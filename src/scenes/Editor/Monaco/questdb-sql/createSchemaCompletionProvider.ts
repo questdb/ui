@@ -1,5 +1,5 @@
 import { Table, InformationSchemaColumn } from "../../../../utils"
-import type { languages } from "monaco-editor"
+import type { languages, IRange } from "monaco-editor"
 import { CompletionItemKind, CompletionItemPriority } from "./types"
 import {
   createAutocompleteProvider,
@@ -9,6 +9,7 @@ import {
   type SchemaInfo,
   type Suggestion,
 } from "@questdb/sql-parser"
+import { isCursorInComment, isCursorInQuotedIdentifier } from "../utils"
 
 /**
  * Map parser's SuggestionKind to Monaco's CompletionItemKind
@@ -54,11 +55,13 @@ const convertToSchemaInfo = (
   ),
 })
 
-/**
- * Convert parser's Suggestion to Monaco's CompletionItem.
- * For columns, uses CompletionItemLabel to show table names inline
- * and data type on the right side.
- */
+const QUOTABLE_KINDS = new Set([SuggestionKind.Table, SuggestionKind.Column])
+
+// Standalone identifiers must start with a letter or '_', followed by letters, digits, '_' or '$'.
+function needsQuoting(name: string): boolean {
+  return !/^[a-zA-Z_][a-zA-Z0-9_$]*$/.test(name)
+}
+
 const UPPERCASE_KINDS = new Set([
   SuggestionKind.Keyword,
   SuggestionKind.Operator,
@@ -68,6 +71,7 @@ const UPPERCASE_KINDS = new Set([
 const toCompletionItem = (
   suggestion: Suggestion,
   range: languages.CompletionItem["range"],
+  isInsideQuotedIdentifier?: boolean,
 ): languages.CompletionItem => {
   const shouldUppercase = UPPERCASE_KINDS.has(suggestion.kind)
   const label = shouldUppercase
@@ -78,6 +82,22 @@ const toCompletionItem = (
     : suggestion.insertText
 
   const isFunction = suggestion.kind === SuggestionKind.Function
+  const isQuotable = QUOTABLE_KINDS.has(suggestion.kind)
+
+  // When outside quotes and the identifier contains special characters,
+  // wrap it in double quotes so the resulting SQL is valid.
+  const shouldAutoQuote =
+    !isInsideQuotedIdentifier && isQuotable && needsQuoting(insertText)
+
+  const quotedInsertText = shouldAutoQuote ? '"' + insertText + '"' : insertText
+
+  // Inside a quoted identifier, the range covers content + closing quote,
+  // so we append '" ' to close the identifier and add a trailing space.
+  const suffix = isFunction
+    ? "($0)"
+    : isInsideQuotedIdentifier
+      ? '"' + " "
+      : " "
 
   return {
     label:
@@ -89,7 +109,7 @@ const toCompletionItem = (
           }
         : label,
     kind: KIND_MAP[suggestion.kind],
-    insertText: isFunction ? insertText + "($0)" : insertText + " ",
+    insertText: quotedInsertText + suffix,
     insertTextRules: isFunction ? 4 : undefined, // CompletionItemInsertTextRule.InsertAsSnippet
     filterText: suggestion.filterText,
     sortText: PRIORITY_MAP[suggestion.priority] + label.toLowerCase(),
@@ -101,44 +121,6 @@ const toCompletionItem = (
           title: "Re-trigger suggestions",
         },
   }
-}
-
-/**
- * Check if cursor is inside a line comment (--) or block comment.
- * The parser already handles string literals via its own guard,
- * but comments are invisible to the lexer (Lexer.SKIPPED).
- */
-function isCursorInComment(text: string, cursorOffset: number): boolean {
-  let i = 0
-  const end = Math.min(cursorOffset, text.length)
-  while (i < end) {
-    const ch = text[i]
-    const next = text[i + 1]
-    // Line comment: -- until end of line
-    if (ch === "-" && next === "-") {
-      i += 2
-      while (i < end && text[i] !== "\n") i++
-      if (i >= cursorOffset) return true
-      continue
-    }
-    // Block comment: /* until */
-    if (ch === "/" && next === "*") {
-      i += 2
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
-      if (i >= cursorOffset) return true
-      i += 2 // skip */
-      continue
-    }
-    // Skip over string literals and quoted identifiers so quotes inside comments don't confuse us
-    if (ch === "'" || ch === '"') {
-      i++
-      while (i < text.length && text[i] !== ch) i++
-      i++ // skip closing quote
-      continue
-    }
-    i++
-  }
-  return false
 }
 
 export const createSchemaCompletionProvider = (
@@ -207,7 +189,19 @@ export const createSchemaCompletionProvider = (
       // can detect when the cursor is inside a string literal or comment.
       const query = fullText.substring(queryStartOffset, queryEndOffset)
 
-      const relativeCursorOffset = cursorOffset - queryStartOffset
+      const openQuoteOffset = isCursorInQuotedIdentifier(
+        fullText,
+        queryStartOffset,
+        cursorOffset,
+      )
+      const isInsideQuotedIdentifier = openQuoteOffset >= 0
+
+      // When inside a quoted identifier, the parser suppresses suggestions.
+      // Work around this by positioning the cursor at the opening " so the
+      // parser sees e.g. "SELECT * FROM" and returns table suggestions.
+      const relativeCursorOffset = isInsideQuotedIdentifier
+        ? openQuoteOffset - queryStartOffset
+        : cursorOffset - queryStartOffset
 
       const suggestions = autocompleteProvider.getSuggestions(
         query,
@@ -217,33 +211,54 @@ export const createSchemaCompletionProvider = (
       // When the "word" at cursor is an operator (e.g. :: from type cast),
       // don't replace it — insert after it instead.
       const isOperatorWord =
-        word.word.length > 0 && !/[a-zA-Z0-9_]/.test(word.word[0])
+        !isInsideQuotedIdentifier &&
+        word.word.length > 0 &&
+        !/[a-zA-Z0-9_]/.test(word.word[0])
 
       // When the word contains a dot (qualified reference like "t." or "t.col"),
       // only replace after the last dot. The prefix before the dot is the
       // table/alias qualifier and should be kept. Without this, Monaco filters
       // suggestions against "t." and nothing matches.
       const dotIndex = word.word.lastIndexOf(".")
-      const startColumn = isOperatorWord
-        ? position.column
-        : dotIndex >= 0
-          ? word.startColumn + dotIndex + 1
-          : word.startColumn
 
-      const range = {
-        startLineNumber: position.lineNumber,
-        endLineNumber: position.lineNumber,
-        startColumn,
-        endColumn: word.endColumn,
+      let range: IRange
+
+      if (isInsideQuotedIdentifier) {
+        // Range covers content between quotes AND the closing quote,
+        // so we can replace it all and append '" ' (close quote + space).
+        const contentStart = model.getPositionAt(openQuoteOffset + 1)
+        const lineContent = model.getLineContent(position.lineNumber)
+        const closingIdx = lineContent.indexOf('"', position.column - 1)
+        range = {
+          startLineNumber: contentStart.lineNumber,
+          startColumn: contentStart.column,
+          endLineNumber: position.lineNumber,
+          // Include the closing " if found, otherwise end at cursor
+          endColumn: closingIdx >= 0 ? closingIdx + 2 : position.column,
+        }
+      } else {
+        const startColumn = isOperatorWord
+          ? position.column
+          : dotIndex >= 0
+            ? word.startColumn + dotIndex + 1
+            : word.startColumn
+        range = {
+          startLineNumber: position.lineNumber,
+          endLineNumber: position.lineNumber,
+          startColumn,
+          endColumn: word.endColumn,
+        }
       }
 
       // Filter out suggestions that exactly match the word already typed,
       // e.g. don't suggest "FROM" when cursor is right after "FROM".
-      const currentWord = isOperatorWord
-        ? ""
-        : dotIndex >= 0
-          ? word.word.substring(dotIndex + 1)
-          : word.word
+      const currentWord = isInsideQuotedIdentifier
+        ? fullText.substring(openQuoteOffset + 1, cursorOffset)
+        : isOperatorWord
+          ? ""
+          : dotIndex >= 0
+            ? word.word.substring(dotIndex + 1)
+            : word.word
 
       const filtered = suggestions.filter(
         (s) => s.insertText.toUpperCase() !== currentWord.toUpperCase(),
@@ -251,7 +266,9 @@ export const createSchemaCompletionProvider = (
 
       return {
         incomplete: true,
-        suggestions: filtered.map((s) => toCompletionItem(s, range)),
+        suggestions: filtered.map((s) =>
+          toCompletionItem(s, range, isInsideQuotedIdentifier),
+        ),
       }
     },
   }

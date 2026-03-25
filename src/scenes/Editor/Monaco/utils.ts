@@ -1453,3 +1453,85 @@ export const createSchemaQueryKey = (
   const ddlHash = hashString(ddl)
   return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }
+
+/**
+ * Check if cursor is inside a line comment (--) or block comment.
+ * Skips over string literals and quoted identifiers so quotes
+ * inside comments don't cause false positives.
+ */
+export function isCursorInComment(text: string, cursorOffset: number): boolean {
+  let i = 0
+  const end = Math.min(cursorOffset, text.length)
+  while (i < end) {
+    const ch = text[i]
+    const next = text[i + 1]
+    // Line comment: -- until end of line
+    if (ch === "-" && next === "-") {
+      i += 2
+      while (i < end && text[i] !== "\n") i++
+      if (i >= cursorOffset) return true
+      continue
+    }
+    // Block comment: /* until */
+    if (ch === "/" && next === "*") {
+      i += 2
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
+      if (i >= cursorOffset) return true
+      i += 2 // skip */
+      continue
+    }
+    // Skip over string literals and quoted identifiers so quotes inside comments don't confuse us
+    if (ch === "'" || ch === '"') {
+      i++
+      while (i < text.length && text[i] !== ch) i++
+      i++ // skip closing quote
+      continue
+    }
+    i++
+  }
+  return false
+}
+
+/**
+ * Check if cursor is inside a double-quoted identifier (e.g. "my-table").
+ * Tracks quote state from `startOffset` to `cursorOffset`, handling
+ * escaped quotes (""), single-quoted strings, and comments.
+ * Returns the offset of the opening " if inside, or -1 if not.
+ */
+export function isCursorInQuotedIdentifier(
+  text: string,
+  startOffset: number,
+  cursorOffset: number,
+): number {
+  if (isCursorInComment(text, cursorOffset)) return -1
+
+  let inDouble = false
+  let inSingle = false
+  let openQuoteOffset = -1
+  for (let i = startOffset; i < cursorOffset; i++) {
+    const ch = text[i]
+    const next = text[i + 1]
+    if (inSingle) {
+      if (ch === "'" && next === "'") i++
+      else if (ch === "'") inSingle = false
+    } else if (inDouble) {
+      if (ch === '"' && next === '"') i++
+      else if (ch === '"') inDouble = false
+    } else if (ch === "-" && next === "-") {
+      // Skip line comment
+      i += 2
+      while (i < cursorOffset && text[i] !== "\n") i++
+    } else if (ch === "/" && next === "*") {
+      // Skip block comment
+      i += 2
+      while (i < cursorOffset && !(text[i] === "*" && text[i + 1] === "/")) i++
+      i++ // skip past */
+    } else if (ch === '"') {
+      inDouble = true
+      openQuoteOffset = i
+    } else if (ch === "'") {
+      inSingle = true
+    }
+  }
+  return inDouble ? openQuoteOffset : -1
+}

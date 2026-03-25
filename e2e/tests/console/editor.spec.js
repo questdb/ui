@@ -824,7 +824,8 @@ describe("errors", () => {
     const query = `select * from long_sequence(1) where cast(x as timestamp) = '2012-04-12T12:00:00A'`
     cy.typeQuery(query)
     cy.runLine()
-    cy.matchErrorMarkerPosition({ left: 506, width: 42 })
+    // Whole date string is shown as error
+    cy.matchErrorMarkerPosition({ left: 506, width: 185 })
 
     cy.getCollapsedNotifications().should("contain", "Invalid date")
   })
