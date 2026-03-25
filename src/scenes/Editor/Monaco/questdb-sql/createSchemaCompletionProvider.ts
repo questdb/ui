@@ -1,5 +1,5 @@
 import { Table, InformationSchemaColumn } from "../../../../utils"
-import type { editor, languages } from "monaco-editor"
+import type { languages } from "monaco-editor"
 import { CompletionItemKind, CompletionItemPriority } from "./types"
 import {
   createAutocompleteProvider,
@@ -129,10 +129,10 @@ function isCursorInComment(text: string, cursorOffset: number): boolean {
       i += 2 // skip */
       continue
     }
-    // Skip over string literals so quotes inside comments don't confuse us
-    if (ch === "'") {
+    // Skip over string literals and quoted identifiers so quotes inside comments don't confuse us
+    if (ch === "'" || ch === '"') {
       i++
-      while (i < text.length && text[i] !== "'") i++
+      while (i < text.length && text[i] !== ch) i++
       i++ // skip closing quote
       continue
     }
@@ -142,7 +142,6 @@ function isCursorInComment(text: string, cursorOffset: number): boolean {
 }
 
 export const createSchemaCompletionProvider = (
-  editor: editor.IStandaloneCodeEditor,
   tables: Table[] = [],
   informationSchemaColumns: Record<string, InformationSchemaColumn[]> = {},
 ) => {

@@ -1275,6 +1275,7 @@ export const setErrorMarkerForQuery = (
 }
 
 const ValidationOwner = "questdb-validation"
+export const JIT_VALIDATION_QUERY_CHAR_CAP = 10_000
 
 const validationRefs: Record<
   string,
@@ -1282,6 +1283,13 @@ const validationRefs: Record<
 > = {}
 
 const validationControllers: Record<string, AbortController> = {}
+
+export const cancelAllValidationRequests = () => {
+  Object.keys(validationControllers).forEach((bufferKey) => {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+  })
+}
 
 export const clearValidationMarkers = (
   monaco: Monaco,
@@ -1308,9 +1316,14 @@ export const applyValidationMarkers = (
   const model = editor.getModel()
   if (!model) return
 
-  const cached = validationRefs[bufferId.toString()]
+  const bufferKey = bufferId.toString()
+  const cached = validationRefs[bufferKey]
   if (cached) {
-    monaco.editor.setModelMarkers(model, ValidationOwner, cached.markers)
+    if (cached.version === model.getVersionId()) {
+      monaco.editor.setModelMarkers(model, ValidationOwner, cached.markers)
+    } else {
+      delete validationRefs[bufferKey]
+    }
   }
 }
 
@@ -1328,6 +1341,7 @@ export const validateQueryJIT = (
   if (!model) return
 
   const bufferKey = bufferId.toString()
+  const modelUri = model.uri.toString()
   const queryAtCursor = getQueryFromCursor(editor)
 
   if (!queryAtCursor) {
@@ -1344,6 +1358,14 @@ export const validateQueryJIT = (
   // Skip if already validated this exact query+version
   const cached = validationRefs[bufferKey]
   if (cached && cached.queryText === queryText && cached.version === version) {
+    return
+  }
+
+  if (queryText.length > JIT_VALIDATION_QUERY_CHAR_CAP) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+    validationRefs[bufferKey] = { markers: [], queryText, version }
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
     return
   }
 
@@ -1365,12 +1387,19 @@ export const validateQueryJIT = (
 
   validateQuery(queryText, controller.signal)
     .then((result: ValidateQueryResult) => {
-      if (validationControllers[bufferKey] === controller) {
-        delete validationControllers[bufferKey]
+      if (validationControllers[bufferKey] !== controller) {
+        return
       }
+      delete validationControllers[bufferKey]
 
       const currentModel = editor.getModel()
-      if (!currentModel || currentModel.getVersionId() !== version) return
+      if (
+        !currentModel ||
+        currentModel.uri.toString() !== modelUri ||
+        currentModel.getVersionId() !== version
+      ) {
+        return
+      }
 
       // Query was executed while validation was in flight — skip
       if (getBufferExecutions()[queryKey]) return
