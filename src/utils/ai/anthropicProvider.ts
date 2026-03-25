@@ -606,6 +606,16 @@ export function createAnthropicProvider(
     },
 
     async countTokens({ messages, systemPrompt, model }) {
+      // Custom providers (non-default baseURL) use chars/3.5 estimation
+      // because the actual tokenizer is unknown and most custom endpoints
+      // don't implement the countTokens API.
+      if (options?.baseURL) {
+        const totalChars =
+          systemPrompt.length +
+          messages.reduce((sum, m) => sum + m.content.length, 0)
+        return Math.ceil(totalChars / 3.5)
+      }
+
       const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
         role: m.role,
         content: m.content,
