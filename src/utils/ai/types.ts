@@ -22,12 +22,11 @@ export interface ResponseFormatSchema {
   strict: boolean
 }
 
-export interface FlowConfig<T> {
+export interface FlowConfig {
   systemInstructions: string
   initialUserContent: string
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
   responseFormat: ResponseFormatSchema
-  postProcess?: (formatted: T) => T
 }
 
 export interface AIProvider {
@@ -36,7 +35,7 @@ export interface AIProvider {
 
   executeFlow<T>(params: {
     model: string
-    config: FlowConfig<T>
+    config: FlowConfig
     modelToolsClient: ModelToolsClient
     tools: ToolDefinition[]
     setStatus: StatusCallback

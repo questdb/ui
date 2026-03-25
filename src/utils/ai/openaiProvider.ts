@@ -242,7 +242,7 @@ export function createOpenAIProvider(
       streaming,
     }: {
       model: string
-      config: FlowConfig<T>
+      config: FlowConfig
       modelToolsClient: ModelToolsClient
       tools: ToolDefinition[]
       setStatus: StatusCallback
@@ -391,10 +391,6 @@ export function createOpenAIProvider(
           outputTokens: totalOutputTokens,
         }
 
-        if (config.postProcess) {
-          const processed = config.postProcess(json)
-          return { ...processed, tokenUsage } as T & { tokenUsage: TokenUsage }
-        }
         return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
       }
 
@@ -402,25 +398,13 @@ export function createOpenAIProvider(
         const json = JSON.parse(rawOutput) as T
         setStatus(null)
 
-        const resultWithTokens = {
+        return {
           ...json,
           tokenUsage: {
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
           },
         } as T & { tokenUsage: TokenUsage }
-
-        if (config.postProcess) {
-          const processed = config.postProcess(json)
-          return {
-            ...processed,
-            tokenUsage: {
-              inputTokens: totalInputTokens,
-              outputTokens: totalOutputTokens,
-            },
-          } as T & { tokenUsage: TokenUsage }
-        }
-        return resultWithTokens
       } catch {
         setStatus(null)
         return {

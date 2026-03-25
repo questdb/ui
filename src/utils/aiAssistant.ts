@@ -361,7 +361,6 @@ export type AIOperation =
 export const continueConversation = async ({
   userMessage,
   conversationHistory,
-  currentSQL,
   settings,
   modelToolsClient,
   setStatus,
@@ -371,7 +370,6 @@ export const continueConversation = async ({
 }: {
   userMessage: string
   conversationHistory: Array<ConversationMessage>
-  currentSQL?: string
   settings: ActiveProviderSettings
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
@@ -480,15 +478,10 @@ export const continueConversation = async ({
         explanation: string
         tokenUsage?: TokenUsage
       }): GeneratedSQL => {
-        const sql =
-          formatted?.sql === null
-            ? null
-            : formatted?.sql
-              ? normalizeSql(formatted.sql)
-              : currentSQL || ""
+        const sql = normalizeSql(formatted?.sql ?? "") || null
         return {
           sql,
-          explanation: formatted?.explanation || "",
+          explanation: formatted.explanation,
           tokenUsage: formatted.tokenUsage,
         }
       }

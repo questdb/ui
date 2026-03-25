@@ -11,7 +11,7 @@ function filterHeaders(raw: HeadersInit, allowSet: Set<string>): Headers {
 
 export function createHeaderFilteredFetch(
   allowedHeaders: string[],
-): typeof globalThis.fetch {
+): typeof fetch {
   const allowSet = new Set(allowedHeaders.map((h) => h.toLowerCase()))
   return (input, init) => {
     // Collect headers from both the Request object and init
@@ -34,7 +34,7 @@ export function createHeaderFilteredFetch(
     const signal =
       init?.signal ?? (input instanceof Request ? input.signal : undefined)
 
-    return globalThis.fetch(url, {
+    return fetch(url, {
       ...init,
       method,
       headers: filtered,

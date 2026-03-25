@@ -517,17 +517,10 @@ export async function executeAIFlow(
             : config.type
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
-    const currentSQL =
-      config.type === "chat"
-        ? config.currentSQL
-        : config.type === "schema_explain" || config.type === "health_issue"
-          ? undefined
-          : config.queryText
 
     const result = await continueConversation({
       userMessage: userMsg.content,
       conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
-      currentSQL,
       settings: providerSettings,
       modelToolsClient,
       setStatus: setStatusWithHistory,
