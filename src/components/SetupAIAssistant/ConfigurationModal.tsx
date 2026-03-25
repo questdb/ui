@@ -128,7 +128,7 @@ const ProviderCardsContainer = styled(Box).attrs({
 `
 
 const ProviderCard = styled.button<{ $selected: boolean }>`
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   border: 0.1rem solid ${({ theme }) => theme.color.selection};
   border-radius: 0.8rem;
   cursor: pointer;
@@ -181,9 +181,10 @@ const InputLabel = styled(Text)`
 
 const StyledInput = styled(Input)<{ $hasError?: boolean; disabled?: boolean }>`
   width: 100%;
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   border: 0.1rem solid
-    ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
+    ${({ theme, $hasError }) =>
+      $hasError ? theme.color.red : theme.color.inputBorder};
   border-radius: 0.8rem;
   cursor: ${({ disabled }) => (disabled ? "not-allowed" : "text")};
   font-size: 1.4rem;

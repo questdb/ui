@@ -31,9 +31,10 @@ export const InputLabel = styled(Text)`
 
 export const StyledInput = styled(Input)<{ $hasError?: boolean }>`
   width: 100%;
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   border: 0.1rem solid
-    ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
+    ${({ theme, $hasError }) =>
+      $hasError ? theme.color.red : theme.color.inputBorder};
   border-radius: 0.8rem;
   font-size: 1.4rem;
   min-height: 3rem;
@@ -56,7 +57,7 @@ const WarningBanner = styled(Box).attrs({
   align: "center",
 })`
   width: 100%;
-  background: rgba(255, 165, 0, 0.08);
+  background: ${({ theme }) => theme.color.orange10};
   border: 0.1rem solid ${({ theme }) => theme.color.orange};
   border-radius: 0.8rem;
   padding: 0.75rem;
@@ -73,7 +74,7 @@ const ModelListContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  border: 0.1rem solid #6b7280;
+  border: 0.1rem solid ${({ theme }) => theme.color.inputBorder};
   border-radius: 0.4rem;
   width: 100%;
 `

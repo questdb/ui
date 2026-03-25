@@ -256,7 +256,8 @@ const StyledInput = styled(Input)<{
   width: 100%;
   background: ${({ theme }) => theme.color.background};
   border: 0.1rem solid
-    ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
+    ${({ theme, $hasError }) =>
+      $hasError ? theme.color.red : theme.color.inputBorder};
   border-radius: 0.8rem;
   padding: 1.2rem;
   padding-right: ${({ $showEditButton }) =>

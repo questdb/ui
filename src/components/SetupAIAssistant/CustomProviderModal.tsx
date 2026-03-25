@@ -107,9 +107,9 @@ const PasswordInput = styled(StyledInput)`
 
 const StyledSelect = styled(Select)`
   width: 100%;
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   color: ${({ theme }) => theme.color.foreground};
-  border: 0.1rem solid #6b7280;
+  border: 0.1rem solid ${({ theme }) => theme.color.inputBorder};
   border-radius: 0.8rem;
   min-height: 3.2rem;
   padding: 0 0.75rem;
