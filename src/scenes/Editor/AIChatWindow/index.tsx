@@ -552,7 +552,12 @@ const AIChatWindow: React.FC = () => {
     userMessageId: string,
     assistantMessageId: string,
   ) => {
-    if (!chatWindowState.activeConversationId || !canUse) return
+    if (
+      !chatWindowState.activeConversationId ||
+      !canUse ||
+      isBlockingAIStatus(aiStatus)
+    )
+      return
 
     const conversationId = chatWindowState.activeConversationId
     const userMessage = messages.find((m) => m.id === userMessageId)

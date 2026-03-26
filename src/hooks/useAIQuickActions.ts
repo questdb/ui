@@ -3,7 +3,7 @@ import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
 import { useAIConversation } from "../providers/AIConversationProvider"
-import { useAIStatus } from "../providers/AIStatusProvider"
+import { isBlockingAIStatus, useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
@@ -49,6 +49,7 @@ export const useAIQuickActions = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    status,
   } = useAIStatus()
 
   const {
@@ -97,6 +98,9 @@ export const useAIQuickActions = () => {
     kind: "table" | "matview" | "view",
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
   ) => {
+    if (isBlockingAIStatus(status)) {
+      return
+    }
     if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
@@ -192,6 +196,9 @@ export const useAIQuickActions = () => {
     issue: HealthIssue,
     trendSamples?: TimestampedSample[],
   ) => {
+    if (isBlockingAIStatus(status)) {
+      return
+    }
     if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
