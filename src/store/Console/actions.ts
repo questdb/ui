@@ -37,6 +37,11 @@ const pushSidebarHistory = (sidebar: Sidebar): ConsoleAction => ({
   type: ConsoleAT.PUSH_SIDEBAR_HISTORY,
 })
 
+const replaceSidebarHistory = (sidebar: Sidebar): ConsoleAction => ({
+  payload: sidebar,
+  type: ConsoleAT.REPLACE_SIDEBAR_HISTORY,
+})
+
 const goBackInSidebar = (): ConsoleAction => ({
   type: ConsoleAT.GO_BACK_IN_SIDEBAR,
 })
@@ -57,6 +62,7 @@ export default {
   toggleSideMenu,
   setActiveBottomPanel,
   pushSidebarHistory,
+  replaceSidebarHistory,
   goBackInSidebar,
   goForwardInSidebar,
   closeSidebar,

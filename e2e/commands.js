@@ -534,7 +534,7 @@ Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
   cy.getByDataHook(titleHook).contains(name).click()
   cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
-  cy.getByDataHook("table-details-name").should("contain", name)
+  cy.getByDataHook("table-details-name").should("have.value", name)
 })
 
 Cypress.Commands.add("getEditorTabs", () => {

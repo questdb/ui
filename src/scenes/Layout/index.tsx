@@ -111,10 +111,10 @@ const Layout = () => {
               </Main>
 
               <Sidebar align="top">
-                <Help />
-                <TableDetailsButton />
                 <AIChatButton />
+                <TableDetailsButton />
                 <News />
+                <Help />
               </Sidebar>
               <TableDetailsDrawer />
               <AIChatWindowLazy />

@@ -106,7 +106,7 @@ const Type = styled(Text)`
 
 const Title = styled(Text)`
   .highlight {
-    background-color: #7c804f;
+    background-color: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
   }
 `
@@ -198,7 +198,7 @@ const StyledTitle = styled(Title)`
   margin-right: 1rem;
 
   .highlight {
-    background-color: #45475a;
+    background-color: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
   }
 

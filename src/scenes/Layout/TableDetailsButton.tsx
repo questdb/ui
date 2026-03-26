@@ -21,11 +21,6 @@ export const TableDetailsButton = () => {
     selectors.console.getTableDetailsTarget,
   )
 
-  // Only show if table details has been opened at least once
-  if (!tableDetailsTarget) {
-    return null
-  }
-
   const handleClick = () => {
     if (activeSidebar?.type === "tableDetails") {
       dispatch(actions.console.closeSidebar())

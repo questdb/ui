@@ -616,7 +616,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-base-table-link").click()
 
       cy.getByDataHook("table-details-type-badge").should("contain", "Table")
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
       cy.getByDataHook("sidebar-back-button").should("not.be.disabled")
 
       cy.getByDataHook("sidebar-back-button").click()
@@ -625,7 +625,7 @@ describe("TableDetailsDrawer", () => {
         "contain",
         "Materialized View",
       )
-      cy.getByDataHook("table-details-name").should("contain", TEST_MATVIEW)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_MATVIEW)
       cy.getByDataHook("sidebar-back-button").should("be.disabled")
     })
 
@@ -807,7 +807,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
-        .should("contain", TEST_TABLE)
+        .should("have.value", TEST_TABLE)
     })
 
     it("should show Explain with AI button in DDL section", () => {
@@ -828,7 +828,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
-        .should("contain", TEST_TABLE)
+        .should("have.value", TEST_TABLE)
     })
 
     it("should trigger AI chat when clicking Ask AI on performance alert", () => {
@@ -853,7 +853,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("sidebar-back-button").click()
       cy.getByDataHook("table-details-name")
         .should("be.visible")
-        .should("contain", TEST_TABLE)
+        .should("have.value", TEST_TABLE)
     })
 
     after(() => {
@@ -877,30 +877,51 @@ describe("TableDetailsDrawer", () => {
       cy.expandTables()
     })
 
-    it("toggle button visibility: hidden initially, visible after opening, stays visible after close, reopens latest", () => {
-      // Given
-      cy.getByDataHook("table-details-toggle-button").should("not.exist")
-
-      // When
-      cy.openDetailsDrawer(TEST_TABLE)
-
-      // Then
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+    it("fresh page: toggle button visible, click shows promo and table selector, search and select table via keyboard", () => {
       cy.getByDataHook("table-details-toggle-button").should("be.visible")
 
-      // When
-      cy.getByDataHook("sidebar-close-button").click()
-
-      // Then
-      cy.getByDataHook("table-details-drawer").should("not.exist")
-      cy.getByDataHook("table-details-toggle-button").should("be.visible")
-
-      // When
       cy.getByDataHook("table-details-toggle-button").click()
-
-      // Then
       cy.getByDataHook("table-details-drawer").should("be.visible")
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-empty-state").should("be.visible")
+
+      cy.getByDataHook("table-details-name").should("be.focused")
+      cy.getByDataHook("table-selector-dropdown").should("be.visible")
+      cy.getByDataHook("table-selector-item").should(
+        "have.length.greaterThan",
+        0,
+      )
+
+      cy.getByDataHook("table-details-name").clear().type(TEST_TABLE)
+      cy.getByDataHook("table-selector-item").should(
+        "have.length.greaterThan",
+        0,
+      )
+
+      cy.getByDataHook("table-details-name").type("{enter}")
+
+      cy.getByDataHook("table-details-empty-state").should("not.exist")
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
+      cy.getByDataHook("table-details-tab-monitoring").should("be.visible")
+    })
+
+    it("switch table via title selector: open details from schema, then switch to another table using the title input", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
+      cy.getByDataHook("table-details-tab-monitoring").should("be.visible")
+
+      cy.getByDataHook("table-details-name").click()
+      cy.getByDataHook("table-selector-dropdown").should("be.visible")
+
+      cy.getByDataHook("table-details-name").clear().type(TEST_TABLE_2)
+      cy.getByDataHook("table-selector-item").should(
+        "have.length.greaterThan",
+        0,
+      )
+
+      cy.getByDataHook("table-details-name").type("{enter}")
+
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE_2)
+      cy.getByDataHook("table-details-tab-monitoring").should("be.visible")
     })
 
     it("cross-panel navigation: navigate between table details, AI chat, and news using back/forward buttons", () => {
@@ -909,7 +930,7 @@ describe("TableDetailsDrawer", () => {
 
       // Then
       cy.getByDataHook("table-details-drawer").should("be.visible")
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
       cy.getByDataHook("sidebar-back-button").should("not.exist")
 
       // When
@@ -944,7 +965,7 @@ describe("TableDetailsDrawer", () => {
 
       // Then
       cy.getByDataHook("table-details-drawer").should("be.visible")
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
       cy.getByDataHook("sidebar-back-button").should("be.disabled")
       cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
 
@@ -1015,7 +1036,7 @@ describe("TableDetailsDrawer", () => {
 
       // Then
       cy.getByDataHook("table-details-drawer").should("be.visible")
-      cy.getByDataHook("table-details-name").should("contain", TEST_TABLE)
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
       cy.getByDataHook("sidebar-forward-button").should("not.be.disabled")
 
       // When
