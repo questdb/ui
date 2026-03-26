@@ -179,12 +179,22 @@ export const TableSelector = ({
   )
 
   const filtered: TableTreeItem[] = useMemo(() => {
-    const list = query
-      ? sorted.filter((o) =>
-          o.label.toLowerCase().includes(query.toLowerCase()),
-        )
-      : sorted
-    return list.map((o) => ({ ...o, id: o.value }))
+    if (!query) return sorted.map((o) => ({ ...o, id: o.value }))
+    const q = query.toLowerCase()
+    const prefixMatches: TableOption[] = []
+    const substringMatches: TableOption[] = []
+    for (const o of sorted) {
+      const lower = o.label.toLowerCase()
+      if (lower.startsWith(q)) {
+        prefixMatches.push(o)
+      } else if (lower.includes(q)) {
+        substringMatches.push(o)
+      }
+    }
+    return [...prefixMatches, ...substringMatches].map((o) => ({
+      ...o,
+      id: o.value,
+    }))
   }, [sorted, query])
 
   const handleSelect = useCallback(

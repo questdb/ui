@@ -585,28 +585,26 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view"
       ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
-        const handleOpenDetailsDrawer =
-          item.kind !== "view"
-            ? () => {
-                if (
-                  activeSidebar?.type === "tableDetails" &&
-                  tableDetailsTarget?.tableName === item.name
-                ) {
-                  dispatch(actions.console.closeSidebar())
-                  return
-                }
-                dispatch(
-                  actions.console.pushSidebarHistory({
-                    type: "tableDetails",
-                    payload: {
-                      tableName: item.name,
-                      isMatView: item.kind === "matview",
-                    },
-                  }),
-                )
-                setTimeout(() => setFocusedIndex(index))
-              }
-            : undefined
+        const handleOpenDetailsDrawer = () => {
+          if (
+            activeSidebar?.type === "tableDetails" &&
+            tableDetailsTarget?.tableName === item.name
+          ) {
+            dispatch(actions.console.closeSidebar())
+            return
+          }
+          dispatch(
+            actions.console.pushSidebarHistory({
+              type: "tableDetails",
+              payload: {
+                tableName: item.name,
+                isMatView: item.kind === "matview",
+                isView: item.kind === "view",
+              },
+            }),
+          )
+          setTimeout(() => setFocusedIndex(index))
+        }
         return (
           <>
             <ContextMenu

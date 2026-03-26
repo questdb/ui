@@ -32,6 +32,7 @@ export interface DetailsTabProps {
   columns: Column[]
   ddl: string
   isMatView: boolean
+  isView: boolean
   truncatedDDL: { text: string; grayedOutLines: [number, number] | null }
   baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
   columnsExpanded: boolean
@@ -158,6 +159,7 @@ export const DetailsTab = ({
   columns,
   ddl,
   isMatView,
+  isView,
   truncatedDDL,
   baseTableStatus,
   columnsExpanded,
@@ -278,72 +280,74 @@ export const DetailsTab = ({
         )}
       </Section>
 
-      {/* Details Section - layout differs by type */}
-      <Section data-hook="table-details-details-section">
-        <SectionTitleContainer>
-          <InfoIcon size="16px" weight="bold" />
-          <SectionTitle>Details</SectionTitle>
-        </SectionTitleContainer>
+      {/* Details Section - layout differs by type, hidden for views */}
+      {!isView && (
+        <Section data-hook="table-details-details-section">
+          <SectionTitleContainer>
+            <InfoIcon size="16px" weight="bold" />
+            <SectionTitle>Details</SectionTitle>
+          </SectionTitleContainer>
 
-        {isMatView && matViewData ? (
-          /* Matview: 2 rows × 2 columns */
-          <MetricsGrid>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>TTL</MetricLabel>
-              <MetricValue>
-                {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
-              </MetricValue>
-            </MetricCard>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>Deduplication</MetricLabel>
-              <MetricValue>
-                {tableData.dedup ? "Enabled" : "Disabled"}
-              </MetricValue>
-            </MetricCard>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>Partitioning</MetricLabel>
-              <MetricValue>
-                {tableData.partitionBy === "NONE"
-                  ? "None"
-                  : tableData.partitionBy.charAt(0).toUpperCase() +
-                    tableData.partitionBy.slice(1).toLowerCase()}
-              </MetricValue>
-            </MetricCard>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>Refresh Type</MetricLabel>
-              <MetricValue>
-                {matViewData.refresh_type.charAt(0).toUpperCase() +
-                  matViewData.refresh_type.slice(1).toLowerCase()}
-              </MetricValue>
-            </MetricCard>
-          </MetricsGrid>
-        ) : (
-          /* Table: 3 items in single row */
-          <DetailsGrid>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>TTL</MetricLabel>
-              <MetricValue>
-                {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
-              </MetricValue>
-            </MetricCard>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>Deduplication</MetricLabel>
-              <MetricValue>
-                {tableData.dedup ? "Enabled" : "Disabled"}
-              </MetricValue>
-            </MetricCard>
-            <MetricCard $background={theme.color.backgroundDarker}>
-              <MetricLabel>Partitioning</MetricLabel>
-              <MetricValue>
-                {tableData.partitionBy === "NONE"
-                  ? "None"
-                  : tableData.partitionBy.charAt(0).toUpperCase() +
-                    tableData.partitionBy.slice(1).toLowerCase()}
-              </MetricValue>
-            </MetricCard>
-          </DetailsGrid>
-        )}
-      </Section>
+          {isMatView && matViewData ? (
+            /* Matview: 2 rows × 2 columns */
+            <MetricsGrid>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>TTL</MetricLabel>
+                <MetricValue>
+                  {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>Deduplication</MetricLabel>
+                <MetricValue>
+                  {tableData.dedup ? "Enabled" : "Disabled"}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>Partitioning</MetricLabel>
+                <MetricValue>
+                  {tableData.partitionBy === "NONE"
+                    ? "None"
+                    : tableData.partitionBy.charAt(0).toUpperCase() +
+                      tableData.partitionBy.slice(1).toLowerCase()}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>Refresh Type</MetricLabel>
+                <MetricValue>
+                  {matViewData.refresh_type.charAt(0).toUpperCase() +
+                    matViewData.refresh_type.slice(1).toLowerCase()}
+                </MetricValue>
+              </MetricCard>
+            </MetricsGrid>
+          ) : (
+            /* Table: 3 items in single row */
+            <DetailsGrid>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>TTL</MetricLabel>
+                <MetricValue>
+                  {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>Deduplication</MetricLabel>
+                <MetricValue>
+                  {tableData.dedup ? "Enabled" : "Disabled"}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricLabel>Partitioning</MetricLabel>
+                <MetricValue>
+                  {tableData.partitionBy === "NONE"
+                    ? "None"
+                    : tableData.partitionBy.charAt(0).toUpperCase() +
+                      tableData.partitionBy.slice(1).toLowerCase()}
+                </MetricValue>
+              </MetricCard>
+            </DetailsGrid>
+          )}
+        </Section>
+      )}
     </>
   )
 }

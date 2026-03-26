@@ -25,6 +25,7 @@
 export type TableDetailsTarget = {
   tableName: string
   isMatView: boolean
+  isView: boolean
 } | null
 
 export type SidebarType = "news" | "aiChat" | "tableDetails"

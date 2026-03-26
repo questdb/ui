@@ -12,6 +12,7 @@ const {
 const TEST_TABLE = "btc_trades"
 const TEST_TABLE_NO_WAL = "btc_trades_no_wal"
 const TEST_MATVIEW = "btc_trades_mv"
+const TEST_VIEW = "btc_trades_view"
 
 function interceptTablesQuery(modifications) {
   cy.intercept(
@@ -667,6 +668,45 @@ describe("TableDetailsDrawer", () => {
     after(() => {
       cy.loadConsoleWithAuth()
       cy.dropMaterializedView(TEST_MATVIEW)
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("view specific", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createView(TEST_VIEW)
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      cy.collapseTables()
+      cy.collapseMatViews()
+      cy.expandViews()
+    })
+
+    it("should open view details from schema, show View badge, no tabs, only DDL and columns sections with columns expanded", () => {
+      cy.openDetailsDrawer(TEST_VIEW, "view")
+
+      cy.getByDataHook("table-details-type-badge").should("contain", "View")
+
+      cy.getByDataHook("table-details-tab-monitoring").should("not.exist")
+      cy.getByDataHook("table-details-tab-details").should("not.exist")
+
+      cy.getByDataHook("table-details-ddl-section").should("be.visible")
+
+      cy.getByDataHook("table-details-columns-content").should("be.visible")
+
+      cy.getByDataHook("table-details-details-section").should("not.exist")
+
+      cy.getByDataHook("table-details-health-status").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropViewIfExists(TEST_VIEW)
       cy.dropTable(TEST_TABLE)
     })
   })

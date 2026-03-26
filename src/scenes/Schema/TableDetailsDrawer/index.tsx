@@ -188,6 +188,7 @@ export const TableDetailsDrawer = () => {
 
   const tableName = target?.tableName ?? ""
   const isMatView = target?.isMatView ?? false
+  const isView = target?.isView ?? false
   const hasTarget = target !== null
   const isOpen = activeSidebar?.type === "tableDetails"
 
@@ -199,16 +200,14 @@ export const TableDetailsDrawer = () => {
 
   const tableOptions: TableOption[] = useMemo(
     () =>
-      tables
-        .filter((t) => getTableKind(t) !== "view")
-        .map((t) => ({
-          label: t.table_name,
-          value: t.table_name,
-          kind: getTableKind(t),
-          walEnabled: t.walEnabled,
-          partitionBy: t.partitionBy,
-          designatedTimestamp: t.designatedTimestamp,
-        })),
+      tables.map((t) => ({
+        label: t.table_name,
+        value: t.table_name,
+        kind: getTableKind(t),
+        walEnabled: t.walEnabled,
+        partitionBy: t.partitionBy,
+        designatedTimestamp: t.designatedTimestamp,
+      })),
     [tables],
   )
 
@@ -220,6 +219,7 @@ export const TableDetailsDrawer = () => {
           payload: {
             tableName: option.label,
             isMatView: option.kind === "matview",
+            isView: option.kind === "view",
           },
         }),
       )
@@ -258,6 +258,7 @@ export const TableDetailsDrawer = () => {
         payload: {
           tableName: matViewData.base_table_name,
           isMatView: false,
+          isView: false,
         },
       }),
     )
@@ -270,14 +271,14 @@ export const TableDetailsDrawer = () => {
     void handleExplainSchema(
       tableData.id,
       tableName,
-      isMatView ? "matview" : "table",
+      isView ? "view" : isMatView ? "matview" : "table",
       {
         partitionBy: tableData.partitionBy,
         walEnabled: tableData.walEnabled,
         designatedTimestamp: tableData.designatedTimestamp,
       },
     )
-  }, [handleExplainSchema, tableData, tableName, isMatView])
+  }, [handleExplainSchema, tableData, tableName, isMatView, isView])
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
@@ -347,16 +348,18 @@ export const TableDetailsDrawer = () => {
 
   const fetchDDL = useCallback(async () => {
     try {
-      const response = isMatView
-        ? await quest.showMatViewDDL(tableName)
-        : await quest.showTableDDL(tableName)
+      const response = isView
+        ? await quest.showViewDDL(tableName)
+        : isMatView
+          ? await quest.showMatViewDDL(tableName)
+          : await quest.showTableDDL(tableName)
       if (response.type === QuestDB.Type.DQL && response.data[0]?.ddl) {
         setDdl(response.data[0].ddl)
       }
     } catch (error) {
       console.error("Failed to fetch DDL:", error)
     }
-  }, [quest, tableName, isMatView])
+  }, [quest, tableName, isMatView, isView])
 
   const checkBaseTableStatus = useCallback(async () => {
     if (!isMatView || !matViewData?.base_table_name) {
@@ -402,7 +405,7 @@ export const TableDetailsDrawer = () => {
       setMatViewData(null)
       setColumns([])
       setDdl("")
-      setColumnsExpanded(false)
+      setColumnsExpanded(isView)
       setWalExpanded(true)
       setHasAutoExpanded(false)
       setTrendData({
@@ -437,7 +440,7 @@ export const TableDetailsDrawer = () => {
 
   useAdaptivePoll({
     fetchFn: fetchTableData,
-    enabled: isOpen && hasTarget && !loading,
+    enabled: isOpen && hasTarget && !loading && !isView,
     key: tableName,
     minIntervalMs: 200,
     maxIntervalMs: 5000,
@@ -571,11 +574,13 @@ export const TableDetailsDrawer = () => {
       titleColor={
         hasTarget && isMatView
           ? theme.color.loginBackground
-          : theme.color.backgroundLighter
+          : isView
+            ? theme.color.tableSelection
+            : theme.color.backgroundLighter
       }
       title={
         <TitleContainer>
-          {hasTarget && (
+          {hasTarget && !isView && (
             <HealthStatusLabel
               severity={healthStatus?.overallSeverity ?? "healthy"}
             />
@@ -602,7 +607,7 @@ export const TableDetailsDrawer = () => {
       afterTitle={
         hasTarget ? (
           <TypeBadge data-hook="table-details-type-badge">
-            {isMatView ? "Materialized View" : "Table"}
+            {isView ? "View" : isMatView ? "Materialized View" : "Table"}
           </TypeBadge>
         ) : undefined
       }
@@ -619,48 +624,50 @@ export const TableDetailsDrawer = () => {
           </LoadingContainer>
         ) : tableData ? (
           <>
-            <TabsContainer>
-              <TabsNav>
-                <Tab
-                  $active={activeTab === "monitoring"}
-                  onClick={() => setActiveTab("monitoring")}
-                  data-hook="table-details-tab-monitoring"
-                  data-active={activeTab === "monitoring"}
-                >
-                  Monitoring
-                  {monitoringIssuesCounts.errors > 0 && (
-                    <TabBadge
-                      $type="error"
-                      data-hook="table-details-tab-error-badge"
-                    >
-                      <XSquareIcon size={12} weight="fill" />
-                      {monitoringIssuesCounts.errors}
-                    </TabBadge>
-                  )}
-                  {monitoringIssuesCounts.errors === 0 &&
-                    monitoringIssuesCounts.warnings > 0 && (
+            {!isView && (
+              <TabsContainer>
+                <TabsNav>
+                  <Tab
+                    $active={activeTab === "monitoring"}
+                    onClick={() => setActiveTab("monitoring")}
+                    data-hook="table-details-tab-monitoring"
+                    data-active={activeTab === "monitoring"}
+                  >
+                    Monitoring
+                    {monitoringIssuesCounts.errors > 0 && (
                       <TabBadge
-                        $type="warning"
-                        data-hook="table-details-tab-warning-badge"
+                        $type="error"
+                        data-hook="table-details-tab-error-badge"
                       >
-                        <WarningIcon size={12} weight="fill" />
-                        {monitoringIssuesCounts.warnings}
+                        <XSquareIcon size={12} weight="fill" />
+                        {monitoringIssuesCounts.errors}
                       </TabBadge>
                     )}
-                </Tab>
-                <Tab
-                  $active={activeTab === "details"}
-                  onClick={() => setActiveTab("details")}
-                  data-hook="table-details-tab-details"
-                  data-active={activeTab === "details"}
-                >
-                  Details
-                </Tab>
-              </TabsNav>
-              <TabsSeparator />
-            </TabsContainer>
+                    {monitoringIssuesCounts.errors === 0 &&
+                      monitoringIssuesCounts.warnings > 0 && (
+                        <TabBadge
+                          $type="warning"
+                          data-hook="table-details-tab-warning-badge"
+                        >
+                          <WarningIcon size={12} weight="fill" />
+                          {monitoringIssuesCounts.warnings}
+                        </TabBadge>
+                      )}
+                  </Tab>
+                  <Tab
+                    $active={activeTab === "details"}
+                    onClick={() => setActiveTab("details")}
+                    data-hook="table-details-tab-details"
+                    data-active={activeTab === "details"}
+                  >
+                    Details
+                  </Tab>
+                </TabsNav>
+                <TabsSeparator />
+              </TabsContainer>
+            )}
 
-            {activeTab === "monitoring" && (
+            {!isView && activeTab === "monitoring" && (
               <MonitoringTab
                 tableData={tableData}
                 matViewData={matViewData}
@@ -678,13 +685,14 @@ export const TableDetailsDrawer = () => {
               />
             )}
 
-            {activeTab === "details" && (
+            {(isView || activeTab === "details") && (
               <DetailsTab
                 tableData={tableData}
                 matViewData={matViewData}
                 columns={columns}
                 ddl={ddl}
                 isMatView={isMatView}
+                isView={isView}
                 truncatedDDL={truncatedDDL}
                 baseTableStatus={baseTableStatus}
                 columnsExpanded={columnsExpanded}
@@ -694,12 +702,14 @@ export const TableDetailsDrawer = () => {
               />
             )}
 
-            <SuspensionDialog
-              tableName={tableName}
-              kind={isMatView ? "matview" : "table"}
-              open={suspensionDialogOpen}
-              onOpenChange={setSuspensionDialogOpen}
-            />
+            {!isView && (
+              <SuspensionDialog
+                tableName={tableName}
+                kind={isMatView ? "matview" : "table"}
+                open={suspensionDialogOpen}
+                onOpenChange={setSuspensionDialogOpen}
+              />
+            )}
           </>
         ) : (
           <EmptyState data-hook="table-details-empty-state">

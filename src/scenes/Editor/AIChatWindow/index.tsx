@@ -458,6 +458,7 @@ const AIChatWindow: React.FC = () => {
             payload: {
               tableName: table.table_name,
               isMatView: table.table_type === "M",
+              isView: table.table_type === "V",
             },
           }),
         )
