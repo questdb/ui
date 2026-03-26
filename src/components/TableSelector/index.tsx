@@ -268,7 +268,10 @@ export const TableSelector = ({
       ) {
         e.preventDefault()
         const item = filtered[focusedIndex]
-        if (item && !item.disabled) handleSelect(item)
+        if (item && !item.disabled) {
+          handleSelect(item)
+          inputRef.current?.blur()
+        }
       } else if (e.key === "Escape") {
         e.preventDefault()
         if (query) {

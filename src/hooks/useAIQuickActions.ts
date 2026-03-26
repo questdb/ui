@@ -9,7 +9,8 @@ import {
   createSchemaExplainFlowConfig,
   createHealthIssueFlowConfig,
 } from "../utils/executeAIFlow"
-import { getSpecificDocumentation } from "../utils/questdbDocsRetrieval"
+import { getDocsSectionByUrl } from "../utils/questdbDocsRetrieval"
+import { ISSUE_DOCS_URLS } from "../scenes/Schema/TableDetailsDrawer/healthCheck"
 import type {
   HealthIssue,
   TimestampedSample,
@@ -228,9 +229,10 @@ export const useAIQuickActions = () => {
 
     let monitoringDocs: string
     try {
-      monitoringDocs = await getSpecificDocumentation("monitoring", [
-        "Monitoring and alerting - Detect table health issues",
-      ])
+      const docsUrl = ISSUE_DOCS_URLS[issue.id]
+      monitoringDocs = docsUrl
+        ? await getDocsSectionByUrl(docsUrl)
+        : "Documentation unavailable"
     } catch (_error) {
       monitoringDocs = "Documentation unavailable"
     }

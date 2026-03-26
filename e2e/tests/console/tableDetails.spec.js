@@ -701,13 +701,63 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-details-section").should("not.exist")
 
-      cy.getByDataHook("table-details-health-status").should("not.exist")
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "healthy")
     })
 
     after(() => {
       cy.loadConsoleWithAuth()
       cy.dropViewIfExists(TEST_VIEW)
       cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("view invalid state (R4)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createView(TEST_VIEW)
+    })
+
+    it("should show error banner when view becomes invalid after base table is dropped", () => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      cy.collapseTables()
+      cy.collapseMatViews()
+      cy.expandViews()
+      cy.openDetailsDrawer(TEST_VIEW, "view")
+
+      // Verify healthy state first
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "healthy")
+      cy.getByDataHook("table-details-error-banner").should("not.exist")
+      cy.getByDataHook("table-details-columns-content").should("be.visible")
+
+      // Drop base table to invalidate the view
+      cy.execQuery(`DROP TABLE ${TEST_TABLE};`)
+
+      // Wait for polling to pick up the invalidation
+      cy.get('[data-hook="table-details-error-banner"]', {
+        timeout: 5000,
+      }).should("be.visible")
+      cy.getByDataHook("table-details-error-title").should(
+        "contain",
+        "View is invalid",
+      )
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "critical",
+      )
+      cy.getByDataHook("table-details-error-docs-link").should("be.visible")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropViewIfExists(TEST_VIEW)
+      cy.dropTableIfExists(TEST_TABLE)
     })
   })
 

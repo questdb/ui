@@ -27,6 +27,7 @@ import {
   type Table,
   type Column,
   type MaterializedView,
+  type View,
 } from "../../../utils/questdb/types"
 import {
   calculateHealthStatus,
@@ -231,6 +232,7 @@ export const TableDetailsDrawer = () => {
   const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
   const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
+  const [viewData, setViewData] = useState<View | null>(null)
   const [columns, setColumns] = useState<Column[]>([])
   const [ddl, setDdl] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -296,6 +298,22 @@ export const TableDetailsDrawer = () => {
     [handleAskAIForHealthIssue, tableData, tableName, trendData],
   )
 
+  const handleAskAIForViewIssue = useCallback(() => {
+    if (tableData?.id == null) return
+    const issue: HealthIssue = {
+      id: "R4",
+      severity: "critical",
+      field: "viewStatus",
+      message: `View is invalid: ${viewData?.invalidation_reason}`,
+    }
+    void handleAskAIForHealthIssue(tableData.id, tableName, issue)
+  }, [
+    handleAskAIForHealthIssue,
+    tableData,
+    tableName,
+    viewData?.invalidation_reason,
+  ])
+
   const fetchTableData = useCallback(async () => {
     try {
       const escapedName = tableName.replace(/'/g, "''")
@@ -334,6 +352,31 @@ export const TableDetailsDrawer = () => {
       console.error("Failed to fetch materialized view data:", error)
     }
   }, [quest, tableName, isMatView])
+
+  const fetchViewData = useCallback(async () => {
+    if (!isView) return
+    try {
+      const escapedName = tableName.replace(/'/g, "''")
+      const response = await quest.query<View>(
+        `views() WHERE view_name = '${escapedName}'`,
+      )
+      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
+        setViewData(response.data[0])
+      } else if (
+        response.type === QuestDB.Type.DQL &&
+        response.data.length === 0
+      ) {
+        dispatch(
+          actions.console.replaceSidebarHistory({
+            type: "tableDetails",
+            payload: null,
+          }),
+        )
+      }
+    } catch (error) {
+      console.error("Failed to fetch view data:", error)
+    }
+  }, [quest, tableName, isView, dispatch])
 
   const fetchColumns = useCallback(async () => {
     try {
@@ -393,16 +436,18 @@ export const TableDetailsDrawer = () => {
     await Promise.all([
       fetchTableData(),
       fetchMatViewData(),
+      fetchViewData(),
       fetchColumns(),
       fetchDDL(),
     ])
     setLoading(false)
-  }, [fetchTableData, fetchMatViewData, fetchColumns, fetchDDL])
+  }, [fetchTableData, fetchMatViewData, fetchViewData, fetchColumns, fetchDDL])
 
   useEffect(() => {
     if (isOpen && hasTarget) {
       setTableData(null)
       setMatViewData(null)
+      setViewData(null)
       setColumns([])
       setDdl("")
       setColumnsExpanded(isView)
@@ -418,6 +463,7 @@ export const TableDetailsDrawer = () => {
     } else if (!isOpen || !hasTarget) {
       setTableData(null)
       setMatViewData(null)
+      setViewData(null)
       setColumns([])
       setDdl("")
       setColumnsExpanded(false)
@@ -497,6 +543,27 @@ export const TableDetailsDrawer = () => {
 
     return () => clearInterval(interval)
   }, [isOpen, hasTarget, isMatView, fetchMatViewData])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget || !isView) return
+
+    const interval = setInterval(() => {
+      void fetchViewData()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, hasTarget, isView, fetchViewData])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget) return
+
+    const interval = setInterval(() => {
+      void fetchColumns()
+      void fetchDDL()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, hasTarget, fetchColumns, fetchDDL])
 
   const rawHealthStatus = useMemo(() => {
     if (!tableData) return null
@@ -580,9 +647,15 @@ export const TableDetailsDrawer = () => {
       }
       title={
         <TitleContainer>
-          {hasTarget && !isView && (
+          {hasTarget && (
             <HealthStatusLabel
-              severity={healthStatus?.overallSeverity ?? "healthy"}
+              severity={
+                isView
+                  ? viewData?.view_status === "invalid"
+                    ? "critical"
+                    : "healthy"
+                  : (healthStatus?.overallSeverity ?? "healthy")
+              }
             />
           )}
 
@@ -689,6 +762,7 @@ export const TableDetailsDrawer = () => {
               <DetailsTab
                 tableData={tableData}
                 matViewData={matViewData}
+                viewData={viewData}
                 columns={columns}
                 ddl={ddl}
                 isMatView={isMatView}
@@ -699,6 +773,7 @@ export const TableDetailsDrawer = () => {
                 onColumnsExpandedChange={setColumnsExpanded}
                 onNavigateToBaseTable={handleNavigateToBaseTable}
                 onExplainWithAI={handleExplainWithAI}
+                onAskAIForViewIssue={handleAskAIForViewIssue}
               />
             )}
 
