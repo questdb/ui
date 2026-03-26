@@ -35,6 +35,16 @@ const hashString = (str) => {
   return new Uint32Array([hash])[0].toString(36)
 }
 
+const COPY_ICON_SVG =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+  '<path d="M7 6V3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3v3c0 .552-.45 1-1.007 1H4.007A1.001 1.001 0 0 1 3 21l.003-14c0-.552.45-1 1.007-1H7zM5.003 8 5 20h10V8H5.003zM9 6h8v10h2V4H9v2z"></path>' +
+  "</svg>"
+
+const CHECK_ICON_SVG =
+  '<svg width="10" height="10" viewBox="0 0 24 24" fill="#50fa7b" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;right:0;transform:translate(25%,-25%)">' +
+  '<path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-6 7.07-7.071-1.414-1.414-5.656 5.657-2.829-2.829-1.414 1.414L11.003 16z"></path>' +
+  "</svg>"
+
 export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: "qdb-grid",
@@ -519,13 +529,18 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function triggerHeaderClick(e) {
-    // avoid broadcasting fat finger clicks
-    if (colResizeColIndex === undefined) {
-      triggerEvent("header.click", {
-        columnName: e.currentTarget.getAttribute("data-column-name"),
-      })
-    }
+  function headerCopyClick(e) {
+    e.stopPropagation()
+    const copyBtn = e.currentTarget
+    const headerEl = copyBtn.closest(".qg-header")
+    const columnName = headerEl.getAttribute("data-column-name")
+    copyToClipboard(columnName).then(undefined)
+    copyBtn.innerHTML = COPY_ICON_SVG + CHECK_ICON_SVG
+    addClass(copyBtn, "qg-header-copy-active")
+    setTimeout(() => {
+      copyBtn.innerHTML = COPY_ICON_SVG
+      removeClass(copyBtn, "qg-header-copy-active")
+    }, 2000)
   }
 
   function colResizeClearTimer() {
@@ -984,9 +999,19 @@ export function grid(rootElement, _paginationFn, id) {
 
       const hBorderSpan = document.createElement("span")
       addClass(hBorderSpan, "qg-header-border")
+
+      const copyBtn = document.createElement("div")
+      addClass(copyBtn, "qg-header-copy")
+      copyBtn.innerHTML = COPY_ICON_SVG
+      copyBtn.onclick = headerCopyClick
+
+      const hNameRow = document.createElement("div")
+      addClass(hNameRow, "qg-header-name-row")
+      hNameRow.append(hName, copyBtn)
+
       h.append(hysteresis, hBorderSpan)
-      h.append(hName, hType)
-      h.onclick = triggerHeaderClick
+      h.append(hNameRow, hType)
+
       header.append(h)
     }
 
@@ -1093,6 +1118,7 @@ export function grid(rootElement, _paginationFn, id) {
       focusedCell = cell
       focusedColumnIndex = cell.columnIndex
       renderFocusedCell()
+      triggerEvent("selection.change", { hasSelection: true })
     }
   }
 
@@ -2230,6 +2256,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function setData(_data) {
     initialFocusSkipped = false
+    triggerEvent("selection.change", { hasSelection: false })
     setTimeout(() => {
       setDataPart1(_data)
       // This part of the update sequence requires layoutStore access.
@@ -2287,6 +2314,7 @@ export function grid(rootElement, _paginationFn, id) {
         setBothRowsInactive()
         focusedRowIndex = -1
         focusedColumnIndex = -1
+        triggerEvent("selection.change", { hasSelection: false })
       }
     })
 

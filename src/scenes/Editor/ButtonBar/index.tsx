@@ -20,9 +20,9 @@ const ButtonBarWrapper = styled.div<{
   ${({ $searchWidgetType }) => css`
     position: absolute;
     top: ${$searchWidgetType === "replace"
-      ? "8.2rem"
+      ? "calc(8.2rem + 8px)"
       : $searchWidgetType === "find"
-        ? "5.3rem"
+        ? "calc(5.3rem + 8px)"
         : "1rem"};
     right: 2.4rem;
     z-index: 1;
