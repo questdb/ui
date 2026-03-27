@@ -25,6 +25,7 @@ import type { editor, IPosition, IRange } from "monaco-editor"
 import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
+import type { ValidateQueryResult } from "../../../utils/questdb"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -198,7 +199,8 @@ export const getQueriesFromPosition = (
   let startCol = start.column
   let startPos = startCharIndex - 1
   let nextSql = null
-  let inQuote = false
+  let inSingleQuote = false
+  let inDoubleQuote = false
   let singleLineCommentStack: number[] = []
   let multiLineCommentStack: number[] = []
   let inSingleLineComment = false
@@ -231,7 +233,12 @@ export const getQueriesFromPosition = (
 
     switch (char) {
       case ";": {
-        if (inQuote || inSingleLineComment || inMultiLineComment) {
+        if (
+          inSingleQuote ||
+          inDoubleQuote ||
+          inSingleLineComment ||
+          inMultiLineComment
+        ) {
           column++
           break
         }
@@ -297,15 +304,23 @@ export const getQueriesFromPosition = (
       }
 
       case "'": {
-        if (!inMultiLineComment && !inSingleLineComment) {
-          inQuote = !inQuote
+        if (!inMultiLineComment && !inSingleLineComment && !inDoubleQuote) {
+          inSingleQuote = !inSingleQuote
+        }
+        column++
+        break
+      }
+
+      case '"': {
+        if (!inMultiLineComment && !inSingleLineComment && !inSingleQuote) {
+          inDoubleQuote = !inDoubleQuote
         }
         column++
         break
       }
 
       case "-": {
-        if (!inMultiLineComment && !inQuote) {
+        if (!inMultiLineComment && !inSingleQuote && !inDoubleQuote) {
           singleLineCommentStack.push(i)
           if (singleLineCommentStack.length === 2) {
             if (singleLineCommentStack[0] + 1 === singleLineCommentStack[1]) {
@@ -326,7 +341,12 @@ export const getQueriesFromPosition = (
       }
 
       case "/": {
-        if (!inMultiLineComment && !inSingleLineComment && !inQuote) {
+        if (
+          !inMultiLineComment &&
+          !inSingleLineComment &&
+          !inSingleQuote &&
+          !inDoubleQuote
+        ) {
           if (multiLineCommentStack.length === 0) {
             multiLineCommentStack.push(i)
           } else {
@@ -352,7 +372,12 @@ export const getQueriesFromPosition = (
       }
 
       case "*": {
-        if (!inMultiLineComment && !inSingleLineComment) {
+        if (
+          !inMultiLineComment &&
+          !inSingleLineComment &&
+          !inSingleQuote &&
+          !inDoubleQuote
+        ) {
           if (
             multiLineCommentStack.length === 1 &&
             multiLineCommentStack[0] + 1 === i
@@ -1249,6 +1274,176 @@ export const setErrorMarkerForQuery = (
   monaco.editor.setModelMarkers(model, QuestDBLanguageName, markers)
 }
 
+const ValidationOwner = "questdb-validation"
+export const JIT_VALIDATION_QUERY_CHAR_CAP = 10_000
+
+const validationRefs: Record<
+  string,
+  { markers: editor.IMarkerData[]; queryText: string; version: number }
+> = {}
+
+const validationControllers: Record<string, AbortController> = {}
+
+export const cancelAllValidationRequests = () => {
+  Object.keys(validationControllers).forEach((bufferKey) => {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+  })
+}
+
+export const clearValidationMarkers = (
+  monaco: Monaco | null,
+  editor: IStandaloneCodeEditor | null,
+  bufferId?: number,
+) => {
+  const model = editor?.getModel()
+  if (model && monaco) {
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+  }
+  if (bufferId !== undefined) {
+    const bufferKey = bufferId.toString()
+    delete validationRefs[bufferKey]
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+  }
+}
+
+export const applyValidationMarkers = (
+  monaco: Monaco,
+  editor: IStandaloneCodeEditor,
+  bufferId: number,
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const bufferKey = bufferId.toString()
+  const cached = validationRefs[bufferKey]
+  if (cached) {
+    if (cached.version === model.getVersionId()) {
+      monaco.editor.setModelMarkers(model, ValidationOwner, cached.markers)
+    } else {
+      delete validationRefs[bufferKey]
+    }
+  }
+}
+
+export const validateQueryJIT = (
+  monaco: Monaco,
+  editor: IStandaloneCodeEditor,
+  bufferId: number,
+  getBufferExecutions: () => Record<QueryKey, unknown>,
+  validateQuery: (
+    query: string,
+    signal: AbortSignal,
+  ) => Promise<ValidateQueryResult>,
+) => {
+  const model = editor.getModel()
+  if (!model) return
+
+  const bufferKey = bufferId.toString()
+  const modelUri = model.uri.toString()
+  const queryAtCursor = getQueryFromCursor(editor)
+
+  if (!queryAtCursor) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+    delete validationRefs[bufferKey]
+    return
+  }
+
+  const queryText = normalizeQueryText(queryAtCursor.query)
+  const version = model.getVersionId()
+
+  // Skip if already validated this exact query+version
+  const cached = validationRefs[bufferKey]
+  if (cached && cached.queryText === queryText && cached.version === version) {
+    return
+  }
+
+  if (queryText.length > JIT_VALIDATION_QUERY_CHAR_CAP) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+    validationRefs[bufferKey] = { markers: [], queryText, version }
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+    return
+  }
+
+  // Skip if execution result already exists for this query
+  const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
+  const bufferExecutions = getBufferExecutions()
+  if (bufferExecutions[queryKey]) {
+    validationControllers[bufferKey]?.abort()
+    delete validationControllers[bufferKey]
+    monaco.editor.setModelMarkers(model, ValidationOwner, [])
+    delete validationRefs[bufferKey]
+    return
+  }
+
+  // Abort any previous in-flight validation for this buffer
+  validationControllers[bufferKey]?.abort()
+  const controller = new AbortController()
+  validationControllers[bufferKey] = controller
+
+  validateQuery(queryText, controller.signal)
+    .then((result: ValidateQueryResult) => {
+      if (validationControllers[bufferKey] !== controller) {
+        return
+      }
+      delete validationControllers[bufferKey]
+
+      const currentModel = editor.getModel()
+      if (
+        !currentModel ||
+        currentModel.uri.toString() !== modelUri ||
+        currentModel.getVersionId() !== version
+      ) {
+        return
+      }
+
+      // Query was executed while validation was in flight — skip
+      if (getBufferExecutions()[queryKey]) return
+
+      if ("error" in result) {
+        const errorRange = getErrorRange(editor, queryAtCursor, result.position)
+        const markers: editor.IMarkerData[] = []
+
+        if (errorRange) {
+          markers.push({
+            message: result.error,
+            severity: monaco.MarkerSeverity.Error,
+            startLineNumber: errorRange.startLineNumber,
+            endLineNumber: errorRange.endLineNumber,
+            startColumn: errorRange.startColumn,
+            endColumn: errorRange.endColumn,
+          })
+        } else {
+          const errorPos = toTextPosition(queryAtCursor, result.position)
+          markers.push({
+            message: result.error,
+            severity: monaco.MarkerSeverity.Error,
+            startLineNumber: errorPos.lineNumber,
+            endLineNumber: errorPos.lineNumber,
+            startColumn: errorPos.column,
+            endColumn: errorPos.column,
+          })
+        }
+
+        validationRefs[bufferKey] = { markers, queryText, version }
+        monaco.editor.setModelMarkers(currentModel, ValidationOwner, markers)
+      } else {
+        delete validationRefs[bufferKey]
+        monaco.editor.setModelMarkers(currentModel, ValidationOwner, [])
+      }
+    })
+    .catch(() => {
+      // Abort or network error — silently ignore
+      if (validationControllers[bufferKey] === controller) {
+        delete validationControllers[bufferKey]
+      }
+    })
+}
+
 // Creates a QueryKey for schema explanation conversations
 // Uses DDL hash so same schema = same queryKey = cached conversation
 export const createSchemaQueryKey = (
@@ -1257,4 +1452,86 @@ export const createSchemaQueryKey = (
 ): QueryKey => {
   const ddlHash = hashString(ddl)
   return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
+}
+
+/**
+ * Check if cursor is inside a line comment (--) or block comment.
+ * Skips over string literals and quoted identifiers so quotes
+ * inside comments don't cause false positives.
+ */
+export function isCursorInComment(text: string, cursorOffset: number): boolean {
+  let i = 0
+  const end = Math.min(cursorOffset, text.length)
+  while (i < end) {
+    const ch = text[i]
+    const next = text[i + 1]
+    // Line comment: -- until end of line
+    if (ch === "-" && next === "-") {
+      i += 2
+      while (i < end && text[i] !== "\n") i++
+      if (i >= cursorOffset) return true
+      continue
+    }
+    // Block comment: /* until */
+    if (ch === "/" && next === "*") {
+      i += 2
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
+      if (i >= cursorOffset) return true
+      i += 2 // skip */
+      continue
+    }
+    // Skip over string literals and quoted identifiers so quotes inside comments don't confuse us
+    if (ch === "'" || ch === '"') {
+      i++
+      while (i < text.length && text[i] !== ch) i++
+      i++ // skip closing quote
+      continue
+    }
+    i++
+  }
+  return false
+}
+
+/**
+ * Check if cursor is inside a double-quoted identifier (e.g. "my-table").
+ * Tracks quote state from `startOffset` to `cursorOffset`, handling
+ * escaped quotes (""), single-quoted strings, and comments.
+ * Returns the offset of the opening " if inside, or -1 if not.
+ */
+export function isCursorInQuotedIdentifier(
+  text: string,
+  startOffset: number,
+  cursorOffset: number,
+): number {
+  if (isCursorInComment(text, cursorOffset)) return -1
+
+  let inDouble = false
+  let inSingle = false
+  let openQuoteOffset = -1
+  for (let i = startOffset; i < cursorOffset; i++) {
+    const ch = text[i]
+    const next = text[i + 1]
+    if (inSingle) {
+      if (ch === "'" && next === "'") i++
+      else if (ch === "'") inSingle = false
+    } else if (inDouble) {
+      if (ch === '"' && next === '"') i++
+      else if (ch === '"') inDouble = false
+    } else if (ch === "-" && next === "-") {
+      // Skip line comment
+      i += 2
+      while (i < cursorOffset && text[i] !== "\n") i++
+    } else if (ch === "/" && next === "*") {
+      // Skip block comment
+      i += 2
+      while (i < cursorOffset && !(text[i] === "*" && text[i + 1] === "/")) i++
+      i++ // skip past */
+    } else if (ch === '"') {
+      inDouble = true
+      openQuoteOffset = i
+    } else if (ch === "'") {
+      inSingle = true
+    }
+  }
+  return inDouble ? openQuoteOffset : -1
 }
