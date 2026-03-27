@@ -51,6 +51,7 @@ export const useAIQuickActions = () => {
     currentModel,
     apiKey,
     status,
+    aiAssistantSettings,
   } = useAIStatus()
 
   const {
@@ -135,6 +136,7 @@ export const useAIQuickActions = () => {
             ...schemaDisplayData,
           },
           settings: { model: currentModel, apiKey },
+          aiAssistantSettings,
           questClient: quest,
           tables,
           hasSchemaAccess,
@@ -176,6 +178,7 @@ export const useAIQuickActions = () => {
           ...schemaDisplayData,
         },
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
@@ -257,6 +260,7 @@ export const useAIQuickActions = () => {
           monitoringDocs,
           trendSamples,
           settings: { model: currentModel, apiKey },
+          aiAssistantSettings,
           questClient: quest,
           tables,
           hasSchemaAccess,
@@ -304,6 +308,7 @@ export const useAIQuickActions = () => {
         monitoringDocs,
         trendSamples,
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,

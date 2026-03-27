@@ -339,11 +339,15 @@ export class Client {
     }
   }
 
-  async validateQuery(query: string): Promise<ValidateQueryResult> {
+  async validateQuery(
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<ValidateQueryResult> {
     const response = await fetch(
       `api/v1/sql/validate?${Client.encodeParams({ query })}`,
       {
         headers: this.commonHeaders,
+        signal,
       },
     )
     if (response.ok) {

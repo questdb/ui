@@ -627,3 +627,9 @@ Cypress.Commands.add("waitForAIResponse", (alias) => {
   cy.wait(alias)
   cy.waitForStreamingComplete()
 })
+
+Cypress.Commands.add("setupCustomProvider", (config = {}) => {
+  const { getCustomProviderConfiguredSettings } = require("./utils/aiAssistant")
+  const settings = getCustomProviderConfiguredSettings(config)
+  cy.loadConsoleWithAuth(false, settings)
+})

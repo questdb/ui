@@ -283,11 +283,8 @@ const AssistantHeader = styled(Box).attrs({
 `
 
 const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
-  font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.4rem;
-  text-transform: uppercase;
   color: ${color("foreground")};
-  line-height: 1;
 `
 
 const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
@@ -986,6 +983,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           }
 
           const hasSQLChange = !!message.sql
+          const isSQLUnchanged =
+            hasSQLChange &&
+            message.previousSQL !== undefined &&
+            normalizeQueryText(message.sql || "") ===
+              normalizeQueryText(message.previousSQL || "")
           const isExpanded = expandedDiffs.has(originalIndex)
 
           // Read status from message, compute isRejectedWithFollowUp from message positions
@@ -1002,6 +1004,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const isMessageStreaming = isStreaming && isLastVisibleMessage
           const showButtons =
             hasSQLChange &&
+            !isSQLUnchanged &&
             !isAccepted &&
             !isRejected &&
             !isRejectedWithFollowUp &&
@@ -1092,7 +1095,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <>
                   <AssistantHeader data-hook="assistant-header">
                     <AISparkle size={20} variant="filled" />
-                    <AssistantLabel>Assistant</AssistantLabel>
+                    <AssistantLabel>
+                      {message.model || "Assistant"}
+                    </AssistantLabel>
                     {tokenDisplay && (
                       <TokenDisplay className="token-display">
                         <GaugeIcon size="16px" color={theme.color.gray2} />
@@ -1118,41 +1123,52 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             <CodeIcon size={22} color="#BDBDBD" />
                             <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
                           </DiffHeaderLeft>
-                          {(isAccepted ||
-                            isRejected ||
-                            isRejectedWithFollowUp) && (
-                            <DiffHeaderStatus
-                              $isAccepted={isAccepted}
-                              $isRejected={isRejected}
-                              $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                              data-hook={
-                                isRejected
-                                  ? "diff-status-rejected"
-                                  : isRejectedWithFollowUp
-                                    ? "diff-status-followed-up"
-                                    : "diff-status-accepted"
-                              }
-                            >
-                              <StatusIcon
+                          {isSQLUnchanged && (
+                            <DiffHeaderStatus data-hook="diff-status-unchanged">
+                              <StatusIcon>
+                                <CheckmarkOutline size="14px" />
+                              </StatusIcon>
+                              Already accepted
+                            </DiffHeaderStatus>
+                          )}
+                          {!isSQLUnchanged &&
+                            (isAccepted ||
+                              isRejected ||
+                              isRejectedWithFollowUp) && (
+                              <DiffHeaderStatus
                                 $isAccepted={isAccepted}
                                 $isRejected={isRejected}
                                 $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                                data-hook={
+                                  isRejected
+                                    ? "diff-status-rejected"
+                                    : isRejectedWithFollowUp
+                                      ? "diff-status-followed-up"
+                                      : "diff-status-accepted"
+                                }
                               >
-                                {isRejected ? (
-                                  <CloseOutline size="14px" />
-                                ) : isRejectedWithFollowUp ? (
-                                  <ChatDotsIcon size="14px" />
-                                ) : (
-                                  <CheckmarkOutline size="14px" />
-                                )}
-                              </StatusIcon>
-                              {isRejected
-                                ? "Rejected"
-                                : isRejectedWithFollowUp
-                                  ? "Followed up"
-                                  : "Accepted"}
-                            </DiffHeaderStatus>
-                          )}
+                                <StatusIcon
+                                  $isAccepted={isAccepted}
+                                  $isRejected={isRejected}
+                                  $isRejectedWithFollowUp={
+                                    isRejectedWithFollowUp
+                                  }
+                                >
+                                  {isRejected ? (
+                                    <CloseOutline size="14px" />
+                                  ) : isRejectedWithFollowUp ? (
+                                    <ChatDotsIcon size="14px" />
+                                  ) : (
+                                    <CheckmarkOutline size="14px" />
+                                  )}
+                                </StatusIcon>
+                                {isRejected
+                                  ? "Rejected"
+                                  : isRejectedWithFollowUp
+                                    ? "Followed up"
+                                    : "Accepted"}
+                              </DiffHeaderStatus>
+                            )}
                           <DiffHeaderRight>
                             <IconButton
                               onClick={(e) => {

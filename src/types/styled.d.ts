@@ -33,11 +33,13 @@ export type ColorShape = {
   gray1: string
   gray2: string
   backgroundLighter: string
+  inputBackground: string
   chatBackground: string
   backgroundDarker: string
   background: string
   foreground: string
   selection: string
+  inputBorder: string
   selectionDarker: string
   comment: string
   midnight: string
@@ -45,6 +47,7 @@ export type ColorShape = {
   redDark: string
   redSecondary: string
   loginBackground: string
+  orange10: string
   orangeDark: string
   orange: string
   yellow: string

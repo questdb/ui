@@ -29,11 +29,12 @@ export const getLastUnactionedDiff = (
 
   const lastVisible = visibleMessages[visibleMessages.length - 1]
 
-  // Check if it's an assistant message with SQL that hasn't been actioned
+  // Check if it's an assistant message with a real SQL change that hasn't been actioned
   const hasUnactionedDiff =
     lastVisible.role === "assistant" &&
     lastVisible.sql !== undefined &&
     lastVisible.previousSQL !== undefined &&
+    lastVisible.sql.trim() !== lastVisible.previousSQL.trim() &&
     !lastVisible.isAccepted &&
     !lastVisible.isRejected
 

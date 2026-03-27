@@ -1,5 +1,4 @@
-import { operators } from "./operators"
-import { dataTypes, functions, keywords } from "@questdb/sql-grammar"
+import { dataTypes, functions, keywords, operators } from "@questdb/sql-parser"
 import { CompletionItemKind } from "./types"
 import type { IRange } from "monaco-editor"
 

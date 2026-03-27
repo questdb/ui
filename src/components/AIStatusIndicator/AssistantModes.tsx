@@ -12,6 +12,7 @@ import {
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
+import { Box } from "../Box"
 
 const Container = styled.div`
   display: flex;
@@ -169,6 +170,7 @@ export type OperationSection = {
   active: boolean
   operations: Array<{ type: AIOperationStatus; args?: StatusArgs }>
   abort: boolean
+  startTimestamp: number
 }
 
 const formatDetailedStatusMessage = (
@@ -212,6 +214,7 @@ export const buildOperationSections = (
         active: false,
         abort: sectionType === AIOperationStatus.Aborted,
         operations: [op],
+        startTimestamp: op.timestamp,
       }
       sections.push(currentSection)
     } else {
@@ -230,11 +233,37 @@ export const buildOperationSections = (
   return sections
 }
 
+export const formatDurationMs = (ms: number): string | null => {
+  if (ms < 0) return null
+  if (ms < 1000) return `${ms}ms`
+  return `${Math.round(ms / 1000)}s`
+}
+
+export const getSectionDuration = (
+  section: OperationSection,
+  nextSection: OperationSection | undefined,
+  responseStart?: number,
+): string | null => {
+  if (section.active || section.abort) return null
+  const endTimestamp = nextSection?.startTimestamp ?? responseStart
+  if (!endTimestamp) return null
+  return formatDurationMs(endTimestamp - section.startTimestamp)
+}
+
+const DurationText = styled.span`
+  font-size: 1.2rem;
+  font-family: ${({ theme }) => theme.fontMonospace};
+  color: ${color("graphLegend")};
+  font-weight: 400;
+  flex-shrink: 0;
+`
+
 type AssistantModesProps = {
   operationHistory: OperationHistory
   status?: AIOperationStatus | null
   isLive?: boolean
   onScrollNeeded?: () => void
+  responseStart?: number
 }
 
 export const AssistantModes: React.FC<AssistantModesProps> = ({
@@ -242,6 +271,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   status,
   isLive = false,
   onScrollNeeded,
+  responseStart,
 }) => {
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
@@ -301,6 +331,13 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
           collapsedSections[section.id] === undefined
             ? defaultExpanded && isExpandable
             : !collapsedSections[section.id] && isExpandable
+        const nextSection: OperationSection | undefined =
+          operationSections[index + 1]
+        const sectionDuration = getSectionDuration(
+          section,
+          nextSection,
+          responseStart,
+        )
 
         return (
           <ModeHeader
@@ -320,16 +357,21 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
                 )}
               </ReasoningIcon>
 
-              <ModeTitle>{section.type}</ModeTitle>
-              {isExpandable && (
-                <ModeChevron onClick={() => handleToggleSection(section.id)}>
-                  {isExpanded ? (
-                    <ChevronDown size={16} />
-                  ) : (
-                    <ChevronRight size={16} />
-                  )}
-                </ModeChevron>
-              )}
+              <Box align="flex-end" gap="0.3rem">
+                <ModeTitle>{section.type}</ModeTitle>
+                {sectionDuration && (
+                  <DurationText>({sectionDuration})</DurationText>
+                )}
+                {isExpandable && (
+                  <ModeChevron onClick={() => handleToggleSection(section.id)}>
+                    {isExpanded ? (
+                      <ChevronDown size={16} />
+                    ) : (
+                      <ChevronRight size={16} />
+                    )}
+                  </ModeChevron>
+                )}
+              </Box>
             </ModeHeaderTop>
             {isExpanded && (
               <ReasoningThread>
