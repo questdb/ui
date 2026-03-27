@@ -10,7 +10,10 @@ import styled, { css, useTheme } from "styled-components"
 import { selectors, actions } from "../../../store"
 import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
 import { Drawer, Box, Text, CopyButton, Dialog } from "../../../components"
-import { hideColumnsFromTableDDL } from "../../../components/LiteEditor/utils"
+import {
+  hideColumnsFromTableDDL,
+  truncateLongDDL,
+} from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
@@ -435,7 +438,9 @@ export const TableDetailsDrawer = () => {
 
   const truncatedDDL = useMemo(() => {
     if (!ddl) return { text: "", grayedOutLines: null }
-    return hideColumnsFromTableDDL(ddl, columns)
+    const result = hideColumnsFromTableDDL(ddl, columns)
+    if (result.grayedOutLines) return result
+    return truncateLongDDL(ddl)
   }, [ddl, columns])
 
   const isIngestionActive = useMemo(() => {

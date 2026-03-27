@@ -417,13 +417,11 @@ export class Client {
   }
 
   async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return await this.query<{ ddl: string }>(
-      `SHOW CREATE MATERIALIZED VIEW '${table}';`,
-    )
+    return this.queryDDL(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
   }
 
   async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
-    return await this.query<{ ddl: string }>(`SHOW CREATE VIEW '${viewName}';`)
+    return this.queryDDL(`SHOW CREATE VIEW '${viewName}';`)
   }
 
   async showViews(): Promise<QueryResult<View>> {
@@ -431,7 +429,18 @@ export class Client {
   }
 
   async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return await this.query<{ ddl: string }>(`SHOW CREATE TABLE '${table}';`)
+    return this.queryDDL(`SHOW CREATE TABLE '${table}';`)
+  }
+
+  private async queryDDL(sql: string): Promise<QueryResult<{ ddl: string }>> {
+    const result = await this.query<{ ddl: string }>(sql)
+    if (result.type === Type.DQL) {
+      result.data = result.data.map((row) => ({
+        ...row,
+        ddl: row.ddl.replace(/\n{2,}/g, "\n"),
+      }))
+    }
+    return result
   }
 
   async checkCSVFile(name: string): Promise<FileCheckResponse> {
