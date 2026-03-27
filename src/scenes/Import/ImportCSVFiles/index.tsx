@@ -243,7 +243,9 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             if (file.isUploading) {
               return
             }
-            void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD)
+            void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD, {
+              fileSize: file.fileObject.size,
+            })
             setIsUploading(file, true)
             try {
               const response = await quest.uploadCSVFile({

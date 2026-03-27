@@ -32,6 +32,8 @@ import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
 import useElementVisibility from "../../../hooks/useElementVisibility"
 import { widgets } from "./widgets"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const Root = styled.div`
   display: flex;
@@ -346,6 +348,12 @@ export const Metrics = () => {
                       }))}
                       onChange={(e) => {
                         if (buffer?.id) {
+                          void trackEvent(
+                            ConsoleEvent.METRIC_REFRESH_RATE_CHANGE,
+                            {
+                              refreshRate: e.target.value as RefreshRate,
+                            },
+                          )
                           void updateBuffer(buffer.id, {
                             metricsViewState: {
                               ...buffer?.metricsViewState,

@@ -38,6 +38,8 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 
 import { useLiveQuery } from "dexie-react-hooks"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 export const MAX_TABS = 100
 
@@ -302,6 +304,11 @@ export const EditorProvider: React.FC = ({ children }) => {
         )
         return undefined
       }
+
+      void trackEvent(ConsoleEvent.TAB_ADD, {
+        type: newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+        count: (buffers?.length ?? 0) + 1,
+      })
 
       const fallback = makeFallbackBuffer(
         newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,

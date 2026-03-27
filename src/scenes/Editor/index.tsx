@@ -272,6 +272,8 @@ const Editor = ({
   const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
 
+    void trackEvent(ConsoleEvent.AI_EDITOR_SUGGESTION_REJECT)
+
     const { conversationId, messageId } = pendingDiffInfo
 
     // Use unified rejectSuggestion from provider

@@ -67,7 +67,10 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
     : defaultColor
 
   const handleSelectMetric = async (metricType: MetricType) => {
-    void trackEvent(ConsoleEvent.METRIC_ADD, { metricType })
+    void trackEvent(ConsoleEvent.METRIC_ADD, {
+      metricType,
+      count: metrics.length + 1,
+    })
     if (buffer?.id) {
       const newBuffer = merge(buffer, {
         metricsViewState: {

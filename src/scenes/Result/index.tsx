@@ -278,7 +278,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         <Button
           skin="transparent"
           disabled={!gridHasSelection}
-          onClick={() => gridRef?.current?.shuffleFocusedColumnToFront()}
+          onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_COLUMN_MOVE_TO_FRONT)
+            gridRef?.current?.shuffleFocusedColumnToFront()
+          }}
         >
           <HandPointLeft size="18px" />
         </Button>

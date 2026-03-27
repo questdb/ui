@@ -1174,11 +1174,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       })
       glyphWidgetsRef.current.clear()
       const lineCount = editorRef.current?.getModel()?.getLineCount()
+      const hasContent =
+        (editorRef.current?.getModel()?.getValueLength() ?? 0) > 0
       if (lineCount) {
         setLineNumbersMinChars(
           getDefaultLineNumbersMinChars(canUseAIRef.current) +
             (lineCount.toString().length - 1),
         )
+        if (hasContent) {
+          void trackEvent(ConsoleEvent.EDITOR_VIEW_TAB, { lines: lineCount })
+        }
       }
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
@@ -1446,9 +1451,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       return
     }
 
-    if (runAll) {
-      void trackEvent(ConsoleEvent.EDITOR_RUN_ALL)
-    }
+    void trackEvent(ConsoleEvent.EDITOR_RUN_MULTIPLE, {
+      queryCount: queriesToRunRef.current?.length ?? 0,
+      runAll,
+    })
 
     const triggerScript = () => {
       if (runAll) {

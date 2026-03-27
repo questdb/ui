@@ -6,7 +6,8 @@ export enum ConsoleEvent {
   SEARCH_EXECUTE = "search.execute",
   SEARCH_OPEN = "search.open",
 
-  EDITOR_RUN_ALL = "editor.run_all",
+  EDITOR_VIEW_TAB = "editor.view_tab",
+  EDITOR_RUN_MULTIPLE = "editor.run_multiple",
   EDITOR_GLYPH_RUN = "editor.glyph_run",
   EDITOR_GLYPH_CONTEXT_OPEN = "editor.glyph_context_open",
   EDITOR_GLYPH_CONTEXT_QUERY_PLAN = "editor.glyph_context_query_plan",
@@ -17,6 +18,7 @@ export enum ConsoleEvent {
   GRID_REFRESH = "grid.refresh",
   GRID_LAYOUT_RESET = "grid.layout_reset",
   GRID_COLUMN_FREEZE = "grid.column_freeze",
+  GRID_COLUMN_MOVE_TO_FRONT = "grid.column_move_to_front",
   GRID_CELL_COPY = "grid.cell_copy",
 
   IMPORT_FILE_UPLOAD = "import.file_upload",
@@ -31,7 +33,10 @@ export enum ConsoleEvent {
   AI_CHAT_SEND = "ai.chat_send",
   AI_CHAT_ACCEPT = "ai.chat_accept",
   AI_EDITOR_SUGGESTION_ACCEPT = "ai.editor.suggestion_accept",
+  AI_EDITOR_SUGGESTION_REJECT = "ai.editor.suggestion_reject",
+  AI_EDITOR_SUGGESTION_APPLY = "ai.editor.suggestion_apply",
   AI_CHAT_REJECT = "ai.chat_reject",
+  AI_OPEN_IN_EDITOR = "ai.open_in_editor",
   AI_CHAT_DELETE = "ai.chat_delete",
   AI_CHAT_RENAME = "ai.chat_rename",
   AI_HISTORY_OPEN = "ai.history_open",
@@ -40,25 +45,28 @@ export enum ConsoleEvent {
   AI_GLYPH_CLICK = "ai.glyph_click",
   AI_CONTEXT_BADGE_CLICK = "ai.context_badge_click",
   AI_PROVIDER_CONFIGURE = "ai.provider_configure",
+  AI_SETTINGS_PROVIDER_REMOVE = "ai.settings_provider_remove",
   AI_PROMO_OPEN = "ai.promo_open",
   AI_CONFIGURATION_OPEN = "ai.configuration_open",
   AI_CONFIGURATION_VALIDATE = "ai.configuration_validate",
   AI_SETTINGS_OPEN = "ai.settings_open",
   AI_SETTINGS_MODEL_TOGGLE = "ai.settings_model_toggle",
-  AI_SETTINGS_API_KEY_REMOVE = "ai.settings_api_key_remove",
   AI_SETTINGS_API_KEY_EDIT = "ai.settings_api_key_edit",
   AI_SETTINGS_SCHEMA_ACCESS_REMOVE = "ai.settings_schema_access_remove",
   AI_MODEL_CHANGE = "ai.model_change",
+  AI_FLOW_COMPLETE = "ai.flow_complete",
 
   PANEL_BOTTOM_SWITCH = "panel.bottom.switch",
 
   SCHEMA_FILTER_SUSPENDED = "schema.filter_suspended",
   SCHEMA_CONTEXT_MENU_OPEN = "schema.context_menu_open",
   SCHEMA_CONTEXT_RESUME_WAL = "schema.context_resume_wal",
+  SCHEMA_RESUME_WAL_SUBMIT = "schema.resume_wal_submit",
   SCHEMA_CONTEXT_COPY_DDL = "schema.context_copy_ddl",
   SCHEMA_CONTEXT_EXPLAIN = "schema.context_explain",
   SCHEMA_COPY_MULTIPLE = "schema.copy_multiple",
 
+  TABLE_DETAILS_TAB_SWITCH = "table_details.tab_switch",
   TABLE_DETAILS_OPEN = "table_details.open",
   TABLE_DETAILS_SCHEMA_EXPLAIN = "table_details.schema_explain",
   TABLE_DETAILS_ASK_AI = "table_details.ask_ai",
@@ -66,6 +74,7 @@ export enum ConsoleEvent {
 
   SIDEBAR_NAVIGATE = "sidebar.navigate",
 
+  TAB_ADD = "tab.add",
   TAB_IMPORT = "tab.import",
   TAB_EXPORT = "tab.export",
   TAB_RENAME = "tab.rename",
@@ -78,7 +87,9 @@ export enum ConsoleEvent {
   QUERY_LOG_CLEAR = "query_log.clear",
 
   METRIC_ADD = "metric.add",
+  METRIC_REMOVE = "metric.remove",
   METRIC_TAB_OPEN = "metric.tab_open",
+  METRIC_REFRESH_RATE_CHANGE = "metric.refresh_rate_change",
 
   HELP_OPEN = "help.open",
   HELP_FEEDBACK_SUBMIT = "help.feedback_submit",

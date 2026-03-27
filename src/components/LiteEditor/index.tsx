@@ -9,6 +9,8 @@ import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
@@ -161,7 +163,12 @@ const LiteEditorToolbar = ({
     <ButtonsContainer>
       <OpenInEditorButton
         className="open-in-editor-btn"
-        onClick={onOpenInEditor}
+        onClick={() => {
+          void trackEvent(ConsoleEvent.AI_OPEN_IN_EDITOR, {
+            diffEditor,
+          })
+          onOpenInEditor()
+        }}
         title="Open in editor"
         data-hook="ai-open-in-editor-button"
       >

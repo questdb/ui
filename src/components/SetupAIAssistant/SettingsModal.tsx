@@ -850,6 +850,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const handleRemoveProvider = useCallback(
     (providerId: ProviderId) => {
       const isCustom = !BUILTIN_PROVIDERS[providerId]
+      void trackEvent(ConsoleEvent.AI_SETTINGS_PROVIDER_REMOVE, {
+        isCustom,
+      })
 
       if (isCustom) {
         setLocalCustomProviders((prev) => {

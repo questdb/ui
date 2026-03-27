@@ -762,7 +762,8 @@ export const ConfigurationModal = ({
     if (!selectedProvider || enabledModels.length === 0) return
 
     void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
-      type: selectedProvider,
+      name: selectedProvider,
+      grantSchemaAccess,
     })
 
     const selectedModel =
@@ -890,6 +891,13 @@ export const ConfigurationModal = ({
           },
         },
       }
+
+      void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
+        name: "custom",
+        grantSchemaAccess: definition.grantSchemaAccess ?? false,
+        type: definition.type,
+        contextWindow: definition.contextWindow,
+      })
 
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
       toast.success("AI Assistant activated successfully")

@@ -711,7 +711,12 @@ export const TableDetailsDrawer = () => {
                 <TabsNav>
                   <Tab
                     $active={activeTab === "monitoring"}
-                    onClick={() => setActiveTab("monitoring")}
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
+                        tab: "monitoring",
+                      })
+                      setActiveTab("monitoring")
+                    }}
                     data-hook="table-details-tab-monitoring"
                     data-active={activeTab === "monitoring"}
                   >
@@ -738,7 +743,12 @@ export const TableDetailsDrawer = () => {
                   </Tab>
                   <Tab
                     $active={activeTab === "details"}
-                    onClick={() => setActiveTab("details")}
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
+                        tab: "details",
+                      })
+                      setActiveTab("details")
+                    }}
                     data-hook="table-details-tab-details"
                     data-active={activeTab === "details"}
                   >
