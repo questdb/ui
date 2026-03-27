@@ -1,5 +1,28 @@
 import type { Column } from "../../utils/questdb/types"
 
+export const truncateLongDDL = (
+  ddl: string,
+  maxLines: number = 10,
+): { text: string; grayedOutLines: [number, number] | null } => {
+  const lines = ddl.split("\n")
+  if (lines.length <= maxLines) {
+    return { text: ddl, grayedOutLines: null }
+  }
+
+  const keepTop = 5
+  const keepBottom = 3
+  const topLines = lines.slice(0, keepTop)
+  const bottomLines = lines.slice(-keepBottom)
+
+  const indent = lines[keepTop]?.match(/^\s*/)?.[0] ?? "  "
+  const text = [...topLines, indent + "...", ...bottomLines].join("\n")
+
+  const grayStartLine = keepTop - 1
+  const grayEndLine = keepTop + 1
+
+  return { text, grayedOutLines: [grayStartLine, grayEndLine] }
+}
+
 export const hideColumnsFromTableDDL = (
   ddl: string,
   columns: Column[],

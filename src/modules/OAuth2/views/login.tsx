@@ -80,7 +80,7 @@ const PlugsContainer = styled.div`
 `
 
 const CloseContainer = styled.div`
-  border: 1px solid #6b7280;
+  border: 1px solid ${({ theme }) => theme.color.inputBorder};
   border-radius: 4px;
   padding: 1.2rem;
   display: flex;
@@ -88,7 +88,7 @@ const CloseContainer = styled.div`
   justify-content: center;
   cursor: pointer;
   &:hover {
-    background: #6b7280;
+    background: ${({ theme }) => theme.color.inputBorder};
   }
 `
 
@@ -177,7 +177,7 @@ const Card = styled.div`
     align-items: center;
     align-self: stretch;
     border-radius: 8px;
-    border: 1px solid #6b7280;
+    border: 1px solid ${({ theme }) => theme.color.inputBorder};
     background: ${({ theme }) => theme.color.background};
     font-size: 1.4rem;
     line-height: 1.5;
@@ -235,12 +235,12 @@ const StyledButton = styled(Button)<{ skin: string }>`
     skin === "secondary" &&
     css`
       border-radius: 4px !important;
-      border: 1px solid #6b7280 !important;
+      border: 1px solid ${({ theme }) => theme.color.inputBorder} !important;
       background: transparent !important;
 
       &:hover {
-        background: #6b7280 !important;
-        border-color: #6b7280 !important;
+        background: ${({ theme }) => theme.color.inputBorder} !important;
+        border-color: ${({ theme }) => theme.color.inputBorder} !important;
       }
     `}
 `

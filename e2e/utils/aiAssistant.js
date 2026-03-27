@@ -9,6 +9,16 @@ const PROVIDERS = {
   },
 }
 
+const CUSTOM_PROVIDER_DEFAULTS = {
+  providerId: "test-provider",
+  name: "Test Provider",
+  type: "openai-chat-completions",
+  baseURL: "http://localhost:11434/v1",
+  models: ["test-model-1"],
+  contextWindow: 200000,
+  grantSchemaAccess: true,
+}
+
 function getOpenAIConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
@@ -39,6 +49,76 @@ function getAnthropicConfiguredSettings(schemaAccess = true) {
   }
 }
 
+/**
+ * Returns localStorage settings for a pre-configured custom provider.
+ * Can optionally merge with existing settings (e.g., a built-in provider).
+ */
+function getCustomProviderConfiguredSettings(config = {}, mergeWith = null) {
+  const {
+    providerId = CUSTOM_PROVIDER_DEFAULTS.providerId,
+    name = CUSTOM_PROVIDER_DEFAULTS.name,
+    type = CUSTOM_PROVIDER_DEFAULTS.type,
+    baseURL = CUSTOM_PROVIDER_DEFAULTS.baseURL,
+    apiKey = "",
+    models = CUSTOM_PROVIDER_DEFAULTS.models,
+    contextWindow = CUSTOM_PROVIDER_DEFAULTS.contextWindow,
+    grantSchemaAccess = CUSTOM_PROVIDER_DEFAULTS.grantSchemaAccess,
+  } = config
+
+  const enabledModels = models.map((m) => `${providerId}:${m}`)
+
+  const baseSettings = mergeWith
+    ? JSON.parse(mergeWith["ai.assistant.settings"])
+    : {}
+
+  const settings = {
+    ...baseSettings,
+    selectedModel: enabledModels[0],
+    customProviders: {
+      ...(baseSettings.customProviders || {}),
+      [providerId]: {
+        type,
+        name,
+        baseURL,
+        ...(apiKey ? { apiKey } : {}),
+        contextWindow,
+        models,
+        grantSchemaAccess,
+      },
+    },
+    providers: {
+      ...(baseSettings.providers || {}),
+      [providerId]: {
+        apiKey: apiKey || "",
+        enabledModels,
+        grantSchemaAccess,
+      },
+    },
+  }
+
+  return {
+    "ai.assistant.settings": JSON.stringify(settings),
+  }
+}
+
+/**
+ * Returns the API endpoint for a custom provider based on its type.
+ */
+function getCustomProviderEndpoint(baseURL, type) {
+  if (type === "openai-chat-completions") {
+    return `${baseURL}/chat/completions`
+  }
+  if (type === "openai") {
+    return `${baseURL}/responses`
+  }
+  // anthropic - SDK appends /v1/messages to baseURL
+  return `${baseURL}/v1/messages`
+}
+
+// =============================================================================
+// RESPONSE DATA BUILDERS
+// =============================================================================
+
 function createFinalResponseData(provider, explanation, sql = null) {
   const responseContent = { explanation, sql }
 
@@ -59,6 +139,26 @@ function createFinalResponseData(provider, explanation, sql = null) {
       ],
       output_text: JSON.stringify(responseContent),
       usage: { input_tokens: 200, output_tokens: 100 },
+    }
+  }
+
+  if (provider === "openai-chat-completions") {
+    return {
+      id: "chatcmpl-mock-final",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "test-model-1",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify(responseContent),
+          },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 200, completion_tokens: 100, total_tokens: 300 },
     }
   }
 
@@ -94,6 +194,36 @@ function createToolCallResponseData(provider, toolName, toolArguments = {}) {
       ],
       output_text: "",
       usage: { input_tokens: 100, output_tokens: 50 },
+    }
+  }
+
+  if (provider === "openai-chat-completions") {
+    return {
+      id: `chatcmpl-mock-tool-${toolName}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "test-model-1",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: callId,
+                type: "function",
+                function: {
+                  name: toolName,
+                  arguments: JSON.stringify(toolArguments),
+                },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
     }
   }
 
@@ -137,6 +267,23 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
     }
   }
 
+  if (provider === "openai-chat-completions") {
+    return {
+      id: "chatcmpl-mock-title",
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: "test-model-1",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: content },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 },
+    }
+  }
+
   // Anthropic
   return {
     id: "msg_mock_title",
@@ -148,6 +295,10 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
     usage: { input_tokens: 50, output_tokens: 20 },
   }
 }
+
+// =============================================================================
+// SSE RESPONSE BUILDERS
+// =============================================================================
 
 function createOpenAISSEResponse(responseData, delay = 0) {
   const events = []
@@ -171,6 +322,121 @@ function createOpenAISSEResponse(responseData, delay = 0) {
 
   // Add [DONE] marker
   const sseBody = events.join("") + "data: [DONE]\n\n"
+
+  const response = {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+    body: sseBody,
+  }
+
+  if (delay > 0) {
+    response.delay = delay
+  }
+
+  return response
+}
+
+function createChatCompletionsSSEResponse(responseData, delay = 0) {
+  const events = []
+  const choice = responseData.choices?.[0]
+  const content = choice?.message?.content || ""
+  const toolCalls = choice?.message?.tool_calls || []
+
+  // Stream content deltas
+  if (content) {
+    const chunkSize = 20
+    for (let i = 0; i < content.length; i += chunkSize) {
+      const chunk = content.slice(i, i + chunkSize)
+      events.push(
+        `data: ${JSON.stringify({
+          id: responseData.id,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: { content: chunk },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      )
+    }
+  }
+
+  // Stream tool call deltas
+  if (toolCalls.length > 0) {
+    for (const tc of toolCalls) {
+      // First chunk: tool call start
+      events.push(
+        `data: ${JSON.stringify({
+          id: responseData.id,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: tc.id,
+                    type: "function",
+                    function: { name: tc.function.name, arguments: "" },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      )
+      // Second chunk: tool call arguments
+      events.push(
+        `data: ${JSON.stringify({
+          id: responseData.id,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    function: { arguments: tc.function.arguments },
+                  },
+                ],
+              },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      )
+    }
+  }
+
+  // Final chunk with finish_reason and usage
+  events.push(
+    `data: ${JSON.stringify({
+      id: responseData.id,
+      object: "chat.completion.chunk",
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: choice?.finish_reason || "stop",
+        },
+      ],
+      usage: responseData.usage,
+    })}\n\n`,
+  )
+
+  // [DONE] marker
+  events.push("data: [DONE]\n\n")
+
+  const sseBody = events.join("")
 
   const response = {
     statusCode: 200,
@@ -327,6 +593,10 @@ function createAnthropicSSEResponse(responseData, delay = 0) {
   return response
 }
 
+// =============================================================================
+// RESPONSE WRAPPERS
+// =============================================================================
+
 function createResponse(provider, responseData, options = {}) {
   const { streaming = true, delay = 0 } = options
 
@@ -345,6 +615,10 @@ function createResponse(provider, responseData, options = {}) {
   // Streaming: return SSE format
   if (provider === "openai") {
     return createOpenAISSEResponse(responseData, delay)
+  }
+
+  if (provider === "openai-chat-completions") {
+    return createChatCompletionsSSEResponse(responseData, delay)
   }
 
   return createAnthropicSSEResponse(responseData, delay)
@@ -378,6 +652,10 @@ function createChatTitleResponse(provider, title = "Test Chat") {
   })
 }
 
+// =============================================================================
+// REQUEST INSPECTION HELPERS
+// =============================================================================
+
 function isTitleRequest(provider, body) {
   if (provider === "openai") {
     return (
@@ -385,7 +663,7 @@ function isTitleRequest(provider, body) {
       false
     )
   }
-  // Anthropic
+  // Both openai-chat-completions and anthropic use messages array
   return (
     body.messages?.[0]?.content?.includes?.("Generate a concise chat title") ||
     false
@@ -396,8 +674,7 @@ function requestMatchesQuestion(provider, body, question) {
   if (provider === "openai") {
     return body.input?.[0]?.content === question
   }
-  // Anthropic - find the first user message with string content (the original question)
-  // Subsequent messages may be tool results or assistant responses
+  // Both openai-chat-completions and anthropic use messages array
   const firstUserMessage = body.messages?.find(
     (msg) => msg.role === "user" && typeof msg.content === "string",
   )
@@ -413,8 +690,14 @@ function extractToolOutputContent(provider, body) {
     return latestOutput?.output || null
   }
 
+  if (provider === "openai-chat-completions") {
+    // Chat Completions: tool results are in messages with role "tool"
+    const toolMessages = body.messages?.filter((msg) => msg.role === "tool")
+    const latestToolMessage = toolMessages?.[toolMessages.length - 1]
+    return latestToolMessage?.content || null
+  }
+
   // Anthropic - tool results are in user messages with content array containing tool_result objects
-  // Format: { role: "user", content: [{ type: "tool_result", tool_use_id: "...", content: "..." }] }
   const toolResultMessages = body.messages?.filter(
     (msg) =>
       msg.role === "user" &&
@@ -425,7 +708,6 @@ function extractToolOutputContent(provider, body) {
   const latestToolResult = latestMessage?.content?.find(
     (c) => c.type === "tool_result",
   )
-  // Anthropic tool result content can be a string directly
   return latestToolResult?.content || null
 }
 
@@ -433,7 +715,7 @@ function extractAllInputContent(provider, body) {
   if (provider === "openai") {
     return body.input?.map((item) => item.content || "").join("\n") || ""
   }
-  // Anthropic
+  // Both openai-chat-completions and anthropic use messages
   return (
     body.messages
       ?.map((msg) => {
@@ -452,57 +734,22 @@ function extractAllInputContent(provider, body) {
 // =============================================================================
 
 /**
- * Creates a multi-turn tool call flow with automatic intercept handling
+ * Creates a multi-turn tool call flow with automatic intercept handling.
+ * Supports built-in providers (openai, anthropic) and custom providers.
  *
- * @param {Object} config - Flow configuration
- * @param {"openai" | "anthropic"} [config.provider="openai"] - The AI provider
- * @param {boolean} [config.streaming=true] - Whether to use streaming responses
- * @param {string} config.question - The user's question to match
- * @param {Array} config.steps - Array of step definitions
- * @param {Object} [config.steps[].toolCall] - Tool call definition { name, args }
- * @param {Object} [config.steps[].expectToolResult] - Expected result { includes: string[] }
- * @param {Object} [config.steps[].finalResponse] - Final response { explanation, sql }
- * @returns {Object} Flow controller with intercept() and waitForCompletion() methods
- *
- * @example
- * // OpenAI with streaming (default)
- * const flow = createToolCallFlow({
- *   question: "Describe the ecommerce_stats table",
- *   steps: [
- *     { toolCall: { name: "get_tables", args: {} } },
- *     { finalResponse: { explanation: "Table description...", sql: null } }
- *   ]
- * })
- *
- * @example
- * // Anthropic with streaming
- * const flow = createToolCallFlow({
- *   provider: "anthropic",
- *   streaming: true,
- *   question: "What tables exist?",
- *   steps: [
- *     { toolCall: { name: "get_tables", args: {} } },
- *     { finalResponse: { explanation: "Found tables...", sql: null } }
- *   ]
- * })
- *
- * @example
- * // OpenAI without streaming
- * const flow = createToolCallFlow({
- *   provider: "openai",
- *   streaming: false,
- *   question: "Quick test",
- *   steps: [
- *     { finalResponse: { explanation: "Done", sql: null } }
- *   ]
- * })
+ * @param {Object} config
+ * @param {"openai" | "anthropic" | "openai-chat-completions"} [config.provider="openai"]
+ * @param {boolean} [config.streaming=true]
+ * @param {string} config.question
+ * @param {Array} config.steps
+ * @param {string} [config.endpoint] - Custom endpoint URL (overrides PROVIDERS lookup)
  */
 function createToolCallFlow(config) {
   const { provider = "openai", streaming = true, question, steps } = config
 
   let requestCount = 0
   const totalRequests = steps.length
-  const endpoint = PROVIDERS[provider].endpoint
+  const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
   return {
@@ -510,9 +757,6 @@ function createToolCallFlow(config) {
     provider,
     streaming,
 
-    /**
-     * Sets up cy.intercept for both chat title and tool call flow
-     */
     intercept() {
       // Handle chat title generation (never streamed)
       cy.intercept("POST", endpoint, (req) => {
@@ -528,7 +772,6 @@ function createToolCallFlow(config) {
           return
         }
 
-        // Check if this request matches our question
         if (!requestMatchesQuestion(provider, req.body, question)) {
           return
         }
@@ -571,14 +814,10 @@ function createToolCallFlow(config) {
       }).as("toolCallRequest")
     },
 
-    /**
-     * Waits for all tool call requests to complete and streaming to finish
-     */
     waitForCompletion() {
       for (let i = 0; i < totalRequests; i++) {
         cy.wait("@toolCallRequest")
       }
-      // Wait for streaming to finish if streaming is enabled
       if (streaming) {
         cy.waitForStreamingComplete()
       }
@@ -591,61 +830,27 @@ function createToolCallFlow(config) {
 // =============================================================================
 
 /**
- * Creates a multi-turn conversation flow for testing multiple questions/responses
- * in the same chat session.
+ * Creates a multi-turn conversation flow.
+ * Supports built-in providers and custom providers.
  *
- * @param {Object} config - Flow configuration
- * @param {"openai" | "anthropic"} [config.provider="openai"] - The AI provider
- * @param {boolean} [config.streaming=true] - Whether to use streaming responses
- * @param {Array} config.turns - Array of turn definitions
- * @param {string} config.turns[].explanation - The AI's explanation text
- * @param {string|null} config.turns[].sql - Optional SQL query suggestion
- * @param {Object} [config.turns[].expectSystemMessage] - Expected content in system message
- * @param {string[]} [config.turns[].expectSystemMessage.includes] - Strings that must appear
- * @param {string[]} [config.turns[].expectSystemMessage.excludes] - Strings that must NOT appear
- * @returns {Object} Flow controller with intercept(), waitForTurn(), and getRequestBody() methods
- *
- * @example
- * // OpenAI streaming (default)
- * const flow = createMultiTurnFlow({
- *   turns: [
- *     { explanation: "First query.", sql: "SELECT 1;" },
- *     { explanation: "Second query.", sql: "SELECT 2;" }
- *   ]
- * })
- *
- * @example
- * // Anthropic streaming
- * const flow = createMultiTurnFlow({
- *   provider: "anthropic",
- *   turns: [
- *     { explanation: "First response.", sql: null },
- *     {
- *       explanation: "Second response.",
- *       sql: "SELECT * FROM users;",
- *       expectSystemMessage: {
- *         includes: ["User accepted the suggested SQL"],
- *         excludes: ["User rejected"]
- *       }
- *     }
- *   ]
- * })
+ * @param {Object} config
+ * @param {"openai" | "anthropic" | "openai-chat-completions"} [config.provider="openai"]
+ * @param {boolean} [config.streaming=true]
+ * @param {Array} config.turns
+ * @param {string} [config.endpoint] - Custom endpoint URL
  */
 function createMultiTurnFlow(config) {
   const { provider = "openai", streaming = true, turns } = config
 
   let requestCount = 0
   const requestBodies = []
-  const endpoint = PROVIDERS[provider].endpoint
+  const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
   return {
     provider,
     streaming,
 
-    /**
-     * Sets up cy.intercept for chat title and all conversation turns
-     */
     intercept() {
       // Intercept for chat title generation
       cy.intercept("POST", endpoint, (req) => {
@@ -656,22 +861,17 @@ function createMultiTurnFlow(config) {
 
       // Intercept for conversation turns
       cy.intercept("POST", endpoint, (req) => {
-        // Skip title requests
         if (isTitleRequest(provider, req.body)) {
           return
         }
 
-        // Handle conversation turns
         const turn = turns[requestCount]
         if (turn) {
-          // Store the request body for later assertions
           requestBodies[requestCount] = req.body
 
-          // Verify system message expectations if defined
           if (turn.expectSystemMessage) {
             const allInputContent = extractAllInputContent(provider, req.body)
 
-            // Check includes
             if (turn.expectSystemMessage.includes) {
               for (const expected of turn.expectSystemMessage.includes) {
                 expect(allInputContent).to.include(
@@ -681,7 +881,6 @@ function createMultiTurnFlow(config) {
               }
             }
 
-            // Check excludes
             if (turn.expectSystemMessage.excludes) {
               for (const excluded of turn.expectSystemMessage.excludes) {
                 expect(allInputContent).to.not.include(
@@ -705,11 +904,6 @@ function createMultiTurnFlow(config) {
       }).as("multiTurnRequest")
     },
 
-    /**
-     * Waits for a specific turn to complete and streaming to finish
-     * @param {number} turnIndex - The turn index (0-based)
-     * @returns {Cypress.Chainable} Chainable that resolves when the turn is complete
-     */
     waitForTurn(turnIndex) {
       return cy
         .wrap(null)
@@ -729,10 +923,6 @@ function createMultiTurnFlow(config) {
         })
     },
 
-    /**
-     * Waits for all turns to complete
-     * @returns {Cypress.Chainable} Chainable that yields all request bodies
-     */
     waitForAllTurns() {
       return cy
         .wrap(null)
@@ -750,20 +940,10 @@ function createMultiTurnFlow(config) {
         })
     },
 
-    /**
-     * Gets the captured request body for a specific turn.
-     * Must be called inside cy.then() after waitForTurn()
-     * @param {number} turnIndex - The turn index (0-based)
-     * @returns {Object} The request body sent for that turn
-     */
     getRequestBody(turnIndex) {
       return requestBodies[turnIndex]
     },
 
-    /**
-     * Gets all captured request bodies
-     * @returns {Array} Array of request bodies
-     */
     getAllRequestBodies() {
       return requestBodies
     },
@@ -772,11 +952,15 @@ function createMultiTurnFlow(config) {
 
 module.exports = {
   PROVIDERS,
+  CUSTOM_PROVIDER_DEFAULTS,
   getOpenAIConfiguredSettings,
   getAnthropicConfiguredSettings,
+  getCustomProviderConfiguredSettings,
+  getCustomProviderEndpoint,
   createFinalResponseData,
   createResponse,
   createFinalResponse,
+  createToolCallResponse,
   createChatTitleResponse,
   createToolCallFlow,
   createMultiTurnFlow,

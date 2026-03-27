@@ -23,8 +23,14 @@ export const FixQueryButton = () => {
   const { quest } = useContext(QuestContext)
   const { editorRef, executionRefs } = useEditor()
   const tables = useSelector(selectors.query.getTables)
-  const { setStatus, abortController, hasSchemaAccess, currentModel, apiKey } =
-    useAIStatus()
+  const {
+    setStatus,
+    abortController,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+    aiAssistantSettings,
+  } = useAIStatus()
   const {
     chatWindowState,
     getConversationMeta,
@@ -56,6 +62,7 @@ export const FixQueryButton = () => {
         errorMessage,
         errorWord: word ?? undefined,
         settings: { model: currentModel!, apiKey: apiKey! },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,

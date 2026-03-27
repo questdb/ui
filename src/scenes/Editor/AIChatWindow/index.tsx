@@ -217,6 +217,7 @@ const AIChatWindow: React.FC = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    aiAssistantSettings,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
   const running = useSelector(selectors.query.getRunning)
@@ -388,6 +389,7 @@ const AIChatWindow: React.FC = () => {
         conversationHistory: conversation.messages,
         isFirstMessage: !hasAssistantMessages,
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,
@@ -467,6 +469,7 @@ const AIChatWindow: React.FC = () => {
             payload: {
               tableName: table.table_name,
               isMatView: table.table_type === "M",
+              isView: table.table_type === "V",
             },
           }),
         )
@@ -560,7 +563,12 @@ const AIChatWindow: React.FC = () => {
     userMessageId: string,
     assistantMessageId: string,
   ) => {
-    if (!chatWindowState.activeConversationId || !canUse) return
+    if (
+      !chatWindowState.activeConversationId ||
+      !canUse ||
+      isBlockingAIStatus(aiStatus)
+    )
+      return
 
     const conversationId = chatWindowState.activeConversationId
     const userMessage = messages.find((m) => m.id === userMessageId)
@@ -569,6 +577,7 @@ const AIChatWindow: React.FC = () => {
     const settings = { model: currentModel, apiKey }
     const commonConfig = {
       settings,
+      aiAssistantSettings,
       questClient: quest,
       tables,
       hasSchemaAccess,

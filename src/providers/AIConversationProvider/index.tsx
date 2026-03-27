@@ -445,7 +445,7 @@ export const AIConversationProvider: React.FC<{
 
             finalUpdates = {
               ...finalUpdates,
-              previousSQL: sqlActuallyChanged ? acceptedSQL : undefined,
+              previousSQL: acceptedSQL,
             }
           }
 

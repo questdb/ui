@@ -7,6 +7,7 @@ import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const StyledButton = styled(Button)`
   padding: 1.2rem 0.6rem;
+  position: relative;
 `
 
 const StyledCheckboxCircle = styled(CheckboxCircle)`

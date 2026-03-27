@@ -1,16 +1,18 @@
 import type { Table, MaterializedView } from "../../../utils/questdb/types"
 
-const DOCS_BASE_URL = "https://questdb.com/docs/operations/monitoring-alerting"
+const DOCS_BASE_URL = "https://questdb.com/docs"
+const MONITORING_DOCS_URL = `${DOCS_BASE_URL}/operations/monitoring-alerting`
 
 export const ISSUE_DOCS_URLS: Record<string, string> = {
-  R1: `${DOCS_BASE_URL}/#detect-suspended-tables`, // WAL suspended
-  R2: `${DOCS_BASE_URL}/#detect-invalid-materialized-views`, // MatView invalid
-  R3: `${DOCS_BASE_URL}/#detect-memory-pressure`, // Memory backoff (level 2)
-  Y1: `${DOCS_BASE_URL}/#detect-transaction-lag-and-pending-rows`, // Transaction lag increasing
-  Y2: `${DOCS_BASE_URL}/#detect-transaction-lag-and-pending-rows`, // Pending rows increasing
-  Y3: `${DOCS_BASE_URL}/#detect-small-transactions`, // Small transactions
-  Y4: `${DOCS_BASE_URL}/#detect-high-write-amplification`, // High write amplification
-  Y5: `${DOCS_BASE_URL}/#detect-memory-pressure`, // Reduced parallelism (level 1)
+  R1: `${MONITORING_DOCS_URL}/#detect-suspended-tables`, // WAL suspended
+  R2: `${MONITORING_DOCS_URL}/#detect-invalid-materialized-views`, // MatView invalid
+  R3: `${MONITORING_DOCS_URL}/#detect-memory-pressure`, // Memory backoff (level 2)
+  R4: `${DOCS_BASE_URL}/concepts/views/#view-invalidation`, // View invalid
+  Y1: `${MONITORING_DOCS_URL}/#detect-transaction-lag-and-pending-rows`, // Transaction lag increasing
+  Y2: `${MONITORING_DOCS_URL}/#detect-transaction-lag-and-pending-rows`, // Pending rows increasing
+  Y3: `${MONITORING_DOCS_URL}/#detect-small-transactions`, // Small transactions
+  Y4: `${MONITORING_DOCS_URL}/#detect-high-write-amplification`, // High write amplification
+  Y5: `${MONITORING_DOCS_URL}/#detect-memory-pressure`, // Reduced parallelism (level 1)
 }
 
 export type HealthSeverity = "critical" | "warning" | "healthy" | "recovering"
@@ -133,7 +135,7 @@ export function calculateHealthStatus(
       id: "R2",
       severity: "critical",
       field: "viewStatus",
-      message: "Materialized view is invalid",
+      message: `Materialized view is invalid: ${matViewData.invalidation_reason}`,
     })
   }
 

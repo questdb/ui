@@ -48,6 +48,7 @@ export type ConversationMessage = {
   isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
   operationHistory?: OperationHistory
   responseStart?: number
+  model?: string
   // Predefined actions (Fix and Explain)
   displayType?: UserMessageDisplayType
   displayUserMessage?: string

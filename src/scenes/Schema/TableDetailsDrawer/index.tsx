@@ -9,15 +9,28 @@ import { useSelector, useDispatch } from "react-redux"
 import styled, { css, useTheme } from "styled-components"
 import { selectors, actions } from "../../../store"
 import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
-import { Drawer, Box, Text, CopyButton, Dialog } from "../../../components"
-import { hideColumnsFromTableDDL } from "../../../components/LiteEditor/utils"
+import {
+  Drawer,
+  Box,
+  Text,
+  Dialog,
+  CopyButton,
+  TableSelector,
+  type TableOption,
+} from "../../../components"
+import {
+  hideColumnsFromTableDDL,
+  truncateLongDDL,
+} from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
-import type {
-  Table,
-  Column,
-  MaterializedView,
+import {
+  getTableKind,
+  type Table,
+  type Column,
+  type MaterializedView,
+  type View,
 } from "../../../utils/questdb/types"
 import {
   calculateHealthStatus,
@@ -34,18 +47,6 @@ import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-
-const TableName = styled(Text).attrs({
-  color: "foreground",
-  code: true,
-})`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 1.6rem;
-  font-weight: 400;
-`
 
 const TypeBadge = styled.span`
   background: transparent;
@@ -70,6 +71,36 @@ const LoadingContainer = styled(Box).attrs({
   height: 100%;
 `
 
+const EmptyState = styled(Box).attrs({
+  flexDirection: "column",
+  align: "flex-start",
+  justifyContent: "center",
+})`
+  gap: 1.2rem;
+  padding: 1.8rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: 40rem;
+  margin: 0 auto;
+`
+
+const EmptyStateHeading = styled.h2`
+  font-size: 2rem;
+  font-weight: 600;
+  text-align: left;
+  color: ${({ theme }) => theme.color.foreground};
+  margin: 0;
+`
+
+const EmptyStateSubheading = styled.p`
+  font-size: 1.4rem;
+  font-weight: 400;
+  color: ${({ theme }) => theme.color.gray2};
+  text-align: left;
+  margin: 0;
+  line-height: 1.5;
+`
+
 const TitleContainer = styled(Dialog.Title).attrs({})`
   display: flex;
   padding: 0;
@@ -82,8 +113,8 @@ const TitleContainer = styled(Dialog.Title).attrs({})`
 `
 
 const StyledCopyButton = styled(CopyButton)`
-  margin-left: auto;
   background: transparent;
+  flex-shrink: 0;
 `
 
 type TabType = "monitoring" | "details"
@@ -163,16 +194,50 @@ export const TableDetailsDrawer = () => {
 
   const tableName = target?.tableName ?? ""
   const isMatView = target?.isMatView ?? false
-  const isOpen = activeSidebar?.type === "tableDetails" && target !== null
+  const isView = target?.isView ?? false
+  const hasTarget = target !== null
+  const isOpen = activeSidebar?.type === "tableDetails"
 
   const handleClose = () => {
     dispatch(actions.console.closeSidebar())
   }
 
+  const tables = useSelector(selectors.query.getTables)
+
+  const tableOptions: TableOption[] = useMemo(
+    () =>
+      tables.map((t) => ({
+        label: t.table_name,
+        value: t.table_name,
+        kind: getTableKind(t),
+        walEnabled: t.walEnabled,
+        partitionBy: t.partitionBy,
+        designatedTimestamp: t.designatedTimestamp,
+      })),
+    [tables],
+  )
+
+  const handleTableSelect = useCallback(
+    (_value: string, option: TableOption) => {
+      dispatch(
+        actions.console.pushSidebarHistory({
+          type: "tableDetails",
+          payload: {
+            tableName: option.label,
+            isMatView: option.kind === "matview",
+            isView: option.kind === "view",
+          },
+        }),
+      )
+    },
+    [dispatch],
+  )
+
   const { quest } = useContext(QuestContext)
   const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
   const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
+  const [viewData, setViewData] = useState<View | null>(null)
   const [columns, setColumns] = useState<Column[]>([])
   const [ddl, setDdl] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -200,6 +265,7 @@ export const TableDetailsDrawer = () => {
         payload: {
           tableName: matViewData.base_table_name,
           isMatView: false,
+          isView: false,
         },
       }),
     )
@@ -213,14 +279,14 @@ export const TableDetailsDrawer = () => {
     void handleExplainSchema(
       tableData.id,
       tableName,
-      isMatView ? "matview" : "table",
+      isView ? "view" : isMatView ? "matview" : "table",
       {
         partitionBy: tableData.partitionBy,
         walEnabled: tableData.walEnabled,
         designatedTimestamp: tableData.designatedTimestamp,
       },
     )
-  }, [handleExplainSchema, tableData, tableName, isMatView])
+  }, [handleExplainSchema, tableData, tableName, isMatView, isView])
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
@@ -239,6 +305,22 @@ export const TableDetailsDrawer = () => {
     [handleAskAIForHealthIssue, tableData, tableName, trendData],
   )
 
+  const handleAskAIForViewIssue = useCallback(() => {
+    if (tableData?.id == null) return
+    const issue: HealthIssue = {
+      id: "R4",
+      severity: "critical",
+      field: "viewStatus",
+      message: `View is invalid: ${viewData?.invalidation_reason}`,
+    }
+    void handleAskAIForHealthIssue(tableData.id, tableName, issue)
+  }, [
+    handleAskAIForHealthIssue,
+    tableData,
+    tableName,
+    viewData?.invalidation_reason,
+  ])
+
   const fetchTableData = useCallback(async () => {
     try {
       const escapedName = tableName.replace(/'/g, "''")
@@ -251,7 +333,12 @@ export const TableDetailsDrawer = () => {
         response.type === QuestDB.Type.DQL &&
         response.data.length === 0
       ) {
-        dispatch(actions.console.closeSidebar())
+        dispatch(
+          actions.console.replaceSidebarHistory({
+            type: "tableDetails",
+            payload: null,
+          }),
+        )
       }
     } catch (error) {
       console.error("Failed to fetch table data:", error)
@@ -273,6 +360,31 @@ export const TableDetailsDrawer = () => {
     }
   }, [quest, tableName, isMatView])
 
+  const fetchViewData = useCallback(async () => {
+    if (!isView) return
+    try {
+      const escapedName = tableName.replace(/'/g, "''")
+      const response = await quest.query<View>(
+        `views() WHERE view_name = '${escapedName}'`,
+      )
+      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
+        setViewData(response.data[0])
+      } else if (
+        response.type === QuestDB.Type.DQL &&
+        response.data.length === 0
+      ) {
+        dispatch(
+          actions.console.replaceSidebarHistory({
+            type: "tableDetails",
+            payload: null,
+          }),
+        )
+      }
+    } catch (error) {
+      console.error("Failed to fetch view data:", error)
+    }
+  }, [quest, tableName, isView, dispatch])
+
   const fetchColumns = useCallback(async () => {
     try {
       const response = await quest.showColumns(tableName)
@@ -286,16 +398,18 @@ export const TableDetailsDrawer = () => {
 
   const fetchDDL = useCallback(async () => {
     try {
-      const response = isMatView
-        ? await quest.showMatViewDDL(tableName)
-        : await quest.showTableDDL(tableName)
+      const response = isView
+        ? await quest.showViewDDL(tableName)
+        : isMatView
+          ? await quest.showMatViewDDL(tableName)
+          : await quest.showTableDDL(tableName)
       if (response.type === QuestDB.Type.DQL && response.data[0]?.ddl) {
         setDdl(response.data[0].ddl)
       }
     } catch (error) {
       console.error("Failed to fetch DDL:", error)
     }
-  }, [quest, tableName, isMatView])
+  }, [quest, tableName, isMatView, isView])
 
   const checkBaseTableStatus = useCallback(async () => {
     if (!isMatView || !matViewData?.base_table_name) {
@@ -329,16 +443,34 @@ export const TableDetailsDrawer = () => {
     await Promise.all([
       fetchTableData(),
       fetchMatViewData(),
+      fetchViewData(),
       fetchColumns(),
       fetchDDL(),
     ])
     setLoading(false)
-  }, [fetchTableData, fetchMatViewData, fetchColumns, fetchDDL])
+  }, [fetchTableData, fetchMatViewData, fetchViewData, fetchColumns, fetchDDL])
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && hasTarget) {
       setTableData(null)
       setMatViewData(null)
+      setViewData(null)
+      setColumns([])
+      setDdl("")
+      setColumnsExpanded(isView)
+      setWalExpanded(true)
+      setHasAutoExpanded(false)
+      setTrendData({
+        walPendingRowCount: [],
+        transactionLag: [],
+        ingestionMetric: [],
+      })
+      setBaseTableStatus(null)
+      void fetchAllData()
+    } else if (!isOpen || !hasTarget) {
+      setTableData(null)
+      setMatViewData(null)
+      setViewData(null)
       setColumns([])
       setDdl("")
       setColumnsExpanded(false)
@@ -350,19 +482,8 @@ export const TableDetailsDrawer = () => {
         ingestionMetric: [],
       })
       setBaseTableStatus(null)
-      void fetchAllData()
-    } else {
-      setColumnsExpanded(false)
-      setWalExpanded(true)
-      setHasAutoExpanded(false)
-      setTrendData({
-        walPendingRowCount: [],
-        transactionLag: [],
-        ingestionMetric: [],
-      })
-      setBaseTableStatus(null)
     }
-  }, [isOpen, tableName, fetchAllData])
+  }, [isOpen, hasTarget, tableName, fetchAllData])
 
   useEffect(() => {
     if (matViewData?.base_table_name) {
@@ -372,7 +493,7 @@ export const TableDetailsDrawer = () => {
 
   useAdaptivePoll({
     fetchFn: fetchTableData,
-    enabled: isOpen && !loading,
+    enabled: isOpen && hasTarget && !loading && !isView,
     key: tableName,
     minIntervalMs: 200,
     maxIntervalMs: 5000,
@@ -421,14 +542,35 @@ export const TableDetailsDrawer = () => {
   }, [tableData, loading])
 
   useEffect(() => {
-    if (!isOpen || !isMatView) return
+    if (!isOpen || !hasTarget || !isMatView) return
 
     const interval = setInterval(() => {
       void fetchMatViewData()
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [isOpen, isMatView, fetchMatViewData])
+  }, [isOpen, hasTarget, isMatView, fetchMatViewData])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget || !isView) return
+
+    const interval = setInterval(() => {
+      void fetchViewData()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, hasTarget, isView, fetchViewData])
+
+  useEffect(() => {
+    if (!isOpen || !hasTarget) return
+
+    const interval = setInterval(() => {
+      void fetchColumns()
+      void fetchDDL()
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, hasTarget, fetchColumns, fetchDDL])
 
   const rawHealthStatus = useMemo(() => {
     if (!tableData) return null
@@ -439,7 +581,9 @@ export const TableDetailsDrawer = () => {
 
   const truncatedDDL = useMemo(() => {
     if (!ddl) return { text: "", grayedOutLines: null }
-    return hideColumnsFromTableDDL(ddl, columns)
+    const result = hideColumnsFromTableDDL(ddl, columns)
+    if (result.grayedOutLines) return result
+    return truncateLongDDL(ddl)
   }, [ddl, columns])
 
   const isIngestionActive = useMemo(() => {
@@ -495,8 +639,6 @@ export const TableDetailsDrawer = () => {
     }
   }, [hasIngestionWarning, hasAutoExpanded, walExpanded])
 
-  if (!target) return null
-
   return (
     <Drawer
       mode="side"
@@ -506,35 +648,56 @@ export const TableDetailsDrawer = () => {
       }}
       withCloseButton
       titleColor={
-        isMatView ? theme.color.loginBackground : theme.color.backgroundLighter
+        hasTarget && isMatView
+          ? theme.color.loginBackground
+          : isView
+            ? theme.color.tableSelection
+            : theme.color.backgroundLighter
       }
       title={
         <TitleContainer>
-          <HealthStatusLabel
-            severity={healthStatus?.overallSeverity ?? "healthy"}
-          />
+          {hasTarget && (
+            <HealthStatusLabel
+              severity={
+                isView
+                  ? viewData?.view_status === "invalid"
+                    ? "critical"
+                    : "healthy"
+                  : (healthStatus?.overallSeverity ?? "healthy")
+              }
+            />
+          )}
 
-          <TableName ellipsis data-hook="table-details-name">
-            {tableName}
-          </TableName>
-          <StyledCopyButton
-            size="sm"
-            text={tableName}
-            iconOnly
-            data-hook="table-details-copy-name"
+          <TableSelector
+            titleDataHook="table-details-name"
+            options={tableOptions}
+            onSelect={handleTableSelect}
+            value={hasTarget ? tableName : ""}
+            placeholder="Select a table"
+            defaultOpen={!hasTarget}
           />
+          {hasTarget && (
+            <StyledCopyButton
+              size="sm"
+              text={tableName}
+              iconOnly
+              data-hook="table-details-copy-name"
+            />
+          )}
         </TitleContainer>
       }
       afterTitle={
-        <TypeBadge data-hook="table-details-type-badge">
-          {isMatView ? "Materialized View" : "Table"}
-        </TypeBadge>
+        hasTarget ? (
+          <TypeBadge data-hook="table-details-type-badge">
+            {isView ? "View" : isMatView ? "Materialized View" : "Table"}
+          </TypeBadge>
+        ) : undefined
       }
       onDismiss={handleClose}
       trigger={<span />}
     >
       <Drawer.ContentWrapper mode="side" data-hook="table-details-drawer">
-        {loading ? (
+        {hasTarget && loading ? (
           <LoadingContainer data-hook="table-details-loading">
             <CircleNotchSpinner size={24} />
             <Text color="gray2" size="md">
@@ -543,48 +706,50 @@ export const TableDetailsDrawer = () => {
           </LoadingContainer>
         ) : tableData ? (
           <>
-            <TabsContainer>
-              <TabsNav>
-                <Tab
-                  $active={activeTab === "monitoring"}
-                  onClick={() => setActiveTab("monitoring")}
-                  data-hook="table-details-tab-monitoring"
-                  data-active={activeTab === "monitoring"}
-                >
-                  Monitoring
-                  {monitoringIssuesCounts.errors > 0 && (
-                    <TabBadge
-                      $type="error"
-                      data-hook="table-details-tab-error-badge"
-                    >
-                      <XSquareIcon size={12} weight="fill" />
-                      {monitoringIssuesCounts.errors}
-                    </TabBadge>
-                  )}
-                  {monitoringIssuesCounts.errors === 0 &&
-                    monitoringIssuesCounts.warnings > 0 && (
+            {!isView && (
+              <TabsContainer>
+                <TabsNav>
+                  <Tab
+                    $active={activeTab === "monitoring"}
+                    onClick={() => setActiveTab("monitoring")}
+                    data-hook="table-details-tab-monitoring"
+                    data-active={activeTab === "monitoring"}
+                  >
+                    Monitoring
+                    {monitoringIssuesCounts.errors > 0 && (
                       <TabBadge
-                        $type="warning"
-                        data-hook="table-details-tab-warning-badge"
+                        $type="error"
+                        data-hook="table-details-tab-error-badge"
                       >
-                        <WarningIcon size={12} weight="fill" />
-                        {monitoringIssuesCounts.warnings}
+                        <XSquareIcon size={12} weight="fill" />
+                        {monitoringIssuesCounts.errors}
                       </TabBadge>
                     )}
-                </Tab>
-                <Tab
-                  $active={activeTab === "details"}
-                  onClick={() => setActiveTab("details")}
-                  data-hook="table-details-tab-details"
-                  data-active={activeTab === "details"}
-                >
-                  Details
-                </Tab>
-              </TabsNav>
-              <TabsSeparator />
-            </TabsContainer>
+                    {monitoringIssuesCounts.errors === 0 &&
+                      monitoringIssuesCounts.warnings > 0 && (
+                        <TabBadge
+                          $type="warning"
+                          data-hook="table-details-tab-warning-badge"
+                        >
+                          <WarningIcon size={12} weight="fill" />
+                          {monitoringIssuesCounts.warnings}
+                        </TabBadge>
+                      )}
+                  </Tab>
+                  <Tab
+                    $active={activeTab === "details"}
+                    onClick={() => setActiveTab("details")}
+                    data-hook="table-details-tab-details"
+                    data-active={activeTab === "details"}
+                  >
+                    Details
+                  </Tab>
+                </TabsNav>
+                <TabsSeparator />
+              </TabsContainer>
+            )}
 
-            {activeTab === "monitoring" && (
+            {!isView && activeTab === "monitoring" && (
               <MonitoringTab
                 tableData={tableData}
                 matViewData={matViewData}
@@ -602,33 +767,45 @@ export const TableDetailsDrawer = () => {
               />
             )}
 
-            {activeTab === "details" && (
+            {(isView || activeTab === "details") && (
               <DetailsTab
                 tableData={tableData}
                 matViewData={matViewData}
+                viewData={viewData}
                 columns={columns}
                 ddl={ddl}
                 isMatView={isMatView}
+                isView={isView}
                 truncatedDDL={truncatedDDL}
                 baseTableStatus={baseTableStatus}
                 columnsExpanded={columnsExpanded}
                 onColumnsExpandedChange={setColumnsExpanded}
                 onNavigateToBaseTable={handleNavigateToBaseTable}
                 onExplainWithAI={handleExplainWithAI}
+                onAskAIForViewIssue={handleAskAIForViewIssue}
               />
             )}
 
-            <SuspensionDialog
-              tableName={tableName}
-              kind={isMatView ? "matview" : "table"}
-              open={suspensionDialogOpen}
-              onOpenChange={setSuspensionDialogOpen}
-            />
+            {!isView && (
+              <SuspensionDialog
+                tableName={tableName}
+                kind={isMatView ? "matview" : "table"}
+                open={suspensionDialogOpen}
+                onOpenChange={setSuspensionDialogOpen}
+              />
+            )}
           </>
         ) : (
-          <LoadingContainer data-hook="table-details-not-found">
-            <Text color="gray2">Table not found</Text>
-          </LoadingContainer>
+          <EmptyState data-hook="table-details-empty-state">
+            <EmptyStateHeading>
+              Monitor and inspect your tables
+            </EmptyStateHeading>
+            <EmptyStateSubheading>
+              Select a table from the dropdown above to view its metadata,
+              health status, ingestion metrics, and performance insights in real
+              time.
+            </EmptyStateSubheading>
+          </EmptyState>
         )}
       </Drawer.ContentWrapper>
     </Drawer>

@@ -137,7 +137,7 @@ const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
     $contextMenuOpen &&
     `
     background: ${theme.color.tableSelection};
-    border: 1px solid ${theme.color.cyan};
+    box-shadow: inset 0 0 0 1px ${theme.color.cyan};
   `}
 `
 
@@ -588,31 +588,29 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view"
       ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
-        const handleOpenDetailsDrawer =
-          item.kind !== "view"
-            ? () => {
-                if (
-                  activeSidebar?.type === "tableDetails" &&
-                  tableDetailsTarget?.tableName === item.name
-                ) {
-                  dispatch(actions.console.closeSidebar())
-                  return
-                }
-                void trackEvent(ConsoleEvent.TABLE_DETAILS_OPEN, {
-                  kind: item.kind,
-                })
-                dispatch(
-                  actions.console.pushSidebarHistory({
-                    type: "tableDetails",
-                    payload: {
-                      tableName: item.name,
-                      isMatView: item.kind === "matview",
-                    },
-                  }),
-                )
-                setTimeout(() => setFocusedIndex(index))
-              }
-            : undefined
+        const handleOpenDetailsDrawer = () => {
+          if (
+            activeSidebar?.type === "tableDetails" &&
+            tableDetailsTarget?.tableName === item.name
+          ) {
+            dispatch(actions.console.closeSidebar())
+            return
+          }
+          void trackEvent(ConsoleEvent.TABLE_DETAILS_OPEN, {
+            kind: item.kind,
+          })
+          dispatch(
+            actions.console.pushSidebarHistory({
+              type: "tableDetails",
+              payload: {
+                tableName: item.name,
+                isMatView: item.kind === "matview",
+                isView: item.kind === "view",
+              },
+            }),
+          )
+          setTimeout(() => setFocusedIndex(index))
+        }
         return (
           <>
             <ContextMenu

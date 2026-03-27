@@ -320,3 +320,42 @@ export async function getReferenceFull(): Promise<string> {
   const url = `${DOCS_BASE_URL}/reference-full.md`
   return fetchMarkdown(url)
 }
+
+/**
+ * Fetch a specific section from a docs page using a full URL with fragment.
+ */
+export async function getDocsSectionByUrl(docsUrl: string): Promise<string> {
+  const [baseUrlRaw, fragment] = docsUrl.split("#")
+  const baseUrl = baseUrlRaw.endsWith("/")
+    ? baseUrlRaw.slice(0, -1)
+    : baseUrlRaw
+  const mdUrl = baseUrl + ".md"
+  const content = await fetchMarkdown(mdUrl)
+
+  if (!fragment) return content
+
+  const lines = content.split("\n")
+  const headerIndex = lines.findIndex((line) => {
+    const match = line.match(/^(#{2,3})\s+(.+)$/)
+    if (!match) return false
+    const slug = match[2]
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+    return slug === fragment
+  })
+
+  if (headerIndex === -1) return content
+
+  const headerLine = lines[headerIndex]
+  const headerLevel = headerLine.startsWith("### ") ? 3 : 2
+  const sectionLines = [headerLine]
+
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,3})\s/)
+    if (match && match[1].length <= headerLevel) break
+    sectionLines.push(lines[i])
+  }
+
+  return sectionLines.join("\n")
+}

@@ -78,7 +78,7 @@ const ItemText = styled(Text)<{ $isArchived?: boolean }>`
   gap: 0.8rem;
 
   .highlight {
-    background-color: #45475a;
+    background-color: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
   }
 

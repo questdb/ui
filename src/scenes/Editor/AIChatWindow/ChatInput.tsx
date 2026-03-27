@@ -20,6 +20,7 @@ import {
 import { slideAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
 import { TableIcon } from "../../Schema/table-icon"
+import { getTableKind } from "../../../utils/questdb/types"
 import { selectors } from "../../../store"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 
@@ -214,21 +215,6 @@ const truncateText = (text: string, maxLength: number = 30): string => {
   return trimmed.slice(0, maxLength) + "..."
 }
 
-const getTableKind = (
-  tableType: "T" | "M" | "V",
-): "table" | "matview" | "view" => {
-  switch (tableType) {
-    case "T":
-      return "table"
-    case "M":
-      return "matview"
-    case "V":
-      return "view"
-    default:
-      return "table"
-  }
-}
-
 export type ChatInputHandle = {
   focus: () => void
 }
@@ -335,7 +321,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                   <ContextBadgeIcon>
                     {tableData ? (
                       <TableIcon
-                        kind={getTableKind(tableData.table_type ?? "T")}
+                        kind={getTableKind(tableData)}
                         partitionBy={tableData.partitionBy}
                         walEnabled={tableData.walEnabled}
                         designatedTimestamp={tableData.designatedTimestamp}
