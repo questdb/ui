@@ -262,7 +262,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     setTabsDisabled,
     editorRef,
     monacoRef,
-    insertTextAtCursor,
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
@@ -854,7 +853,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     cleanupActionsRef.current.push(
       registerLegacyEventBusEvents({
         editor,
-        insertTextAtCursor,
         toggleRunning,
       }),
     )
@@ -876,6 +874,42 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         addBuffer: () => editorContext.addBuffer(),
       }),
     )
+
+    // Prevent context menu from being clipped
+    const containerDomNode = editor.getContainerDomNode()
+    const contextMenuObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (
+            node instanceof HTMLElement &&
+            node.classList.contains("context-view") &&
+            node.classList.contains("monaco-menu-container")
+          ) {
+            const rect = node.getBoundingClientRect()
+            node.style.position = "fixed"
+            node.style.left = `${rect.left}px`
+            node.style.top = `${rect.top}px`
+
+            // Monaco reuses the node on subsequent opens, resetting styles.
+            const styleObserver = new MutationObserver(() => {
+              if (node.style.position !== "fixed") {
+                const rect = node.getBoundingClientRect()
+                node.style.position = "fixed"
+                node.style.left = `${rect.left}px`
+                node.style.top = `${rect.top}px`
+              }
+            })
+            styleObserver.observe(node, {
+              attributes: true,
+              attributeFilter: ["style"],
+            })
+            cleanupActionsRef.current.push(() => styleObserver.disconnect())
+          }
+        }
+      }
+    })
+    contextMenuObserver.observe(containerDomNode, { childList: true })
+    cleanupActionsRef.current.push(() => contextMenuObserver.disconnect())
 
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.

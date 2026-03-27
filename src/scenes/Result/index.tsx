@@ -84,7 +84,7 @@ const Actions = styled.div`
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: max-content;
-  gap: 0;
+  gap: 0.5rem;
   align-items: center;
   justify-content: flex-end;
   padding: 0 1rem;
@@ -96,6 +96,12 @@ const Actions = styled.div`
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
   transform: scaleX(-1);
+`
+
+const StyledPrimaryToggleButton = styled(PrimaryToggleButton)`
+  padding: 0 1rem;
+  height: 3rem;
+  width: 4rem;
 `
 
 const RowCount = styled(Text)`
@@ -142,6 +148,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
+  const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
   const dispatch = useDispatch()
 
@@ -180,12 +187,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     )
 
     _grid.addEventListener(
-      "header.click",
-      function (event: CustomEvent<{ columnName: string }>) {
-        eventBus.publish(
-          EventType.MSG_EDITOR_INSERT_COLUMN,
-          event.detail.columnName,
-        )
+      "selection.change",
+      function (event: CustomEvent<{ hasSelection: boolean }>) {
+        setGridHasSelection(event.detail.hasSelection)
       },
     )
 
@@ -235,7 +239,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     {
       tooltipText: "Copy result to Markdown",
       trigger: (
-        <PrimaryToggleButton
+        <Button
+          skin="transparent"
           onClick={() => {
             void copyToClipboard(
               gridRef?.current?.getResultAsMarkdown() as string,
@@ -246,13 +251,13 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           }}
         >
           {isCopied ? <Check size="18px" /> : <Markdown size="18px" />}
-        </PrimaryToggleButton>
+        </Button>
       ),
     },
     {
       tooltipText: "Freeze left column",
       trigger: (
-        <PrimaryToggleButton
+        <StyledPrimaryToggleButton
           onClick={() => {
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
@@ -260,7 +265,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
           selected={gridFreezeLeftState > 0}
         >
           <TableFreezeColumnIcon size="18px" />
-        </PrimaryToggleButton>
+        </StyledPrimaryToggleButton>
       ),
     },
     {
@@ -268,6 +273,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
+          disabled={!gridHasSelection}
           onClick={() => gridRef?.current?.shuffleFocusedColumnToFront()}
         >
           <HandPointLeft size="18px" />
@@ -376,45 +382,47 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               </Tooltip>
             ))}
 
-          <DownloadButton
-            skin="secondary"
-            data-hook="download-parquet-button"
-            onClick={() => handleDownload("parquet")}
-          >
-            <Box align="center" gap="0.5rem" style={{ lineHeight: "1.285" }}>
-              <Download2 height="18px" width="18px" />
-              Download as Parquet
-            </Box>
-          </DownloadButton>
-          <PopperToggle
-            active={downloadMenuActive}
-            onToggle={setDownloadMenuActive}
-            placement="bottom-end"
-            modifiers={[
-              {
-                name: "offset",
-                options: {
-                  offset: [0, 4],
-                },
-              },
-            ]}
-            trigger={
-              <DownloadDropdownButton
-                skin="secondary"
-                data-hook="download-dropdown-button"
-              >
-                <ArrowIcon size="18px" $open={downloadMenuActive} />
-              </DownloadDropdownButton>
-            }
-          >
-            <DownloadMenuItem
-              data-hook="download-csv-button"
+          <Box gap="0">
+            <DownloadButton
               skin="secondary"
-              onClick={() => handleDownload("csv")}
+              data-hook="download-parquet-button"
+              onClick={() => handleDownload("parquet")}
             >
-              Download as CSV
-            </DownloadMenuItem>
-          </PopperToggle>
+              <Box align="center" gap="0.5rem" style={{ lineHeight: "1.285" }}>
+                <Download2 height="18px" width="18px" />
+                Download as Parquet
+              </Box>
+            </DownloadButton>
+            <PopperToggle
+              active={downloadMenuActive}
+              onToggle={setDownloadMenuActive}
+              placement="bottom-end"
+              modifiers={[
+                {
+                  name: "offset",
+                  options: {
+                    offset: [0, 4],
+                  },
+                },
+              ]}
+              trigger={
+                <DownloadDropdownButton
+                  skin="secondary"
+                  data-hook="download-dropdown-button"
+                >
+                  <ArrowIcon size="18px" $open={downloadMenuActive} />
+                </DownloadDropdownButton>
+              }
+            >
+              <DownloadMenuItem
+                data-hook="download-csv-button"
+                skin="secondary"
+                onClick={() => handleDownload("csv")}
+              >
+                Download as CSV
+              </DownloadMenuItem>
+            </PopperToggle>
+          </Box>
         </Actions>
 
         <Content>
