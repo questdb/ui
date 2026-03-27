@@ -3,13 +3,14 @@ import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
 import { useAIConversation } from "../providers/AIConversationProvider"
-import { useAIStatus } from "../providers/AIStatusProvider"
+import { isBlockingAIStatus, useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
   createHealthIssueFlowConfig,
 } from "../utils/executeAIFlow"
-import { getSpecificDocumentation } from "../utils/questdbDocsRetrieval"
+import { getDocsSectionByUrl } from "../utils/questdbDocsRetrieval"
+import { ISSUE_DOCS_URLS } from "../scenes/Schema/TableDetailsDrawer/healthCheck"
 import type {
   HealthIssue,
   TimestampedSample,
@@ -49,6 +50,7 @@ export const useAIQuickActions = () => {
     hasSchemaAccess,
     currentModel,
     apiKey,
+    status,
     aiAssistantSettings,
   } = useAIStatus()
 
@@ -98,6 +100,9 @@ export const useAIQuickActions = () => {
     kind: "table" | "matview" | "view",
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
   ) => {
+    if (isBlockingAIStatus(status)) {
+      return
+    }
     if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
@@ -195,6 +200,9 @@ export const useAIQuickActions = () => {
     issue: HealthIssue,
     trendSamples?: TimestampedSample[],
   ) => {
+    if (isBlockingAIStatus(status)) {
+      return
+    }
     if (!canUse) {
       toast.error(
         "AI Assistant is not enabled. Please configure your API key in settings.",
@@ -224,9 +232,10 @@ export const useAIQuickActions = () => {
 
     let monitoringDocs: string
     try {
-      monitoringDocs = await getSpecificDocumentation("monitoring", [
-        "Monitoring and alerting - Detect table health issues",
-      ])
+      const docsUrl = ISSUE_DOCS_URLS[issue.id]
+      monitoringDocs = docsUrl
+        ? await getDocsSectionByUrl(docsUrl)
+        : "Documentation unavailable"
     } catch (_error) {
       monitoringDocs = "Documentation unavailable"
     }

@@ -92,6 +92,24 @@ const _console = (
       }
     }
 
+    case ConsoleAT.REPLACE_SIDEBAR_HISTORY: {
+      const { sidebarHistory, sidebarHistoryPosition } = state
+      if (
+        sidebarHistoryPosition < 0 ||
+        sidebarHistoryPosition >= sidebarHistory.length
+      )
+        return state
+
+      const newHistory = [...sidebarHistory]
+      newHistory[sidebarHistoryPosition] = action.payload
+
+      return {
+        ...state,
+        sidebarHistory: newHistory,
+        sidebarVisible: true,
+      }
+    }
+
     case ConsoleAT.GO_BACK_IN_SIDEBAR: {
       if (state.sidebarHistoryPosition <= 0) return state
       return {

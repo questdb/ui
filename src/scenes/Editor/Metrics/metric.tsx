@@ -23,20 +23,24 @@ import type {
 import { widgets } from "./widgets"
 import { QuestContext } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
+import { getTableKind } from "../../../utils/questdb/types"
 import { Graph } from "./graph"
 import uPlot from "uplot"
 import styled from "styled-components"
 import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import { TableSelector } from "./table-selector"
+import { TableIcon } from "../../Schema/table-icon"
 import {
   Box,
   Button,
   ForwardRef,
   IconWithTooltip,
   Popover,
+  TableSelector,
+  type TableOption,
 } from "../../../components"
+
 import { ColorPalette } from "./color-palette"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
@@ -46,12 +50,16 @@ const MetricInfoRoot = styled(Box).attrs({
   justifyContent: "center",
 })`
   background-color: ${({ theme }) => theme.color.backgroundLighter};
-  height: 25rem;
 `
 
 const ActionButton = styled(Button)`
   padding: 0;
   width: 3rem;
+`
+
+const StyledTableSelector = styled(TableSelector)`
+  min-width: 0;
+  margin-left: 0.6rem;
 `
 
 export const Metric = ({
@@ -83,9 +91,8 @@ export const Metric = ({
 
   const tables = useSelector(selectors.query.getTables)
 
-  const tableName = tables.find(
-    (t): boolean => t.id === metric.tableId,
-  )?.table_name
+  const selectedTable = tables.find((t): boolean => t.id === metric.tableId)
+  const tableName = selectedTable?.table_name
   tableNameRef.current = tableName
 
   const widgetConfig = widgets[metric.metricType]
@@ -186,12 +193,18 @@ export const Metric = ({
   }, [tableName, widgetConfig])
 
   const canZoomToData = false
-  const tableOptions = useMemo(() => {
-    return tables.map((t) => ({
-      label: t.table_name,
-      value: t.id.toString(),
-      disabled: !t.walEnabled,
-    }))
+  const tableOptions: TableOption[] = useMemo(() => {
+    return tables
+      .filter((t) => getTableKind(t) !== "view")
+      .map((t) => ({
+        label: t.table_name,
+        value: t.id.toString(),
+        disabled: !t.walEnabled,
+        kind: getTableKind(t),
+        walEnabled: t.walEnabled,
+        partitionBy: t.partitionBy,
+        designatedTimestamp: t.designatedTimestamp,
+      }))
   }, [tables])
 
   if (!dataRef.current && !loading && metric.tableId) {
@@ -220,17 +233,28 @@ export const Metric = ({
       tableName={tableName}
       widgetConfig={widgetConfig}
       beforeLabel={
-        <TableSelector
-          tableId={metric.tableId}
-          loading={loading}
+        <StyledTableSelector
           options={tableOptions}
-          placeholder="Select table"
           onSelect={(value) => onTableChange(metric, parseInt(value))}
-          defaultValue={tableNameRef.current || ""}
+          value={tableNameRef.current || ""}
+          placeholder="Select table"
+          prefix={
+            selectedTable ? (
+              <TableIcon
+                kind={getTableKind(selectedTable)}
+                walEnabled={selectedTable?.walEnabled}
+                partitionBy={selectedTable?.partitionBy}
+                designatedTimestamp={selectedTable?.designatedTimestamp}
+                size="18px"
+              />
+            ) : (
+              <div style={{ width: "18px" }} />
+            )
+          }
         />
       }
       actions={
-        <Box gap="0.5rem" align="center">
+        <Box gap="0.8rem" align="center">
           <IconWithTooltip
             icon={
               <ForwardRef>
@@ -245,7 +269,10 @@ export const Metric = ({
                   align="center"
                 >
                   <ColorPalette
-                    onSelect={(color) => onColorChange(metric, color)}
+                    onSelect={(color) => {
+                      onColorChange(metric, color)
+                      setColorPickerOpen(false)
+                    }}
                     selectedColor={metric.color}
                   />
                 </Popover>

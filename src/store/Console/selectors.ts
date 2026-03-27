@@ -56,8 +56,8 @@ const getTableDetailsTarget: (store: StoreShape) => TableDetailsTarget = (
     sidebarHistoryPosition < sidebarHistory.length
   ) {
     const current = sidebarHistory[sidebarHistoryPosition]
-    if (current?.type === "tableDetails" && current.payload) {
-      return current.payload
+    if (current?.type === "tableDetails") {
+      return current.payload ?? null
     }
   }
 

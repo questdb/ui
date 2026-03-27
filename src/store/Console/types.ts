@@ -25,6 +25,7 @@
 export type TableDetailsTarget = {
   tableName: string
   isMatView: boolean
+  isView: boolean
 } | null
 
 export type SidebarType = "news" | "aiChat" | "tableDetails"
@@ -50,6 +51,7 @@ export enum ConsoleAT {
   PUSH_SIDEBAR_HISTORY = "CONSOLE/PUSH_SIDEBAR_HISTORY",
   GO_BACK_IN_SIDEBAR = "CONSOLE/GO_BACK_IN_SIDEBAR",
   GO_FORWARD_IN_SIDEBAR = "CONSOLE/GO_FORWARD_IN_SIDEBAR",
+  REPLACE_SIDEBAR_HISTORY = "CONSOLE/REPLACE_SIDEBAR_HISTORY",
   CLOSE_SIDEBAR = "CONSOLE/CLOSE_SIDEBAR",
   OPEN_SIDEBAR = "CONSOLE/OPEN_SIDEBAR",
 }
@@ -76,6 +78,11 @@ type GoForwardInSidebarAction = Readonly<{
   type: ConsoleAT.GO_FORWARD_IN_SIDEBAR
 }>
 
+type ReplaceSidebarHistoryAction = Readonly<{
+  payload: Sidebar
+  type: ConsoleAT.REPLACE_SIDEBAR_HISTORY
+}>
+
 type CloseSidebarAction = Readonly<{
   type: ConsoleAT.CLOSE_SIDEBAR
 }>
@@ -88,6 +95,7 @@ export type ConsoleAction =
   | ToggleSideMenuAction
   | SetActiveBottomPanelAction
   | PushSidebarHistoryAction
+  | ReplaceSidebarHistoryAction
   | GoBackInSidebarAction
   | GoForwardInSidebarAction
   | CloseSidebarAction

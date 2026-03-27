@@ -14,10 +14,6 @@ import {
   hasData,
 } from "./utils"
 
-const Actions = styled.div`
-  margin-right: 0;
-`
-
 const Root = styled(Box).attrs({
   align: "center",
   flexDirection: "column",
@@ -25,25 +21,38 @@ const Root = styled(Box).attrs({
 })`
   position: relative;
   background-color: ${({ theme }) => theme.color.backgroundLighter};
-  height: 25rem;
+  padding: 0.5rem;
+  border-radius: 0.4rem;
+  min-height: 0;
+  overflow: hidden;
+  overflow-y: auto;
+`
+
+const Header = styled(Box)`
+  position: relative;
+  width: 100%;
+  gap: 1.5rem;
+  padding: 0.5rem 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+`
+
+const HeaderMeta = styled(Box)`
+  flex-shrink: 1;
+  min-width: 0;
+  flex-wrap: wrap;
 `
 
 const BeforeLabel = styled.div`
-  margin-left: 0;
-`
-
-const Header = styled(Box).attrs({
-  align: "center",
-  justifyContent: "space-between",
-})`
-  position: relative;
-  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  max-width: 100%;
 `
 
 const HeaderText = styled.span`
   font-size: 1.4rem;
+  line-height: 1.14;
   font-weight: 600;
-  padding: 0 0 0 1rem;
 `
 
 const GraphWrapper = styled(Box).attrs({
@@ -114,6 +123,7 @@ export const Graph = ({
   const timeRef = useRef(null)
   const valueRef = useRef(null)
   const uPlotRef = useRef<uPlot>()
+  const colorsString = useMemo(() => colors.join(","), [colors])
 
   const { isTableMetric, mapYValue, chartTitle } = widgetConfig
 
@@ -156,7 +166,7 @@ export const Graph = ({
         theme,
       }),
     )
-  }, [data])
+  }, [data, colorsString])
 
   const graphRootRef = useRef<HTMLDivElement>(null)
 
@@ -192,17 +202,25 @@ export const Graph = ({
   return (
     <Root ref={graphRootRef}>
       <Header>
-        <Box gap="0.5rem" align="center">
+        <HeaderMeta>
           <BeforeLabel>{beforeLabel}</BeforeLabel>
-          <HeaderText>{chartTitle}</HeaderText>
-          <IconWithTooltip
-            icon={<Information size="16px" style={{ flexShrink: 0 }} />}
-            tooltip={widgetConfig.getDescription({
-              lastValue,
-              sampleBySeconds: getSamplingRateForPeriod(from, to),
-            })}
-            placement="bottom"
-          />
+          <Box gap="0.8rem" margin="0 0 0 0.6rem">
+            <HeaderText>{chartTitle}</HeaderText>
+            <IconWithTooltip
+              icon={
+                <Information
+                  size="16px"
+                  style={{ flexShrink: 0 }}
+                  color={theme.color.gray2}
+                />
+              }
+              tooltip={widgetConfig.getDescription({
+                lastValue,
+                sampleBySeconds: getSamplingRateForPeriod(from, to),
+              })}
+              placement="bottom"
+            />
+          </Box>
           {delayedLoading && <Loader size="18px" spin />}
           {hasError && (
             <IconWithTooltip
@@ -211,8 +229,8 @@ export const Graph = ({
               placement="bottom"
             />
           )}
-        </Box>
-        <Actions>{actions}</Actions>
+        </HeaderMeta>
+        <Box style={{ flexShrink: 0 }}>{actions}</Box>
       </Header>
       <GraphWrapper>
         {!hasData(data) && (

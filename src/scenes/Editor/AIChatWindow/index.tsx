@@ -460,6 +460,7 @@ const AIChatWindow: React.FC = () => {
             payload: {
               tableName: table.table_name,
               isMatView: table.table_type === "M",
+              isView: table.table_type === "V",
             },
           }),
         )
@@ -553,7 +554,12 @@ const AIChatWindow: React.FC = () => {
     userMessageId: string,
     assistantMessageId: string,
   ) => {
-    if (!chatWindowState.activeConversationId || !canUse) return
+    if (
+      !chatWindowState.activeConversationId ||
+      !canUse ||
+      isBlockingAIStatus(aiStatus)
+    )
+      return
 
     const conversationId = chatWindowState.activeConversationId
     const userMessage = messages.find((m) => m.id === userMessageId)

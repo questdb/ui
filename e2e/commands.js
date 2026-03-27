@@ -529,12 +529,11 @@ Cypress.Commands.add("expandViews", () => {
 })
 
 Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
-  const titleHook =
-    kind === "matview" ? "schema-matview-title" : "schema-table-title"
+  const titleHook = `schema-${kind}-title`
   cy.getByDataHook(titleHook).contains(name).click()
   cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
-  cy.getByDataHook("table-details-name").should("contain", name)
+  cy.getByDataHook("table-details-name").should("have.value", name)
 })
 
 Cypress.Commands.add("getEditorTabs", () => {

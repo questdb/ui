@@ -6,12 +6,15 @@ import React, {
   useState,
   useCallback,
 } from "react"
+import { useDispatch, useSelector } from "react-redux"
+import { actions, selectors } from "../../../store"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
-import { color } from "../../../utils"
+import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
+import { color, getTableKind } from "../../../utils"
 import type {
   ConversationMessage,
   UserMessageDisplayType,
@@ -209,14 +212,20 @@ const IssueMessageRow = styled(Box)`
   gap: 0.5rem;
 `
 
-const SchemaNameDisplay = styled(Box)`
+const SchemaNameDisplay = styled(Button)`
   margin-left: 0.4rem;
-  padding: 0.8rem 1.2rem;
+  padding: 0.5rem 1rem;
   align-items: center;
   gap: 1rem;
-  border-radius: 8px;
+  border-radius: 0.6rem;
   border: 1px solid ${color("selection")};
   background: ${color("backgroundDarker")};
+
+  &:hover,
+  &:active {
+    background: ${color("backgroundLighter")} !important;
+    border-color: ${color("cyan")} !important;
+  }
 `
 
 const SchemaName = styled(Text)`
@@ -604,6 +613,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onScrollToMessageComplete,
 }) => {
   const theme = useTheme()
+  const dispatch = useDispatch()
+  const tables = useSelector(selectors.query.getTables)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -620,6 +631,29 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       setScrolled(true)
     })
   }, [scrolled, scrollToMessageId])
+
+  const handleSchemaNameDisplayClick = useCallback(
+    (schemaData: SchemaDisplayData) => {
+      const table = tables.find(
+        (t) =>
+          t.table_name === schemaData.tableName &&
+          getTableKind(t) === schemaData.kind,
+      )
+      if (table) {
+        dispatch(
+          actions.console.pushSidebarHistory({
+            type: "tableDetails",
+            payload: {
+              tableName: table.table_name,
+              isMatView: table.table_type === "M",
+              isView: table.table_type === "V",
+            },
+          }),
+        )
+      }
+    },
+    [tables],
+  )
 
   useEffect(() => {
     const container = messagesContainerRef.current
@@ -782,7 +816,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               const schemaData = message.displaySchemaData
               content = (
                 <UserRequestContent>
-                  <SchemaNameDisplay>
+                  <SchemaNameDisplay
+                    onClick={() => handleSchemaNameDisplayClick(schemaData)}
+                  >
                     <TableIcon
                       kind={schemaData.kind}
                       partitionBy={schemaData.partitionBy}
