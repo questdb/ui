@@ -211,9 +211,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@anthropic-ai/sdk@npm:^0.71.2":
-  version: 0.71.2
-  resolution: "@anthropic-ai/sdk@npm:0.71.2"
+"@anthropic-ai/sdk@npm:^0.78.0":
+  version: 0.78.0
+  resolution: "@anthropic-ai/sdk@npm:0.78.0"
   dependencies:
     json-schema-to-ts: "npm:^3.1.1"
   peerDependencies:
@@ -223,7 +223,7 @@ __metadata:
       optional: true
   bin:
     anthropic-ai-sdk: bin/cli
-  checksum: 10/a8190f9e860079dd97a544a95f36bd4b0b3a9a941610d7e067c431dc47febe03e3e761fc371166b261af9629d832533eeb3d8e72298e9f73dd52994a61881a2c
+  checksum: 10/7cb34e36d4fc766f0765b2581596825996073b03eec97a1193f07c6ca4ab48a021310dae9df630d61550ae2aa7fb3a6cf54236f7418932b25ea1a0e32624fdf1
   languageName: node
   linkType: hard
 
@@ -2505,7 +2505,7 @@ __metadata:
   resolution: "@questdb/web-console@workspace:."
   dependencies:
     "@4tw/cypress-drag-drop": "npm:^2.2.5"
-    "@anthropic-ai/sdk": "npm:^0.71.2"
+    "@anthropic-ai/sdk": "npm:^0.78.0"
     "@babel/core": "npm:^7.28.5"
     "@babel/preset-env": "npm:^7.20.2"
     "@babel/preset-react": "npm:^7.17.12"
@@ -2589,6 +2589,7 @@ __metadata:
     js-base64: "npm:^3.7.7"
     js-sha256: "npm:^0.11.0"
     js-tiktoken: "npm:^1.0.21"
+    jsonrepair: "npm:^3.13.3"
     lint-staged: "npm:^16.2.6"
     lodash.isequal: "npm:^4.5.0"
     lodash.merge: "npm:^4.6.2"
@@ -8326,6 +8327,15 @@ __metadata:
   version: 1.1.5
   resolution: "jsonpack@npm:1.1.5"
   checksum: 10/1b676c36ae2f1475cbbb46c67a0606029bd08104d65dd4575ce1b38da175abb28b5b2801fdac6cbb22a8f0224b4f97bd5734eb2065dfbe17de28ced89be17ce8
+  languageName: node
+  linkType: hard
+
+"jsonrepair@npm:^3.13.3":
+  version: 3.13.3
+  resolution: "jsonrepair@npm:3.13.3"
+  bin:
+    jsonrepair: bin/cli.js
+  checksum: 10/cd1d42516e3e03ccc44498c328f87f4ec05b24afe190becced0babf5d608e81b375e8d2040494142760556c1d6583b395073b5253626907e4df968d8cf01115c
   languageName: node
   linkType: hard
 
