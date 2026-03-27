@@ -14,7 +14,10 @@ import {
   hasSchemaAccess,
   providerForModel,
   canUseAiAssistant,
-} from "../../utils/aiAssistantSettings"
+  getAllEnabledModels,
+  getApiKey,
+} from "../../utils/ai"
+import type { AiAssistantSettings } from "../LocalStorageProvider/types"
 import { useAIConversation } from "../AIConversationProvider"
 
 export const useAIStatus = () => {
@@ -78,6 +81,7 @@ type BaseAIStatusContextType = {
   models: string[]
   currentOperation: OperationHistory
   clearOperation: () => void
+  aiAssistantSettings: AiAssistantSettings
 }
 
 export type AIStatusContextType =
@@ -135,19 +139,15 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
 
   const apiKey = useMemo(() => {
     if (!currentModel) return null
-    const provider = providerForModel(currentModel)
-    return aiAssistantSettings.providers?.[provider]?.apiKey || null
+    const provider = providerForModel(currentModel, aiAssistantSettings)
+    if (!provider) return null
+    return getApiKey(provider, aiAssistantSettings)
   }, [currentModel, aiAssistantSettings])
 
-  const models = useMemo(() => {
-    const allModels: string[] = []
-    const anthropicModels =
-      aiAssistantSettings.providers?.anthropic?.enabledModels || []
-    const openaiModels =
-      aiAssistantSettings.providers?.openai?.enabledModels || []
-    allModels.push(...anthropicModels, ...openaiModels)
-    return allModels
-  }, [aiAssistantSettings])
+  const models = useMemo(
+    () => getAllEnabledModels(aiAssistantSettings),
+    [aiAssistantSettings],
+  )
 
   const setStatus = useCallback(
     (
@@ -251,6 +251,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey: apiKey!,
         models,
         currentOperation,
+        aiAssistantSettings,
       }
     : {
         status,
@@ -265,6 +266,7 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
         apiKey,
         models,
         currentOperation,
+        aiAssistantSettings,
       }
 
   return (

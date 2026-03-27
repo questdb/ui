@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react"
+import React, { useState, useMemo, useCallback, useEffect } from "react"
 import styled, { css } from "styled-components"
 import { Dialog } from "../Dialog"
 import { MultiStepModal, Step } from "../MultiStepModal"
@@ -10,17 +10,23 @@ import { Text } from "../Text"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
+import type { CustomProviderDefinition } from "../../providers/LocalStorageProvider/types"
 import { toast } from "../Toast"
 import {
-  MODEL_OPTIONS,
+  getAllModelOptions,
+  getAllProviders,
+  makeCustomModelValue,
   type ModelOption,
-  type Provider,
-} from "../../utils/aiAssistantSettings"
+  type ProviderId,
+  getProviderName,
+} from "../../utils/ai"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
+import { PlusIcon, Plugs as PlugsIcon } from "@phosphor-icons/react"
 import { theme } from "../../theme"
+import { CustomProviderModal } from "./CustomProviderModal"
 
 const ModalContent = styled.div`
   display: flex;
@@ -113,21 +119,16 @@ const SectionDescription = styled(Text)`
   color: ${({ theme }) => theme.color.gray2};
 `
 
-const ProviderSelectionContainer = styled(Box).attrs({
-  gap: "4rem",
-  align: "center",
+const ProviderCardsContainer = styled(Box).attrs({
+  gap: "2rem",
+  alignItems: "flex-start",
 })`
+  height: 8.5rem;
   width: 100%;
 `
 
-const ProviderCardsContainer = styled(Box).attrs({
-  gap: "2rem",
-})`
-  height: 8.5rem;
-`
-
 const ProviderCard = styled.button<{ $selected: boolean }>`
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   border: 0.1rem solid ${({ theme }) => theme.color.selection};
   border-radius: 0.8rem;
   cursor: pointer;
@@ -165,34 +166,6 @@ const ProviderName = styled(Text)`
   text-align: center;
 `
 
-const ComingSoonContainer = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.6rem",
-  align: "flex-start",
-})`
-  width: 13.2rem;
-`
-
-const ComingSoonIcons = styled(Box).attrs({
-  align: "center",
-})`
-  width: 100%;
-  padding-left: 0;
-  padding-right: 1.2rem;
-`
-
-const ComingSoonIcon = styled.img`
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-`
-
-const ComingSoonText = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 300;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
 const InputSection = styled(Box).attrs({
   flexDirection: "column",
   gap: "1.2rem",
@@ -208,9 +181,10 @@ const InputLabel = styled(Text)`
 
 const StyledInput = styled(Input)<{ $hasError?: boolean; disabled?: boolean }>`
   width: 100%;
-  background: #262833;
+  background: ${({ theme }) => theme.color.inputBackground};
   border: 0.1rem solid
-    ${({ theme, $hasError }) => ($hasError ? theme.color.red : "#6b7280")};
+    ${({ theme, $hasError }) =>
+      $hasError ? theme.color.red : theme.color.inputBorder};
   border-radius: 0.8rem;
   cursor: ${({ disabled }) => (disabled ? "not-allowed" : "text")};
   font-size: 1.4rem;
@@ -406,30 +380,53 @@ const WarningText = styled(Text)`
   text-align: left;
 `
 
+const AddCustomProviderCard = styled.button`
+  background: transparent;
+  border: 0.1rem dashed ${({ theme }) => theme.color.gray2};
+  border-radius: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.2rem 2rem;
+  width: 10rem;
+  height: 8.5rem;
+  transition: all 0.2s;
+  color: ${({ theme }) => theme.color.gray2};
+
+  &:hover {
+    border-color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.foreground};
+  }
+
+  &:focus-visible {
+    outline: 0.2rem solid ${({ theme }) => theme.color.foreground};
+    outline-offset: 0.2rem;
+  }
+`
+
 type ConfigurationModalProps = {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
-const getProviderName = (provider: Provider | null) => {
-  if (!provider) return ""
-  return provider === "openai" ? "OpenAI" : "Anthropic"
-}
-
 type StepOneContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: ProviderId | null
   apiKey: string
   error: string | null
   providerName: string
-  onProviderSelect: (provider: Provider) => void
+  onProviderSelect: (provider: ProviderId) => void
   onApiKeyChange: (value: string) => void
+  onAddCustomProvider: () => void
 }
 
 type StepTwoContentProps = {
-  selectedProvider: Provider | null
+  selectedProvider: ProviderId | null
   enabledModels: string[]
   grantSchemaAccess: boolean
-  modelsByProvider: { anthropic: ModelOption[]; openai: ModelOption[] }
+  modelsByProvider: Record<string, ModelOption[]>
   onModelToggle: (modelValue: string) => void
   onSchemaAccessChange: (checked: boolean) => void
 }
@@ -463,6 +460,7 @@ const StepOneContent = ({
   providerName,
   onProviderSelect,
   onApiKeyChange,
+  onAddCustomProvider,
 }: StepOneContentProps) => {
   const navigation = useModalNavigation()
   const handleClose: () => void = navigation.handleClose
@@ -487,74 +485,77 @@ const StepOneContent = ({
           <Box flexDirection="column" gap="0.8rem" align="flex-start">
             <SectionTitle>Select Provider</SectionTitle>
             <SectionDescription>
-              We currently only support two model providers, with support for
-              more coming soon.
+              Choose a built-in provider or add your own custom provider.
+              You&apos;ll be able to configure and switch between multiple
+              providers later.
             </SectionDescription>
           </Box>
-          <ProviderSelectionContainer>
-            <ProviderCardsContainer>
-              <ProviderCard
-                $selected={selectedProvider === "openai"}
-                onClick={() => onProviderSelect("openai")}
-                type="button"
-                data-hook="ai-settings-provider-openai"
-              >
-                <OpenAIIcon
-                  width="40"
-                  height="40"
-                  color={theme.color.foreground}
-                />
-                <ProviderName>OpenAI</ProviderName>
-              </ProviderCard>
-              <ProviderCard
-                $selected={selectedProvider === "anthropic"}
-                onClick={() => onProviderSelect("anthropic")}
-                type="button"
-                data-hook="ai-settings-provider-anthropic"
-              >
-                <AnthropicIcon
-                  width="40"
-                  height="40"
-                  color={theme.color.foreground}
-                />
-                <ProviderName>Anthropic</ProviderName>
-              </ProviderCard>
-            </ProviderCardsContainer>
-            <ComingSoonContainer>
-              <ComingSoonIcons>
-                <ComingSoonIcon
-                  src="/assets/models-group-icon.svg"
-                  alt="Coming soon providers"
-                />
-              </ComingSoonIcons>
-              <ComingSoonText>Coming soon...</ComingSoonText>
-            </ComingSoonContainer>
-          </ProviderSelectionContainer>
+          <ProviderCardsContainer>
+            <ProviderCard
+              $selected={selectedProvider === "openai"}
+              onClick={() => onProviderSelect("openai")}
+              type="button"
+              data-hook="ai-settings-provider-openai"
+            >
+              <OpenAIIcon
+                width="40"
+                height="40"
+                color={theme.color.foreground}
+              />
+              <ProviderName>{getProviderName("openai")}</ProviderName>
+            </ProviderCard>
+            <ProviderCard
+              $selected={selectedProvider === "anthropic"}
+              onClick={() => onProviderSelect("anthropic")}
+              type="button"
+              data-hook="ai-settings-provider-anthropic"
+            >
+              <AnthropicIcon
+                width="40"
+                height="40"
+                color={theme.color.foreground}
+              />
+              <ProviderName>{getProviderName("anthropic")}</ProviderName>
+            </ProviderCard>
+            <AddCustomProviderCard
+              data-hook="ai-settings-provider-custom"
+              type="button"
+              onClick={onAddCustomProvider}
+            >
+              <PlusIcon size={32} weight="light" />
+              <ProviderName>Custom</ProviderName>
+            </AddCustomProviderCard>
+          </ProviderCardsContainer>
         </Box>
       </ContentSection>
-      <Separator />
-      <ContentSection>
-        <InputSection align="flex-start">
-          <InputLabel>API Key</InputLabel>
-          <StyledInput
-            type="text"
-            value={apiKey}
-            onChange={(e) => onApiKeyChange(e.target.value)}
-            placeholder={`Enter${providerName ? ` ${providerName}` : ""} API key`}
-            $hasError={!!error}
-            disabled={!selectedProvider}
-            data-hook="ai-settings-api-key"
-          />
-          {error && (
-            <ErrorText data-hook="ai-settings-api-key-error">{error}</ErrorText>
-          )}
-          <SectionDescription>
-            Stored locally in your browser and never sent to QuestDB servers.
-            This API key is used to authenticate your requests to the model
-            provider.
-          </SectionDescription>
-        </InputSection>
-      </ContentSection>
+      {selectedProvider && (
+        <>
+          <Separator />
+          <ContentSection>
+            <InputSection align="flex-start">
+              <InputLabel>API Key</InputLabel>
+              <StyledInput
+                type="text"
+                value={apiKey}
+                onChange={(e) => onApiKeyChange(e.target.value)}
+                placeholder={`Enter${providerName ? ` ${providerName}` : ""} API key`}
+                $hasError={!!error}
+                data-hook="ai-settings-api-key"
+              />
+              {error && (
+                <ErrorText data-hook="ai-settings-api-key-error">
+                  {error}
+                </ErrorText>
+              )}
+              <SectionDescription>
+                Stored locally in your browser and never sent to QuestDB
+                servers. This API key is used to authenticate your requests to
+                the model provider.
+              </SectionDescription>
+            </InputSection>
+          </ContentSection>
+        </>
+      )}
     </ModalContent>
   )
 }
@@ -571,10 +572,8 @@ const StepTwoContent = ({
   const handleClose: () => void = navigation.handleClose
   const currentProvider = selectedProvider
 
-  const getModelsForProvider = (provider: Provider) => {
-    return provider === "openai"
-      ? modelsByProvider.openai
-      : modelsByProvider.anthropic
+  const getModelsForProvider = (provider: ProviderId) => {
+    return modelsByProvider[provider] || []
   }
 
   return (
@@ -600,10 +599,12 @@ const StepTwoContent = ({
               <EnableModelsHeader>
                 <EnableModelsTitle>Enable Models</EnableModelsTitle>
                 <ProviderBadge>
-                  {currentProvider === "openai" ? (
+                  {currentProvider === "anthropic" ? (
+                    <AnthropicIcon width="16" height="16" color="#fff" />
+                  ) : currentProvider === "openai" ? (
                     <OpenAIIcon width="16" height="16" color="#fff" />
                   ) : (
-                    <AnthropicIcon width="16" height="16" color="#fff" />
+                    <PlugsIcon size={16} color="#fff" />
                   )}
                   <ProviderBadgeText>
                     {getProviderName(currentProvider)}
@@ -700,33 +701,38 @@ export const ConfigurationModal = ({
   onOpenChange,
 }: ConfigurationModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
-  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   )
   const providerName = useMemo(
-    () => getProviderName(selectedProvider),
-    [selectedProvider],
+    () => getProviderName(selectedProvider, aiAssistantSettings),
+    [selectedProvider, aiAssistantSettings],
   )
   const [apiKey, setApiKey] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
+  const [customProviderModalOpen, setCustomProviderModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setCustomProviderModalOpen(false)
+    }
+  }, [open])
 
   const [enabledModels, setEnabledModels] = useState<string[]>([])
   const [grantSchemaAccess, setGrantSchemaAccess] = useState<boolean>(true)
 
   const modelsByProvider = useMemo(() => {
-    const anthropic: ModelOption[] = []
-    const openai: ModelOption[] = []
-    MODEL_OPTIONS.forEach((model) => {
-      if (model.provider === "anthropic") {
-        anthropic.push(model)
-      } else {
-        openai.push(model)
+    const result: Record<string, ModelOption[]> = {}
+    getAllModelOptions(aiAssistantSettings).forEach((model) => {
+      if (!result[model.provider]) {
+        result[model.provider] = []
       }
+      result[model.provider].push(model)
     })
-    return { anthropic, openai }
-  }, [])
+    return result
+  }, [aiAssistantSettings])
 
-  const handleProviderSelect = useCallback((provider: Provider) => {
+  const handleProviderSelect = useCallback((provider: ProviderId) => {
     setSelectedProvider(provider)
     setError(null)
     setApiKey("")
@@ -755,7 +761,9 @@ export const ConfigurationModal = ({
 
     const selectedModel =
       enabledModels.find(
-        (m) => MODEL_OPTIONS.find((mo) => mo.value === m)?.default,
+        (m) =>
+          getAllModelOptions(aiAssistantSettings).find((mo) => mo.value === m)
+            ?.default,
       ) ?? enabledModels[0]
 
     const newSettings = {
@@ -794,20 +802,25 @@ export const ConfigurationModal = ({
     }
 
     const testModel =
-      MODEL_OPTIONS.find(
+      getAllModelOptions(aiAssistantSettings).find(
         (m) => m.isTestModel && m.provider === selectedProvider,
       )?.value ?? modelsByProvider[selectedProvider][0].value
 
     try {
-      const result = await testApiKey(apiKey, testModel)
+      const result = await testApiKey(
+        apiKey,
+        testModel,
+        selectedProvider,
+        aiAssistantSettings,
+      )
       if (!result.valid) {
         const errorMsg = result.error || "Invalid API key"
         setError(errorMsg)
         return errorMsg
       }
-      const defaultModels = MODEL_OPTIONS.filter(
-        (m) => m.defaultEnabled && m.provider === selectedProvider,
-      ).map((m) => m.value)
+      const defaultModels = getAllModelOptions(aiAssistantSettings)
+        .filter((m) => m.defaultEnabled && m.provider === selectedProvider)
+        .map((m) => m.value)
       if (defaultModels.length > 0) {
         setEnabledModels(defaultModels)
       }
@@ -848,6 +861,37 @@ export const ConfigurationModal = ({
     setGrantSchemaAccess(true)
   }, [])
 
+  const handleCustomProviderSave = useCallback(
+    (providerId: string, definition: CustomProviderDefinition) => {
+      const newEnabledModels = definition.models.map((m) =>
+        makeCustomModelValue(providerId, m),
+      )
+
+      const newSettings = {
+        ...aiAssistantSettings,
+        selectedModel: newEnabledModels[0],
+        customProviders: {
+          ...(aiAssistantSettings.customProviders ?? {}),
+          [providerId]: definition,
+        },
+        providers: {
+          ...aiAssistantSettings.providers,
+          [providerId]: {
+            apiKey: definition.apiKey ?? "",
+            enabledModels: newEnabledModels,
+            grantSchemaAccess: definition.grantSchemaAccess ?? false,
+          },
+        },
+      }
+
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
+      toast.success("AI Assistant activated successfully")
+      setCustomProviderModalOpen(false)
+      onOpenChange?.(false)
+    },
+    [aiAssistantSettings, updateSettings, onOpenChange],
+  )
+
   const steps: Step[] = useMemo(
     () => [
       {
@@ -862,6 +906,7 @@ export const ConfigurationModal = ({
             providerName={providerName}
             onProviderSelect={handleProviderSelect}
             onApiKeyChange={handleApiKeyChange}
+            onAddCustomProvider={() => setCustomProviderModalOpen(true)}
           />
         ),
         validate: validateStepOne,
@@ -901,21 +946,33 @@ export const ConfigurationModal = ({
   )
 
   return (
-    <MultiStepModal
-      open={open}
-      onOpenChange={(isOpen) => {
-        if (!isOpen) {
-          handleModalClose()
-        }
-        onOpenChange?.(isOpen)
-      }}
-      onStepChange={handleStepChange}
-      steps={steps}
-      maxWidth="64rem"
-      onComplete={handleComplete}
-      canProceed={canProceed}
-      completeButtonText="Activate Assistant"
-      showValidationError={false}
-    />
+    <>
+      <MultiStepModal
+        open={open && !customProviderModalOpen}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            handleModalClose()
+          }
+          onOpenChange?.(isOpen)
+        }}
+        onStepChange={handleStepChange}
+        steps={steps}
+        maxWidth="64rem"
+        onComplete={handleComplete}
+        canProceed={canProceed}
+        completeButtonText="Activate Assistant"
+        showValidationError={false}
+      />
+      {customProviderModalOpen && (
+        <CustomProviderModal
+          open={customProviderModalOpen}
+          onOpenChange={setCustomProviderModalOpen}
+          onSave={handleCustomProviderSave}
+          existingProviderNames={getAllProviders(aiAssistantSettings).map((p) =>
+            getProviderName(p, aiAssistantSettings),
+          )}
+        />
+      )}
+    </>
   )
 }
