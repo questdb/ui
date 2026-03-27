@@ -1223,7 +1223,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                               type="button"
                               onClick={() => {
                                 void trackEvent(
-                                  ConsoleEvent.AI_SETTINGS_API_KEY_EDIT
+                                  ConsoleEvent.AI_SETTINGS_API_KEY_EDIT,
                                 )
                                 inputRef.current?.focus()
                               }}
