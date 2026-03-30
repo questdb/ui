@@ -13,6 +13,8 @@ import { MetricType } from "./utils"
 import { useEditor } from "../../../providers"
 import merge from "lodash.merge"
 import { defaultColor, getColorForNewMetric } from "./color-palette"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { widgets } from "./widgets"
 
 const StyledDescription = styled(Dialog.Description)`
@@ -65,6 +67,10 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
     : defaultColor
 
   const handleSelectMetric = async (metricType: MetricType) => {
+    void trackEvent(ConsoleEvent.METRIC_ADD, {
+      metricType,
+      count: metrics.length + 1,
+    })
     if (buffer?.id) {
       const newBuffer = merge(buffer, {
         metricsViewState: {

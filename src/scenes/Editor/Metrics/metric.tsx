@@ -44,6 +44,8 @@ import {
 import { ColorPalette } from "./color-palette"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const MetricInfoRoot = styled(Box).attrs({
   align: "center",
@@ -283,7 +285,13 @@ export const Metric = ({
           />
           <IconWithTooltip
             icon={
-              <ActionButton skin="transparent" onClick={() => onRemove(metric)}>
+              <ActionButton
+                skin="transparent"
+                onClick={() => {
+                  void trackEvent(ConsoleEvent.METRIC_REMOVE)
+                  onRemove(metric)
+                }}
+              >
                 <Trash size="18px" />
               </ActionButton>
             }

@@ -52,6 +52,8 @@ import {
   AIOperationStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -1201,6 +1203,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                       message.sql &&
                                       !isOperationInProgress
                                     ) {
+                                      void trackEvent(
+                                        ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
+                                      )
                                       onApplyToEditor(message.id, message.sql)
                                     }
                                   }}

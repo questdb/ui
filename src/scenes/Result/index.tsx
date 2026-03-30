@@ -59,6 +59,8 @@ import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../../components"
 import { API_VERSION } from "../../consts"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const Root = styled.div`
   display: flex;
@@ -242,6 +244,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         <Button
           skin="transparent"
           onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_MARKDOWN_COPY)
             void copyToClipboard(
               gridRef?.current?.getResultAsMarkdown() as string,
             ).then(() => {
@@ -259,6 +262,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <StyledPrimaryToggleButton
           onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_COLUMN_FREEZE)
             gridRef?.current?.toggleFreezeLeft()
             gridRef?.current?.focus()
           }}
@@ -274,7 +278,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         <Button
           skin="transparent"
           disabled={!gridHasSelection}
-          onClick={() => gridRef?.current?.shuffleFocusedColumnToFront()}
+          onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_COLUMN_MOVE_TO_FRONT)
+            gridRef?.current?.shuffleFocusedColumnToFront()
+          }}
         >
           <HandPointLeft size="18px" />
         </Button>
@@ -285,7 +292,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
-          onClick={() => gridRef?.current?.clearCustomLayout()}
+          onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_LAYOUT_RESET)
+            gridRef?.current?.clearCustomLayout()
+          }}
         >
           <Reset size="18px" />
         </Button>
@@ -297,6 +307,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         <Button
           skin="transparent"
           onClick={() => {
+            void trackEvent(ConsoleEvent.GRID_REFRESH)
             const sql = gridRef?.current?.getSQL()
             if (sql) {
               eventBus.publish(EventType.MSG_QUERY_EXEC, { q: sql })
@@ -316,6 +327,11 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   }, [result])
 
   const handleDownload = (format: "csv" | "parquet") => {
+    void trackEvent(
+      format === "parquet"
+        ? ConsoleEvent.GRID_PARQUET_DOWNLOAD
+        : ConsoleEvent.GRID_CSV_DOWNLOAD,
+    )
     setDownloadMenuActive(false)
     const sql = gridRef?.current?.getSQL()
     if (!sql) {

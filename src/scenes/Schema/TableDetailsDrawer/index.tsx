@@ -45,6 +45,8 @@ import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const TypeBadge = styled.span`
   background: transparent;
@@ -272,6 +274,7 @@ export const TableDetailsDrawer = () => {
   const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 
   const handleExplainWithAI = useCallback(() => {
+    void trackEvent(ConsoleEvent.TABLE_DETAILS_SCHEMA_EXPLAIN)
     if (tableData?.id == null) return
     void handleExplainSchema(
       tableData.id,
@@ -287,6 +290,7 @@ export const TableDetailsDrawer = () => {
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
+      void trackEvent(ConsoleEvent.TABLE_DETAILS_ASK_AI)
       if (tableData?.id == null) return
 
       let samples = undefined
@@ -707,7 +711,12 @@ export const TableDetailsDrawer = () => {
                 <TabsNav>
                   <Tab
                     $active={activeTab === "monitoring"}
-                    onClick={() => setActiveTab("monitoring")}
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
+                        tab: "monitoring",
+                      })
+                      setActiveTab("monitoring")
+                    }}
                     data-hook="table-details-tab-monitoring"
                     data-active={activeTab === "monitoring"}
                   >
@@ -734,7 +743,12 @@ export const TableDetailsDrawer = () => {
                   </Tab>
                   <Tab
                     $active={activeTab === "details"}
-                    onClick={() => setActiveTab("details")}
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
+                        tab: "details",
+                      })
+                      setActiveTab("details")
+                    }}
                     data-hook="table-details-tab-details"
                     data-active={activeTab === "details"}
                   >

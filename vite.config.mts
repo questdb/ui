@@ -6,6 +6,9 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 import wasm from 'vite-plugin-wasm'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import path from 'path'
+import { readFileSync } from 'fs'
+
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string }
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -136,6 +139,7 @@ export default defineConfig(({ mode }) => {
 
     define: {
       'import.meta.env.COMMIT_HASH': JSON.stringify(env.COMMIT_HASH || ''),
+      'import.meta.env.CONSOLE_VERSION': JSON.stringify(pkg.version),
     },
 
     test: {

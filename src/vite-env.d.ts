@@ -2,6 +2,7 @@
 
 type ImportMetaEnv = {
   readonly COMMIT_HASH: string
+  readonly CONSOLE_VERSION: string
   readonly MODE: string
 }
 

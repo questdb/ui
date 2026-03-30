@@ -37,6 +37,8 @@ import type {
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
 import { ManageModelsModal } from "./ManageModelsModal"
 
@@ -749,6 +751,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleModelToggle = useCallback(
     (provider: ProviderId, modelValue: string) => {
+      void trackEvent(ConsoleEvent.AI_SETTINGS_MODEL_TOGGLE)
       setEnabledModels((prev) => {
         const current = prev[provider]
         const isEnabled = current.includes(modelValue)
@@ -765,6 +768,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleSchemaAccessChange = useCallback(
     (provider: ProviderId, checked: boolean) => {
+      if (!checked) {
+        void trackEvent(ConsoleEvent.AI_SETTINGS_SCHEMA_ACCESS_REMOVE)
+      }
       setGrantSchemaAccess((prev) => ({ ...prev, [provider]: checked }))
     },
     [],
@@ -844,6 +850,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const handleRemoveProvider = useCallback(
     (providerId: ProviderId) => {
       const isCustom = !BUILTIN_PROVIDERS[providerId]
+      void trackEvent(ConsoleEvent.AI_SETTINGS_PROVIDER_REMOVE, {
+        isCustom,
+      })
 
       if (isCustom) {
         setLocalCustomProviders((prev) => {
@@ -1216,6 +1225,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                             <EditButton
                               type="button"
                               onClick={() => {
+                                void trackEvent(
+                                  ConsoleEvent.AI_SETTINGS_API_KEY_EDIT,
+                                )
                                 inputRef.current?.focus()
                               }}
                               title="Edit API key"

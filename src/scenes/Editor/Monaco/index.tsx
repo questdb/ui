@@ -76,6 +76,8 @@ import {
   getQueriesStartingFromLine,
 } from "./utils"
 import { toast } from "../../../components/Toast"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
@@ -527,6 +529,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const handleExplainQuery = (query: Request) => {
+    void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_QUERY_PLAN)
     setDropdownOpen(false)
     runQueryAction(query, RunningType.EXPLAIN)
   }
@@ -604,6 +607,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleAskAI = async (query?: Request) => {
     setDropdownOpen(false)
+    void trackEvent(ConsoleEvent.AI_GLYPH_CLICK)
     if (!query || !editorRef.current) return
 
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
@@ -782,6 +786,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           requestRef.current?.row + 1 === startLineNumber
 
         const handleRunClick = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_RUN)
           if (isRunningQuery) {
             toggleRunning(RunningType.NONE)
           } else {
@@ -819,6 +824,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const handleRunContextMenu = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_OPEN)
           if (isBlockingAIStatusRef.current) return
           const dropdownQueries = getDropdownQueries(startLineNumber)
           if (dropdownQueries.length > 0) {
@@ -1168,11 +1174,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       })
       glyphWidgetsRef.current.clear()
       const lineCount = editorRef.current?.getModel()?.getLineCount()
+      const hasContent =
+        (editorRef.current?.getModel()?.getValueLength() ?? 0) > 0
       if (lineCount) {
         setLineNumbersMinChars(
           getDefaultLineNumbersMinChars(canUseAIRef.current) +
             (lineCount.toString().length - 1),
         )
+        if (hasContent) {
+          void trackEvent(ConsoleEvent.EDITOR_VIEW_TAB, { lines: lineCount })
+        }
       }
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
@@ -1439,6 +1450,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       dispatch(actions.query.toggleRunning())
       return
     }
+
+    void trackEvent(ConsoleEvent.EDITOR_RUN_MULTIPLE, {
+      queryCount: queriesToRunRef.current?.length ?? 0,
+      runAll,
+    })
 
     const triggerScript = () => {
       if (runAll) {

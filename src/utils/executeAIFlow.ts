@@ -29,6 +29,8 @@ import { providerForModel, getTestModel, getAllModelOptions } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { eventBus } from "../modules/EventBus"
 import { EventType } from "../modules/EventBus/types"
+import { trackEvent } from "../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 
 type BaseFlowConfig = {
   conversationId: ConversationId
@@ -529,7 +531,7 @@ export async function executeAIFlow(
       streaming: streamingCallback,
     })
 
-    return processResult({
+    const flowResult = processResult({
       type: config.type,
       response: result,
       conversationId,
@@ -537,6 +539,14 @@ export async function executeAIFlow(
       callbacks,
       compactedHistory: result.compactedConversationHistory,
     })
+
+    void trackEvent(ConsoleEvent.AI_FLOW_COMPLETE, {
+      type: config.type,
+      success: flowResult.success,
+      hasSchemaAccess,
+    })
+
+    return flowResult
   } finally {
     streamingCallback?.cleanup?.()
     await callbacks.persistMessages(conversationId)

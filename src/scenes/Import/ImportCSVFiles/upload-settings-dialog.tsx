@@ -14,6 +14,8 @@ import { Settings4 } from "@styled-icons/remix-line"
 import { Undo } from "@styled-icons/boxicons-regular"
 import { UploadModeSettings } from "../../../utils"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const SettingsIcon = styled(Settings4)`
   color: ${({ theme }) => theme.color.foreground};
@@ -234,6 +236,7 @@ export const UploadSettingsDialog = ({
             prefixIcon={<Settings4 size={18} />}
             skin="success"
             onClick={() => {
+              void trackEvent(ConsoleEvent.IMPORT_SETTINGS_CHANGE)
               onSubmit(settings)
               onOpenChange(false)
             }}

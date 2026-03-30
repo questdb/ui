@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react"
 import { useDispatch } from "react-redux"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import styled from "styled-components"
 import { Tooltip } from "../../components"
 import Editor from "../Editor"
@@ -171,11 +173,13 @@ const Console = () => {
                           direction="left"
                           onClick={() => {
                             if (isDataSourcesPanelOpen) {
+                              void trackEvent(ConsoleEvent.SCHEMA_OPEN)
                               updateLeftPanelState({
                                 type: null,
                                 width: leftPanelState.width,
                               })
                             } else {
+                              void trackEvent(ConsoleEvent.SCHEMA_CLOSE)
                               updateLeftPanelState({
                                 type: LeftPanelType.DATASOURCES,
                                 width: leftPanelState.width,
@@ -199,7 +203,12 @@ const Console = () => {
                       <Navigation
                         data-hook="search-panel-button"
                         direction="left"
-                        onClick={() => setSearchPanelOpen(!isSearchPanelOpen)}
+                        onClick={() => {
+                          if (!isSearchPanelOpen) {
+                            void trackEvent(ConsoleEvent.SEARCH_OPEN)
+                          }
+                          setSearchPanelOpen(!isSearchPanelOpen)
+                        }}
                         selected={isSearchPanelOpen}
                       >
                         <FileSearch size={BUTTON_ICON_SIZE} />
@@ -253,6 +262,12 @@ const Console = () => {
                             data-hook={`${mode}-panel-button`}
                             direction="left"
                             onClick={() => {
+                              void trackEvent(
+                                ConsoleEvent.PANEL_BOTTOM_SWITCH,
+                                {
+                                  panel: mode,
+                                },
+                              )
                               dispatch(
                                 actions.console.setActiveBottomPanel("result"),
                               )
@@ -279,6 +294,9 @@ const Console = () => {
                         readOnly={consoleConfig.readOnly}
                         {...(!consoleConfig.readOnly && {
                           onClick: () => {
+                            void trackEvent(ConsoleEvent.PANEL_BOTTOM_SWITCH, {
+                              panel: "import",
+                            })
                             dispatch(
                               actions.console.setActiveBottomPanel("import"),
                             )

@@ -14,6 +14,8 @@ import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
 import { PlugsIcon } from "@phosphor-icons/react"
 import { Tooltip } from "../Tooltip"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const ExpandUpDown = () => (
   <svg
@@ -173,6 +175,7 @@ export const ModelDropdown = () => {
   }, [enabledModelValues, aiAssistantSettings])
 
   const handleModelSelect = (modelValue: string) => {
+    void trackEvent(ConsoleEvent.AI_MODEL_CHANGE)
     updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
       ...aiAssistantSettings,
       selectedModel: modelValue,

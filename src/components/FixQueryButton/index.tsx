@@ -12,6 +12,8 @@ import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import { executeAIFlow, createFixFlowConfig } from "../../utils/executeAIFlow"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const FixButton = styled(Button)`
   gap: 1rem;
@@ -40,6 +42,7 @@ export const FixQueryButton = () => {
   } = useAIConversation()
 
   const handleFixQuery = () => {
+    void trackEvent(ConsoleEvent.AI_FIX_QUERY)
     const conversationId = chatWindowState.activeConversationId!
     const conversation = getConversationMeta(conversationId)!
 

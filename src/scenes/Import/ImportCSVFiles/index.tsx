@@ -23,6 +23,8 @@ import { Upload } from "./upload"
 import { getValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { ssoAuthState } from "../../../modules/OAuth2/ssoAuthState"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 type State = "upload" | "list"
 
@@ -241,6 +243,9 @@ export const ImportCSVFiles = ({ onViewData, onUpload }: Props) => {
             if (file.isUploading) {
               return
             }
+            void trackEvent(ConsoleEvent.IMPORT_FILE_UPLOAD, {
+              fileSize: file.fileObject.size,
+            })
             setIsUploading(file, true)
             try {
               const response = await quest.uploadCSVFile({

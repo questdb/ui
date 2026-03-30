@@ -31,6 +31,8 @@ import {
 import { useEditor } from "../EditorProvider"
 import { normalizeSql } from "../../utils/aiAssistant"
 import { useDispatch, useSelector } from "react-redux"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -597,6 +599,7 @@ export const AIConversationProvider: React.FC<{
           activeConversationId: conversationId,
         }))
         dispatch(actions.console.pushSidebarHistory({ type: "aiChat" }))
+        void trackEvent(ConsoleEvent.AI_CHAT_OPEN)
       } finally {
         isOpeningChatWindowRef.current = false
       }
@@ -611,6 +614,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const closeChatWindow = useCallback(() => {
+    void trackEvent(ConsoleEvent.AI_CHAT_CLOSE)
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
       if (activeConversationMessages.length === 0) {
@@ -689,6 +693,7 @@ export const AIConversationProvider: React.FC<{
   }, [createConversation, openChatWindow])
 
   const openHistoryView = useCallback(() => {
+    void trackEvent(ConsoleEvent.AI_HISTORY_OPEN)
     setChatWindowState((prev) => ({
       ...prev,
       isHistoryOpen: true,
@@ -707,6 +712,7 @@ export const AIConversationProvider: React.FC<{
 
   const deleteConversation = useCallback(
     async (conversationId: ConversationId) => {
+      void trackEvent(ConsoleEvent.AI_CHAT_DELETE)
       await aiConversationStore.deleteConversation(conversationId)
 
       let fallbackId: ConversationId | null = null

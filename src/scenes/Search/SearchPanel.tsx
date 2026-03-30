@@ -13,6 +13,8 @@ import { SearchOptions, SearchMatch } from "../../utils/textSearch"
 import { bufferStore } from "../../store/buffers"
 import { SearchResults } from "./SearchResults"
 import { eventBus } from "../../modules/EventBus"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { EventType } from "../../modules/EventBus/types"
 import { useSearch } from "../../providers"
 import { db } from "../../store/db"
@@ -295,6 +297,11 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
 
       setIsSearching(true)
       searchInProgressRef.current = true
+      void trackEvent(ConsoleEvent.SEARCH_EXECUTE, {
+        caseSensitive: searchOptions.caseSensitive,
+        wholeWord: searchOptions.wholeWord,
+        useRegex: searchOptions.useRegex,
+      })
 
       if (searchQuery !== currentSearchResultRef.current.query) {
         bufferSearchTimesRef.current = {}

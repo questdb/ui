@@ -32,8 +32,12 @@ import { formatCommitHash, formatVersion } from "./services"
 import { Versions } from "./types"
 import { hasUIAuth } from "../../modules/OAuth2/utils"
 import { useSettings } from "../SettingsProvider"
-import { useDispatch } from "react-redux"
-import { actions } from "../../store"
+import { useDispatch, useSelector } from "react-redux"
+import { actions, selectors } from "../../store"
+import {
+  start as startConsoleEvents,
+  stop as stopConsoleEvents,
+} from "../../modules/ConsoleEventTracker"
 
 const questClient = new QuestDB.Client()
 
@@ -58,6 +62,7 @@ export const QuestProvider: React.FC = ({ children }) => {
   const dispatch = useDispatch()
   const { settings } = useSettings()
   const { sessionData, refreshAuthToken } = useAuth()
+  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [authCheckFinished, setAuthCheckFinished] = useState(
     !hasUIAuth(settings),
   )
@@ -130,6 +135,15 @@ export const QuestProvider: React.FC = ({ children }) => {
       dispatch(actions.telemetry.start())
     }
   }, [authCheckFinished])
+
+  useEffect(() => {
+    if (telemetryConfig?.enabled && telemetryConfig?.id) {
+      void startConsoleEvents(telemetryConfig)
+      return () => {
+        stopConsoleEvents()
+      }
+    }
+  }, [telemetryConfig?.enabled, telemetryConfig?.id])
 
   if (!authCheckFinished) return null
 

@@ -12,6 +12,8 @@ import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
 import { InfoIcon } from "@phosphor-icons/react"
 import { spinAnimation, toast } from "../../../components"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { color, ErrorResult } from "../../../utils"
 import * as QuestDB from "../../../utils/questdb"
 import { State, View } from "../../Schema"
@@ -296,6 +298,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     tableName: string,
     kind: "table" | "matview" | "view",
   ) => {
+    void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_COPY_DDL, { kind })
     const schema = await getTableSchema(tableName, kind)
     if (schema) {
       await copyToClipboard(schema)
@@ -593,6 +596,9 @@ const VirtualTables: FC<VirtualTablesProps> = ({
             dispatch(actions.console.closeSidebar())
             return
           }
+          void trackEvent(ConsoleEvent.TABLE_DETAILS_OPEN, {
+            kind: item.kind,
+          })
           dispatch(
             actions.console.pushSidebarHistory({
               type: "tableDetails",
@@ -608,9 +614,14 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         return (
           <>
             <ContextMenu
-              onOpenChange={(open) =>
+              onOpenChange={(open) => {
+                if (open) {
+                  void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_MENU_OPEN, {
+                    kind: item.kind,
+                  })
+                }
                 setOpenedContextMenu(open ? item.id : null)
-              }
+              }}
             >
               <ContextMenuTrigger>
                 <>
@@ -681,6 +692,9 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                         toast.error("Cannot find table ID")
                         return
                       }
+                      void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_EXPLAIN, {
+                        kind: item.kind,
+                      })
                       await handleExplainSchema(
                         item.table.id,
                         item.name,
@@ -705,10 +719,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 {canSuspend && (
                   <MenuItem
                     data-hook="table-context-menu-resume-wal"
-                    onClick={() =>
-                      item.table?.table_suspended &&
-                      setTimeout(() => setOpenedSuspensionDialog(item.id))
-                    }
+                    onClick={() => {
+                      void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_RESUME_WAL)
+                      if (item.table?.table_suspended) {
+                        setTimeout(() => setOpenedSuspensionDialog(item.id))
+                      }
+                    }}
                     icon={<Restart size={16} />}
                     disabled={!item.table?.table_suspended}
                   >

@@ -26,6 +26,8 @@ import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
 import { PlusIcon, Plugs as PlugsIcon } from "@phosphor-icons/react"
 import { theme } from "../../theme"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
 
 const ModalContent = styled.div`
@@ -759,6 +761,11 @@ export const ConfigurationModal = ({
   const handleComplete = () => {
     if (!selectedProvider || enabledModels.length === 0) return
 
+    void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
+      name: selectedProvider,
+      grantSchemaAccess,
+    })
+
     const selectedModel =
       enabledModels.find(
         (m) =>
@@ -825,6 +832,7 @@ export const ConfigurationModal = ({
         setEnabledModels(defaultModels)
       }
       setError(null)
+      void trackEvent(ConsoleEvent.AI_CONFIGURATION_VALIDATE)
       return true
     } catch (err) {
       const errorMessage =
@@ -883,6 +891,13 @@ export const ConfigurationModal = ({
           },
         },
       }
+
+      void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
+        name: "custom",
+        grantSchemaAccess: definition.grantSchemaAccess ?? false,
+        type: definition.type,
+        contextWindow: definition.contextWindow,
+      })
 
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, newSettings)
       toast.success("AI Assistant activated successfully")

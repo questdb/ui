@@ -13,6 +13,8 @@ import {
 } from "../../../components"
 import { getTableKindLabel } from "../VirtualTables"
 import { Undo, CheckCircle } from "@styled-icons/boxicons-regular"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
 import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
@@ -138,6 +140,7 @@ export const SuspensionDialog = ({
     : 0
 
   const handleSubmit = async (values: FormValues) => {
+    void trackEvent(ConsoleEvent.SCHEMA_RESUME_WAL_SUBMIT)
     setIsSubmitting(true)
     setError(undefined)
     const escapedName = tableName.replace(/'/g, "''")
