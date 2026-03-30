@@ -389,6 +389,7 @@ export function grid(rootElement, _paginationFn, id) {
 
     if (paginationFn) {
       paginationFn(sql, lo + 1, hi, renderFunc)
+      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: hi })
     }
   }
 
@@ -536,6 +537,7 @@ export function grid(rootElement, _paginationFn, id) {
     const copyBtn = e.currentTarget
     const headerEl = copyBtn.closest(".qg-header")
     const columnName = headerEl.getAttribute("data-column-name")
+    void trackEvent(ConsoleEvent.GRID_COLUMN_COPY)
     copyToClipboard(columnName).then(undefined)
     copyBtn.innerHTML = COPY_ICON_SVG + CHECK_ICON_SVG
     addClass(copyBtn, "qg-header-copy-active")

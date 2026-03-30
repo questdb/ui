@@ -12,6 +12,8 @@ export enum ConsoleEvent {
   EDITOR_GLYPH_CONTEXT_OPEN = "editor.glyph_context_open",
   EDITOR_GLYPH_CONTEXT_QUERY_PLAN = "editor.glyph_context_query_plan",
 
+  CHART_DRAW = "chart.draw",
+
   GRID_CSV_DOWNLOAD = "grid.csv_download",
   GRID_PARQUET_DOWNLOAD = "grid.parquet_download",
   GRID_MARKDOWN_COPY = "grid.markdown_copy",
@@ -19,7 +21,9 @@ export enum ConsoleEvent {
   GRID_LAYOUT_RESET = "grid.layout_reset",
   GRID_COLUMN_FREEZE = "grid.column_freeze",
   GRID_COLUMN_MOVE_TO_FRONT = "grid.column_move_to_front",
+  GRID_COLUMN_COPY = "grid.column_copy",
   GRID_CELL_COPY = "grid.cell_copy",
+  GRID_SCROLL = "grid.scroll",
 
   IMPORT_FILE_UPLOAD = "import.file_upload",
   IMPORT_ADD_SCHEMA = "import.add_schema",
