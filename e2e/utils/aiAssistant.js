@@ -119,9 +119,7 @@ function getCustomProviderEndpoint(baseURL, type) {
 // RESPONSE DATA BUILDERS
 // =============================================================================
 
-function createFinalResponseData(provider, explanation, sql = null) {
-  const responseContent = { explanation, sql }
-
+function createFinalResponseData(provider, explanation) {
   if (provider === "openai") {
     return {
       id: "resp_mock_final",
@@ -132,12 +130,10 @@ function createFinalResponseData(provider, explanation, sql = null) {
         {
           type: "message",
           role: "assistant",
-          content: [
-            { type: "output_text", text: JSON.stringify(responseContent) },
-          ],
+          content: [{ type: "output_text", text: explanation }],
         },
       ],
-      output_text: JSON.stringify(responseContent),
+      output_text: explanation,
       usage: { input_tokens: 200, output_tokens: 100 },
     }
   }
@@ -153,7 +149,7 @@ function createFinalResponseData(provider, explanation, sql = null) {
           index: 0,
           message: {
             role: "assistant",
-            content: JSON.stringify(responseContent),
+            content: explanation,
           },
           finish_reason: "stop",
         },
@@ -168,7 +164,7 @@ function createFinalResponseData(provider, explanation, sql = null) {
     type: "message",
     role: "assistant",
     model: PROVIDERS.anthropic.defaultModel,
-    content: [{ type: "text", text: JSON.stringify(responseContent) }],
+    content: [{ type: "text", text: explanation }],
     stop_reason: "end_turn",
     usage: { input_tokens: 200, output_tokens: 100 },
   }
@@ -247,8 +243,6 @@ function createToolCallResponseData(provider, toolName, toolArguments = {}) {
 }
 
 function createChatTitleResponseData(provider, title = "Test Chat") {
-  const content = JSON.stringify({ title })
-
   if (provider === "openai") {
     return {
       id: "resp_mock_title",
@@ -259,10 +253,10 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
         {
           type: "message",
           role: "assistant",
-          content: [{ type: "output_text", text: content }],
+          content: [{ type: "output_text", text: title }],
         },
       ],
-      output_text: content,
+      output_text: title,
       usage: { input_tokens: 50, output_tokens: 20 },
     }
   }
@@ -276,7 +270,7 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: content },
+          message: { role: "assistant", content: title },
           finish_reason: "stop",
         },
       ],
@@ -290,7 +284,7 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
     type: "message",
     role: "assistant",
     model: PROVIDERS.anthropic.defaultModel,
-    content: [{ type: "text", text: content }],
+    content: [{ type: "text", text: title }],
     stop_reason: "end_turn",
     usage: { input_tokens: 50, output_tokens: 20 },
   }
@@ -624,8 +618,8 @@ function createResponse(provider, responseData, options = {}) {
   return createAnthropicSSEResponse(responseData, delay)
 }
 
-function createFinalResponse(provider, explanation, sql = null, options = {}) {
-  const responseData = createFinalResponseData(provider, explanation, sql)
+function createFinalResponse(provider, explanation, options = {}) {
+  const responseData = createFinalResponseData(provider, explanation)
   return createResponse(provider, responseData, options)
 }
 
@@ -734,21 +728,38 @@ function extractAllInputContent(provider, body) {
 // =============================================================================
 
 /**
- * Creates a multi-turn tool call flow with automatic intercept handling.
- * Supports built-in providers (openai, anthropic) and custom providers.
- *
- * @param {Object} config
- * @param {"openai" | "anthropic" | "openai-chat-completions"} [config.provider="openai"]
- * @param {boolean} [config.streaming=true]
- * @param {string} config.question
- * @param {Array} config.steps
- * @param {string} [config.endpoint] - Custom endpoint URL (overrides PROVIDERS lookup)
+ * Expands user-facing steps into internal API request steps.
+ * A finalResponse with sql is expanded into:
+ *   1. suggest_query tool call (with expectToolResult from original step)
+ *   2. text-only final response
  */
+function expandSteps(steps) {
+  const expanded = []
+  for (const step of steps) {
+    if (step.finalResponse && step.finalResponse.sql) {
+      expanded.push({
+        toolCall: {
+          name: "suggest_query",
+          args: { query: step.finalResponse.sql },
+        },
+        expectToolResult: step.expectToolResult,
+      })
+      expanded.push({
+        finalResponse: { explanation: step.finalResponse.explanation },
+      })
+    } else {
+      expanded.push(step)
+    }
+  }
+  return expanded
+}
+
 function createToolCallFlow(config) {
   const { provider = "openai", streaming = true, question, steps } = config
 
+  const expandedSteps = expandSteps(steps)
   let requestCount = 0
-  const totalRequests = steps.length
+  const totalRequests = expandedSteps.length
   const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
@@ -778,7 +789,7 @@ function createToolCallFlow(config) {
 
         requestCount++
 
-        const step = steps[requestCount - 1]
+        const step = expandedSteps[requestCount - 1]
         if (!step) return
 
         // Verify previous tool result if expectToolResult is defined
@@ -806,7 +817,6 @@ function createToolCallFlow(config) {
             createFinalResponse(
               provider,
               step.finalResponse.explanation,
-              step.finalResponse.sql,
               responseOptions,
             ),
           )
@@ -844,6 +854,8 @@ function createMultiTurnFlow(config) {
 
   let requestCount = 0
   const requestBodies = []
+  const turnComplete = []
+  let pendingTextForTurn = null
   const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
@@ -862,6 +874,18 @@ function createMultiTurnFlow(config) {
       // Intercept for conversation turns
       cy.intercept("POST", endpoint, (req) => {
         if (isTitleRequest(provider, req.body)) {
+          return
+        }
+
+        // If we have a pending text response (after suggest_query tool call)
+        if (pendingTextForTurn !== null) {
+          const turnIdx = pendingTextForTurn
+          const turn = turns[turnIdx]
+          pendingTextForTurn = null
+          req.reply(
+            createFinalResponse(provider, turn.explanation, responseOptions),
+          )
+          turnComplete[turnIdx] = true
           return
         }
 
@@ -891,15 +915,25 @@ function createMultiTurnFlow(config) {
             }
           }
 
-          requestCount++
-          req.reply(
-            createFinalResponse(
-              provider,
-              turn.explanation,
-              turn.sql,
-              responseOptions,
-            ),
-          )
+          if (turn.sql) {
+            // Two-phase: first respond with suggest_query tool call
+            pendingTextForTurn = requestCount
+            requestCount++
+            req.reply(
+              createToolCallResponse(
+                provider,
+                "suggest_query",
+                { query: turn.sql },
+                responseOptions,
+              ),
+            )
+          } else {
+            requestCount++
+            req.reply(
+              createFinalResponse(provider, turn.explanation, responseOptions),
+            )
+            turnComplete[requestCount - 1] = true
+          }
         }
       }).as("multiTurnRequest")
     },
@@ -909,9 +943,9 @@ function createMultiTurnFlow(config) {
         .wrap(null)
         .should(() => {
           expect(
-            requestBodies[turnIndex],
-            `Turn ${turnIndex} should be captured`,
-          ).to.not.be.undefined
+            turnComplete[turnIndex],
+            `Turn ${turnIndex} should be complete`,
+          ).to.be.true
         })
         .then(() => {
           if (streaming) {
@@ -928,9 +962,9 @@ function createMultiTurnFlow(config) {
         .wrap(null)
         .should(() => {
           expect(
-            requestBodies[turns.length - 1],
-            `All ${turns.length} turns should be captured`,
-          ).to.not.be.undefined
+            turnComplete[turns.length - 1],
+            `All ${turns.length} turns should be complete`,
+          ).to.be.true
         })
         .then(() => {
           if (streaming) {

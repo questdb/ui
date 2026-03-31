@@ -47,68 +47,6 @@ function interceptAIRequestWithResponse(
 }
 
 /**
- * Creates a valid OpenAI response for explain schema requests.
- * Note: Schema explanation uses responses.parse() which is non-streaming.
- * @param {Object} schemaData - The schema explanation data
- * @returns {Object} OpenAI response body
- */
-function createOpenAIExplainSchemaResponse(schemaData) {
-  return {
-    id: "resp_mock_schema",
-    object: "response",
-    created_at: Date.now(),
-    status: "completed",
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text: JSON.stringify(schemaData),
-          },
-        ],
-      },
-    ],
-    output_parsed: schemaData,
-    usage: {
-      input_tokens: 150,
-      output_tokens: 200,
-    },
-  }
-}
-
-/**
- * Creates an OpenAI response where output_parsed is null, triggering parse error.
- * @returns {Object} OpenAI response body with null output_parsed
- */
-function createOpenAIParseFailureResponse() {
-  return {
-    id: "resp_mock_parse_fail",
-    object: "response",
-    created_at: Date.now(),
-    status: "completed",
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text: "",
-          },
-        ],
-      },
-    ],
-    output_parsed: null,
-    usage: {
-      input_tokens: 150,
-      output_tokens: 50,
-    },
-  }
-}
-
-/**
  * Intercepts AI chat requests with a default test response.
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
@@ -130,7 +68,6 @@ function interceptAIChatRequest(
   const responseData = createFinalResponseData(
     provider,
     "Test response explanation",
-    null,
   )
 
   cy.intercept("POST", endpoint, (req) => {
@@ -1379,15 +1316,10 @@ describe("ai assistant", () => {
 
     it("should show processing status and display valid schema explanation", () => {
       // Given - Set up intercept with valid schema response
-      const validSchemaResponse = createOpenAIExplainSchemaResponse({
-        explanation:
-          "The test_trades table stores trading data with symbol identification, price values, and timestamps.",
-      })
-      interceptAIRequestWithResponse(
-        "openai",
-        validSchemaResponse,
-        "explainSchema",
-      )
+      const schemaExplanation =
+        "The test_trades table stores trading data with symbol identification, price values, and timestamps."
+      const responseData = createFinalResponseData("openai", schemaExplanation)
+      interceptAIRequestWithResponse("openai", responseData, "explainSchema")
 
       cy.refreshSchema()
       // When - Right-click on table and select explain schema
@@ -1399,8 +1331,6 @@ describe("ai assistant", () => {
       // Then - Chat window should open with processing status
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("assistant-modes-container").should("be.visible")
-      cy.getByDataHook("assistant-mode-processing-collapsed").click()
-      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
       cy.waitForAIResponse("@explainSchema")
@@ -1408,21 +1338,29 @@ describe("ai assistant", () => {
       // Then - Should display the schema explanation content
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
-      // Verify explanation summary
+      // Verify explanation content and processing status in collapsed mode
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+
       cy.getByDataHook("chat-message-assistant").should(
         "contain",
         "The test_trades table stores trading data",
       )
     })
 
-    it("should show error when schema explanation fails to parse", () => {
-      // Given - Set up intercept with parse failure response (output_parsed: null)
-      const parseFailureResponse = createOpenAIParseFailureResponse()
-      interceptAIRequestWithResponse(
-        "openai",
-        parseFailureResponse,
-        "explainSchemaFail",
-      )
+    it("should show error when schema explanation request fails", () => {
+      // Given - Set up intercept with API error response
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        req.reply({
+          statusCode: 500,
+          body: {
+            error: {
+              type: "server_error",
+              message: "Internal server error",
+            },
+          },
+        })
+      }).as("explainSchemaFail")
 
       cy.refreshSchema()
       // When - Right-click on table and select explain schema
@@ -1431,19 +1369,14 @@ describe("ai assistant", () => {
         .rightclick()
       cy.getByDataHook("table-context-menu-explain-schema").click()
 
-      // Then - Chat window should open with processing status
+      // Then - Chat window should open
       cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("assistant-modes-container").should("be.visible")
-      cy.getByDataHook("assistant-mode-processing-collapsed").click()
-      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
       cy.wait("@explainSchemaFail")
 
       // Then - Should display error message
-      cy.getByDataHook("chat-message-error")
-        .should("be.visible")
-        .should("contain", "Failed to parse assistant response.")
+      cy.getByDataHook("chat-message-error").should("be.visible")
     })
   })
 
@@ -1769,11 +1702,11 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
     })
@@ -1826,11 +1759,11 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
     })
@@ -1883,11 +1816,11 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
     })
@@ -2464,7 +2397,7 @@ Syntax: \`avg(column)\`
         req.reply(
           createResponse(
             "openai",
-            createFinalResponseData("openai", "Successful response", null),
+            createFinalResponseData("openai", "Successful response"),
             { streaming: true },
           ),
         )
@@ -2519,7 +2452,7 @@ Syntax: \`avg(column)\`
         req.reply(
           createResponse(
             "anthropic",
-            createFinalResponseData("anthropic", "Successful response", null),
+            createFinalResponseData("anthropic", "Successful response"),
             { streaming: true },
           ),
         )
@@ -2908,7 +2841,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Successful response after retry",
-            null,
           ),
           { streaming: true },
         ),
@@ -3052,7 +2984,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "anthropic",
             "Response from custom Anthropic provider",
-            null,
           ),
           { streaming: true },
         ),
@@ -3111,7 +3042,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Response from Ollama",
-            null,
           ),
           { streaming: true },
         ),
@@ -3126,7 +3056,7 @@ describe("custom providers", () => {
       req.reply(
         createResponse(
           "openai",
-          createFinalResponseData("openai", "Response from OpenAI", null),
+          createFinalResponseData("openai", "Response from OpenAI"),
           { streaming: true },
         ),
       )
@@ -3257,7 +3187,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Working after reload",
-            null,
           ),
           { streaming: true },
         ),
@@ -3304,7 +3233,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "No auth response",
-            null,
           ),
           { streaming: true },
         ),
@@ -3340,11 +3268,7 @@ describe("custom providers", () => {
       req.reply(
         createResponse(
           "openai-chat-completions",
-          createFinalResponseData(
-            "openai-chat-completions",
-            "Auth response",
-            null,
-          ),
+          createFinalResponseData("openai-chat-completions", "Auth response"),
           { streaming: true },
         ),
       )

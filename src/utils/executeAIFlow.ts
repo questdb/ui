@@ -15,14 +15,12 @@ import { AIOperationStatus } from "../providers/AIStatusProvider"
 import {
   continueConversation,
   createModelToolsClient,
-  createStreamingCallback,
   isAiAssistantError,
   generateChatTitle,
   type ActiveProviderSettings,
   type GeneratedSQL,
-  type AiAssistantExplanation,
   type AiAssistantAPIError,
-  type AIOperation,
+  type StreamingCallback,
 } from "./aiAssistant"
 import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
 import { providerForModel, getTestModel, getAllModelOptions } from "./ai"
@@ -139,7 +137,6 @@ export type AIFlowResult = {
   cachedMessageId?: string
   error?: string
   sql?: string
-  explanation?: string
 }
 
 function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
@@ -222,7 +219,7 @@ function formatErrorMessage(error: AiAssistantAPIError): string {
 
 type ProcessResultConfig = {
   type: AIFlowConfig["type"]
-  response: GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError
+  response: GeneratedSQL | AiAssistantAPIError
   conversationId: string
   assistantMessageId: string
   callbacks: AIFlowCallbacks
@@ -251,54 +248,13 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     callbacks.replaceConversationMessages(compactedHistory)
   }
 
-  switch (type) {
-    case "chat":
-    case "fix":
-    case "health_issue": {
-      const result = response as GeneratedSQL
-      return processSQLResult(
-        result,
-        conversationId,
-        assistantMessageId,
-        callbacks,
-        type,
-      )
-    }
-
-    case "explain": {
-      const result = response as AiAssistantExplanation
-      if (!result.explanation) {
-        callbacks.updateMessage(conversationId, assistantMessageId, {
-          error: "No explanation received from AI Assistant",
-        })
-        return { success: false, error: "No explanation received" }
-      }
-
-      callbacks.updateMessage(conversationId, assistantMessageId, {
-        content: result.explanation,
-        explanation: result.explanation,
-        tokenUsage: result.tokenUsage,
-      })
-      return { success: true, explanation: result.explanation }
-    }
-
-    case "schema_explain": {
-      const result = response as AiAssistantExplanation
-      if (!result.explanation) {
-        callbacks.updateMessage(conversationId, assistantMessageId, {
-          error: "No explanation received from AI Assistant",
-        })
-        return { success: false, error: "No explanation received" }
-      }
-
-      callbacks.updateMessage(conversationId, assistantMessageId, {
-        content: result.explanation,
-        explanation: result.explanation,
-        tokenUsage: result.tokenUsage,
-      })
-      return { success: true, explanation: result.explanation }
-    }
-  }
+  return processSQLResult(
+    response,
+    conversationId,
+    assistantMessageId,
+    callbacks,
+    type,
+  )
 }
 
 function processSQLResult(
@@ -306,17 +262,15 @@ function processSQLResult(
   conversationId: string,
   assistantMessageId: string,
   callbacks: AIFlowCallbacks,
-  type: "chat" | "fix" | "health_issue",
+  type: AIFlowConfig["type"],
 ): AIFlowResult {
   const hasSQLInResult = result.sql && result.sql.trim() !== ""
 
   if (type === "fix" && !hasSQLInResult && result.explanation) {
     callbacks.updateMessage(conversationId, assistantMessageId, {
-      content: result.explanation,
-      explanation: result.explanation,
       tokenUsage: result.tokenUsage,
     })
-    return { success: true, explanation: result.explanation }
+    return { success: true }
   }
 
   if (type === "fix" && !hasSQLInResult && !result.explanation) {
@@ -329,22 +283,14 @@ function processSQLResult(
     }
   }
 
-  let assistantContent = result.explanation || "No explanation received"
-  if (hasSQLInResult) {
-    assistantContent = `SQL Query:\n\`\`\`sql\n${result.sql}\n\`\`\`\n\nExplanation:\n${result.explanation || ""}`
-  }
-
   callbacks.updateMessage(conversationId, assistantMessageId, {
-    content: assistantContent,
     ...(hasSQLInResult && { sql: result.sql as string }),
-    explanation: result.explanation,
     tokenUsage: result.tokenUsage,
   })
 
   return {
     success: true,
     sql: hasSQLInResult ? result.sql! : undefined,
-    explanation: result.explanation,
   }
 }
 
@@ -443,7 +389,6 @@ export async function executeAIFlow(
   callbacks.addMessage({
     id: assistantMessageId,
     role: "assistant",
-    content: "",
     timestamp: Date.now(),
     operationHistory: [],
     model: modelLabel,
@@ -475,7 +420,10 @@ export async function executeAIFlow(
     hasSchemaAccess ? tables : undefined,
   )
 
+  let latestOperationHistory: OperationHistory = []
+
   const handleStatusUpdate = (history: OperationHistory) => {
+    latestOperationHistory = history
     callbacks.updateMessage(conversationId, assistantMessageId, {
       operationHistory: [...history],
     })
@@ -501,22 +449,64 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
-  const streamingCallback = createStreamingCallback({
-    conversationId,
-    assistantMessageId,
-    updateMessage: callbacks.updateMessage,
-    setIsStreaming: callbacks.setIsStreaming,
-  })
+  let thinkingStatusEmitted = false
+  let generatingResponseEmitted = false
+
+  const setStatusWithHistoryAndResetFlags = (
+    status: AIOperationStatus | null,
+    args?: StatusArgs,
+  ) => {
+    if (status !== null) {
+      if (status !== AIOperationStatus.Thinking) {
+        thinkingStatusEmitted = false
+      }
+      if (status !== AIOperationStatus.GeneratingResponse) {
+        generatingResponseEmitted = false
+      }
+    }
+    setStatusWithHistory(status, args)
+  }
+
+  const streamingCallback: StreamingCallback = {
+    onTextChunk: (chunk: string) => {
+      if (!generatingResponseEmitted) {
+        generatingResponseEmitted = true
+        thinkingStatusEmitted = false
+        setStatusWithHistory(AIOperationStatus.GeneratingResponse)
+        callbacks.setIsStreaming(true)
+      }
+
+      const lastEntry =
+        latestOperationHistory[latestOperationHistory.length - 1]
+      if (
+        lastEntry &&
+        lastEntry.type === AIOperationStatus.GeneratingResponse
+      ) {
+        lastEntry.content = (lastEntry.content ?? "") + chunk
+        callbacks.updateMessage(conversationId, assistantMessageId, {
+          operationHistory: [...latestOperationHistory],
+        })
+      }
+    },
+    onThinkingChunk: (chunk: string) => {
+      if (!thinkingStatusEmitted) {
+        thinkingStatusEmitted = true
+        generatingResponseEmitted = false
+        setStatusWithHistory(AIOperationStatus.Thinking)
+        callbacks.setIsStreaming(true)
+      }
+      const lastEntry =
+        latestOperationHistory[latestOperationHistory.length - 1]
+      if (lastEntry && lastEntry.type === AIOperationStatus.Thinking) {
+        lastEntry.content = (lastEntry.content ?? "") + chunk
+        callbacks.updateMessage(conversationId, assistantMessageId, {
+          operationHistory: [...latestOperationHistory],
+        })
+      }
+    },
+  }
 
   try {
-    const operation: AIOperation =
-      config.type === "chat"
-        ? "followup"
-        : config.type === "schema_explain"
-          ? "schema_explain"
-          : config.type === "health_issue"
-            ? "health_issue"
-            : config.type
     const conversationHistory =
       config.type === "chat" ? config.conversationHistory : []
 
@@ -525,9 +515,8 @@ export async function executeAIFlow(
       conversationHistory: conversationHistory.filter((m) => !m.isCompacted),
       settings: providerSettings,
       modelToolsClient,
-      setStatus: setStatusWithHistory,
+      setStatus: setStatusWithHistoryAndResetFlags,
       abortSignal,
-      operation,
       streaming: streamingCallback,
     })
 
@@ -548,7 +537,6 @@ export async function executeAIFlow(
 
     return flowResult
   } finally {
-    streamingCallback?.cleanup?.()
     await callbacks.persistMessages(conversationId)
     callbacks.setIsStreaming(false)
   }

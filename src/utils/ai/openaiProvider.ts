@@ -1,8 +1,5 @@
 import OpenAI from "openai"
-import type {
-  ResponseOutputItem,
-  ResponseTextConfig,
-} from "openai/resources/responses/responses"
+import type { ResponseOutputItem } from "openai/resources/responses/responses"
 import type {
   AiAssistantAPIError,
   ModelToolsClient,
@@ -13,40 +10,20 @@ import type {
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
-import type {
-  AIProvider,
-  FlowConfig,
-  ResponseFormatSchema,
-  ToolDefinition,
-} from "./types"
+import type { AIProvider, FlowConfig, ToolDefinition } from "./types"
 import {
   StreamingError,
   RefusalError,
   MaxTokensError,
   safeJsonParse,
-  extractPartialExplanation,
   executeTool,
-  parseCustomProviderResponse,
-  responseFormatToPromptInstruction,
+  type ToolExecutionContext,
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 import {
   createHeaderFilteredFetch,
   OPENAI_ALLOWED_HEADERS,
 } from "./fetchWithFilteredHeaders"
-
-function toResponseTextConfig(
-  format: ResponseFormatSchema,
-): ResponseTextConfig {
-  return {
-    format: {
-      type: "json_schema" as const,
-      name: format.name,
-      schema: format.schema,
-      strict: format.strict,
-    },
-  }
-}
 
 function toOpenAIFunctions(tools: ToolDefinition[]): OpenAI.Responses.Tool[] {
   return tools.map((t) => ({
@@ -64,8 +41,6 @@ async function createOpenAIResponseStreaming(
   streamCallback: StreamingCallback,
   abortSignal?: AbortSignal,
 ): Promise<OpenAI.Responses.Response> {
-  let accumulatedText = ""
-  let lastExplanation = ""
   let finalResponse: OpenAI.Responses.Response | null = null
 
   try {
@@ -100,14 +75,20 @@ async function createOpenAIResponseStreaming(
         )
       }
 
-      if (event.type === "response.output_text.delta") {
-        accumulatedText += event.delta
-        const explanation = extractPartialExplanation(accumulatedText)
-        if (explanation !== lastExplanation) {
-          const chunk = explanation.slice(lastExplanation.length)
-          lastExplanation = explanation
-          streamCallback.onTextChunk(chunk, explanation)
+      if (
+        (event as { type: string }).type ===
+          "response.reasoning_summary_text.delta" ||
+        (event as { type: string }).type ===
+          "response.reasoning_summary_part.delta"
+      ) {
+        const delta = (event as { delta?: string }).delta
+        if (delta) {
+          streamCallback.onThinkingChunk?.(delta)
         }
+      }
+
+      if (event.type === "response.output_text.delta") {
+        streamCallback.onTextChunk(event.delta)
       }
 
       if (event.type === "response.completed") {
@@ -203,6 +184,7 @@ function toResponsesAPIProps(model: string): {
       ? {
           reasoning: {
             effort: props.reasoningEffort as OpenAI.ReasoningEffort,
+            summary: "auto",
           },
         }
       : {}),
@@ -271,22 +253,13 @@ export function createOpenAIProvider(
 
       let totalInputTokens = 0
       let totalOutputTokens = 0
-
-      const systemInstructions = isCustom
-        ? config.systemInstructions +
-          responseFormatToPromptInstruction(config.responseFormat)
-        : config.systemInstructions
-
-      const textConfig = isCustom
-        ? undefined
-        : toResponseTextConfig(config.responseFormat)
+      const toolContext: ToolExecutionContext = {}
 
       const requestParams = {
         ...toResponsesAPIProps(model),
-        instructions: systemInstructions,
+        instructions: config.systemInstructions,
         input,
         tools: openaiTools,
-        ...(textConfig ? { text: textConfig } : {}),
       } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
       let lastResponse = streaming
@@ -320,6 +293,7 @@ export function createOpenAIProvider(
             tc.arguments,
             modelToolsClient,
             setStatus,
+            toolContext,
           )
           tool_outputs.push({
             type: "function_call_output",
@@ -341,10 +315,9 @@ export function createOpenAIProvider(
         }
         const loopRequestParams = {
           ...toResponsesAPIProps(model),
-          instructions: systemInstructions,
+          instructions: config.systemInstructions,
           input,
           tools: openaiTools,
-          ...(textConfig ? { text: textConfig } : {}),
         } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
         lastResponse = streaming
@@ -368,6 +341,11 @@ export function createOpenAIProvider(
         } as AiAssistantAPIError
       }
 
+      const tokenUsage = {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+      }
+
       const text = getOpenAIText(lastResponse)
       if (text.type === "refusal") {
         return {
@@ -378,71 +356,22 @@ export function createOpenAIProvider(
 
       const rawOutput = text.message
 
-      if (isCustom) {
-        const json = parseCustomProviderResponse<T>(
-          rawOutput,
-          (config.responseFormat.schema.required as string[]) || [],
-          (raw) => ({ explanation: raw }) as unknown as T,
-        )
-        setStatus(null)
-
-        const tokenUsage = {
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-        }
-
-        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
-      }
-
-      try {
-        const json = JSON.parse(rawOutput) as T
-        setStatus(null)
-
-        return {
-          ...json,
-          tokenUsage: {
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-          },
-        } as T & { tokenUsage: TokenUsage }
-      } catch {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "Failed to parse assistant response.",
-        } as AiAssistantAPIError
-      }
+      setStatus(null)
+      return {
+        explanation: rawOutput,
+        sql: toolContext.suggestedSQL ?? null,
+        tokenUsage,
+      } as unknown as T & { tokenUsage: TokenUsage }
     },
 
-    async generateTitle({ model, prompt, responseFormat }) {
+    async generateTitle({ model, prompt }) {
       try {
-        const userContent = isCustom
-          ? prompt + responseFormatToPromptInstruction(responseFormat)
-          : prompt
-
-        const titleTextConfig = isCustom
-          ? undefined
-          : toResponseTextConfig(responseFormat)
-
         const response = await openai.responses.create({
           model: toResponsesAPIProps(model).model,
-          input: [{ role: "user", content: userContent }],
-          ...(titleTextConfig ? { text: titleTextConfig } : {}),
+          input: [{ role: "user", content: prompt }],
           max_output_tokens: 100,
         })
-        const rawText = response.output_text
-
-        if (isCustom) {
-          const parsed = parseCustomProviderResponse<{ title: string }>(
-            rawText,
-            (responseFormat.schema.required as string[]) || [],
-            (raw) => ({ title: raw.trim().slice(0, 40) }),
-          )
-          return parsed.title || null
-        }
-
-        const parsed = JSON.parse(rawText) as { title: string }
-        return parsed.title || null
+        return response.output_text || null
       } catch {
         return null
       }

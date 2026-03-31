@@ -50,6 +50,7 @@ export enum AIOperationStatus {
   GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
+  Thinking = "Thinking",
 }
 
 export type StatusArgs = {
@@ -64,6 +65,7 @@ export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
   timestamp: number
+  content?: string
 }
 
 export type OperationHistory = StatusEntry[]
@@ -219,12 +221,12 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [abortController])
 
   useEffect(() => {
-    if (!isStreamingRef.current && isStreaming) {
-      setStatus(AIOperationStatus.GeneratingResponse)
-    } else if (isStreamingRef.current && !isStreaming) {
-      if (statusRef.current !== AIOperationStatus.Aborted) {
-        setStatus(null)
-      }
+    if (
+      isStreamingRef.current &&
+      !isStreaming &&
+      statusRef.current !== AIOperationStatus.Aborted
+    ) {
+      setStatus(null)
     }
     isStreamingRef.current = isStreaming
   }, [isStreaming])

@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages"
-import type { OutputConfig } from "@anthropic-ai/sdk/resources/messages"
 import type { Tool as AnthropicTool } from "@anthropic-ai/sdk/resources/messages"
 import type {
   AiAssistantAPIError,
@@ -12,20 +11,13 @@ import type {
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
-import type {
-  AIProvider,
-  FlowConfig,
-  ResponseFormatSchema,
-  ToolDefinition,
-} from "./types"
+import type { AIProvider, FlowConfig, ToolDefinition } from "./types"
 import {
   StreamingError,
   RefusalError,
   MaxTokensError,
-  extractPartialExplanation,
   executeTool,
-  parseCustomProviderResponse,
-  responseFormatToPromptInstruction,
+  type ToolExecutionContext,
 } from "./shared"
 import {
   createHeaderFilteredFetch,
@@ -46,15 +38,6 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
 
 function toAnthropicModel(model: string): string {
   return getModelProps(model).model
-}
-
-function toAnthropicOutputConfig(format: ResponseFormatSchema): OutputConfig {
-  return {
-    format: {
-      type: "json_schema",
-      schema: format.schema,
-    },
-  }
 }
 
 async function createAnthropicMessage(
@@ -97,9 +80,6 @@ async function createAnthropicMessageStreaming(
   streamCallback: StreamingCallback,
   abortSignal?: AbortSignal,
 ): Promise<Anthropic.Messages.Message> {
-  let accumulatedText = ""
-  let lastExplanation = ""
-
   const stream = anthropic.messages.stream(
     {
       ...params,
@@ -134,16 +114,13 @@ async function createAnthropicMessageStreaming(
         throw new StreamingError(errorMessage, "failed", event)
       }
 
-      if (
-        event.type === "content_block_delta" &&
-        event.delta.type === "text_delta"
-      ) {
-        accumulatedText += event.delta.text
-        const explanation = extractPartialExplanation(accumulatedText)
-        if (explanation !== lastExplanation) {
-          const chunk = explanation.slice(lastExplanation.length)
-          lastExplanation = explanation
-          streamCallback.onTextChunk(chunk, explanation)
+      if (event.type === "content_block_delta") {
+        if (event.delta.type === "thinking_delta") {
+          streamCallback.onThinkingChunk?.(
+            (event.delta as { thinking: string }).thinking,
+          )
+        } else if (event.delta.type === "text_delta") {
+          streamCallback.onTextChunk(event.delta.text)
         }
       }
     }
@@ -208,12 +185,12 @@ async function handleToolCalls(
   model: string,
   systemPrompt: string,
   setStatus: StatusCallback,
-  outputConfig: OutputConfig | undefined,
   tools: AnthropicTool[],
   contextWindow: number,
   abortSignal?: AbortSignal,
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
   streaming?: StreamingCallback,
+  toolContext?: ToolExecutionContext,
 ): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
@@ -234,6 +211,7 @@ async function handleToolCalls(
         toolUse.input,
         modelToolsClient,
         setStatus,
+        toolContext,
       )
       toolResults.push({
         type: "tool_result" as const,
@@ -273,7 +251,6 @@ async function handleToolCalls(
     tools,
     messages: updatedHistory,
     temperature: 0.3,
-    ...(outputConfig ? { output_config: outputConfig } : {}),
   }
 
   const followUpMessage = streaming
@@ -303,12 +280,12 @@ async function handleToolCalls(
       model,
       systemPrompt,
       setStatus,
-      outputConfig,
       tools,
       contextWindow,
       abortSignal,
       newAccumulatedTokens,
       streaming,
+      toolContext,
     )
   }
 
@@ -377,14 +354,9 @@ export function createAnthropicProvider(
       })
 
       const anthropicTools = toAnthropicTools(tools)
-      const outputConfig = isCustom
-        ? undefined
-        : toAnthropicOutputConfig(config.responseFormat)
+      const systemPrompt = config.systemInstructions
 
-      const systemPrompt = isCustom
-        ? config.systemInstructions +
-          responseFormatToPromptInstruction(config.responseFormat)
-        : config.systemInstructions
+      const toolContext: ToolExecutionContext = {}
 
       const resolvedModel = toAnthropicModel(model)
 
@@ -394,7 +366,6 @@ export function createAnthropicProvider(
         tools: anthropicTools,
         messages: initialMessages,
         temperature: 0.3,
-        ...(outputConfig ? { output_config: outputConfig } : {}),
       }
 
       const message = streaming
@@ -420,12 +391,12 @@ export function createAnthropicProvider(
           resolvedModel,
           systemPrompt,
           setStatus,
-          outputConfig,
           anthropicTools,
           contextWindow,
           abortSignal,
           { inputTokens: 0, outputTokens: 0 },
           streaming,
+          toolContext,
         )
 
         if ("type" in toolCallResult && "message" in toolCallResult) {
@@ -450,84 +421,32 @@ export function createAnthropicProvider(
       const textBlock = responseMessage.content.find(
         (block) => block.type === "text",
       )
-      if (!textBlock || !("text" in textBlock)) {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "No text response received from assistant.",
-        } as AiAssistantAPIError
+
+      const tokenUsage = {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
       }
 
-      if (isCustom) {
-        const json = parseCustomProviderResponse<T>(
-          textBlock.text,
-          (config.responseFormat.schema.required as string[]) || [],
-          (raw) => ({ explanation: raw }) as unknown as T,
-        )
-        setStatus(null)
-
-        const tokenUsage = {
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-        }
-
-        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
-      }
-
-      try {
-        const json = JSON.parse(textBlock.text) as T
-        setStatus(null)
-
-        return {
-          ...json,
-          tokenUsage: {
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-          },
-        } as T & { tokenUsage: TokenUsage }
-      } catch {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "Failed to parse assistant response.",
-        } as AiAssistantAPIError
-      }
+      setStatus(null)
+      const explanation = textBlock && "text" in textBlock ? textBlock.text : ""
+      return {
+        explanation,
+        sql: toolContext.suggestedSQL ?? null,
+        tokenUsage,
+      } as unknown as T & { tokenUsage: TokenUsage }
     },
 
-    async generateTitle({ model, prompt, responseFormat }) {
+    async generateTitle({ model, prompt }) {
       try {
-        const userContent = isCustom
-          ? prompt + responseFormatToPromptInstruction(responseFormat)
-          : prompt
-
-        const titleOutputConfig = isCustom
-          ? undefined
-          : toAnthropicOutputConfig(responseFormat)
-
-        const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
+        const message = await createAnthropicMessage(anthropic, {
           model: toAnthropicModel(model),
-          messages: [{ role: "user", content: userContent }],
+          messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
           temperature: 0.3,
-          ...(titleOutputConfig ? { output_config: titleOutputConfig } : {}),
-        }
-        const message = await createAnthropicMessage(anthropic, messageParams)
+        })
 
         const textBlock = message.content.find((block) => block.type === "text")
-        if (textBlock && "text" in textBlock) {
-          if (isCustom) {
-            const parsed = parseCustomProviderResponse<{ title: string }>(
-              textBlock.text,
-              (responseFormat.schema.required as string[]) || [],
-              (raw) => ({ title: raw.trim().slice(0, 40) }),
-            )
-            return parsed.title || null
-          }
-
-          const parsed = JSON.parse(textBlock.text) as { title: string }
-          return parsed.title?.slice(0, 40) || null
-        }
-        return null
+        return textBlock && "text" in textBlock ? textBlock.text : null
       } catch {
         return null
       }

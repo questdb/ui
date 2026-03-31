@@ -22,6 +22,7 @@ import { extractErrorByQueryKey } from "../utils"
 import { getQueryInfoFromKey } from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
+import { getMessageContent } from "../../../providers/AIConversationProvider/messageContent"
 import {
   trimSemicolonForDisplay,
   hasUnactionedDiff as checkHasUnactionedDiff,
@@ -680,7 +681,8 @@ const AIChatWindow: React.FC = () => {
 
       case "ask_request":
       default: {
-        const userText = userMessage.displayUserMessage || userMessage.content
+        const userText =
+          userMessage.displayUserMessage || getMessageContent(userMessage)
 
         const historyUpToFailed = messages.filter(
           (m) => m.id !== userMessageId && m.id !== assistantMessageId,

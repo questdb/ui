@@ -416,16 +416,6 @@ export const AIConversationProvider: React.FC<{
           const newSql = updates.sql
 
           if (
-            msg.role === "assistant" &&
-            (updates.content || updates.error) &&
-            !msg.content &&
-            !msg.error &&
-            !msg.responseStart
-          ) {
-            finalUpdates = { ...finalUpdates, responseStart: Date.now() }
-          }
-
-          if (
             newSql !== undefined &&
             msg.previousSQL === undefined &&
             updates.previousSQL === undefined &&

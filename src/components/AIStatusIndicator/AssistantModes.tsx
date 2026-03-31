@@ -168,7 +168,11 @@ export type OperationSection = {
   id: string
   type: AIOperationStatus
   active: boolean
-  operations: Array<{ type: AIOperationStatus; args?: StatusArgs }>
+  operations: Array<{
+    type: AIOperationStatus
+    args?: StatusArgs
+    content?: string
+  }>
   abort: boolean
   startTimestamp: number
 }
@@ -190,10 +194,11 @@ const formatDetailedStatusMessage = (
   return status
 }
 
-const getIsExpandableSection = (section: OperationSection) => {
+export const getIsExpandableSection = (section: OperationSection) => {
   return [
     AIOperationStatus.InvestigatingTable,
     AIOperationStatus.InvestigatingDocs,
+    AIOperationStatus.Thinking,
   ].includes(section.type)
 }
 
@@ -242,10 +247,10 @@ export const formatDurationMs = (ms: number): string | null => {
 export const getSectionDuration = (
   section: OperationSection,
   nextSection: OperationSection | undefined,
-  responseStart?: number,
+  fallbackEndTimestamp?: number,
 ): string | null => {
   if (section.active || section.abort) return null
-  const endTimestamp = nextSection?.startTimestamp ?? responseStart
+  const endTimestamp = nextSection?.startTimestamp ?? fallbackEndTimestamp
   if (!endTimestamp) return null
   return formatDurationMs(endTimestamp - section.startTimestamp)
 }
@@ -263,7 +268,6 @@ type AssistantModesProps = {
   status?: AIOperationStatus | null
   isLive?: boolean
   onScrollNeeded?: () => void
-  responseStart?: number
 }
 
 export const AssistantModes: React.FC<AssistantModesProps> = ({
@@ -271,7 +275,6 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   status,
   isLive = false,
   onScrollNeeded,
-  responseStart,
 }) => {
   const [collapsedSections, setCollapsedSections] = useState<
     Record<string, boolean>
@@ -333,11 +336,7 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
             : !collapsedSections[section.id] && isExpandable
         const nextSection: OperationSection | undefined =
           operationSections[index + 1]
-        const sectionDuration = getSectionDuration(
-          section,
-          nextSection,
-          responseStart,
-        )
+        const sectionDuration = getSectionDuration(section, nextSection)
 
         return (
           <ModeHeader

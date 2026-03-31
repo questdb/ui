@@ -1,50 +1,21 @@
 import type { ToolDefinition } from "./types"
 
-export const SCHEMA_TOOLS: ToolDefinition[] = [
+export const DEFAULT_TOOLS: ToolDefinition[] = [
   {
-    name: "get_tables",
+    name: "suggest_query",
     description:
-      "Get a list of all tables and materialized views in the QuestDB database",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "get_table_schema",
-    description:
-      "Get the full schema definition (DDL) for a specific table or materialized view",
+      "Suggest a SQL query to the user. The query will be displayed as a suggestion that the user can accept or reject. Always validate the query using validate_query before suggesting it.",
     inputSchema: {
       type: "object",
       properties: {
-        table_name: {
+        query: {
           type: "string",
-          description:
-            "The name of the table or materialized view to get schema for",
+          description: "The SQL query to suggest to the user",
         },
       },
-      required: ["table_name"],
+      required: ["query"],
     },
   },
-  {
-    name: "get_table_details",
-    description:
-      "Get the runtime details/statistics of a specific table or materialized view",
-    inputSchema: {
-      type: "object",
-      properties: {
-        table_name: {
-          type: "string",
-          description:
-            "The name of the table or materialized view to get details for",
-        },
-      },
-      required: ["table_name"],
-    },
-  },
-]
-
-export const REFERENCE_TOOLS: ToolDefinition[] = [
   {
     name: "validate_query",
     description:
@@ -102,4 +73,48 @@ export const REFERENCE_TOOLS: ToolDefinition[] = [
   },
 ]
 
-export const ALL_TOOLS: ToolDefinition[] = [...SCHEMA_TOOLS, ...REFERENCE_TOOLS]
+export const SCHEMA_TOOLS: ToolDefinition[] = [
+  {
+    name: "get_tables",
+    description:
+      "Get a list of all tables and materialized views in the QuestDB database",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "get_table_schema",
+    description:
+      "Get the full schema definition (DDL) for a specific table or materialized view",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_name: {
+          type: "string",
+          description:
+            "The name of the table or materialized view to get schema for",
+        },
+      },
+      required: ["table_name"],
+    },
+  },
+  {
+    name: "get_table_details",
+    description:
+      "Get the runtime details/statistics of a specific table or materialized view",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table_name: {
+          type: "string",
+          description:
+            "The name of the table or materialized view to get details for",
+        },
+      },
+      required: ["table_name"],
+    },
+  },
+]
+
+export const ALL_TOOLS: ToolDefinition[] = [...DEFAULT_TOOLS, ...SCHEMA_TOOLS]

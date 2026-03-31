@@ -16,17 +16,10 @@ export interface ToolDefinition {
   }
 }
 
-export interface ResponseFormatSchema {
-  name: string
-  schema: Record<string, unknown>
-  strict: boolean
-}
-
 export interface FlowConfig {
   systemInstructions: string
   initialUserContent: string
   conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>
-  responseFormat: ResponseFormatSchema
 }
 
 export interface AIProvider {
@@ -46,7 +39,6 @@ export interface AIProvider {
   generateTitle(params: {
     model: string
     prompt: string
-    responseFormat: ResponseFormatSchema
   }): Promise<string | null>
 
   generateSummary(params: {

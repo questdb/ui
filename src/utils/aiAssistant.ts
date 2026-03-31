@@ -1,5 +1,5 @@
 import { Client } from "./questdb/client"
-import { Type, Table } from "./questdb/types"
+import { Type, Table, TableKind } from "./questdb/types"
 import type { ProviderId } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { formatSql } from "./formatSql"
@@ -8,19 +8,17 @@ import type {
   ConversationId,
   ConversationMessage,
 } from "../providers/AIConversationProvider/types"
+import { getMessageContent } from "../providers/AIConversationProvider/messageContent"
 import { compactConversationIfNeeded } from "./contextCompaction"
 import {
   createProvider,
-  ExplainFormat,
-  FixSQLFormat,
-  ConversationResponseFormat,
-  ChatTitleFormat,
   ALL_TOOLS,
-  REFERENCE_TOOLS,
+  DEFAULT_TOOLS,
   getUnifiedPrompt,
   BUILTIN_PROVIDERS,
 } from "./ai"
 import type { AIProvider } from "./ai"
+import { getTableKind } from "./questdb/types"
 
 export type ActiveProviderSettings = {
   model: string
@@ -33,11 +31,6 @@ export interface AiAssistantAPIError {
   type: "rate_limit" | "invalid_key" | "network" | "unknown" | "aborted"
   message: string
   details?: string
-}
-
-export interface AiAssistantExplanation {
-  explanation: string
-  tokenUsage?: TokenUsage
 }
 
 export type AiAssistantValidateQueryResult =
@@ -57,7 +50,7 @@ export interface GeneratedSQL {
 
 export interface ModelToolsClient {
   validateQuery: (query: string) => Promise<AiAssistantValidateQueryResult>
-  getTables?: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
+  getTables?: () => Promise<Array<{ name: string; type: TableKind }>>
   getTableSchema?: (tableName: string) => Promise<string | null>
   getTableDetails?: (tableName: string) => Promise<Table | null>
 }
@@ -68,8 +61,8 @@ export type StatusCallback = (
 ) => void
 
 export type StreamingCallback = {
-  onTextChunk: (chunk: string, accumulated: string) => void
-  cleanup?: () => void
+  onTextChunk: (chunk: string) => void
+  onThinkingChunk?: (chunk: string) => void
 }
 
 export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
@@ -82,11 +75,7 @@ export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
 }
 
 export function isAiAssistantError(
-  response:
-    | AiAssistantAPIError
-    | AiAssistantExplanation
-    | GeneratedSQL
-    | Partial<GeneratedSQL>,
+  response: AiAssistantAPIError | GeneratedSQL | Partial<GeneratedSQL>,
 ): response is AiAssistantAPIError {
   if ("type" in response && "message" in response) {
     return true
@@ -133,13 +122,11 @@ export function createModelToolsClient(
     },
     ...(tables
       ? {
-          getTables(): Promise<
-            Array<{ name: string; type: "table" | "matview" }>
-          > {
+          getTables(): Promise<Array<{ name: string; type: TableKind }>> {
             return Promise.resolve(
               tables.map((table) => ({
                 name: table.table_name,
-                type: table.matView ? "matview" : ("table" as const),
+                type: getTableKind(table),
               })),
             )
           },
@@ -188,61 +175,6 @@ export function createModelToolsClient(
           },
         }
       : {}),
-  }
-}
-
-type CreateStreamingCallbackParams = {
-  conversationId: string
-  assistantMessageId: string
-  updateMessage: (
-    id: string,
-    msgId: string,
-    updates: Partial<ConversationMessage>,
-  ) => void
-  setIsStreaming: (streaming: boolean) => void
-}
-
-export const createStreamingCallback = (
-  params: CreateStreamingCallbackParams,
-): StreamingCallback => {
-  const { conversationId, assistantMessageId, updateMessage, setIsStreaming } =
-    params
-  let streamingStarted = false
-  let pendingUpdate: string | null = null
-  let updateScheduled = false
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
-  let cleaned = false
-
-  return {
-    onTextChunk: (_chunk: string, accumulated: string) => {
-      if (cleaned) return
-      if (!streamingStarted) {
-        streamingStarted = true
-        setIsStreaming(true)
-      }
-      pendingUpdate = accumulated
-      if (!updateScheduled) {
-        updateScheduled = true
-        timeoutId = setTimeout(() => {
-          timeoutId = null
-          updateScheduled = false
-          if (pendingUpdate !== null && !cleaned) {
-            updateMessage(conversationId, assistantMessageId, {
-              content: pendingUpdate,
-              explanation: pendingUpdate,
-            })
-          }
-        })
-      }
-    },
-    cleanup: () => {
-      cleaned = true
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId)
-        timeoutId = null
-      }
-      pendingUpdate = null
-    },
   }
 }
 
@@ -333,18 +265,21 @@ export const generateChatTitle = async ({
       settings.aiAssistantSettings,
     )
 
-    const prompt = `Generate a concise chat title (max 30 characters) for this conversation with QuestDB AI Assistant. The title should capture the main topic or intent.
+    const prompt = `Generate a concise chat title (max 30 characters) for this conversation. The title should capture the main topic or intent. Respond with ONLY the title text, nothing else.
 
 User's message:
-${firstUserMessage}
+${firstUserMessage}`
 
-Return a JSON object with the following structure: { "title": "Your title here" }`
-
-    return await provider.generateTitle({
+    const raw = await provider.generateTitle({
       model: settings.model,
       prompt,
-      responseFormat: ChatTitleFormat,
     })
+    return (
+      raw
+        ?.trim()
+        .replace(/^["']|["']$/g, "")
+        .slice(0, 40) || null
+    )
   } catch (error) {
     console.warn("Failed to generate chat title:", error)
     return null
@@ -365,7 +300,6 @@ export const continueConversation = async ({
   modelToolsClient,
   setStatus,
   abortSignal,
-  operation = "followup",
   streaming,
 }: {
   userMessage: string
@@ -374,11 +308,10 @@ export const continueConversation = async ({
   modelToolsClient: ModelToolsClient
   setStatus: StatusCallback
   abortSignal?: AbortSignal
-  operation?: AIOperation
   conversationId?: ConversationId
   streaming?: StreamingCallback
 }): Promise<
-  (GeneratedSQL | AiAssistantExplanation | AiAssistantAPIError) & {
+  (GeneratedSQL | AiAssistantAPIError) & {
     compactedConversationHistory?: Array<ConversationMessage>
   }
 > => {
@@ -397,14 +330,6 @@ export const continueConversation = async ({
       message: "Operation was cancelled",
     }
   }
-
-  const responseFormat = {
-    explain: ExplainFormat,
-    fix: FixSQLFormat,
-    followup: ConversationResponseFormat,
-    schema_explain: ExplainFormat,
-    health_issue: ConversationResponseFormat,
-  }[operation]
 
   let provider: ReturnType<typeof createProvider>
   try {
@@ -458,14 +383,21 @@ export const continueConversation = async ({
         }
 
         if (compactionResult.wasCompacted) {
+          const compactionTimestamp = Date.now()
           workingConversationHistory = [
             ...conversationHistory.map((m) => ({ ...m, isCompacted: true })),
             {
               id: crypto.randomUUID(),
               role: "assistant" as const,
-              content: compactionResult.compactedMessage,
               hideFromUI: true,
-              timestamp: Date.now(),
+              timestamp: compactionTimestamp,
+              operationHistory: [
+                {
+                  type: AIOperationStatus.GeneratingResponse,
+                  timestamp: compactionTimestamp,
+                  content: compactionResult.compactedMessage,
+                },
+              ],
             },
           ]
           isCompacted = true
@@ -486,7 +418,7 @@ export const continueConversation = async ({
         }
       }
 
-      const tools = grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS
+      const tools = grantSchemaAccess ? ALL_TOOLS : DEFAULT_TOOLS
 
       const result = await provider.executeFlow<{
         sql?: string | null
@@ -497,10 +429,12 @@ export const continueConversation = async ({
         config: {
           systemInstructions: getUnifiedPrompt(grantSchemaAccess),
           initialUserContent: userMessage,
-          conversationHistory: workingConversationHistory.filter(
-            (m) => !m.isCompacted,
-          ),
-          responseFormat,
+          conversationHistory: workingConversationHistory
+            .filter((m) => !m.isCompacted)
+            .map((m) => ({
+              role: m.role,
+              content: getMessageContent(m),
+            })),
         },
         modelToolsClient,
         tools,

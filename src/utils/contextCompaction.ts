@@ -1,4 +1,5 @@
 import type { ConversationMessage } from "../providers/AIConversationProvider/types"
+import { getMessageContent } from "../providers/AIConversationProvider/messageContent"
 import { getTestModel } from "./ai"
 import type { AIProvider } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
@@ -66,11 +67,11 @@ function toTokenMessages(
   messages: [...ConversationMessage[], Omit<ConversationMessage, "id">],
 ): Array<{ role: "user" | "assistant"; content: string }> {
   return messages
-    .filter((m) => m.content && m.content.trim() !== "")
     .map((m) => ({
       role: m.role,
-      content: m.content,
+      content: getMessageContent(m as ConversationMessage),
     }))
+    .filter((m) => m.content.trim() !== "")
 }
 
 async function generateSummary(
@@ -84,7 +85,7 @@ async function generateSummary(
   }
 
   const conversationText = middleMessages
-    .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+    .map((m) => `${m.role.toUpperCase()}: ${getMessageContent(m)}`)
     .join("\n\n")
 
   const userMessage = `Please summarize the following conversation:\n\n${conversationText}`
@@ -115,7 +116,11 @@ export async function compactConversationIfNeeded(
   ] as [...ConversationMessage[], Omit<ConversationMessage, "id">]
 
   const totalChars =
-    systemPrompt.length + messages.reduce((sum, m) => sum + m.content.length, 0)
+    systemPrompt.length +
+    messages.reduce(
+      (sum, m) => sum + getMessageContent(m as ConversationMessage).length,
+      0,
+    )
 
   if (totalChars < compactionThreshold) {
     return { wasCompacted: false }

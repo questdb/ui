@@ -35,11 +35,10 @@ export type UserMessageDisplayType =
 export type ConversationMessage = {
   id: string
   role: "user" | "assistant"
-  content: string
+  content?: string
   timestamp: number
   error?: string
   sql?: string
-  explanation?: string
   tokenUsage?: TokenUsage // Token usage for current turn in total, including tool calls that we omit from the history after response
   previousSQL?: string // SQL before this change (for diff display)
   isRejected?: boolean
@@ -47,7 +46,6 @@ export type ConversationMessage = {
   hideFromUI?: boolean // User messages for accept/reject and compaction result are hidden
   isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
   operationHistory?: OperationHistory
-  responseStart?: number
   model?: string
   // Predefined actions (Fix and Explain)
   displayType?: UserMessageDisplayType

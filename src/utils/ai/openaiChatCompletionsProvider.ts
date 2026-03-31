@@ -13,38 +13,20 @@ import type {
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
-import type {
-  AIProvider,
-  FlowConfig,
-  ResponseFormatSchema,
-  ToolDefinition,
-} from "./types"
+import type { AIProvider, FlowConfig, ToolDefinition } from "./types"
 import {
   StreamingError,
   RefusalError,
   MaxTokensError,
   safeJsonParse,
-  extractPartialExplanation,
   executeTool,
-  parseCustomProviderResponse,
-  responseFormatToPromptInstruction,
+  type ToolExecutionContext,
 } from "./shared"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 import {
   createHeaderFilteredFetch,
   OPENAI_ALLOWED_HEADERS,
 } from "./fetchWithFilteredHeaders"
-
-function toResponseFormat(format: ResponseFormatSchema) {
-  return {
-    type: "json_schema" as const,
-    json_schema: {
-      name: format.name,
-      schema: format.schema,
-      strict: format.strict,
-    },
-  }
-}
 
 function toOpenAITools(
   tools: ToolDefinition[],
@@ -82,7 +64,6 @@ async function createChatCompletionStreaming(
 }> {
   let accumulatedText = ""
   let accumulatedRefusal = ""
-  let lastExplanation = ""
   let finishReason: string | null = null
   const toolCallAccumulator: Map<
     number,
@@ -104,14 +85,21 @@ async function createChatCompletionStreaming(
 
       const choice = chunk.choices?.[0]
 
+      const deltaAny = choice?.delta as
+        | {
+            reasoning_content?: string
+            reasoning?: string
+          }
+        | undefined
+      const reasoningContent =
+        deltaAny?.reasoning_content || deltaAny?.reasoning
+      if (reasoningContent) {
+        streamCallback.onThinkingChunk?.(reasoningContent)
+      }
+
       if (choice?.delta?.content) {
         accumulatedText += choice.delta.content
-        const explanation = extractPartialExplanation(accumulatedText)
-        if (explanation !== lastExplanation) {
-          const delta = explanation.slice(lastExplanation.length)
-          lastExplanation = explanation
-          streamCallback.onTextChunk(delta, explanation)
-        }
+        streamCallback.onTextChunk(choice.delta.content)
       }
 
       if (choice?.delta?.refusal) {
@@ -320,10 +308,7 @@ export function createOpenAIChatCompletionsProvider(
       abortSignal?: AbortSignal
       streaming?: StreamingCallback
     }): Promise<T | AiAssistantAPIError> {
-      const systemContent = isCustom
-        ? config.systemInstructions +
-          responseFormatToPromptInstruction(config.responseFormat)
-        : config.systemInstructions
+      const systemContent = config.systemInstructions
 
       const messages: ChatCompletionMessageParam[] = [
         { role: "system", content: systemContent },
@@ -344,15 +329,11 @@ export function createOpenAIChatCompletionsProvider(
       let totalInputTokens = 0
       let totalOutputTokens = 0
       let lastPromptTokens = 0
-
-      const response_format = isCustom
-        ? undefined
-        : toResponseFormat(config.responseFormat)
+      const toolContext: ToolExecutionContext = {}
 
       const baseParams = {
         ...toChatCompletionsAPIProps(model),
         tools: openaiTools,
-        response_format,
       }
 
       let result = await executeRequest(
@@ -385,6 +366,7 @@ export function createOpenAIChatCompletionsProvider(
             tc.arguments,
             modelToolsClient,
             setStatus,
+            toolContext,
           )
           messages.push({
             role: "tool",
@@ -426,71 +408,27 @@ export function createOpenAIChatCompletionsProvider(
         } as AiAssistantAPIError
       }
 
-      if (isCustom) {
-        const json = parseCustomProviderResponse<T>(
-          result.content,
-          (config.responseFormat.schema.required as string[]) || [],
-          (raw) => ({ explanation: raw }) as unknown as T,
-        )
-        setStatus(null)
-
-        const tokenUsage = {
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-        }
-
-        return { ...json, tokenUsage } as T & { tokenUsage: TokenUsage }
+      const tokenUsage = {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
       }
 
-      try {
-        const json = JSON.parse(result.content) as T
-        setStatus(null)
-
-        return {
-          ...json,
-          tokenUsage: {
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-          },
-        } as T & { tokenUsage: TokenUsage }
-      } catch {
-        setStatus(null)
-        return {
-          type: "unknown",
-          message: "Failed to parse assistant response.",
-        } as AiAssistantAPIError
-      }
+      setStatus(null)
+      return {
+        explanation: result.content,
+        sql: toolContext.suggestedSQL ?? null,
+        tokenUsage,
+      } as unknown as T & { tokenUsage: TokenUsage }
     },
 
-    async generateTitle({ model, prompt, responseFormat }) {
+    async generateTitle({ model, prompt }) {
       try {
-        const userContent = isCustom
-          ? prompt + responseFormatToPromptInstruction(responseFormat)
-          : prompt
-
-        const response_format = isCustom
-          ? undefined
-          : toResponseFormat(responseFormat)
-
         const response = await openai.chat.completions.create({
           model: toChatCompletionsAPIProps(model).model,
-          messages: [{ role: "user", content: userContent }],
-          response_format,
+          messages: [{ role: "user", content: prompt }],
           ...(isCustom ? {} : { max_completion_tokens: 100 }),
         })
-        const content = response.choices[0]?.message?.content || ""
-
-        if (isCustom) {
-          const parsed = parseCustomProviderResponse<{ title: string }>(
-            content,
-            (responseFormat.schema.required as string[]) || [],
-            (raw) => ({ title: raw.trim().slice(0, 40) }),
-          )
-          return parsed.title || null
-        }
-
-        const parsed = JSON.parse(content) as { title: string }
-        return parsed.title || null
+        return response.choices[0]?.message?.content || null
       } catch {
         return null
       }
