@@ -1,4 +1,11 @@
-export type { AIProvider, ToolDefinition, FlowConfig } from "./types"
+export type {
+  AIProvider,
+  ToolDefinition,
+  ToolCall,
+  FlowConfig,
+  FlowResult,
+  Message,
+} from "./types"
 export { createProvider } from "./registry"
 export { SCHEMA_TOOLS, DEFAULT_TOOLS, ALL_TOOLS } from "./tools"
 export {

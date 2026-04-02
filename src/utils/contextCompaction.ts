@@ -1,7 +1,7 @@
 import type { ConversationMessage } from "../providers/AIConversationProvider/types"
-import { getMessageContent } from "../providers/AIConversationProvider/messageContent"
 import { getTestModel } from "./ai"
-import type { AIProvider } from "./ai"
+import type { AIProvider, Message } from "./ai"
+import { getMessageTextLength } from "./ai/shared"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 
 type CompactionResultSuccess = {
@@ -63,15 +63,24 @@ ${summary}
 **Continue helping the user from where we left off.**`
 }
 
-function toTokenMessages(
-  messages: [...ConversationMessage[], Omit<ConversationMessage, "id">],
-): Array<{ role: "user" | "assistant"; content: string }> {
+/** Convert ConversationMessage[] to Message[] for the provider (strip metadata). */
+export function toApiMessages(messages: ConversationMessage[]): Message[] {
   return messages
-    .map((m) => ({
-      role: m.role,
-      content: getMessageContent(m as ConversationMessage),
-    }))
-    .filter((m) => m.content.trim() !== "")
+    .filter((m) => {
+      if (m.role === "tool") return true
+      if (m.role === "assistant") {
+        return m.content || m.tool_calls?.length || m.reasoning?.content
+      }
+      return typeof m.content === "string" && m.content.trim().length > 0
+    })
+    .map((m): Message => {
+      const msg: Message = { role: m.role, content: m.content }
+      if (m.tool_calls) msg.tool_calls = m.tool_calls
+      if (m.reasoning?.content) msg.reasoning = m.reasoning
+      if (m.tool_call_id) msg.tool_call_id = m.tool_call_id
+      if (m.name) msg.name = m.name
+      return msg
+    })
 }
 
 async function generateSummary(
@@ -85,7 +94,29 @@ async function generateSummary(
   }
 
   const conversationText = middleMessages
-    .map((m) => `${m.role.toUpperCase()}: ${getMessageContent(m)}`)
+    .map((m) => {
+      if (m.role === "user") {
+        return `USER: ${m.content ?? ""}`
+      }
+      if (m.role === "tool") {
+        return `TOOL RESULT (${m.name ?? "unknown"}): ${m.content ?? ""}`
+      }
+      // assistant
+      const parts: string[] = []
+      if (m.reasoning?.content) {
+        parts.push(`THINKING: ${m.reasoning.content}`)
+      }
+      if (m.tool_calls?.length) {
+        for (const tc of m.tool_calls) {
+          parts.push(`TOOL CALL: ${tc.name}(${tc.arguments})`)
+        }
+      }
+      if (m.content) {
+        parts.push(`ASSISTANT: ${m.content}`)
+      }
+      return parts.join("\n")
+    })
+    .filter(Boolean)
     .join("\n\n")
 
   const userMessage = `Please summarize the following conversation:\n\n${conversationText}`
@@ -106,32 +137,30 @@ export async function compactConversationIfNeeded(
   options: { model?: string; aiAssistantSettings?: AiAssistantSettings } = {},
 ): Promise<CompactionResult> {
   const compactionThreshold = aiProvider.contextWindow - 50_000
-  const messages = [
+  const allMessages: ConversationMessage[] = [
     ...conversationHistory,
     {
+      id: "",
       role: "user" as const,
       content: userMessage,
       timestamp: Date.now(),
-    } as Omit<ConversationMessage, "id">,
-  ] as [...ConversationMessage[], Omit<ConversationMessage, "id">]
+    },
+  ]
+
+  const apiMessages = toApiMessages(allMessages)
 
   const totalChars =
     systemPrompt.length +
-    messages.reduce(
-      (sum, m) => sum + getMessageContent(m as ConversationMessage).length,
-      0,
-    )
+    apiMessages.reduce((sum, m) => sum + getMessageTextLength(m), 0)
 
   if (totalChars < compactionThreshold) {
     return { wasCompacted: false }
   }
 
-  const tokenMessages = toTokenMessages(messages)
-
   let estimatedTokens: number
   try {
     estimatedTokens = await aiProvider.countTokens({
-      messages: tokenMessages,
+      messages: apiMessages,
       systemPrompt,
       model: options.model ?? "",
     })
@@ -146,7 +175,7 @@ export async function compactConversationIfNeeded(
     return { wasCompacted: false }
   }
 
-  if (messages.length < 3) {
+  if (allMessages.length < 3) {
     return {
       wasCompacted: false,
       error:

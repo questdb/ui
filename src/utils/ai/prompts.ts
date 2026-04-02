@@ -47,7 +47,7 @@ export const getUnifiedPrompt = (grantSchemaAccess?: boolean) => {
 - NEVER include SQL queries as code blocks in your response text. The ONLY way to suggest a SQL query is by using the suggest_query tool. If you want to show a query to the user, call suggest_query — do not write it as \`\`\`sql code blocks in your message.
 - Only suggest a query if the user asks you to generate, fix, or make changes to the query. If the user does not ask for fixing/changing/generating a query, do not call suggest_query.
 - Always validate a query using validate_query before calling suggest_query.
-- You may use inline \`code\` for short SQL fragments (column names, function names, keywords) when explaining — but never full queries.
+- You may use inline \`code\` for short SQL fragments (column names, function names, keywords) when explaining, but never for full queries.
 
 ## Tools
 - Use the validate_query tool to validate a query before suggesting it to the user.

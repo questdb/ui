@@ -8,21 +8,110 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "../aiAssistant"
-import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
-import type { AIProvider, FlowConfig, ToolDefinition } from "./types"
+import {
+  type AIProvider,
+  type FlowConfig,
+  type FlowResult,
+  type ToolDefinition,
+  type Message,
+} from "./types"
 import {
   StreamingError,
   RefusalError,
   MaxTokensError,
   executeTool,
+  safeJsonParse,
+  CRITICAL_TOKEN_USAGE_MESSAGE,
+  getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
 import {
   createHeaderFilteredFetch,
   ANTHROPIC_ALLOWED_HEADERS,
 } from "./fetchWithFilteredHeaders"
+
+function toNativeMessages(messages: Message[]): MessageParam[] {
+  const result: MessageParam[] = []
+
+  type UserBlock =
+    | Anthropic.Messages.ToolResultBlockParam
+    | Anthropic.Messages.TextBlockParam
+  type AssistantBlock = Anthropic.Messages.ContentBlockParam
+
+  const toUserBlocks = (v: string | UserBlock[]): UserBlock[] =>
+    typeof v === "string" ? [{ type: "text" as const, text: v }] : v
+
+  const orderUserBlocks = (blocks: UserBlock[]): UserBlock[] => {
+    const toolResults = blocks.filter((b) => b.type === "tool_result")
+    const rest = blocks.filter((b) => b.type !== "tool_result")
+    return [...toolResults, ...rest]
+  }
+
+  const pushUser = (content: string | UserBlock[]) => {
+    const last = result[result.length - 1]
+    if (last?.role === "user") {
+      // Merge into existing user message to maintain alternation
+      const prev = toUserBlocks(last.content as string | UserBlock[])
+      const next = toUserBlocks(content)
+      last.content = orderUserBlocks([
+        ...prev,
+        ...next,
+      ]) as MessageParam["content"]
+    } else {
+      result.push({ role: "user", content } as MessageParam)
+    }
+  }
+
+  const pushAssistant = (blocks: AssistantBlock[]) => {
+    const last = result[result.length - 1]
+    if (last?.role === "assistant" && Array.isArray(last.content)) {
+      last.content = [...last.content, ...blocks] as MessageParam["content"]
+    } else {
+      result.push({ role: "assistant", content: blocks } as MessageParam)
+    }
+  }
+
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      if (msg.content) {
+        pushUser(msg.content)
+      }
+      continue
+    }
+
+    if (msg.role === "tool") {
+      const toolResult = {
+        type: "tool_result" as const,
+        tool_use_id: msg.tool_call_id!,
+        content: msg.content ?? "",
+      }
+      pushUser([toolResult])
+      continue
+    }
+
+    const blocks: Anthropic.Messages.ContentBlockParam[] = []
+    if (msg.content) {
+      blocks.push({ type: "text" as const, text: msg.content })
+    }
+    if (msg.tool_calls) {
+      for (const tc of msg.tool_calls) {
+        blocks.push({
+          type: "tool_use" as const,
+          id: tc.id,
+          name: tc.name,
+          input: safeJsonParse(tc.arguments),
+        })
+      }
+    }
+    if (blocks.length > 0) {
+      pushAssistant(blocks)
+    }
+  }
+
+  return result
+}
 
 function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
   return tools.map((t) => ({
@@ -51,7 +140,7 @@ async function createAnthropicMessage(
     {
       ...params,
       stream: false,
-      max_tokens: params.max_tokens ?? 8192,
+      max_tokens: params.max_tokens ?? 64_000,
     },
     {
       signal,
@@ -83,7 +172,7 @@ async function createAnthropicMessageStreaming(
   const stream = anthropic.messages.stream(
     {
       ...params,
-      max_tokens: params.max_tokens ?? 8192,
+      max_tokens: params.max_tokens ?? 64_000,
     },
     {
       signal: abortSignal,
@@ -172,6 +261,21 @@ async function createAnthropicMessageStreaming(
   return finalMessage
 }
 
+function emitToolCallsFromResponse(
+  message: Anthropic.Messages.Message,
+  streaming?: StreamingCallback,
+) {
+  for (const block of message.content) {
+    if (block.type === "tool_use") {
+      streaming?.onToolCall?.({
+        id: block.id,
+        name: block.name,
+        arguments: JSON.stringify(block.input),
+      })
+    }
+  }
+}
+
 interface AnthropicToolCallResult {
   message: Anthropic.Messages.Message
   accumulatedTokens: TokenUsage
@@ -195,7 +299,6 @@ async function handleToolCalls(
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
   )
-  const toolResults = []
 
   if (abortSignal?.aborted) {
     return {
@@ -203,6 +306,8 @@ async function handleToolCalls(
       message: "Operation was cancelled",
     } as AiAssistantAPIError
   }
+
+  const toolResults = []
 
   for (const toolUse of toolUseBlocks) {
     if ("name" in toolUse) {
@@ -213,6 +318,22 @@ async function handleToolCalls(
         setStatus,
         toolContext,
       )
+
+      if (abortSignal?.aborted) {
+        return {
+          type: "aborted",
+          message: "Operation was cancelled",
+        } as AiAssistantAPIError
+      }
+      streaming?.onToolResult?.({
+        tool_call_id: toolUse.id,
+        name: toolUse.name,
+        content:
+          typeof exec.content === "string"
+            ? exec.content
+            : JSON.stringify(exec.content),
+      })
+
       toolResults.push({
         type: "tool_result" as const,
         tool_use_id: toolUse.id,
@@ -240,10 +361,18 @@ async function handleToolCalls(
   if (criticalTokenUsage) {
     updatedHistory.push({
       role: "user" as const,
-      content:
-        "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**",
+      content: CRITICAL_TOKEN_USAGE_MESSAGE,
     })
   }
+
+  if (abortSignal?.aborted) {
+    return {
+      type: "aborted",
+      message: "Operation was cancelled",
+    } as AiAssistantAPIError
+  }
+  // Signal start of follow-up response before making the API call
+  streaming?.onResponseStart?.()
 
   const followUpParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
@@ -272,6 +401,7 @@ async function handleToolCalls(
   }
 
   if (followUpMessage.stop_reason === "tool_use") {
+    emitToolCallsFromResponse(followUpMessage, streaming)
     return handleToolCalls(
       followUpMessage,
       anthropic,
@@ -318,7 +448,11 @@ export function createAnthropicProvider(
     id: providerId,
     contextWindow,
 
-    async executeFlow<T>({
+    toNativeMessages(messages: Message[]): MessageParam[] {
+      return toNativeMessages(messages)
+    },
+
+    async executeFlow({
       model,
       config,
       modelToolsClient,
@@ -334,18 +468,10 @@ export function createAnthropicProvider(
       setStatus: StatusCallback
       abortSignal?: AbortSignal
       streaming?: StreamingCallback
-    }): Promise<T | AiAssistantAPIError> {
+    }): Promise<FlowResult | AiAssistantAPIError> {
       const initialMessages: MessageParam[] = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
-        const validMessages = config.conversationHistory.filter(
-          (msg) => msg.content && msg.content.trim() !== "",
-        )
-        for (const msg of validMessages) {
-          initialMessages.push({
-            role: msg.role,
-            content: msg.content,
-          })
-        }
+        initialMessages.push(...toNativeMessages(config.conversationHistory))
       }
 
       initialMessages.push({
@@ -383,6 +509,7 @@ export function createAnthropicProvider(
       let responseMessage: Anthropic.Messages.Message
 
       if (message.stop_reason === "tool_use") {
+        emitToolCallsFromResponse(message, streaming)
         const toolCallResult = await handleToolCalls(
           message,
           anthropic,
@@ -433,7 +560,7 @@ export function createAnthropicProvider(
         explanation,
         sql: toolContext.suggestedSQL ?? null,
         tokenUsage,
-      } as unknown as T & { tokenUsage: TokenUsage }
+      }
     },
 
     async generateTitle({ model, prompt }) {
@@ -453,15 +580,22 @@ export function createAnthropicProvider(
     },
 
     async generateSummary({ model, systemPrompt, userMessage }) {
-      const response = await anthropic.messages.create({
+      let text = ""
+      const stream = anthropic.messages.stream({
         ...getModelProps(model),
-        max_tokens: 8192,
+        max_tokens: 64_000,
         messages: [{ role: "user", content: userMessage }],
         system: systemPrompt,
       })
-
-      const textBlock = response.content.find((block) => block.type === "text")
-      return textBlock?.type === "text" ? textBlock.text : ""
+      for await (const event of stream) {
+        if (
+          event.type === "content_block_delta" &&
+          event.delta.type === "text_delta"
+        ) {
+          text += event.delta.text
+        }
+      }
+      return text
     },
 
     async testConnection({ apiKey: testApiKey, model }) {
@@ -480,6 +614,7 @@ export function createAnthropicProvider(
         await createAnthropicMessage(testClient, {
           model: toAnthropicModel(model),
           messages: [{ role: "user", content: "ping" }],
+          max_tokens: 16,
         })
         return { valid: true }
       } catch (error: unknown) {
@@ -515,21 +650,16 @@ export function createAnthropicProvider(
       if (options?.baseURL) {
         const totalChars =
           systemPrompt.length +
-          messages.reduce((sum, m) => sum + m.content.length, 0)
+          messages.reduce((sum, m) => sum + getMessageTextLength(m), 0)
         return Math.ceil(totalChars / 3.5)
       }
 
-      const anthropicMessages: Anthropic.MessageParam[] = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
-
+      const nativeMessages = toNativeMessages(messages)
       const response = await anthropic.messages.countTokens({
         model: toAnthropicModel(model),
         system: systemPrompt,
-        messages: anthropicMessages,
+        messages: nativeMessages,
       })
-
       return response.input_tokens
     },
 
@@ -549,7 +679,6 @@ export function createAnthropicProvider(
         error instanceof Anthropic.APIUserAbortError ||
         (error instanceof StreamingError && error.errorType === "interrupted")
       ) {
-        setStatus(AIOperationStatus.Aborted)
         return { type: "aborted", message: "Operation was cancelled" }
       }
       setStatus(null)

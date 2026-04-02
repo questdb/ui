@@ -54,7 +54,6 @@ export enum AIOperationStatus {
 }
 
 export type StatusArgs = {
-  conversationId?: string
   name?: string
   section?: string
   tableOpType?: "schema" | "details"
@@ -158,9 +157,22 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       onUpdate?: (history: OperationHistory) => void,
     ) => {
       if (newStatus !== null) {
+        const normalizedArgs = args || null
+        const lastEntry =
+          currentOperationRef.current[currentOperationRef.current.length - 1]
+        const isDuplicateConsecutiveStatus =
+          !!lastEntry &&
+          lastEntry.type === newStatus &&
+          JSON.stringify(lastEntry.args ?? null) ===
+            JSON.stringify(normalizedArgs)
+
+        if (isDuplicateConsecutiveStatus) {
+          return
+        }
+
         const statusPayload: StatusEntry = {
           type: newStatus,
-          args: args || undefined,
+          args: normalizedArgs ?? undefined,
           timestamp: Date.now(),
         }
         if (

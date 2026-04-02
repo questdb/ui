@@ -8,8 +8,7 @@ import type {
   ConversationId,
   ConversationMessage,
 } from "../providers/AIConversationProvider/types"
-import { getMessageContent } from "../providers/AIConversationProvider/messageContent"
-import { compactConversationIfNeeded } from "./contextCompaction"
+import { compactConversationIfNeeded, toApiMessages } from "./contextCompaction"
 import {
   createProvider,
   ALL_TOOLS,
@@ -63,6 +62,13 @@ export type StatusCallback = (
 export type StreamingCallback = {
   onTextChunk: (chunk: string) => void
   onThinkingChunk?: (chunk: string) => void
+  onToolCall?: (call: { id: string; name: string; arguments: string }) => void
+  onToolResult?: (result: {
+    tool_call_id: string
+    name: string
+    content: string
+  }) => void
+  onResponseStart?: () => void
 }
 
 export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
@@ -356,7 +362,6 @@ export const continueConversation = async ({
       let workingConversationHistory = conversationHistory
       let isCompacted = false
 
-      setStatus(AIOperationStatus.Processing)
       if (conversationHistory.length > 0) {
         const compactionResult = await compactConversationIfNeeded(
           conversationHistory,
@@ -388,53 +393,27 @@ export const continueConversation = async ({
             ...conversationHistory.map((m) => ({ ...m, isCompacted: true })),
             {
               id: crypto.randomUUID(),
-              role: "assistant" as const,
+              role: "user" as const,
+              content: compactionResult.compactedMessage,
               hideFromUI: true,
               timestamp: compactionTimestamp,
-              operationHistory: [
-                {
-                  type: AIOperationStatus.GeneratingResponse,
-                  timestamp: compactionTimestamp,
-                  content: compactionResult.compactedMessage,
-                },
-              ],
             },
           ]
           isCompacted = true
-        }
-      }
-      setStatus(AIOperationStatus.Processing)
-
-      const postProcess = (formatted: {
-        sql?: string | null
-        explanation: string
-        tokenUsage?: TokenUsage
-      }): GeneratedSQL => {
-        const sql = normalizeSql(formatted?.sql ?? "") || null
-        return {
-          sql,
-          explanation: formatted.explanation,
-          tokenUsage: formatted.tokenUsage,
+          setStatus(AIOperationStatus.Processing)
         }
       }
 
       const tools = grantSchemaAccess ? ALL_TOOLS : DEFAULT_TOOLS
 
-      const result = await provider.executeFlow<{
-        sql?: string | null
-        explanation: string
-        tokenUsage?: TokenUsage
-      }>({
+      const result = await provider.executeFlow({
         model: settings.model,
         config: {
           systemInstructions: getUnifiedPrompt(grantSchemaAccess),
           initialUserContent: userMessage,
-          conversationHistory: workingConversationHistory
-            .filter((m) => !m.isCompacted)
-            .map((m) => ({
-              role: m.role,
-              content: getMessageContent(m),
-            })),
+          conversationHistory: toApiMessages(
+            workingConversationHistory.filter((m) => !m.isCompacted),
+          ),
         },
         modelToolsClient,
         tools,
@@ -446,8 +425,11 @@ export const continueConversation = async ({
       if (isAiAssistantError(result)) {
         return result
       }
+      const sql = normalizeSql(result.sql ?? "") || null
       return {
-        ...postProcess(result),
+        sql,
+        explanation: result.explanation,
+        tokenUsage: result.tokenUsage,
         compactedConversationHistory: isCompacted
           ? workingConversationHistory
           : undefined,

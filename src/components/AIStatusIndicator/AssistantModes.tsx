@@ -239,7 +239,7 @@ export const buildOperationSections = (
 }
 
 export const formatDurationMs = (ms: number): string | null => {
-  if (ms < 0) return null
+  if (ms <= 0) return null
   if (ms < 1000) return `${ms}ms`
   return `${Math.round(ms / 1000)}s`
 }

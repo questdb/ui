@@ -17,7 +17,6 @@ import type {
   ConversationMessage,
   UserMessageDisplayType,
 } from "../../../providers/AIConversationProvider/types"
-import { getMessageContent } from "../../../providers/AIConversationProvider/messageContent"
 import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
 import {
@@ -46,61 +45,13 @@ import { AssistantMessageContent } from "./AssistantMessageContent"
 import type { QueryNotifications } from "../../../store/Query/types"
 import { NotificationType, RunningType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
-import {
-  AIOperationStatus,
-  useAIStatus,
-  type OperationHistory,
-} from "../../../providers/AIStatusProvider"
+import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
-
-export type TimelineOperations = {
-  type: "operations"
-  operations: OperationHistory
-  timestamp: number
-  endTimestamp?: number
-}
-export type TimelineContent = {
-  type: "content"
-  content: string
-  timestamp: number
-}
-export type TimelineItem = TimelineOperations | TimelineContent
-
-function buildInterleavedTimeline(
-  operationHistory: OperationHistory,
-): TimelineItem[] {
-  const merged: TimelineItem[] = []
-
-  for (const entry of operationHistory) {
-    if (entry.type === AIOperationStatus.GeneratingResponse) {
-      const last = merged[merged.length - 1]
-      if (last?.type === "operations" && !last.endTimestamp) {
-        last.endTimestamp = entry.timestamp
-      }
-      if (entry.content?.trim()) {
-        merged.push({
-          type: "content",
-          content: entry.content,
-          timestamp: entry.timestamp,
-        })
-      }
-    } else {
-      const last = merged[merged.length - 1]
-      if (last?.type === "operations") {
-        last.operations.push(entry)
-      } else {
-        merged.push({
-          type: "operations",
-          operations: [entry],
-          timestamp: entry.timestamp,
-        })
-      }
-    }
-  }
-
-  return merged
-}
+import {
+  getScrollLength,
+  projectConversationTurns,
+} from "../../../utils/ai/turnView"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -293,7 +244,7 @@ const MessageContent = styled(Text)`
 const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.8rem;
   width: 100%;
   align-self: flex-start;
   text-align: left;
@@ -508,7 +459,7 @@ type ChatMessagesProps = {
   ) => Promise<void>
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
-  onRetry?: (userMessageId: string, assistantMessageId: string) => void
+  onRetry?: (userMessageId: string) => void
   // Query execution status
   running?: RunningType
   aiSuggestionRequest?: { query: string; startOffset: number } | null
@@ -686,38 +637,19 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
   }, [latestDiffIndex])
 
-  const formatTokenCount = (count: number): string => {
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}K`
-    }
-    return count.toString()
-  }
-
-  const visibleMessagesCount = useMemo(
-    () =>
-      messages.reduce(
-        (acc, msg) =>
-          acc +
-          (msg.hideFromUI
-            ? 0
-            : (msg.operationHistory?.length ?? 0) +
-              (msg.error || getMessageContent(msg) ? 1 : 0)),
-        0,
-      ),
+  const { visibleEntries, lastAssistantAnchorIndex } = useMemo(
+    () => projectConversationTurns(messages),
     [messages],
   )
 
-  const operationContentLength = useMemo(() => {
-    if (!isStreaming) return 0
-    const lastMessage = messages[messages.length - 1]
-    const ops = lastMessage?.operationHistory
-    if (!ops || ops.length === 0) return 0
-    return ops.reduce((sum, op) => sum + (op.content?.length ?? 0), 0)
-  }, [messages, isStreaming])
+  const scrollLength = useMemo(
+    () => getScrollLength(isStreaming, messages),
+    [isStreaming, messages],
+  )
 
   useEffect(() => {
     handleScrollNeeded()
-  }, [visibleMessagesCount, operationContentLength])
+  }, [scrollLength])
 
   useLayoutEffect(() => {
     if (!scrollToMessageId || isLoadingMessages) return
@@ -739,29 +671,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
   }, [])
 
-  const visibleMessages: Array<{
-    message: ConversationMessage
-    originalIndex: number
-  }> = []
-  messages.forEach((msg, originalIdx) => {
-    if (!msg.hideFromUI) {
-      visibleMessages.push({ message: msg, originalIndex: originalIdx })
-    }
-  })
-
+  const lastVisibleEntry = visibleEntries[visibleEntries.length - 1]
   const lastVisibleMessageIndex =
-    visibleMessages.length > 0
-      ? visibleMessages[visibleMessages.length - 1].originalIndex
+    visibleEntries.length > 0
+      ? lastVisibleEntry.type === "user"
+        ? lastVisibleEntry.index
+        : lastVisibleEntry.anchorIndex
       : -1
 
-  const lastAssistantMessageIndex = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant" && !messages[i].hideFromUI) {
-        return i
-      }
-    }
-    return -1
-  }, [messages])
+  const lastAssistantMessageIndex = lastAssistantAnchorIndex
 
   const hasVisibleUserMessageAfter = (index: number): boolean => {
     for (let i = index + 1; i < messages.length; i++) {
@@ -778,14 +696,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       $scrolled={scrolled}
       data-hook="chat-messages-container"
     >
-      {visibleMessages.map(({ message, originalIndex }) => {
-        const key = `${message.id}`
-        const isCurrentQuery =
-          normalizeQueryText(message.sql || "") ===
-          normalizeQueryText(editorSQL || "")
-        const severity = message.displayHealthIssueData?.severity
+      {visibleEntries.map((entry) => {
+        if (entry.type === "user") {
+          const { message } = entry
+          const key = `${message.id}`
+          const severity = message.displayHealthIssueData?.severity
+          const isCurrentQuery =
+            normalizeQueryText(message.sql || "") ===
+            normalizeQueryText(editorSQL || "")
 
-        if (message.role === "user") {
           // Check if this is a special request type with inline SQL display
           const displayType = message.displayType
           const sql = message.sql
@@ -902,7 +821,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           // Special handling for ask_request: show user's question above SQL
           if (displayType === "ask_request" && sql) {
             const userQuestion =
-              message.displayUserMessage || getMessageContent(message)
+              message.displayUserMessage || message.content || ""
 
             return (
               <UserRequestBox
@@ -942,334 +861,303 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 if (el) messageRefs.current.set(message.id, el)
               }}
             >
-              <MessageContent>{getMessageContent(message)}</MessageContent>
+              <MessageContent>{message.content}</MessageContent>
             </MessageBubble>
           )
-        } else {
-          // Assistant message - show as ExplanationBox
-          const tokenUsage = message.tokenUsage as
-            | { inputTokens: number; outputTokens: number }
-            | undefined
-          let tokenDisplay: React.ReactNode | null = null
+        }
+
+        const {
+          anchorMessage: message,
+          anchorIndex: originalIndex,
+          turnMessages,
+        } = entry
+        const key = `${message.id}`
+        const isCurrentQuery =
+          normalizeQueryText(message.sql || "") ===
+          normalizeQueryText(editorSQL || "")
+
+        // Assistant message - show as ExplanationBox (bundle entire turn under anchor)
+        const hasSQLChange = !!message.sql
+        const isSQLUnchanged =
+          hasSQLChange &&
+          message.previousSQL !== undefined &&
+          normalizeQueryText(message.sql || "") ===
+            normalizeQueryText(message.previousSQL || "")
+        const isExpanded = expandedDiffs.has(originalIndex)
+
+        // Read status from message, compute isRejectedWithFollowUp from message positions
+        const isAccepted = message.isAccepted === true
+        const isRejected = message.isRejected === true
+        // A message is "followed up" if it has SQL, isn't accepted/rejected, and has a visible user message after it
+        const isRejectedWithFollowUp =
+          hasSQLChange &&
+          !isAccepted &&
+          !isRejected &&
+          hasVisibleUserMessageAfter(originalIndex)
+
+        const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
+        const isMessageStreaming = isStreaming && isLastVisibleMessage
+        const showButtons =
+          hasSQLChange &&
+          !isSQLUnchanged &&
+          !isAccepted &&
+          !isRejected &&
+          !isRejectedWithFollowUp &&
+          isLastVisibleMessage
+
+        // Compute query run status for this message's SQL
+        let queryRunStatus: QueryRunStatus = "neutral"
+        if (message.sql) {
+          const normalizedMessageSQL = normalizeQueryText(message.sql)
+          // Check if this query is currently running
           if (
-            tokenUsage &&
-            typeof tokenUsage.inputTokens === "number" &&
-            typeof tokenUsage.outputTokens === "number"
+            running === RunningType.AI_SUGGESTION &&
+            aiSuggestionRequest &&
+            normalizeQueryText(aiSuggestionRequest.query) ===
+              normalizedMessageSQL
           ) {
-            tokenDisplay = (
-              <>
-                <span style={{ fontWeight: 600 }}>
-                  {formatTokenCount(tokenUsage.inputTokens)}
-                </span>{" "}
-                input /{" "}
-                <span style={{ fontWeight: 600 }}>
-                  {formatTokenCount(tokenUsage.outputTokens)}
-                </span>{" "}
-                output tokens
-              </>
-            )
+            queryRunStatus = "loading"
           }
-
-          const hasSQLChange = !!message.sql
-          const isSQLUnchanged =
-            hasSQLChange &&
-            message.previousSQL !== undefined &&
-            normalizeQueryText(message.sql || "") ===
-              normalizeQueryText(message.previousSQL || "")
-          const isExpanded = expandedDiffs.has(originalIndex)
-
-          // Read status from message, compute isRejectedWithFollowUp from message positions
-          const isAccepted = message.isAccepted === true
-          const isRejected = message.isRejected === true
-          // A message is "followed up" if it has SQL, isn't accepted/rejected, and has a visible user message after it
-          const isRejectedWithFollowUp =
-            hasSQLChange &&
-            !isAccepted &&
-            !isRejected &&
-            hasVisibleUserMessageAfter(originalIndex)
-
-          const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
-          const isMessageStreaming = isStreaming && isLastVisibleMessage
-          const showButtons =
-            hasSQLChange &&
-            !isSQLUnchanged &&
-            !isAccepted &&
-            !isRejected &&
-            !isRejectedWithFollowUp &&
-            isLastVisibleMessage
-
-          // Compute query run status for this message's SQL
-          let queryRunStatus: QueryRunStatus = "neutral"
-          if (message.sql) {
-            const normalizedMessageSQL = normalizeQueryText(message.sql)
-            // Check if this query is currently running
-            if (
-              running === RunningType.AI_SUGGESTION &&
-              aiSuggestionRequest &&
-              normalizeQueryText(aiSuggestionRequest.query) ===
-                normalizedMessageSQL
-            ) {
-              queryRunStatus = "loading"
-            }
-            // Check if we have a notification for this specific query in queryNotifications
-            // The query key is created from the normalized SQL and the conversation's queryStartOffset
-            else if (queryNotifications) {
-              const queryKey = createQueryKey(
-                normalizedMessageSQL,
-                queryStartOffset,
-              )
-              const notification = queryNotifications[queryKey]?.latest
-              if (notification) {
-                if (notification.type === NotificationType.ERROR) {
-                  queryRunStatus = "error"
-                } else if (
-                  notification.type === NotificationType.SUCCESS ||
-                  notification.type === NotificationType.INFO
-                ) {
-                  queryRunStatus = "success"
-                }
+          // Check if we have a notification for this specific query in queryNotifications
+          // The query key is created from the normalized SQL and the conversation's queryStartOffset
+          else if (queryNotifications) {
+            const queryKey = createQueryKey(
+              normalizedMessageSQL,
+              queryStartOffset,
+            )
+            const notification = queryNotifications[queryKey]?.latest
+            if (notification) {
+              if (notification.type === NotificationType.ERROR) {
+                queryRunStatus = "error"
+              } else if (
+                notification.type === NotificationType.SUCCESS ||
+                notification.type === NotificationType.INFO
+              ) {
+                queryRunStatus = "success"
               }
             }
           }
+        }
 
-          const previousSQLForDiff = trimSemicolonForDisplay(
-            message.previousSQL,
-          )
-          const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
+        const previousSQLForDiff = trimSemicolonForDisplay(message.previousSQL)
+        const currentSQLForDiff = trimSemicolonForDisplay(message.sql)
 
-          const operationHistory = message.operationHistory?.filter(
-            (op) => op.type !== AIOperationStatus.Aborted,
-          )
-          const hasError = !!message.error
-          const showRetry =
-            hasError &&
-            !isStreaming &&
-            !isOperationInProgress &&
-            isLastVisibleMessage
+        const hasError = !!message.error
+        const showRetry =
+          hasError &&
+          !isStreaming &&
+          !isOperationInProgress &&
+          isLastVisibleMessage
 
-          const isLiveOperation =
-            originalIndex === lastAssistantMessageIndex &&
-            isOperationInProgress === true
+        const isLiveOperation =
+          originalIndex === lastAssistantMessageIndex &&
+          isOperationInProgress === true
 
-          const hasOperationHistory =
-            !!operationHistory && operationHistory.length > 0
+        const hasOperationHistory =
+          !!message.operationHistory && message.operationHistory.length > 0
 
-          const hasGeneratingResponseContent = operationHistory?.some(
-            (op) =>
-              op.type === AIOperationStatus.GeneratingResponse &&
-              op.content?.trim(),
-          )
-          const timeline =
-            hasGeneratingResponseContent && operationHistory?.length
-              ? buildInterleavedTimeline(operationHistory)
-              : null
-
-          return (
-            <ExplanationBox
-              key={key}
-              $hasOperationHistory={hasOperationHistory}
-              data-hook="chat-message-assistant"
-              ref={(el) => {
-                if (el) messageRefs.current.set(message.id, el)
-              }}
-            >
-              <AssistantMessageContent
-                message={message}
-                operationHistory={operationHistory}
-                hasOperationHistory={hasOperationHistory}
-                timeline={timeline}
-                status={status}
-                isLiveOperation={isLiveOperation}
-                isMessageStreaming={isMessageStreaming}
-                tokenDisplay={tokenDisplay}
-                onScrollNeeded={handleScrollNeeded}
-                onOpenInEditor={onOpenInEditor}
-              />
-              {hasSQLChange && !isMessageStreaming && (
-                <DiffContainer data-hook="inline-diff-container">
-                  <DiffHeader $isExpanded={isExpanded}>
-                    <DiffHeaderLeft>
-                      <CodeIcon size={22} color="#BDBDBD" />
-                      <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
-                    </DiffHeaderLeft>
-                    {isSQLUnchanged && (
-                      <DiffHeaderStatus data-hook="diff-status-unchanged">
-                        <StatusIcon>
-                          <CheckmarkOutline size="14px" />
-                        </StatusIcon>
-                        Already accepted
-                      </DiffHeaderStatus>
-                    )}
-                    {!isSQLUnchanged &&
-                      (isAccepted || isRejected || isRejectedWithFollowUp) && (
-                        <DiffHeaderStatus
+        return (
+          <ExplanationBox
+            key={key}
+            $hasOperationHistory={hasOperationHistory}
+            data-hook="chat-message-assistant"
+            ref={(el) => {
+              if (el) messageRefs.current.set(message.id, el)
+            }}
+          >
+            <AssistantMessageContent
+              turnMessages={turnMessages}
+              anchorMessage={message}
+              status={status}
+              isLiveOperation={isLiveOperation}
+              isMessageStreaming={isMessageStreaming}
+              onScrollNeeded={handleScrollNeeded}
+              onOpenInEditor={onOpenInEditor}
+            />
+            {hasSQLChange && !isMessageStreaming && (
+              <DiffContainer data-hook="inline-diff-container">
+                <DiffHeader $isExpanded={isExpanded}>
+                  <DiffHeaderLeft>
+                    <CodeIcon size={22} color="#BDBDBD" />
+                    <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
+                  </DiffHeaderLeft>
+                  {isSQLUnchanged && (
+                    <DiffHeaderStatus data-hook="diff-status-unchanged">
+                      <StatusIcon>
+                        <CheckmarkOutline size="14px" />
+                      </StatusIcon>
+                      Already accepted
+                    </DiffHeaderStatus>
+                  )}
+                  {!isSQLUnchanged &&
+                    (isAccepted || isRejected || isRejectedWithFollowUp) && (
+                      <DiffHeaderStatus
+                        $isAccepted={isAccepted}
+                        $isRejected={isRejected}
+                        $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                        data-hook={
+                          isRejected
+                            ? "diff-status-rejected"
+                            : isRejectedWithFollowUp
+                              ? "diff-status-followed-up"
+                              : "diff-status-accepted"
+                        }
+                      >
+                        <StatusIcon
                           $isAccepted={isAccepted}
                           $isRejected={isRejected}
                           $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                          data-hook={
-                            isRejected
-                              ? "diff-status-rejected"
-                              : isRejectedWithFollowUp
-                                ? "diff-status-followed-up"
-                                : "diff-status-accepted"
-                          }
                         >
-                          <StatusIcon
-                            $isAccepted={isAccepted}
-                            $isRejected={isRejected}
-                            $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                          >
-                            {isRejected ? (
-                              <CloseOutline size="14px" />
-                            ) : isRejectedWithFollowUp ? (
-                              <ChatDotsIcon size="14px" />
-                            ) : (
-                              <CheckmarkOutline size="14px" />
-                            )}
-                          </StatusIcon>
-                          {isRejected
-                            ? "Rejected"
-                            : isRejectedWithFollowUp
-                              ? "Followed up"
-                              : "Accepted"}
-                        </DiffHeaderStatus>
-                      )}
-                    <DiffHeaderRight>
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (message.sql && onRunQuery) {
-                            onRunQuery(message.sql)
-                          }
-                        }}
-                        title="Run this query"
-                        data-hook="message-action-run-sql"
-                      >
-                        {getQueryStatusIcon(queryRunStatus)}
-                      </IconButton>
-                      {!showButtons &&
-                        onApplyToEditor &&
-                        !(originalIndex === latestDiffIndex && isAccepted) &&
-                        !isCurrentQuery && (
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (
-                                message.id &&
-                                message.sql &&
-                                !isOperationInProgress
-                              ) {
-                                void trackEvent(
-                                  ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
-                                )
-                                onApplyToEditor(message.id, message.sql)
-                              }
-                            }}
-                            title="Apply to editor"
-                            disabled={isOperationInProgress}
-                            style={{
-                              opacity: isOperationInProgress ? 0.5 : 1,
-                              cursor: isOperationInProgress
-                                ? "not-allowed"
-                                : "pointer",
-                            }}
-                            data-hook="message-action-apply"
-                          >
-                            <KeyReturnIcon size={22} color="#BDBDBD" />
-                          </IconButton>
-                        )}
-                      <ExpandButton
-                        title="Expand diff view"
-                        data-hook="diff-expand-button"
-                        onClick={() => {
-                          setExpandedDiffs((prev) => {
-                            const next = new Set(prev)
-                            if (next.has(originalIndex)) {
-                              next.delete(originalIndex)
-                            } else {
-                              next.add(originalIndex)
-                            }
-                            return next
-                          })
-                        }}
-                      >
-                        <ExpandUpDownIcon />
-                      </ExpandButton>
-                    </DiffHeaderRight>
-                  </DiffHeader>
-                  {isExpanded && (
-                    <>
-                      <DiffEditorWrapper>
-                        <LiteEditor
-                          diffEditor
-                          original={previousSQLForDiff}
-                          modified={currentSQLForDiff}
-                          maxHeight={300}
-                          onOpenInEditor={() =>
-                            onOpenInEditor({
-                              type: "diff",
-                              original: previousSQLForDiff ?? "",
-                              modified: currentSQLForDiff ?? "",
-                            })
-                          }
-                          handleScrollNeeded={handleScrollNeeded}
-                        />
-                      </DiffEditorWrapper>
-                      {showButtons && (
-                        <ButtonBar align="center" justifyContent="center">
-                          {onRejectChange && message.id && (
-                            <RejectButton
-                              onClick={() => onRejectChange(message.id)}
-                              data-hook="message-action-reject"
-                            >
-                              Reject
-                            </RejectButton>
+                          {isRejected ? (
+                            <CloseOutline size="14px" />
+                          ) : isRejectedWithFollowUp ? (
+                            <ChatDotsIcon size="14px" />
+                          ) : (
+                            <CheckmarkOutline size="14px" />
                           )}
-                          {onAcceptChange && message.id && (
-                            <AcceptButton
-                              onClick={() => onAcceptChange(message.id)}
-                              data-hook="message-action-accept"
-                            >
-                              Accept
-                            </AcceptButton>
-                          )}
-                        </ButtonBar>
-                      )}
-                    </>
-                  )}
-                </DiffContainer>
-              )}
-              {hasError && (
-                <ErrorContainer data-hook="chat-message-error">
-                  <CloseCircle
-                    size={16}
-                    color={theme.color.red}
-                    style={{ flexShrink: 0 }}
-                  />
-                  {message.error}
-                  {showRetry && onRetry && (
-                    <RetryButton
-                      size="sm"
-                      skin="secondary"
-                      prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
-                      onClick={() => {
-                        const userMessageIndex = messages
-                          .slice(0, originalIndex)
-                          .findLastIndex((m) => m.role === "user")
-                        if (userMessageIndex >= 0) {
-                          onRetry(messages[userMessageIndex].id, message.id)
+                        </StatusIcon>
+                        {isRejected
+                          ? "Rejected"
+                          : isRejectedWithFollowUp
+                            ? "Followed up"
+                            : "Accepted"}
+                      </DiffHeaderStatus>
+                    )}
+                  <DiffHeaderRight>
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (message.sql && onRunQuery) {
+                          onRunQuery(message.sql)
                         }
                       }}
-                      data-hook="retry-button"
+                      title="Run this query"
+                      data-hook="message-action-run-sql"
                     >
-                      Retry
-                    </RetryButton>
-                  )}
-                </ErrorContainer>
-              )}
-            </ExplanationBox>
-          )
-        }
+                      {getQueryStatusIcon(queryRunStatus)}
+                    </IconButton>
+                    {!showButtons &&
+                      onApplyToEditor &&
+                      !(originalIndex === latestDiffIndex && isAccepted) &&
+                      !isCurrentQuery && (
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (
+                              message.id &&
+                              message.sql &&
+                              !isOperationInProgress
+                            ) {
+                              void trackEvent(
+                                ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
+                              )
+                              onApplyToEditor(message.id, message.sql)
+                            }
+                          }}
+                          title="Apply to editor"
+                          disabled={isOperationInProgress}
+                          style={{
+                            opacity: isOperationInProgress ? 0.5 : 1,
+                            cursor: isOperationInProgress
+                              ? "not-allowed"
+                              : "pointer",
+                          }}
+                          data-hook="message-action-apply"
+                        >
+                          <KeyReturnIcon size={22} color="#BDBDBD" />
+                        </IconButton>
+                      )}
+                    <ExpandButton
+                      title="Expand diff view"
+                      data-hook="diff-expand-button"
+                      onClick={() => {
+                        setExpandedDiffs((prev) => {
+                          const next = new Set(prev)
+                          if (next.has(originalIndex)) {
+                            next.delete(originalIndex)
+                          } else {
+                            next.add(originalIndex)
+                          }
+                          return next
+                        })
+                      }}
+                    >
+                      <ExpandUpDownIcon />
+                    </ExpandButton>
+                  </DiffHeaderRight>
+                </DiffHeader>
+                {isExpanded && (
+                  <>
+                    <DiffEditorWrapper>
+                      <LiteEditor
+                        diffEditor
+                        original={previousSQLForDiff}
+                        modified={currentSQLForDiff}
+                        maxHeight={300}
+                        onOpenInEditor={() =>
+                          onOpenInEditor({
+                            type: "diff",
+                            original: previousSQLForDiff ?? "",
+                            modified: currentSQLForDiff ?? "",
+                          })
+                        }
+                        handleScrollNeeded={handleScrollNeeded}
+                      />
+                    </DiffEditorWrapper>
+                    {showButtons && (
+                      <ButtonBar align="center" justifyContent="center">
+                        {onRejectChange && message.id && (
+                          <RejectButton
+                            onClick={() => onRejectChange(message.id)}
+                            data-hook="message-action-reject"
+                          >
+                            Reject
+                          </RejectButton>
+                        )}
+                        {onAcceptChange && message.id && (
+                          <AcceptButton
+                            onClick={() => onAcceptChange(message.id)}
+                            data-hook="message-action-accept"
+                          >
+                            Accept
+                          </AcceptButton>
+                        )}
+                      </ButtonBar>
+                    )}
+                  </>
+                )}
+              </DiffContainer>
+            )}
+            {hasError && (
+              <ErrorContainer data-hook="chat-message-error">
+                <CloseCircle
+                  size={16}
+                  color={theme.color.red}
+                  style={{ flexShrink: 0 }}
+                />
+                {message.error}
+                {showRetry && onRetry && (
+                  <RetryButton
+                    size="sm"
+                    skin="secondary"
+                    prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
+                    onClick={() => {
+                      const userMessageIndex = messages
+                        .slice(0, originalIndex)
+                        .findLastIndex((m) => m.role === "user")
+                      if (userMessageIndex >= 0) {
+                        onRetry(messages[userMessageIndex].id)
+                      }
+                    }}
+                    data-hook="retry-button"
+                  >
+                    Retry
+                  </RetryButton>
+                )}
+              </ErrorContainer>
+            )}
+          </ExplanationBox>
+        )
       })}
       <MessagesEnd ref={messagesEndRef} data-hook="messages-end" />
     </MessagesContainer>

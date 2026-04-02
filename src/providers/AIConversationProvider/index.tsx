@@ -33,6 +33,7 @@ import { normalizeSql } from "../../utils/aiAssistant"
 import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { projectConversationTurns } from "../../utils/ai/turnView"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -95,6 +96,7 @@ type AIConversationContextType = {
     message: Omit<ConversationMessage, "id"> & { id?: string },
     messageIdsToRemove?: string[],
   ) => void
+  removeMessages: (messageIdsToRemove: string[]) => void
   updateMessage: (
     conversationId: ConversationId,
     messageId: string,
@@ -220,13 +222,26 @@ export const AIConversationProvider: React.FC<{
       lastAssistantMessage?: ConversationMessage
     }> => {
       const messages = await aiConversationStore.getMessages(conversationId)
+      const { visibleEntries, previousVisibleUserByAnchorIndex } =
+        projectConversationTurns(messages)
+      const lastEntry = visibleEntries.at(-1)
+      const lastAssistantMessage =
+        lastEntry?.type === "assistantTurn"
+          ? lastEntry.anchorMessage
+          : undefined
+
+      let lastUserMessage: ConversationMessage | undefined
+      if (lastEntry?.type === "assistantTurn") {
+        lastUserMessage = previousVisibleUserByAnchorIndex.get(
+          lastEntry.anchorIndex,
+        )
+      } else if (lastEntry?.type === "user") {
+        lastUserMessage = lastEntry.message
+      }
+
       return {
-        lastUserMessage: messages
-          .filter((m) => m.role === "user" && !m.hideFromUI)
-          .at(-1),
-        lastAssistantMessage: messages
-          .filter((m) => m.role === "assistant" && !m.hideFromUI)
-          .at(-1),
+        lastUserMessage,
+        lastAssistantMessage,
       }
     },
     [],
@@ -398,6 +413,13 @@ export const AIConversationProvider: React.FC<{
     },
     [],
   )
+
+  const removeMessages = useCallback((messageIdsToRemove: string[]) => {
+    if (messageIdsToRemove.length === 0) return
+    setActiveConversationMessages((prev) =>
+      prev.filter((message) => !messageIdsToRemove.includes(message.id)),
+    )
+  }, [])
 
   const updateMessage = useCallback(
     (
@@ -998,6 +1020,7 @@ export const AIConversationProvider: React.FC<{
         closeHistoryView,
         deleteConversation,
         addMessage,
+        removeMessages,
         updateMessage,
         replaceConversationMessages,
         updateConversationName,

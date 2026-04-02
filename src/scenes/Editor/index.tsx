@@ -45,12 +45,12 @@ import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
 import { color, platform } from "../../utils"
-import { getLastUnactionedDiff } from "../../providers/AIConversationProvider/utils"
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { getLastTurnWithUnactionedDiff } from "../../utils/ai/turnView"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -225,7 +225,9 @@ const Editor = ({
       return null
     }
 
-    const lastUnactionedDiff = getLastUnactionedDiff(activeConversationMessages)
+    const lastUnactionedDiff = getLastTurnWithUnactionedDiff(
+      activeConversationMessages,
+    )
     if (!lastUnactionedDiff) {
       return null
     }

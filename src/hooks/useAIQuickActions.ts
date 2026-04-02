@@ -59,6 +59,7 @@ export const useAIQuickActions = () => {
     createConversation,
     openChatWindow,
     addMessage,
+    removeMessages,
     updateMessage,
     updateConversationName,
     persistMessages,
@@ -145,6 +146,7 @@ export const useAIQuickActions = () => {
         }),
         {
           addMessage,
+          removeMessages,
           updateMessage,
           setStatus,
           setIsStreaming,
@@ -186,6 +188,7 @@ export const useAIQuickActions = () => {
       }),
       {
         addMessage,
+        removeMessages,
         updateMessage,
         setStatus,
         setIsStreaming,
@@ -269,6 +272,7 @@ export const useAIQuickActions = () => {
         }),
         {
           addMessage,
+          removeMessages,
           updateMessage,
           setStatus,
           setIsStreaming,
@@ -316,6 +320,7 @@ export const useAIQuickActions = () => {
       }),
       {
         addMessage,
+        removeMessages,
         updateMessage,
         setStatus,
         setIsStreaming,

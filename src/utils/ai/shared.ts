@@ -33,6 +33,9 @@ export class StreamingError extends Error {
   }
 }
 
+export const CRITICAL_TOKEN_USAGE_MESSAGE =
+  "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**"
+
 export const safeJsonParse = <T>(text: string): T | object => {
   try {
     return JSON.parse(text) as T
@@ -43,6 +46,22 @@ export const safeJsonParse = <T>(text: string): T | object => {
       return {}
     }
   }
+}
+
+// For custom providers naive token estimation
+export function getMessageTextLength(m: {
+  content?: string | null
+  reasoning?: { content: string } | null
+  tool_calls?: { name: string; arguments: string }[]
+}): number {
+  let len = m.content?.length ?? 0
+  if (m.reasoning?.content) len += m.reasoning.content.length
+  if (m.tool_calls) {
+    for (const tc of m.tool_calls) {
+      len += tc.name.length + tc.arguments.length
+    }
+  }
+  return len
 }
 
 export type ToolExecutionContext = {

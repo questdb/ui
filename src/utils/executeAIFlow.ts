@@ -12,6 +12,7 @@ import type {
   StatusArgs,
 } from "../providers/AIStatusProvider"
 import { AIOperationStatus } from "../providers/AIStatusProvider"
+import type { ToolCall } from "./ai"
 import {
   continueConversation,
   createModelToolsClient,
@@ -107,6 +108,7 @@ export type AIFlowCallbacks = {
   addMessage: (
     message: Omit<ConversationMessage, "id"> & { id?: string },
   ) => void
+  removeMessages?: (messageIdsToRemove: string[]) => void
   updateMessage: (
     conversationId: string,
     messageId: string,
@@ -137,6 +139,47 @@ export type AIFlowResult = {
   cachedMessageId?: string
   error?: string
   sql?: string
+}
+
+function cleanupOrphanedToolCallsForTurn(params: {
+  conversationId: ConversationId
+  callbacks: Pick<AIFlowCallbacks, "updateMessage" | "removeMessages">
+  emittedToolCallsByMessage: Map<string, Map<string, ToolCall>>
+  resolvedToolCallIds: Set<string>
+  toolResultMessages: Array<{ messageId: string; toolCallId: string }>
+}) {
+  const {
+    conversationId,
+    callbacks,
+    emittedToolCallsByMessage,
+    resolvedToolCallIds,
+    toolResultMessages,
+  } = params
+
+  const emittedToolCallIds = new Set<string>()
+  for (const [messageId, callsById] of emittedToolCallsByMessage.entries()) {
+    const allCalls = [...callsById.values()]
+    for (const call of allCalls) emittedToolCallIds.add(call.id)
+    const resolvedCalls = allCalls.filter((call) =>
+      resolvedToolCallIds.has(call.id),
+    )
+
+    if (resolvedCalls.length !== allCalls.length) {
+      callbacks.updateMessage(conversationId, messageId, {
+        tool_calls: resolvedCalls.length > 0 ? resolvedCalls : undefined,
+      })
+    }
+  }
+
+  if (!callbacks.removeMessages) return
+
+  const orphanedToolResultMessageIds = toolResultMessages
+    .filter((result) => !emittedToolCallIds.has(result.toolCallId))
+    .map((result) => result.messageId)
+
+  if (orphanedToolResultMessageIds.length > 0) {
+    callbacks.removeMessages(orphanedToolResultMessageIds)
+  }
 }
 
 function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
@@ -221,7 +264,8 @@ type ProcessResultConfig = {
   type: AIFlowConfig["type"]
   response: GeneratedSQL | AiAssistantAPIError
   conversationId: string
-  assistantMessageId: string
+  anchorMessageId: string
+  streamingAssistantMessageId: string
   callbacks: AIFlowCallbacks
   compactedHistory?: ConversationMessage[]
 }
@@ -231,14 +275,15 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     type,
     response,
     conversationId,
-    assistantMessageId,
+    anchorMessageId,
+    streamingAssistantMessageId,
     callbacks,
     compactedHistory,
   } = config
 
   if (isAiAssistantError(response)) {
     const errorMessage = formatErrorMessage(response)
-    callbacks.updateMessage(conversationId, assistantMessageId, {
+    callbacks.updateMessage(conversationId, anchorMessageId, {
       error: errorMessage,
     })
     return { success: false, error: errorMessage }
@@ -248,33 +293,30 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     callbacks.replaceConversationMessages(compactedHistory)
   }
 
-  return processSQLResult(
-    response,
-    conversationId,
-    assistantMessageId,
-    callbacks,
-    type,
-  )
-}
+  const hasSQLInResult = response.sql && response.sql.trim() !== ""
 
-function processSQLResult(
-  result: GeneratedSQL,
-  conversationId: string,
-  assistantMessageId: string,
-  callbacks: AIFlowCallbacks,
-  type: AIFlowConfig["type"],
-): AIFlowResult {
-  const hasSQLInResult = result.sql && result.sql.trim() !== ""
-
-  if (type === "fix" && !hasSQLInResult && result.explanation) {
-    callbacks.updateMessage(conversationId, assistantMessageId, {
-      tokenUsage: result.tokenUsage,
+  if (streamingAssistantMessageId !== anchorMessageId) {
+    // Multi-message turn (tool calls): anchor holds metadata, last assistant holds content
+    callbacks.updateMessage(conversationId, anchorMessageId, {
+      ...(hasSQLInResult && { sql: response.sql as string }),
+      tokenUsage: response.tokenUsage,
     })
-    return { success: true }
+    if (response.explanation) {
+      callbacks.updateMessage(conversationId, streamingAssistantMessageId, {
+        content: response.explanation,
+      })
+    }
+  } else {
+    // Single assistant message — anchor IS the current message
+    callbacks.updateMessage(conversationId, anchorMessageId, {
+      ...(response.explanation && { content: response.explanation }),
+      ...(hasSQLInResult && { sql: response.sql as string }),
+      tokenUsage: response.tokenUsage,
+    })
   }
 
-  if (type === "fix" && !hasSQLInResult && !result.explanation) {
-    callbacks.updateMessage(conversationId, assistantMessageId, {
+  if (type === "fix" && !hasSQLInResult && !response.explanation) {
+    callbacks.updateMessage(conversationId, anchorMessageId, {
       error: "No fixed query or explanation received from AI Assistant",
     })
     return {
@@ -283,14 +325,9 @@ function processSQLResult(
     }
   }
 
-  callbacks.updateMessage(conversationId, assistantMessageId, {
-    ...(hasSQLInResult && { sql: result.sql as string }),
-    tokenUsage: result.tokenUsage,
-  })
-
   return {
     success: true,
-    sql: hasSQLInResult ? result.sql! : undefined,
+    sql: hasSQLInResult ? response.sql! : undefined,
   }
 }
 
@@ -352,7 +389,9 @@ export async function executeAIFlow(
       await callbacks.getLastRoundMessages(conversationId)
 
     if (
-      lastUserMessage?.content === userMsg.content &&
+      lastUserMessage &&
+      typeof lastUserMessage.content === "string" &&
+      lastUserMessage.content === userMsg.content &&
       lastAssistantMessage &&
       !lastAssistantMessage.error
     ) {
@@ -381,16 +420,17 @@ export async function executeAIFlow(
     }),
   })
 
-  const assistantMessageId = crypto.randomUUID()
+  // Create turn anchor — first assistant message of this turn
+  const anchorMessageId = crypto.randomUUID()
   const modelLabel =
     getAllModelOptions(config.aiAssistantSettings).find(
       (m) => m.value === settings.model,
     )?.label ?? settings.model
   callbacks.addMessage({
-    id: assistantMessageId,
+    id: anchorMessageId,
     role: "assistant",
+    content: null,
     timestamp: Date.now(),
-    operationHistory: [],
     model: modelLabel,
   })
 
@@ -400,7 +440,7 @@ export async function executeAIFlow(
 
   const provider = providerForModel(settings.model, config.aiAssistantSettings)
   if (!provider) {
-    callbacks.updateMessage(conversationId, assistantMessageId, {
+    callbacks.updateMessage(conversationId, anchorMessageId, {
       error: `No provider found for model: ${settings.model}`,
     })
     return {
@@ -424,20 +464,80 @@ export async function executeAIFlow(
 
   const handleStatusUpdate = (history: OperationHistory) => {
     latestOperationHistory = history
-    callbacks.updateMessage(conversationId, assistantMessageId, {
+    callbacks.updateMessage(conversationId, anchorMessageId, {
       operationHistory: [...history],
     })
   }
 
   const setStatusWithHistory = (
-    status: AIOperationStatus | null,
+    nextStatus: AIOperationStatus | null,
     args?: StatusArgs,
   ) => {
-    callbacks.setStatus(
-      status,
-      { ...(args ?? {}), conversationId },
-      handleStatusUpdate,
-    )
+    callbacks.setStatus(nextStatus, args, handleStatusUpdate)
+  }
+
+  // Streaming state — mutable accumulators, flushed to React state via RAF
+  let streamingAssistantMessageId = anchorMessageId
+  let accumulatedReasoning = ""
+  let reasoningTimestamp = 0
+  let accumulatedToolCalls: ToolCall[] = []
+  let accumulatedText = ""
+  let contentTimestamp = 0
+
+  let rafId = 0
+  let hasPendingStreamingUpdate = false
+  const emittedToolCallsByMessage = new Map<string, Map<string, ToolCall>>()
+  const resolvedToolCallIds = new Set<string>()
+  const toolResultMessages: Array<{ messageId: string; toolCallId: string }> =
+    []
+
+  const flushStreamingUpdate = () => {
+    rafId = 0
+    if (hasPendingStreamingUpdate) {
+      hasPendingStreamingUpdate = false
+      const updates: Partial<ConversationMessage> = {}
+      if (accumulatedReasoning)
+        updates.reasoning = {
+          timestamp: reasoningTimestamp,
+          content: accumulatedReasoning,
+        }
+      if (accumulatedToolCalls.length > 0)
+        updates.tool_calls = [...accumulatedToolCalls]
+      if (accumulatedText) {
+        updates.content = accumulatedText
+        if (contentTimestamp) updates.contentTimestamp = contentTimestamp
+      }
+      callbacks.updateMessage(
+        conversationId,
+        streamingAssistantMessageId,
+        updates,
+      )
+    }
+  }
+
+  const scheduleStreamingUpdate = () => {
+    hasPendingStreamingUpdate = true
+    if (!rafId) {
+      rafId = requestAnimationFrame(flushStreamingUpdate)
+    }
+  }
+
+  let thinkingStatusEmitted = false
+  let generatingResponseEmitted = false
+
+  const setStatusWithHistoryAndResetFlags = (
+    nextStatus: AIOperationStatus | null,
+    args?: StatusArgs,
+  ) => {
+    if (nextStatus !== null) {
+      if (nextStatus !== AIOperationStatus.Thinking) {
+        thinkingStatusEmitted = false
+      }
+      if (nextStatus !== AIOperationStatus.GeneratingResponse) {
+        generatingResponseEmitted = false
+      }
+    }
+    setStatusWithHistory(nextStatus, args)
   }
 
   const shouldGenerateTitle =
@@ -449,33 +549,17 @@ export async function executeAIFlow(
     void generateChatTitleIfNeeded(config, userMsg.content, callbacks)
   }
 
-  let thinkingStatusEmitted = false
-  let generatingResponseEmitted = false
-
-  const setStatusWithHistoryAndResetFlags = (
-    status: AIOperationStatus | null,
-    args?: StatusArgs,
-  ) => {
-    if (status !== null) {
-      if (status !== AIOperationStatus.Thinking) {
-        thinkingStatusEmitted = false
-      }
-      if (status !== AIOperationStatus.GeneratingResponse) {
-        generatingResponseEmitted = false
-      }
-    }
-    setStatusWithHistory(status, args)
-  }
-
   const streamingCallback: StreamingCallback = {
     onTextChunk: (chunk: string) => {
+      if (contentTimestamp === 0) contentTimestamp = Date.now()
       if (!generatingResponseEmitted) {
         generatingResponseEmitted = true
         thinkingStatusEmitted = false
         setStatusWithHistory(AIOperationStatus.GeneratingResponse)
-        callbacks.setIsStreaming(true)
       }
-
+      accumulatedText += chunk
+      callbacks.setIsStreaming(true)
+      scheduleStreamingUpdate()
       const lastEntry =
         latestOperationHistory[latestOperationHistory.length - 1]
       if (
@@ -483,28 +567,104 @@ export async function executeAIFlow(
         lastEntry.type === AIOperationStatus.GeneratingResponse
       ) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
-        callbacks.updateMessage(conversationId, assistantMessageId, {
+        callbacks.updateMessage(conversationId, anchorMessageId, {
           operationHistory: [...latestOperationHistory],
         })
       }
     },
     onThinkingChunk: (chunk: string) => {
+      if (reasoningTimestamp === 0) reasoningTimestamp = Date.now()
       if (!thinkingStatusEmitted) {
         thinkingStatusEmitted = true
         generatingResponseEmitted = false
         setStatusWithHistory(AIOperationStatus.Thinking)
-        callbacks.setIsStreaming(true)
       }
+      accumulatedReasoning += chunk
+      callbacks.setIsStreaming(true)
+      scheduleStreamingUpdate()
       const lastEntry =
         latestOperationHistory[latestOperationHistory.length - 1]
       if (lastEntry && lastEntry.type === AIOperationStatus.Thinking) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
-        callbacks.updateMessage(conversationId, assistantMessageId, {
+        callbacks.updateMessage(conversationId, anchorMessageId, {
           operationHistory: [...latestOperationHistory],
         })
       }
     },
+    onToolCall: (call) => {
+      const toolCall: ToolCall = {
+        id: call.id,
+        name: call.name,
+        arguments: call.arguments,
+        timestamp: Date.now(),
+      }
+      accumulatedToolCalls.push(toolCall)
+      let callsForMessage = emittedToolCallsByMessage.get(
+        streamingAssistantMessageId,
+      )
+      if (!callsForMessage) {
+        callsForMessage = new Map<string, ToolCall>()
+        emittedToolCallsByMessage.set(
+          streamingAssistantMessageId,
+          callsForMessage,
+        )
+      }
+      callsForMessage.set(toolCall.id, toolCall)
+      scheduleStreamingUpdate()
+    },
+    onToolResult: (result) => {
+      resolvedToolCallIds.add(result.tool_call_id)
+      const toolResultMessageId = crypto.randomUUID()
+      toolResultMessages.push({
+        messageId: toolResultMessageId,
+        toolCallId: result.tool_call_id,
+      })
+      // Flush any pending updates for current assistant message before adding tool message
+      if (hasPendingStreamingUpdate) {
+        if (rafId) {
+          cancelAnimationFrame(rafId)
+          rafId = 0
+        }
+        flushStreamingUpdate()
+      }
+      callbacks.addMessage({
+        id: toolResultMessageId,
+        role: "tool",
+        tool_call_id: result.tool_call_id,
+        name: result.name,
+        content: result.content,
+        timestamp: Date.now(),
+        hideFromUI: true,
+      })
+    },
+    onResponseStart: () => {
+      // Flush pending updates for current assistant before creating new one
+      if (hasPendingStreamingUpdate) {
+        if (rafId) {
+          cancelAnimationFrame(rafId)
+          rafId = 0
+        }
+        flushStreamingUpdate()
+      }
+      // Create new assistant message for the follow-up response
+      const newId = crypto.randomUUID()
+      callbacks.addMessage({
+        id: newId,
+        role: "assistant",
+        content: null,
+        timestamp: Date.now(),
+      })
+      // Reset accumulators
+      streamingAssistantMessageId = newId
+      accumulatedReasoning = ""
+      reasoningTimestamp = 0
+      accumulatedToolCalls = []
+      accumulatedText = ""
+      contentTimestamp = 0
+    },
   }
+
+  setStatusWithHistory(AIOperationStatus.Processing)
 
   try {
     const conversationHistory =
@@ -524,7 +684,8 @@ export async function executeAIFlow(
       type: config.type,
       response: result,
       conversationId,
-      assistantMessageId,
+      anchorMessageId,
+      streamingAssistantMessageId,
       callbacks,
       compactedHistory: result.compactedConversationHistory,
     })
@@ -537,6 +698,37 @@ export async function executeAIFlow(
 
     return flowResult
   } finally {
+    if (rafId) {
+      cancelAnimationFrame(rafId)
+      rafId = 0
+    }
+    if (hasPendingStreamingUpdate) {
+      hasPendingStreamingUpdate = false
+      const updates: Partial<ConversationMessage> = {}
+      if (accumulatedReasoning)
+        updates.reasoning = {
+          timestamp: reasoningTimestamp,
+          content: accumulatedReasoning,
+        }
+      if (accumulatedToolCalls.length > 0)
+        updates.tool_calls = [...accumulatedToolCalls]
+      if (accumulatedText) {
+        updates.content = accumulatedText
+        if (contentTimestamp) updates.contentTimestamp = contentTimestamp
+      }
+      callbacks.updateMessage(
+        conversationId,
+        streamingAssistantMessageId,
+        updates,
+      )
+    }
+    cleanupOrphanedToolCallsForTurn({
+      conversationId,
+      callbacks,
+      emittedToolCallsByMessage,
+      resolvedToolCallIds,
+      toolResultMessages,
+    })
     await callbacks.persistMessages(conversationId)
     callbacks.setIsStreaming(false)
   }

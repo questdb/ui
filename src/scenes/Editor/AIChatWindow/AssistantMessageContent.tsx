@@ -1,19 +1,21 @@
-import React from "react"
+import React, { useMemo } from "react"
 import styled, { keyframes, useTheme } from "styled-components"
 import { Box, Text } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
 import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
-import { getMessageContent } from "../../../providers/AIConversationProvider/messageContent"
-import {
-  AIOperationStatus,
-  type OperationHistory,
-} from "../../../providers/AIStatusProvider"
+import { AIOperationStatus } from "../../../providers/AIStatusProvider"
 import { GaugeIcon } from "@phosphor-icons/react"
 import { color } from "../../../utils"
 import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { OpenInEditorContent } from "./ChatMessages"
-import type { TimelineItem } from "./ChatMessages"
+
+function formatTokenCount(count: number): string {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`
+  }
+  return count.toString()
+}
 
 const Divider = styled.div`
   width: 100%;
@@ -72,14 +74,11 @@ const StreamingCursor = styled.span`
 `
 
 type AssistantMessageContentProps = {
-  message: ConversationMessage
-  operationHistory: OperationHistory | undefined
-  hasOperationHistory: boolean
-  timeline: TimelineItem[] | null
+  turnMessages: ConversationMessage[]
+  anchorMessage: ConversationMessage
   status: AIOperationStatus | null
   isLiveOperation: boolean
   isMessageStreaming: boolean
-  tokenDisplay: React.ReactNode | null
   onScrollNeeded: () => void
   onOpenInEditor: (
     content: OpenInEditorContent,
@@ -87,28 +86,138 @@ type AssistantMessageContentProps = {
   ) => Promise<void>
 }
 
+type TimelineOperations = {
+  type: "operations"
+  operations: NonNullable<ConversationMessage["operationHistory"]>
+  timestamp: number
+  endTimestamp?: number
+}
+
+type TimelineContent = {
+  type: "content"
+  content: string
+  timestamp: number
+}
+
+type TimelineItem = TimelineOperations | TimelineContent
+
+function buildInterleavedTimeline(
+  operationHistory: NonNullable<ConversationMessage["operationHistory"]>,
+): TimelineItem[] {
+  const timeline: TimelineItem[] = []
+
+  for (const entry of operationHistory) {
+    if (entry.type === AIOperationStatus.GeneratingResponse) {
+      const last = timeline[timeline.length - 1]
+      if (last?.type === "operations" && !last.endTimestamp) {
+        last.endTimestamp = entry.timestamp
+      }
+      if (entry.content?.trim()) {
+        timeline.push({
+          type: "content",
+          content: entry.content,
+          timestamp: entry.timestamp,
+        })
+      }
+      continue
+    }
+
+    const last = timeline[timeline.length - 1]
+    if (last?.type === "operations") {
+      last.operations.push(entry)
+    } else {
+      timeline.push({
+        type: "operations",
+        operations: [entry],
+        timestamp: entry.timestamp,
+      })
+    }
+  }
+
+  return timeline
+}
+
 export const AssistantMessageContent: React.FC<
   AssistantMessageContentProps
 > = ({
-  message,
-  operationHistory,
-  hasOperationHistory,
-  timeline,
+  turnMessages,
+  anchorMessage,
   status,
   isLiveOperation,
   isMessageStreaming,
-  tokenDisplay,
   onScrollNeeded,
   onOpenInEditor,
 }) => {
   const theme = useTheme()
-  const messageContent = getMessageContent(message)
-  const hasContent = !!messageContent
+
+  const { operationHistory, endTimestamp, timeline } = useMemo(() => {
+    const fullHistory = anchorMessage.operationHistory ?? []
+    const filteredHistory = fullHistory.filter(
+      (op) => op.type !== AIOperationStatus.Aborted,
+    )
+    const end =
+      fullHistory.length > 0
+        ? Math.max(...fullHistory.map((entry) => entry.timestamp))
+        : undefined
+    const hasGeneratingResponseContent = filteredHistory.some(
+      (op) =>
+        op.type === AIOperationStatus.GeneratingResponse &&
+        !!op.content?.trim(),
+    )
+    return {
+      operationHistory: filteredHistory.filter(
+        (op) => op.type !== AIOperationStatus.GeneratingResponse,
+      ),
+      endTimestamp: end,
+      timeline: hasGeneratingResponseContent
+        ? buildInterleavedTimeline(filteredHistory)
+        : null,
+    }
+  }, [anchorMessage.operationHistory])
+
+  const fallbackContent = useMemo(() => {
+    return turnMessages
+      .filter(
+        (message) =>
+          message.role === "assistant" &&
+          typeof message.content === "string" &&
+          !!message.content,
+      )
+      .map((message) => message.content as string)
+      .join("\n\n")
+  }, [turnMessages])
+
+  const hasContent = !!fallbackContent
+
+  const tokenDisplay = useMemo(() => {
+    const tokenUsage = anchorMessage.tokenUsage as
+      | { inputTokens: number; outputTokens: number }
+      | undefined
+    if (
+      !tokenUsage ||
+      typeof tokenUsage.inputTokens !== "number" ||
+      typeof tokenUsage.outputTokens !== "number"
+    ) {
+      return null
+    }
+    return (
+      <>
+        <span style={{ fontWeight: 600 }}>
+          {formatTokenCount(tokenUsage.inputTokens)}
+        </span>{" "}
+        input /{" "}
+        <span style={{ fontWeight: 600 }}>
+          {formatTokenCount(tokenUsage.outputTokens)}
+        </span>{" "}
+        output tokens
+      </>
+    )
+  }, [anchorMessage.tokenUsage])
 
   const header = (
     <AssistantHeader data-hook="assistant-header">
       <AISparkle size={20} variant="filled" />
-      <AssistantLabel>{message.model || "Assistant"}</AssistantLabel>
+      <AssistantLabel>{anchorMessage.model || "Assistant"}</AssistantLabel>
       {tokenDisplay && (
         <TokenDisplay className="token-display">
           <GaugeIcon size="16px" color={theme.color.gray2} />
@@ -120,16 +229,17 @@ export const AssistantMessageContent: React.FC<
     </AssistantHeader>
   )
 
-  if (timeline) {
+  if (timeline && timeline.length > 0) {
     let headerRendered = false
+
     return (
       <>
-        {timeline.map((item, idx) => {
-          const isLast = idx === timeline.length - 1
+        {timeline.map((item, index) => {
+          const isLast = index === timeline.length - 1
           if (item.type === "operations") {
             return (
               <React.Fragment key={`ops-${item.timestamp}`}>
-                {idx === 0 && <Divider />}
+                {index === 0 && <Divider />}
                 <OperationHistoryContainer>
                   <AssistantModesCompact
                     operationHistory={item.operations}
@@ -151,7 +261,7 @@ export const AssistantMessageContent: React.FC<
               <ExplanationContent>
                 <AssistantMarkdown
                   content={item.content}
-                  messageId={message.id}
+                  messageId={anchorMessage.id}
                   onOpenInEditor={onOpenInEditor}
                 />
               </ExplanationContent>
@@ -165,7 +275,7 @@ export const AssistantMessageContent: React.FC<
 
   return (
     <>
-      {hasOperationHistory && operationHistory && (
+      {operationHistory.length > 0 && (
         <>
           <Divider />
           <OperationHistoryContainer>
@@ -174,7 +284,8 @@ export const AssistantMessageContent: React.FC<
               status={status}
               isLive={isLiveOperation}
               onScrollNeeded={onScrollNeeded}
-              collapsed={hasContent || !!message.error}
+              collapsed={hasContent || !!anchorMessage.error}
+              endTimestamp={endTimestamp}
             />
           </OperationHistoryContainer>
         </>
@@ -184,8 +295,8 @@ export const AssistantMessageContent: React.FC<
           {header}
           <ExplanationContent>
             <AssistantMarkdown
-              content={messageContent}
-              messageId={message.id}
+              content={fallbackContent}
+              messageId={anchorMessage.id}
               onOpenInEditor={onOpenInEditor}
             />
             {isMessageStreaming && (

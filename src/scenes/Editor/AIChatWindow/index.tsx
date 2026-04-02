@@ -21,12 +21,7 @@ import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
 import { getQueryInfoFromKey } from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
-import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
-import { getMessageContent } from "../../../providers/AIConversationProvider/messageContent"
-import {
-  trimSemicolonForDisplay,
-  hasUnactionedDiff as checkHasUnactionedDiff,
-} from "../../../providers/AIConversationProvider/utils"
+import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import {
   isBlockingAIStatus,
   useAIStatus,
@@ -56,6 +51,7 @@ import { RunningType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { CircleNotchSpinner } from "../Monaco/icons"
+import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
 
 const HeaderLeft = styled.div`
   display: flex;
@@ -203,6 +199,7 @@ const AIChatWindow: React.FC = () => {
     closeHistoryView,
     getConversationMeta,
     addMessage,
+    removeMessages,
     updateMessage,
     replaceConversationMessages,
     updateConversationName,
@@ -256,7 +253,7 @@ const AIChatWindow: React.FC = () => {
   const messages = activeConversationMessages
 
   const hasUnactionedDiff = useMemo(() => {
-    return checkHasUnactionedDiff(messages)
+    return getLastTurnWithUnactionedDiff(messages) !== null
   }, [messages])
 
   const shouldShowMessages = useMemo(() => {
@@ -398,6 +395,7 @@ const AIChatWindow: React.FC = () => {
       }),
       {
         addMessage,
+        removeMessages,
         updateMessage,
         setStatus,
         setIsStreaming,
@@ -560,10 +558,7 @@ const AIChatWindow: React.FC = () => {
     ],
   )
 
-  const handleRetry = async (
-    userMessageId: string,
-    assistantMessageId: string,
-  ) => {
+  const handleRetry = async (userMessageId: string) => {
     if (
       !chatWindowState.activeConversationId ||
       !canUse ||
@@ -574,6 +569,15 @@ const AIChatWindow: React.FC = () => {
     const conversationId = chatWindowState.activeConversationId
     const userMessage = messages.find((m) => m.id === userMessageId)
     if (!userMessage) return
+    const userMessageIndex = messages.findIndex((m) => m.id === userMessageId)
+    if (userMessageIndex < 0) return
+
+    const failedRoundMessageIds = messages
+      .slice(userMessageIndex)
+      .map((message) => message.id)
+    const failedRoundMessageIdSet = new Set(failedRoundMessageIds)
+
+    removeMessages(failedRoundMessageIds)
 
     const settings = { model: currentModel, apiKey }
     const commonConfig = {
@@ -585,20 +589,10 @@ const AIChatWindow: React.FC = () => {
       abortSignal: abortController?.signal,
     }
 
-    let isRemoved = false
     const callbacks = {
-      addMessage: (
-        message: Omit<ConversationMessage, "id"> & { id?: string },
-      ) => {
-        addMessage(
-          message,
-          !isRemoved ? [userMessageId, assistantMessageId] : [],
-        )
-        if (!isRemoved) {
-          isRemoved = true
-        }
-      },
+      addMessage,
       updateMessage,
+      removeMessages,
       setStatus,
       setIsStreaming,
       persistMessages,
@@ -682,10 +676,10 @@ const AIChatWindow: React.FC = () => {
       case "ask_request":
       default: {
         const userText =
-          userMessage.displayUserMessage || getMessageContent(userMessage)
+          userMessage.displayUserMessage || userMessage.content || ""
 
         const historyUpToFailed = messages.filter(
-          (m) => m.id !== userMessageId && m.id !== assistantMessageId,
+          (message) => !failedRoundMessageIdSet.has(message.id),
         )
 
         const hasAssistantMessages = historyUpToFailed.some(

@@ -182,26 +182,29 @@ const createComponents = (
   ),
 })
 
-export const AssistantMarkdown = ({
-  content,
-  messageId,
-  onOpenInEditor,
-}: {
-  content: string
-  messageId: string
-  onOpenInEditor: (content: OpenInEditorContent) => void
-}) => {
-  const onOpenInEditorRef = useRef(onOpenInEditor)
-  useEffect(() => {
-    onOpenInEditorRef.current = onOpenInEditor
-  }, [onOpenInEditor])
-  const components = useMemo(() => createComponents(onOpenInEditorRef), [])
+export const AssistantMarkdown = memo(
+  ({
+    content,
+    messageId,
+    onOpenInEditor,
+  }: {
+    content: string
+    messageId: string
+    onOpenInEditor: (content: OpenInEditorContent) => void
+  }) => {
+    const onOpenInEditorRef = useRef(onOpenInEditor)
+    useEffect(() => {
+      onOpenInEditorRef.current = onOpenInEditor
+    }, [onOpenInEditor])
+    const components = useMemo(() => createComponents(onOpenInEditorRef), [])
 
-  return (
-    <MarkdownContent key={messageId}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
-    </MarkdownContent>
-  )
-}
+    return (
+      <MarkdownContent key={messageId}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {content}
+        </ReactMarkdown>
+      </MarkdownContent>
+    )
+  },
+  (prev, next) => prev.content === next.content,
+)

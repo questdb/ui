@@ -664,15 +664,54 @@ function isTitleRequest(provider, body) {
   )
 }
 
-function requestMatchesQuestion(provider, body, question) {
-  if (provider === "openai") {
-    return body.input?.[0]?.content === question
+function contentToText(value) {
+  if (typeof value === "string") return value
+  if (value == null) return ""
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => contentToText(entry)).join("\n")
   }
-  // Both openai-chat-completions and anthropic use messages array
-  const firstUserMessage = body.messages?.find(
-    (msg) => msg.role === "user" && typeof msg.content === "string",
+
+  if (typeof value === "object") {
+    return [
+      value.text,
+      value.content,
+      value.output,
+      value.arguments,
+      value.input,
+    ]
+      .filter((part) => part != null)
+      .map((part) => contentToText(part))
+      .join("\n")
+  }
+
+  return String(value)
+}
+
+function getUserTexts(provider, body) {
+  if (provider === "openai") {
+    const userInputs = (body.input || []).filter(
+      (item) => item?.role === "user",
+    )
+    return userInputs.map((item) => contentToText(item.content)).filter(Boolean)
+  }
+
+  const userMessages = (body.messages || []).filter(
+    (msg) => msg?.role === "user",
   )
-  return firstUserMessage?.content === question
+  return userMessages.map((msg) => contentToText(msg.content)).filter(Boolean)
+}
+
+function requestMatchesQuestion(provider, body, question) {
+  const userTexts = getUserTexts(provider, body)
+  if (userTexts.length === 0) return false
+
+  const lastUserText = userTexts[userTexts.length - 1]
+  return (
+    userTexts.some((text) => text === question) ||
+    userTexts.some((text) => text.includes(question)) ||
+    lastUserText.includes(`User request: ${question}`)
+  )
 }
 
 function extractToolOutputContent(provider, body) {
@@ -699,28 +738,66 @@ function extractToolOutputContent(provider, body) {
       msg.content.some((c) => c.type === "tool_result"),
   )
   const latestMessage = toolResultMessages?.[toolResultMessages.length - 1]
-  const latestToolResult = latestMessage?.content?.find(
-    (c) => c.type === "tool_result",
-  )
+  const latestToolResult = [...(latestMessage?.content || [])]
+    .reverse()
+    .find((c) => c.type === "tool_result")
   return latestToolResult?.content || null
 }
 
 function extractAllInputContent(provider, body) {
   if (provider === "openai") {
-    return body.input?.map((item) => item.content || "").join("\n") || ""
+    return (
+      body.input
+        ?.map((item) =>
+          contentToText(item.content ?? item.output ?? item.arguments ?? ""),
+        )
+        .join("\n") || ""
+    )
   }
   // Both openai-chat-completions and anthropic use messages
   return (
-    body.messages
-      ?.map((msg) => {
-        if (typeof msg.content === "string") return msg.content
-        if (Array.isArray(msg.content)) {
-          return msg.content.map((c) => c.text || c.content || "").join("\n")
-        }
-        return ""
-      })
-      .join("\n") || ""
+    body.messages?.map((msg) => contentToText(msg.content)).join("\n") || ""
   )
+}
+
+function normalizeRequestBodyForAssertions(provider, body) {
+  if (!body || typeof body !== "object") return body
+
+  if (provider === "openai") {
+    const input = Array.isArray(body.input) ? body.input : []
+    return {
+      ...body,
+      input: input.filter(
+        (item) =>
+          item?.type !== "function_call" &&
+          item?.type !== "function_call_output",
+      ),
+    }
+  }
+
+  if (provider === "openai-chat-completions") {
+    const messages = Array.isArray(body.messages) ? body.messages : []
+    return {
+      ...body,
+      messages: messages.filter((msg) => msg?.role !== "tool"),
+    }
+  }
+
+  if (provider === "anthropic") {
+    const messages = Array.isArray(body.messages) ? body.messages : []
+    return {
+      ...body,
+      messages: messages.map((msg) => {
+        if (msg?.role !== "user" || !Array.isArray(msg.content)) return msg
+        return {
+          ...msg,
+          content: msg.content.filter((block) => block?.type !== "tool_result"),
+        }
+      }),
+    }
+  }
+
+  return body
 }
 
 // =============================================================================
@@ -891,7 +968,10 @@ function createMultiTurnFlow(config) {
 
         const turn = turns[requestCount]
         if (turn) {
-          requestBodies[requestCount] = req.body
+          requestBodies[requestCount] = normalizeRequestBodyForAssertions(
+            provider,
+            req.body,
+          )
 
           if (turn.expectSystemMessage) {
             const allInputContent = extractAllInputContent(provider, req.body)
