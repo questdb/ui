@@ -22,6 +22,10 @@
  *
  ******************************************************************************/
 
+import {
+  createDetachedQueryKey,
+  parseQueryKey,
+} from "../../scenes/Editor/Monaco/utils"
 import { QueryAction, QueryAT, QueryStateShape, RunningType } from "../../types"
 import type { InformationSchemaColumn } from "utils/questdb"
 
@@ -33,7 +37,6 @@ export const initialState: QueryStateShape = {
   queryNotifications: {},
   activeNotification: null,
   queriesToRun: [],
-  aiSuggestionRequest: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
@@ -155,7 +158,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     }
 
     case QueryAT.UPDATE_NOTIFICATION_KEY: {
-      const { oldKey, newKey, bufferId } = action.payload
+      const { oldKey, newKey, bufferId, preserveOldKey } = action.payload
       if (newKey === oldKey) {
         return { ...state }
       }
@@ -167,7 +170,9 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         if (updatedBufferNotifications[oldKey]) {
           updatedBufferNotifications[newKey] =
             updatedBufferNotifications[oldKey]
-          delete updatedBufferNotifications[oldKey]
+          if (!preserveOldKey) {
+            delete updatedBufferNotifications[oldKey]
+          }
         }
 
         const updatedNotifications = state.notifications.map((notification) =>
@@ -207,6 +212,39 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         ...state,
         notifications: updatedNotifications,
         activeNotification: updatedActiveNotification,
+      }
+    }
+
+    case QueryAT.MOVE_NOTIFICATION_NAMESPACE: {
+      const { fromBufferId, toBufferId, newQueryKey } = action.payload
+      if (fromBufferId === toBufferId) {
+        return state
+      }
+
+      const fromNotifications = state.queryNotifications[fromBufferId] || {}
+      if (Object.keys(fromNotifications).length === 0) {
+        return state
+      }
+
+      const toNotifications = state.queryNotifications[toBufferId] || {}
+      const mergedNotifications = {
+        ...toNotifications,
+        ...fromNotifications,
+      }
+      const { queryText } = parseQueryKey(newQueryKey)
+      const detachedQueryKey = createDetachedQueryKey(queryText)
+      if (fromNotifications[detachedQueryKey]) {
+        mergedNotifications[newQueryKey] = fromNotifications[detachedQueryKey]
+        mergedNotifications[detachedQueryKey] =
+          fromNotifications[detachedQueryKey]
+      }
+      const updatedQueryNotifications = { ...state.queryNotifications }
+      updatedQueryNotifications[toBufferId] = mergedNotifications
+      delete updatedQueryNotifications[fromBufferId]
+
+      return {
+        ...state,
+        queryNotifications: updatedQueryNotifications,
       }
     }
 
@@ -264,13 +302,6 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         queriesToRun: action.payload,
-      }
-    }
-
-    case QueryAT.SET_AI_SUGGESTION_REQUEST: {
-      return {
-        ...state,
-        aiSuggestionRequest: action.payload,
       }
     }
 

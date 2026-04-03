@@ -4,10 +4,11 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useState,
 } from "react"
 import type { MutableRefObject } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box, Drawer } from "../../../components"
+import { Button, Box, Drawer, Text } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
@@ -19,7 +20,12 @@ import {
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
-import { getQueryInfoFromKey } from "../Monaco/utils"
+import {
+  createDetachedQueryKey,
+  getQueryInfoFromKey,
+  normalizeQueryText,
+  type QueryKey,
+} from "../Monaco/utils"
 import type { ExecutionRefs } from "../index"
 import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import {
@@ -47,11 +53,13 @@ import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { actions, selectors } from "../../../store"
-import { RunningType } from "../../../store/Query/types"
+import { NotificationType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { CircleNotchSpinner } from "../Monaco/icons"
 import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
+import QueryResult from "../QueryResult"
+import { QueryInNotification } from "../Monaco/query-in-notification"
 
 const HeaderLeft = styled.div`
   display: flex;
@@ -218,10 +226,7 @@ const AIChatWindow: React.FC = () => {
     aiAssistantSettings,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
-  const running = useSelector(selectors.query.getRunning)
-  const aiSuggestionRequest = useSelector(
-    selectors.query.getAISuggestionRequest,
-  )
+  const [runningQueryKey, setRunningQueryKey] = useState<QueryKey | null>(null)
 
   const conversationMeta = chatWindowState.activeConversationId
     ? getConversationMeta(chatWindowState.activeConversationId)
@@ -232,11 +237,16 @@ const AIChatWindow: React.FC = () => {
     return { ...conversationMeta, messages: activeConversationMessages }
   }, [conversationMeta, activeConversationMessages])
 
-  // Get query notifications for the conversation's buffer
-  // Use the conversation's bufferId (original buffer, not diff buffer) for looking up notifications
-  const conversationBufferId = conversation?.bufferId
+  const notificationNamespaceKey = useMemo(() => {
+    if (!conversation) return -1
+    if (conversation.bufferId !== undefined) {
+      return conversation.bufferId
+    }
+    return conversation.id
+  }, [conversation?.bufferId, conversation?.id])
+
   const queryNotifications = useSelector(
-    selectors.query.getQueryNotificationsForBuffer(conversationBufferId ?? -1),
+    selectors.query.getQueryNotificationsForBuffer(notificationNamespaceKey),
   )
 
   // Ref for ChatInput to programmatically focus
@@ -415,8 +425,6 @@ const AIChatWindow: React.FC = () => {
         conversationId: chatWindowState.activeConversationId,
         messageId,
       })
-
-      dispatch(actions.query.setAISuggestionRequest(null))
     },
     [chatWindowState.activeConversationId, acceptSuggestion],
   )
@@ -436,20 +444,133 @@ const AIChatWindow: React.FC = () => {
   )
 
   const handleRunQuery = useCallback(
-    (sql: string) => {
-      const normalizedSQL = sql.trim().endsWith(";")
-        ? sql.trim().slice(0, -1)
-        : sql.trim()
+    async (sql: string) => {
+      if (!conversation) return
+
+      const normalizedSQL = normalizeQueryText(sql)
+      const queryKey = createDetachedQueryKey(normalizedSQL)
+
+      setRunningQueryKey(queryKey)
 
       dispatch(
-        actions.query.setAISuggestionRequest({
-          query: normalizedSQL,
-          startOffset: queryInfo.startOffset,
-        }),
+        actions.query.addNotification(
+          {
+            query: queryKey,
+            type: NotificationType.LOADING,
+            content: "Running...",
+          },
+          notificationNamespaceKey,
+        ),
       )
-      dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
+
+      try {
+        const result = await quest.queryRaw(normalizedSQL, {
+          limit: "0,1000",
+          explain: true,
+        })
+
+        if (!executionRefs.current[notificationNamespaceKey]) {
+          executionRefs.current[notificationNamespaceKey] = {}
+        }
+        executionRefs.current[notificationNamespaceKey][queryKey] = {
+          success: true,
+          queryText: normalizedSQL,
+          startOffset: -1,
+          endOffset: -1,
+        }
+
+        dispatch(actions.query.setResult(result))
+
+        if (
+          result.type === QuestDB.Type.DDL ||
+          result.type === QuestDB.Type.DML
+        ) {
+          dispatch(
+            actions.query.addNotification(
+              {
+                query: queryKey,
+                content: <QueryInNotification query={normalizedSQL} />,
+              },
+              notificationNamespaceKey,
+            ),
+          )
+          eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+          return
+        }
+
+        if (result.type === QuestDB.Type.NOTICE) {
+          dispatch(
+            actions.query.addNotification(
+              {
+                query: queryKey,
+                content: (
+                  <Text color="foreground" ellipsis title={normalizedSQL}>
+                    {result.notice}
+                    {normalizedSQL !== "" ? `: ${normalizedSQL}` : ""}
+                  </Text>
+                ),
+                type: NotificationType.NOTICE,
+                sideContent: <QueryInNotification query={normalizedSQL} />,
+              },
+              notificationNamespaceKey,
+            ),
+          )
+          eventBus.publish(EventType.MSG_QUERY_SCHEMA)
+          return
+        }
+
+        if (result.type === QuestDB.Type.DQL) {
+          dispatch(
+            actions.query.addNotification(
+              {
+                query: queryKey,
+                jitCompiled: result.explain?.jitCompiled ?? false,
+                content: (
+                  <QueryResult {...result.timings} rowCount={result.count} />
+                ),
+                sideContent: <QueryInNotification query={normalizedSQL} />,
+              },
+              notificationNamespaceKey,
+            ),
+          )
+          eventBus.publish(EventType.MSG_QUERY_DATASET, result)
+        }
+      } catch (_error: unknown) {
+        const error = _error as {
+          error?: string
+          message?: string
+          position?: number
+        }
+        if (!executionRefs.current[notificationNamespaceKey]) {
+          executionRefs.current[notificationNamespaceKey] = {}
+        }
+        executionRefs.current[notificationNamespaceKey][queryKey] = {
+          success: false,
+          queryText: normalizedSQL,
+          startOffset: -1,
+          endOffset: -1,
+        }
+
+        dispatch(
+          actions.query.addNotification(
+            {
+              query: queryKey,
+              content: (
+                <Text color="red">
+                  {error.error || error.message || "Query execution failed"}
+                </Text>
+              ),
+              type: NotificationType.ERROR,
+              sideContent: <QueryInNotification query={normalizedSQL} />,
+            },
+            notificationNamespaceKey,
+          ),
+        )
+      } finally {
+        setRunningQueryKey(null)
+      }
     },
-    [queryInfo.startOffset],
+    [conversation, executionRefs],
   )
 
   const handleContextClick = useCallback(async () => {
@@ -806,10 +927,8 @@ const AIChatWindow: React.FC = () => {
                 onOpenInEditor={handleOpenInEditor}
                 onApplyToEditor={handleApplyToEditor}
                 onRetry={handleRetry}
-                running={running}
-                aiSuggestionRequest={aiSuggestionRequest}
+                runningQueryKey={runningQueryKey}
                 queryNotifications={queryNotifications}
-                queryStartOffset={queryInfo.startOffset}
                 isOperationInProgress={isBlockingAIStatus(aiStatus)}
                 editorSQL={queryInfo.queryText}
                 isStreaming={isStreaming}

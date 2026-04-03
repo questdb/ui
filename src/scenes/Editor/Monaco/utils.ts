@@ -708,33 +708,6 @@ export const getQueryRequestFromLastExecutedQuery = (
   }
 }
 
-// Creates a Request from an AI suggestion, using the original query's start offset
-// so that the queryKey matches the original query position in the editor
-export const getQueryRequestFromAISuggestion = (
-  editor: IStandaloneCodeEditor,
-  aiSuggestion: { query: string; startOffset: number },
-): Request | undefined => {
-  const model = editor.getModel()
-  if (!model) return undefined
-
-  // Convert the startOffset back to row/column position
-  const position = model.getPositionAt(aiSuggestion.startOffset)
-
-  // Calculate end position from query length
-  const lines = aiSuggestion.query.split("\n")
-  const endRow = lines.length
-  const endColumn = lines[lines.length - 1].length + 1
-
-  return {
-    query: aiSuggestion.query,
-    // row is 0-indexed for Request, but position.lineNumber is 1-indexed
-    row: position.lineNumber - 1,
-    column: position.column,
-    endRow: position.lineNumber - 1 + endRow - 1,
-    endColumn: endRow === 1 ? position.column + endColumn - 1 : endColumn,
-  }
-}
-
 export const getErrorRange = (
   editor: IStandaloneCodeEditor,
   request: Request,
@@ -1140,6 +1113,11 @@ export const createQueryKey = (
   return `${normalizedText}@${startOffset}-${startOffset + normalizedText.length}`
 }
 
+export const createDetachedQueryKey = (queryText: string): QueryKey => {
+  const normalizedText = normalizeQueryText(queryText)
+  return `${normalizedText}@-1--1` as QueryKey
+}
+
 export const parseQueryKey = (
   queryKey: QueryKey,
 ): { queryText: string; startOffset: number; endOffset: number } => {
@@ -1147,12 +1125,18 @@ export const parseQueryKey = (
 
   const queryText = queryKey.slice(0, separatorIndex)
   const offsets = queryKey.slice(separatorIndex + 1)
-
-  const [startOffset, endOffset] = offsets.split("-")
+  const offsetMatch = offsets.match(/^(-?\d+)-(-?\d+)$/)
+  if (!offsetMatch) {
+    return {
+      queryText,
+      startOffset: 0,
+      endOffset: 0,
+    }
+  }
   return {
     queryText,
-    startOffset: parseInt(startOffset, 10),
-    endOffset: parseInt(endOffset, 10),
+    startOffset: parseInt(offsetMatch[1], 10),
+    endOffset: parseInt(offsetMatch[2], 10),
   }
 }
 

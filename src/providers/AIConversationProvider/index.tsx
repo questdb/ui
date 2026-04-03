@@ -25,6 +25,7 @@ import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,
   createQueryKey,
+  createDetachedQueryKey,
   getQueryInfoFromKey,
   shiftQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
@@ -790,6 +791,16 @@ export const AIConversationProvider: React.FC<{
         currentSQL: normalizedSQL,
       })
 
+      const detachedQueryKey = createDetachedQueryKey(normalizedSQL)
+      dispatch(
+        actions.query.updateNotificationKey(
+          detachedQueryKey,
+          result.finalQueryKey,
+          meta.bufferId,
+          true,
+        ),
+      )
+
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {
           tableId: undefined,
@@ -863,6 +874,16 @@ export const AIConversationProvider: React.FC<{
         queryKey: newQueryKey,
         currentSQL: normalizedSQL,
       })
+
+      if (newBuffer.id) {
+        dispatch(
+          actions.query.moveNotificationNamespace(
+            meta.bufferId ?? conversationId,
+            newBuffer.id,
+            newQueryKey,
+          ),
+        )
+      }
 
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {

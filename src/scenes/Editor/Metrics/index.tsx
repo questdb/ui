@@ -34,14 +34,14 @@ import useElementVisibility from "../../../hooks/useElementVisibility"
 import { widgets } from "./widgets"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { PaneContent } from "../../../components"
 
-const Root = styled.div`
+const Root = styled(PaneContent)`
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
   background: #2c2e3d;
-  padding-bottom: calc(4.5rem);
 `
 
 const Toolbar = styled(Box).attrs({

@@ -33,6 +33,7 @@ import type {
 import {
   NotificationShape,
   NotificationType,
+  NotificationNamespaceKey,
   QueryAction,
   QueryAT,
   QueryKey,
@@ -56,7 +57,7 @@ const setColumns = (payload: InformationSchemaColumn[]): QueryAction => ({
 
 const addNotification = (
   payload: Partial<NotificationShape> & { content: ReactNode; query: QueryKey },
-  bufferId?: number,
+  bufferId?: NotificationNamespaceKey,
 ): QueryAction => ({
   payload: {
     createdAt: new Date(),
@@ -71,7 +72,9 @@ const cleanupNotifications = (): QueryAction => ({
   type: QueryAT.CLEANUP_NOTIFICATIONS,
 })
 
-const cleanupBufferNotifications = (bufferId: number): QueryAction => ({
+const cleanupBufferNotifications = (
+  bufferId: NotificationNamespaceKey,
+): QueryAction => ({
   type: QueryAT.CLEANUP_BUFFER_NOTIFICATIONS,
   payload: {
     bufferId,
@@ -80,7 +83,7 @@ const cleanupBufferNotifications = (bufferId: number): QueryAction => ({
 
 const removeNotification = (
   payload: QueryKey,
-  bufferId?: number,
+  bufferId?: NotificationNamespaceKey,
 ): QueryAction => ({
   payload,
   bufferId,
@@ -111,25 +114,33 @@ const setActiveNotification = (
 const updateNotificationKey = (
   oldKey: QueryKey,
   newKey: QueryKey,
-  bufferId?: number,
+  bufferId?: NotificationNamespaceKey,
+  preserveOldKey?: boolean,
 ): QueryAction => ({
   type: QueryAT.UPDATE_NOTIFICATION_KEY,
   payload: {
     oldKey,
     newKey,
     bufferId,
+    preserveOldKey,
+  },
+})
+
+const moveNotificationNamespace = (
+  fromBufferId: NotificationNamespaceKey,
+  toBufferId: NotificationNamespaceKey,
+  newQueryKey: QueryKey,
+): QueryAction => ({
+  type: QueryAT.MOVE_NOTIFICATION_NAMESPACE,
+  payload: {
+    fromBufferId,
+    toBufferId,
+    newQueryKey,
   },
 })
 
 const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
   type: QueryAT.SET_QUERIES_TO_RUN,
-  payload,
-})
-
-const setAISuggestionRequest = (
-  payload: { query: string; startOffset: number } | null,
-): QueryAction => ({
-  type: QueryAT.SET_AI_SUGGESTION_REQUEST,
   payload,
 })
 
@@ -139,6 +150,7 @@ export default {
   cleanupBufferNotifications,
   removeNotification,
   updateNotificationKey,
+  moveNotificationNamespace,
   setResult,
   stopRunning,
   toggleRunning,
@@ -146,5 +158,4 @@ export default {
   setColumns,
   setActiveNotification,
   setQueriesToRun,
-  setAISuggestionRequest,
 }

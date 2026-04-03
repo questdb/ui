@@ -45,7 +45,10 @@ import { selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
+import type { NotificationNamespaceKey } from "../../store/Query/types"
 import { useEditor } from "../../providers"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
@@ -111,13 +114,27 @@ const ClearAllNotifications = styled.div`
 
 const Notifications = ({
   onClearNotifications,
+  targetBufferId: targetBufferIdOverride,
 }: {
-  onClearNotifications: (bufferId: number) => void
+  onClearNotifications: (bufferId: NotificationNamespaceKey) => void
+  targetBufferId?: NotificationNamespaceKey
 }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
-  // Use the active buffer's ID for notifications
-  const targetBufferId = activeBuffer.id as number
+  const [isEditorFocused, setIsEditorFocused] = useState(false)
+  useEffect(() => {
+    const onEditorFocused = (focused?: boolean) => {
+      setIsEditorFocused(Boolean(focused))
+    }
+    eventBus.subscribe<boolean>(EventType.EDITOR_FOCUSED, onEditorFocused)
+    return () => {
+      eventBus.unsubscribe<boolean>(EventType.EDITOR_FOCUSED, onEditorFocused)
+    }
+  }, [])
+
+  const targetBufferId = isEditorFocused
+    ? (activeBuffer.id as number)
+    : (targetBufferIdOverride ?? (activeBuffer.id as number))
   const queryNotifications =
     useSelector(
       selectors.query.getQueryNotificationsForBuffer(targetBufferId),
@@ -129,13 +146,13 @@ const Notifications = ({
 
   // Show notifications that either:
   // 1. Have a matching queryKey in queryNotifications (regular queries from editor)
-  // 2. Match the activeNotification (for AI_SUGGESTION and other special cases)
+  // 2. Match the activeNotification (for special non-cursor flows)
   const bufferNotifications = notifications.filter((notification) => {
     // If queryKey exists in queryNotifications for this buffer, show it
     if (queryNotifications[notification.query]) {
       return true
     }
-    // Also show if this is the active notification (covers AI_SUGGESTION queries)
+    // Also show if this is the active notification
     if (
       activeNotification &&
       notification.query === activeNotification.query &&

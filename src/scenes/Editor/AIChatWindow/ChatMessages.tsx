@@ -18,7 +18,7 @@ import type {
   UserMessageDisplayType,
 } from "../../../providers/AIConversationProvider/types"
 import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
-import { normalizeQueryText, createQueryKey } from "../Monaco/utils"
+import { normalizeQueryText, createDetachedQueryKey } from "../Monaco/utils"
 import {
   PlayIcon,
   ErrorIcon,
@@ -43,7 +43,7 @@ import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { TableIcon } from "../../Schema/table-icon"
 import { AssistantMessageContent } from "./AssistantMessageContent"
 import type { QueryNotifications } from "../../../store/Query/types"
-import { NotificationType, RunningType } from "../../../store/Query/types"
+import { NotificationType } from "../../../store/Query/types"
 import type { QueryKey } from "../Monaco/utils"
 import { useAIStatus } from "../../../providers/AIStatusProvider"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -461,12 +461,9 @@ type ChatMessagesProps = {
   onApplyToEditor?: (messageId: string, sql: string) => void
   onRetry?: (userMessageId: string) => void
   // Query execution status
-  running?: RunningType
-  aiSuggestionRequest?: { query: string; startOffset: number } | null
+  runningQueryKey?: QueryKey | null
   // Query notifications for this conversation's buffer - keyed by QueryKey
   queryNotifications?: Record<QueryKey, QueryNotifications>
-  // The start offset used when running queries from this conversation
-  queryStartOffset?: number
   // Whether an AI operation is in progress
   isOperationInProgress?: boolean
   // Current SQL in editor (acceptedSQL) - used to hide Apply button when suggestion matches editor
@@ -538,10 +535,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onOpenInEditor,
   onApplyToEditor,
   onRetry,
-  running,
-  aiSuggestionRequest,
+  runningQueryKey,
   queryNotifications,
-  queryStartOffset = 0,
   isOperationInProgress,
   editorSQL,
   isStreaming,
@@ -909,22 +904,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         let queryRunStatus: QueryRunStatus = "neutral"
         if (message.sql) {
           const normalizedMessageSQL = normalizeQueryText(message.sql)
+          const queryKey = createDetachedQueryKey(normalizedMessageSQL)
           // Check if this query is currently running
-          if (
-            running === RunningType.AI_SUGGESTION &&
-            aiSuggestionRequest &&
-            normalizeQueryText(aiSuggestionRequest.query) ===
-              normalizedMessageSQL
-          ) {
+          if (runningQueryKey && queryKey === runningQueryKey) {
             queryRunStatus = "loading"
           }
           // Check if we have a notification for this specific query in queryNotifications
           // The query key is created from the normalized SQL and the conversation's queryStartOffset
           else if (queryNotifications) {
-            const queryKey = createQueryKey(
-              normalizedMessageSQL,
-              queryStartOffset,
-            )
             const notification = queryNotifications[queryKey]?.latest
             if (notification) {
               if (notification.type === NotificationType.ERROR) {

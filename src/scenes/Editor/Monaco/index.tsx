@@ -59,7 +59,6 @@ import {
   getQueryFromCursor,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
-  getQueryRequestFromAISuggestion,
   QuestDBLanguageName,
   getAllQueries,
   getQueriesInRange,
@@ -264,7 +263,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const editorContext = useEditor()
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
-    buffers,
     setTabsDisabled,
     editorRef,
     monacoRef,
@@ -293,9 +291,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const scriptConfirmationOpenRef = useRef(false)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
-  const aiSuggestionRequest = useSelector(
-    selectors.query.getAISuggestionRequest,
-  )
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
@@ -326,10 +321,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const requestRef = useRef(request)
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
-  const aiSuggestionRequestRef = useRef<{
-    query: string
-    startOffset: number
-  } | null>(aiSuggestionRequest)
   const canUseAIRef = useRef(canUseAI)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
@@ -401,18 +392,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
-    const currentAISuggestion = aiSuggestionRequestRef.current
-    if (currentAISuggestion && activeNotificationRef.current) {
-      const aiQueryKey = createQueryKey(
-        normalizeQueryText(currentAISuggestion.query),
-        currentAISuggestion.startOffset,
-      )
-      // If current notification is from AI suggestion, preserve it
-      if (activeNotificationRef.current.query === aiQueryKey) {
-        return
-      }
-    }
-
     let newActiveNotification: NotificationShape | null = null
 
     if (queryKey) {
@@ -697,7 +676,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
     if (
-      !["scroll", "script"].includes(source ?? "") &&
+      !["scroll", "script", "query-notifications-sync"].includes(
+        source ?? "",
+      ) &&
       !isRunningScriptRef.current
     ) {
       updateQueryNotification(
@@ -897,6 +878,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
+    eventBus.publish<boolean>(EventType.EDITOR_FOCUSED, editor.hasTextFocus())
     setEditorReady(true)
     editorReadyTrigger(editor)
     isNavigatingFromSearchRef.current = false
@@ -962,6 +944,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     })
     contextMenuObserver.observe(containerDomNode, { childList: true })
     cleanupActionsRef.current.push(() => contextMenuObserver.disconnect())
+
+    editor.onDidFocusEditorWidget(() => {
+      eventBus.publish<boolean>(EventType.EDITOR_FOCUSED, true)
+    })
+    editor.onDidBlurEditorWidget(() => {
+      eventBus.publish<boolean>(EventType.EDITOR_FOCUSED, false)
+    })
 
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
@@ -1076,20 +1065,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       const currentNotifications = queryNotificationsRef.current || {}
-      const currentAISuggestion = aiSuggestionRequestRef.current
-      const aiSuggestionQueryKey = currentAISuggestion
-        ? createQueryKey(
-            normalizeQueryText(currentAISuggestion.query),
-            currentAISuggestion.startOffset,
-          )
-        : null
 
       Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
-
-        if (aiSuggestionQueryKey && queryKey === aiSuggestionQueryKey) {
-          return
-        }
 
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
@@ -1673,16 +1651,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   useEffect(() => {
-    // Remove all execution information for the buffers that have been deleted
-    Object.keys(executionRefs.current).forEach((key) => {
-      const bufferId = parseInt(key)
-      if (!buffers.find((b) => b.id === bufferId)) {
-        cleanupExecutionRefs(bufferId)
-      }
-    })
-  }, [buffers, executionRefs, cleanupExecutionRefs])
-
-  useEffect(() => {
     canUseAIRef.current = canUseAI
     const lineCount = editorRef.current?.getModel()?.getLineCount()
     if (lineCount) {
@@ -1701,10 +1669,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [activeNotification])
 
   useEffect(() => {
-    aiSuggestionRequestRef.current = aiSuggestionRequest
-  }, [aiSuggestionRequest])
-
-  useEffect(() => {
     abortConfirmationOpenRef.current = abortConfirmationOpen
   }, [abortConfirmationOpen])
 
@@ -1721,7 +1685,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       !contentJustChangedRef.current &&
       !activeNotification?.query.endsWith(gridNotificationKeySuffix)
     ) {
-      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+      applyGlyphsAndLineMarkings(
+        monacoRef.current,
+        editorRef.current,
+        "query-notifications-sync",
+      )
     }
   }, [queryNotifications])
 
@@ -1759,32 +1727,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : running === RunningType.AI_SUGGESTION &&
-              aiSuggestionRequestRef.current
-            ? getQueryRequestFromAISuggestion(
-                editor,
-                aiSuggestionRequestRef.current,
-              )
-            : getQueryRequestFromEditor(editor)
+          : getQueryRequestFromEditor(editor)
 
       const isRunningExplain = running === RunningType.EXPLAIN
-      const isAISuggestion =
-        running === RunningType.AI_SUGGESTION &&
-        aiSuggestionRequestRef.current !== null
 
       const targetBufferId = activeBufferRef.current.id as number
 
       if (request?.query) {
         editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
-        // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequestRef
-        // because the editor model doesn't contain the AI suggestion query
-        const parentQueryKey = isAISuggestion
-          ? createQueryKey(
-              request.query,
-              aiSuggestionRequestRef.current!.startOffset,
-            )
-          : createQueryKeyFromRequest(editor, request)
+        const parentQueryKey = createQueryKeyFromRequest(editor, request)
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1855,10 +1807,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   executionRefs.current[targetBufferIdStr] = {}
                 }
 
-                // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
-                const queryStartOffset = isAISuggestion
-                  ? aiSuggestionRequestRef.current!.startOffset
-                  : getQueryStartOffset(editorRef.current, request)
+                const queryStartOffset = getQueryStartOffset(
+                  editorRef.current,
+                  request,
+                )
                 executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                   success: true,
                   selection: request.selection,
@@ -1966,17 +1918,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
               const errorToStore = { ...error, position: adjustedErrorPosition }
 
-              // Use the already-defined parentQueryKey (which correctly handles AI_SUGGESTION)
-              // instead of recalculating it here
+              // Use the already-defined parentQueryKey instead of recalculating it here
               const targetBufferIdStr = targetBufferId.toString()
               if (!executionRefs.current[targetBufferIdStr]) {
                 executionRefs.current[targetBufferIdStr] = {}
               }
 
-              // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
-              const startOffset = isAISuggestion
-                ? aiSuggestionRequestRef.current!.startOffset
-                : getQueryStartOffset(editorRef.current, request)
+              const startOffset = getQueryStartOffset(
+                editorRef.current,
+                request,
+              )
               executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                 error: errorToStore,
                 selection: request.selection,
