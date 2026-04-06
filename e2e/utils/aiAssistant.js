@@ -170,6 +170,36 @@ function createFinalResponseData(provider, explanation) {
   }
 }
 
+function createFinalResponseDataWithThinking(provider, explanation, thinking) {
+  if (provider === "openai") {
+    const data = createFinalResponseData(provider, explanation)
+    // Attach reasoning text for SSE builder to pick up
+    data._reasoning = thinking
+    return data
+  }
+
+  if (provider === "openai-chat-completions") {
+    const data = createFinalResponseData(provider, explanation)
+    // Chat completions streams reasoning_content in choice deltas
+    data._reasoning = thinking
+    return data
+  }
+
+  // Anthropic - thinking is a content block before the text block
+  return {
+    id: "msg_mock_final_thinking",
+    type: "message",
+    role: "assistant",
+    model: PROVIDERS.anthropic.defaultModel,
+    content: [
+      { type: "thinking", thinking },
+      { type: "text", text: explanation },
+    ],
+    stop_reason: "end_turn",
+    usage: { input_tokens: 200, output_tokens: 100 },
+  }
+}
+
 function createToolCallResponseData(provider, toolName, toolArguments = {}) {
   const callId = `call_${Math.random().toString(36).substring(7)}`
 
@@ -297,6 +327,18 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
 function createOpenAISSEResponse(responseData, delay = 0) {
   const events = []
 
+  // Stream reasoning/thinking deltas if present
+  const reasoningText = responseData._reasoning || ""
+  if (reasoningText) {
+    const chunkSize = 20
+    for (let i = 0; i < reasoningText.length; i += chunkSize) {
+      const chunk = reasoningText.slice(i, i + chunkSize)
+      events.push(
+        `event: response.reasoning_summary_text.delta\ndata: ${JSON.stringify({ type: "response.reasoning_summary_text.delta", delta: chunk })}\n\n`,
+      )
+    }
+  }
+
   // Stream text delta events for the content
   const outputText = responseData.output_text || ""
   if (outputText) {
@@ -339,6 +381,28 @@ function createChatCompletionsSSEResponse(responseData, delay = 0) {
   const choice = responseData.choices?.[0]
   const content = choice?.message?.content || ""
   const toolCalls = choice?.message?.tool_calls || []
+  const reasoningText = responseData._reasoning || ""
+
+  // Stream reasoning_content deltas (before content)
+  if (reasoningText) {
+    const chunkSize = 20
+    for (let i = 0; i < reasoningText.length; i += chunkSize) {
+      const chunk = reasoningText.slice(i, i + chunkSize)
+      events.push(
+        `data: ${JSON.stringify({
+          id: responseData.id,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: { reasoning_content: chunk },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      )
+    }
+  }
 
   // Stream content deltas
   if (content) {
@@ -455,6 +519,8 @@ function createAnthropicSSEResponse(responseData, delay = 0) {
   // Extract text content from response
   const textContent =
     responseData.content?.find((c) => c.type === "text")?.text || ""
+  const thinkingContent =
+    responseData.content?.find((c) => c.type === "thinking")?.thinking || ""
   const toolUseContent = responseData.content?.find(
     (c) => c.type === "tool_use",
   )
@@ -480,6 +546,38 @@ function createAnthropicSSEResponse(responseData, delay = 0) {
   )
 
   let contentIndex = 0
+
+  // Handle thinking content (before text)
+  if (thinkingContent) {
+    events.push(
+      `event: content_block_start\ndata: ${JSON.stringify({
+        type: "content_block_start",
+        index: contentIndex,
+        content_block: { type: "thinking", thinking: "" },
+      })}\n\n`,
+    )
+
+    const chunkSize = 20
+    for (let i = 0; i < thinkingContent.length; i += chunkSize) {
+      const chunk = thinkingContent.slice(i, i + chunkSize)
+      events.push(
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index: contentIndex,
+          delta: { type: "thinking_delta", thinking: chunk },
+        })}\n\n`,
+      )
+    }
+
+    events.push(
+      `event: content_block_stop\ndata: ${JSON.stringify({
+        type: "content_block_stop",
+        index: contentIndex,
+      })}\n\n`,
+    )
+
+    contentIndex++
+  }
 
   // Handle text content
   if (textContent) {
@@ -1072,6 +1170,7 @@ module.exports = {
   getCustomProviderConfiguredSettings,
   getCustomProviderEndpoint,
   createFinalResponseData,
+  createFinalResponseDataWithThinking,
   createResponse,
   createFinalResponse,
   createToolCallResponse,
