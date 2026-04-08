@@ -122,12 +122,15 @@ async function createOpenAIResponseStreaming(
   let finalResponse: OpenAI.Responses.Response | null = null
 
   try {
-    const stream = await openai.responses.create({
-      ...params,
-      stream: true,
-      store: false,
-      include: ["reasoning.encrypted_content"],
-    } as OpenAI.Responses.ResponseCreateParamsStreaming)
+    const stream = await openai.responses.create(
+      {
+        ...params,
+        stream: true,
+        store: false,
+        include: ["reasoning.encrypted_content"],
+      } as OpenAI.Responses.ResponseCreateParamsStreaming,
+      { signal: abortSignal },
+    )
 
     for await (const event of stream) {
       if (abortSignal?.aborted) {

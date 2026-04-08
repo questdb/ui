@@ -156,11 +156,14 @@ async function createChatCompletionStreaming(
   let usage: { prompt_tokens: number; completion_tokens: number } | null = null
 
   try {
-    const stream = await openai.chat.completions.create({
-      ...params,
-      stream: true,
-      stream_options: { include_usage: true },
-    })
+    const stream = await openai.chat.completions.create(
+      {
+        ...params,
+        stream: true,
+        stream_options: { include_usage: true },
+      },
+      { signal: abortSignal },
+    )
 
     for await (const chunk of stream) {
       if (abortSignal?.aborted) {
