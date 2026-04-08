@@ -486,6 +486,7 @@ export async function executeAIFlow(
 
   let rafId = 0
   let hasPendingStreamingUpdate = false
+  let hasPendingOperationHistoryUpdate = false
   const emittedToolCallsByMessage = new Map<string, Map<string, ToolCall>>()
   const resolvedToolCallIds = new Set<string>()
   const toolResultMessages: Array<{ messageId: string; toolCallId: string }> =
@@ -513,10 +514,15 @@ export async function executeAIFlow(
         updates,
       )
     }
+    if (hasPendingOperationHistoryUpdate) {
+      hasPendingOperationHistoryUpdate = false
+      callbacks.updateMessage(conversationId, anchorMessageId, {
+        operationHistory: [...latestOperationHistory],
+      })
+    }
   }
 
-  const scheduleStreamingUpdate = () => {
-    hasPendingStreamingUpdate = true
+  const scheduleUpdate = () => {
     if (!rafId) {
       rafId = requestAnimationFrame(flushStreamingUpdate)
     }
@@ -559,7 +565,8 @@ export async function executeAIFlow(
       }
       accumulatedText += chunk
       callbacks.setIsStreaming(true)
-      scheduleStreamingUpdate()
+      hasPendingStreamingUpdate = true
+      scheduleUpdate()
       const lastEntry =
         latestOperationHistory[latestOperationHistory.length - 1]
       if (
@@ -567,9 +574,8 @@ export async function executeAIFlow(
         lastEntry.type === AIOperationStatus.GeneratingResponse
       ) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
-        callbacks.updateMessage(conversationId, anchorMessageId, {
-          operationHistory: [...latestOperationHistory],
-        })
+        hasPendingOperationHistoryUpdate = true
+        scheduleUpdate()
       }
     },
     onThinkingChunk: (chunk: string) => {
@@ -581,14 +587,14 @@ export async function executeAIFlow(
       }
       accumulatedReasoning += chunk
       callbacks.setIsStreaming(true)
-      scheduleStreamingUpdate()
+      hasPendingStreamingUpdate = true
+      scheduleUpdate()
       const lastEntry =
         latestOperationHistory[latestOperationHistory.length - 1]
       if (lastEntry && lastEntry.type === AIOperationStatus.Thinking) {
         lastEntry.content = (lastEntry.content ?? "") + chunk
-        callbacks.updateMessage(conversationId, anchorMessageId, {
-          operationHistory: [...latestOperationHistory],
-        })
+        hasPendingOperationHistoryUpdate = true
+        scheduleUpdate()
       }
     },
     onToolCall: (call) => {
@@ -610,7 +616,8 @@ export async function executeAIFlow(
         )
       }
       callsForMessage.set(toolCall.id, toolCall)
-      scheduleStreamingUpdate()
+      hasPendingStreamingUpdate = true
+      scheduleUpdate()
     },
     onToolResult: (result) => {
       resolvedToolCallIds.add(result.tool_call_id)
@@ -702,26 +709,7 @@ export async function executeAIFlow(
       cancelAnimationFrame(rafId)
       rafId = 0
     }
-    if (hasPendingStreamingUpdate) {
-      hasPendingStreamingUpdate = false
-      const updates: Partial<ConversationMessage> = {}
-      if (accumulatedReasoning)
-        updates.reasoning = {
-          timestamp: reasoningTimestamp,
-          content: accumulatedReasoning,
-        }
-      if (accumulatedToolCalls.length > 0)
-        updates.tool_calls = [...accumulatedToolCalls]
-      if (accumulatedText) {
-        updates.content = accumulatedText
-        if (contentTimestamp) updates.contentTimestamp = contentTimestamp
-      }
-      callbacks.updateMessage(
-        conversationId,
-        streamingAssistantMessageId,
-        updates,
-      )
-    }
+    flushStreamingUpdate()
     cleanupOrphanedToolCallsForTurn({
       conversationId,
       callbacks,

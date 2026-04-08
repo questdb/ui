@@ -8,7 +8,7 @@ import React, {
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
-import styled, { css, keyframes, useTheme } from "styled-components"
+import styled, { css, useTheme, type DefaultTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
 import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
@@ -23,7 +23,6 @@ import {
   PlayIcon,
   ErrorIcon,
   SuccessIcon,
-  LoadingIconSvg,
   ExpandUpDownIcon,
 } from "../Monaco/icons"
 import {
@@ -39,6 +38,7 @@ import {
   WarningIcon,
 } from "@phosphor-icons/react"
 import { CloseCircle } from "@styled-icons/remix-fill"
+import { Stop } from "@styled-icons/remix-line"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { TableIcon } from "../../Schema/table-icon"
 import { AssistantMessageContent } from "./AssistantMessageContent"
@@ -54,28 +54,6 @@ import {
 } from "../../../utils/ai/turnView"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
-
-const spinAnimation = keyframes`
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-`
-
-const LoadingIconWrapper = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: ${spinAnimation} 3s linear infinite;
-`
-
-const LoadingIcon = () => (
-  <LoadingIconWrapper>
-    <LoadingIconSvg />
-  </LoadingIconWrapper>
-)
 
 const MessagesContainer = styled(Box)<{ $scrolled: boolean }>`
   display: flex;
@@ -303,11 +281,11 @@ const MessagesEnd = styled.div`
 const DiffContainer = styled(Box)`
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 1rem;
   margin-top: 1rem;
-  padding: 8px 12px;
+  padding: 0.8rem 1.2rem;
   border: 1px solid ${color("selection")};
-  border-radius: 8px;
+  border-radius: 0.8rem;
   background: ${color("backgroundDarker")};
   width: 100%;
 `
@@ -316,7 +294,7 @@ const DiffHeader = styled(Box)<{ $isExpanded?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 8px;
+  padding-bottom: 0.8rem;
   border-bottom: 1px solid ${color("selectionDarker")};
   width: 100%;
   ${({ $isExpanded }) =>
@@ -331,7 +309,7 @@ const DiffHeaderLeft = styled(Box)`
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 4px 0;
+  padding: 0.4rem 0;
 `
 
 const DiffHeaderLabel = styled.span`
@@ -386,20 +364,25 @@ const IconButton = styled.button`
   background: transparent;
   border: none;
   cursor: pointer;
-  height: 22px;
-  width: 22px;
+  height: 2.2rem;
+  width: 2.2rem;
   color: ${color("gray2")};
 
-  &:hover {
+  &:hover:not(:disabled) {
     svg {
       filter: brightness(1.3);
     }
   }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 `
 
 const ExpandButton = styled(IconButton)`
-  width: 16px;
-  height: 16px;
+  width: 1.6rem;
+  height: 1.6rem;
 `
 
 const DiffEditorWrapper = styled.div`
@@ -460,6 +443,7 @@ type ChatMessagesProps = {
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
   onRetry?: (userMessageId: string) => void
+  onCancelQuery?: () => void
   // Query execution status
   runningQueryKey?: QueryKey | null
   // Query notifications for this conversation's buffer - keyed by QueryKey
@@ -514,10 +498,10 @@ const getOperationBadgeInfo = (
 }
 
 // Helper to get the appropriate icon based on query run status
-const getQueryStatusIcon = (status: QueryRunStatus) => {
+const getQueryStatusIcon = (status: QueryRunStatus, theme: DefaultTheme) => {
   switch (status) {
     case "loading":
-      return <LoadingIcon />
+      return <Stop size={24} color={theme.color.red} />
     case "success":
       return <SuccessIcon />
     case "error":
@@ -535,6 +519,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onOpenInEditor,
   onApplyToEditor,
   onRetry,
+  onCancelQuery,
   runningQueryKey,
   queryNotifications,
   isOperationInProgress,
@@ -644,7 +629,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   useEffect(() => {
     handleScrollNeeded()
-  }, [scrollLength])
+  }, [scrollLength, handleScrollNeeded])
 
   useLayoutEffect(() => {
     if (!scrollToMessageId || isLoadingMessages) return
@@ -965,7 +950,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               <DiffContainer data-hook="inline-diff-container">
                 <DiffHeader $isExpanded={isExpanded}>
                   <DiffHeaderLeft>
-                    <CodeIcon size={22} color="#BDBDBD" />
+                    <CodeIcon size={22} color={theme.color.offWhite} />
                     <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
                   </DiffHeaderLeft>
                   {isSQLUnchanged && (
@@ -1014,14 +999,20 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (message.sql && onRunQuery) {
+                        if (queryRunStatus === "loading") {
+                          onCancelQuery?.()
+                        } else if (message.sql && onRunQuery) {
                           onRunQuery(message.sql)
                         }
                       }}
-                      title="Run this query"
+                      title={
+                        queryRunStatus === "loading"
+                          ? "Cancel query"
+                          : "Run this query"
+                      }
                       data-hook="message-action-run-sql"
                     >
-                      {getQueryStatusIcon(queryRunStatus)}
+                      {getQueryStatusIcon(queryRunStatus, theme)}
                     </IconButton>
                     {!showButtons &&
                       onApplyToEditor &&
@@ -1043,15 +1034,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                           }}
                           title="Apply to editor"
                           disabled={isOperationInProgress}
-                          style={{
-                            opacity: isOperationInProgress ? 0.5 : 1,
-                            cursor: isOperationInProgress
-                              ? "not-allowed"
-                              : "pointer",
-                          }}
                           data-hook="message-action-apply"
                         >
-                          <KeyReturnIcon size={22} color="#BDBDBD" />
+                          <KeyReturnIcon
+                            size={22}
+                            color={theme.color.offWhite}
+                          />
                         </IconButton>
                       )}
                     <ExpandButton

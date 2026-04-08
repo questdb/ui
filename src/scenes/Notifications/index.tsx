@@ -47,8 +47,6 @@ import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
 import type { NotificationNamespaceKey } from "../../store/Query/types"
 import { useEditor } from "../../providers"
-import { eventBus } from "../../modules/EventBus"
-import { EventType } from "../../modules/EventBus/types"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   flex: ${(props) => (props.minimized ? "initial" : "1")};
@@ -121,38 +119,31 @@ const Notifications = ({
 }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
-  const [isEditorFocused, setIsEditorFocused] = useState(false)
-  useEffect(() => {
-    const onEditorFocused = (focused?: boolean) => {
-      setIsEditorFocused(Boolean(focused))
-    }
-    eventBus.subscribe<boolean>(EventType.EDITOR_FOCUSED, onEditorFocused)
-    return () => {
-      eventBus.unsubscribe<boolean>(EventType.EDITOR_FOCUSED, onEditorFocused)
-    }
-  }, [])
 
-  const targetBufferId = isEditorFocused
-    ? (activeBuffer.id as number)
-    : (targetBufferIdOverride ?? (activeBuffer.id as number))
-  const queryNotifications =
+  const bufferIdKey = activeBuffer.id as number
+  const bufferQueryNotifications =
+    useSelector(selectors.query.getQueryNotificationsForBuffer(bufferIdKey)) ||
+    {}
+  const overrideQueryNotifications =
     useSelector(
-      selectors.query.getQueryNotificationsForBuffer(targetBufferId),
+      selectors.query.getQueryNotificationsForBuffer(
+        targetBufferIdOverride ?? bufferIdKey,
+      ),
     ) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
-  // Show notifications that either:
-  // 1. Have a matching queryKey in queryNotifications (regular queries from editor)
-  // 2. Match the activeNotification (for special non-cursor flows)
+  // Show notifications that match either the buffer or override namespace,
+  // or match the activeNotification (covers in-flight queries)
   const bufferNotifications = notifications.filter((notification) => {
-    // If queryKey exists in queryNotifications for this buffer, show it
-    if (queryNotifications[notification.query]) {
+    if (bufferQueryNotifications[notification.query]) {
       return true
     }
-    // Also show if this is the active notification
+    if (overrideQueryNotifications[notification.query]) {
+      return true
+    }
     if (
       activeNotification &&
       notification.query === activeNotification.query &&
@@ -241,7 +232,13 @@ const Notifications = ({
                 disabled={bufferNotifications.length === 0}
                 onClick={() => {
                   void trackEvent(ConsoleEvent.QUERY_LOG_CLEAR)
-                  onClearNotifications(targetBufferId)
+                  onClearNotifications(bufferIdKey)
+                  if (
+                    targetBufferIdOverride !== undefined &&
+                    targetBufferIdOverride !== bufferIdKey
+                  ) {
+                    onClearNotifications(targetBufferIdOverride)
+                  }
                 }}
               >
                 Clear query log

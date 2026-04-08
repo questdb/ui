@@ -30,6 +30,7 @@ import {
   QueryNotifications,
   QueriesToRun,
 } from "types"
+import type { ActiveQueryExecution } from "./types"
 import type {
   QueryRawResult,
   Table,
@@ -70,6 +71,10 @@ const getColumns: (
   store: StoreShape,
 ) => Record<string, InformationSchemaColumn[]> = (store) => store.query.columns
 
+const getActiveQueryExecution: (store: StoreShape) => ActiveQueryExecution = (
+  store,
+) => store.query.activeQueryExecution
+
 export default {
   getNotifications,
   getQueryNotifications,
@@ -80,4 +85,5 @@ export default {
   getRunning,
   getTables,
   getColumns,
+  getActiveQueryExecution,
 }

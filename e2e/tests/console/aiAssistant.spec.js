@@ -3070,6 +3070,38 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("chat-context-badge").click()
       cy.get(".aiQueryHighlight").should("exist")
     })
+
+    it("should show error notification when running invalid SQL from chat", () => {
+      const sql = "SELECT * FROM nonexistent_table_xyz;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show nonexistent data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Run the invalid query from chat
+      cy.getByDataHook("message-action-run-sql").should("be.visible").click()
+
+      // Should display error notification
+      cy.getByDataHook("error-notification").should("be.visible")
+    })
   })
 })
 

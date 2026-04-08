@@ -37,6 +37,7 @@ export const initialState: QueryStateShape = {
   queryNotifications: {},
   activeNotification: null,
   queriesToRun: [],
+  activeQueryExecution: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
@@ -235,8 +236,6 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       const detachedQueryKey = createDetachedQueryKey(queryText)
       if (fromNotifications[detachedQueryKey]) {
         mergedNotifications[newQueryKey] = fromNotifications[detachedQueryKey]
-        mergedNotifications[detachedQueryKey] =
-          fromNotifications[detachedQueryKey]
       }
       const updatedQueryNotifications = { ...state.queryNotifications }
       updatedQueryNotifications[toBufferId] = mergedNotifications
@@ -302,6 +301,20 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         queriesToRun: action.payload,
+      }
+    }
+
+    case QueryAT.START_QUERY_EXECUTION: {
+      return {
+        ...state,
+        activeQueryExecution: action.payload,
+      }
+    }
+
+    case QueryAT.STOP_QUERY_EXECUTION: {
+      return {
+        ...state,
+        activeQueryExecution: null,
       }
     }
 

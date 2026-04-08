@@ -225,7 +225,7 @@ export const AIConversationProvider: React.FC<{
       const messages = await aiConversationStore.getMessages(conversationId)
       const { visibleEntries, previousVisibleUserByAnchorIndex } =
         projectConversationTurns(messages)
-      const lastEntry = visibleEntries.at(-1)
+      const lastEntry = visibleEntries[visibleEntries.length - 1]
       const lastAssistantMessage =
         lastEntry?.type === "assistantTurn"
           ? lastEntry.anchorMessage

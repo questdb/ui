@@ -376,9 +376,21 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
           $expanded={isExpanded}
           $isExpandable={isExpandable}
           data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
-          role="presentation"
+          role={isExpandable ? "button" : "presentation"}
+          tabIndex={isExpandable ? 0 : undefined}
+          aria-expanded={isExpandable ? isExpanded : undefined}
           onClick={
             isExpandable ? () => handleToggleSection(section.id) : undefined
+          }
+          onKeyDown={
+            isExpandable
+              ? (e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    handleToggleSection(section.id)
+                  }
+                }
+              : undefined
           }
         >
           <ReasoningIcon>
@@ -585,8 +597,16 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
             $expanded={collapsedProcessingExpanded}
             $isExpandable
             onClick={() => setCollapsedProcessingExpanded((prev) => !prev)}
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setCollapsedProcessingExpanded((prev) => !prev)
+              }
+            }}
             data-hook="assistant-mode-processing-collapsed"
-            role="presentation"
+            role="button"
+            tabIndex={0}
+            aria-expanded={collapsedProcessingExpanded}
           >
             <CheckIcon />
             <ModeTitle $isActive={false}>

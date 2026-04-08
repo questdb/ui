@@ -47,6 +47,11 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
+export type ActiveQueryExecution = {
+  bufferId: NotificationNamespaceKey
+  queryKey: QueryKey
+} | null
+
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
@@ -59,6 +64,7 @@ export type QueryStateShape = Readonly<{
   >
   activeNotification: NotificationShape | null
   queriesToRun: QueriesToRun
+  activeQueryExecution: ActiveQueryExecution
 }>
 
 export enum QueryAT {
@@ -75,6 +81,8 @@ export enum QueryAT {
   SET_COLUMNS = "QUERY/SET_COLUMNS",
   SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
   SET_QUERIES_TO_RUN = "QUERY/SET_QUERIES_TO_RUN",
+  START_QUERY_EXECUTION = "QUERY/START_QUERY_EXECUTION",
+  STOP_QUERY_EXECUTION = "QUERY/STOP_QUERY_EXECUTION",
 }
 
 type AddNotificationAction = Readonly<{
@@ -156,6 +164,15 @@ type SetQueriesToRunAction = Readonly<{
   payload: QueriesToRun
 }>
 
+type StartQueryExecutionAction = Readonly<{
+  type: QueryAT.START_QUERY_EXECUTION
+  payload: { bufferId: NotificationNamespaceKey; queryKey: QueryKey }
+}>
+
+type StopQueryExecutionAction = Readonly<{
+  type: QueryAT.STOP_QUERY_EXECUTION
+}>
+
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
@@ -170,3 +187,5 @@ export type QueryAction =
   | SetColumnsActions
   | SetActiveNotificationAction
   | SetQueriesToRunAction
+  | StartQueryExecutionAction
+  | StopQueryExecutionAction

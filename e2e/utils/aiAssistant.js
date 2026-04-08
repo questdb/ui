@@ -170,36 +170,6 @@ function createFinalResponseData(provider, explanation) {
   }
 }
 
-function createFinalResponseDataWithThinking(provider, explanation, thinking) {
-  if (provider === "openai") {
-    const data = createFinalResponseData(provider, explanation)
-    // Attach reasoning text for SSE builder to pick up
-    data._reasoning = thinking
-    return data
-  }
-
-  if (provider === "openai-chat-completions") {
-    const data = createFinalResponseData(provider, explanation)
-    // Chat completions streams reasoning_content in choice deltas
-    data._reasoning = thinking
-    return data
-  }
-
-  // Anthropic - thinking is a content block before the text block
-  return {
-    id: "msg_mock_final_thinking",
-    type: "message",
-    role: "assistant",
-    model: PROVIDERS.anthropic.defaultModel,
-    content: [
-      { type: "thinking", thinking },
-      { type: "text", text: explanation },
-    ],
-    stop_reason: "end_turn",
-    usage: { input_tokens: 200, output_tokens: 100 },
-  }
-}
-
 function createToolCallResponseData(provider, toolName, toolArguments = {}) {
   const callId = `call_${Math.random().toString(36).substring(7)}`
 
@@ -1170,7 +1140,6 @@ module.exports = {
   getCustomProviderConfiguredSettings,
   getCustomProviderEndpoint,
   createFinalResponseData,
-  createFinalResponseDataWithThinking,
   createResponse,
   createFinalResponse,
   createToolCallResponse,

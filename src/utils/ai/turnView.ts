@@ -1,4 +1,6 @@
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import type { StatusEntry } from "../../providers/AIStatusProvider"
 
 export type AssistantTurn = {
   anchorIndex: number
@@ -85,12 +87,6 @@ export function projectConversationTurns(
   }
 }
 
-export function buildAssistantTurns(
-  messages: ConversationMessage[],
-): AssistantTurn[] {
-  return projectConversationTurns(messages).turns
-}
-
 export function getLastTurnWithUnactionedDiff(
   messages: ConversationMessage[],
 ): ConversationMessage | null {
@@ -134,4 +130,55 @@ export function getScrollLength(
   const toolCallCount = lastMessage.tool_calls?.length ?? 0
 
   return headVisibleCount + contentLength + reasoningLength + toolCallCount
+}
+
+export type TimelineOperations = {
+  type: "operations"
+  operations: StatusEntry[]
+  timestamp: number
+  endTimestamp?: number
+}
+
+export type TimelineContent = {
+  type: "content"
+  content: string
+  timestamp: number
+}
+
+export type TimelineItem = TimelineOperations | TimelineContent
+
+export function buildInterleavedTimeline(
+  operationHistory: StatusEntry[],
+): TimelineItem[] {
+  const timeline: TimelineItem[] = []
+
+  for (const entry of operationHistory) {
+    if (entry.type === AIOperationStatus.GeneratingResponse) {
+      const last = timeline[timeline.length - 1]
+      if (last?.type === "operations" && !last.endTimestamp) {
+        last.endTimestamp = entry.timestamp
+      }
+      if (entry.content?.trim()) {
+        timeline.push({
+          type: "content",
+          content: entry.content,
+          timestamp: entry.timestamp,
+        })
+      }
+      continue
+    }
+
+    const last = timeline[timeline.length - 1]
+    if (last?.type === "operations") {
+      last.operations.push(entry)
+    } else {
+      timeline.push({
+        type: "operations",
+        operations: [entry],
+        timestamp: entry.timestamp,
+      })
+    }
+  }
+
+  return timeline
 }

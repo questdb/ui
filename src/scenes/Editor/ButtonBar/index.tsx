@@ -159,6 +159,9 @@ const shortcutTitles =
 const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
+  const activeQueryExecution = useSelector(
+    selectors.query.getActiveQueryExecution,
+  )
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
@@ -260,7 +263,11 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
-        disabled={running !== RunningType.NONE || isTemporary}
+        disabled={
+          running !== RunningType.NONE ||
+          activeQueryExecution !== null ||
+          isTemporary
+        }
       >
         Run all queries
         <RunShortcut>
@@ -320,6 +327,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
           onClick={handleClickQueryButton}
           disabled={
             running !== RunningType.NONE ||
+            activeQueryExecution !== null ||
             queriesToRun.length === 0 ||
             isTemporary
           }
