@@ -5,8 +5,9 @@ import { checker } from 'vite-plugin-checker'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
 import wasm from 'vite-plugin-wasm'
 import topLevelAwait from 'vite-plugin-top-level-await'
+import license from 'rollup-plugin-license'
 import path from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync, appendFileSync } from 'fs'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string }
 
@@ -117,6 +118,23 @@ export default defineConfig(({ mode }) => {
           ]),
         ],
       }),
+      isProduction && {
+        name: 'append-font-licenses',
+        closeBundle() {
+          const output = path.resolve(__dirname, 'dist', 'THIRD_PARTY_LICENSES.txt')
+          const fontDirs = [
+            { dir: 'src/styles/fonts', name: 'Open Sans' },
+            { dir: 'public/fonts', name: 'PP Formula' },
+          ]
+          for (const { dir, name } of fontDirs) {
+            const licFile = path.resolve(__dirname, dir, 'LICENSE')
+            if (existsSync(licFile)) {
+              const text = readFileSync(licFile, 'utf-8')
+              appendFileSync(output, `\n---\n\nName: ${name} (font)\nSource: ${dir}\nLicense Text:\n===\n\n${text}\n`)
+            }
+          }
+        },
+      },
     ].filter(Boolean),
 
     resolve: {
@@ -166,6 +184,14 @@ export default defineConfig(({ mode }) => {
       ssr: false,
       minify: 'esbuild',
       rollupOptions: {
+        plugins: [
+          license({
+            thirdParty: {
+              output: path.resolve(__dirname, 'dist', 'THIRD_PARTY_LICENSES.txt'),
+              includePrivate: false,
+            },
+          }),
+        ],
         output: {
           manualChunks: {
             vendor: [
