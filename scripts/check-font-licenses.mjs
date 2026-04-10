@@ -19,14 +19,17 @@ for (const dir of FONT_DIRS) {
   const fullPath = resolve(root, dir)
   if (!existsSync(fullPath)) continue
 
-  const hasFont = readdirSync(fullPath).some((f) =>
+  const fonts = readdirSync(fullPath).filter((f) =>
     FONT_EXTENSIONS.has(f.slice(f.lastIndexOf("."))),
   )
-  if (!hasFont) continue
+  if (fonts.length === 0) continue
 
   const licenseFile = resolve(fullPath, "LICENSE")
   if (!existsSync(licenseFile)) {
-    console.error(`Missing LICENSE file in ${dir}`)
+    console.error(`Missing LICENSE file in ${dir} for fonts:`)
+    for (const f of fonts) {
+      console.error(`  - ${f}`)
+    }
     failed = true
   } else {
     console.log(`OK: ${dir}/LICENSE`)
