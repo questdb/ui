@@ -532,7 +532,6 @@ export function createOpenAIProvider(
         await testClient.responses.create({
           model: getModelProps(model).model,
           input: [{ role: "user", content: "ping" }],
-          max_output_tokens: 16,
         })
         return { valid: true }
       } catch (error: unknown) {

@@ -595,7 +595,6 @@ export function createOpenAIChatCompletionsProvider(
         await testClient.chat.completions.create({
           model: getModelProps(model).model,
           messages: [{ role: "user", content: "ping" }],
-          max_completion_tokens: 16,
         })
         return { valid: true }
       } catch (error: unknown) {

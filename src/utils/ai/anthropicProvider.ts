@@ -618,6 +618,9 @@ export function createAnthropicProvider(
         })
         return { valid: true }
       } catch (error: unknown) {
+        if (error instanceof MaxTokensError || error instanceof RefusalError) {
+          return { valid: true }
+        }
         if (error instanceof Anthropic.AuthenticationError) {
           return { valid: false, error: "Invalid API key" }
         }
