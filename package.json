@@ -28,8 +28,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ e2e/tests/",
     "lint:fix": "eslint src/ e2e/tests/ --fix",
-    "prepare": "husky",
-    "check:licenses": "license-checker --production --onlyAllow 'MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;Unlicense;CC0-1.0;CC-BY-3.0;CC-BY-4.0;Python-2.0;BlueOak-1.0.0;Zlib' && node scripts/check-font-licenses.mjs"
+    "prepare": "husky"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -62,7 +61,6 @@
     "@styled-icons/remix-fill": "10.46.0",
     "@styled-icons/remix-line": "10.46.0",
     "allotment": "^1.19.3",
-    "animate.css": "3.7.2",
     "bowser": "^2.14.1",
     "compare-versions": "^5.0.1",
     "core-js": "^3.22.8",
@@ -126,7 +124,6 @@
     "@types/draggabilly": "^2.1.6",
     "@types/echarts": "^4.9.22",
     "@types/jquery": "3.5.1",
-    "@types/license-checker": "^25",
     "@types/lodash.merge": "^4.6.9",
     "@types/node": "^18.0.0",
     "@types/ramda": "0.27.40",
@@ -154,7 +151,6 @@
     "globals": "^15.0.0",
     "husky": "^9.1.7",
     "jiti": "^2.6.1",
-    "license-checker": "^25.0.1",
     "lint-staged": "^16.2.6",
     "prettier": "^3.3.0",
     "rollup-plugin-license": "^3.7.1",
