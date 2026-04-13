@@ -182,6 +182,14 @@ export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
 export type TableType = "T" | "M" | "V" // Table | MaterializedView | View
 
+export type TableKind = "table" | "matview" | "view"
+
+export const getTableKind = (table: Table): TableKind => {
+  if (table.matView || table.table_type === "M") return "matview"
+  if (table.table_type === "V") return "view"
+  return "table"
+}
+
 export type Table = {
   id: number
   table_name: string

@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 export type TelemetryConfigShape = Readonly<{
-  enabled: string
+  enabled: boolean
   id: string
   version: string
   os: string

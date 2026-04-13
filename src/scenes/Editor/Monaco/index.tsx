@@ -50,7 +50,10 @@ import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
   appendQuery,
+  applyValidationMarkers,
+  cancelAllValidationRequests,
   clearModelMarkers,
+  clearValidationMarkers,
   findMatches,
   getErrorRange,
   getQueryFromCursor,
@@ -66,12 +69,15 @@ import {
   parseQueryKey,
   createQueryKeyFromRequest,
   validateQueryAtOffset,
+  validateQueryJIT,
   setErrorMarkerForQuery,
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
 } from "./utils"
 import { toast } from "../../../components/Toast"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import ButtonBar from "../ButtonBar"
 import { QueryDropdown } from "./QueryDropdown"
 import {
@@ -262,7 +268,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     setTabsDisabled,
     editorRef,
     monacoRef,
-    insertTextAtCursor,
     activeBuffer,
     updateBuffer,
     editorReadyTrigger,
@@ -342,6 +347,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   })
   const scrollTimeoutRef = useRef<number | null>(null)
   const notificationTimeoutRef = useRef<number | null>(null)
+  const validationTimeoutRef = useRef<number | null>(null)
   const targetPositionRef = useRef<{
     lineNumber: number
     column: number
@@ -375,6 +381,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const toggleRunning = (runningType?: RunningType) => {
     dispatch(actions.query.toggleRunning(runningType))
+  }
+
+  const triggerJitValidation = () => {
+    if (runningValueRef.current !== RunningType.NONE || requestRef.current) {
+      return
+    }
+
+    if (monacoRef.current && editorRef.current) {
+      const currentBufferId = activeBufferRef.current.id as number
+      validateQueryJIT(
+        monacoRef.current,
+        editorRef.current,
+        currentBufferId,
+        () => executionRefs.current[currentBufferId.toString()] || {},
+        (q, signal) => quest.validateQuery(q, signal),
+      )
+    }
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
@@ -506,6 +529,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const handleExplainQuery = (query: Request) => {
+    void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_QUERY_PLAN)
     setDropdownOpen(false)
     runQueryAction(query, RunningType.EXPLAIN)
   }
@@ -520,6 +544,18 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const startOffset = getQueryStartOffset(editor, query)
     const queryText = query.query
+
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
+    if (monacoRef.current) {
+      clearValidationMarkers(
+        monacoRef.current,
+        editor,
+        activeBufferRef.current.id as number,
+      )
+    }
 
     if (runningValueRef.current === RunningType.NONE) {
       setCursorBeforeRunning(query)
@@ -551,6 +587,18 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       return
     }
 
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
+    if (monacoRef.current) {
+      clearValidationMarkers(
+        monacoRef.current,
+        editor,
+        activeBufferRef.current.id as number,
+      )
+    }
+
     const position = model.getPositionAt(pending.startOffset)
     editor.setPosition(position)
 
@@ -559,6 +607,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleAskAI = async (query?: Request) => {
     setDropdownOpen(false)
+    void trackEvent(ConsoleEvent.AI_GLYPH_CLICK)
     if (!query || !editorRef.current) return
 
     const queryKey = createQueryKeyFromRequest(editorRef.current, query)
@@ -737,6 +786,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           requestRef.current?.row + 1 === startLineNumber
 
         const handleRunClick = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_RUN)
           if (isRunningQuery) {
             toggleRunning(RunningType.NONE)
           } else {
@@ -774,6 +824,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const handleRunContextMenu = () => {
+          void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_OPEN)
           if (isBlockingAIStatusRef.current) return
           const dropdownQueries = getDropdownQueries(startLineNumber)
           if (dropdownQueries.length > 0) {
@@ -854,7 +905,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     cleanupActionsRef.current.push(
       registerLegacyEventBusEvents({
         editor,
-        insertTextAtCursor,
         toggleRunning,
       }),
     )
@@ -876,6 +926,42 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         addBuffer: () => editorContext.addBuffer(),
       }),
     )
+
+    // Prevent context menu from being clipped
+    const containerDomNode = editor.getContainerDomNode()
+    const contextMenuObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (
+            node instanceof HTMLElement &&
+            node.classList.contains("context-view") &&
+            node.classList.contains("monaco-menu-container")
+          ) {
+            const rect = node.getBoundingClientRect()
+            node.style.position = "fixed"
+            node.style.left = `${rect.left}px`
+            node.style.top = `${rect.top}px`
+
+            // Monaco reuses the node on subsequent opens, resetting styles.
+            const styleObserver = new MutationObserver(() => {
+              if (node.style.position !== "fixed") {
+                const rect = node.getBoundingClientRect()
+                node.style.position = "fixed"
+                node.style.left = `${rect.left}px`
+                node.style.top = `${rect.top}px`
+              }
+            })
+            styleObserver.observe(node, {
+              attributes: true,
+              attributeFilter: ["style"],
+            })
+            cleanupActionsRef.current.push(() => styleObserver.disconnect())
+          }
+        }
+      }
+    })
+    contextMenuObserver.observe(containerDomNode, { childList: true })
+    cleanupActionsRef.current.push(() => contextMenuObserver.disconnect())
 
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
@@ -902,6 +988,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
         cursorChangeTimeoutRef.current = null
       }, 50)
+
+      // JIT validation on cursor move (debounced)
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+      }
+      validationTimeoutRef.current = window.setTimeout(() => {
+        triggerJitValidation()
+        validationTimeoutRef.current = null
+      }, 300)
     })
 
     editor.onDidChangeModelContent(async (e) => {
@@ -929,8 +1024,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           newKey: QueryKey
           data: ExecutionInfo
         }> = []
-        const keysToRemove: QueryKey[] = []
-
         Object.keys(bufferExecutions).forEach((key) => {
           const queryKey = key as QueryKey
           const { queryText, startOffset, endOffset } =
@@ -948,36 +1041,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           }
 
           const newOffset = startOffset + effectiveOffsetDelta
-          if (validateQueryAtOffset(editor, queryText, newOffset)) {
-            const selection = bufferExecutions[queryKey].selection
-            const shiftedSelection = selection
-              ? {
-                  startOffset: selection.startOffset + effectiveOffsetDelta,
-                  endOffset: selection.endOffset + effectiveOffsetDelta,
-                }
-              : undefined
-            keysToUpdate.push({
-              oldKey: queryKey,
-              newKey: createQueryKey(queryText, newOffset),
-              data: {
-                ...bufferExecutions[queryKey],
-                startOffset: newOffset,
-                endOffset: endOffset + effectiveOffsetDelta,
-                selection: shiftedSelection,
-              },
-            })
-          } else {
-            keysToRemove.push(queryKey)
-            notificationUpdates.push(() =>
-              dispatch(
-                actions.query.removeNotification(queryKey, activeBufferId),
-              ),
-            )
-          }
-        })
-
-        keysToRemove.forEach((key) => {
-          delete bufferExecutions[key]
+          const selection = bufferExecutions[queryKey].selection
+          const shiftedSelection = selection
+            ? {
+                startOffset: selection.startOffset + effectiveOffsetDelta,
+                endOffset: selection.endOffset + effectiveOffsetDelta,
+              }
+            : undefined
+          keysToUpdate.push({
+            oldKey: queryKey,
+            newKey: createQueryKey(queryText, newOffset),
+            data: {
+              ...bufferExecutions[queryKey],
+              startOffset: newOffset,
+              endOffset: endOffset + effectiveOffsetDelta,
+              selection: shiftedSelection,
+            },
+          })
         })
 
         keysToUpdate.forEach(({ oldKey, newKey, data }) => {
@@ -1024,25 +1104,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         }
 
         const newOffset = startOffset + effectiveOffsetDelta
-
-        if (validateQueryAtOffset(editor, queryText, newOffset)) {
-          const newKey = createQueryKey(queryText, newOffset)
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.updateNotificationKey(
-                queryKey,
-                newKey,
-                activeBufferId,
-              ),
+        const newKey = createQueryKey(queryText, newOffset)
+        notificationUpdates.push(() =>
+          dispatch(
+            actions.query.updateNotificationKey(
+              queryKey,
+              newKey,
+              activeBufferId,
             ),
-          )
-        } else {
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.removeNotification(queryKey, activeBufferId),
-            ),
-          )
-        }
+          ),
+        )
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
@@ -1081,13 +1152,39 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       contentJustChangedRef.current = false
       notificationUpdates.forEach((update) => update())
+
+      // JIT validation (debounced)
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+      }
+      validationTimeoutRef.current = window.setTimeout(() => {
+        triggerJitValidation()
+        validationTimeoutRef.current = null
+      }, 300)
     })
 
     editor.onDidChangeModel(() => {
+      cancelAllValidationRequests()
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+        validationTimeoutRef.current = null
+      }
       glyphWidgetsRef.current.forEach((widget) => {
-        editor.removeGlyphMarginWidget(widget)
+        editorRef.current?.removeGlyphMarginWidget(widget)
       })
       glyphWidgetsRef.current.clear()
+      const lineCount = editorRef.current?.getModel()?.getLineCount()
+      const hasContent =
+        (editorRef.current?.getModel()?.getValueLength() ?? 0) > 0
+      if (lineCount) {
+        setLineNumbersMinChars(
+          getDefaultLineNumbersMinChars(canUseAIRef.current) +
+            (lineCount.toString().length - 1),
+        )
+        if (hasContent) {
+          void trackEvent(ConsoleEvent.EDITOR_VIEW_TAB, { lines: lineCount })
+        }
+      }
       setTimeout(() => {
         if (monacoRef.current && editorRef.current) {
           applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
@@ -1182,6 +1279,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       } else {
         toggleRunning()
       }
+    } else {
+      triggerJitValidation()
     }
   }
 
@@ -1208,6 +1307,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
       | null = null
     dispatch(actions.query.setResult(undefined))
+
+    // Clear JIT validation markers — execution result takes over.
+    if (monacoRef.current) {
+      clearValidationMarkers(monacoRef.current, editor, activeBufferId)
+    }
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
 
     dispatch(
       actions.query.setActiveNotification({
@@ -1342,6 +1450,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       dispatch(actions.query.toggleRunning())
       return
     }
+
+    void trackEvent(ConsoleEvent.EDITOR_RUN_MULTIPLE, {
+      queryCount: queriesToRunRef.current?.length ?? 0,
+      runAll,
+    })
 
     const triggerScript = () => {
       if (runAll) {
@@ -1621,17 +1734,27 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     runningValueRef.current = running
-    if (
-      ![RunningType.NONE, RunningType.SCRIPT].includes(running) &&
-      editorRef?.current
-    ) {
-      if (monacoRef?.current) {
-        clearModelMarkers(monacoRef.current, editorRef.current)
-      }
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) {
+      return
+    }
 
-      if (monacoRef?.current && editorRef?.current) {
-        applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+    if (running !== RunningType.NONE) {
+      cancelAllValidationRequests()
+      clearModelMarkers(monaco, editor)
+      clearValidationMarkers(
+        monaco,
+        editor,
+        activeBufferRef.current.id as number,
+      )
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+        validationTimeoutRef.current = null
       }
+    }
+    if (![RunningType.NONE, RunningType.SCRIPT].includes(running)) {
+      applyGlyphsAndLineMarkings(monaco, editor)
 
       const request =
         running === RunningType.REFRESH
@@ -1639,10 +1762,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           : running === RunningType.AI_SUGGESTION &&
               aiSuggestionRequestRef.current
             ? getQueryRequestFromAISuggestion(
-                editorRef.current,
+                editor,
                 aiSuggestionRequestRef.current,
               )
-            : getQueryRequestFromEditor(editorRef.current)
+            : getQueryRequestFromEditor(editor)
 
       const isRunningExplain = running === RunningType.EXPLAIN
       const isAISuggestion =
@@ -1652,7 +1775,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const targetBufferId = activeBufferRef.current.id as number
 
       if (request?.query) {
-        editorRef.current?.updateOptions({ readOnly: true })
+        editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
         // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequestRef
         // because the editor model doesn't contain the AI suggestion query
@@ -1661,7 +1784,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               request.query,
               aiSuggestionRequestRef.current!.startOffset,
             )
-          : createQueryKeyFromRequest(editorRef.current, request)
+          : createQueryKeyFromRequest(editor, request)
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1672,11 +1795,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
-          if (
-            runningValueRef.current &&
-            requestRef.current &&
-            editorRef.current
-          ) {
+          if (runningValueRef.current && requestRef.current && editor) {
             dispatch(
               actions.query.addNotification(
                 {
@@ -1932,7 +2051,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       setSchemaCompletionHandle(
         monacoRef.current.languages.registerCompletionItemProvider(
           QuestDBLanguageName,
-          createSchemaCompletionProvider(editorRef.current, tables, columns),
+          createSchemaCompletionProvider(tables, columns),
         ),
       )
       setRefreshingTables(false)
@@ -1952,6 +2071,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       clearModelMarkers(monacoRef.current, editorRef.current)
 
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+
+      // Restore cached validation markers for this buffer
+      applyValidationMarkers(
+        monacoRef.current,
+        editorRef.current,
+        activeBuffer.id as number,
+      )
     }
   }, [activeBuffer])
 
@@ -2026,6 +2152,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         window.clearTimeout(notificationTimeoutRef.current)
       }
 
+      if (validationTimeoutRef.current) {
+        window.clearTimeout(validationTimeoutRef.current)
+        clearValidationMarkers(
+          monacoRef.current,
+          editorRef.current,
+          activeBufferRef.current.id as number,
+        )
+      }
+
       glyphWidgetsRef.current.forEach((widget) => {
         editorRef.current?.removeGlyphMarginWidget(widget)
       })
@@ -2076,6 +2211,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               scrollBeyondLastLine: false,
               tabSize: 2,
               lineNumbersMinChars,
+              wordBasedSuggestions: "off",
             }}
             theme="dracula"
           />

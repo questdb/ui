@@ -32,6 +32,8 @@ import { formatISO } from "date-fns"
 import { DateTimePicker } from "./date-time-picker"
 import useElementVisibility from "../../../hooks/useElementVisibility"
 import { widgets } from "./widgets"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const Root = styled.div`
   display: flex;
@@ -62,23 +64,17 @@ const Header = styled(Text)`
   margin-bottom: 1rem;
 `
 
-const Charts = styled(Box).attrs({
-  align: "flex-start",
-  gap: "2.5rem",
-})<{ noMetrics: boolean; viewMode: MetricViewMode }>`
-  align-content: ${({ noMetrics }: { noMetrics: boolean }) =>
-    noMetrics ? "center" : "flex-start"};
+const Charts = styled.div<{ noMetrics: boolean; viewMode: MetricViewMode }>`
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
   width: 100%;
-  flex-wrap: wrap;
+  gap: 2.5rem;
 
-  > div {
-    width: ${({ viewMode }: { viewMode: MetricViewMode }) =>
-      viewMode === MetricViewMode.GRID ? "calc(50% - 1.25rem)" : "100%"};
-    flex-shrink: 0;
-  }
+  display: grid;
+  grid-template-columns: ${({ viewMode }: { viewMode: MetricViewMode }) =>
+    viewMode === MetricViewMode.GRID ? "repeat(2, 1fr)" : "1fr"};
+  grid-auto-rows: min-content;
 `
 
 const GlobalInfo = styled(Box).attrs({
@@ -211,7 +207,7 @@ export const Metrics = () => {
   const handleColorChange = useCallback(
     (metric: Metric, color: string) => {
       if (buffer?.id && buffer?.metricsViewState?.metrics) {
-        void updateMetrics(
+        updateMetrics(
           buffer?.metricsViewState?.metrics.map((m: Metric) =>
             m.position === metric.position ? { ...m, color } : m,
           ),
@@ -352,6 +348,12 @@ export const Metrics = () => {
                       }))}
                       onChange={(e) => {
                         if (buffer?.id) {
+                          void trackEvent(
+                            ConsoleEvent.METRIC_REFRESH_RATE_CHANGE,
+                            {
+                              refreshRate: e.target.value as RefreshRate,
+                            },
+                          )
                           void updateBuffer(buffer.id, {
                             metricsViewState: {
                               ...buffer?.metricsViewState,

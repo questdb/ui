@@ -12,6 +12,8 @@ import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import { executeAIFlow, createFixFlowConfig } from "../../utils/executeAIFlow"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const FixButton = styled(Button)`
   gap: 1rem;
@@ -21,8 +23,14 @@ export const FixQueryButton = () => {
   const { quest } = useContext(QuestContext)
   const { editorRef, executionRefs } = useEditor()
   const tables = useSelector(selectors.query.getTables)
-  const { setStatus, abortController, hasSchemaAccess, currentModel, apiKey } =
-    useAIStatus()
+  const {
+    setStatus,
+    abortController,
+    hasSchemaAccess,
+    currentModel,
+    apiKey,
+    aiAssistantSettings,
+  } = useAIStatus()
   const {
     chatWindowState,
     getConversationMeta,
@@ -34,6 +42,7 @@ export const FixQueryButton = () => {
   } = useAIConversation()
 
   const handleFixQuery = () => {
+    void trackEvent(ConsoleEvent.AI_FIX_QUERY)
     const conversationId = chatWindowState.activeConversationId!
     const conversation = getConversationMeta(conversationId)!
 
@@ -53,6 +62,7 @@ export const FixQueryButton = () => {
         errorMessage,
         errorWord: word ?? undefined,
         settings: { model: currentModel!, apiKey: apiKey! },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,

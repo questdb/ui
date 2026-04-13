@@ -44,7 +44,7 @@ describe("sendServerInfoTelemetry", () => {
     version: "1.0.0",
     os: "linux",
     package: "test",
-    enabled: "true",
+    enabled: true,
     instance_name: "",
     instance_type: "",
     instance_desc: "",
@@ -53,7 +53,7 @@ describe("sendServerInfoTelemetry", () => {
   it("should not send telemetry when releaseType is not EE and telemetry is disabled", async () => {
     mockGetValue.mockReturnValue("OSS")
 
-    const disabledServerInfo = { ...mockServerInfo, enabled: "" }
+    const disabledServerInfo = { ...mockServerInfo, enabled: false }
     const promise = sendServerInfoTelemetry(disabledServerInfo)
 
     await vi.runAllTimersAsync()

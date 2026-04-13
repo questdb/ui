@@ -43,10 +43,13 @@ const StyledOverlay = styled.div`
   }
 `
 
-export const Overlay = ({
-  primitive,
-}: {
-  primitive: typeof RadixDialogOverlay | typeof RadixAlertDialogOverlay
-}) => {
-  return <StyledOverlay as={primitive} />
-}
+export const Overlay = React.forwardRef<
+  HTMLDivElement,
+  {
+    primitive: typeof RadixDialogOverlay | typeof RadixAlertDialogOverlay
+  }
+>(({ primitive }, ref) => {
+  return <StyledOverlay as={primitive} ref={ref} />
+})
+
+Overlay.displayName = "Overlay"

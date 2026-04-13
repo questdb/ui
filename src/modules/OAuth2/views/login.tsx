@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import styled, { css, useTheme, createGlobalStyle } from "styled-components"
+import styled, { css, useTheme } from "styled-components"
 import { User, Building, Close } from "@styled-icons/remix-line"
 import { ErrorWarning } from "@styled-icons/remix-fill"
 import { XSquare } from "@styled-icons/boxicons-solid"
@@ -13,17 +13,6 @@ import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
 
-const LoginFontStyles = createGlobalStyle`
-  @font-face {
-    font-family: 'PPFormula';
-    src: url('/fonts/PPFormula-SemiExtendedBold.woff2') format('woff2'),
-         url('/fonts/PPFormula-SemiExtendedBold.woff') format('woff'),
-         url('/fonts/PPFormula-SemiExtendedBold.ttf') format('truetype');
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-  }
-`
 
 const LoginContainer = styled.div`
   width: 100%;
@@ -80,7 +69,7 @@ const PlugsContainer = styled.div`
 `
 
 const CloseContainer = styled.div`
-  border: 1px solid #6b7280;
+  border: 1px solid ${({ theme }) => theme.color.inputBorder};
   border-radius: 4px;
   padding: 1.2rem;
   display: flex;
@@ -88,7 +77,7 @@ const CloseContainer = styled.div`
   justify-content: center;
   cursor: pointer;
   &:hover {
-    background: #6b7280;
+    background: ${({ theme }) => theme.color.inputBorder};
   }
 `
 
@@ -105,8 +94,7 @@ const Container = styled.div<{ $hasRedirectError: boolean }>`
 const Title = styled.h2`
   width: 100%;
   color: white;
-  font-family: "PPFormula", "Open Sans", sans-serif;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 33.75px;
   text-align: center;
   margin: 0;
@@ -177,7 +165,7 @@ const Card = styled.div`
     align-items: center;
     align-self: stretch;
     border-radius: 8px;
-    border: 1px solid #6b7280;
+    border: 1px solid ${({ theme }) => theme.color.inputBorder};
     background: ${({ theme }) => theme.color.background};
     font-size: 1.4rem;
     line-height: 1.5;
@@ -235,12 +223,12 @@ const StyledButton = styled(Button)<{ skin: string }>`
     skin === "secondary" &&
     css`
       border-radius: 4px !important;
-      border: 1px solid #6b7280 !important;
+      border: 1px solid ${({ theme }) => theme.color.inputBorder} !important;
       background: transparent !important;
 
       &:hover {
-        background: #6b7280 !important;
-        border-color: #6b7280 !important;
+        background: ${({ theme }) => theme.color.inputBorder} !important;
+        border-color: ${({ theme }) => theme.color.inputBorder} !important;
       }
     `}
 `
@@ -409,7 +397,6 @@ export const Login = ({
 
   return settings["acl.basic.auth.realm.enabled"] ? null : (
     <>
-      <LoginFontStyles />
       <LoginContainer data-hook="auth-login">
         <LoginBackground
           src="assets/login-background.svg"

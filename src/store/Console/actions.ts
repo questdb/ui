@@ -21,22 +21,11 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import {
-  ConsoleAction,
-  ConsoleAT,
-  ImageToZoom,
-  Sidebar,
-  BottomPanel,
-} from "./types"
+import { ConsoleAction, ConsoleAT, Sidebar, BottomPanel } from "./types"
 
 const setActiveBottomPanel = (panel: BottomPanel): ConsoleAction => ({
   payload: panel,
   type: ConsoleAT.SET_ACTIVE_BOTTOM_PANEL,
-})
-
-const setImageToZoom = (image?: ImageToZoom): ConsoleAction => ({
-  payload: image,
-  type: ConsoleAT.SET_IMAGE_TO_ZOOM,
 })
 
 const toggleSideMenu = (): ConsoleAction => ({
@@ -46,6 +35,11 @@ const toggleSideMenu = (): ConsoleAction => ({
 const pushSidebarHistory = (sidebar: Sidebar): ConsoleAction => ({
   payload: sidebar,
   type: ConsoleAT.PUSH_SIDEBAR_HISTORY,
+})
+
+const replaceSidebarHistory = (sidebar: Sidebar): ConsoleAction => ({
+  payload: sidebar,
+  type: ConsoleAT.REPLACE_SIDEBAR_HISTORY,
 })
 
 const goBackInSidebar = (): ConsoleAction => ({
@@ -67,8 +61,8 @@ const openSidebar = (): ConsoleAction => ({
 export default {
   toggleSideMenu,
   setActiveBottomPanel,
-  setImageToZoom,
   pushSidebarHistory,
+  replaceSidebarHistory,
   goBackInSidebar,
   goForwardInSidebar,
   closeSidebar,

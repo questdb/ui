@@ -31,6 +31,8 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import styled from "styled-components"
 import { Shortcuts } from "../Editor/Shortcuts"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const HelpButton = styled(PrimaryToggleButton)`
   padding: 0;
@@ -117,6 +119,7 @@ export const Help = () => {
           email?: string
           message: string
         }) => {
+          void trackEvent(ConsoleEvent.HELP_FEEDBACK_SUBMIT)
           try {
             await quest.sendFeedback({
               email,
@@ -132,7 +135,15 @@ export const Help = () => {
           }
         }}
       />
-      <DropdownMenu.Root modal={false} onOpenChange={setOpen}>
+      <DropdownMenu.Root
+        modal={false}
+        onOpenChange={(open) => {
+          if (open) {
+            void trackEvent(ConsoleEvent.HELP_OPEN)
+          }
+          setOpen(open)
+        }}
+      >
         <DropdownMenu.Trigger asChild>
           <HelpButton
             {...(open && { selected: true })}

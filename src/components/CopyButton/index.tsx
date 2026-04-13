@@ -7,6 +7,7 @@ import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const StyledButton = styled(Button)`
   padding: 1.2rem 0.6rem;
+  position: relative;
 `
 
 const StyledCheckboxCircle = styled(CheckboxCircle)`
@@ -19,11 +20,13 @@ export const CopyButton = ({
   text,
   iconOnly,
   size = "md",
+  onCopy,
   ...props
 }: {
   text: string
   iconOnly?: boolean
   size?: ButtonProps["size"]
+  onCopy?: () => void
 } & ButtonProps) => {
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -47,6 +50,7 @@ export const CopyButton = ({
         e.stopPropagation()
         setCopied(true)
         timeoutRef.current = setTimeout(() => setCopied(false), 2000)
+        onCopy?.()
       }}
       {...(!iconOnly && {
         prefixIcon: <FileCopy size={size === "sm" ? "12px" : "16px"} />,

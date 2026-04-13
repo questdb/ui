@@ -13,6 +13,8 @@ import {
   executeAIFlow,
   createExplainFlowConfig,
 } from "../../utils/executeAIFlow"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   color: ${({ theme }) => theme.color.pinkPrimary};
@@ -44,6 +46,7 @@ export const ExplainQueryButton = ({
     hasSchemaAccess,
     currentModel: currentModelValue,
     apiKey: apiKeyValue,
+    aiAssistantSettings,
   } = useAIStatus()
   const {
     addMessage,
@@ -54,6 +57,7 @@ export const ExplainQueryButton = ({
   } = useAIConversation()
 
   const handleExplainQuery = () => {
+    void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)
     const currentModel = currentModelValue!
     const apiKey = apiKeyValue!
 
@@ -62,6 +66,7 @@ export const ExplainQueryButton = ({
         conversationId,
         queryText,
         settings: { model: currentModel, apiKey },
+        aiAssistantSettings,
         questClient: quest,
         tables,
         hasSchemaAccess,

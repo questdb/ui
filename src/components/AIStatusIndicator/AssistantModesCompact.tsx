@@ -12,8 +12,14 @@ import {
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
-import { buildOperationSections, type OperationSection } from "./AssistantModes"
+import {
+  buildOperationSections,
+  formatDurationMs,
+  getSectionDuration,
+  type OperationSection,
+} from "./AssistantModes"
 import { slideAnimation } from "../../components/Animation"
+import { Box } from "../Box"
 
 const Container = styled.div`
   display: flex;
@@ -58,7 +64,6 @@ const ModeChevron = styled.div<{ $expanded?: boolean }>`
   align-items: center;
   justify-content: center;
   color: ${color("gray2")};
-  margin-left: -0.3rem;
   cursor: pointer;
   transition:
     color 0.2s,
@@ -239,6 +244,15 @@ const CollapsedSectionsWrapper = styled.div`
   padding-left: 2.8rem;
 `
 
+const DurationText = styled.span`
+  font-size: 1.2rem;
+  color: ${color("graphLegend")};
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-weight: 400;
+  flex-shrink: 0;
+  transform: translateY(1px);
+`
+
 const formatDetailedStatusMessage = (
   status: AIOperationStatus,
   args?: StatusArgs,
@@ -347,13 +361,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
     if (operationHistory.length === 0) return null
     const firstTimestamp = operationHistory[0]?.timestamp
     if (!firstTimestamp || !responseStart) return null
-    const durationMs = responseStart - firstTimestamp
-    if (durationMs < 0) return null
-    if (durationMs < 1000) {
-      return `${durationMs}ms`
-    }
-    const seconds = Math.round(durationMs / 1000)
-    return `${seconds}s`
+    return formatDurationMs(responseStart - firstTimestamp)
   }, [operationHistory, responseStart])
 
   if (operationHistory.length === 0) {
@@ -368,6 +376,13 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
       collapsedSections[section.id] === undefined
         ? defaultExpanded && isExpandable
         : !collapsedSections[section.id] && isExpandable
+    const nextSection: OperationSection | undefined =
+      operationSections[index + 1]
+    const sectionDuration = getSectionDuration(
+      section,
+      nextSection,
+      responseStart,
+    )
 
     return (
       <ModeHeader
@@ -393,13 +408,17 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
               <CheckIcon />
             )}
           </ReasoningIcon>
-
-          <ModeTitle $isActive={section.active}>{section.type}</ModeTitle>
-          {isExpandable && (
-            <ModeChevron $expanded={isExpanded}>
-              <ChevronRight size={14} />
-            </ModeChevron>
-          )}
+          <Box gap="0.3rem">
+            <ModeTitle $isActive={section.active}>{section.type}</ModeTitle>
+            {sectionDuration && (
+              <DurationText>({sectionDuration})</DurationText>
+            )}
+            {isExpandable && (
+              <ModeChevron $expanded={isExpanded}>
+                <ChevronRight size={14} />
+              </ModeChevron>
+            )}
+          </Box>
         </ModeHeaderTop>
         {isExpandable && (
           <ExpandableWrapper $expanded={isExpanded}>

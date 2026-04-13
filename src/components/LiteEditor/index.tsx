@@ -4,10 +4,13 @@ import type { editor } from "monaco-editor"
 import { QuestDBLanguageName } from "../../scenes/Editor/Monaco/utils"
 import styled, { useTheme } from "styled-components"
 import { Button } from "../Button"
+import { CornersOutIcon } from "@phosphor-icons/react"
 import { FileCopy } from "@styled-icons/remix-line"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
@@ -37,6 +40,10 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   .view-lines {
     width: 100% !important;
     pointer-events: none;
+  }
+
+  .view-overlays > * {
+    overflow-x: hidden;
   }
 
   .current-line {
@@ -141,27 +148,32 @@ const LiteEditorToolbar = ({
   onOpenInEditor,
   onCopy,
   copied,
+  diffEditor,
   compact = false,
 }: {
+  diffEditor: boolean
   onOpenInEditor: () => void
   onCopy: () => void
   copied: boolean
   compact?: boolean
 }) => {
   const appTheme = useTheme()
+  const Icon = diffEditor ? SquareSplitHorizontalIcon : CornersOutIcon
   return (
     <ButtonsContainer>
       <OpenInEditorButton
         className="open-in-editor-btn"
-        onClick={onOpenInEditor}
+        onClick={() => {
+          void trackEvent(ConsoleEvent.AI_OPEN_IN_EDITOR, {
+            diffEditor,
+          })
+          onOpenInEditor()
+        }}
         title="Open in editor"
         data-hook="ai-open-in-editor-button"
       >
         {!compact && "Open in editor"}
-        <SquareSplitHorizontalIcon
-          size="1.8rem"
-          color={appTheme.color.offWhite}
-        />
+        <Icon size="1.8rem" color={appTheme.color.offWhite} />
       </OpenInEditorButton>
       {!compact && (
         <CopyButtonBase
@@ -393,6 +405,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
         }}
       >
         <LiteEditorToolbar
+          diffEditor
           onOpenInEditor={props.onOpenInEditor}
           onCopy={() => handleCopy(props.modified)}
           copied={copied}
@@ -415,6 +428,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
     <EditorWrapper style={{ height: effectiveHeight }}>
       {showToolbarForRegularEditor || compactToolbar ? (
         <LiteEditorToolbar
+          diffEditor={false}
           onOpenInEditor={props.onOpenInEditor}
           onCopy={() => handleCopy(props.value ?? "")}
           copied={copied}

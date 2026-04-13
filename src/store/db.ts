@@ -52,6 +52,10 @@ export class Storage extends Dexie {
   read_notifications!: Table<{ newsId: string }, number>
   ai_conversations!: Table<ConversationMeta, string>
   ai_conversation_messages!: Table<PersistedMessages, string>
+  events!: Table<
+    { id?: number; created: number; name: string; props?: string },
+    number
+  >
   ready: boolean = false
 
   constructor() {
@@ -87,6 +91,9 @@ export class Storage extends Dexie {
         .filter((buffer) => buffer.isDiffBuffer === true)
         .delete(),
     )
+    this.version(6).stores({
+      events: "++id, created",
+    })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)
     // If you add a new version here that changes the "buffers" table:

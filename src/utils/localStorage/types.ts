@@ -41,4 +41,5 @@ export enum StoreKey {
   LEFT_PANEL_STATE = "left.panel.state",
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
+  CLIENT_ID = "client.id",
 }

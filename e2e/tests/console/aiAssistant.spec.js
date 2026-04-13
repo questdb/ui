@@ -2,6 +2,7 @@
 
 const {
   PROVIDERS,
+  CUSTOM_PROVIDER_DEFAULTS,
   getOpenAIConfiguredSettings,
   getAnthropicConfiguredSettings,
   createToolCallFlow,
@@ -10,6 +11,8 @@ const {
   createFinalResponseData,
   createChatTitleResponse,
   isTitleRequest,
+  getCustomProviderConfiguredSettings,
+  getCustomProviderEndpoint,
 } = require("../../utils/aiAssistant")
 
 /**
@@ -266,28 +269,24 @@ describe("ai assistant", () => {
 
       // Then
       cy.getByDataHook("ai-settings-modal-step-one").should("be.visible")
-      cy.getByDataHook("ai-settings-api-key")
-        .should("be.visible")
-        .should("have.attr", "placeholder", "Enter API key")
-        .should("be.disabled")
+      // API key input is hidden until a provider is selected
+      cy.getByDataHook("ai-settings-api-key").should("not.exist")
 
-      // When
+      // When - select Anthropic
       cy.getByDataHook("ai-settings-provider-anthropic").click()
 
-      // Then
+      // Then - API key input appears
       cy.getByDataHook("ai-settings-api-key")
         .should("be.visible")
         .should("have.attr", "placeholder", "Enter Anthropic API key")
-        .should("not.be.disabled")
 
-      // When
+      // When - switch to OpenAI
       cy.getByDataHook("ai-settings-provider-openai").click()
 
       // Then
       cy.getByDataHook("ai-settings-api-key")
         .should("be.visible")
         .should("have.attr", "placeholder", "Enter OpenAI API key")
-        .should("not.be.disabled")
       ;["anthropic", "openai"].forEach((provider) => {
         // Given
         interceptTokenValidation(provider, false)
@@ -303,7 +302,6 @@ describe("ai assistant", () => {
             "placeholder",
             `Enter ${provider === "anthropic" ? "Anthropic" : "OpenAI"} API key`,
           )
-          .should("not.be.disabled")
           .should("be.empty")
 
         // When
@@ -415,9 +413,9 @@ describe("ai assistant", () => {
         .should("contain", "Inactive")
 
       // When
-      cy.getByDataHook("ai-settings-test-api")
+      cy.getByDataHook("ai-settings-remove-provider").scrollIntoView()
+      cy.getByDataHook("ai-settings-remove-provider")
         .should("be.visible")
-        .should("contain", "Remove API Key")
         .click()
 
       // Then
@@ -2534,5 +2532,1096 @@ Syntax: \`avg(column)\`
       cy.getByDataHook("chat-message-error").should("not.exist")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
     })
+  })
+})
+
+describe("custom providers", () => {
+  beforeEach(() => {
+    cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      throw new Error(
+        `Unhandled OpenAI request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledOpenAI")
+
+    cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+      throw new Error(
+        `Unhandled Anthropic request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
+      )
+    }).as("unhandledAnthropic")
+  })
+
+  it("should configure provider with auto-fetched models, select/deselect", () => {
+    cy.loadConsoleWithAuth()
+
+    cy.intercept("GET", "**/models*", {
+      statusCode: 200,
+      body: {
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
+          { id: "codellama", object: "model" },
+        ],
+      },
+    }).as("modelListRequest")
+
+    cy.getByDataHook("ai-assistant-settings-button")
+      .should("be.visible")
+      .click()
+    cy.getByDataHook("ai-promo-continue").should("be.visible").click()
+    cy.getByDataHook("ai-settings-modal-step-one").should("be.visible")
+    cy.getByDataHook("ai-settings-provider-custom").should("be.visible").click()
+
+    cy.getByDataHook("custom-provider-name-input")
+      .should("be.visible")
+      .type("Ollama")
+    cy.getByDataHook("custom-provider-type-select").should(
+      "have.value",
+      "openai-chat-completions",
+    )
+    cy.getByDataHook("custom-provider-base-url-input").type(
+      "http://localhost:11434/v1",
+    )
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.wait("@modelListRequest")
+
+    cy.getByDataHook("custom-provider-model-row").should("have.length", 3)
+    cy.getByDataHook("custom-provider-context-window-input").should(
+      "have.value",
+      "200000",
+    )
+
+    cy.getByDataHook("custom-provider-select-all").click()
+    cy.getByDataHook("custom-provider-model-row")
+      .find('input[type="checkbox"]')
+      .each(($checkbox) => {
+        cy.wrap($checkbox).should("be.checked")
+      })
+
+    cy.getByDataHook("custom-provider-deselect-all").click()
+    cy.getByDataHook("custom-provider-model-row")
+      .find('input[type="checkbox"]')
+      .each(($checkbox) => {
+        cy.wrap($checkbox).should("not.be.checked")
+      })
+
+    cy.getByDataHook("custom-provider-model-row").contains("llama3").click()
+    cy.getByDataHook("custom-provider-model-row").contains("mistral").click()
+
+    cy.getByDataHook("custom-provider-manual-model-input").type(
+      "custom-finetune",
+    )
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 1)
+    cy.getByDataHook("custom-provider-model-chip").should(
+      "contain",
+      "custom-finetune",
+    )
+
+    cy.getByDataHook("custom-provider-remove-model").click()
+    cy.getByDataHook("custom-provider-model-chip").should("not.exist")
+
+    cy.getByDataHook("custom-provider-schema-access").check()
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    cy.contains("AI Assistant activated successfully").should("be.visible")
+    cy.getByDataHook("ai-chat-button").should("be.visible")
+  })
+
+  it("should reject invalid URL, require models, enforce context window minimum, and prevent duplicates", () => {
+    cy.loadConsoleWithAuth()
+
+    cy.getByDataHook("ai-assistant-settings-button")
+      .should("be.visible")
+      .click()
+    cy.getByDataHook("ai-promo-continue").should("be.visible").click()
+    cy.getByDataHook("ai-settings-provider-custom").should("be.visible").click()
+
+    cy.getByDataHook("multi-step-modal-next-button").should("be.disabled")
+
+    cy.getByDataHook("custom-provider-name-input").type("OpenRouter")
+    cy.getByDataHook("custom-provider-base-url-input").type("ftp://invalid")
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.contains("Base URL must start with http:// or https://").should(
+      "be.visible",
+    )
+
+    cy.getByDataHook("custom-provider-base-url-input")
+      .clear()
+      .type("https://openrouter.ai/api/v1")
+    cy.getByDataHook("custom-provider-api-key-input").type("sk-test")
+
+    cy.intercept("GET", "**/models*", {
+      statusCode: 500,
+      body: { error: "Internal Server Error" },
+    }).as("modelListFail")
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.wait("@modelListFail")
+
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.contains("Add at least one model").should("be.visible")
+
+    cy.getByDataHook("custom-provider-manual-model-input").type("gpt-4o{enter}")
+    cy.getByDataHook("custom-provider-model-chip")
+      .should("have.length", 1)
+      .should("contain", "gpt-4o")
+
+    // Duplicate model should not create a second chip
+    cy.getByDataHook("custom-provider-manual-model-input").type("gpt-4o")
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 1)
+
+    // Input not cleared on duplicate, clear manually
+    cy.getByDataHook("custom-provider-manual-model-input")
+      .clear()
+      .type("claude-3.5-sonnet")
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 2)
+
+    cy.getByDataHook("custom-provider-add-model-button").should("be.disabled")
+
+    cy.getByDataHook("custom-provider-context-window-input").type(
+      "{selectall}50000",
+    )
+    cy.getByDataHook("custom-provider-context-window-input").should(
+      "have.value",
+      "50000",
+    )
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.contains("Context window must be at least 100,000 tokens").should(
+      "be.visible",
+    )
+
+    cy.getByDataHook("custom-provider-context-window-input").type(
+      "{selectall}100000",
+    )
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    cy.contains("AI Assistant activated successfully").should("be.visible")
+    cy.getByDataHook("ai-chat-button").should("be.visible")
+  })
+
+  it("should send chat with tool call through custom endpoint and accept SQL suggestion", () => {
+    const customBaseURL = CUSTOM_PROVIDER_DEFAULTS.baseURL
+    const customEndpoint = getCustomProviderEndpoint(
+      customBaseURL,
+      "openai-chat-completions",
+    )
+
+    cy.setupCustomProvider()
+    cy.createTable("btc_trades")
+    cy.refreshSchema()
+
+    const assistantResponse =
+      "Here are the tables in your database. Let me write a query for btc_trades."
+    const sql = "SELECT * FROM btc_trades LIMIT 10;"
+
+    const flow = createToolCallFlow({
+      provider: "openai-chat-completions",
+      streaming: true,
+      question: "What tables are in the database?",
+      endpoint: customEndpoint,
+      steps: [
+        { toolCall: { name: "get_tables", args: {} } },
+        {
+          finalResponse: {
+            explanation: assistantResponse,
+            sql: sql,
+          },
+          expectToolResult: { includes: ["btc_trades"] },
+        },
+      ],
+    })
+
+    flow.intercept()
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type(flow.question)
+    cy.getByDataHook("chat-send-button").click()
+
+    flow.waitForCompletion()
+
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", assistantResponse)
+
+    cy.getByDataHook("assistant-mode-processing-collapsed").click()
+    cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
+
+    cy.getByDataHook("message-action-accept").should("be.visible")
+    cy.getByDataHook("message-action-accept").click()
+
+    cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+    cy.getByDataHook("chat-context-badge").should(
+      "contain",
+      "SELECT * FROM btc_trades",
+    )
+
+    cy.dropTableIfExists("btc_trades")
+  })
+
+  it("should toggle models, add second provider, remove first, and update model dropdown", () => {
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId: "ollama",
+        name: "Ollama",
+        models: ["llama3", "mistral", "codellama"],
+      }),
+    )
+
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 3)
+    cy.contains("llama3").should("be.visible")
+    cy.contains("mistral").should("be.visible")
+    cy.contains("codellama").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
+
+    cy.get("[data-model='llama3']").should("exist")
+    cy.get("[data-model='mistral']").should("exist")
+    cy.get("[data-model='codellama']").should("exist")
+
+    cy.get("[data-model='mistral']").find("button[role='switch']").click()
+    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    cy.getByDataHook("ai-settings-save").click()
+
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 2)
+    cy.contains("llama3").should("be.visible")
+    cy.contains("codellama").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-ollama").click()
+    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+
+    cy.get("[data-model='mistral']").find("button[role='switch']").click()
+    cy.get("[data-model='mistral'][data-enabled='true']").should("exist")
+    cy.getByDataHook("ai-settings-save").click()
+
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 3)
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-add-custom-provider")
+      .should("be.visible")
+      .click()
+
+    cy.getByDataHook("custom-provider-name-input").type("OpenRouter")
+    cy.getByDataHook("custom-provider-base-url-input").type(
+      "https://openrouter.ai/api/v1",
+    )
+
+    cy.intercept("GET", "https://openrouter.ai/api/v1/models", {
+      statusCode: 500,
+      body: { error: "Server error" },
+    })
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+    cy.getByDataHook("custom-provider-manual-model-input").type("gpt-4o")
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    cy.getByDataHook("ai-settings-provider-ollama").should("be.visible")
+    cy.contains("[data-hook^='ai-settings-provider-']", "OpenRouter").should(
+      "be.visible",
+    )
+    cy.getByDataHook("ai-settings-save").click()
+
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 4)
+    cy.contains("gpt-4o").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-ollama").click()
+    cy.getByDataHook("ai-settings-remove-provider").click()
+
+    cy.getByDataHook("ai-settings-provider-ollama").should("not.exist")
+    cy.contains("[data-hook^='ai-settings-provider-']", "OpenRouter").should(
+      "be.visible",
+    )
+    cy.getByDataHook("ai-settings-save").click()
+
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
+    cy.contains("gpt-4o").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+  })
+
+  it("should show error on 401, retry successfully, and show error on network failure", () => {
+    const customEndpoint = getCustomProviderEndpoint(
+      CUSTOM_PROVIDER_DEFAULTS.baseURL,
+      "openai-chat-completions",
+    )
+
+    cy.setupCustomProvider()
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      req.reply({
+        statusCode: 401,
+        body: {
+          error: {
+            type: "authentication_error",
+            message: "Invalid API key",
+          },
+        },
+      })
+    }).as("errorRequest")
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test error handling")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@errorRequest")
+    cy.getByDataHook("chat-message-error").should("be.visible")
+    cy.getByDataHook("retry-button").should("be.visible")
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      req.reply(
+        createResponse(
+          "openai-chat-completions",
+          createFinalResponseData(
+            "openai-chat-completions",
+            "Successful response after retry",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("successRequest")
+
+    cy.getByDataHook("retry-button").click()
+
+    cy.wait("@successRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-error").should("not.exist")
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Successful response after retry")
+
+    cy.getByDataHook("chat-window-new").click()
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      req.destroy()
+    }).as("networkError")
+
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test network error")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@networkError")
+    cy.getByDataHook("chat-message-error").should("be.visible")
+    cy.getByDataHook("retry-button").should("be.visible")
+  })
+
+  it("should reject duplicate names against custom and built-in providers, and allow unique names", () => {
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId: "my-provider",
+        name: "My Provider",
+        models: ["test-model"],
+      }),
+    )
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-add-custom-provider").click()
+
+    // Exact duplicate name
+    cy.getByDataHook("custom-provider-name-input").type("My Provider")
+    cy.getByDataHook("custom-provider-base-url-input").type(
+      "http://localhost:1234",
+    )
+
+    cy.intercept("GET", "http://localhost:1234/models", {
+      statusCode: 500,
+      body: { error: "not needed" },
+    })
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.contains("A provider with the same name already exists").should(
+      "be.visible",
+    )
+
+    // Case-insensitive duplicate of built-in provider name
+    cy.getByDataHook("custom-provider-name-input").clear().type("openai")
+
+    cy.intercept("GET", "http://localhost:1234/models", {
+      statusCode: 500,
+      body: { error: "not needed" },
+    })
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.contains("A provider with the same name already exists").should(
+      "be.visible",
+    )
+
+    // Unique name should proceed to step 2
+    cy.getByDataHook("custom-provider-name-input")
+      .clear()
+      .type("My Provider (v2.0)!")
+
+    cy.intercept("GET", "http://localhost:1234/models", {
+      statusCode: 500,
+      body: { error: "not needed" },
+    })
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+
+    cy.getByDataHook("custom-provider-manual-model-input").type("test-model-2")
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    // Both providers visible in sidebar (find by name text)
+    cy.contains("My Provider").should("be.visible")
+    cy.contains("My Provider (v2.0)!").should("be.visible")
+
+    cy.getByDataHook("ai-settings-save").click()
+    cy.window().then((win) => {
+      const settings = JSON.parse(
+        win.localStorage.getItem("ai.assistant.settings"),
+      )
+      // Provider ID should be a UUID
+      const customIds = Object.keys(settings.customProviders)
+      const newProviderId = customIds.find((id) => id !== "my-provider")
+      expect(newProviderId).to.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      )
+      expect(settings.customProviders[newProviderId].name).to.equal(
+        "My Provider (v2.0)!",
+      )
+    })
+  })
+
+  it("should route Anthropic-type provider requests to custom base URL", () => {
+    const anthropicBaseURL = "http://localhost:8080"
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId: "custom-anthropic",
+        name: "Custom Anthropic",
+        type: "anthropic",
+        baseURL: anthropicBaseURL,
+        apiKey: "test-anthropic-key",
+        models: ["claude-custom"],
+      }),
+    )
+
+    // Anthropic SDK appends /v1/messages to baseURL
+    cy.intercept("POST", "http://localhost:8080/v1/messages", (req) => {
+      if (isTitleRequest("anthropic", req.body)) {
+        req.reply(createChatTitleResponse("anthropic", "Test Chat"))
+        return
+      }
+      req.reply(
+        createResponse(
+          "anthropic",
+          createFinalResponseData(
+            "anthropic",
+            "Response from custom Anthropic provider",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("anthropicRequest")
+
+    cy.intercept("POST", "https://api.anthropic.com/**", () => {
+      throw new Error(
+        "Request should not go to api.anthropic.com for custom provider",
+      )
+    })
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test Anthropic custom")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@anthropicRequest")
+    cy.waitForStreamingComplete()
+
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Response from custom Anthropic provider")
+  })
+
+  it("should route requests to correct endpoint when switching between built-in and custom models", () => {
+    const customBaseURL = CUSTOM_PROVIDER_DEFAULTS.baseURL
+    const customEndpoint = getCustomProviderEndpoint(
+      customBaseURL,
+      "openai-chat-completions",
+    )
+
+    const openaiSettings = getOpenAIConfiguredSettings()
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings(
+        {
+          providerId: "ollama",
+          name: "Ollama",
+          models: ["llama3"],
+        },
+        openaiSettings,
+      ),
+    )
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Ollama Chat"),
+        )
+        return
+      }
+      req.reply(
+        createResponse(
+          "openai-chat-completions",
+          createFinalResponseData(
+            "openai-chat-completions",
+            "Response from Ollama",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("ollamaRequest")
+
+    cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+      if (isTitleRequest("openai", req.body)) {
+        req.reply(createChatTitleResponse("openai", "OpenAI Chat"))
+        return
+      }
+      req.reply(
+        createResponse(
+          "openai",
+          createFinalResponseData("openai", "Response from OpenAI", null),
+          { streaming: true },
+        ),
+      )
+    }).as("openaiRequest")
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test with Ollama")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@ollamaRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Response from Ollama")
+
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.getByDataHook("ai-settings-model-item-label")
+      .contains("GPT-5 mini")
+      .click()
+
+    cy.getByDataHook("chat-window-new").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test with OpenAI")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@openaiRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Response from OpenAI")
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-openai").should("be.visible")
+    cy.getByDataHook("ai-settings-provider-ollama").should("be.visible")
+    cy.getByDataHook("ai-settings-cancel").click()
+  })
+
+  it("should reset fields on cancel, preserve them on back, and add model via Enter key", () => {
+    cy.loadConsoleWithAuth()
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-promo-continue").click()
+    cy.getByDataHook("ai-settings-provider-custom").click()
+
+    cy.getByDataHook("custom-provider-name-input").type("Partial")
+    cy.getByDataHook("custom-provider-base-url-input").type(
+      "http://localhost:1234",
+    )
+
+    cy.getByDataHook("multi-step-modal-cancel-button").click()
+
+    cy.getByDataHook("ai-settings-provider-custom").click()
+    cy.getByDataHook("custom-provider-name-input").should("have.value", "")
+    cy.getByDataHook("custom-provider-base-url-input").should("have.value", "")
+
+    cy.getByDataHook("custom-provider-name-input").type("Test Provider")
+    cy.getByDataHook("custom-provider-base-url-input").type(
+      "http://localhost:5555",
+    )
+
+    cy.intercept("GET", "http://localhost:5555/models", {
+      statusCode: 500,
+      body: { error: "fail" },
+    })
+
+    cy.getByDataHook("multi-step-modal-next-button").click()
+
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+    cy.getByDataHook("custom-provider-context-window-input").should(
+      "have.value",
+      "200000",
+    )
+    cy.getByDataHook("custom-provider-schema-access").should("be.checked")
+    cy.getByDataHook("custom-provider-add-model-button").should("be.disabled")
+
+    cy.getByDataHook("custom-provider-manual-model-input").type(
+      "enter-model{enter}",
+    )
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 1)
+    cy.getByDataHook("custom-provider-manual-model-input").should(
+      "have.value",
+      "",
+    )
+
+    // Back button preserves step 1 fields
+    cy.getByDataHook("multi-step-modal-cancel-button").click()
+    cy.getByDataHook("custom-provider-name-input").should(
+      "have.value",
+      "Test Provider",
+    )
+    cy.getByDataHook("custom-provider-base-url-input").should(
+      "have.value",
+      "http://localhost:5555",
+    )
+
+    cy.intercept("GET", "http://localhost:5555/models", {
+      statusCode: 500,
+      body: { error: "fail" },
+    })
+    cy.getByDataHook("multi-step-modal-next-button").click()
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+  })
+
+  it("should preserve custom provider settings and chat after page reload", () => {
+    const customEndpoint = getCustomProviderEndpoint(
+      CUSTOM_PROVIDER_DEFAULTS.baseURL,
+      "openai-chat-completions",
+    )
+    const settings = getCustomProviderConfiguredSettings()
+
+    cy.loadConsoleWithAuth(false, settings)
+    cy.getByDataHook("ai-chat-button").should("be.visible")
+
+    cy.loadConsoleWithAuth(false, settings)
+    cy.getByDataHook("ai-chat-button").should("be.visible")
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      req.reply(
+        createResponse(
+          "openai-chat-completions",
+          createFinalResponseData(
+            "openai-chat-completions",
+            "Working after reload",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("chatRequest")
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test after reload")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@chatRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Working after reload")
+  })
+
+  it("should omit auth token without API key and send Bearer token when API key is configured", () => {
+    const customEndpoint = getCustomProviderEndpoint(
+      CUSTOM_PROVIDER_DEFAULTS.baseURL,
+      "openai-chat-completions",
+    )
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        apiKey: "",
+      }),
+    )
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      const auth = req.headers["authorization"] || ""
+      expect(auth).to.not.include("sk-")
+      req.reply(
+        createResponse(
+          "openai-chat-completions",
+          createFinalResponseData(
+            "openai-chat-completions",
+            "No auth response",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("noAuthRequest")
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test no auth")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@noAuthRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "No auth response")
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        apiKey: "sk-test-key-123",
+      }),
+    )
+
+    cy.intercept("POST", customEndpoint, (req) => {
+      if (isTitleRequest("openai-chat-completions", req.body)) {
+        req.reply(
+          createChatTitleResponse("openai-chat-completions", "Test Chat"),
+        )
+        return
+      }
+      expect(req.headers["authorization"]).to.equal("Bearer sk-test-key-123")
+      req.reply(
+        createResponse(
+          "openai-chat-completions",
+          createFinalResponseData(
+            "openai-chat-completions",
+            "Auth response",
+            null,
+          ),
+          { streaming: true },
+        ),
+      )
+    }).as("authRequest")
+
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").should("be.visible")
+    cy.getByDataHook("chat-input-textarea").type("Test with auth")
+    cy.getByDataHook("chat-send-button").click()
+
+    cy.wait("@authRequest")
+    cy.waitForStreamingComplete()
+    cy.getByDataHook("chat-message-assistant")
+      .should("be.visible")
+      .should("contain", "Auth response")
+  })
+
+  it("should open manage models, add and remove models, update context window, and reflect in dropdown", () => {
+    const providerId = "ollama"
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId,
+        name: "Ollama",
+        models: ["llama3", "mistral", "codellama"],
+      }),
+    )
+
+    // Intercept model fetch before opening modal
+    cy.intercept("GET", "**/models*", {
+      statusCode: 200,
+      body: {
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
+          { id: "codellama", object: "model" },
+        ],
+      },
+    }).as("manageModelsFetch")
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
+
+    cy.getByDataHook("ai-settings-manage-models").should("be.visible").click()
+    cy.wait("@manageModelsFetch")
+
+    // All 3 models should be checked
+    cy.getByDataHook("custom-provider-model-row").should("have.length", 3)
+    cy.getByDataHook("custom-provider-model-row")
+      .find('input[type="checkbox"]')
+      .each(($checkbox) => {
+        cy.wrap($checkbox).should("be.checked")
+      })
+
+    // Add a manual model
+    cy.getByDataHook("custom-provider-manual-model-input").type(
+      "custom-finetune",
+    )
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 1)
+    cy.getByDataHook("custom-provider-model-chip").should(
+      "contain",
+      "custom-finetune",
+    )
+
+    // Uncheck codellama
+    cy.getByDataHook("custom-provider-model-row").contains("codellama").click()
+
+    // Validation: context window too low
+    cy.getByDataHook("custom-provider-context-window-input")
+      .clear()
+      .type("50000")
+    cy.getByDataHook("manage-models-save").click()
+    cy.contains("Context window must be at least 100,000 tokens").should(
+      "be.visible",
+    )
+
+    // Fix context window and save
+    cy.getByDataHook("custom-provider-context-window-input")
+      .clear()
+      .type("150000")
+    cy.getByDataHook("custom-provider-context-window-input").should(
+      "have.value",
+      "150000",
+    )
+    cy.getByDataHook("manage-models-save").click()
+
+    // Modal should close, settings modal visible again
+    cy.getByDataHook("ai-settings-manage-models").should("be.visible")
+
+    // Save the outer settings modal (manage-models toast auto-dismisses)
+    cy.getByDataHook("ai-settings-save").click()
+    cy.get(".toast-success-container").should("be.visible").first().click()
+
+    // Dropdown should show 3 models (llama3, mistral, custom-finetune)
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 3)
+    cy.contains("llama3").should("be.visible")
+    cy.contains("mistral").should("be.visible")
+    cy.contains("custom-finetune").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+  })
+
+  it("should auto-enable new models from manage models and preserve unsaved toggle state", () => {
+    const providerId = "test-provider"
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId,
+        name: "Test Provider",
+        models: ["model-a", "model-b", "model-c"],
+      }),
+    )
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-test-provider")
+      .should("be.visible")
+      .click()
+
+    // All 3 models should be enabled
+    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-b'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
+
+    // Disable model-b toggle (unsaved state)
+    cy.get("[data-model='model-b']").find("button[role='switch']").click()
+    cy.get("[data-model='model-b'][data-enabled='false']").should("exist")
+
+    // Intercept model fetch → fail to get manual mode
+    cy.intercept("GET", "**/models*", {
+      statusCode: 500,
+      body: { error: "Server error" },
+    }).as("manageModelsFetchFail")
+
+    // Open manage models
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@manageModelsFetchFail")
+
+    // Manual mode: warning banner + existing models as chips
+    cy.getByDataHook("custom-provider-warning-banner").should("be.visible")
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 3)
+
+    // Add model-d
+    cy.getByDataHook("custom-provider-manual-model-input").type("model-d")
+    cy.getByDataHook("custom-provider-add-model-button").click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 4)
+
+    // Remove model-b
+    cy.getByDataHook("custom-provider-model-chip")
+      .filter(":contains('model-b')")
+      .find("[data-hook='custom-provider-remove-model']")
+      .click()
+    cy.getByDataHook("custom-provider-model-chip").should("have.length", 3)
+
+    // Save manage models
+    cy.getByDataHook("manage-models-save").click()
+
+    // Back in SettingsModal: model-b gone, model-d auto-enabled
+    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-b']").should("not.exist")
+    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-d'][data-enabled='true']").should("exist")
+
+    // Save settings
+    cy.getByDataHook("ai-settings-save").click()
+    cy.get(".toast-success-container").should("be.visible").first().click()
+
+    // Dropdown should show 3 models (model-a, model-c, model-d)
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 3)
+    cy.contains("model-a").should("be.visible")
+    cy.contains("model-c").should("be.visible")
+    cy.contains("model-d").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+  })
+
+  it("should handle no-API-key custom provider: models visible, no validated badge, schema toggle enabled, and allow adding an API key", () => {
+    const providerId = "ollama"
+    const customEndpoint = getCustomProviderEndpoint(
+      CUSTOM_PROVIDER_DEFAULTS.baseURL,
+      "openai-chat-completions",
+    )
+
+    cy.loadConsoleWithAuth(
+      false,
+      getCustomProviderConfiguredSettings({
+        providerId,
+        name: "Ollama",
+        baseURL: CUSTOM_PROVIDER_DEFAULTS.baseURL,
+        apiKey: "",
+        models: ["llama3", "mistral"],
+      }),
+    )
+
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
+
+    // Part A: No-API-key state
+
+    // No validated badge
+    cy.getByDataHook("ai-settings-validated-badge").should("not.exist")
+
+    // API key input shows placeholder about no key
+    cy.getByDataHook("ai-settings-api-key").should(
+      "have.attr",
+      "placeholder",
+      "This provider does not have an API key",
+    )
+
+    // Model list visible with both models
+    cy.get("[data-model='llama3']").should("exist")
+    cy.get("[data-model='mistral']").should("exist")
+
+    // Schema access toggle is not disabled
+    cy.getByDataHook("ai-settings-schema-access").should("not.be.disabled")
+
+    // Manage models button visible
+    cy.getByDataHook("ai-settings-manage-models").should("be.visible")
+
+    // Toggle mistral off
+    cy.get("[data-model='mistral']").find("button[role='switch']").click()
+    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+
+    // Built-in provider should NOT have manage models button
+    cy.getByDataHook("ai-settings-provider-openai").click()
+    cy.getByDataHook("ai-settings-manage-models").should("not.exist")
+
+    // Part B: Add API key
+
+    // Switch back to custom provider
+    cy.getByDataHook("ai-settings-provider-ollama").click()
+
+    // Click Edit button to make input editable, then type API key
+    cy.get('button[title="Edit API key"]').click()
+    cy.getByDataHook("ai-settings-api-key").type("sk-custom-key-123")
+
+    // Intercept validation request to custom endpoint
+    cy.intercept("POST", customEndpoint, {
+      statusCode: 200,
+      delay: 200,
+      body: {
+        id: "chatcmpl-mock",
+        object: "chat.completion",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+    }).as("customValidation")
+
+    // Click validate
+    cy.getByDataHook("ai-settings-test-api").should("be.visible").click()
+    cy.wait("@customValidation")
+
+    // Validated badge should now appear
+    cy.getByDataHook("ai-settings-validated-badge").should("be.visible")
+
+    // Models still visible, mistral toggle preserved
+    cy.get("[data-model='llama3'][data-enabled='true']").should("exist")
+    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+
+    // Part C: Save and verify
+
+    cy.getByDataHook("ai-settings-save").click()
+    cy.get(".toast-success-container").should("be.visible").click()
+
+    // Dropdown should show only llama3 (mistral was disabled)
+    cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
+    cy.contains("llama3").should("be.visible")
+    cy.getByDataHook("ai-settings-model-dropdown").click()
   })
 })

@@ -21,6 +21,8 @@ import { Dialog as TableSchemaDialog } from "../../../components/TableSchemaDial
 import { UploadResultDialog } from "./upload-result-dialog"
 import { shortenText, UploadResult } from "../../../utils"
 import { DropBox } from "./dropbox"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const Root = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
   padding: 2rem;
@@ -149,9 +151,10 @@ export const FilesToUpload = ({
                     <Button
                       skin="secondary"
                       prefixIcon={<Grid size="18px" />}
-                      onClick={() =>
+                      onClick={() => {
+                        void trackEvent(ConsoleEvent.IMPORT_RESULTS_OPEN)
                         onViewData(data.uploadResult as UploadResult)
-                      }
+                      }}
                     >
                       Result
                     </Button>
@@ -273,6 +276,7 @@ export const FilesToUpload = ({
               setSchemaDialogOpen(name ? data.id : undefined)
             }
             onSchemaChange={(schema) => {
+              void trackEvent(ConsoleEvent.IMPORT_ADD_SCHEMA)
               onFilePropertyChange(data.id, {
                 schema: schema.schemaColumns,
                 partitionBy: schema.partitionBy,
@@ -320,14 +324,17 @@ export const FilesToUpload = ({
         <Select
           name="overwrite"
           defaultValue={data.settings.overwrite ? "true" : "false"}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+            void trackEvent(ConsoleEvent.IMPORT_CHANGE_WRITE_MODE, {
+              type: e.target.value === "true" ? "overwrite" : "append",
+            })
             onFilePropertyChange(data.id, {
               settings: {
                 ...data.settings,
                 overwrite: e.target.value === "true",
               },
             })
-          }
+          }}
           options={[
             {
               label: "Append",

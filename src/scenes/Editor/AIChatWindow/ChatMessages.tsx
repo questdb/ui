@@ -6,12 +6,15 @@ import React, {
   useState,
   useCallback,
 } from "react"
+import { useDispatch, useSelector } from "react-redux"
+import { actions, selectors } from "../../../store"
 import styled, { css, keyframes, useTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import { Box, Text, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { AssistantModesCompact } from "../../../components/AIStatusIndicator/AssistantModesCompact"
-import { color } from "../../../utils"
+import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
+import { color, getTableKind } from "../../../utils"
 import type {
   ConversationMessage,
   UserMessageDisplayType,
@@ -49,6 +52,8 @@ import {
   AIOperationStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 type QueryRunStatus = "neutral" | "loading" | "success" | "error"
 
@@ -209,14 +214,20 @@ const IssueMessageRow = styled(Box)`
   gap: 0.5rem;
 `
 
-const SchemaNameDisplay = styled(Box)`
+const SchemaNameDisplay = styled(Button)`
   margin-left: 0.4rem;
-  padding: 0.8rem 1.2rem;
+  padding: 0.5rem 1rem;
   align-items: center;
   gap: 1rem;
-  border-radius: 8px;
+  border-radius: 0.6rem;
   border: 1px solid ${color("selection")};
   background: ${color("backgroundDarker")};
+
+  &:hover,
+  &:active {
+    background: ${color("backgroundLighter")} !important;
+    border-color: ${color("cyan")} !important;
+  }
 `
 
 const SchemaName = styled(Text)`
@@ -274,11 +285,8 @@ const AssistantHeader = styled(Box).attrs({
 `
 
 const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
-  font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.4rem;
-  text-transform: uppercase;
   color: ${color("foreground")};
-  line-height: 1;
 `
 
 const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
@@ -607,6 +615,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   onScrollToMessageComplete,
 }) => {
   const theme = useTheme()
+  const dispatch = useDispatch()
+  const tables = useSelector(selectors.query.getTables)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -623,6 +633,29 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
       setScrolled(true)
     })
   }, [scrolled, scrollToMessageId])
+
+  const handleSchemaNameDisplayClick = useCallback(
+    (schemaData: SchemaDisplayData) => {
+      const table = tables.find(
+        (t) =>
+          t.table_name === schemaData.tableName &&
+          getTableKind(t) === schemaData.kind,
+      )
+      if (table) {
+        dispatch(
+          actions.console.pushSidebarHistory({
+            type: "tableDetails",
+            payload: {
+              tableName: table.table_name,
+              isMatView: table.table_type === "M",
+              isView: table.table_type === "V",
+            },
+          }),
+        )
+      }
+    },
+    [tables],
+  )
 
   useEffect(() => {
     const container = messagesContainerRef.current
@@ -785,7 +818,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               const schemaData = message.displaySchemaData
               content = (
                 <UserRequestContent>
-                  <SchemaNameDisplay>
+                  <SchemaNameDisplay
+                    onClick={() => handleSchemaNameDisplayClick(schemaData)}
+                  >
                     <TableIcon
                       kind={schemaData.kind}
                       partitionBy={schemaData.partitionBy}
@@ -950,6 +985,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           }
 
           const hasSQLChange = !!message.sql
+          const isSQLUnchanged =
+            hasSQLChange &&
+            message.previousSQL !== undefined &&
+            normalizeQueryText(message.sql || "") ===
+              normalizeQueryText(message.previousSQL || "")
           const isExpanded = expandedDiffs.has(originalIndex)
 
           // Read status from message, compute isRejectedWithFollowUp from message positions
@@ -966,6 +1006,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           const isMessageStreaming = isStreaming && isLastVisibleMessage
           const showButtons =
             hasSQLChange &&
+            !isSQLUnchanged &&
             !isAccepted &&
             !isRejected &&
             !isRejectedWithFollowUp &&
@@ -1056,7 +1097,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 <>
                   <AssistantHeader data-hook="assistant-header">
                     <AISparkle size={20} variant="filled" />
-                    <AssistantLabel>Assistant</AssistantLabel>
+                    <AssistantLabel>
+                      {message.model || "Assistant"}
+                    </AssistantLabel>
                     {tokenDisplay && (
                       <TokenDisplay className="token-display">
                         <GaugeIcon size="16px" color={theme.color.gray2} />
@@ -1082,41 +1125,52 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             <CodeIcon size={22} color="#BDBDBD" />
                             <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
                           </DiffHeaderLeft>
-                          {(isAccepted ||
-                            isRejected ||
-                            isRejectedWithFollowUp) && (
-                            <DiffHeaderStatus
-                              $isAccepted={isAccepted}
-                              $isRejected={isRejected}
-                              $isRejectedWithFollowUp={isRejectedWithFollowUp}
-                              data-hook={
-                                isRejected
-                                  ? "diff-status-rejected"
-                                  : isRejectedWithFollowUp
-                                    ? "diff-status-followed-up"
-                                    : "diff-status-accepted"
-                              }
-                            >
-                              <StatusIcon
+                          {isSQLUnchanged && (
+                            <DiffHeaderStatus data-hook="diff-status-unchanged">
+                              <StatusIcon>
+                                <CheckmarkOutline size="14px" />
+                              </StatusIcon>
+                              Already accepted
+                            </DiffHeaderStatus>
+                          )}
+                          {!isSQLUnchanged &&
+                            (isAccepted ||
+                              isRejected ||
+                              isRejectedWithFollowUp) && (
+                              <DiffHeaderStatus
                                 $isAccepted={isAccepted}
                                 $isRejected={isRejected}
                                 $isRejectedWithFollowUp={isRejectedWithFollowUp}
+                                data-hook={
+                                  isRejected
+                                    ? "diff-status-rejected"
+                                    : isRejectedWithFollowUp
+                                      ? "diff-status-followed-up"
+                                      : "diff-status-accepted"
+                                }
                               >
-                                {isRejected ? (
-                                  <CloseOutline size="14px" />
-                                ) : isRejectedWithFollowUp ? (
-                                  <ChatDotsIcon size="14px" />
-                                ) : (
-                                  <CheckmarkOutline size="14px" />
-                                )}
-                              </StatusIcon>
-                              {isRejected
-                                ? "Rejected"
-                                : isRejectedWithFollowUp
-                                  ? "Followed up"
-                                  : "Accepted"}
-                            </DiffHeaderStatus>
-                          )}
+                                <StatusIcon
+                                  $isAccepted={isAccepted}
+                                  $isRejected={isRejected}
+                                  $isRejectedWithFollowUp={
+                                    isRejectedWithFollowUp
+                                  }
+                                >
+                                  {isRejected ? (
+                                    <CloseOutline size="14px" />
+                                  ) : isRejectedWithFollowUp ? (
+                                    <ChatDotsIcon size="14px" />
+                                  ) : (
+                                    <CheckmarkOutline size="14px" />
+                                  )}
+                                </StatusIcon>
+                                {isRejected
+                                  ? "Rejected"
+                                  : isRejectedWithFollowUp
+                                    ? "Followed up"
+                                    : "Accepted"}
+                              </DiffHeaderStatus>
+                            )}
                           <DiffHeaderRight>
                             <IconButton
                               onClick={(e) => {
@@ -1149,6 +1203,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                                       message.sql &&
                                       !isOperationInProgress
                                     ) {
+                                      void trackEvent(
+                                        ConsoleEvent.AI_EDITOR_SUGGESTION_APPLY,
+                                      )
                                       onApplyToEditor(message.id, message.sql)
                                     }
                                   }}

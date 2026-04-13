@@ -37,7 +37,6 @@ import {
 } from "../../providers"
 import { Help } from "./help"
 import { Warnings } from "./warning"
-import { ImageZoom } from "../News/image-zoom"
 import { AIChatButton } from "./AIChatButton"
 import { TableDetailsButton } from "./TableDetailsButton"
 import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
@@ -106,17 +105,16 @@ const Layout = () => {
             <Warnings />
             <Root>
               <Main>
-                <ImageZoom />
                 <Page>
                   <Console />
                 </Page>
               </Main>
 
               <Sidebar align="top">
-                <Help />
-                <TableDetailsButton />
                 <AIChatButton />
+                <TableDetailsButton />
                 <News />
+                <Help />
               </Sidebar>
               <TableDetailsDrawer />
               <AIChatWindowLazy />

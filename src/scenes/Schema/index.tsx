@@ -74,6 +74,8 @@ import { useSchema } from "./SchemaContext"
 import { SchemaProvider } from "./SchemaContext"
 import { TreeNodeKind } from "./Row"
 import { toast } from "../../components/Toast"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 type Props = Readonly<{
   hideMenu?: boolean
@@ -227,6 +229,7 @@ const Schema = ({
   }
 
   const copySchemasToClipboard = async () => {
+    void trackEvent(ConsoleEvent.SCHEMA_COPY_MULTIPLE)
     if (!tables) return
     const tablesWithError: { name: string; type: TreeNodeKind }[] = []
     const ddls = await Promise.all(
@@ -263,6 +266,7 @@ const Schema = ({
   }
 
   const handleAddMetricsBuffer = useCallback(async () => {
+    void trackEvent(ConsoleEvent.METRIC_TAB_OPEN)
     const last1h = metricDurations.find(
       (d) => d.dateFrom === "now-1h" && d.dateTo === "now",
     ) as Duration

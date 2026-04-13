@@ -29,7 +29,6 @@ const MAX_HISTORY_SIZE = 20
 export const initialState: ConsoleStateShape = {
   sideMenuOpened: false,
   activeBottomPanel: "zeroState",
-  imageToZoom: undefined,
   sidebarHistory: [],
   sidebarHistoryPosition: -1,
   sidebarVisible: false,
@@ -51,13 +50,6 @@ const _console = (
       return {
         ...state,
         activeBottomPanel: action.payload,
-      }
-    }
-
-    case ConsoleAT.SET_IMAGE_TO_ZOOM: {
-      return {
-        ...state,
-        imageToZoom: action.payload,
       }
     }
 
@@ -96,6 +88,24 @@ const _console = (
         ...state,
         sidebarHistory: newHistory,
         sidebarHistoryPosition: newHistory.length - 1,
+        sidebarVisible: true,
+      }
+    }
+
+    case ConsoleAT.REPLACE_SIDEBAR_HISTORY: {
+      const { sidebarHistory, sidebarHistoryPosition } = state
+      if (
+        sidebarHistoryPosition < 0 ||
+        sidebarHistoryPosition >= sidebarHistory.length
+      )
+        return state
+
+      const newHistory = [...sidebarHistory]
+      newHistory[sidebarHistoryPosition] = action.payload
+
+      return {
+        ...state,
+        sidebarHistory: newHistory,
         sidebarVisible: true,
       }
     }

@@ -40,6 +40,8 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { escapeHtml } from "../../utils/escapeHtml"
 import * as QuestDB from "../../utils/questdb"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { AnyIfEmpty } from "react-redux"
 import { request } from "http"
 
@@ -231,6 +233,9 @@ export function quickVis(
     setDrawBtnToCancel()
     requestActive = true
     chartType = chartTypePicker.selected()
+    void trackEvent(ConsoleEvent.CHART_DRAW, {
+      chartType,
+    })
 
     // check if the only change is chart type
     const selectedXAxis = xAxisPicker.selected()

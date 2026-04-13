@@ -11,7 +11,7 @@ const Root = styled.div`
   border-radius: ${({ theme }) => theme.borderRadius};
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
   overflow: hidden;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.backgroundDarker};
 
   svg {
     position: absolute;

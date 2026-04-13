@@ -49,6 +49,8 @@ import { getLastUnactionedDiff } from "../../providers/AIConversationProvider/ut
 import { useDispatch } from "react-redux"
 import { actions } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -256,6 +258,8 @@ const Editor = ({
     )
       return
 
+    void trackEvent(ConsoleEvent.AI_EDITOR_SUGGESTION_ACCEPT)
+
     const { conversationId } = pendingDiffInfo
 
     // Use unified acceptSuggestion from provider
@@ -267,6 +271,8 @@ const Editor = ({
 
   const handleRejectFromDiffEditor = useCallback(async () => {
     if (!pendingDiffInfo) return
+
+    void trackEvent(ConsoleEvent.AI_EDITOR_SUGGESTION_REJECT)
 
     const { conversationId, messageId } = pendingDiffInfo
 

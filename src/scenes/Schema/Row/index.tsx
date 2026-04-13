@@ -48,6 +48,8 @@ import {
   Button,
   toast,
 } from "../../../components"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { color, copyToClipboard } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
@@ -106,7 +108,7 @@ const Type = styled(Text)`
 
 const Title = styled(Text)`
   .highlight {
-    background-color: #7c804f;
+    background-color: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
   }
 `
@@ -198,7 +200,7 @@ const StyledTitle = styled(Title)`
   margin-right: 1rem;
 
   .highlight {
-    background-color: #45475a;
+    background-color: ${({ theme }) => theme.color.selection};
     color: ${({ theme }) => theme.color.foreground};
   }
 
@@ -516,6 +518,9 @@ const Row = ({
           (e.key === "c" || e.key === "C") &&
           (isTableKind || kind === "column")
         ) {
+          void trackEvent(ConsoleEvent.SCHEMA_NAME_COPY, {
+            kind,
+          })
           void copyToClipboard(name)
           toast.success("Copied to clipboard", { autoClose: 2000 })
 
