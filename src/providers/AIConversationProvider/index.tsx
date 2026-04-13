@@ -35,6 +35,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { projectConversationTurns } from "../../utils/ai/turnView"
+import { toast } from "../../components/Toast"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -202,14 +203,19 @@ export const AIConversationProvider: React.FC<{
       if (conversationId !== activeConversationIdRef.current) {
         return
       }
-      await aiConversationStore.saveMessages(
-        conversationId,
-        activeConversationMessagesRef.current,
-      )
-      if (updateTimestamp) {
-        await aiConversationStore.updateMeta(conversationId, {
-          updatedAt: Date.now(),
-        })
+      try {
+        await aiConversationStore.saveMessages(
+          conversationId,
+          activeConversationMessagesRef.current,
+        )
+        if (updateTimestamp) {
+          await aiConversationStore.updateMeta(conversationId, {
+            updatedAt: Date.now(),
+          })
+        }
+      } catch (e) {
+        console.error("Failed to persist messages:", e)
+        toast.error("Failed to save conversation")
       }
     },
     [],

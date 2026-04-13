@@ -264,6 +264,9 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
     const nextLast = next.turnMessages[next.turnMessages.length - 1]
     return (
       prevLast === nextLast &&
+      prev.anchorMessage === next.anchorMessage &&
+      prev.status === next.status &&
+      prev.isLiveOperation === next.isLiveOperation &&
       prev.isMessageStreaming === next.isMessageStreaming
     )
   },

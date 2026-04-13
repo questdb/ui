@@ -24,6 +24,8 @@ import {
   executeTool,
   safeJsonParse,
   CRITICAL_TOKEN_USAGE_MESSAGE,
+  MAX_TOOL_CALL_ROUNDS,
+  TOOL_CALL_LIMIT_MESSAGE,
   getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
@@ -295,6 +297,7 @@ async function handleToolCalls(
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
   streaming?: StreamingCallback,
   toolContext?: ToolExecutionContext,
+  round: number = 1,
 ): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
@@ -365,6 +368,14 @@ async function handleToolCalls(
     })
   }
 
+  const isLastRound = round >= MAX_TOOL_CALL_ROUNDS
+  if (isLastRound) {
+    updatedHistory.push({
+      role: "user" as const,
+      content: TOOL_CALL_LIMIT_MESSAGE,
+    })
+  }
+
   if (abortSignal?.aborted) {
     return {
       type: "aborted",
@@ -377,7 +388,7 @@ async function handleToolCalls(
   const followUpParams: Parameters<typeof createAnthropicMessage>[1] = {
     model,
     system: systemPrompt,
-    tools,
+    ...(!isLastRound && { tools }),
     messages: updatedHistory,
     temperature: 0.3,
   }
@@ -416,6 +427,7 @@ async function handleToolCalls(
       newAccumulatedTokens,
       streaming,
       toolContext,
+      round + 1,
     )
   }
 
@@ -579,14 +591,27 @@ export function createAnthropicProvider(
       }
     },
 
-    async generateSummary({ model, systemPrompt, userMessage }) {
+    async generateSummary({
+      model,
+      systemPrompt,
+      userMessage,
+      abortSignal,
+    }: {
+      model: string
+      systemPrompt: string
+      userMessage: string
+      abortSignal?: AbortSignal
+    }) {
       let text = ""
-      const stream = anthropic.messages.stream({
-        ...getModelProps(model),
-        max_tokens: 64_000,
-        messages: [{ role: "user", content: userMessage }],
-        system: systemPrompt,
-      })
+      const stream = anthropic.messages.stream(
+        {
+          ...getModelProps(model),
+          max_tokens: 64_000,
+          messages: [{ role: "user", content: userMessage }],
+          system: systemPrompt,
+        },
+        { signal: abortSignal },
+      )
       for await (const event of stream) {
         if (
           event.type === "content_block_delta" &&

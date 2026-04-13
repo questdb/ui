@@ -87,6 +87,7 @@ async function generateSummary(
   middleMessages: ConversationMessage[],
   aiProvider: AIProvider,
   settings?: AiAssistantSettings,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   const testModelValue = getTestModel(aiProvider.id, settings)
   if (!testModelValue) {
@@ -125,6 +126,7 @@ async function generateSummary(
     model: testModelValue,
     systemPrompt: SUMMARIZATION_PROMPT,
     userMessage,
+    abortSignal,
   })
 }
 
@@ -135,6 +137,7 @@ export async function compactConversationIfNeeded(
   userMessage: string,
   setStatusCompacting: () => void,
   options: { model?: string; aiAssistantSettings?: AiAssistantSettings } = {},
+  abortSignal?: AbortSignal,
 ): Promise<CompactionResult> {
   const compactionThreshold = aiProvider.contextWindow - 50_000
   const allMessages: ConversationMessage[] = [
@@ -188,6 +191,7 @@ export async function compactConversationIfNeeded(
     aiProvider,
     setStatusCompacting,
     options.aiAssistantSettings,
+    abortSignal,
   )
 
   if (!result.wasCompacted) {
@@ -206,6 +210,7 @@ async function compactConversationInternal(
   aiProvider: AIProvider,
   setStatusCompacting: () => void,
   settings?: AiAssistantSettings,
+  abortSignal?: AbortSignal,
 ): Promise<CompactionResult> {
   if (messages.length === 0) {
     return { wasCompacted: false }
@@ -214,13 +219,21 @@ async function compactConversationInternal(
   setStatusCompacting()
 
   try {
-    const summary = await generateSummary(messages, aiProvider, settings)
+    const summary = await generateSummary(
+      messages,
+      aiProvider,
+      settings,
+      abortSignal,
+    )
 
     return {
       compactedMessage: buildContinuationPrompt(summary),
       wasCompacted: true,
     }
   } catch (error) {
+    if (abortSignal?.aborted) {
+      return { wasCompacted: false }
+    }
     console.error("Failed to compact conversation:", error)
     return {
       wasCompacted: false,

@@ -20,6 +20,8 @@ import {
   safeJsonParse,
   executeTool,
   CRITICAL_TOKEN_USAGE_MESSAGE,
+  MAX_TOOL_CALL_ROUNDS,
+  TOOL_CALL_LIMIT_MESSAGE,
   getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
@@ -365,6 +367,7 @@ export function createOpenAIProvider(
         })
       }
 
+      let toolCallRound = 0
       while (true) {
         if (abortSignal?.aborted) {
           return {
@@ -375,6 +378,7 @@ export function createOpenAIProvider(
 
         const toolCalls = extractOpenAIToolCalls(lastResponse)
         if (!toolCalls.length) break
+        toolCallRound++
         const tool_outputs: OpenAI.Responses.ResponseFunctionToolCallOutputItem[] =
           []
         for (const tc of toolCalls) {
@@ -416,6 +420,14 @@ export function createOpenAIProvider(
           })
         }
 
+        const isLastRound = toolCallRound >= MAX_TOOL_CALL_ROUNDS
+        if (isLastRound) {
+          input.push({
+            role: "user" as const,
+            content: TOOL_CALL_LIMIT_MESSAGE as string,
+          })
+        }
+
         if (abortSignal?.aborted) {
           return {
             type: "aborted",
@@ -429,7 +441,7 @@ export function createOpenAIProvider(
           ...toResponsesAPIProps(model),
           instructions: config.systemInstructions,
           input,
-          tools: openaiTools,
+          ...(!isLastRound && { tools: openaiTools }),
           store: false,
           include: ["reasoning.encrypted_content"],
         } as OpenAI.Responses.ResponseCreateParamsNonStreaming
@@ -501,14 +513,27 @@ export function createOpenAIProvider(
       }
     },
 
-    async generateSummary({ model, systemPrompt, userMessage }) {
+    async generateSummary({
+      model,
+      systemPrompt,
+      userMessage,
+      abortSignal,
+    }: {
+      model: string
+      systemPrompt: string
+      userMessage: string
+      abortSignal?: AbortSignal
+    }) {
       let text = ""
-      const stream = await openai.responses.create({
-        ...toResponsesAPIProps(model),
-        instructions: systemPrompt,
-        input: userMessage,
-        stream: true,
-      })
+      const stream = await openai.responses.create(
+        {
+          ...toResponsesAPIProps(model),
+          instructions: systemPrompt,
+          input: userMessage,
+          stream: true,
+        },
+        ...(abortSignal ? [{ signal: abortSignal }] : ([] as const)),
+      )
       for await (const event of stream) {
         if (event.type === "response.output_text.delta" && "delta" in event) {
           text += event.delta

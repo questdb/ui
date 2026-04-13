@@ -26,6 +26,8 @@ import {
   safeJsonParse,
   executeTool,
   CRITICAL_TOKEN_USAGE_MESSAGE,
+  MAX_TOOL_CALL_ROUNDS,
+  TOOL_CALL_LIMIT_MESSAGE,
   getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
@@ -449,6 +451,7 @@ export function createOpenAIChatCompletionsProvider(
         })
       }
 
+      let toolCallRound = 0
       while (true) {
         if (abortSignal?.aborted) {
           return {
@@ -458,6 +461,7 @@ export function createOpenAIChatCompletionsProvider(
         }
 
         if (!result.toolCalls.length) break
+        toolCallRound++
 
         for (const tc of result.toolCalls) {
           const exec = await executeTool(
@@ -497,6 +501,14 @@ export function createOpenAIChatCompletionsProvider(
           })
         }
 
+        const isLastRound = toolCallRound >= MAX_TOOL_CALL_ROUNDS
+        if (isLastRound) {
+          chatMessages.push({
+            role: "user" as const,
+            content: TOOL_CALL_LIMIT_MESSAGE as string,
+          })
+        }
+
         if (abortSignal?.aborted) {
           return {
             type: "aborted",
@@ -509,6 +521,7 @@ export function createOpenAIChatCompletionsProvider(
           openai,
           {
             ...baseParams,
+            ...(!isLastRound && { tools: baseParams.tools }),
             messages: chatMessages,
           } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
           streaming,
@@ -561,16 +574,29 @@ export function createOpenAIChatCompletionsProvider(
       }
     },
 
-    async generateSummary({ model, systemPrompt, userMessage }) {
+    async generateSummary({
+      model,
+      systemPrompt,
+      userMessage,
+      abortSignal,
+    }: {
+      model: string
+      systemPrompt: string
+      userMessage: string
+      abortSignal?: AbortSignal
+    }) {
       let text = ""
-      const stream = await openai.chat.completions.create({
-        ...toChatCompletionsAPIProps(model),
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        stream: true,
-      })
+      const stream = await openai.chat.completions.create(
+        {
+          ...toChatCompletionsAPIProps(model),
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          stream: true,
+        },
+        ...(abortSignal ? [{ signal: abortSignal }] : ([] as const)),
+      )
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content
         if (delta) {

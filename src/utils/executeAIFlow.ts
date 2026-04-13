@@ -491,6 +491,7 @@ export async function executeAIFlow(
   const resolvedToolCallIds = new Set<string>()
   const toolResultMessages: Array<{ messageId: string; toolCallId: string }> =
     []
+  const streamingMessageIds: string[] = []
 
   const flushStreamingUpdate = () => {
     rafId = 0
@@ -556,6 +557,45 @@ export async function executeAIFlow(
   }
 
   const streamingCallback: StreamingCallback = {
+    onBeforeStream: () => {
+      // Cancel any pending RAF from a previous failed attempt
+      if (rafId) {
+        cancelAnimationFrame(rafId)
+        rafId = 0
+      }
+      hasPendingStreamingUpdate = false
+      hasPendingOperationHistoryUpdate = false
+
+      // Remove messages created during a previous failed streaming attempt
+      if (streamingMessageIds.length > 0) {
+        callbacks.removeMessages?.(streamingMessageIds)
+        streamingMessageIds.length = 0
+      }
+
+      // Reset tracking state
+      emittedToolCallsByMessage.clear()
+      resolvedToolCallIds.clear()
+      toolResultMessages.length = 0
+
+      // Reset accumulators to initial state
+      streamingAssistantMessageId = anchorMessageId
+      accumulatedReasoning = ""
+      reasoningTimestamp = 0
+      accumulatedToolCalls = []
+      accumulatedText = ""
+      contentTimestamp = 0
+
+      // Reset status flags
+      thinkingStatusEmitted = false
+      generatingResponseEmitted = false
+
+      // Clear any partial content flushed to the anchor during the failed attempt
+      callbacks.updateMessage(conversationId, anchorMessageId, {
+        content: null,
+        reasoning: undefined,
+        tool_calls: undefined,
+      })
+    },
     onTextChunk: (chunk: string) => {
       if (contentTimestamp === 0) contentTimestamp = Date.now()
       if (!generatingResponseEmitted) {
@@ -626,6 +666,7 @@ export async function executeAIFlow(
         messageId: toolResultMessageId,
         toolCallId: result.tool_call_id,
       })
+      streamingMessageIds.push(toolResultMessageId)
       // Flush any pending updates for current assistant message before adding tool message
       if (hasPendingStreamingUpdate) {
         if (rafId) {
@@ -661,6 +702,7 @@ export async function executeAIFlow(
         content: null,
         timestamp: Date.now(),
       })
+      streamingMessageIds.push(newId)
       // Reset accumulators
       streamingAssistantMessageId = newId
       accumulatedReasoning = ""

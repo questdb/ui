@@ -36,6 +36,11 @@ export class StreamingError extends Error {
 export const CRITICAL_TOKEN_USAGE_MESSAGE =
   "**CRITICAL TOKEN USAGE: The conversation is getting too long to fit the context window. If you are planning to use more tools, summarize your findings to the user first, and wait for user confirmation to continue working on the task.**"
 
+export const MAX_TOOL_CALL_ROUNDS = 50
+
+export const TOOL_CALL_LIMIT_MESSAGE =
+  "Tool call limit exceeded for this turn. You may not use any tools. Provide a response summarizing your findings."
+
 export const safeJsonParse = <T>(text: string): T | object => {
   try {
     return JSON.parse(text) as T

@@ -75,6 +75,7 @@ export interface AIProvider {
     model: string
     systemPrompt: string
     userMessage: string
+    abortSignal?: AbortSignal
   }): Promise<string>
 
   testConnection(params: {

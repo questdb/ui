@@ -69,6 +69,7 @@ export type StreamingCallback = {
     content: string
   }) => void
   onResponseStart?: () => void
+  onBeforeStream?: () => void
 }
 
 export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
@@ -373,7 +374,15 @@ export const continueConversation = async ({
             model: settings.model,
             aiAssistantSettings: settings.aiAssistantSettings,
           },
+          abortSignal,
         )
+
+        if (abortSignal?.aborted) {
+          return {
+            type: "aborted" as const,
+            message: "Operation was cancelled",
+          }
+        }
 
         if ("error" in compactionResult) {
           setStatus(null)
@@ -405,6 +414,8 @@ export const continueConversation = async ({
       }
 
       const tools = grantSchemaAccess ? ALL_TOOLS : DEFAULT_TOOLS
+
+      streaming?.onBeforeStream?.()
 
       const result = await provider.executeFlow({
         model: settings.model,
