@@ -213,7 +213,7 @@ const AIChatWindow: React.FC = () => {
     addMessage,
     removeMessages,
     updateMessage,
-    replaceConversationMessages,
+    updateMessagesWithCompaction,
     updateConversationName,
     acceptSuggestion,
     rejectSuggestion,
@@ -420,7 +420,7 @@ const AIChatWindow: React.FC = () => {
         setIsStreaming,
         persistMessages,
         updateConversationName,
-        replaceConversationMessages,
+        updateMessagesWithCompaction,
       },
     )
   }
@@ -659,7 +659,7 @@ const AIChatWindow: React.FC = () => {
         setIsStreaming,
         persistMessages,
         updateConversationName,
-        replaceConversationMessages,
+        updateMessagesWithCompaction,
       }
 
       switch (userMessage.displayType) {
@@ -782,7 +782,7 @@ const AIChatWindow: React.FC = () => {
       setIsStreaming,
       persistMessages,
       updateConversationName,
-      replaceConversationMessages,
+      updateMessagesWithCompaction,
       currentSQL,
     ],
   )

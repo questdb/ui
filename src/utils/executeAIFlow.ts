@@ -126,7 +126,7 @@ export type AIFlowCallbacks = {
     name: string,
     isGeneratedByAI?: boolean,
   ) => Promise<void>
-  replaceConversationMessages?: (messages: ConversationMessage[]) => void
+  updateMessagesWithCompaction?: (messages: ConversationMessage[]) => void
   getLastRoundMessages?: (conversationId: ConversationId) => Promise<{
     lastUserMessage?: ConversationMessage
     lastAssistantMessage?: ConversationMessage
@@ -289,8 +289,8 @@ function processResult(config: ProcessResultConfig): AIFlowResult {
     return { success: false, error: errorMessage }
   }
 
-  if (compactedHistory && callbacks.replaceConversationMessages) {
-    callbacks.replaceConversationMessages(compactedHistory)
+  if (compactedHistory && callbacks.updateMessagesWithCompaction) {
+    callbacks.updateMessagesWithCompaction(compactedHistory)
   }
 
   const hasSQLInResult = response.sql && response.sql.trim() !== ""

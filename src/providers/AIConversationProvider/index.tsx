@@ -104,7 +104,9 @@ type AIConversationContextType = {
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
-  replaceConversationMessages: (newMessages: Array<ConversationMessage>) => void
+  updateMessagesWithCompaction: (
+    newMessages: Array<ConversationMessage>,
+  ) => void
   updateConversationName: (
     conversationId: ConversationId,
     name: string,
@@ -484,7 +486,7 @@ export const AIConversationProvider: React.FC<{
     [conversationMetas],
   )
 
-  const replaceConversationMessages = useCallback(
+  const updateMessagesWithCompaction = useCallback(
     (newMessages: Array<ConversationMessage>) => {
       setActiveConversationMessages((prev) => {
         const conversationMessages = [...prev]
@@ -498,11 +500,14 @@ export const AIConversationProvider: React.FC<{
             conversationMessages[index] = message
           }
         }
-        conversationMessages.splice(
-          lastReplaceIndex + 1,
-          0,
-          newMessages[newMessages.length - 1],
-        )
+        // Insert the compaction summary message
+        const lastNewMessage = newMessages[newMessages.length - 1]
+        if (
+          lastNewMessage &&
+          !conversationMessages.some((m) => m.id === lastNewMessage.id)
+        ) {
+          conversationMessages.splice(lastReplaceIndex + 1, 0, lastNewMessage)
+        }
         return conversationMessages
       })
     },
@@ -621,6 +626,7 @@ export const AIConversationProvider: React.FC<{
         void trackEvent(ConsoleEvent.AI_CHAT_OPEN)
       } finally {
         isOpeningChatWindowRef.current = false
+        setIsLoadingMessages(false)
       }
     },
     [
@@ -1049,7 +1055,7 @@ export const AIConversationProvider: React.FC<{
         addMessage,
         removeMessages,
         updateMessage,
-        replaceConversationMessages,
+        updateMessagesWithCompaction,
         updateConversationName,
         acceptSuggestion,
         rejectSuggestion,
