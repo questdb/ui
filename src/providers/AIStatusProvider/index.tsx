@@ -248,6 +248,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
     }
   }, [])
 
