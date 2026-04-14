@@ -636,13 +636,13 @@ export const AIConversationProvider: React.FC<{
     void trackEvent(ConsoleEvent.AI_CHAT_CLOSE)
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
-      if (activeConversationMessages.length === 0) {
+      if (activeConversationMessagesRef.current.length === 0) {
         void aiConversationStore.deleteConversation(
           chatWindowState.activeConversationId,
         )
       }
     }
-  }, [chatWindowState.activeConversationId, activeConversationMessages])
+  }, [chatWindowState.activeConversationId])
 
   const handleGlyphClick = useCallback(
     async (options: {

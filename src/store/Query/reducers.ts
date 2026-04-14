@@ -234,6 +234,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
       const { queryText } = parseQueryKey(newQueryKey)
       const detachedQueryKey = createDetachedQueryKey(queryText)
+      // Keeping the original query key to separate chat window vs. editor notifications from now on
       if (fromNotifications[detachedQueryKey]) {
         mergedNotifications[newQueryKey] = fromNotifications[detachedQueryKey]
       }
