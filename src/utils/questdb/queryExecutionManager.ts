@@ -1,4 +1,4 @@
-import type { Client } from "./client"
+import type { Client, QueryId } from "./client"
 import type { QueryKey } from "../../store/Query/types"
 
 type NotificationNamespaceKey = string | number
@@ -6,6 +6,7 @@ type NotificationNamespaceKey = string | number
 export type ActiveExecution = {
   bufferId: NotificationNamespaceKey
   queryKey: QueryKey
+  queryId?: QueryId
 }
 
 type PendingExecution = ActiveExecution & {
@@ -31,7 +32,11 @@ export class QueryExecutionManager {
 
   private _idleWaiters: Array<() => void> = []
 
-  constructor(private client: Client) {}
+  constructor(private client: Client) {
+    client.onCancellableQueryStarted = (queryId) => {
+      this.setActiveQueryId(queryId)
+    }
+  }
 
   private waitForIdle(): Promise<void> {
     if (this._active === null) return Promise.resolve()
@@ -90,9 +95,22 @@ export class QueryExecutionManager {
     this.refreshSnapshot()
   }
 
+  private setActiveQueryId(queryId: QueryId): void {
+    if (this._active === null) return
+    this._active = { ...this._active, queryId }
+  }
+
+  private abortActive(): void {
+    if (this._active?.queryId !== undefined) {
+      this.client.abort(this._active.queryId)
+    } else {
+      this.client.abortActive()
+    }
+  }
+
   cancelActive = (): void => {
     if (this._active === null) return
-    this.client.abortActive()
+    this.abortActive()
     this._active = null
     this.refreshSnapshot()
     this.flushIdleWaiters()
@@ -115,7 +133,7 @@ export class QueryExecutionManager {
     // pending query. Otherwise execute() can fire toggleRunning(QUERY) while
     // running is still QUERY, producing a no-op useEffect.
     const idle = this.waitForIdle()
-    this.client.abortActive()
+    this.abortActive()
     await idle
 
     this._active = { bufferId: pending.bufferId, queryKey: pending.queryKey }

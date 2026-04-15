@@ -473,8 +473,7 @@ const AIChatWindow: React.FC = () => {
                       <CancelButton
                         skin="error"
                         onClick={() => {
-                          quest.abortActive()
-                          questExecution.releaseExecution(queryKey)
+                          questExecution.cancelActive()
                         }}
                       >
                         <Stop size="18px" />
@@ -524,10 +523,9 @@ const AIChatWindow: React.FC = () => {
         window.clearTimeout(notificationTimeoutRef.current)
         notificationTimeoutRef.current = null
       }
-      quest.abortActive()
-      questExecution.releaseExecution(queryKey)
+      questExecution.cancelActive()
     },
-    [questExecution, quest],
+    [questExecution],
   )
 
   const handleContextClick = useCallback(async () => {

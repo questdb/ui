@@ -38,6 +38,7 @@ export class Client {
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
+  onCancellableQueryStarted: ((queryId: QueryId) => void) | null = null
   private static refreshTokenPending = false
   private static numOfPendingQueries = 0
   refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
@@ -184,6 +185,7 @@ export class Client {
 
     if (options?.cancellable) {
       this._activeQueryId = queryId
+      this.onCancellableQueryStarted?.(queryId)
       return { promise, queryId }
     }
 
