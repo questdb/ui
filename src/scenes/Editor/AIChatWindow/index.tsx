@@ -837,6 +837,15 @@ const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
+  useEffect(() => {
+    return () => {
+      if (notificationTimeoutRef.current !== null) {
+        window.clearTimeout(notificationTimeoutRef.current)
+        notificationTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }

@@ -172,10 +172,12 @@ const Notifications = ({
     if (bufferNotifications.length > 0) {
       scrollToBottom()
     }
-  }, [bufferNotifications])
+  }, [bufferNotifications.length])
 
   useLayoutEffect(() => {
-    scrollToBottom()
+    if (!isMinimized) {
+      scrollToBottom()
+    }
   }, [isMinimized])
 
   useEffect(() => {
