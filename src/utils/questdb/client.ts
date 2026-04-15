@@ -31,8 +31,12 @@ import {
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
+export type QueryId = number
+
 export class Client {
-  private _controllers: AbortController[] = []
+  private _controllers = new Map<QueryId, AbortController>()
+  private _nextQueryId: QueryId = 1
+  private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
   private static refreshTokenPending = false
   private static numOfPendingQueries = 0
@@ -92,11 +96,27 @@ export class Client {
       )
       .join("&")
 
-  abort = () => {
-    this._controllers.forEach((controller) => {
-      controller.abort()
-    })
-    this._controllers = []
+  abort = (queryId?: QueryId) => {
+    if (queryId !== undefined) {
+      const controller = this._controllers.get(queryId)
+      if (controller) {
+        controller.abort()
+        this._controllers.delete(queryId)
+      }
+      if (this._activeQueryId === queryId) {
+        this._activeQueryId = null
+      }
+      return
+    }
+    this._controllers.forEach((controller) => controller.abort())
+    this._controllers.clear()
+    this._activeQueryId = null
+  }
+
+  abortActive = () => {
+    if (this._activeQueryId !== null) {
+      this.abort(this._activeQueryId)
+    }
   }
 
   static transformQueryRawResult = <T extends Record<string, unknown>>(
@@ -138,25 +158,54 @@ export class Client {
     return Client.transformQueryRawResult<T>(result)
   }
 
-  private removeController(controller: AbortController) {
-    const index = this._controllers.indexOf(controller)
-    if (index >= 0) {
-      this._controllers.splice(index, 1)
+  private removeController(queryId: QueryId) {
+    this._controllers.delete(queryId)
+    if (this._activeQueryId === queryId) {
+      this._activeQueryId = null
     }
   }
 
-  async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
+  queryRaw(
+    query: string,
+    options: Options & { cancellable: true },
+  ): { promise: Promise<QueryRawResult>; queryId: QueryId }
+  queryRaw(query: string, options?: Options): Promise<QueryRawResult>
+  queryRaw(
+    query: string,
+    options?: Options,
+  ):
+    | Promise<QueryRawResult>
+    | { promise: Promise<QueryRawResult>; queryId: QueryId } {
+    const queryId = this._nextQueryId++
     const controller = new AbortController()
+    this._controllers.set(queryId, controller)
+
+    const promise = this._executeQueryRaw(query, options, controller, queryId)
+
+    if (options?.cancellable) {
+      this._activeQueryId = queryId
+      return { promise, queryId }
+    }
+
+    return promise
+  }
+
+  private async _executeQueryRaw(
+    query: string,
+    options: Options | undefined,
+    controller: AbortController,
+    queryId: QueryId,
+  ): Promise<QueryRawResult> {
+    const { cancellable: _, ...queryOptions } = options ?? {}
     const payload = {
       count: true,
       src: "con",
       query,
       timings: true,
       version: API_VERSION,
-      ...options,
+      ...queryOptions,
     }
 
-    this._controllers.push(controller)
     let response: Response
 
     if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
@@ -183,7 +232,7 @@ export class Client {
         headers: this.commonHeaders,
       })
     } catch (error) {
-      this.removeController(controller)
+      this.removeController(queryId)
       Client.numOfPendingQueries--
 
       const err = {
@@ -334,7 +383,7 @@ export class Client {
 
       return Promise.reject(errorPayload)
     } finally {
-      this.removeController(controller)
+      this.removeController(queryId)
       Client.numOfPendingQueries--
     }
   }

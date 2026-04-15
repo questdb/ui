@@ -323,6 +323,7 @@ export type Options = {
   count?: boolean
   cols?: string
   src?: string
+  cancellable?: boolean
 }
 
 export type Release = {

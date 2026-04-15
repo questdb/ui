@@ -144,7 +144,7 @@ const DownloadMenuItem = styled(Button)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
@@ -186,6 +186,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       $("#quick-vis"),
       window.bus as unknown as ReturnType<typeof $>,
       quest,
+      questExecution,
     )
 
     _grid.addEventListener(

@@ -36,7 +36,6 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { actions, selectors } from "../../../store"
-import { useQueryExecutionGuard } from "../../../hooks/useQueryExecutionGuard"
 import { RunningType } from "../../../store/Query/types"
 import type { NotificationShape } from "../../../store/Query/types"
 import { theme } from "../../../theme"
@@ -262,7 +261,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     queryParamProcessedRef,
     isNavigatingFromSearchRef,
   } = editorContext
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
   const {
     handleGlyphClick,
@@ -277,12 +276,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const scriptConfirmationOpenRef = useRef(false)
-  const {
-    requestExecution,
-    releaseExecution,
-    isAnyQueryRunning,
-    confirmationDialog: abortConfirmationDialog,
-  } = useQueryExecutionGuard()
+  const editorQueryIdRef = useRef<QuestDB.QueryId | null>(null)
+  const scriptQueryKeyRef = useRef<QueryKey | null>(null)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
@@ -530,7 +525,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const targetBufferId = activeBufferRef.current.id as number
     const queryKey = createQueryKeyFromRequest(editor, query)
 
-    requestExecution(targetBufferId, queryKey, () => {
+    questExecution.requestExecution(targetBufferId, queryKey, () => {
       setCursorBeforeRunning(query)
       toggleRunning(type)
     })
@@ -1297,13 +1292,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     )
 
     try {
-      const result = await quest.queryRaw(
-        normalizeQueryText(effectiveQueryText),
-        {
+      const { promise: scriptQueryPromise, queryId: scriptQueryId } =
+        quest.queryRaw(normalizeQueryText(effectiveQueryText), {
           limit: "0,1000",
           explain: true,
-        },
-      )
+          cancellable: true,
+        })
+      editorQueryIdRef.current = scriptQueryId
+
+      const result = await scriptQueryPromise
 
       const bufferIdStr = activeBufferId.toString()
       if (executionRefs.current[bufferIdStr]) {
@@ -1433,7 +1430,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
 
-    if (runningValueRef.current === RunningType.NONE && !isAnyQueryRunning) {
+    if (
+      runningValueRef.current === RunningType.NONE &&
+      !questExecution.isAnyRunning()
+    ) {
       triggerScript()
       return
     }
@@ -1586,7 +1586,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     ) {
       isRunningScriptRef.current = false
       dispatch(actions.query.stopRunning())
-      dispatch(actions.query.stopQueryExecution())
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
     }
 
     const notificationPrefix = completedGracefully
@@ -1666,10 +1669,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     if (running === RunningType.NONE && request) {
-      quest.abort()
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
       setRequest(undefined)
     }
-  }, [request, quest, running])
+  }, [request, running, quest])
 
   useEffect(() => {
     runningValueRef.current = running
@@ -1678,7 +1684,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (!editor || !monaco) {
       return
     }
-
     if (running !== RunningType.NONE) {
       cancelAllValidationRequests()
       clearModelMarkers(monaco, editor)
@@ -1708,6 +1713,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
         const parentQueryKey = createQueryKeyFromRequest(editor, request)
+        questExecution.markActive(targetBufferId, parentQueryKey)
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1745,11 +1751,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           notificationTimeoutRef.current = null
         }, 1000)
 
-        void quest
-          .queryRaw(normalizeQueryText(queryToRun), {
+        const { promise: queryPromise, queryId } = quest.queryRaw(
+          normalizeQueryText(queryToRun),
+          {
             limit: "0,1000",
             explain: true,
-          })
+            cancellable: true,
+          },
+        )
+        editorQueryIdRef.current = queryId
+
+        void queryPromise
           .then((result) => {
             if (notificationTimeoutRef.current) {
               window.clearTimeout(notificationTimeoutRef.current)
@@ -1794,7 +1806,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
 
             dispatch(actions.query.stopRunning())
-            releaseExecution(parentQueryKey)
+            questExecution.releaseExecution(parentQueryKey)
             dispatch(actions.query.setResult(result))
 
             if (
@@ -1867,7 +1879,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
-            releaseExecution(parentQueryKey)
+            questExecution.releaseExecution(parentQueryKey)
 
             if (editorRef?.current && monacoRef?.current) {
               // For error positioning, we need to use the original request (without EXPLAIN prefix)
@@ -1947,19 +1959,25 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         setRequest(request)
       } else {
         dispatch(actions.query.stopRunning())
-        dispatch(actions.query.stopQueryExecution())
+        questExecution.cancelActive()
       }
     } else if (running === RunningType.SCRIPT) {
       const scriptQueryKey: QueryKey = `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
-      dispatch(
-        actions.query.startQueryExecution({
-          bufferId: activeBufferRef.current.id as number,
-          queryKey: scriptQueryKey,
-        }),
+      scriptQueryKeyRef.current = scriptQueryKey
+      questExecution.markActive(
+        activeBufferRef.current.id as number,
+        scriptQueryKey,
       )
       void handleRunScript()
     } else if (running === RunningType.NONE && isRunningScriptRef.current) {
-      quest.abort()
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
       scriptStopRef.current = true
       eventBus.publish(EventType.MSG_QUERY_SCHEMA)
     }
@@ -2243,8 +2261,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-
-      {abortConfirmationDialog}
     </>
   )
 }

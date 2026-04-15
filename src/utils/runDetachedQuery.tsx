@@ -24,6 +24,7 @@ export type RunDetachedQueryConfig = {
   dispatch: Dispatch<QueryAction>
   executionRefs: React.MutableRefObject<ExecutionRefs>
   releaseExecution: (queryKey: QueryKey) => void
+  onSettled?: () => void
 }
 
 export async function runDetachedQuery(
@@ -39,11 +40,14 @@ export async function runDetachedQuery(
     releaseExecution,
   } = config
 
+  const { promise } = quest.queryRaw(normalizedSQL, {
+    limit: "0,1000",
+    explain: true,
+    cancellable: true,
+  })
+
   try {
-    const result = await quest.queryRaw(normalizedSQL, {
-      limit: "0,1000",
-      explain: true,
-    })
+    const result = await promise
 
     if (!executionRefs.current[namespaceKey]) {
       executionRefs.current[namespaceKey] = {}
@@ -141,6 +145,7 @@ export async function runDetachedQuery(
       ),
     )
   } finally {
+    config.onSettled?.()
     releaseExecution(queryKey)
   }
 }

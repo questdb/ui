@@ -37,7 +37,6 @@ export const initialState: QueryStateShape = {
   queryNotifications: {},
   activeNotification: null,
   queriesToRun: [],
-  activeQueryExecution: null,
 }
 
 const query = (state = initialState, action: QueryAction): QueryStateShape => {
@@ -263,8 +262,13 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
     }
 
     case QueryAT.TOGGLE_RUNNING: {
-      const currentRunning = state.running
-      if (currentRunning !== RunningType.NONE) {
+      if (action.payload !== undefined) {
+        return {
+          ...state,
+          running: action.payload,
+        }
+      }
+      if (state.running !== RunningType.NONE) {
         return {
           ...state,
           running: RunningType.NONE,
@@ -272,7 +276,7 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       }
       return {
         ...state,
-        running: action.payload ?? RunningType.QUERY,
+        running: RunningType.QUERY,
       }
     }
 
@@ -302,20 +306,6 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
       return {
         ...state,
         queriesToRun: action.payload,
-      }
-    }
-
-    case QueryAT.START_QUERY_EXECUTION: {
-      return {
-        ...state,
-        activeQueryExecution: action.payload,
-      }
-    }
-
-    case QueryAT.STOP_QUERY_EXECUTION: {
-      return {
-        ...state,
-        activeQueryExecution: null,
       }
     }
 

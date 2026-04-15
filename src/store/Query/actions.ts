@@ -144,18 +144,6 @@ const setQueriesToRun = (payload: QueriesToRun): QueryAction => ({
   payload,
 })
 
-const startQueryExecution = (payload: {
-  bufferId: NotificationNamespaceKey
-  queryKey: QueryKey
-}): QueryAction => ({
-  type: QueryAT.START_QUERY_EXECUTION,
-  payload,
-})
-
-const stopQueryExecution = (): QueryAction => ({
-  type: QueryAT.STOP_QUERY_EXECUTION,
-})
-
 export default {
   addNotification,
   cleanupNotifications,
@@ -170,6 +158,4 @@ export default {
   setColumns,
   setActiveNotification,
   setQueriesToRun,
-  startQueryExecution,
-  stopQueryExecution,
 }

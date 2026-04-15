@@ -443,7 +443,7 @@ type ChatMessagesProps = {
   // Apply SQL to editor and mark that specific message as accepted
   onApplyToEditor?: (messageId: string, sql: string) => void
   onRetry?: (userMessageId: string) => void
-  onCancelQuery?: () => void
+  onCancelQuery?: (queryKey: QueryKey) => void
   // Query execution status
   runningQueryKey?: QueryKey | null
   // Query notifications for this conversation's buffer - keyed by QueryKey
@@ -999,8 +999,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     <IconButton
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (queryRunStatus === "loading") {
-                          onCancelQuery?.()
+                        if (queryRunStatus === "loading" && message.sql) {
+                          onCancelQuery?.(
+                            createDetachedQueryKey(
+                              normalizeQueryText(message.sql),
+                            ),
+                          )
                         } else if (message.sql && onRunQuery) {
                           onRunQuery(message.sql)
                         }

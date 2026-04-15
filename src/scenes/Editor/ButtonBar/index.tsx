@@ -8,6 +8,7 @@ import { Box, Button, PopperToggle } from "../../../components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
+import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
@@ -159,9 +160,7 @@ const shortcutTitles =
 const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
-  const activeQueryExecution = useSelector(
-    selectors.query.getActiveQueryExecution,
-  )
+  const { active: activeQueryExecution } = useQueryExecutionState()
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)

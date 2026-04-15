@@ -52,12 +52,13 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { actions, selectors } from "../../../store"
 import { NotificationType } from "../../../store/Query/types"
+import type { QueryKey } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { Stop } from "@styled-icons/remix-line"
 import { CircleNotchSpinner } from "../Monaco/icons"
 import { QueryInNotification } from "../Monaco/query-in-notification"
-import { useQueryExecutionGuard } from "../../../hooks/useQueryExecutionGuard"
+import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
 import { runDetachedQuery } from "../../../utils/runDetachedQuery"
 
@@ -188,7 +189,7 @@ const ChatPanel = styled(Box)`
 const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const {
     editorRef,
     showPreviewBuffer,
@@ -230,12 +231,8 @@ const AIChatWindow: React.FC = () => {
     aiAssistantSettings,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
-  const {
-    requestExecution,
-    releaseExecution,
-    runningQueryKey,
-    confirmationDialog: queryAbortDialog,
-  } = useQueryExecutionGuard()
+  const { active: activeExecution } = useQueryExecutionState()
+  const runningQueryKey = activeExecution?.queryKey ?? null
 
   const conversationMeta = chatWindowState.activeConversationId
     ? getConversationMeta(chatWindowState.activeConversationId)
@@ -260,6 +257,7 @@ const AIChatWindow: React.FC = () => {
 
   // Ref for ChatInput to programmatically focus
   const chatInputRef = useRef<ChatInputHandle>(null)
+  const notificationTimeoutRef = useRef<number | null>(null)
 
   const currentSQL = useMemo(() => {
     return trimSemicolonForDisplay(conversation?.currentSQL)
@@ -459,59 +457,78 @@ const AIChatWindow: React.FC = () => {
       const normalizedSQL = normalizeQueryText(sql)
       const queryKey = createDetachedQueryKey(normalizedSQL)
 
-      requestExecution(notificationNamespaceKey, queryKey, () => {
-        dispatch(
-          actions.query.addNotification(
-            {
-              query: queryKey,
-              type: NotificationType.LOADING,
-              content: (
-                <Box gap="1rem" align="center">
-                  <Text color="foreground">Running...</Text>
-                  <CancelButton
-                    skin="error"
-                    onClick={() => {
-                      quest.abort()
-                      releaseExecution(queryKey)
-                    }}
-                  >
-                    <Stop size="18px" />
-                  </CancelButton>
-                </Box>
+      questExecution.requestExecution(
+        notificationNamespaceKey,
+        queryKey,
+        () => {
+          const timeoutId = window.setTimeout(() => {
+            dispatch(
+              actions.query.addNotification(
+                {
+                  query: queryKey,
+                  type: NotificationType.LOADING,
+                  content: (
+                    <Box gap="1rem" align="center">
+                      <Text color="foreground">Running...</Text>
+                      <CancelButton
+                        skin="error"
+                        onClick={() => {
+                          quest.abortActive()
+                          questExecution.releaseExecution(queryKey)
+                        }}
+                      >
+                        <Stop size="18px" />
+                      </CancelButton>
+                    </Box>
+                  ),
+                  sideContent: <QueryInNotification query={normalizedSQL} />,
+                },
+                notificationNamespaceKey,
               ),
-              sideContent: <QueryInNotification query={normalizedSQL} />,
-            },
-            notificationNamespaceKey,
-          ),
-        )
+            )
+            notificationTimeoutRef.current = null
+          }, 1000)
+          notificationTimeoutRef.current = timeoutId
 
-        void runDetachedQuery({
-          normalizedSQL,
-          queryKey,
-          namespaceKey: notificationNamespaceKey,
-          quest,
-          dispatch,
-          executionRefs,
-          releaseExecution,
-        })
-      })
+          void runDetachedQuery({
+            normalizedSQL,
+            queryKey,
+            namespaceKey: notificationNamespaceKey,
+            quest,
+            dispatch,
+            executionRefs,
+            releaseExecution: questExecution.releaseExecution,
+            onSettled: () => {
+              if (notificationTimeoutRef.current === timeoutId) {
+                window.clearTimeout(timeoutId)
+                notificationTimeoutRef.current = null
+              }
+            },
+          })
+        },
+      )
     },
     [
       conversation,
       executionRefs,
       notificationNamespaceKey,
       quest,
-      requestExecution,
-      releaseExecution,
+      questExecution,
     ],
   )
 
-  const handleCancelQuery = useCallback(() => {
-    if (runningQueryKey) {
-      quest.abort()
-      releaseExecution(runningQueryKey)
-    }
-  }, [quest, releaseExecution, runningQueryKey])
+  const handleCancelQuery = useCallback(
+    (queryKey: QueryKey) => {
+      if (questExecution.getActive()?.queryKey !== queryKey) return
+      if (notificationTimeoutRef.current !== null) {
+        window.clearTimeout(notificationTimeoutRef.current)
+        notificationTimeoutRef.current = null
+      }
+      quest.abortActive()
+      questExecution.releaseExecution(queryKey)
+    },
+    [questExecution, quest],
+  )
 
   const handleContextClick = useCallback(async () => {
     void trackEvent(ConsoleEvent.AI_CONTEXT_BADGE_CLICK, {
@@ -960,7 +977,6 @@ const AIChatWindow: React.FC = () => {
           )}
         </ChatWindowContent>
       </Drawer>
-      {queryAbortDialog}
     </>
   )
 }
