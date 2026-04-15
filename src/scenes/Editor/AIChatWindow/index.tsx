@@ -261,7 +261,7 @@ const AIChatWindow: React.FC = () => {
 
   const currentSQL = useMemo(() => {
     return trimSemicolonForDisplay(conversation?.currentSQL)
-  }, [conversation])
+  }, [conversation?.currentSQL])
 
   const queryInfo = useMemo(() => {
     return getQueryInfoFromKey(conversation?.queryKey)
