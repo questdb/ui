@@ -160,10 +160,7 @@ const createComponents = (
               : ""
         ).replace(/\n$/, "")
         return (
-          <CodeBlockWrapper
-            key={codeContent}
-            data-hook="chat-message-code-block"
-          >
+          <CodeBlockWrapper data-hook="chat-message-code-block">
             <LiteEditor
               value={codeContent}
               maxHeight={216}
