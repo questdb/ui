@@ -521,7 +521,7 @@ export function createOpenAIChatCompletionsProvider(
           openai,
           {
             ...baseParams,
-            ...(!isLastRound && { tools: baseParams.tools }),
+            ...(isLastRound ? { tools: undefined } : {}),
             messages: chatMessages,
           } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
           streaming,

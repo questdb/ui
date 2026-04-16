@@ -1447,6 +1447,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const handleConfirmRunScript = () => {
     setScriptConfirmationOpen(false)
 
+    questExecution.cancelActive()
+
     if (pendingActionRef.current) {
       if (runningValueRef.current === RunningType.NONE) {
         executePendingAction()
@@ -1497,6 +1499,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const individualQueryResults: Array<IndividualQueryResult> = []
 
     editor.updateOptions({ readOnly: true })
+
+    // Drain pending microtasks (e.g., an aborted chat query's rejection
+    // dispatching addNotification) before the loop starts, so iteration 0's
+    // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
@@ -1583,7 +1590,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const completedGracefully = queries.length === individualQueryResults.length
     if (
       completedGracefully ||
-      (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)
+      (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries) ||
+      scriptStopRef.current
     ) {
       isRunningScriptRef.current = false
       dispatch(actions.query.stopRunning())
@@ -1972,6 +1980,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       questExecution.markActive(
         activeBufferRef.current.id as number,
         scriptQueryKey,
+        () => {
+          scriptStopRef.current = true
+          if (editorQueryIdRef.current !== null) {
+            quest.abort(editorQueryIdRef.current)
+            editorQueryIdRef.current = null
+          }
+        },
       )
       void handleRunScript()
     } else if (running === RunningType.NONE && isRunningScriptRef.current) {

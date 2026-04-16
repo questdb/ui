@@ -7,6 +7,7 @@ export type ActiveExecution = {
   bufferId: NotificationNamespaceKey
   queryKey: QueryKey
   queryId?: QueryId
+  onStop?: () => void
 }
 
 type PendingExecution = ActiveExecution & {
@@ -84,6 +85,7 @@ export class QueryExecutionManager {
   markActive = (
     bufferId: NotificationNamespaceKey,
     queryKey: QueryKey,
+    onStop?: () => void,
   ): void => {
     if (
       this._active?.queryKey === queryKey &&
@@ -91,7 +93,7 @@ export class QueryExecutionManager {
     ) {
       return
     }
-    this._active = { bufferId, queryKey }
+    this._active = { bufferId, queryKey, onStop }
     this.refreshSnapshot()
   }
 
@@ -101,6 +103,10 @@ export class QueryExecutionManager {
   }
 
   private abortActive(): void {
+    if (this._active?.onStop) {
+      this._active.onStop()
+      return
+    }
     if (this._active?.queryId !== undefined) {
       this.client.abort(this._active.queryId)
     } else {
