@@ -872,6 +872,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       registerLegacyEventBusEvents({
         editor,
         toggleRunning,
+        getRunning: () => runningValueRef.current,
       }),
     )
     cleanupActionsRef.current.push(
@@ -1959,7 +1960,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         setRequest(request)
       } else {
         dispatch(actions.query.stopRunning())
-        questExecution.cancelActive()
+        if (
+          questExecution.getActive()?.bufferId === activeBufferRef.current.id
+        ) {
+          questExecution.cancelActive()
+        }
       }
     } else if (running === RunningType.SCRIPT) {
       const scriptQueryKey: QueryKey = `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
