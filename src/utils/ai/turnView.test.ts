@@ -130,6 +130,50 @@ describe("projectConversationTurns", () => {
     expect(result.turns[0].anchorMessage.id).toBe("a1")
     expect(result.turns[1].anchorMessage.id).toBe("a2")
   })
+
+  describe("lastVisibleUserIndex", () => {
+    it("points at the latest visible user message when none follow an assistant tail", () => {
+      const messages = [
+        msg({ id: "u1", role: "user", content: "q1" }),
+        msg({ id: "a1", role: "assistant", content: "r1" }),
+        msg({ id: "a2", role: "assistant", content: "r2" }),
+      ]
+      const result = projectConversationTurns(messages)
+      expect(result.lastVisibleUserIndex).toBe(0)
+    })
+
+    it("advances when another visible user message arrives", () => {
+      const messages = [
+        msg({ id: "u1", role: "user", content: "q1" }),
+        msg({ id: "a1", role: "assistant", content: "r1" }),
+        msg({ id: "u2", role: "user", content: "q2" }),
+        msg({ id: "a2", role: "assistant", content: "r2" }),
+      ]
+      const result = projectConversationTurns(messages)
+      expect(result.lastVisibleUserIndex).toBe(2)
+    })
+
+    it("ignores hidden user messages", () => {
+      const messages = [
+        msg({ id: "u1", role: "user", content: "q1" }),
+        msg({ id: "a1", role: "assistant", content: "r1" }),
+        msg({
+          id: "u2",
+          role: "user",
+          content: "compacted",
+          hideFromUI: true,
+        }),
+        msg({ id: "a2", role: "assistant", content: "r2" }),
+      ]
+      const result = projectConversationTurns(messages)
+      expect(result.lastVisibleUserIndex).toBe(0)
+    })
+
+    it("is -1 for an empty conversation", () => {
+      const result = projectConversationTurns([])
+      expect(result.lastVisibleUserIndex).toBe(-1)
+    })
+  })
 })
 
 describe("getLastTurnWithUnactionedDiff", () => {

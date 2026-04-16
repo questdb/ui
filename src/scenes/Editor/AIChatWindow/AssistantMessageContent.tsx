@@ -21,7 +21,11 @@ function formatTokenCount(count: number): string {
 const Divider = styled.div`
   width: 100%;
   height: 1px;
-  background: linear-gradient(90deg, #9c274b 0%, rgba(54, 14, 26, 0) 100%);
+  background: linear-gradient(
+    90deg,
+    ${color("dividerAccent")} 0%,
+    rgba(54, 14, 26, 0) 100%
+  );
   margin-bottom: 1rem;
 `
 

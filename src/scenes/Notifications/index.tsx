@@ -202,6 +202,8 @@ const Notifications = ({
           <Button
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}
+            aria-label={isMinimized ? "Expand log" : "Collapse log"}
+            aria-expanded={!isMinimized}
             data-hook={`${isMinimized ? "expand-notifications" : "collapse-notifications"}`}
           >
             {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}

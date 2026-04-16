@@ -80,7 +80,7 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   width: 100%;
   align-self: flex-end;
   background: ${color("loginBackground")};
-  border: 1px solid rgba(25, 26, 33, 0.32);
+  border: 1px solid ${color("black32")};
   flex-shrink: 0;
 `
 
@@ -92,7 +92,7 @@ const UserRequestBox = styled(Box)`
   width: 100%;
   align-self: flex-end;
   background: ${color("loginBackground")};
-  border: 1px solid rgba(25, 26, 33, 0.32);
+  border: 1px solid ${color("black32")};
   border-radius: 0.6rem;
   flex-shrink: 0;
 `
@@ -133,8 +133,8 @@ const BadgeIconContainer = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background: #290a13;
-  border: 1px solid rgba(122, 31, 58, 0.64);
+  background: ${color("aiBadgeIconBg")};
+  border: 1px solid ${color("aiBadgeIconBorder")};
   border-radius: 0.4rem;
   padding: 0.8rem;
   width: 4.8rem;
@@ -243,7 +243,8 @@ const ExplanationBox = styled(Box)<{ $hasOperationHistory?: boolean }>`
     opacity: 0;
   }
 
-  &:hover {
+  &:hover,
+  &:focus-within {
     .assistant-label,
     .token-display {
       opacity: 1;
@@ -617,10 +618,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
     }
   }, [latestDiffIndex])
 
-  const { visibleEntries, lastAssistantAnchorIndex } = useMemo(
-    () => projectConversationTurns(messages),
-    [messages],
-  )
+  const { visibleEntries, lastAssistantAnchorIndex, lastVisibleUserIndex } =
+    useMemo(() => projectConversationTurns(messages), [messages])
 
   const scrollLength = useMemo(
     () => getScrollLength(isStreaming, messages),
@@ -661,19 +660,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
 
   const lastAssistantMessageIndex = lastAssistantAnchorIndex
 
-  const hasVisibleUserMessageAfter = (index: number): boolean => {
-    for (let i = index + 1; i < messages.length; i++) {
-      if (messages[i].role === "user" && !messages[i].hideFromUI) {
-        return true
-      }
-    }
-    return false
-  }
-
   return (
     <MessagesContainer
       ref={messagesContainerRef}
       $scrolled={scrolled}
+      role="log"
       data-hook="chat-messages-container"
     >
       {visibleEntries.map((entry) => {
@@ -873,7 +864,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
           hasSQLChange &&
           !isAccepted &&
           !isRejected &&
-          hasVisibleUserMessageAfter(originalIndex)
+          originalIndex < lastVisibleUserIndex
 
         const isLastVisibleMessage = originalIndex === lastVisibleMessageIndex
         const isMessageStreaming = isStreaming && isLastVisibleMessage
@@ -1014,6 +1005,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                           ? "Cancel query"
                           : "Run this query"
                       }
+                      aria-label={
+                        queryRunStatus === "loading"
+                          ? "Cancel query"
+                          : "Run this query"
+                      }
                       data-hook="message-action-run-sql"
                     >
                       {getQueryStatusIcon(queryRunStatus, theme)}
@@ -1037,6 +1033,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             }
                           }}
                           title="Apply to editor"
+                          aria-label="Apply to editor"
                           disabled={isOperationInProgress}
                           data-hook="message-action-apply"
                         >
@@ -1048,6 +1045,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       )}
                     <ExpandButton
                       title="Expand diff view"
+                      aria-label={
+                        isExpanded ? "Collapse diff view" : "Expand diff view"
+                      }
+                      aria-expanded={isExpanded}
                       data-hook="diff-expand-button"
                       onClick={() => {
                         setExpandedDiffs((prev) => {
@@ -1108,7 +1109,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               </DiffContainer>
             )}
             {hasError && (
-              <ErrorContainer data-hook="chat-message-error">
+              <ErrorContainer role="alert" data-hook="chat-message-error">
                 <CloseCircle
                   size={16}
                   color={theme.color.red}

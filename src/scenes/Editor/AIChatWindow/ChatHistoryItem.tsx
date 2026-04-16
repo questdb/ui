@@ -10,27 +10,33 @@ import type { ConversationMeta } from "../../../store/db"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
-const Container = styled.button<{ disabled?: boolean }>`
+const Container = styled.div<{ $disabled?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.8rem;
   border-radius: 4px;
-  cursor: ${({ disabled }) => (disabled ? "not-allowed" : "pointer")};
+  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
   background: ${color("transparent")};
-  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
+  opacity: ${({ $disabled }) => ($disabled ? 0.5 : 1)};
   border: 0;
   width: 100%;
   text-align: left;
 
-  &:hover {
-    background: ${({ disabled }) =>
-      disabled ? "transparent" : color("selection")};
+  &:hover,
+  &:focus-visible {
+    background: ${({ $disabled }) =>
+      $disabled ? "transparent" : color("selection")};
 
     .chat-title {
-      color: ${({ disabled }) =>
-        disabled ? color("offWhite") : color("foreground")};
+      color: ${({ $disabled }) =>
+        $disabled ? color("offWhite") : color("foreground")};
     }
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${color("pink")};
+    outline-offset: -2px;
   }
 `
 
@@ -113,8 +119,15 @@ const ActionButton = styled.button`
   color: ${color("foreground")};
   opacity: 0;
 
-  ${Container}:hover & {
+  ${Container}:hover &,
+  ${Container}:focus-within & {
     opacity: 1;
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: 2px solid ${color("pink")};
+    outline-offset: -2px;
   }
 
   &:hover {
@@ -125,7 +138,7 @@ const ActionButton = styled.button`
 const CurrentIndicator = styled.span`
   font-size: 1.2rem;
   line-height: 1.5rem;
-  color: #9ca3af;
+  color: ${color("mutedLabel")};
   white-space: nowrap;
 `
 
@@ -200,10 +213,23 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
     }
   }
 
+  const handleContainerKeyDown = async (e: React.KeyboardEvent) => {
+    if (isEditing || disabled) return
+    if (e.target !== e.currentTarget) return
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      await onSelect(conversation.id)
+    }
+  }
+
   return (
     <Container
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
       onClick={handleContainerClick}
-      disabled={disabled}
+      onKeyDown={handleContainerKeyDown}
+      $disabled={disabled}
       data-hook="chat-history-item"
     >
       <IconWrapper>

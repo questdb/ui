@@ -21,6 +21,7 @@ export type TurnProjection = {
   turns: AssistantTurn[]
   visibleEntries: VisibleEntry[]
   lastAssistantAnchorIndex: number
+  lastVisibleUserIndex: number
   previousVisibleUserByAnchorIndex: Map<number, ConversationMessage>
 }
 
@@ -39,6 +40,7 @@ export function projectConversationTurns(
   >()
   let currentTurn: AssistantTurn | null = null
   let lastVisibleUser: ConversationMessage | null = null
+  let lastVisibleUserIndex = -1
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]
@@ -47,6 +49,7 @@ export function projectConversationTurns(
       if (!message.hideFromUI) {
         visibleEntries.push({ type: "user", message, index: i })
         lastVisibleUser = message
+        lastVisibleUserIndex = i
         currentTurn = null
       }
       continue
@@ -83,6 +86,7 @@ export function projectConversationTurns(
     visibleEntries,
     lastAssistantAnchorIndex:
       turns.length > 0 ? turns[turns.length - 1].anchorIndex : -1,
+    lastVisibleUserIndex,
     previousVisibleUserByAnchorIndex,
   }
 }

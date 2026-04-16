@@ -872,6 +872,7 @@ const AIChatWindow: React.FC = () => {
             <HeaderButton
               onClick={openBlankChatWindow}
               title="New chat"
+              aria-label="New chat"
               disabled={addButtonDisabled}
               data-hook="chat-window-new"
             >
@@ -881,6 +882,8 @@ const AIChatWindow: React.FC = () => {
               $active={isHistoryOpen}
               onClick={handleHistoryToggle}
               title={isHistoryOpen ? "Back to chat" : "Chat history"}
+              aria-label={isHistoryOpen ? "Back to chat" : "Chat history"}
+              aria-pressed={isHistoryOpen}
               disabled={!hasConversations || isBlockingAIStatus(aiStatus)}
               data-hook="chat-window-history"
             >
@@ -889,6 +892,7 @@ const AIChatWindow: React.FC = () => {
             <HeaderButton
               onClick={closeChatWindow}
               title="Close"
+              aria-label="Close AI chat"
               data-hook="chat-window-close"
             >
               <XIcon size={16} weight="bold" />
