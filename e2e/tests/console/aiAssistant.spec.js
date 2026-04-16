@@ -3071,6 +3071,146 @@ Syntax: \`avg(column)\`
       cy.get(".aiQueryHighlight").should("exist")
     })
 
+    it("should show abort dialog when running chat query while editor query is in flight", () => {
+      // Given
+      const sql = "SELECT * FROM btc_trades LIMIT 10;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show btc data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+      cy.typeQuery("select 1;")
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question, {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+      flow.waitForCompletion()
+      cy.getByDataHook("message-action-run-sql").should("be.visible")
+      cy.intercept("/exec*", (req) => {
+        req.on("response", (res) => {
+          res.setDelay(3000)
+        })
+      })
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getCancelIconInLine(1).should("be.visible")
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-dismiss").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("not.exist")
+      cy.getCancelIconInLine(1).should("be.visible")
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+
+      // Then
+      cy.getByDataHook("success-notification").should("be.visible")
+
+      // When
+      cy.clickLine(1)
+
+      // Then
+      cy.getByDataHook("error-notification").should(
+        "contain",
+        "Cancelled by user",
+      )
+    })
+
+    it("should show abort dialog when running editor query while chat query is in flight", () => {
+      // Given
+      const sql = "SELECT * FROM btc_trades LIMIT 10;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show btc data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+      cy.typeQuery("select 1;")
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question, {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+      flow.waitForCompletion()
+      cy.getByDataHook("message-action-run-sql").should("be.visible")
+      cy.intercept("/exec*", (req) => {
+        req.on("response", (res) => {
+          res.setDelay(3000)
+        })
+      })
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("loading-notification").should("be.visible")
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-dismiss").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("not.exist")
+      cy.getByDataHook("loading-notification").should("be.visible")
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+      cy.clickLine(1)
+
+      // Then
+      cy.getByDataHook("success-notification").should("contain", "select 1")
+    })
+
     it("should show error notification when running invalid SQL from chat", () => {
       const sql = "SELECT * FROM nonexistent_table_xyz;"
       const flow = createToolCallFlow({
