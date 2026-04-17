@@ -257,6 +257,7 @@ const AIChatWindow: React.FC = () => {
 
   // Ref for ChatInput to programmatically focus
   const chatInputRef = useRef<ChatInputHandle>(null)
+  const hasAutoFocusedRef = useRef(false)
   const notificationTimeoutRef = useRef<number | null>(null)
 
   const currentSQL = useMemo(() => {
@@ -844,6 +845,20 @@ const AIChatWindow: React.FC = () => {
     }
   }, [])
 
+  useEffect(() => {
+    if (hasAutoFocusedRef.current) return
+    if (isHistoryOpen || isLoadingMessages) return
+    if (!chatInputRef.current) return
+    chatInputRef.current.focus()
+    hasAutoFocusedRef.current = true
+  }, [isHistoryOpen, isLoadingMessages])
+
+  const handleNewChat = useCallback(async () => {
+    hasAutoFocusedRef.current = false
+    await openBlankChatWindow()
+    chatInputRef.current?.focus()
+  }, [openBlankChatWindow])
+
   if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
@@ -870,7 +885,7 @@ const AIChatWindow: React.FC = () => {
         afterTitle={
           <HeaderRight>
             <HeaderButton
-              onClick={openBlankChatWindow}
+              onClick={handleNewChat}
               title="New chat"
               aria-label="New chat"
               disabled={addButtonDisabled}
