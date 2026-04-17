@@ -1,15 +1,12 @@
 import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
+import type { Message } from "../../utils/ai/types"
+import type { TokenUsage } from "../../utils/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
 export type { QueryKey }
 
 export type ConversationId = string
-
-export type TokenUsage = {
-  inputTokens: number
-  outputTokens: number
-}
 
 export type SchemaDisplayData = {
   tableName: string
@@ -32,24 +29,20 @@ export type UserMessageDisplayType =
   | "schema_explain_request"
   | "health_issue_request"
 
-export type ConversationMessage = {
+export type ConversationMessage = Message & {
   id: string
-  role: "user" | "assistant"
-  content: string
   timestamp: number
   error?: string
   sql?: string
-  explanation?: string
-  tokenUsage?: TokenUsage // Token usage for current turn in total, including tool calls that we omit from the history after response
+  tokenUsage?: TokenUsage
   previousSQL?: string // SQL before this change (for diff display)
   isRejected?: boolean
+  contentTimestamp?: number // When text content started streaming
   isAccepted?: boolean
-  hideFromUI?: boolean // User messages for accept/reject and compaction result are hidden
-  isCompacted?: boolean // When converted to true, we include it in the history for UI, but do not send to the model anymore
+  hideFromUI?: boolean
+  isCompacted?: boolean
   operationHistory?: OperationHistory
-  responseStart?: number
   model?: string
-  // Predefined actions (Fix and Explain)
   displayType?: UserMessageDisplayType
   displayUserMessage?: string
   displaySchemaData?: SchemaDisplayData

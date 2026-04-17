@@ -58,6 +58,7 @@ import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
 import { NotificationType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../../components"
+import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
 import { API_VERSION } from "../../consts"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -144,9 +145,10 @@ const DownloadMenuItem = styled(Button)`
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
+  const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | undefined>()
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
@@ -186,6 +188,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       $("#quick-vis"),
       window.bus as unknown as ReturnType<typeof $>,
       quest,
+      questExecution,
     )
 
     _grid.addEventListener(
@@ -306,6 +309,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           skin="transparent"
+          disabled={activeQueryExecution !== null}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_REFRESH)
             const sql = gridRef?.current?.getSQL()

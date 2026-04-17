@@ -160,10 +160,7 @@ const createComponents = (
               : ""
         ).replace(/\n$/, "")
         return (
-          <CodeBlockWrapper
-            key={codeContent}
-            data-hook="chat-message-code-block"
-          >
+          <CodeBlockWrapper data-hook="chat-message-code-block">
             <LiteEditor
               value={codeContent}
               maxHeight={216}
@@ -182,26 +179,29 @@ const createComponents = (
   ),
 })
 
-export const AssistantMarkdown = ({
-  content,
-  messageId,
-  onOpenInEditor,
-}: {
-  content: string
-  messageId: string
-  onOpenInEditor: (content: OpenInEditorContent) => void
-}) => {
-  const onOpenInEditorRef = useRef(onOpenInEditor)
-  useEffect(() => {
-    onOpenInEditorRef.current = onOpenInEditor
-  }, [onOpenInEditor])
-  const components = useMemo(() => createComponents(onOpenInEditorRef), [])
+export const AssistantMarkdown = memo(
+  ({
+    content,
+    messageId,
+    onOpenInEditor,
+  }: {
+    content: string
+    messageId: string
+    onOpenInEditor: (content: OpenInEditorContent) => void
+  }) => {
+    const onOpenInEditorRef = useRef(onOpenInEditor)
+    useEffect(() => {
+      onOpenInEditorRef.current = onOpenInEditor
+    }, [onOpenInEditor])
+    const components = useMemo(() => createComponents(onOpenInEditorRef), [])
 
-  return (
-    <MarkdownContent key={messageId}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
-    </MarkdownContent>
-  )
-}
+    return (
+      <MarkdownContent key={messageId}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+          {content}
+        </ReactMarkdown>
+      </MarkdownContent>
+    )
+  },
+  (prev, next) => prev.content === next.content,
+)

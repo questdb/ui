@@ -35,9 +35,7 @@ type EditorSettings = {
   value: string | number
 }
 
-export type ConversationMeta = Omit<AIConversation, "messages">
-
-export type ConversationMetaWithStatus = ConversationMeta & {
+export type ConversationMeta = Omit<AIConversation, "messages"> & {
   hasMessages: boolean
 }
 
@@ -93,6 +91,21 @@ export class Storage extends Dexie {
     )
     this.version(6).stores({
       events: "++id, created",
+    })
+    this.version(7).upgrade(async (tx) => {
+      const primaryKeys = await tx
+        .table<{ conversationId: string }, string>("ai_conversation_messages")
+        .toCollection()
+        .primaryKeys()
+      const conversationIdsWithMessages = new Set<string>(primaryKeys)
+      await tx
+        .table<{ id: string; hasMessages?: boolean }, string>(
+          "ai_conversations",
+        )
+        .toCollection()
+        .modify((meta) => {
+          meta.hasMessages = conversationIdsWithMessages.has(meta.id)
+        })
     })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)

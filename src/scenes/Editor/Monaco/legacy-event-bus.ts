@@ -30,9 +30,11 @@ import { RunningType } from "../../../store/Query/types"
 export const registerLegacyEventBusEvents = ({
   editor,
   toggleRunning,
+  getRunning,
 }: {
   editor: editor.IStandaloneCodeEditor
   toggleRunning: (runningType?: RunningType) => void
+  getRunning: () => RunningType
 }) => {
   eventBus.subscribe<{ query: string; options?: AppendQueryOptions }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
@@ -40,6 +42,7 @@ export const registerLegacyEventBusEvents = ({
       if (payload) {
         const text = `${payload.query};`
         appendQuery(editor, text, payload.options)
+        if (getRunning() !== RunningType.NONE) return
         toggleRunning()
       }
     },

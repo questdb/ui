@@ -44,13 +44,17 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { AnyIfEmpty } from "react-redux"
 import { request } from "http"
+import { createDetachedQueryKey } from "../../scenes/Editor/Monaco/utils"
 
 echarts.use([LegendComponent, GridComponent])
+
+const QUICK_VIS_BUFFER_ID = "quick-vis"
 
 export function quickVis(
   root: ReturnType<typeof jQuery>,
   msgBus: ReturnType<typeof jQuery>,
   quest: QuestDB.Client,
+  questExecution: QuestDB.QueryExecutionManager,
 ) {
   const bus = msgBus
   const div = root
@@ -85,6 +89,7 @@ export function quickVis(
   let cachedResponse: any
   let cachedQuery: AnyIfEmpty
   let requestActive: boolean = false
+  let executionToken = 0
 
   const chartTypePicker = new SlimSelect({
     select: "#_qvis_frm_chart_type",
@@ -219,7 +224,6 @@ export function quickVis(
 
   function handleServerError(r) {
     requestActive = false
-    setDrawBtnToDraw()
     eventBus.publish(EventType.MSG_QUERY_ERROR, {
       query: cachedQuery,
       r: r.responseJSON,
@@ -230,6 +234,11 @@ export function quickVis(
   }
 
   async function executeQueryAndDraw() {
+    const token = ++executionToken
+    const releaseIfOwner = () => {
+      if (token !== executionToken) return
+      questExecution.releaseExecution(createDetachedQueryKey(query))
+    }
     setDrawBtnToCancel()
     requestActive = true
     chartType = chartTypePicker.selected()
@@ -247,6 +256,7 @@ export function quickVis(
       query === cachedQuery
     ) {
       draw(cachedResponse)
+      releaseIfOwner()
     } else {
       // create set of unique column names that are necessary to build a chart
       columnSet.clear()
@@ -273,19 +283,37 @@ export function quickVis(
 
       // time the query because control that displays query success expected time delta
       queryExecutionTimestamp = new Date().getTime()
-      const response = await quest.queryRaw(query, {
+      const { promise: queryPromise } = quest.queryRaw(query, {
         count: false,
         timings: false,
         cols: urlColumns,
         src: "vis",
+        cancellable: true,
       })
-      if (response.type === QuestDB.Type.DQL) {
-        handleServerResponse(response)
-      } else {
-        handleServerError(response)
+      try {
+        const response = await queryPromise
+        if (response.type === QuestDB.Type.DQL) {
+          handleServerResponse(response)
+        } else {
+          handleServerError(response)
+        }
+        eventBus.publish(EventType.MSG_QUERY_RUNNING)
+      } finally {
+        releaseIfOwner()
+        setDrawBtnToDraw()
       }
-      eventBus.publish(EventType.MSG_QUERY_RUNNING)
     }
+  }
+
+  function requestExecuteQueryAndDraw() {
+    if (!query) return
+    questExecution.requestExecution(
+      QUICK_VIS_BUFFER_ID,
+      createDetachedQueryKey(query),
+      () => {
+        void executeQueryAndDraw()
+      },
+    )
   }
 
   function clearChart() {
@@ -309,16 +337,15 @@ export function quickVis(
   }
 
   function cancelDraw() {
-    quest.abort()
+    executionToken++
+    questExecution.cancelActive()
   }
 
   function btnDrawClick() {
     if (requestActive) {
       cancelDraw()
-    } else {
-      executeQueryAndDraw()
     }
-    executeQueryAndDraw()
+    requestExecuteQueryAndDraw()
     return false
   }
 

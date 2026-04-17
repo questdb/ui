@@ -7,7 +7,7 @@ import React, {
 } from "react"
 import type { MutableRefObject } from "react"
 import styled, { css } from "styled-components"
-import { Button, Box, Drawer } from "../../../components"
+import { Button, Box, Drawer, Text } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
 import { FixQueryButton } from "../../../components/FixQueryButton"
@@ -19,13 +19,13 @@ import {
 import { useEditor } from "../../../providers"
 import { useAIConversation } from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
-import { getQueryInfoFromKey } from "../Monaco/utils"
-import type { ExecutionRefs } from "../index"
-import type { ConversationMessage } from "../../../providers/AIConversationProvider/types"
 import {
-  trimSemicolonForDisplay,
-  hasUnactionedDiff as checkHasUnactionedDiff,
-} from "../../../providers/AIConversationProvider/utils"
+  createDetachedQueryKey,
+  getQueryInfoFromKey,
+  normalizeQueryText,
+} from "../Monaco/utils"
+import type { ExecutionRefs } from "../index"
+import { trimSemicolonForDisplay } from "../../../providers/AIConversationProvider/utils"
 import {
   isBlockingAIStatus,
   useAIStatus,
@@ -51,10 +51,20 @@ import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { actions, selectors } from "../../../store"
-import { RunningType } from "../../../store/Query/types"
+import { NotificationType } from "../../../store/Query/types"
+import type { QueryKey } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { Stop } from "@styled-icons/remix-line"
 import { CircleNotchSpinner } from "../Monaco/icons"
+import { QueryInNotification } from "../Monaco/query-in-notification"
+import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
+import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
+import { runDetachedQuery } from "../../../utils/runDetachedQuery"
+
+const CancelButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+`
 
 const HeaderLeft = styled.div`
   display: flex;
@@ -179,7 +189,7 @@ const ChatPanel = styled(Box)`
 const AIChatWindow: React.FC = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const {
     editorRef,
     showPreviewBuffer,
@@ -202,8 +212,9 @@ const AIChatWindow: React.FC = () => {
     closeHistoryView,
     getConversationMeta,
     addMessage,
+    removeMessages,
     updateMessage,
-    replaceConversationMessages,
+    updateMessagesWithCompaction,
     updateConversationName,
     acceptSuggestion,
     rejectSuggestion,
@@ -220,10 +231,8 @@ const AIChatWindow: React.FC = () => {
     aiAssistantSettings,
   } = useAIStatus()
   const tables = useSelector(selectors.query.getTables)
-  const running = useSelector(selectors.query.getRunning)
-  const aiSuggestionRequest = useSelector(
-    selectors.query.getAISuggestionRequest,
-  )
+  const { active: activeExecution } = useQueryExecutionState()
+  const runningQueryKey = activeExecution?.queryKey ?? null
 
   const conversationMeta = chatWindowState.activeConversationId
     ? getConversationMeta(chatWindowState.activeConversationId)
@@ -234,19 +243,26 @@ const AIChatWindow: React.FC = () => {
     return { ...conversationMeta, messages: activeConversationMessages }
   }, [conversationMeta, activeConversationMessages])
 
-  // Get query notifications for the conversation's buffer
-  // Use the conversation's bufferId (original buffer, not diff buffer) for looking up notifications
-  const conversationBufferId = conversation?.bufferId
+  const notificationNamespaceKey = useMemo(() => {
+    if (!conversation) return -1
+    if (conversation.bufferId !== undefined) {
+      return conversation.bufferId
+    }
+    return conversation.id
+  }, [conversation?.bufferId, conversation?.id])
+
   const queryNotifications = useSelector(
-    selectors.query.getQueryNotificationsForBuffer(conversationBufferId ?? -1),
+    selectors.query.getQueryNotificationsForBuffer(notificationNamespaceKey),
   )
 
   // Ref for ChatInput to programmatically focus
   const chatInputRef = useRef<ChatInputHandle>(null)
+  const hasAutoFocusedRef = useRef(false)
+  const notificationTimeoutRef = useRef<number | null>(null)
 
   const currentSQL = useMemo(() => {
     return trimSemicolonForDisplay(conversation?.currentSQL)
-  }, [conversation])
+  }, [conversation?.currentSQL])
 
   const queryInfo = useMemo(() => {
     return getQueryInfoFromKey(conversation?.queryKey)
@@ -255,7 +271,7 @@ const AIChatWindow: React.FC = () => {
   const messages = activeConversationMessages
 
   const hasUnactionedDiff = useMemo(() => {
-    return checkHasUnactionedDiff(messages)
+    return getLastTurnWithUnactionedDiff(messages) !== null
   }, [messages])
 
   const shouldShowMessages = useMemo(() => {
@@ -397,12 +413,13 @@ const AIChatWindow: React.FC = () => {
       }),
       {
         addMessage,
+        removeMessages,
         updateMessage,
         setStatus,
         setIsStreaming,
         persistMessages,
         updateConversationName,
-        replaceConversationMessages,
+        updateMessagesWithCompaction,
       },
     )
   }
@@ -416,8 +433,6 @@ const AIChatWindow: React.FC = () => {
         conversationId: chatWindowState.activeConversationId,
         messageId,
       })
-
-      dispatch(actions.query.setAISuggestionRequest(null))
     },
     [chatWindowState.activeConversationId, acceptSuggestion],
   )
@@ -438,19 +453,80 @@ const AIChatWindow: React.FC = () => {
 
   const handleRunQuery = useCallback(
     (sql: string) => {
-      const normalizedSQL = sql.trim().endsWith(";")
-        ? sql.trim().slice(0, -1)
-        : sql.trim()
+      if (!conversation) return
 
-      dispatch(
-        actions.query.setAISuggestionRequest({
-          query: normalizedSQL,
-          startOffset: queryInfo.startOffset,
-        }),
+      const normalizedSQL = normalizeQueryText(sql)
+      const queryKey = createDetachedQueryKey(normalizedSQL)
+
+      questExecution.requestExecution(
+        notificationNamespaceKey,
+        queryKey,
+        () => {
+          const timeoutId = window.setTimeout(() => {
+            dispatch(
+              actions.query.addNotification(
+                {
+                  query: queryKey,
+                  type: NotificationType.LOADING,
+                  content: (
+                    <Box gap="1rem" align="center">
+                      <Text color="foreground">Running...</Text>
+                      <CancelButton
+                        skin="error"
+                        onClick={() => {
+                          questExecution.cancelActive()
+                        }}
+                      >
+                        <Stop size="18px" />
+                      </CancelButton>
+                    </Box>
+                  ),
+                  sideContent: <QueryInNotification query={normalizedSQL} />,
+                },
+                notificationNamespaceKey,
+              ),
+            )
+            notificationTimeoutRef.current = null
+          }, 1000)
+          notificationTimeoutRef.current = timeoutId
+
+          void runDetachedQuery({
+            normalizedSQL,
+            queryKey,
+            namespaceKey: notificationNamespaceKey,
+            quest,
+            dispatch,
+            executionRefs,
+            releaseExecution: questExecution.releaseExecution,
+            onSettled: () => {
+              if (notificationTimeoutRef.current === timeoutId) {
+                window.clearTimeout(timeoutId)
+                notificationTimeoutRef.current = null
+              }
+            },
+          })
+        },
       )
-      dispatch(actions.query.toggleRunning(RunningType.AI_SUGGESTION))
     },
-    [queryInfo.startOffset],
+    [
+      conversation,
+      executionRefs,
+      notificationNamespaceKey,
+      quest,
+      questExecution,
+    ],
+  )
+
+  const handleCancelQuery = useCallback(
+    (queryKey: QueryKey) => {
+      if (questExecution.getActive()?.queryKey !== queryKey) return
+      if (notificationTimeoutRef.current !== null) {
+        window.clearTimeout(notificationTimeoutRef.current)
+        notificationTimeoutRef.current = null
+      }
+      questExecution.cancelActive()
+    },
+    [questExecution],
   )
 
   const handleContextClick = useCallback(async () => {
@@ -559,152 +635,173 @@ const AIChatWindow: React.FC = () => {
     ],
   )
 
-  const handleRetry = async (
-    userMessageId: string,
-    assistantMessageId: string,
-  ) => {
-    if (
-      !chatWindowState.activeConversationId ||
-      !canUse ||
-      isBlockingAIStatus(aiStatus)
-    )
-      return
+  const handleRetry = useCallback(
+    async (userMessageId: string) => {
+      if (
+        !chatWindowState.activeConversationId ||
+        !canUse ||
+        isBlockingAIStatus(aiStatus)
+      )
+        return
 
-    const conversationId = chatWindowState.activeConversationId
-    const userMessage = messages.find((m) => m.id === userMessageId)
-    if (!userMessage) return
+      const conversationId = chatWindowState.activeConversationId
+      const userMessage = messages.find((m) => m.id === userMessageId)
+      if (!userMessage) return
+      const userMessageIndex = messages.findIndex((m) => m.id === userMessageId)
+      if (userMessageIndex < 0) return
 
-    const settings = { model: currentModel, apiKey }
-    const commonConfig = {
-      settings,
+      const failedRoundMessageIds = messages
+        .slice(userMessageIndex)
+        .map((message) => message.id)
+      const failedRoundMessageIdSet = new Set(failedRoundMessageIds)
+
+      removeMessages(failedRoundMessageIds)
+
+      const settings = { model: currentModel, apiKey }
+      const commonConfig = {
+        settings,
+        aiAssistantSettings,
+        questClient: quest,
+        tables,
+        hasSchemaAccess,
+        abortSignal: abortController?.signal,
+      }
+
+      const callbacks = {
+        addMessage,
+        updateMessage,
+        removeMessages,
+        setStatus,
+        setIsStreaming,
+        persistMessages,
+        updateConversationName,
+        updateMessagesWithCompaction,
+      }
+
+      switch (userMessage.displayType) {
+        case "explain_request": {
+          if (!userMessage.sql) return
+          void executeAIFlow(
+            createExplainFlowConfig({
+              conversationId,
+              queryText: userMessage.sql,
+              ...commonConfig,
+            }),
+            callbacks,
+          )
+          break
+        }
+
+        case "fix_request": {
+          if (!userMessage.sql) return
+
+          void executeAIFlow(
+            createFixFlowConfig({
+              conversationId,
+              queryText: userMessage.sql,
+              ...commonConfig,
+            }),
+            callbacks,
+          )
+          break
+        }
+
+        case "schema_explain_request": {
+          if (!userMessage.displaySchemaData) return
+          const schemaData = userMessage.displaySchemaData
+
+          try {
+            const ddlResult =
+              schemaData.kind === "matview"
+                ? await quest.showMatViewDDL(schemaData.tableName)
+                : schemaData.kind === "view"
+                  ? await quest.showViewDDL(schemaData.tableName)
+                  : await quest.showTableDDL(schemaData.tableName)
+
+            if (
+              ddlResult?.type !== QuestDB.Type.DQL ||
+              !ddlResult.data ||
+              ddlResult.data.length === 0
+            ) {
+              toast.error("Failed to fetch table schema for retry")
+              return
+            }
+
+            const ddlRow = ddlResult.data[0] as { ddl?: string }
+            if (!ddlRow.ddl) {
+              toast.error("Failed to fetch table schema for retry")
+              return
+            }
+
+            void executeAIFlow(
+              createSchemaExplainFlowConfig({
+                conversationId,
+                tableName: schemaData.tableName,
+                schema: ddlRow.ddl,
+                kindLabel: getTableKindLabel(schemaData.kind),
+                schemaDisplayData: schemaData,
+                ...commonConfig,
+              }),
+              callbacks,
+            )
+          } catch (error) {
+            console.error("Error fetching DDL for retry:", error)
+            toast.error("Failed to fetch table schema for retry")
+          }
+          break
+        }
+
+        case "ask_request":
+        default: {
+          const userText =
+            userMessage.displayUserMessage || userMessage.content || ""
+
+          const historyUpToFailed = messages.filter(
+            (message) => !failedRoundMessageIdSet.has(message.id),
+          )
+
+          const hasAssistantMessages = historyUpToFailed.some(
+            (msg) => msg.role === "assistant",
+          )
+
+          void executeAIFlow(
+            createChatFlowConfig({
+              conversationId,
+              userMessage: userText,
+              currentSQL: userMessage.sql || currentSQL,
+              conversationHistory: historyUpToFailed,
+              isFirstMessage: !hasAssistantMessages,
+              ...commonConfig,
+            }),
+            callbacks,
+          )
+          break
+        }
+      }
+    },
+    [
+      chatWindowState.activeConversationId,
+      canUse,
+      aiStatus,
+      messages,
+      removeMessages,
+      currentModel,
+      apiKey,
       aiAssistantSettings,
-      questClient: quest,
+      quest,
       tables,
       hasSchemaAccess,
-      abortSignal: abortController?.signal,
-    }
-
-    let isRemoved = false
-    const callbacks = {
-      addMessage: (
-        message: Omit<ConversationMessage, "id"> & { id?: string },
-      ) => {
-        addMessage(
-          message,
-          !isRemoved ? [userMessageId, assistantMessageId] : [],
-        )
-        if (!isRemoved) {
-          isRemoved = true
-        }
-      },
+      abortController,
+      addMessage,
       updateMessage,
       setStatus,
       setIsStreaming,
       persistMessages,
       updateConversationName,
-      replaceConversationMessages,
-    }
-
-    switch (userMessage.displayType) {
-      case "explain_request": {
-        if (!userMessage.sql) return
-        void executeAIFlow(
-          createExplainFlowConfig({
-            conversationId,
-            queryText: userMessage.sql,
-            ...commonConfig,
-          }),
-          callbacks,
-        )
-        break
-      }
-
-      case "fix_request": {
-        if (!userMessage.sql) return
-
-        void executeAIFlow(
-          createFixFlowConfig({
-            conversationId,
-            queryText: userMessage.sql,
-            ...commonConfig,
-          }),
-          callbacks,
-        )
-        break
-      }
-
-      case "schema_explain_request": {
-        if (!userMessage.displaySchemaData) return
-        const schemaData = userMessage.displaySchemaData
-
-        try {
-          const ddlResult =
-            schemaData.kind === "matview"
-              ? await quest.showMatViewDDL(schemaData.tableName)
-              : schemaData.kind === "view"
-                ? await quest.showViewDDL(schemaData.tableName)
-                : await quest.showTableDDL(schemaData.tableName)
-
-          if (
-            ddlResult?.type !== QuestDB.Type.DQL ||
-            !ddlResult.data ||
-            ddlResult.data.length === 0
-          ) {
-            toast.error("Failed to fetch table schema for retry")
-            return
-          }
-
-          const ddlRow = ddlResult.data[0] as { ddl?: string }
-          if (!ddlRow.ddl) {
-            toast.error("Failed to fetch table schema for retry")
-            return
-          }
-
-          void executeAIFlow(
-            createSchemaExplainFlowConfig({
-              conversationId,
-              tableName: schemaData.tableName,
-              schema: ddlRow.ddl,
-              kindLabel: getTableKindLabel(schemaData.kind),
-              schemaDisplayData: schemaData,
-              ...commonConfig,
-            }),
-            callbacks,
-          )
-        } catch (error) {
-          console.error("Error fetching DDL for retry:", error)
-          toast.error("Failed to fetch table schema for retry")
-        }
-        break
-      }
-
-      case "ask_request":
-      default: {
-        const userText = userMessage.displayUserMessage || userMessage.content
-
-        const historyUpToFailed = messages.filter(
-          (m) => m.id !== userMessageId && m.id !== assistantMessageId,
-        )
-
-        const hasAssistantMessages = historyUpToFailed.some(
-          (msg) => msg.role === "assistant",
-        )
-
-        void executeAIFlow(
-          createChatFlowConfig({
-            conversationId,
-            userMessage: userText,
-            currentSQL: userMessage.sql || currentSQL,
-            conversationHistory: historyUpToFailed,
-            isFirstMessage: !hasAssistantMessages,
-            ...commonConfig,
-          }),
-          callbacks,
-        )
-        break
-      }
-    }
-  }
+      updateMessagesWithCompaction,
+      currentSQL,
+    ],
+  )
 
   const explainButtonRef = useRef<HTMLDivElement | null>(null)
 
@@ -739,144 +836,174 @@ const AIChatWindow: React.FC = () => {
     }
   }, [shouldShowExplainButton, handleKeyDown, handleExplainQuery])
 
+  useEffect(() => {
+    return () => {
+      if (notificationTimeoutRef.current !== null) {
+        window.clearTimeout(notificationTimeoutRef.current)
+        notificationTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (hasAutoFocusedRef.current) return
+    if (isHistoryOpen || isLoadingMessages) return
+    if (!chatInputRef.current) return
+    chatInputRef.current.focus()
+    hasAutoFocusedRef.current = true
+  }, [isHistoryOpen, isLoadingMessages])
+
+  const handleNewChat = useCallback(async () => {
+    hasAutoFocusedRef.current = false
+    await openBlankChatWindow()
+    chatInputRef.current?.focus()
+  }, [openBlankChatWindow])
+
   if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
 
   return (
-    <Drawer
-      mode="side"
-      data-hook="ai-chat-window"
-      open={activeSidebar?.type === "aiChat"}
-      onOpenChange={(open) => {
-        if (!open) closeChatWindow()
-      }}
-      onDismiss={closeChatWindow}
-      trigger={<span />}
-      title={
-        <HeaderLeft>
-          <AISparkle size={20} variant="filled" />
-          <HeaderTitle data-hook="chat-window-title">{headerTitle}</HeaderTitle>
-        </HeaderLeft>
-      }
-      afterTitle={
-        <HeaderRight>
-          <HeaderButton
-            onClick={openBlankChatWindow}
-            title="New chat"
-            disabled={addButtonDisabled}
-            data-hook="chat-window-new"
-          >
-            <PlusIcon size={16} weight="bold" />
-          </HeaderButton>
-          <HeaderButton
-            $active={isHistoryOpen}
-            onClick={handleHistoryToggle}
-            title={isHistoryOpen ? "Back to chat" : "Chat history"}
-            disabled={!hasConversations || isBlockingAIStatus(aiStatus)}
-            data-hook="chat-window-history"
-          >
-            <ClockCounterClockwiseIcon size={16} weight="bold" />
-          </HeaderButton>
-          <HeaderButton
-            onClick={closeChatWindow}
-            title="Close"
-            data-hook="chat-window-close"
-          >
-            <XIcon size={16} weight="bold" />
-          </HeaderButton>
-        </HeaderRight>
-      }
-    >
-      <ChatWindowContent>
-        {isLoadingMessages ? (
-          <ChatPanel>
-            <CircleNotchSpinner size={20} style={{ margin: "auto" }} />
-          </ChatPanel>
-        ) : isHistoryOpen ? (
-          <ChatHistoryView
-            currentConversationId={
-              chatWindowState.previousConversationId ?? null
-            }
-          />
-        ) : (
-          <ChatPanel>
-            {shouldShowMessages ? (
-              <ChatMessages
-                messages={messages}
-                onAcceptChange={handleAcceptChange}
-                onRejectChange={handleRejectChange}
-                onRunQuery={handleRunQuery}
-                onOpenInEditor={handleOpenInEditor}
-                onApplyToEditor={handleApplyToEditor}
-                onRetry={handleRetry}
-                running={running}
-                aiSuggestionRequest={aiSuggestionRequest}
-                queryNotifications={queryNotifications}
-                queryStartOffset={queryInfo.startOffset}
-                isOperationInProgress={isBlockingAIStatus(aiStatus)}
-                editorSQL={queryInfo.queryText}
-                isStreaming={isStreaming}
-                isLoadingMessages={isLoadingMessages}
-                scrollToMessageId={scrollToMessageId}
-                onScrollToMessageComplete={handleScrollToMessageComplete}
-              />
-            ) : currentSQL && currentSQL.trim() ? (
-              <InitialQueryContainer>
-                <InitialQueryBox data-hook="chat-initial-query-box">
-                  <InitialQueryEditor data-hook="chat-lite-editor">
-                    <LiteEditor
-                      value={currentSQL.trim()}
-                      maxHeight={216}
-                      onOpenInEditor={() =>
-                        handleOpenInEditor(
-                          { type: "code", value: currentSQL.trim() },
-                          true,
-                        )
-                      }
-                    />
-                  </InitialQueryEditor>
-                </InitialQueryBox>
-                {(shouldShowExplainButton || shouldShowFixButton) && (
-                  <ButtonContainer ref={explainButtonRef}>
-                    {shouldShowExplainButton && (
-                      <ExplainQueryButton
-                        conversationId={conversation!.id}
-                        queryText={currentSQL.trim()}
-                      />
-                    )}
-                    {shouldShowFixButton && <FixQueryButton />}
-                  </ButtonContainer>
-                )}
-              </InitialQueryContainer>
-            ) : (
-              <BlankChatContainer data-hook="chat-blank-state">
-                <BlankChatHeading>
-                  Leverage AI directly in your database
-                </BlankChatHeading>
-                <BlankChatSubheading>
-                  Our AI Assistant is a specialized programming and support
-                  agent that makes you more effective and helps you solve
-                  problems as you interface with your QuestDB database. Start a
-                  conversation.
-                </BlankChatSubheading>
-              </BlankChatContainer>
-            )}
-            <ChatInput
-              ref={chatInputRef}
-              onSend={(message) =>
-                handleSendMessage(message, hasUnactionedDiff)
+    <>
+      <Drawer
+        mode="side"
+        data-hook="ai-chat-window"
+        open={activeSidebar?.type === "aiChat"}
+        onOpenChange={(open) => {
+          if (!open) closeChatWindow()
+        }}
+        onDismiss={closeChatWindow}
+        trigger={<span />}
+        title={
+          <HeaderLeft>
+            <AISparkle size={20} variant="filled" />
+            <HeaderTitle data-hook="chat-window-title">
+              {headerTitle}
+            </HeaderTitle>
+          </HeaderLeft>
+        }
+        afterTitle={
+          <HeaderRight>
+            <HeaderButton
+              onClick={handleNewChat}
+              title="New chat"
+              aria-label="New chat"
+              disabled={addButtonDisabled}
+              data-hook="chat-window-new"
+            >
+              <PlusIcon size={16} weight="bold" />
+            </HeaderButton>
+            <HeaderButton
+              $active={isHistoryOpen}
+              onClick={handleHistoryToggle}
+              title={isHistoryOpen ? "Back to chat" : "Chat history"}
+              aria-label={isHistoryOpen ? "Back to chat" : "Chat history"}
+              aria-pressed={isHistoryOpen}
+              disabled={!hasConversations || isBlockingAIStatus(aiStatus)}
+              data-hook="chat-window-history"
+            >
+              <ClockCounterClockwiseIcon size={16} weight="bold" />
+            </HeaderButton>
+            <HeaderButton
+              onClick={closeChatWindow}
+              title="Close"
+              aria-label="Close AI chat"
+              data-hook="chat-window-close"
+            >
+              <XIcon size={16} weight="bold" />
+            </HeaderButton>
+          </HeaderRight>
+        }
+      >
+        <ChatWindowContent>
+          {isLoadingMessages ? (
+            <ChatPanel>
+              <CircleNotchSpinner size={20} style={{ margin: "auto" }} />
+            </ChatPanel>
+          ) : isHistoryOpen ? (
+            <ChatHistoryView
+              currentConversationId={
+                chatWindowState.previousConversationId ?? null
               }
-              disabled={!canUse || isBlockingAIStatus(aiStatus)}
-              placeholder={getPlaceholder()}
-              contextSQL={queryInfo.queryText}
-              contextTableId={conversation?.tableId}
-              onContextClick={handleContextClick}
             />
-          </ChatPanel>
-        )}
-      </ChatWindowContent>
-    </Drawer>
+          ) : (
+            <ChatPanel>
+              {shouldShowMessages ? (
+                <ChatMessages
+                  messages={messages}
+                  onAcceptChange={handleAcceptChange}
+                  onRejectChange={handleRejectChange}
+                  onRunQuery={handleRunQuery}
+                  onOpenInEditor={handleOpenInEditor}
+                  onApplyToEditor={handleApplyToEditor}
+                  onRetry={handleRetry}
+                  onCancelQuery={handleCancelQuery}
+                  runningQueryKey={runningQueryKey}
+                  queryNotifications={queryNotifications}
+                  isOperationInProgress={isBlockingAIStatus(aiStatus)}
+                  editorSQL={queryInfo.queryText}
+                  isStreaming={isStreaming}
+                  isLoadingMessages={isLoadingMessages}
+                  scrollToMessageId={scrollToMessageId}
+                  onScrollToMessageComplete={handleScrollToMessageComplete}
+                />
+              ) : currentSQL && currentSQL.trim() ? (
+                <InitialQueryContainer>
+                  <InitialQueryBox data-hook="chat-initial-query-box">
+                    <InitialQueryEditor data-hook="chat-lite-editor">
+                      <LiteEditor
+                        value={currentSQL.trim()}
+                        maxHeight={216}
+                        onOpenInEditor={() =>
+                          handleOpenInEditor(
+                            { type: "code", value: currentSQL.trim() },
+                            true,
+                          )
+                        }
+                      />
+                    </InitialQueryEditor>
+                  </InitialQueryBox>
+                  {(shouldShowExplainButton || shouldShowFixButton) && (
+                    <ButtonContainer ref={explainButtonRef}>
+                      {shouldShowExplainButton && (
+                        <ExplainQueryButton
+                          conversationId={conversation!.id}
+                          queryText={currentSQL.trim()}
+                        />
+                      )}
+                      {shouldShowFixButton && <FixQueryButton />}
+                    </ButtonContainer>
+                  )}
+                </InitialQueryContainer>
+              ) : (
+                <BlankChatContainer data-hook="chat-blank-state">
+                  <BlankChatHeading>
+                    Leverage AI directly in your database
+                  </BlankChatHeading>
+                  <BlankChatSubheading>
+                    Our AI Assistant is a specialized programming and support
+                    agent that makes you more effective and helps you solve
+                    problems as you interface with your QuestDB database. Start
+                    a conversation.
+                  </BlankChatSubheading>
+                </BlankChatContainer>
+              )}
+              <ChatInput
+                ref={chatInputRef}
+                onSend={(message) =>
+                  handleSendMessage(message, hasUnactionedDiff)
+                }
+                disabled={!canUse || isBlockingAIStatus(aiStatus)}
+                placeholder={getPlaceholder()}
+                contextSQL={queryInfo.queryText}
+                contextTableId={conversation?.tableId}
+                onContextClick={handleContextClick}
+              />
+            </ChatPanel>
+          )}
+        </ChatWindowContent>
+      </Drawer>
+    </>
   )
 }
 

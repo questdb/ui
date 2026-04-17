@@ -119,9 +119,7 @@ function getCustomProviderEndpoint(baseURL, type) {
 // RESPONSE DATA BUILDERS
 // =============================================================================
 
-function createFinalResponseData(provider, explanation, sql = null) {
-  const responseContent = { explanation, sql }
-
+function createFinalResponseData(provider, explanation) {
   if (provider === "openai") {
     return {
       id: "resp_mock_final",
@@ -132,12 +130,10 @@ function createFinalResponseData(provider, explanation, sql = null) {
         {
           type: "message",
           role: "assistant",
-          content: [
-            { type: "output_text", text: JSON.stringify(responseContent) },
-          ],
+          content: [{ type: "output_text", text: explanation }],
         },
       ],
-      output_text: JSON.stringify(responseContent),
+      output_text: explanation,
       usage: { input_tokens: 200, output_tokens: 100 },
     }
   }
@@ -153,7 +149,7 @@ function createFinalResponseData(provider, explanation, sql = null) {
           index: 0,
           message: {
             role: "assistant",
-            content: JSON.stringify(responseContent),
+            content: explanation,
           },
           finish_reason: "stop",
         },
@@ -168,7 +164,7 @@ function createFinalResponseData(provider, explanation, sql = null) {
     type: "message",
     role: "assistant",
     model: PROVIDERS.anthropic.defaultModel,
-    content: [{ type: "text", text: JSON.stringify(responseContent) }],
+    content: [{ type: "text", text: explanation }],
     stop_reason: "end_turn",
     usage: { input_tokens: 200, output_tokens: 100 },
   }
@@ -247,8 +243,6 @@ function createToolCallResponseData(provider, toolName, toolArguments = {}) {
 }
 
 function createChatTitleResponseData(provider, title = "Test Chat") {
-  const content = JSON.stringify({ title })
-
   if (provider === "openai") {
     return {
       id: "resp_mock_title",
@@ -259,10 +253,10 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
         {
           type: "message",
           role: "assistant",
-          content: [{ type: "output_text", text: content }],
+          content: [{ type: "output_text", text: title }],
         },
       ],
-      output_text: content,
+      output_text: title,
       usage: { input_tokens: 50, output_tokens: 20 },
     }
   }
@@ -276,7 +270,7 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: content },
+          message: { role: "assistant", content: title },
           finish_reason: "stop",
         },
       ],
@@ -290,7 +284,7 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
     type: "message",
     role: "assistant",
     model: PROVIDERS.anthropic.defaultModel,
-    content: [{ type: "text", text: content }],
+    content: [{ type: "text", text: title }],
     stop_reason: "end_turn",
     usage: { input_tokens: 50, output_tokens: 20 },
   }
@@ -302,6 +296,18 @@ function createChatTitleResponseData(provider, title = "Test Chat") {
 
 function createOpenAISSEResponse(responseData, delay = 0) {
   const events = []
+
+  // Stream reasoning/thinking deltas if present
+  const reasoningText = responseData._reasoning || ""
+  if (reasoningText) {
+    const chunkSize = 20
+    for (let i = 0; i < reasoningText.length; i += chunkSize) {
+      const chunk = reasoningText.slice(i, i + chunkSize)
+      events.push(
+        `event: response.reasoning_summary_text.delta\ndata: ${JSON.stringify({ type: "response.reasoning_summary_text.delta", delta: chunk })}\n\n`,
+      )
+    }
+  }
 
   // Stream text delta events for the content
   const outputText = responseData.output_text || ""
@@ -345,6 +351,28 @@ function createChatCompletionsSSEResponse(responseData, delay = 0) {
   const choice = responseData.choices?.[0]
   const content = choice?.message?.content || ""
   const toolCalls = choice?.message?.tool_calls || []
+  const reasoningText = responseData._reasoning || ""
+
+  // Stream reasoning_content deltas (before content)
+  if (reasoningText) {
+    const chunkSize = 20
+    for (let i = 0; i < reasoningText.length; i += chunkSize) {
+      const chunk = reasoningText.slice(i, i + chunkSize)
+      events.push(
+        `data: ${JSON.stringify({
+          id: responseData.id,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: { reasoning_content: chunk },
+              finish_reason: null,
+            },
+          ],
+        })}\n\n`,
+      )
+    }
+  }
 
   // Stream content deltas
   if (content) {
@@ -461,6 +489,8 @@ function createAnthropicSSEResponse(responseData, delay = 0) {
   // Extract text content from response
   const textContent =
     responseData.content?.find((c) => c.type === "text")?.text || ""
+  const thinkingContent =
+    responseData.content?.find((c) => c.type === "thinking")?.thinking || ""
   const toolUseContent = responseData.content?.find(
     (c) => c.type === "tool_use",
   )
@@ -486,6 +516,38 @@ function createAnthropicSSEResponse(responseData, delay = 0) {
   )
 
   let contentIndex = 0
+
+  // Handle thinking content (before text)
+  if (thinkingContent) {
+    events.push(
+      `event: content_block_start\ndata: ${JSON.stringify({
+        type: "content_block_start",
+        index: contentIndex,
+        content_block: { type: "thinking", thinking: "" },
+      })}\n\n`,
+    )
+
+    const chunkSize = 20
+    for (let i = 0; i < thinkingContent.length; i += chunkSize) {
+      const chunk = thinkingContent.slice(i, i + chunkSize)
+      events.push(
+        `event: content_block_delta\ndata: ${JSON.stringify({
+          type: "content_block_delta",
+          index: contentIndex,
+          delta: { type: "thinking_delta", thinking: chunk },
+        })}\n\n`,
+      )
+    }
+
+    events.push(
+      `event: content_block_stop\ndata: ${JSON.stringify({
+        type: "content_block_stop",
+        index: contentIndex,
+      })}\n\n`,
+    )
+
+    contentIndex++
+  }
 
   // Handle text content
   if (textContent) {
@@ -624,8 +686,8 @@ function createResponse(provider, responseData, options = {}) {
   return createAnthropicSSEResponse(responseData, delay)
 }
 
-function createFinalResponse(provider, explanation, sql = null, options = {}) {
-  const responseData = createFinalResponseData(provider, explanation, sql)
+function createFinalResponse(provider, explanation, options = {}) {
+  const responseData = createFinalResponseData(provider, explanation)
   return createResponse(provider, responseData, options)
 }
 
@@ -670,15 +732,54 @@ function isTitleRequest(provider, body) {
   )
 }
 
-function requestMatchesQuestion(provider, body, question) {
-  if (provider === "openai") {
-    return body.input?.[0]?.content === question
+function contentToText(value) {
+  if (typeof value === "string") return value
+  if (value == null) return ""
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => contentToText(entry)).join("\n")
   }
-  // Both openai-chat-completions and anthropic use messages array
-  const firstUserMessage = body.messages?.find(
-    (msg) => msg.role === "user" && typeof msg.content === "string",
+
+  if (typeof value === "object") {
+    return [
+      value.text,
+      value.content,
+      value.output,
+      value.arguments,
+      value.input,
+    ]
+      .filter((part) => part != null)
+      .map((part) => contentToText(part))
+      .join("\n")
+  }
+
+  return String(value)
+}
+
+function getUserTexts(provider, body) {
+  if (provider === "openai") {
+    const userInputs = (body.input || []).filter(
+      (item) => item?.role === "user",
+    )
+    return userInputs.map((item) => contentToText(item.content)).filter(Boolean)
+  }
+
+  const userMessages = (body.messages || []).filter(
+    (msg) => msg?.role === "user",
   )
-  return firstUserMessage?.content === question
+  return userMessages.map((msg) => contentToText(msg.content)).filter(Boolean)
+}
+
+function requestMatchesQuestion(provider, body, question) {
+  const userTexts = getUserTexts(provider, body)
+  if (userTexts.length === 0) return false
+
+  const lastUserText = userTexts[userTexts.length - 1]
+  return (
+    userTexts.some((text) => text === question) ||
+    userTexts.some((text) => text.includes(question)) ||
+    lastUserText.includes(`User request: ${question}`)
+  )
 }
 
 function extractToolOutputContent(provider, body) {
@@ -705,28 +806,66 @@ function extractToolOutputContent(provider, body) {
       msg.content.some((c) => c.type === "tool_result"),
   )
   const latestMessage = toolResultMessages?.[toolResultMessages.length - 1]
-  const latestToolResult = latestMessage?.content?.find(
-    (c) => c.type === "tool_result",
-  )
+  const latestToolResult = [...(latestMessage?.content || [])]
+    .reverse()
+    .find((c) => c.type === "tool_result")
   return latestToolResult?.content || null
 }
 
 function extractAllInputContent(provider, body) {
   if (provider === "openai") {
-    return body.input?.map((item) => item.content || "").join("\n") || ""
+    return (
+      body.input
+        ?.map((item) =>
+          contentToText(item.content ?? item.output ?? item.arguments ?? ""),
+        )
+        .join("\n") || ""
+    )
   }
   // Both openai-chat-completions and anthropic use messages
   return (
-    body.messages
-      ?.map((msg) => {
-        if (typeof msg.content === "string") return msg.content
-        if (Array.isArray(msg.content)) {
-          return msg.content.map((c) => c.text || c.content || "").join("\n")
-        }
-        return ""
-      })
-      .join("\n") || ""
+    body.messages?.map((msg) => contentToText(msg.content)).join("\n") || ""
   )
+}
+
+function normalizeRequestBodyForAssertions(provider, body) {
+  if (!body || typeof body !== "object") return body
+
+  if (provider === "openai") {
+    const input = Array.isArray(body.input) ? body.input : []
+    return {
+      ...body,
+      input: input.filter(
+        (item) =>
+          item?.type !== "function_call" &&
+          item?.type !== "function_call_output",
+      ),
+    }
+  }
+
+  if (provider === "openai-chat-completions") {
+    const messages = Array.isArray(body.messages) ? body.messages : []
+    return {
+      ...body,
+      messages: messages.filter((msg) => msg?.role !== "tool"),
+    }
+  }
+
+  if (provider === "anthropic") {
+    const messages = Array.isArray(body.messages) ? body.messages : []
+    return {
+      ...body,
+      messages: messages.map((msg) => {
+        if (msg?.role !== "user" || !Array.isArray(msg.content)) return msg
+        return {
+          ...msg,
+          content: msg.content.filter((block) => block?.type !== "tool_result"),
+        }
+      }),
+    }
+  }
+
+  return body
 }
 
 // =============================================================================
@@ -734,21 +873,38 @@ function extractAllInputContent(provider, body) {
 // =============================================================================
 
 /**
- * Creates a multi-turn tool call flow with automatic intercept handling.
- * Supports built-in providers (openai, anthropic) and custom providers.
- *
- * @param {Object} config
- * @param {"openai" | "anthropic" | "openai-chat-completions"} [config.provider="openai"]
- * @param {boolean} [config.streaming=true]
- * @param {string} config.question
- * @param {Array} config.steps
- * @param {string} [config.endpoint] - Custom endpoint URL (overrides PROVIDERS lookup)
+ * Expands user-facing steps into internal API request steps.
+ * A finalResponse with sql is expanded into:
+ *   1. suggest_query tool call (with expectToolResult from original step)
+ *   2. text-only final response
  */
+function expandSteps(steps) {
+  const expanded = []
+  for (const step of steps) {
+    if (step.finalResponse && step.finalResponse.sql) {
+      expanded.push({
+        toolCall: {
+          name: "suggest_query",
+          args: { query: step.finalResponse.sql },
+        },
+        expectToolResult: step.expectToolResult,
+      })
+      expanded.push({
+        finalResponse: { explanation: step.finalResponse.explanation },
+      })
+    } else {
+      expanded.push(step)
+    }
+  }
+  return expanded
+}
+
 function createToolCallFlow(config) {
   const { provider = "openai", streaming = true, question, steps } = config
 
+  const expandedSteps = expandSteps(steps)
   let requestCount = 0
-  const totalRequests = steps.length
+  const totalRequests = expandedSteps.length
   const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
@@ -778,7 +934,7 @@ function createToolCallFlow(config) {
 
         requestCount++
 
-        const step = steps[requestCount - 1]
+        const step = expandedSteps[requestCount - 1]
         if (!step) return
 
         // Verify previous tool result if expectToolResult is defined
@@ -806,7 +962,6 @@ function createToolCallFlow(config) {
             createFinalResponse(
               provider,
               step.finalResponse.explanation,
-              step.finalResponse.sql,
               responseOptions,
             ),
           )
@@ -844,6 +999,8 @@ function createMultiTurnFlow(config) {
 
   let requestCount = 0
   const requestBodies = []
+  const turnComplete = []
+  let pendingTextForTurn = null
   const endpoint = config.endpoint || PROVIDERS[provider]?.endpoint
   const responseOptions = { streaming }
 
@@ -865,9 +1022,24 @@ function createMultiTurnFlow(config) {
           return
         }
 
+        // If we have a pending text response (after suggest_query tool call)
+        if (pendingTextForTurn !== null) {
+          const turnIdx = pendingTextForTurn
+          const turn = turns[turnIdx]
+          pendingTextForTurn = null
+          req.reply(
+            createFinalResponse(provider, turn.explanation, responseOptions),
+          )
+          turnComplete[turnIdx] = true
+          return
+        }
+
         const turn = turns[requestCount]
         if (turn) {
-          requestBodies[requestCount] = req.body
+          requestBodies[requestCount] = normalizeRequestBodyForAssertions(
+            provider,
+            req.body,
+          )
 
           if (turn.expectSystemMessage) {
             const allInputContent = extractAllInputContent(provider, req.body)
@@ -891,15 +1063,25 @@ function createMultiTurnFlow(config) {
             }
           }
 
-          requestCount++
-          req.reply(
-            createFinalResponse(
-              provider,
-              turn.explanation,
-              turn.sql,
-              responseOptions,
-            ),
-          )
+          if (turn.sql) {
+            // Two-phase: first respond with suggest_query tool call
+            pendingTextForTurn = requestCount
+            requestCount++
+            req.reply(
+              createToolCallResponse(
+                provider,
+                "suggest_query",
+                { query: turn.sql },
+                responseOptions,
+              ),
+            )
+          } else {
+            requestCount++
+            req.reply(
+              createFinalResponse(provider, turn.explanation, responseOptions),
+            )
+            turnComplete[requestCount - 1] = true
+          }
         }
       }).as("multiTurnRequest")
     },
@@ -909,9 +1091,9 @@ function createMultiTurnFlow(config) {
         .wrap(null)
         .should(() => {
           expect(
-            requestBodies[turnIndex],
-            `Turn ${turnIndex} should be captured`,
-          ).to.not.be.undefined
+            turnComplete[turnIndex],
+            `Turn ${turnIndex} should be complete`,
+          ).to.be.true
         })
         .then(() => {
           if (streaming) {
@@ -928,9 +1110,9 @@ function createMultiTurnFlow(config) {
         .wrap(null)
         .should(() => {
           expect(
-            requestBodies[turns.length - 1],
-            `All ${turns.length} turns should be captured`,
-          ).to.not.be.undefined
+            turnComplete[turns.length - 1],
+            `All ${turns.length} turns should be complete`,
+          ).to.be.true
         })
         .then(() => {
           if (streaming) {

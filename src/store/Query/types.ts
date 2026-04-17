@@ -8,6 +8,7 @@ import type {
 import type { Request } from "../../scenes/Editor/Monaco/utils"
 
 export type QueryKey = `${string}@${number}-${number}`
+export type NotificationNamespaceKey = string | number
 
 export enum NotificationType {
   ERROR = "error",
@@ -22,7 +23,6 @@ export enum RunningType {
   EXPLAIN = "explain",
   REFRESH = "refresh",
   QUERY = "query",
-  AI_SUGGESTION = "ai_suggestion",
   NONE = "none",
 }
 
@@ -47,21 +47,18 @@ export type QueryNotifications = Readonly<{
   explain?: NotificationShape
 }>
 
-export type AISuggestionRequest = Readonly<{
-  query: string
-  startOffset: number
-}>
-
 export type QueryStateShape = Readonly<{
   notifications: NotificationShape[]
   tables: Table[]
   columns: Record<string, InformationSchemaColumn[]>
   result?: QueryRawResult
   running: RunningType
-  queryNotifications: Record<number, Record<QueryKey, QueryNotifications>>
+  queryNotifications: Record<
+    NotificationNamespaceKey,
+    Record<QueryKey, QueryNotifications>
+  >
   activeNotification: NotificationShape | null
   queriesToRun: QueriesToRun
-  aiSuggestionRequest: AISuggestionRequest | null
 }>
 
 export enum QueryAT {
@@ -70,6 +67,7 @@ export enum QueryAT {
   CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
   UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
+  MOVE_NOTIFICATION_NAMESPACE = "QUERY/MOVE_NOTIFICATION_NAMESPACE",
   SET_RESULT = "QUERY/SET_RESULT",
   STOP_RUNNING = "QUERY/STOP_RUNNING",
   TOGGLE_RUNNING = "QUERY/TOGGLE_RUNNING",
@@ -77,11 +75,10 @@ export enum QueryAT {
   SET_COLUMNS = "QUERY/SET_COLUMNS",
   SET_ACTIVE_NOTIFICATION = "QUERY/SET_ACTIVE_NOTIFICATION",
   SET_QUERIES_TO_RUN = "QUERY/SET_QUERIES_TO_RUN",
-  SET_AI_SUGGESTION_REQUEST = "QUERY/SET_AI_SUGGESTION_REQUEST",
 }
 
 type AddNotificationAction = Readonly<{
-  payload: NotificationShape & { bufferId?: number }
+  payload: NotificationShape & { bufferId?: NotificationNamespaceKey }
   type: QueryAT.ADD_NOTIFICATION
 }>
 
@@ -92,13 +89,13 @@ type CleanupNotificationsAction = Readonly<{
 type CleanupBufferNotificationsAction = Readonly<{
   type: QueryAT.CLEANUP_BUFFER_NOTIFICATIONS
   payload: {
-    bufferId: number
+    bufferId: NotificationNamespaceKey
   }
 }>
 
 type RemoveNotificationAction = Readonly<{
   payload: QueryKey
-  bufferId?: number
+  bufferId?: NotificationNamespaceKey
   type: QueryAT.REMOVE_NOTIFICATION
 }>
 
@@ -140,7 +137,17 @@ type UpdateNotificationKeyAction = Readonly<{
   payload: {
     oldKey: QueryKey
     newKey: QueryKey
-    bufferId?: number
+    bufferId?: NotificationNamespaceKey
+    preserveOldKey?: boolean
+  }
+}>
+
+type MoveNotificationNamespaceAction = Readonly<{
+  type: QueryAT.MOVE_NOTIFICATION_NAMESPACE
+  payload: {
+    fromBufferId: NotificationNamespaceKey
+    toBufferId: NotificationNamespaceKey
+    newQueryKey: QueryKey
   }
 }>
 
@@ -149,17 +156,13 @@ type SetQueriesToRunAction = Readonly<{
   payload: QueriesToRun
 }>
 
-type SetAISuggestionRequestAction = Readonly<{
-  type: QueryAT.SET_AI_SUGGESTION_REQUEST
-  payload: AISuggestionRequest | null
-}>
-
 export type QueryAction =
   | AddNotificationAction
   | CleanupNotificationsAction
   | CleanupBufferNotificationsAction
   | RemoveNotificationAction
   | UpdateNotificationKeyAction
+  | MoveNotificationNamespaceAction
   | SetResultAction
   | StopRunningAction
   | ToggleRunningAction
@@ -167,4 +170,3 @@ export type QueryAction =
   | SetColumnsActions
   | SetActiveNotificationAction
   | SetQueriesToRunAction
-  | SetAISuggestionRequestAction

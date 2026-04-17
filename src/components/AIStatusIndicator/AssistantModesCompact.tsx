@@ -15,6 +15,7 @@ import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import {
   buildOperationSections,
   formatDurationMs,
+  getIsExpandableSection,
   getSectionDuration,
   type OperationSection,
 } from "./AssistantModes"
@@ -209,34 +210,6 @@ const CloseCircleIcon = styled(CloseCircle)`
   flex-shrink: 0;
 `
 
-const GradientCheckCircleIcon = ({ size = 20 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 256 256"
-    style={{ flexShrink: 0 }}
-  >
-    <defs>
-      <linearGradient
-        id="checkCircleGradient"
-        x1="128"
-        x2="128"
-        y1="24"
-        y2="232"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#d14671" />
-        <stop offset="1" stopColor="#892c6c" />
-      </linearGradient>
-    </defs>
-    <path
-      fill="url(#checkCircleGradient)"
-      d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm45.66,85.66-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35a8,8,0,0,1,11.32,11.32Z"
-    />
-  </svg>
-)
-
 const CollapsedSectionsWrapper = styled.div`
   display: flex;
   flex-direction: column;
@@ -270,12 +243,14 @@ const formatDetailedStatusMessage = (
   return status
 }
 
-const getIsExpandableSection = (section: OperationSection) => {
-  return [
-    AIOperationStatus.InvestigatingTable,
-    AIOperationStatus.InvestigatingDocs,
-  ].includes(section.type)
-}
+const ThinkingContent = styled.div`
+  font-size: 1.3rem;
+  color: ${color("gray2")};
+  padding: 0 2.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.7;
+`
 
 type AssistantModesCompactProps = {
   operationHistory: OperationHistory
@@ -283,7 +258,7 @@ type AssistantModesCompactProps = {
   isLive?: boolean
   onScrollNeeded?: () => void
   collapsed?: boolean
-  responseStart?: number
+  endTimestamp?: number
 }
 
 export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
@@ -292,7 +267,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
   isLive = false,
   onScrollNeeded,
   collapsed = false,
-  responseStart,
+  endTimestamp,
 }) => {
   const theme = useTheme()
   const [collapsedSections, setCollapsedSections] = useState<
@@ -360,9 +335,12 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
   const durationText = useMemo(() => {
     if (operationHistory.length === 0) return null
     const firstTimestamp = operationHistory[0]?.timestamp
-    if (!firstTimestamp || !responseStart) return null
-    return formatDurationMs(responseStart - firstTimestamp)
-  }, [operationHistory, responseStart])
+    const lastTimestamp =
+      endTimestamp ?? operationHistory[operationHistory.length - 1]?.timestamp
+    if (!firstTimestamp || !lastTimestamp || firstTimestamp === lastTimestamp)
+      return null
+    return formatDurationMs(lastTimestamp - firstTimestamp)
+  }, [operationHistory, endTimestamp])
 
   if (operationHistory.length === 0) {
     return null
@@ -381,8 +359,12 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
     const sectionDuration = getSectionDuration(
       section,
       nextSection,
-      responseStart,
+      !nextSection ? endTimestamp : undefined,
     )
+    const thinkingSegmentText =
+      section.type === AIOperationStatus.Thinking
+        ? (section.operations[0]?.content ?? "")
+        : ""
 
     return (
       <ModeHeader
@@ -394,9 +376,21 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
           $expanded={isExpanded}
           $isExpandable={isExpandable}
           data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
-          role="presentation"
+          role={isExpandable ? "button" : "presentation"}
+          tabIndex={isExpandable ? 0 : undefined}
+          aria-expanded={isExpandable ? isExpanded : undefined}
           onClick={
             isExpandable ? () => handleToggleSection(section.id) : undefined
+          }
+          onKeyDown={
+            isExpandable
+              ? (e: React.KeyboardEvent) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    handleToggleSection(section.id)
+                  }
+                }
+              : undefined
           }
         >
           <ReasoningIcon>
@@ -420,7 +414,16 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
             )}
           </Box>
         </ModeHeaderTop>
-        {isExpandable && (
+        {isExpandable && section.type === AIOperationStatus.Thinking && (
+          <ExpandableWrapper $expanded={isExpanded}>
+            <ExpandableContent>
+              {thinkingSegmentText ? (
+                <ThinkingContent>{thinkingSegmentText}</ThinkingContent>
+              ) : null}
+            </ExpandableContent>
+          </ExpandableWrapper>
+        )}
+        {isExpandable && section.type !== AIOperationStatus.Thinking && (
           <ExpandableWrapper $expanded={isExpanded}>
             <ExpandableContent>
               <ReasoningThread>
@@ -594,10 +597,18 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
             $expanded={collapsedProcessingExpanded}
             $isExpandable
             onClick={() => setCollapsedProcessingExpanded((prev) => !prev)}
+            onKeyDown={(e: React.KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setCollapsedProcessingExpanded((prev) => !prev)
+              }
+            }}
             data-hook="assistant-mode-processing-collapsed"
-            role="presentation"
+            role="button"
+            tabIndex={0}
+            aria-expanded={collapsedProcessingExpanded}
           >
-            <GradientCheckCircleIcon size={20} />
+            <CheckIcon />
             <ModeTitle $isActive={false}>
               {durationText ? `Thought for ${durationText}` : "Thought"}
             </ModeTitle>

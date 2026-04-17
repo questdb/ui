@@ -19,6 +19,8 @@ import {
   Button,
   Checkbox,
   Dialog,
+  DialogButton,
+  DialogDescription,
   ForwardRef,
   Overlay,
   PaneContent,
@@ -59,7 +61,6 @@ import {
   getQueryFromCursor,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
-  getQueryRequestFromAISuggestion,
   QuestDBLanguageName,
   getAllQueries,
   getQueriesInRange,
@@ -236,19 +237,6 @@ const CancelButton = styled(Button)`
   padding: 1.2rem 0.6rem;
 `
 
-const StyledDialogDescription = styled(Dialog.Description)`
-  font-size: 1.4rem;
-`
-
-const StyledDialogButton = styled(Button)`
-  padding: 1.2rem 0.6rem;
-  font-size: 1.4rem;
-
-  &:focus {
-    outline: 1px solid ${({ theme }) => theme.color.foreground};
-  }
-`
-
 const EditorWrapper = styled.div`
   flex: 1;
   overflow: hidden;
@@ -264,7 +252,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const editorContext = useEditor()
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
-    buffers,
     setTabsDisabled,
     editorRef,
     monacoRef,
@@ -274,7 +261,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     queryParamProcessedRef,
     isNavigatingFromSearchRef,
   } = editorContext
-  const { quest } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
   const {
     handleGlyphClick,
@@ -288,14 +275,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
-  const [abortConfirmationOpen, setAbortConfirmationOpen] = useState(false)
-  const abortConfirmationOpenRef = useRef(false)
   const scriptConfirmationOpenRef = useRef(false)
+  const editorQueryIdRef = useRef<QuestDB.QueryId | null>(null)
+  const scriptQueryKeyRef = useRef<QueryKey | null>(null)
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
-  const aiSuggestionRequest = useSelector(
-    selectors.query.getAISuggestionRequest,
-  )
   const tables = useSelector(selectors.query.getTables)
   const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
@@ -326,10 +310,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const requestRef = useRef(request)
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
-  const aiSuggestionRequestRef = useRef<{
-    query: string
-    startOffset: number
-  } | null>(aiSuggestionRequest)
   const canUseAIRef = useRef(canUseAI)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
@@ -401,18 +381,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const updateQueryNotification = (queryKey?: QueryKey) => {
-    const currentAISuggestion = aiSuggestionRequestRef.current
-    if (currentAISuggestion && activeNotificationRef.current) {
-      const aiQueryKey = createQueryKey(
-        normalizeQueryText(currentAISuggestion.query),
-        currentAISuggestion.startOffset,
-      )
-      // If current notification is from AI suggestion, preserve it
-      if (activeNotificationRef.current.query === aiQueryKey) {
-        return
-      }
-    }
-
     let newActiveNotification: NotificationShape | null = null
 
     if (queryKey) {
@@ -542,9 +510,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const model = editor?.getModel()
     if (!editor || !model) return
 
-    const startOffset = getQueryStartOffset(editor, query)
-    const queryText = query.query
-
     if (validationTimeoutRef.current) {
       window.clearTimeout(validationTimeoutRef.current)
       validationTimeoutRef.current = null
@@ -557,14 +522,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       )
     }
 
-    if (runningValueRef.current === RunningType.NONE) {
+    const targetBufferId = activeBufferRef.current.id as number
+    const queryKey = createQueryKeyFromRequest(editor, query)
+
+    questExecution.requestExecution(targetBufferId, queryKey, () => {
       setCursorBeforeRunning(query)
       toggleRunning(type)
-      return
-    }
-
-    pendingActionRef.current = { type, queryText, startOffset }
-    setAbortConfirmationOpen(true)
+    })
   }
 
   const executePendingAction = () => {
@@ -697,7 +661,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     )
     lineMarkingDecorationIdsRef.current = newLineMarkingIds
     if (
-      !["scroll", "script"].includes(source ?? "") &&
+      !["scroll", "script", "query-notifications-sync"].includes(
+        source ?? "",
+      ) &&
       !isRunningScriptRef.current
     ) {
       updateQueryNotification(
@@ -906,6 +872,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       registerLegacyEventBusEvents({
         editor,
         toggleRunning,
+        getRunning: () => runningValueRef.current,
       }),
     )
     cleanupActionsRef.current.push(
@@ -1076,20 +1043,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       const currentNotifications = queryNotificationsRef.current || {}
-      const currentAISuggestion = aiSuggestionRequestRef.current
-      const aiSuggestionQueryKey = currentAISuggestion
-        ? createQueryKey(
-            normalizeQueryText(currentAISuggestion.query),
-            currentAISuggestion.startOffset,
-          )
-        : null
 
       Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
-
-        if (aiSuggestionQueryKey && queryKey === aiSuggestionQueryKey) {
-          return
-        }
 
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
@@ -1337,13 +1293,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     )
 
     try {
-      const result = await quest.queryRaw(
-        normalizeQueryText(effectiveQueryText),
-        {
+      const { promise: scriptQueryPromise, queryId: scriptQueryId } =
+        quest.queryRaw(normalizeQueryText(effectiveQueryText), {
           limit: "0,1000",
           explain: true,
-        },
-      )
+          cancellable: true,
+        })
+      editorQueryIdRef.current = scriptQueryId
+
+      const result = await scriptQueryPromise
 
       const bufferIdStr = activeBufferId.toString()
       if (executionRefs.current[bufferIdStr]) {
@@ -1473,7 +1431,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
     }
 
-    if (runningValueRef.current === RunningType.NONE) {
+    if (
+      runningValueRef.current === RunningType.NONE &&
+      !questExecution.isAnyRunning()
+    ) {
       triggerScript()
       return
     }
@@ -1485,6 +1446,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleConfirmRunScript = () => {
     setScriptConfirmationOpen(false)
+
+    questExecution.cancelActive()
 
     if (pendingActionRef.current) {
       if (runningValueRef.current === RunningType.NONE) {
@@ -1511,11 +1474,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     pendingActionRef.current = undefined
     handleToggleDialog(false)
   }
-  const handleCloseAbortDialog = () => {
-    if (!abortConfirmationOpen) return
-    pendingActionRef.current = undefined
-    setAbortConfirmationOpen(false)
-  }
 
   const handleRunScript = async () => {
     let successfulQueries = 0
@@ -1541,6 +1499,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const individualQueryResults: Array<IndividualQueryResult> = []
 
     editor.updateOptions({ readOnly: true })
+
+    // Drain pending microtasks (e.g., an aborted chat query's rejection
+    // dispatching addNotification) before the loop starts, so iteration 0's
+    // setActiveNotification / toggleGlyphWidgetLoading aren't clobbered.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     const startTime = Date.now()
     for (let i = 0; i < queries.length; i++) {
@@ -1627,10 +1590,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const completedGracefully = queries.length === individualQueryResults.length
     if (
       completedGracefully ||
-      (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries)
+      (failedQueries > 0 && stopAfterFailureRef.current && runningAllQueries) ||
+      scriptStopRef.current
     ) {
       isRunningScriptRef.current = false
       dispatch(actions.query.stopRunning())
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
     }
 
     const notificationPrefix = completedGracefully
@@ -1663,24 +1631,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.updateOptions({ readOnly: false })
     if (scriptStopRef.current) {
       scriptStopRef.current = false
-      if (
-        !abortConfirmationOpenRef.current &&
-        !scriptConfirmationOpenRef.current
-      ) {
+      if (!scriptConfirmationOpenRef.current) {
         executePendingAction()
       }
     }
   }
-
-  useEffect(() => {
-    // Remove all execution information for the buffers that have been deleted
-    Object.keys(executionRefs.current).forEach((key) => {
-      const bufferId = parseInt(key)
-      if (!buffers.find((b) => b.id === bufferId)) {
-        cleanupExecutionRefs(bufferId)
-      }
-    })
-  }, [buffers, executionRefs, cleanupExecutionRefs])
 
   useEffect(() => {
     canUseAIRef.current = canUseAI
@@ -1701,14 +1656,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [activeNotification])
 
   useEffect(() => {
-    aiSuggestionRequestRef.current = aiSuggestionRequest
-  }, [aiSuggestionRequest])
-
-  useEffect(() => {
-    abortConfirmationOpenRef.current = abortConfirmationOpen
-  }, [abortConfirmationOpen])
-
-  useEffect(() => {
     scriptConfirmationOpenRef.current = scriptConfirmationOpen
   }, [scriptConfirmationOpen])
 
@@ -1721,16 +1668,23 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       !contentJustChangedRef.current &&
       !activeNotification?.query.endsWith(gridNotificationKeySuffix)
     ) {
-      applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
+      applyGlyphsAndLineMarkings(
+        monacoRef.current,
+        editorRef.current,
+        "query-notifications-sync",
+      )
     }
   }, [queryNotifications])
 
   useEffect(() => {
     if (running === RunningType.NONE && request) {
-      quest.abort()
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
       setRequest(undefined)
     }
-  }, [request, quest, running])
+  }, [request, running, quest])
 
   useEffect(() => {
     runningValueRef.current = running
@@ -1739,7 +1693,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (!editor || !monaco) {
       return
     }
-
     if (running !== RunningType.NONE) {
       cancelAllValidationRequests()
       clearModelMarkers(monaco, editor)
@@ -1759,32 +1712,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : running === RunningType.AI_SUGGESTION &&
-              aiSuggestionRequestRef.current
-            ? getQueryRequestFromAISuggestion(
-                editor,
-                aiSuggestionRequestRef.current,
-              )
-            : getQueryRequestFromEditor(editor)
+          : getQueryRequestFromEditor(editor)
 
       const isRunningExplain = running === RunningType.EXPLAIN
-      const isAISuggestion =
-        running === RunningType.AI_SUGGESTION &&
-        aiSuggestionRequestRef.current !== null
 
       const targetBufferId = activeBufferRef.current.id as number
 
       if (request?.query) {
         editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
-        // For AI_SUGGESTION, use the startOffset directly from aiSuggestionRequestRef
-        // because the editor model doesn't contain the AI suggestion query
-        const parentQueryKey = isAISuggestion
-          ? createQueryKey(
-              request.query,
-              aiSuggestionRequestRef.current!.startOffset,
-            )
-          : createQueryKeyFromRequest(editor, request)
+        const parentQueryKey = createQueryKeyFromRequest(editor, request)
+        questExecution.markActive(targetBufferId, parentQueryKey)
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1822,11 +1760,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           notificationTimeoutRef.current = null
         }, 1000)
 
-        void quest
-          .queryRaw(normalizeQueryText(queryToRun), {
+        const { promise: queryPromise, queryId } = quest.queryRaw(
+          normalizeQueryText(queryToRun),
+          {
             limit: "0,1000",
             explain: true,
-          })
+            cancellable: true,
+          },
+        )
+        editorQueryIdRef.current = queryId
+
+        void queryPromise
           .then((result) => {
             if (notificationTimeoutRef.current) {
               window.clearTimeout(notificationTimeoutRef.current)
@@ -1834,6 +1778,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
 
             setRequest(undefined)
+            dispatch(actions.query.stopRunning())
+            questExecution.releaseExecution(parentQueryKey)
             if (!editorRef.current) return
 
             const targetBufferIdStr = targetBufferId.toString()
@@ -1855,10 +1801,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   executionRefs.current[targetBufferIdStr] = {}
                 }
 
-                // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
-                const queryStartOffset = isAISuggestion
-                  ? aiSuggestionRequestRef.current!.startOffset
-                  : getQueryStartOffset(editorRef.current, request)
+                const queryStartOffset = getQueryStartOffset(
+                  editorRef.current,
+                  request,
+                )
                 executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                   success: true,
                   selection: request.selection,
@@ -1870,7 +1816,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               }
             }
 
-            dispatch(actions.query.stopRunning())
             dispatch(actions.query.setResult(result))
 
             if (
@@ -1943,6 +1888,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
             setRequest(undefined)
             dispatch(actions.query.stopRunning())
+            questExecution.releaseExecution(parentQueryKey)
 
             if (editorRef?.current && monacoRef?.current) {
               // For error positioning, we need to use the original request (without EXPLAIN prefix)
@@ -1966,17 +1912,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
               const errorToStore = { ...error, position: adjustedErrorPosition }
 
-              // Use the already-defined parentQueryKey (which correctly handles AI_SUGGESTION)
-              // instead of recalculating it here
+              // Use the already-defined parentQueryKey instead of recalculating it here
               const targetBufferIdStr = targetBufferId.toString()
               if (!executionRefs.current[targetBufferIdStr]) {
                 executionRefs.current[targetBufferIdStr] = {}
               }
 
-              // For AI_SUGGESTION, use the startOffset from aiSuggestionRequestRef
-              const startOffset = isAISuggestion
-                ? aiSuggestionRequestRef.current!.startOffset
-                : getQueryStartOffset(editorRef.current, request)
+              const startOffset = getQueryStartOffset(
+                editorRef.current,
+                request,
+              )
               executionRefs.current[targetBufferIdStr][parentQueryKey] = {
                 error: errorToStore,
                 selection: request.selection,
@@ -2016,21 +1961,43 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
           })
           .finally(() => {
-            if (
-              !abortConfirmationOpenRef.current &&
-              !scriptConfirmationOpenRef.current
-            ) {
+            if (!scriptConfirmationOpenRef.current) {
               executePendingAction()
             }
           })
         setRequest(request)
       } else {
         dispatch(actions.query.stopRunning())
+        if (
+          questExecution.getActive()?.bufferId === activeBufferRef.current.id
+        ) {
+          questExecution.cancelActive()
+        }
       }
     } else if (running === RunningType.SCRIPT) {
+      const scriptQueryKey: QueryKey = `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
+      scriptQueryKeyRef.current = scriptQueryKey
+      questExecution.markActive(
+        activeBufferRef.current.id as number,
+        scriptQueryKey,
+        () => {
+          scriptStopRef.current = true
+          if (editorQueryIdRef.current !== null) {
+            quest.abort(editorQueryIdRef.current)
+            editorQueryIdRef.current = null
+          }
+        },
+      )
       void handleRunScript()
     } else if (running === RunningType.NONE && isRunningScriptRef.current) {
-      quest.abort()
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
       scriptStopRef.current = true
       eventBus.publish(EventType.MSG_QUERY_SCHEMA)
     }
@@ -2139,6 +2106,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     return () => {
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
+
       cleanupActionsRef.current.forEach((cleanup) => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)
@@ -2254,7 +2226,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           >
             <Dialog.Title>Run all queries</Dialog.Title>
 
-            <StyledDialogDescription>
+            <DialogDescription>
               {pendingActionRef.current && (
                 <Box
                   margin="0 0 1rem 0"
@@ -2294,80 +2266,22 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   </Text>
                 </label>
               </Box>
-            </StyledDialogDescription>
+            </DialogDescription>
 
             <Dialog.ActionButtons>
               <Dialog.Close asChild>
-                <StyledDialogButton
-                  skin="secondary"
-                  onClick={handleCloseDialog}
-                >
+                <DialogButton skin="secondary" onClick={handleCloseDialog}>
                   Cancel
-                </StyledDialogButton>
+                </DialogButton>
               </Dialog.Close>
 
-              <StyledDialogButton
+              <DialogButton
                 skin="primary"
                 data-hook="run-all-queries-confirm"
                 onClick={handleConfirmRunScript}
               >
                 Run all queries
-              </StyledDialogButton>
-            </Dialog.ActionButtons>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      <Dialog.Root
-        open={abortConfirmationOpen}
-        onOpenChange={(open) => {
-          setAbortConfirmationOpen(open)
-        }}
-      >
-        <Dialog.Portal>
-          <ForwardRef>
-            <Overlay primitive={Dialog.Overlay} />
-          </ForwardRef>
-
-          <Dialog.Content
-            onEscapeKeyDown={handleCloseAbortDialog}
-            onInteractOutside={handleCloseAbortDialog}
-            data-hook="abort-confirmation-dialog"
-          >
-            <Dialog.Title>Cancel current query?</Dialog.Title>
-
-            <StyledDialogDescription>
-              <Text color="foreground">
-                A query is currently running. Starting a new query will cancel
-                the current execution.
-              </Text>
-            </StyledDialogDescription>
-
-            <Dialog.ActionButtons>
-              <Dialog.Close asChild>
-                <StyledDialogButton
-                  skin="secondary"
-                  data-hook="abort-confirmation-dialog-dismiss"
-                  onClick={handleCloseAbortDialog}
-                >
-                  Dismiss
-                </StyledDialogButton>
-              </Dialog.Close>
-
-              <StyledDialogButton
-                skin="primary"
-                data-hook="abort-confirmation-dialog-confirm"
-                onClick={() => {
-                  setAbortConfirmationOpen(false)
-                  if (runningValueRef.current === RunningType.NONE) {
-                    executePendingAction()
-                  } else {
-                    toggleRunning(RunningType.NONE)
-                  }
-                }}
-              >
-                Cancel current query
-              </StyledDialogButton>
+              </DialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>
         </Dialog.Portal>

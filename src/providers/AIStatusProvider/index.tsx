@@ -50,10 +50,10 @@ export enum AIOperationStatus {
   GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
+  Thinking = "Thinking",
 }
 
 export type StatusArgs = {
-  conversationId?: string
   name?: string
   section?: string
   tableOpType?: "schema" | "details"
@@ -64,6 +64,7 @@ export type StatusEntry = {
   type: AIOperationStatus
   args?: StatusArgs
   timestamp: number
+  content?: string
 }
 
 export type OperationHistory = StatusEntry[]
@@ -156,9 +157,22 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
       onUpdate?: (history: OperationHistory) => void,
     ) => {
       if (newStatus !== null) {
+        const normalizedArgs = args || null
+        const lastEntry =
+          currentOperationRef.current[currentOperationRef.current.length - 1]
+        const isDuplicateConsecutiveStatus =
+          !!lastEntry &&
+          lastEntry.type === newStatus &&
+          JSON.stringify(lastEntry.args ?? null) ===
+            JSON.stringify(normalizedArgs)
+
+        if (isDuplicateConsecutiveStatus) {
+          return
+        }
+
         const statusPayload: StatusEntry = {
           type: newStatus,
-          args: args || undefined,
+          args: normalizedArgs ?? undefined,
           timestamp: Date.now(),
         }
         if (
@@ -219,12 +233,12 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
   }, [abortController])
 
   useEffect(() => {
-    if (!isStreamingRef.current && isStreaming) {
-      setStatus(AIOperationStatus.GeneratingResponse)
-    } else if (isStreamingRef.current && !isStreaming) {
-      if (statusRef.current !== AIOperationStatus.Aborted) {
-        setStatus(null)
-      }
+    if (
+      isStreamingRef.current &&
+      !isStreaming &&
+      statusRef.current !== AIOperationStatus.Aborted
+    ) {
+      setStatus(null)
     }
     isStreamingRef.current = isStreaming
   }, [isStreaming])
@@ -233,6 +247,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
       }
     }
   }, [])

@@ -47,68 +47,6 @@ function interceptAIRequestWithResponse(
 }
 
 /**
- * Creates a valid OpenAI response for explain schema requests.
- * Note: Schema explanation uses responses.parse() which is non-streaming.
- * @param {Object} schemaData - The schema explanation data
- * @returns {Object} OpenAI response body
- */
-function createOpenAIExplainSchemaResponse(schemaData) {
-  return {
-    id: "resp_mock_schema",
-    object: "response",
-    created_at: Date.now(),
-    status: "completed",
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text: JSON.stringify(schemaData),
-          },
-        ],
-      },
-    ],
-    output_parsed: schemaData,
-    usage: {
-      input_tokens: 150,
-      output_tokens: 200,
-    },
-  }
-}
-
-/**
- * Creates an OpenAI response where output_parsed is null, triggering parse error.
- * @returns {Object} OpenAI response body with null output_parsed
- */
-function createOpenAIParseFailureResponse() {
-  return {
-    id: "resp_mock_parse_fail",
-    object: "response",
-    created_at: Date.now(),
-    status: "completed",
-    output: [
-      {
-        type: "message",
-        role: "assistant",
-        content: [
-          {
-            type: "output_text",
-            text: "",
-          },
-        ],
-      },
-    ],
-    output_parsed: null,
-    usage: {
-      input_tokens: 150,
-      output_tokens: 50,
-    },
-  }
-}
-
-/**
  * Intercepts AI chat requests with a default test response.
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
@@ -130,7 +68,6 @@ function interceptAIChatRequest(
   const responseData = createFinalResponseData(
     provider,
     "Test response explanation",
-    null,
   )
 
   cy.intercept("POST", endpoint, (req) => {
@@ -1379,15 +1316,10 @@ describe("ai assistant", () => {
 
     it("should show processing status and display valid schema explanation", () => {
       // Given - Set up intercept with valid schema response
-      const validSchemaResponse = createOpenAIExplainSchemaResponse({
-        explanation:
-          "The test_trades table stores trading data with symbol identification, price values, and timestamps.",
-      })
-      interceptAIRequestWithResponse(
-        "openai",
-        validSchemaResponse,
-        "explainSchema",
-      )
+      const schemaExplanation =
+        "The test_trades table stores trading data with symbol identification, price values, and timestamps."
+      const responseData = createFinalResponseData("openai", schemaExplanation)
+      interceptAIRequestWithResponse("openai", responseData, "explainSchema")
 
       cy.refreshSchema()
       // When - Right-click on table and select explain schema
@@ -1399,8 +1331,6 @@ describe("ai assistant", () => {
       // Then - Chat window should open with processing status
       cy.getByDataHook("ai-chat-window").should("be.visible")
       cy.getByDataHook("assistant-modes-container").should("be.visible")
-      cy.getByDataHook("assistant-mode-processing-collapsed").click()
-      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
       cy.waitForAIResponse("@explainSchema")
@@ -1408,21 +1338,29 @@ describe("ai assistant", () => {
       // Then - Should display the schema explanation content
       cy.getByDataHook("chat-message-assistant").should("be.visible")
 
-      // Verify explanation summary
+      // Verify explanation content and processing status in collapsed mode
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
+      cy.getByDataHook("assistant-mode-processing-request").should("exist")
+
       cy.getByDataHook("chat-message-assistant").should(
         "contain",
         "The test_trades table stores trading data",
       )
     })
 
-    it("should show error when schema explanation fails to parse", () => {
-      // Given - Set up intercept with parse failure response (output_parsed: null)
-      const parseFailureResponse = createOpenAIParseFailureResponse()
-      interceptAIRequestWithResponse(
-        "openai",
-        parseFailureResponse,
-        "explainSchemaFail",
-      )
+    it("should show error when schema explanation request fails", () => {
+      // Given - Set up intercept with API error response
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        req.reply({
+          statusCode: 500,
+          body: {
+            error: {
+              type: "server_error",
+              message: "Internal server error",
+            },
+          },
+        })
+      }).as("explainSchemaFail")
 
       cy.refreshSchema()
       // When - Right-click on table and select explain schema
@@ -1431,19 +1369,14 @@ describe("ai assistant", () => {
         .rightclick()
       cy.getByDataHook("table-context-menu-explain-schema").click()
 
-      // Then - Chat window should open with processing status
+      // Then - Chat window should open
       cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("assistant-modes-container").should("be.visible")
-      cy.getByDataHook("assistant-mode-processing-collapsed").click()
-      cy.getByDataHook("assistant-mode-processing-request").should("be.visible")
 
       // When - Wait for response
       cy.wait("@explainSchemaFail")
 
       // Then - Should display error message
-      cy.getByDataHook("chat-message-error")
-        .should("be.visible")
-        .should("contain", "Failed to parse assistant response.")
+      cy.getByDataHook("chat-message-error").should("be.visible")
     })
   })
 
@@ -1769,11 +1702,11 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
     })
@@ -1826,11 +1759,11 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
     })
@@ -1883,13 +1816,256 @@ Syntax: \`avg(column)\`
       // Hover on assistant header to reveal token display
       cy.getByDataHook("assistant-header").realHover()
 
-      // Verify token usage is displayed (1 tool call + 1 final = 300 input / 150 output)
+      // Verify token usage is displayed (1 tool call + 1 suggest_query + 1 final = 400 input / 200 output)
       cy.get(".token-display")
         .should("be.visible")
-        .should("contain", "300")
-        .should("contain", "150")
+        .should("contain", "400")
+        .should("contain", "200")
         .should("contain", "input")
         .should("contain", "output")
+    })
+
+    it("should handle interleaved thinking, tool calls, content, and suggestions in a multi-step flow", () => {
+      const question = "What is the average trade price per symbol?"
+      const thinkingText1 =
+        "Let me check what tables are available in the database."
+      const midContent1 =
+        "I found the btc_trades table. Let me look at its schema."
+      const thinkingText2 =
+        "The table has symbol and price columns. I can write a GROUP BY query."
+      const midContent2 =
+        "The query syntax is valid. Let me suggest this query for you."
+      const suggestedSQL = "SELECT symbol, avg(price) FROM btc_trades"
+      const finalExplanation =
+        "This query groups all trades by their symbol and calculates the average price for each."
+
+      let requestCount = 0
+
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        if (isTitleRequest("openai", req.body)) {
+          req.reply(createChatTitleResponse("openai"))
+          return
+        }
+
+        requestCount++
+
+        // Round 1: thinking + get_tables tool call
+        if (requestCount === 1) {
+          req.reply(
+            createResponse(
+              "openai",
+              {
+                id: "resp_r1",
+                object: "response",
+                created_at: Date.now(),
+                status: "completed",
+                output: [
+                  {
+                    type: "function_call",
+                    id: "fc_get_tables",
+                    name: "get_tables",
+                    arguments: "{}",
+                    call_id: "call_get_tables",
+                  },
+                ],
+                output_text: "",
+                _reasoning: thinkingText1,
+                usage: { input_tokens: 100, output_tokens: 50 },
+              },
+              { streaming: true },
+            ),
+          )
+          return
+        }
+
+        // Round 2: text + get_table_schema tool call
+        if (requestCount === 2) {
+          req.reply(
+            createResponse(
+              "openai",
+              {
+                id: "resp_r2",
+                object: "response",
+                created_at: Date.now(),
+                status: "completed",
+                output: [
+                  {
+                    type: "message",
+                    role: "assistant",
+                    content: [{ type: "output_text", text: midContent1 }],
+                  },
+                  {
+                    type: "function_call",
+                    id: "fc_get_schema",
+                    name: "get_table_schema",
+                    arguments: JSON.stringify({
+                      table_name: "btc_trades",
+                    }),
+                    call_id: "call_get_schema",
+                  },
+                ],
+                output_text: midContent1,
+                usage: { input_tokens: 150, output_tokens: 60 },
+              },
+              { streaming: true },
+            ),
+          )
+          return
+        }
+
+        // Round 3: thinking + validate_query tool call
+        if (requestCount === 3) {
+          req.reply(
+            createResponse(
+              "openai",
+              {
+                id: "resp_r3",
+                object: "response",
+                created_at: Date.now(),
+                status: "completed",
+                output: [
+                  {
+                    type: "function_call",
+                    id: "fc_validate",
+                    name: "validate_query",
+                    arguments: JSON.stringify({ query: suggestedSQL }),
+                    call_id: "call_validate",
+                  },
+                ],
+                output_text: "",
+                _reasoning: thinkingText2,
+                usage: { input_tokens: 200, output_tokens: 70 },
+              },
+              { streaming: true },
+            ),
+          )
+          return
+        }
+
+        // Round 4: text + suggest_query tool call
+        if (requestCount === 4) {
+          req.reply(
+            createResponse(
+              "openai",
+              {
+                id: "resp_r4",
+                object: "response",
+                created_at: Date.now(),
+                status: "completed",
+                output: [
+                  {
+                    type: "message",
+                    role: "assistant",
+                    content: [{ type: "output_text", text: midContent2 }],
+                  },
+                  {
+                    type: "function_call",
+                    id: "fc_suggest",
+                    name: "suggest_query",
+                    arguments: JSON.stringify({ query: suggestedSQL }),
+                    call_id: "call_suggest",
+                  },
+                ],
+                output_text: midContent2,
+                usage: { input_tokens: 250, output_tokens: 80 },
+              },
+              { streaming: true },
+            ),
+          )
+          return
+        }
+
+        // Round 5: final text explanation
+        if (requestCount === 5) {
+          req.reply(
+            createResponse(
+              "openai",
+              createFinalResponseData("openai", finalExplanation),
+              { streaming: true },
+            ),
+          )
+        }
+      }).as("interleavedRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(question)
+      cy.getByDataHook("chat-send-button").click()
+
+      // --- After Round 1: thinking + get_tables ---
+      // Thinking should be visible and expanded (live state, not collapsed)
+      cy.getByDataHook("assistant-mode-thinking").should("be.visible")
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Let me check",
+      )
+      // Reviewing tables status appears
+      cy.getByDataHook("assistant-mode-reviewing-tables").should("be.visible")
+
+      // --- After Round 2: text + get_table_schema ---
+      // Mid-content from round 2 should appear in the interleaved timeline
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "I found the btc_trades table",
+      )
+      // Investigating table status appears
+      cy.getByDataHook("assistant-mode-investigating-table").should(
+        "be.visible",
+      )
+
+      // --- After Round 3: thinking + validate_query ---
+      // Second thinking block content should be visible
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "symbol and price columns",
+      )
+      // Validating query status appears
+      cy.getByDataHook("assistant-mode-validating-query").should("be.visible")
+
+      // --- After Round 4: text + suggest_query ---
+      // Mid-content from round 4 visible
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "query syntax is valid",
+      )
+      // SQL suggestion should appear as inline diff
+      cy.getByDataHook("inline-diff-container").should("be.visible")
+
+      // --- After Round 5: final explanation ---
+      cy.waitForStreamingComplete()
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "groups all trades by their symbol",
+      )
+
+      // All operations should now be collapsed into processing-collapsed headers
+      // (one per operation group in the interleaved timeline)
+      cy.getByDataHook("assistant-mode-processing-collapsed").should("exist")
+
+      // Expand each collapsed operation group
+      cy.getByDataHook("assistant-mode-processing-collapsed").each(($el) => {
+        cy.wrap($el).click()
+      })
+
+      // All sections should be present inside the expanded operations
+      cy.getByDataHook("assistant-mode-thinking").should("exist")
+      cy.getByDataHook("assistant-mode-reviewing-tables").should("exist")
+      cy.getByDataHook("assistant-mode-investigating-table").should("exist")
+      cy.getByDataHook("assistant-mode-validating-query").should("exist")
+
+      // Expand first thinking and verify its content
+      cy.getByDataHook("assistant-mode-thinking").first().click({ force: true })
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "Let me check",
+      )
+
+      // Expand second thinking and verify its content
+      cy.getByDataHook("assistant-mode-thinking").eq(1).click({ force: true })
+      cy.getByDataHook("chat-message-assistant").should(
+        "contain",
+        "symbol and price columns",
+      )
     })
   })
 
@@ -2464,7 +2640,7 @@ Syntax: \`avg(column)\`
         req.reply(
           createResponse(
             "openai",
-            createFinalResponseData("openai", "Successful response", null),
+            createFinalResponseData("openai", "Successful response"),
             { streaming: true },
           ),
         )
@@ -2519,7 +2695,7 @@ Syntax: \`avg(column)\`
         req.reply(
           createResponse(
             "anthropic",
-            createFinalResponseData("anthropic", "Successful response", null),
+            createFinalResponseData("anthropic", "Successful response"),
             { streaming: true },
           ),
         )
@@ -2531,6 +2707,540 @@ Syntax: \`avg(column)\`
       cy.waitForStreamingComplete()
       cy.getByDataHook("chat-message-error").should("not.exist")
       cy.getByDataHook("chat-message-assistant").should("be.visible")
+    })
+  })
+
+  describe("thinking blocks", () => {
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
+    })
+
+    it("should display thinking block for Anthropic reasoning model", () => {
+      const thinkingText =
+        "Let me analyze the user request. They want to understand the table structure. I should retrieve the schema first."
+      const explanation =
+        "The btc_trades table stores cryptocurrency trading data."
+
+      let requestCount = 0
+
+      cy.intercept("POST", PROVIDERS.anthropic.endpoint, (req) => {
+        if (isTitleRequest("anthropic", req.body)) {
+          req.reply(createChatTitleResponse("anthropic"))
+          return
+        }
+        requestCount++
+        if (requestCount === 1) {
+          // First response: thinking + tool call (no text yet)
+          // This lets thinking render while tool is being executed
+          const thinkingAndToolData = {
+            id: "msg_mock_thinking_tool",
+            type: "message",
+            role: "assistant",
+            model: PROVIDERS.anthropic.defaultModel,
+            content: [
+              { type: "thinking", thinking: thinkingText },
+              {
+                type: "tool_use",
+                id: "call_thinking_validate",
+                name: "validate_query",
+                input: { query: "SELECT 1" },
+              },
+            ],
+            stop_reason: "tool_use",
+            usage: { input_tokens: 100, output_tokens: 50 },
+          }
+          req.reply(
+            createResponse("anthropic", thinkingAndToolData, {
+              streaming: true,
+            }),
+          )
+        } else {
+          // Second response: final text explanation
+          req.reply(
+            createResponse(
+              "anthropic",
+              createFinalResponseData("anthropic", explanation),
+              { streaming: true },
+            ),
+          )
+        }
+      }).as("thinkingRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(
+        "Describe the btc_trades table",
+      )
+      cy.getByDataHook("chat-send-button").click()
+
+      // While thinking has arrived but text hasn't:
+      // Thinking section should be visible and expanded by default (live state)
+      cy.getByDataHook("assistant-mode-thinking").should("be.visible")
+      cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
+
+      // Wait for full response to complete
+      cy.waitForStreamingComplete()
+      cy.getByDataHook("chat-message-assistant").should("contain", explanation)
+
+      // After completion: expand collapsed operations, find thinking, expand it
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
+      cy.getByDataHook("assistant-mode-thinking").should("exist")
+      cy.getByDataHook("assistant-mode-thinking").click({ force: true })
+      cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
+    })
+
+    it("should display thinking block for OpenAI reasoning model", () => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+
+      const thinkingText =
+        "The user is asking about aggregate functions. I should look at the available documentation."
+      const explanation =
+        "QuestDB supports several aggregate functions including sum, avg, and count."
+
+      let requestCount = 0
+
+      cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
+        if (isTitleRequest("openai", req.body)) {
+          req.reply(createChatTitleResponse("openai"))
+          return
+        }
+        requestCount++
+        if (requestCount === 1) {
+          // First response: reasoning + tool call (no text yet)
+          const thinkingAndToolData = {
+            id: "resp_mock_thinking_tool",
+            object: "response",
+            created_at: Date.now(),
+            status: "completed",
+            output: [
+              {
+                type: "function_call",
+                id: "fc_thinking_validate",
+                name: "validate_query",
+                arguments: JSON.stringify({ query: "SELECT 1" }),
+                call_id: "call_thinking_validate",
+              },
+            ],
+            output_text: "",
+            _reasoning: thinkingText,
+            usage: { input_tokens: 100, output_tokens: 50 },
+          }
+          req.reply(
+            createResponse("openai", thinkingAndToolData, { streaming: true }),
+          )
+        } else {
+          // Second response: final text explanation
+          req.reply(
+            createResponse(
+              "openai",
+              createFinalResponseData("openai", explanation),
+              { streaming: true },
+            ),
+          )
+        }
+      }).as("thinkingRequest")
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(
+        "What aggregate functions does QuestDB support?",
+      )
+      cy.getByDataHook("chat-send-button").click()
+
+      // While thinking has arrived but text hasn't:
+      // Thinking section should be visible and expanded by default (live state)
+      cy.getByDataHook("assistant-mode-thinking").should("be.visible")
+      cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
+
+      // Wait for full response to complete
+      cy.waitForStreamingComplete()
+      cy.getByDataHook("chat-message-assistant").should("contain", explanation)
+
+      // After completion: expand collapsed operations, find thinking, expand it
+      cy.getByDataHook("assistant-mode-processing-collapsed").click()
+      cy.getByDataHook("assistant-mode-thinking").should("exist")
+      cy.getByDataHook("assistant-mode-thinking").click({ force: true })
+      cy.getByDataHook("chat-message-assistant").should("contain", thinkingText)
+    })
+  })
+
+  describe("run query from chat", () => {
+    const testTables = ["btc_trades"]
+
+    before(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      testTables.forEach((table) => {
+        cy.createTable(table)
+      })
+      cy.refreshSchema()
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      testTables.forEach((table) => {
+        cy.dropTableIfExists(table)
+      })
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+    })
+
+    it("should accept suggestion to active buffer and move notification", () => {
+      const sql = "SELECT * FROM btc_trades LIMIT 10;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show btc data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query for btc_trades.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Run the query from chat first to produce a notification
+      cy.getByDataHook("message-action-run-sql").should("be.visible").click()
+      cy.getByDataHook("success-notification").should("be.visible")
+
+      // Now accept the suggestion — this applies it to the active buffer
+      cy.getByDataHook("message-action-accept").should("be.visible").click()
+      cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+
+      // Context badge should show the query
+      cy.getByDataHook("chat-context-badge").should(
+        "contain",
+        "SELECT * FROM btc_trades",
+      )
+
+      // Click context badge to focus editor
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+
+      // Notification should still be visible after applying to buffer
+      // (notification moved from detached namespace to buffer namespace)
+      cy.getByDataHook("success-notification").should("be.visible")
+    })
+
+    it("should accept suggestion to new tab when no prior buffer exists", () => {
+      const sql = "SELECT count() FROM btc_trades;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Count btc trades",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a count query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      // Open chat from the chat button (no query context, no buffer association)
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Run the query from chat first
+      cy.getByDataHook("message-action-run-sql").should("be.visible").click()
+      cy.getByDataHook("success-notification").should("be.visible")
+
+      // Accept the suggestion — should create a new tab since chat has no buffer
+      cy.getByDataHook("message-action-accept").should("be.visible").click()
+      cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+
+      // Context badge should show the query
+      cy.getByDataHook("chat-context-badge").should(
+        "contain",
+        "SELECT count() FROM btc_trades",
+      )
+
+      // Click context badge to navigate to the new tab
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+
+      // Notification should still be visible (moved to new buffer namespace)
+      cy.getByDataHook("success-notification").should("be.visible")
+    })
+
+    it("should accept suggestion to new tab when previous buffer is archived", () => {
+      const firstSQL = "SELECT symbol FROM btc_trades;"
+      const secondSQL = "SELECT price FROM btc_trades;"
+
+      // Open chat from a query glyph icon so the chat is bound to the current buffer
+      cy.typeQuery("SELECT 1;")
+      cy.getAIIconInLine(1).click()
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+
+      // First turn: get a suggestion and accept it to bind to this buffer
+      const firstFlow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show symbols",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Query for symbols.",
+              sql: firstSQL,
+            },
+          },
+        ],
+      })
+
+      firstFlow.intercept()
+
+      cy.getByDataHook("chat-input-textarea").type(firstFlow.question, {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+
+      firstFlow.waitForCompletion()
+
+      cy.getByDataHook("message-action-accept").should("be.visible").click()
+      cy.getByDataHook("diff-status-accepted").should("contain", "Accepted")
+      cy.getByDataHook("chat-context-badge").should("contain", "SELECT symbol")
+
+      // Close the tab that the suggestion was applied to (archive the buffer)
+      // First, create another tab so we can close the current one
+      cy.get(".new-tab-button").click()
+      cy.getEditorTabs().should("have.length", 2)
+
+      // Close the first tab (the one with the accepted query)
+      cy.getEditorTabs().eq(0).find(".chrome-tab-close").click()
+      cy.getEditorTabs().should("have.length", 1)
+
+      // Now send a follow-up that produces a new suggestion
+      const secondFlow = createMultiTurnFlow({
+        provider: "openai",
+        streaming: true,
+        turns: [
+          {
+            explanation: "Query for prices.",
+            sql: secondSQL,
+          },
+        ],
+      })
+
+      secondFlow.intercept()
+
+      cy.getByDataHook("chat-input-textarea").type("Show prices instead", {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+
+      secondFlow.waitForTurn(0)
+
+      // Accept the new suggestion — buffer was archived, should create new tab
+      cy.getByDataHook("chat-message-assistant")
+        .last()
+        .getByDataHook("message-action-accept")
+        .should("be.visible")
+        .click()
+
+      // Should show accepted status
+      cy.getByDataHook("chat-message-assistant")
+        .last()
+        .find('[data-hook="diff-status-accepted"]')
+        .should("contain", "Accepted")
+
+      // Context badge should show the new query
+      cy.getByDataHook("chat-context-badge").should("contain", "SELECT price")
+
+      // Click context badge to navigate to the new tab
+      cy.getByDataHook("chat-context-badge").click()
+      cy.get(".aiQueryHighlight").should("exist")
+    })
+
+    it("should show abort dialog when running chat query while editor query is in flight", () => {
+      // Given
+      const sql = "SELECT * FROM btc_trades LIMIT 10;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show btc data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+      cy.typeQuery("select 1;")
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question, {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+      flow.waitForCompletion()
+      cy.getByDataHook("message-action-run-sql").should("be.visible")
+      cy.intercept("/exec*", (req) => {
+        req.on("response", (res) => {
+          res.setDelay(3000)
+        })
+      })
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getCancelIconInLine(1).should("be.visible")
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-dismiss").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("not.exist")
+      cy.getCancelIconInLine(1).should("be.visible")
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+
+      // Then
+      cy.getByDataHook("success-notification").should("be.visible")
+
+      // When
+      cy.clickLine(1)
+
+      // Then
+      cy.getByDataHook("error-notification").should(
+        "contain",
+        "Cancelled by user",
+      )
+    })
+
+    it("should show abort dialog when running editor query while chat query is in flight", () => {
+      // Given
+      const sql = "SELECT * FROM btc_trades LIMIT 10;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show btc data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+      cy.typeQuery("select 1;")
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question, {
+        force: true,
+      })
+      cy.getByDataHook("chat-send-button").click()
+      flow.waitForCompletion()
+      cy.getByDataHook("message-action-run-sql").should("be.visible")
+      cy.intercept("/exec*", (req) => {
+        req.on("response", (res) => {
+          res.setDelay(3000)
+        })
+      })
+
+      // When
+      cy.getByDataHook("message-action-run-sql").click()
+
+      // Then
+      cy.getByDataHook("loading-notification").should("be.visible")
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-dismiss").click()
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("not.exist")
+      cy.getByDataHook("loading-notification").should("be.visible")
+
+      // When
+      cy.clickRunIconInLine(1)
+
+      // Then
+      cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+      cy.clickLine(1)
+
+      // Then
+      cy.getByDataHook("success-notification").should("contain", "select 1")
+    })
+
+    it("should show error notification when running invalid SQL from chat", () => {
+      const sql = "SELECT * FROM nonexistent_table_xyz;"
+      const flow = createToolCallFlow({
+        provider: "openai",
+        streaming: true,
+        question: "Show nonexistent data",
+        steps: [
+          {
+            finalResponse: {
+              explanation: "Here is a query.",
+              sql,
+            },
+          },
+        ],
+      })
+
+      flow.intercept()
+
+      cy.getByDataHook("ai-chat-button").click()
+      cy.getByDataHook("chat-input-textarea").should("be.visible")
+      cy.getByDataHook("chat-input-textarea").type(flow.question)
+      cy.getByDataHook("chat-send-button").click()
+
+      flow.waitForCompletion()
+
+      // Run the invalid query from chat
+      cy.getByDataHook("message-action-run-sql").should("be.visible").click()
+
+      // Should display error notification
+      cy.getByDataHook("error-notification").should("be.visible")
     })
   })
 })
@@ -2908,7 +3618,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Successful response after retry",
-            null,
           ),
           { streaming: true },
         ),
@@ -3052,7 +3761,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "anthropic",
             "Response from custom Anthropic provider",
-            null,
           ),
           { streaming: true },
         ),
@@ -3111,7 +3819,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Response from Ollama",
-            null,
           ),
           { streaming: true },
         ),
@@ -3126,7 +3833,7 @@ describe("custom providers", () => {
       req.reply(
         createResponse(
           "openai",
-          createFinalResponseData("openai", "Response from OpenAI", null),
+          createFinalResponseData("openai", "Response from OpenAI"),
           { streaming: true },
         ),
       )
@@ -3257,7 +3964,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "Working after reload",
-            null,
           ),
           { streaming: true },
         ),
@@ -3304,7 +4010,6 @@ describe("custom providers", () => {
           createFinalResponseData(
             "openai-chat-completions",
             "No auth response",
-            null,
           ),
           { streaming: true },
         ),
@@ -3340,11 +4045,7 @@ describe("custom providers", () => {
       req.reply(
         createResponse(
           "openai-chat-completions",
-          createFinalResponseData(
-            "openai-chat-completions",
-            "Auth response",
-            null,
-          ),
+          createFinalResponseData("openai-chat-completions", "Auth response"),
           { streaming: true },
         ),
       )
