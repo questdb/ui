@@ -1778,6 +1778,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
 
             setRequest(undefined)
+            dispatch(actions.query.stopRunning())
+            questExecution.releaseExecution(parentQueryKey)
             if (!editorRef.current) return
 
             const targetBufferIdStr = targetBufferId.toString()
@@ -1814,8 +1816,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               }
             }
 
-            dispatch(actions.query.stopRunning())
-            questExecution.releaseExecution(parentQueryKey)
             dispatch(actions.query.setResult(result))
 
             if (
@@ -2106,6 +2106,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   useEffect(() => {
     return () => {
+      if (editorQueryIdRef.current !== null) {
+        quest.abort(editorQueryIdRef.current)
+        editorQueryIdRef.current = null
+      }
+
       cleanupActionsRef.current.forEach((cleanup) => cleanup())
       if (cursorChangeTimeoutRef.current) {
         window.clearTimeout(cursorChangeTimeoutRef.current)
