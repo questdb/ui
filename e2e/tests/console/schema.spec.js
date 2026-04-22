@@ -692,3 +692,61 @@ describe("materialized views", () => {
     })
   })
 })
+
+describe("create materialized view from context menu", () => {
+  const sourceTable = "btc_trades"
+  const nonWalTable = "btc_trades_no_wal"
+  const nonPartitionedTable = "my_publics"
+  // Our generator emits {table}_{interval}; btc_trades is PARTITION BY DAY,
+  // so the derived SAMPLE BY is 1h → view name is btc_trades_1h.
+  const generatedMatView = "btc_trades_1h"
+
+  before(() => {
+    cy.loadConsoleWithAuth()
+    cy.createTable(sourceTable)
+    cy.createTable(nonWalTable)
+    cy.createTable(nonPartitionedTable)
+    cy.refreshSchema()
+  })
+
+  after(() => {
+    cy.loadConsoleWithAuth()
+    cy.dropMaterializedView(generatedMatView)
+    cy.dropTableIfExists(sourceTable)
+    cy.dropTableIfExists(nonWalTable)
+    cy.dropTableIfExists(nonPartitionedTable)
+  })
+
+  it("disables the menu item for non-WAL and non-partitioned tables, and generates a runnable matview DDL from a valid source", () => {
+    // 1. Non-WAL (partitioned but BYPASS WAL) → menu item disabled
+    cy.getByDataHook("schema-table-title").contains(nonWalTable).rightclick()
+    cy.getByDataHook("table-context-menu-create-matview").should(
+      "have.attr",
+      "data-disabled",
+    )
+    cy.realPress("Escape")
+
+    // 2. Non-partitioned, no timestamp, no WAL → menu item disabled
+    cy.getByDataHook("schema-table-title")
+      .contains(nonPartitionedTable)
+      .rightclick()
+    cy.getByDataHook("table-context-menu-create-matview").should(
+      "have.attr",
+      "data-disabled",
+    )
+    cy.realPress("Escape")
+
+    // 3. Valid base → click generates DDL and editor runs it successfully
+    cy.clearEditor()
+    cy.getByDataHook("schema-table-title").contains(sourceTable).rightclick()
+    cy.getByDataHook("table-context-menu-create-matview")
+      .filter(":visible")
+      .click()
+
+    cy.runLine().clearEditor()
+
+    cy.refreshSchema()
+    cy.expandMatViews()
+    cy.getByDataHook("schema-matview-title").should("contain", generatedMatView)
+  })
+})
