@@ -259,17 +259,21 @@ export const TableDetailsDrawer = () => {
 
   const handleNavigateToBaseTable = useCallback(() => {
     if (!matViewData?.base_table_name || !baseTableExists) return
+    const baseTable = tables.find(
+      (t) => t.table_name === matViewData.base_table_name,
+    )
+    const kind = baseTable ? getTableKind(baseTable) : "table"
     dispatch(
       actions.console.pushSidebarHistory({
         type: "tableDetails",
         payload: {
           tableName: matViewData.base_table_name,
-          isMatView: false,
-          isView: false,
+          isMatView: kind === "matview",
+          isView: kind === "view",
         },
       }),
     )
-  }, [dispatch, matViewData?.base_table_name, baseTableExists])
+  }, [dispatch, matViewData?.base_table_name, baseTableExists, tables])
 
   const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 

@@ -12,6 +12,7 @@ const {
 const TEST_TABLE = "btc_trades"
 const TEST_TABLE_NO_WAL = "btc_trades_no_wal"
 const TEST_MATVIEW = "btc_trades_mv"
+const TEST_MATVIEW_ON_MV = "btc_trades_mv_on_mv"
 const TEST_VIEW = "btc_trades_view"
 
 function interceptTablesQuery(modifications) {
@@ -632,6 +633,53 @@ describe("TableDetailsDrawer", () => {
 
     after(() => {
       cy.loadConsoleWithAuth()
+      cy.dropMaterializedView(TEST_MATVIEW)
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("materialized view based on another materialized view", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createMaterializedView(TEST_MATVIEW)
+      cy.createMaterializedView(TEST_MATVIEW_ON_MV)
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      cy.expandMatViews()
+    })
+
+    it("should open as matview and navigate to a matview base table preserving the matview kind", () => {
+      cy.openDetailsDrawer(TEST_MATVIEW_ON_MV, "matview")
+
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Materialized View",
+      )
+
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-base-table-section").should("be.visible")
+      cy.getByDataHook("table-details-base-table-link").should(
+        "contain",
+        TEST_MATVIEW,
+      )
+
+      cy.getByDataHook("table-details-base-table-link").click()
+
+      cy.getByDataHook("table-details-name").should("have.value", TEST_MATVIEW)
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Materialized View",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropMaterializedView(TEST_MATVIEW_ON_MV)
       cy.dropMaterializedView(TEST_MATVIEW)
       cy.dropTable(TEST_TABLE)
     })

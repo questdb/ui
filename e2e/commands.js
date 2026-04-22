@@ -33,6 +33,9 @@ const materializedViewSchemas = {
   btc_trades_mv:
     "CREATE MATERIALIZED VIEW IF NOT EXISTS btc_trades_mv WITH BASE btc_trades as (" +
     "SELECT timestamp, avg(amount) avg FROM btc_trades SAMPLE BY 1m) PARTITION BY week;",
+  btc_trades_mv_on_mv:
+    "CREATE MATERIALIZED VIEW IF NOT EXISTS btc_trades_mv_on_mv as (" +
+    "SELECT timestamp, avg(avg) avg FROM btc_trades_mv SAMPLE BY 1h) PARTITION BY week;",
 }
 
 const viewSchemas = {
