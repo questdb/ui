@@ -47,6 +47,70 @@ const CHECK_ICON_SVG =
   '<path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-6 7.07-7.071-1.414-1.414-5.656 5.657-2.829-2.829-1.414 1.414L11.003 16z"></path>' +
   "</svg>"
 
+// Rotate icon for bar/ohlc visualization toggle (screen_rotation inspired)
+const ROTATE_ICON_SVG =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+  '<path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26A8.95 8.95 0 0 0 13 4V1L8.45 5.55 13 10V7a6 6 0 0 1 4.9 2.55l2.46-2.91zM19.36 17.1A8.95 8.95 0 0 0 21 12h-3a6 6 0 0 1-1.64 4.13l2 1.97z"/>' +
+  "</svg>"
+
+// Regex to detect bar/ohlc function calls in SQL
+const BAR_FN_REGEX = /(?:ohlc_bar_labels|ohlc_bar|bar)\s*\(/i
+
+function queryContainsBarFunction(sqlText) {
+  if (!sqlText) return false
+  return BAR_FN_REGEX.test(sqlText)
+}
+
+function detectVisualizationType(value) {
+  if (!value || typeof value !== "string") return null
+
+  // Step 1: ohlc_bar
+  if (value.includes("\u2800") || value.includes("\u2591")) {
+    return "ohlc_bar"
+  }
+
+  let hasFullBlock = false
+  let hasFractionalBlock = false
+  let hasLowerBlock = false
+
+  for (const ch of value) {
+    const cp = ch.codePointAt(0)
+    if (cp >= 0x2589 && cp <= 0x258f) hasFractionalBlock = true
+    if (cp === 0x2588) hasFullBlock = true
+    if (cp >= 0x2581 && cp <= 0x2587) hasLowerBlock = true
+  }
+
+  // Step 2: bar
+  if (hasFractionalBlock) return "bar"
+  if (hasFullBlock && !hasLowerBlock) return "bar"
+
+  // Step 3: sparkline
+  if (hasLowerBlock) return "sparkline"
+
+  return null
+}
+
+// Check at least 2 out of 3 non-null values match
+function detectVisualizationFromData(dataPage, varcharColIndex) {
+  if (!dataPage || dataPage.length === 0) return null
+  let matches = 0
+  let checked = 0
+  let detectedType = null
+
+  for (let i = 0; i < dataPage.length && checked < 3; i++) {
+    const val = dataPage[i][varcharColIndex]
+    if (val === null) continue
+    checked++
+    const vtype = detectVisualizationType(val)
+    if (vtype) {
+      if (!detectedType) detectedType = vtype
+      if (vtype === detectedType) matches++
+    }
+  }
+
+  return matches >= 2 ? detectedType : null
+}
+
 export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: "qdb-grid",
@@ -199,6 +263,10 @@ export function grid(rootElement, _paginationFn, id) {
   let activeCellPulseClearTimer
 
   let initialFocusSkipped = false
+
+  // Bar/OHLC visualization state
+  let vizType = null // 'bar', 'ohlc_bar', or null
+  let vizRotated = false // whether the rotated (horizontal) view is active
 
   function getColumn(index) {
     return columns[columnPositions[index]]
@@ -1013,6 +1081,22 @@ export function grid(rootElement, _paginationFn, id) {
       addClass(hNameRow, "qg-header-name-row")
       hNameRow.append(hName, copyBtn)
 
+      // Add rotate icon for bar/ohlc visualization columns
+      if (vizType && c.type.toUpperCase() === "VARCHAR") {
+        const rotateBtn = document.createElement("div")
+        addClass(rotateBtn, "qg-header-rotate")
+        if (vizRotated) {
+          addClass(rotateBtn, "qg-header-rotate-active")
+        }
+        rotateBtn.innerHTML = ROTATE_ICON_SVG
+        rotateBtn.onclick = function (e) {
+          e.stopPropagation()
+          vizRotated = !vizRotated
+          triggerEvent("viz.rotate", { rotated: vizRotated, type: vizType })
+        }
+        hNameRow.append(rotateBtn)
+      }
+
       h.append(hysteresis, hBorderSpan)
       h.append(hNameRow, hType)
 
@@ -1080,6 +1164,14 @@ export function grid(rootElement, _paginationFn, id) {
     layoutStoreColumnSetSha256 = undefined
     panelLeftWidth = 0
     deferVisualsCompute = false
+    vizType = null
+    if (rotatedContainer) {
+      rotatedContainer.style.display = "none"
+      rotatedContainer.innerHTML = ""
+    }
+    // Restore normal grid elements that showRotatedView may have hidden
+    if (header) header.style.display = ""
+    if (viewport) viewport.style.display = ""
     setFreezeLeft0(0)
     enableHover()
   }
@@ -1185,9 +1277,20 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.textContent = unescapeHtml(
+      const displayValue = unescapeHtml(
         getDisplayedCellValue(column, cellData, columnWidth),
       )
+
+      // Apply OHLC coloring for ohlc_bar visualization columns
+      if (
+        vizType === "ohlc_bar" &&
+        column.type.toUpperCase() === "VARCHAR" &&
+        typeof displayValue === "string"
+      ) {
+        renderOhlcCell(cell, displayValue)
+      } else {
+        cell.textContent = displayValue
+      }
 
       cell.classList.remove("qg-null")
 
@@ -1197,6 +1300,55 @@ export function grid(rootElement, _paginationFn, id) {
     } else {
       cell.textContent = "null"
       cell.classList.add("qg-null")
+    }
+  }
+
+  function renderOhlcCell(cell, value) {
+    cell.textContent = ""
+    let currentRun = ""
+    let currentType = null // null, 'bullish', 'bearish'
+
+    for (const ch of value) {
+      const cp = ch.codePointAt(0)
+      let charType = null
+      if (cp === 0x2588) {
+        charType = "bullish"
+      } else if (cp === 0x2591) {
+        charType = "bearish"
+      }
+
+      if (charType !== currentType) {
+        if (currentRun) {
+          if (currentType) {
+            const span = document.createElement("span")
+            span.className =
+              currentType === "bullish"
+                ? "qg-ohlc-bullish"
+                : "qg-ohlc-bearish"
+            span.textContent = currentRun
+            cell.appendChild(span)
+          } else {
+            cell.appendChild(document.createTextNode(currentRun))
+          }
+        }
+        currentRun = ch
+        currentType = charType
+      } else {
+        currentRun += ch
+      }
+    }
+
+    // Flush remaining
+    if (currentRun) {
+      if (currentType) {
+        const span = document.createElement("span")
+        span.className =
+          currentType === "bullish" ? "qg-ohlc-bullish" : "qg-ohlc-bearish"
+        span.textContent = currentRun
+        cell.appendChild(span)
+      } else {
+        cell.appendChild(document.createTextNode(currentRun))
+      }
     }
   }
 
@@ -2117,6 +2269,8 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function setDataPart1(_data) {
+    const prevVizRotated = vizRotated
+    const prevQueryWasBar = queryContainsBarFunction(sql)
     clear()
     sql = _data.query
     data.push(_data.dataset)
@@ -2126,6 +2280,32 @@ export function grid(rootElement, _paginationFn, id) {
     ogTimestampIndex = _data.timestamp
     timestampIndex = ogTimestampIndex
     rowCount = _data.count
+
+    // Detect bar/ohlc visualization
+    const isBarQuery = queryContainsBarFunction(sql)
+    if (isBarQuery && columnCount === 2) {
+      let tsColIndex = -1
+      let varcharColIndex = -1
+      for (let i = 0; i < 2; i++) {
+        const t = columns[i].type.toUpperCase()
+        if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") {
+          tsColIndex = i
+        } else if (t === "VARCHAR") {
+          varcharColIndex = i
+        }
+      }
+      if (tsColIndex !== -1 && varcharColIndex !== -1 && data[0]) {
+        vizType = detectVisualizationFromData(data[0], varcharColIndex)
+      }
+    }
+
+    // Preserve rotation state between bar/ohlc queries, reset otherwise
+    if (isBarQuery && prevQueryWasBar && vizType) {
+      vizRotated = prevVizRotated
+    } else if (!isBarQuery) {
+      vizRotated = false
+    }
+
     computeHeaderWidths()
     computeVisibleAreaAfterDataIsSet()
   }
@@ -2181,6 +2361,14 @@ export function grid(rootElement, _paginationFn, id) {
     // we can assume that viewport already rendered top left corner of the data set
     focusTopLeftCell()
     setBothRowsActive()
+
+    // If vizRotated was preserved from a previous bar/ohlc query, show rotated view
+    if (vizRotated && vizType) {
+      showRotatedView()
+    } else if (rotatedContainer) {
+      rotatedContainer.style.display = "none"
+      rotatedContainer.innerHTML = ""
+    }
   }
 
   function showPanelLeft() {
@@ -2295,6 +2483,135 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  let rotatedContainer
+
+  function showRotatedView() {
+    // Keep header visible so the rotate icon remains clickable
+    viewport.style.display = "none"
+    panelLeft.style.display = "none"
+    panelLeftGhost.style.display = "none"
+    panelLeftSnapGhost.style.display = "none"
+    panelLeftInitialHysteresis.style.display = "none"
+    rotatedContainer.style.display = "flex"
+    renderRotatedView()
+  }
+
+  function hideRotatedView() {
+    viewport.style.display = ""
+    rotatedContainer.style.display = "none"
+    rotatedContainer.innerHTML = ""
+    render()
+  }
+
+  function renderRotatedView() {
+    rotatedContainer.innerHTML = ""
+    if (!data || data.length === 0 || columnCount !== 2) return
+
+    // Find which column is timestamp and which is varchar
+    let tsColIndex = -1
+    let varcharColIndex = -1
+    for (let i = 0; i < 2; i++) {
+      const t = columns[i].type.toUpperCase()
+      if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") tsColIndex = i
+      else if (t === "VARCHAR") varcharColIndex = i
+    }
+    if (tsColIndex === -1 || varcharColIndex === -1) return
+
+    // Collect all rows from all data pages
+    const allRows = []
+    for (let p = 0; p < data.length; p++) {
+      if (data[p]) {
+        for (let r = 0; r < data[p].length; r++) {
+          allRows.push(data[p][r])
+        }
+      }
+    }
+    if (allRows.length === 0) return
+
+    // Layout: each original row becomes a visual column.
+    // The bar string is kept intact and rotated via writing-mode so the
+    // horizontal bar becomes vertical. Time flows left-to-right.
+
+    // Find the max bar length to compute proportional heights
+    let maxBarLen = 0
+    for (let i = 0; i < allRows.length; i++) {
+      const val = allRows[i][varcharColIndex]
+      if (val !== null) {
+        const len = [...val].length
+        if (len > maxBarLen) maxBarLen = len
+      }
+    }
+
+    const scrollArea = document.createElement("div")
+    addClass(scrollArea, "qg-rotated-scroll")
+
+    const barCells = []
+
+    for (let ri = 0; ri < allRows.length; ri++) {
+      const row = allRows[ri]
+      const colDiv = document.createElement("div")
+      addClass(colDiv, "qg-rotated-col")
+
+      // Bar cell: the entire bar string, rotated via CSS
+      const barCell = document.createElement("div")
+      addClass(barCell, "qg-rotated-bar")
+      const barVal = row[varcharColIndex]
+      if (barVal !== null) {
+        if (vizType === "ohlc_bar") {
+          renderOhlcCell(barCell, barVal)
+        } else {
+          // For bar charts, replace fractional block chars (U+2589-U+258F)
+          // with full blocks - fractional blocks don't render well vertically
+          let cleaned = ""
+          for (const ch of barVal) {
+            const cp = ch.codePointAt(0)
+            cleaned += cp >= 0x2589 && cp <= 0x258f ? "\u2588" : ch
+          }
+          barCell.textContent = cleaned
+        }
+      }
+      barCells.push(barCell)
+      colDiv.appendChild(barCell)
+
+      // Timestamp label at bottom - time + date on two lines
+      const tsCell = document.createElement("div")
+      addClass(tsCell, "qg-rotated-ts")
+      const tsVal = row[tsColIndex]
+      if (tsVal !== null) {
+        const ts = tsVal.toString()
+        const timeMatch = ts.match(/T(\d{2}:\d{2})/)
+        const dateMatch = ts.match(/^(\d{4}-\d{2}-\d{2})/)
+        const timeLine = document.createElement("div")
+        timeLine.textContent = timeMatch ? timeMatch[1] : ts.slice(11, 16)
+        tsCell.appendChild(timeLine)
+        if (dateMatch) {
+          const dateLine = document.createElement("div")
+          addClass(dateLine, "qg-rotated-ts-date")
+          dateLine.textContent = dateMatch[1]
+          tsCell.appendChild(dateLine)
+        }
+        tsCell.title = ts
+      }
+      colDiv.appendChild(tsCell)
+
+      scrollArea.appendChild(colDiv)
+    }
+
+    rotatedContainer.appendChild(scrollArea)
+
+    // After DOM insertion, compute available height and cap bars to 80%
+    requestAnimationFrame(function () {
+      const containerH = rotatedContainer.getBoundingClientRect().height
+      // Reserve space for timestamps (~35px) and top gap
+      const tsHeight = 35
+      const availableH = containerH - tsHeight
+      const maxBarH = Math.floor(availableH * 0.8)
+      for (const barCell of barCells) {
+        barCell.style.maxHeight = maxBarH + "px"
+      }
+    })
+  }
+
   function triggerEvent(eventName, data) {
     grid.dispatchEvent(new CustomEvent(eventName, { detail: data }))
   }
@@ -2377,6 +2694,10 @@ export function grid(rootElement, _paginationFn, id) {
     panelLeftInitialHysteresis.onmousemove = colFreezeMouseMoveGhostHandle
     panelLeftInitialHysteresis.onmousedown = colFreezeMouseDown
 
+    rotatedContainer = document.createElement("div")
+    rotatedContainer.className = "qg-rotated-container"
+    rotatedContainer.style.display = "none"
+
     grid.append(
       header,
       viewport,
@@ -2384,7 +2705,17 @@ export function grid(rootElement, _paginationFn, id) {
       panelLeftGhost,
       panelLeftSnapGhost,
       panelLeftInitialHysteresis,
+      rotatedContainer,
     )
+
+    // Listen for rotation toggle
+    grid.addEventListener("viz.rotate", function (e) {
+      if (e.detail.rotated) {
+        showRotatedView()
+      } else {
+        hideRotatedView()
+      }
+    })
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover

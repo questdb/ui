@@ -154,6 +154,36 @@ $drag-handle-margin: 2px;
   display: flex;
 }
 
+.qg-header-rotate {
+  display: flex;
+  padding: 2px;
+  cursor: pointer;
+  color: #bbb;
+  border-radius: 3px;
+  line-height: 0;
+  flex-shrink: 0;
+
+  &:hover {
+    color: #f8f8f2;
+  }
+}
+
+.qg-header-rotate-active {
+  color: #8be9fd;
+
+  &:hover {
+    color: #8be9fd;
+  }
+}
+
+.qg-ohlc-bullish {
+  color: #50fa7b;
+}
+
+.qg-ohlc-bearish {
+  color: #ff5555;
+}
+
 .qg-header-border {
   position: absolute;
   margin-top: 10px;
@@ -362,4 +392,64 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   border-radius: 3px;
   margin-left: -2px;
   cursor: grab;
+}
+
+// Rotated (horizontal) bar/ohlc visualization view
+.qg-rotated-container {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #282a36;
+}
+
+.qg-rotated-scroll {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 100%;
+}
+
+.qg-rotated-col {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  max-height: 100%;
+  border-right: thin dotted #44475a;
+}
+
+.qg-rotated-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  direction: rtl;
+  white-space: pre;
+  font-family: "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  color: #f8f8f2;
+  line-height: 1;
+  padding: 0 0 4px 0;
+}
+
+.qg-rotated-ts {
+  background: #21222c;
+  color: #50fa7b;
+  font-size: 10px;
+  padding: 4px 2px;
+  white-space: nowrap;
+  border-top: 1px solid #44475a;
+  text-align: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.3;
+}
+
+.qg-rotated-ts-date {
+  color: #bbbbbb;
+  font-size: 9px;
 }
