@@ -90,6 +90,18 @@ function detectVisualizationType(value) {
   return null
 }
 
+// Split ohlc_bar_labels output into bar portion and label portion.
+// Labels start with " O:" (space + O + colon) after the bar characters.
+const OHLC_LABEL_REGEX = /^(.*?)\s+(O:.*)$/
+
+function splitOhlcLabels(value) {
+  const m = OHLC_LABEL_REGEX.exec(value)
+  if (m) {
+    return { bar: m[1], labels: m[2] }
+  }
+  return { bar: value, labels: null }
+}
+
 // Check at least 2 out of 3 non-null values match
 function detectVisualizationFromData(dataPage, varcharColIndex) {
   if (!dataPage || dataPage.length === 0) return null
@@ -1165,6 +1177,7 @@ export function grid(rootElement, _paginationFn, id) {
     panelLeftWidth = 0
     deferVisualsCompute = false
     vizType = null
+    vizRotated = false
     if (rotatedContainer) {
       rotatedContainer.style.display = "none"
       rotatedContainer.innerHTML = ""
@@ -1305,10 +1318,19 @@ export function grid(rootElement, _paginationFn, id) {
 
   function renderOhlcCell(cell, value) {
     cell.textContent = ""
+    cell.title = ""
+
+    // Strip labels from ohlc_bar_labels output, show as tooltip
+    const parts = splitOhlcLabels(value)
+    const barPart = parts.bar
+    if (parts.labels) {
+      cell.title = parts.labels
+    }
+
     let currentRun = ""
     let currentType = null // null, 'bullish', 'bearish'
 
-    for (const ch of value) {
+    for (const ch of barPart) {
       const cp = ch.codePointAt(0)
       let charType = null
       if (cp === 0x2588) {
@@ -2270,7 +2292,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function setDataPart1(_data) {
     const prevVizRotated = vizRotated
-    const prevQueryWasBar = queryContainsBarFunction(sql)
+    const prevSql = sql
     clear()
     sql = _data.query
     data.push(_data.dataset)
@@ -2299,12 +2321,11 @@ export function grid(rootElement, _paginationFn, id) {
       }
     }
 
-    // Preserve rotation state between bar/ohlc queries, reset otherwise
-    if (isBarQuery && prevQueryWasBar && vizType) {
+    // Preserve rotation state between consecutive bar/ohlc queries
+    if (isBarQuery && queryContainsBarFunction(prevSql) && vizType) {
       vizRotated = prevVizRotated
-    } else if (!isBarQuery) {
-      vizRotated = false
     }
+    // Otherwise vizRotated stays false (reset by clear())
 
     computeHeaderWidths()
     computeVisibleAreaAfterDataIsSet()
