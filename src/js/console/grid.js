@@ -53,8 +53,9 @@ const ROTATE_ICON_SVG =
   '<path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26A8.95 8.95 0 0 0 13 4V1L8.45 5.55 13 10V7a6 6 0 0 1 4.9 2.55l2.46-2.91zM19.36 17.1A8.95 8.95 0 0 0 21 12h-3a6 6 0 0 1-1.64 4.13l2 1.97z"/>' +
   "</svg>"
 
-// Regex to detect bar/ohlc function calls in SQL
-const BAR_FN_REGEX = /(?:ohlc_bar_labels|ohlc_bar|bar)\s*\(/i
+// Regex to detect bar/ohlc function calls in SQL.
+// Uses word boundary to avoid matching e.g. "foobar(" or "sidebar("
+const BAR_FN_REGEX = /\b(?:ohlc_bar_labels|ohlc_bar|bar)\s*\(/i
 
 function queryContainsBarFunction(sqlText) {
   if (!sqlText) return false
@@ -141,6 +142,7 @@ export function grid(rootElement, _paginationFn, id) {
     cellWidthMultiplier: 9.6,
     arrayCellWidthMultiplier: 8.3,
     maxCellWidthMultiplier: 0.8,
+    vizCellWidthMultiplier: 1.4,
   }
   const ACTIVE_CELL_CLASS = "qg-c-active"
   const NAV_EVENT_ANY_VERTICAL = 0
@@ -279,6 +281,7 @@ export function grid(rootElement, _paginationFn, id) {
   // Bar/OHLC visualization state
   let vizType = null // 'bar', 'ohlc_bar', or null
   let vizRotated = false // whether the rotated (horizontal) view is active
+  let rotatedContainer
 
   function getColumn(index) {
     return columns[columnPositions[index]]
@@ -1303,6 +1306,7 @@ export function grid(rootElement, _paginationFn, id) {
         renderOhlcCell(cell, displayValue)
       } else {
         cell.textContent = displayValue
+        cell.title = ""
       }
 
       cell.classList.remove("qg-null")
@@ -2176,6 +2180,37 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  function isVizColumn(columnIndex) {
+    return vizType && getColumn(columnIndex).type.toUpperCase() === "VARCHAR"
+  }
+
+  // Find timestamp and varchar column indices for a 2-column viz result
+  function findVizColumns() {
+    if (columnCount !== 2) return null
+    let tsCol = -1
+    let varcharCol = -1
+    for (let i = 0; i < 2; i++) {
+      const t = columns[i].type.toUpperCase()
+      if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") tsCol = i
+      else if (t === "VARCHAR") varcharCol = i
+    }
+    if (tsCol === -1 || varcharCol === -1) return null
+    return { tsCol, varcharCol }
+  }
+
+  // Width calculation for viz columns. Unicode block and braille characters
+  // render wider than the standard cellWidthMultiplier assumes.
+  function getVizCellWidth(str) {
+    return Math.max(
+      defaults.minColumnWidth,
+      Math.ceil(
+        str.length *
+          defaults.cellWidthMultiplier *
+          defaults.vizCellWidthMultiplier,
+      ),
+    )
+  }
+
   function computeColumnWidthsFromData() {
     const maxWidth =
       viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
@@ -2188,6 +2223,7 @@ export function grid(rootElement, _paginationFn, id) {
       // a little inefficient, but lets traverse
       for (let i = 0; i < columnCount; i++) {
         let w = getColumnWidth(i)
+        const uncapped = isVizColumn(i)
 
         // Traverse the page to find the widest value in the column, set the width to the widest value
         for (let j = 0; j < (dataPage?.length ?? 0); j++) {
@@ -2197,12 +2233,21 @@ export function grid(rootElement, _paginationFn, id) {
             str = "null"
           } else if (Array.isArray(value)) {
             const arrayColumnWidth = getArrayColumnWidth(value, i)
-            w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+            w = uncapped
+              ? Math.max(w, arrayColumnWidth)
+              : Math.min(maxWidth, Math.max(w, arrayColumnWidth))
             continue
           } else {
             str = value.toString()
+            // For ohlc_bar_labels, measure only the bar portion
+            if (uncapped && vizType === "ohlc_bar") {
+              const parts = splitOhlcLabels(str)
+              str = parts.bar
+            }
           }
-          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+          // For viz columns, measure actual pixel width to handle wide Unicode glyphs
+          const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
+          w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
         }
         offsets[i] = offset
         offset += w
@@ -2236,7 +2281,8 @@ export function grid(rootElement, _paginationFn, id) {
         // this assumes that initial width has been set to the width of the header
         let w
 
-        if (deviants) {
+        const uncapped = isVizColumn(i)
+        if (deviants && !uncapped) {
           w = deviants[getColumn(i).name]
         }
 
@@ -2250,12 +2296,19 @@ export function grid(rootElement, _paginationFn, id) {
               str = "null"
             } else if (getColumn(i).type === "ARRAY") {
               const arrayColumnWidth = getArrayColumnWidth(value, i)
-              w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+              w = uncapped
+                ? Math.max(w, arrayColumnWidth)
+                : Math.min(maxWidth, Math.max(w, arrayColumnWidth))
               continue
             } else {
               str = value.toString()
+              if (uncapped && vizType === "ohlc_bar") {
+                const parts = splitOhlcLabels(str)
+                str = parts.bar
+              }
             }
-            w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+            const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
+            w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
           }
         } else {
           columnOffsets[i] = offset
@@ -2305,19 +2358,10 @@ export function grid(rootElement, _paginationFn, id) {
 
     // Detect bar/ohlc visualization
     const isBarQuery = queryContainsBarFunction(sql)
-    if (isBarQuery && columnCount === 2) {
-      let tsColIndex = -1
-      let varcharColIndex = -1
-      for (let i = 0; i < 2; i++) {
-        const t = columns[i].type.toUpperCase()
-        if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") {
-          tsColIndex = i
-        } else if (t === "VARCHAR") {
-          varcharColIndex = i
-        }
-      }
-      if (tsColIndex !== -1 && varcharColIndex !== -1 && data[0]) {
-        vizType = detectVisualizationFromData(data[0], varcharColIndex)
+    if (isBarQuery) {
+      const vizCols = findVizColumns()
+      if (vizCols && data[0]) {
+        vizType = detectVisualizationFromData(data[0], vizCols.varcharCol)
       }
     }
 
@@ -2504,8 +2548,6 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  let rotatedContainer
-
   function showRotatedView() {
     // Keep header visible so the rotate icon remains clickable
     viewport.style.display = "none"
@@ -2526,17 +2568,12 @@ export function grid(rootElement, _paginationFn, id) {
 
   function renderRotatedView() {
     rotatedContainer.innerHTML = ""
-    if (!data || data.length === 0 || columnCount !== 2) return
+    if (!data || data.length === 0) return
 
-    // Find which column is timestamp and which is varchar
-    let tsColIndex = -1
-    let varcharColIndex = -1
-    for (let i = 0; i < 2; i++) {
-      const t = columns[i].type.toUpperCase()
-      if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") tsColIndex = i
-      else if (t === "VARCHAR") varcharColIndex = i
-    }
-    if (tsColIndex === -1 || varcharColIndex === -1) return
+    const vizCols = findVizColumns()
+    if (!vizCols) return
+    const tsColIndex = vizCols.tsCol
+    const varcharColIndex = vizCols.varcharCol
 
     // Collect all rows from all data pages
     const allRows = []
@@ -2552,16 +2589,6 @@ export function grid(rootElement, _paginationFn, id) {
     // Layout: each original row becomes a visual column.
     // The bar string is kept intact and rotated via writing-mode so the
     // horizontal bar becomes vertical. Time flows left-to-right.
-
-    // Find the max bar length to compute proportional heights
-    let maxBarLen = 0
-    for (let i = 0; i < allRows.length; i++) {
-      const val = allRows[i][varcharColIndex]
-      if (val !== null) {
-        const len = [...val].length
-        if (len > maxBarLen) maxBarLen = len
-      }
-    }
 
     const scrollArea = document.createElement("div")
     addClass(scrollArea, "qg-rotated-scroll")
