@@ -192,11 +192,6 @@ $drag-handle-margin: 2px;
   color: #ffb86c;
 }
 
-.qg-ohlc-labels {
-  float: right;
-  padding-left: 1em;
-}
-
 .qg-header-border {
   position: absolute;
   margin-top: 10px;
@@ -441,7 +436,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   writing-mode: vertical-rl;
   direction: rtl;
   white-space: pre;
-  font-family: "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono",
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   color: #f8f8f2;
   line-height: 1;

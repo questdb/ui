@@ -66,9 +66,9 @@ function detectVisualizationType(value) {
   if (!value || typeof value !== "string") return null
 
   // Step 1: ohlc_bar
-  // Bearish bodies use U+2591 (light shade), always identifies ohlc_bar.
-  // Legacy padding U+2800 (braille blank) also identifies ohlc_bar.
-  if (value.includes("\u2591") || value.includes("\u2800")) {
+  // U+2800 (braille blank) is used as padding in ohlc_bar output.
+  // U+2591 (light shade) is used for bearish candle bodies.
+  if (value.includes("\u2800") || value.includes("\u2591")) {
     return "ohlc_bar"
   }
 
@@ -102,8 +102,8 @@ function detectVisualizationType(value) {
 }
 
 // Split ohlc_bar_labels output into bar portion, separator, and label portion.
-// Labels start with " O:" (space + O + colon) after the bar characters.
-const OHLC_LABEL_REGEX = /^(.*?)(\s+)(O:.*)$/
+// Labels start with "O:" after bar characters and padding (U+2800 or spaces).
+const OHLC_LABEL_REGEX = /^(.*?)([\s\u2800]+)(O:.*)$/
 
 function splitOhlcLabels(value) {
   const m = OHLC_LABEL_REGEX.exec(value)
