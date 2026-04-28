@@ -184,6 +184,19 @@ $drag-handle-margin: 2px;
   color: #ff5555;
 }
 
+.qg-ohlc-cell {
+  font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.qg-ohlc-label-key {
+  color: #ffb86c;
+}
+
+.qg-ohlc-labels {
+  float: right;
+  padding-left: 1em;
+}
+
 .qg-header-border {
   position: absolute;
   margin-top: 10px;

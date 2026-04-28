@@ -53,9 +53,9 @@ const ROTATE_ICON_SVG =
   '<path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26A8.95 8.95 0 0 0 13 4V1L8.45 5.55 13 10V7a6 6 0 0 1 4.9 2.55l2.46-2.91zM19.36 17.1A8.95 8.95 0 0 0 21 12h-3a6 6 0 0 1-1.64 4.13l2 1.97z"/>' +
   "</svg>"
 
-// Regex to detect bar/ohlc function calls in SQL.
+// Regex to detect bar/ohlc/sparkline function calls in SQL.
 // Uses word boundary to avoid matching e.g. "foobar(" or "sidebar("
-const BAR_FN_REGEX = /\b(?:ohlc_bar_labels|ohlc_bar|bar)\s*\(/i
+const BAR_FN_REGEX = /\b(?:ohlc_bar_labels|ohlc_bar|bar|sparkline)\s*\(/i
 
 function queryContainsBarFunction(sqlText) {
   if (!sqlText) return false
@@ -66,19 +66,29 @@ function detectVisualizationType(value) {
   if (!value || typeof value !== "string") return null
 
   // Step 1: ohlc_bar
-  if (value.includes("\u2800") || value.includes("\u2591")) {
+  // Bearish bodies use U+2591 (light shade), always identifies ohlc_bar.
+  // Legacy padding U+2800 (braille blank) also identifies ohlc_bar.
+  if (value.includes("\u2591") || value.includes("\u2800")) {
     return "ohlc_bar"
   }
 
   let hasFullBlock = false
   let hasFractionalBlock = false
   let hasLowerBlock = false
+  let hasBoxHorizontal = false
 
   for (const ch of value) {
     const cp = ch.codePointAt(0)
     if (cp >= 0x2589 && cp <= 0x258f) hasFractionalBlock = true
     if (cp === 0x2588) hasFullBlock = true
     if (cp >= 0x2581 && cp <= 0x2587) hasLowerBlock = true
+    if (cp === 0x2500) hasBoxHorizontal = true
+  }
+
+  // Bullish-only ohlc_bar candles have full blocks + box horizontal (wicks)
+  // but no fractional blocks and no lower blocks
+  if (hasFullBlock && hasBoxHorizontal && !hasFractionalBlock && !hasLowerBlock) {
+    return "ohlc_bar"
   }
 
   // Step 2: bar
@@ -91,16 +101,16 @@ function detectVisualizationType(value) {
   return null
 }
 
-// Split ohlc_bar_labels output into bar portion and label portion.
+// Split ohlc_bar_labels output into bar portion, separator, and label portion.
 // Labels start with " O:" (space + O + colon) after the bar characters.
-const OHLC_LABEL_REGEX = /^(.*?)\s+(O:.*)$/
+const OHLC_LABEL_REGEX = /^(.*?)(\s+)(O:.*)$/
 
 function splitOhlcLabels(value) {
   const m = OHLC_LABEL_REGEX.exec(value)
   if (m) {
-    return { bar: m[1], labels: m[2] }
+    return { bar: m[1], sep: m[2], labels: m[3] }
   }
-  return { bar: value, labels: null }
+  return { bar: value, sep: null, labels: null }
 }
 
 // Check at least 2 out of 3 non-null values match
@@ -1297,16 +1307,26 @@ export function grid(rootElement, _paginationFn, id) {
         getDisplayedCellValue(column, cellData, columnWidth),
       )
 
-      // Apply OHLC coloring for ohlc_bar visualization columns
+      // Apply coloring and monospace font for visualization columns
       if (
-        vizType === "ohlc_bar" &&
+        vizType &&
         column.type.toUpperCase() === "VARCHAR" &&
         typeof displayValue === "string"
       ) {
-        renderOhlcCell(cell, displayValue)
+        if (vizType === "ohlc_bar") {
+          renderOhlcCell(cell, displayValue)
+        } else {
+          // bar and sparkline: monospace font, preserve whitespace
+          cell.textContent = displayValue
+          cell.style.whiteSpace = "pre"
+          addClass(cell, "qg-ohlc-cell")
+          cell.title = ""
+        }
       } else {
         cell.textContent = displayValue
         cell.title = ""
+        cell.style.whiteSpace = ""
+        removeClass(cell, "qg-ohlc-cell")
       }
 
       cell.classList.remove("qg-null")
@@ -1320,21 +1340,53 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  function renderOhlcCell(cell, value) {
+  // Regex to match O:, H:, L:, C: prefixes in labels
+  const OHLC_KEY_REGEX = /([OHLC]:)/g
+
+  function renderOhlcLabels(cell, labels) {
+    // Render labels with O:, H:, L:, C: colored in orange
+    let lastIndex = 0
+    let m
+    OHLC_KEY_REGEX.lastIndex = 0
+    while ((m = OHLC_KEY_REGEX.exec(labels)) !== null) {
+      // Text before the key
+      if (m.index > lastIndex) {
+        cell.appendChild(document.createTextNode(labels.slice(lastIndex, m.index)))
+      }
+      // The key itself, colored
+      const keySpan = document.createElement("span")
+      keySpan.className = "qg-ohlc-label-key"
+      keySpan.textContent = m[1]
+      cell.appendChild(keySpan)
+      lastIndex = OHLC_KEY_REGEX.lastIndex
+    }
+    // Remaining text
+    if (lastIndex < labels.length) {
+      cell.appendChild(document.createTextNode(labels.slice(lastIndex)))
+    }
+  }
+
+  function renderOhlcCell(cell, value, stripLabels) {
     cell.textContent = ""
     cell.title = ""
+    cell.style.whiteSpace = "pre"
+    addClass(cell, "qg-ohlc-cell")
 
-    // Strip labels from ohlc_bar_labels output, show as tooltip
+    // Always split bar from labels
     const parts = splitOhlcLabels(value)
-    const barPart = parts.bar
-    if (parts.labels) {
-      cell.title = parts.labels
+    const textToRender = parts.bar
+
+    if (stripLabels) {
+      // In rotated view: show labels as tooltip
+      if (parts.labels) {
+        cell.title = parts.labels
+      }
     }
 
     let currentRun = ""
     let currentType = null // null, 'bullish', 'bearish'
 
-    for (const ch of barPart) {
+    for (const ch of textToRender) {
       const cp = ch.codePointAt(0)
       let charType = null
       if (cp === 0x2588) {
@@ -1375,6 +1427,12 @@ export function grid(rootElement, _paginationFn, id) {
       } else {
         cell.appendChild(document.createTextNode(currentRun))
       }
+    }
+
+    // In normal view, append separator + labels with colored O:/H:/L:/C: keys
+    if (!stripLabels && parts.labels) {
+      cell.appendChild(document.createTextNode(parts.sep))
+      renderOhlcLabels(cell, parts.labels)
     }
   }
 
@@ -1853,6 +1911,11 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function render() {
+    // Skip normal grid rendering when rotated view is active
+    if (vizRotated && vizType) {
+      return
+    }
+
     if (noData()) {
       renderColumns()
       renderRows(0)
@@ -2239,13 +2302,7 @@ export function grid(rootElement, _paginationFn, id) {
             continue
           } else {
             str = value.toString()
-            // For ohlc_bar_labels, measure only the bar portion
-            if (uncapped && vizType === "ohlc_bar") {
-              const parts = splitOhlcLabels(str)
-              str = parts.bar
-            }
           }
-          // For viz columns, measure actual pixel width to handle wide Unicode glyphs
           const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
           w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
         }
@@ -2302,10 +2359,6 @@ export function grid(rootElement, _paginationFn, id) {
               continue
             } else {
               str = value.toString()
-              if (uncapped && vizType === "ohlc_bar") {
-                const parts = splitOhlcLabels(str)
-                str = parts.bar
-              }
             }
             const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
             w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
@@ -2356,12 +2409,24 @@ export function grid(rootElement, _paginationFn, id) {
     timestampIndex = ogTimestampIndex
     rowCount = _data.count
 
-    // Detect bar/ohlc visualization
+    // Detect bar/ohlc/sparkline visualization
     const isBarQuery = queryContainsBarFunction(sql)
-    if (isBarQuery) {
+    if (isBarQuery && data[0]) {
+      // For 2-column results (timestamp + varchar), use strict detection
       const vizCols = findVizColumns()
-      if (vizCols && data[0]) {
+      if (vizCols) {
         vizType = detectVisualizationFromData(data[0], vizCols.varcharCol)
+      } else {
+        // For multi-column results, check each VARCHAR column
+        for (let i = 0; i < columnCount; i++) {
+          if (columns[i].type.toUpperCase() === "VARCHAR") {
+            const detected = detectVisualizationFromData(data[0], i)
+            if (detected) {
+              vizType = detected
+              break
+            }
+          }
+        }
       }
     }
 
@@ -2606,7 +2671,7 @@ export function grid(rootElement, _paginationFn, id) {
       const barVal = row[varcharColIndex]
       if (barVal !== null) {
         if (vizType === "ohlc_bar") {
-          renderOhlcCell(barCell, barVal)
+          renderOhlcCell(barCell, barVal, true)
         } else {
           // For bar charts, replace fractional block chars (U+2589-U+258F)
           // with full blocks - fractional blocks don't render well vertically
