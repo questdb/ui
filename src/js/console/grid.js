@@ -2765,19 +2765,22 @@ export function grid(rootElement, _paginationFn, id) {
       addClass(barCell, "qg-rotated-bar")
       const barVal = row[varcharColIndex]
       if (barVal !== null) {
+        // Strip labels before reversing, show as tooltip
+        const parts = splitVizLabels(barVal)
+        if (parts.labels) {
+          colDiv.title = parts.labels
+        }
+        // Reverse the bar string so that in vertical-rl writing mode,
+        // char[0] (low price) is at the bottom and char[last] (high price)
+        // is at the top, matching a traditional chart orientation.
+        const reversed = [...parts.bar].reverse().join("")
         if (vizType === "ohlc_bar") {
-          renderOhlcCell(barCell, barVal, true)
-          // Move title from barCell to colDiv for reliable tooltip on hover
-          // (writing-mode: vertical-rl on barCell can interfere with tooltips)
-          if (barCell.title) {
-            colDiv.title = barCell.title
-            barCell.removeAttribute("title")
-          }
+          renderOhlcCell(barCell, reversed)
         } else {
           // For bar charts, replace fractional block chars (U+2589-U+258F)
           // with full blocks - fractional blocks don't render well vertically
           let cleaned = ""
-          for (const ch of barVal) {
+          for (const ch of reversed) {
             const cp = ch.codePointAt(0)
             cleaned += cp >= 0x2589 && cp <= 0x258f ? "\u2588" : ch
           }
