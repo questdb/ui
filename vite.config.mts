@@ -153,14 +153,16 @@ export default defineConfig(({ mode }) => {
             }
             const dirPath = path.resolve(fontsRoot, entry.name)
             const fonts = readdirSync(dirPath).filter(isFontFile)
-            if (fonts.length === 0) continue
             const licFile = path.resolve(dirPath, 'LICENSE')
-            if (!existsSync(licFile)) {
+            const hasLicense = existsSync(licFile)
+            // Allow LICENSE-only dirs for fonts that ship from elsewhere (e.g. via viteStaticCopy).
+            if (fonts.length === 0 && !hasLicense) continue
+            if (fonts.length > 0 && !hasLicense) {
               errors.push(`Missing LICENSE in src/styles/fonts/${entry.name}/ for: ${fonts.join(', ')}`)
-            } else {
-              const text = readFileSync(licFile, 'utf-8')
-              appendFileSync(output, `\n---\n\nName: ${entry.name} (font)\nSource: src/styles/fonts/${entry.name}\nLicense Text:\n===\n\n${text}\n`)
+              continue
             }
+            const text = readFileSync(licFile, 'utf-8')
+            appendFileSync(output, `\n---\n\nName: ${entry.name} (font)\nSource: src/styles/fonts/${entry.name}\nLicense Text:\n===\n\n${text}\n`)
           }
 
           if (errors.length > 0) {

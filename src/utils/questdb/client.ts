@@ -194,7 +194,7 @@ export class Client {
 
       const genericErrorPayload = {
         ...err,
-        error: "An error occured, please try again",
+        error: "An error occurred, please try again",
       }
 
       if (error instanceof DOMException) {
