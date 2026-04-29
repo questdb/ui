@@ -1117,6 +1117,11 @@ export function grid(rootElement, _paginationFn, id) {
         rotateBtn.onclick = function (e) {
           e.stopPropagation()
           vizRotated = !vizRotated
+          if (vizRotated) {
+            addClass(rotateBtn, "qg-header-rotate-active")
+          } else {
+            removeClass(rotateBtn, "qg-header-rotate-active")
+          }
           triggerEvent("viz.rotate", { rotated: vizRotated, type: vizType })
         }
         hNameRow.append(rotateBtn)
@@ -1368,7 +1373,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function renderOhlcCell(cell, value, stripLabels) {
     cell.textContent = ""
-    cell.title = ""
+    cell.removeAttribute("title")
     cell.style.whiteSpace = "pre"
     addClass(cell, "qg-ohlc-cell")
 
@@ -2672,6 +2677,12 @@ export function grid(rootElement, _paginationFn, id) {
       if (barVal !== null) {
         if (vizType === "ohlc_bar") {
           renderOhlcCell(barCell, barVal, true)
+          // Move title from barCell to colDiv for reliable tooltip on hover
+          // (writing-mode: vertical-rl on barCell can interfere with tooltips)
+          if (barCell.title) {
+            colDiv.title = barCell.title
+            barCell.removeAttribute("title")
+          }
         } else {
           // For bar charts, replace fractional block chars (U+2589-U+258F)
           // with full blocks - fractional blocks don't render well vertically
