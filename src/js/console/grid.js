@@ -53,9 +53,10 @@ const ROTATE_ICON_SVG =
   '<path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26A8.95 8.95 0 0 0 13 4V1L8.45 5.55 13 10V7a6 6 0 0 1 4.9 2.55l2.46-2.91zM19.36 17.1A8.95 8.95 0 0 0 21 12h-3a6 6 0 0 1-1.64 4.13l2 1.97z"/>' +
   "</svg>"
 
-// Regex to detect bar/ohlc/sparkline function calls in SQL.
+// Regex to detect visualization function calls in SQL.
 // Uses word boundary to avoid matching e.g. "foobar(" or "sidebar("
-const BAR_FN_REGEX = /\b(?:ohlc_bar_labels|ohlc_bar|bar|sparkline)\s*\(/i
+const BAR_FN_REGEX =
+  /\b(?:ohlc_bar_labels|ohlc_bar|bar|sparkline|depth_chart_labels|depth_chart)\s*\(/i
 
 function queryContainsBarFunction(sqlText) {
   if (!sqlText) return false
@@ -65,7 +66,13 @@ function queryContainsBarFunction(sqlText) {
 function detectVisualizationType(value) {
   if (!value || typeof value !== "string") return null
 
-  // Step 1: ohlc_bar
+  // Step 1: depth_chart
+  // U+254E (box drawings light double dash vertical) is the spread separator
+  if (value.includes("\u254e")) {
+    return "depth_chart"
+  }
+
+  // Step 2: ohlc_bar
   // U+2800 (braille blank) is used as padding in ohlc_bar output.
   // U+2591 (light shade) is used for bearish candle bodies.
   if (value.includes("\u2800") || value.includes("\u2591")) {
@@ -91,22 +98,22 @@ function detectVisualizationType(value) {
     return "ohlc_bar"
   }
 
-  // Step 2: bar
+  // Step 3: bar
   if (hasFractionalBlock) return "bar"
   if (hasFullBlock && !hasLowerBlock) return "bar"
 
-  // Step 3: sparkline
+  // Step 4: sparkline
   if (hasLowerBlock) return "sparkline"
 
   return null
 }
 
-// Split ohlc_bar_labels output into bar portion, separator, and label portion.
-// Labels start with "O:" after bar characters and padding (U+2800 or spaces).
-const OHLC_LABEL_REGEX = /^(.*?)([\s\u2800]+)(O:.*)$/
+// Split visualization labels output into bar portion, separator, and label portion.
+// OHLC labels start with "O:", depth_chart labels start with "bb:"
+const VIZ_LABEL_REGEX = /^(.*?)([\s\u2800]+)((?:O:|bb:).*)$/
 
-function splitOhlcLabels(value) {
-  const m = OHLC_LABEL_REGEX.exec(value)
+function splitVizLabels(value) {
+  const m = VIZ_LABEL_REGEX.exec(value)
   if (m) {
     return { bar: m[1], sep: m[2], labels: m[3] }
   }
@@ -899,6 +906,16 @@ export function grid(rootElement, _paginationFn, id) {
     return lines.join("\n")
   }
 
+  // Get cell text values from a row, using data-viz-raw for viz cells
+  function getCellTexts(row) {
+    const texts = []
+    for (const cell of row.childNodes) {
+      const raw = cell.getAttribute && cell.getAttribute("data-viz-raw")
+      texts.push(raw || cell.innerText || "")
+    }
+    return texts
+  }
+
   function getResultSetGridAsMarkdown() {
     // first, we get a starting width, based on the column header
     // this is necessary to get a properly formatted, pipe-aligned table
@@ -917,7 +934,7 @@ export function grid(rootElement, _paginationFn, id) {
 
     // then we loop over our rows to check how wide it needs to be according to the data
     for (const row of rows) {
-      let row_splits = row.innerText.split(/\n/)
+      let row_splits = getCellTexts(row)
       for (const [i, row_split] of row_splits.entries()) {
         column_widths[i] = Math.max(column_widths[i], row_split.length)
       }
@@ -945,7 +962,7 @@ export function grid(rootElement, _paginationFn, id) {
     let data_rows_builder = []
 
     for (const row of rows) {
-      let row_splits = row.innerText.split(/\n/)
+      let row_splits = getCellTexts(row)
 
       // sometimes we get arrays like this: [""] in rows
       // this usually happens at the end of the result set
@@ -1106,8 +1123,9 @@ export function grid(rootElement, _paginationFn, id) {
       addClass(hNameRow, "qg-header-name-row")
       hNameRow.append(hName, copyBtn)
 
-      // Add rotate icon for bar/ohlc visualization columns
-      if (vizType && c.type.toUpperCase() === "VARCHAR") {
+      // Add rotate icon only for 2-column (timestamp + varchar) bar/ohlc results
+      const canRotate = (vizType === "ohlc_bar" || vizType === "bar") && findVizColumns()
+      if (canRotate && c.type.toUpperCase() === "VARCHAR") {
         const rotateBtn = document.createElement("div")
         addClass(rotateBtn, "qg-header-rotate")
         if (vizRotated) {
@@ -1320,6 +1338,8 @@ export function grid(rootElement, _paginationFn, id) {
       ) {
         if (vizType === "ohlc_bar") {
           renderOhlcCell(cell, displayValue)
+        } else if (vizType === "depth_chart") {
+          renderDepthChartCell(cell, displayValue)
         } else {
           // bar and sparkline: monospace font, preserve whitespace
           cell.textContent = displayValue
@@ -1332,6 +1352,7 @@ export function grid(rootElement, _paginationFn, id) {
         cell.title = ""
         cell.style.whiteSpace = ""
         removeClass(cell, "qg-ohlc-cell")
+        cell.removeAttribute("data-viz-raw")
       }
 
       cell.classList.remove("qg-null")
@@ -1346,28 +1367,23 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   // Regex to match O:, H:, L:, C: prefixes in labels
-  const OHLC_KEY_REGEX = /([OHLC]:)/g
+  // Parse "O:1.234 H:5.678 L:0.123 C:4.567" into key-value pairs
+  const OHLC_PAIR_REGEX = /([OHLC]):(\S+)/g
 
-  function renderOhlcLabels(cell, labels) {
-    // Render labels with O:, H:, L:, C: colored in orange
-    let lastIndex = 0
+  function renderOhlcLabels(container, labels) {
     let m
-    OHLC_KEY_REGEX.lastIndex = 0
-    while ((m = OHLC_KEY_REGEX.exec(labels)) !== null) {
-      // Text before the key
-      if (m.index > lastIndex) {
-        cell.appendChild(document.createTextNode(labels.slice(lastIndex, m.index)))
-      }
-      // The key itself, colored
+    OHLC_PAIR_REGEX.lastIndex = 0
+    while ((m = OHLC_PAIR_REGEX.exec(labels)) !== null) {
+      const pair = document.createElement("span")
+      pair.className = "qg-ohlc-label-pair"
+
       const keySpan = document.createElement("span")
       keySpan.className = "qg-ohlc-label-key"
-      keySpan.textContent = m[1]
-      cell.appendChild(keySpan)
-      lastIndex = OHLC_KEY_REGEX.lastIndex
-    }
-    // Remaining text
-    if (lastIndex < labels.length) {
-      cell.appendChild(document.createTextNode(labels.slice(lastIndex)))
+      keySpan.textContent = m[1] + ":"
+      pair.appendChild(keySpan)
+
+      pair.appendChild(document.createTextNode(m[2]))
+      container.appendChild(pair)
     }
   }
 
@@ -1376,9 +1392,11 @@ export function grid(rootElement, _paginationFn, id) {
     cell.removeAttribute("title")
     cell.style.whiteSpace = "pre"
     addClass(cell, "qg-ohlc-cell")
+    // Store raw value for markdown export
+    cell.setAttribute("data-viz-raw", value)
 
     // Always split bar from labels
-    const parts = splitOhlcLabels(value)
+    const parts = splitVizLabels(value)
     const textToRender = parts.bar
 
     if (stripLabels) {
@@ -1434,10 +1452,79 @@ export function grid(rootElement, _paginationFn, id) {
       }
     }
 
-    // In normal view, append separator + labels with colored O:/H:/L:/C: keys
+    // In normal view, render labels right-aligned in a floated container
     if (!stripLabels && parts.labels) {
-      cell.appendChild(document.createTextNode(parts.sep))
-      renderOhlcLabels(cell, parts.labels)
+      const labelsContainer = document.createElement("span")
+      labelsContainer.className = "qg-ohlc-labels"
+      renderOhlcLabels(labelsContainer, parts.labels)
+      cell.insertBefore(labelsContainer, cell.firstChild)
+    }
+  }
+
+  // Parse "bb:73339 ba:80708 tb:4.24B ta:4.42B" into key-value pairs
+  const DEPTH_PAIR_REGEX = /(bb|ba|tb|ta):(\S+)/g
+
+  function renderDepthChartLabels(container, labels) {
+    let m
+    DEPTH_PAIR_REGEX.lastIndex = 0
+    while ((m = DEPTH_PAIR_REGEX.exec(labels)) !== null) {
+      const pair = document.createElement("span")
+      pair.className = "qg-ohlc-label-pair"
+
+      const keySpan = document.createElement("span")
+      keySpan.className = "qg-ohlc-label-key"
+      keySpan.textContent = m[1] + ":"
+      pair.appendChild(keySpan)
+
+      pair.appendChild(document.createTextNode(m[2]))
+      container.appendChild(pair)
+    }
+  }
+
+  function renderDepthChartCell(cell, value) {
+    cell.textContent = ""
+    cell.removeAttribute("title")
+    cell.style.whiteSpace = "pre"
+    addClass(cell, "qg-ohlc-cell")
+    // Store raw value for markdown export
+    cell.setAttribute("data-viz-raw", value)
+
+    const parts = splitVizLabels(value)
+    const barPart = parts.bar
+
+    // Split on spread character U+254E
+    const spreadIdx = barPart.indexOf("\u254e")
+    if (spreadIdx === -1) {
+      // No spread char found, render as plain
+      cell.textContent = barPart
+    } else {
+      const bidPart = barPart.slice(0, spreadIdx)
+      const askPart = barPart.slice(spreadIdx + 1)
+
+      if (bidPart) {
+        const bidSpan = document.createElement("span")
+        bidSpan.className = "qg-ohlc-bullish"
+        bidSpan.textContent = bidPart
+        cell.appendChild(bidSpan)
+      }
+
+      // Spread character in default color
+      cell.appendChild(document.createTextNode("\u254e"))
+
+      if (askPart) {
+        const askSpan = document.createElement("span")
+        askSpan.className = "qg-ohlc-bearish"
+        askSpan.textContent = askPart
+        cell.appendChild(askSpan)
+      }
+    }
+
+    // Render labels right-aligned
+    if (parts.labels) {
+      const labelsContainer = document.createElement("span")
+      labelsContainer.className = "qg-ohlc-labels"
+      renderDepthChartLabels(labelsContainer, parts.labels)
+      cell.insertBefore(labelsContainer, cell.firstChild)
     }
   }
 
@@ -2435,8 +2522,11 @@ export function grid(rootElement, _paginationFn, id) {
       }
     }
 
-    // Preserve rotation state between consecutive bar/ohlc queries
-    if (isBarQuery && queryContainsBarFunction(prevSql) && vizType) {
+    // Preserve rotation state only if the new result can actually rotate
+    // (bar/ohlc type with exactly 2 columns: timestamp + varchar)
+    const canRotate =
+      (vizType === "ohlc_bar" || vizType === "bar") && findVizColumns()
+    if (canRotate && queryContainsBarFunction(prevSql)) {
       vizRotated = prevVizRotated
     }
     // Otherwise vizRotated stays false (reset by clear())
