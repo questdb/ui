@@ -2777,12 +2777,21 @@ export function grid(rootElement, _paginationFn, id) {
         if (vizType === "ohlc_bar") {
           renderOhlcCell(barCell, reversed)
         } else {
-          // For bar charts, replace fractional block chars (U+2589-U+258F)
-          // with full blocks - fractional blocks don't render well vertically
+          // For bar charts, replace left fractional blocks (U+2589-U+258F)
+          // in rotated view: >= 1/2 becomes full block, < 1/2 becomes light
+          // shade to suggest a partial fill without rendering artifacts
           let cleaned = ""
           for (const ch of reversed) {
             const cp = ch.codePointAt(0)
-            cleaned += cp >= 0x2589 && cp <= 0x258f ? "\u2588" : ch
+            if (cp >= 0x2589 && cp <= 0x258c) {
+              // 7/8, 3/4, 5/8, 1/2 -> full block
+              cleaned += "\u2588"
+            } else if (cp >= 0x258d && cp <= 0x258f) {
+              // 3/8, 1/4, 1/8 -> light shade
+              cleaned += "\u2591"
+            } else {
+              cleaned += ch
+            }
           }
           barCell.textContent = cleaned
         }
