@@ -697,8 +697,7 @@ describe("create materialized view from context menu", () => {
   const sourceTable = "btc_trades"
   const nonWalTable = "btc_trades_no_wal"
   const nonPartitionedTable = "my_publics"
-  // Our generator emits {table}_{interval}; btc_trades is PARTITION BY DAY,
-  // so the derived SAMPLE BY is 1h → view name is btc_trades_1h.
+  // btc_trades is PARTITION BY DAY → derived SAMPLE BY 1h → view name btc_trades_1h.
   const generatedMatView = "btc_trades_1h"
 
   before(() => {
@@ -718,7 +717,6 @@ describe("create materialized view from context menu", () => {
   })
 
   it("disables the menu item for non-WAL and non-partitioned tables, and generates a runnable matview DDL from a valid source", () => {
-    // 1. Non-WAL (partitioned but BYPASS WAL) → menu item disabled
     cy.getByDataHook("schema-table-title").contains(nonWalTable).rightclick()
     cy.getByDataHook("table-context-menu-create-matview").should(
       "have.attr",
@@ -726,7 +724,6 @@ describe("create materialized view from context menu", () => {
     )
     cy.realPress("Escape")
 
-    // 2. Non-partitioned, no timestamp, no WAL → menu item disabled
     cy.getByDataHook("schema-table-title")
       .contains(nonPartitionedTable)
       .rightclick()
@@ -736,11 +733,51 @@ describe("create materialized view from context menu", () => {
     )
     cy.realPress("Escape")
 
-    // 3. Valid base → click generates DDL and editor runs it successfully
     cy.clearEditor()
     cy.getByDataHook("schema-table-title").contains(sourceTable).rightclick()
     cy.getByDataHook("table-context-menu-create-matview")
       .filter(":visible")
+      .click()
+
+    cy.runLine().clearEditor()
+
+    cy.refreshSchema()
+    cy.expandMatViews()
+    cy.getByDataHook("schema-matview-title").should("contain", generatedMatView)
+  })
+})
+
+describe("create materialized view from matview context menu", () => {
+  const sourceTable = "btc_trades"
+  const sourceMatView = "btc_trades_mv"
+  // btc_trades_mv is SAMPLE BY 1m → next rung 5m; name has no period token,
+  // so the generator appends `_5m`.
+  const generatedMatView = "btc_trades_mv_5m"
+
+  before(() => {
+    cy.loadConsoleWithAuth()
+    cy.createTable(sourceTable)
+    cy.createMaterializedView(sourceMatView)
+    cy.refreshSchema()
+  })
+
+  after(() => {
+    cy.loadConsoleWithAuth()
+    cy.dropMaterializedView(generatedMatView)
+    cy.dropMaterializedView(sourceMatView)
+    cy.dropTableIfExists(sourceTable)
+  })
+
+  it("generates a runnable chained matview DDL from a matview source", () => {
+    cy.expandMatViews()
+
+    cy.clearEditor()
+    cy.getByDataHook("schema-matview-title")
+      .contains(sourceMatView)
+      .rightclick()
+    cy.getByDataHook("table-context-menu-create-matview")
+      .filter(":visible")
+      .should("not.have.attr", "data-disabled")
       .click()
 
     cy.runLine().clearEditor()

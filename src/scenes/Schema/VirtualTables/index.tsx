@@ -688,11 +688,12 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 >
                   Copy schema
                 </MenuItem>
-                {item.kind === "table" && (
+                {(item.kind === "table" || item.kind === "matview") && (
                   <span
                     title={
-                      !item.table?.designatedTimestamp ||
-                      !item.table?.walEnabled
+                      item.kind === "table" &&
+                      (!item.table?.designatedTimestamp ||
+                        !item.table?.walEnabled)
                         ? "Only WAL tables with a designated timestamp can be used as a materialized view base"
                         : undefined
                     }
@@ -702,34 +703,34 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       onClick={async () => {
                         void trackEvent(
                           ConsoleEvent.SCHEMA_CONTEXT_CREATE_MATVIEW,
+                          { kind: item.kind },
                         )
-                        const tableDDL = await getTableSchema(
+                        const sourceDDL = await getTableSchema(
                           item.name,
-                          "table",
+                          item.kind as "table" | "matview",
                         )
-                        if (!tableDDL) return
+                        if (!sourceDDL) return
                         try {
-                          const existingNames = [
-                            ...tables.map((t) => t.table_name),
-                            ...(materializedViews?.map((v) => v.view_name) ??
-                              []),
-                            ...(views?.map((v) => v.view_name) ?? []),
-                          ]
+                          const existingNames = tables.map((t) => t.table_name)
                           const ddl = generateMatViewDDL(
-                            tableDDL,
+                            sourceDDL,
                             existingNames,
                           )
                           appendQuery(ddl, { appendAt: "end" })
-                        } catch {
+                        } catch (e) {
+                          console.error(e)
                           toast.error(
-                            "Failed to generate materialized view DDL",
+                            e instanceof Error
+                              ? `Failed to generate materialized view DDL: ${e.message}`
+                              : "Failed to generate materialized view DDL",
                           )
                         }
                       }}
                       icon={<MaterializedViewIcon size="16px" />}
                       disabled={
-                        !item.table?.designatedTimestamp ||
-                        !item.table?.walEnabled
+                        item.kind === "table" &&
+                        (!item.table?.designatedTimestamp ||
+                          !item.table?.walEnabled)
                       }
                     >
                       Create materialized view
