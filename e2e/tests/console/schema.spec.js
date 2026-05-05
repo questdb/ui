@@ -776,8 +776,7 @@ describe("create materialized view from matview context menu", () => {
       .contains(sourceMatView)
       .rightclick()
     cy.getByDataHook("table-context-menu-create-matview")
-      .filter(":visible")
-      .should("not.have.attr", "data-disabled")
+      .should("not.be.disabled")
       .click()
 
     cy.runLine().clearEditor()

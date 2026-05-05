@@ -829,15 +829,12 @@ const insertText = ({
 
 export const appendQuery = (editor: IStandaloneCodeEditor, query: string) => {
   const model = editor.getModel()
+  const position = editor.getPosition()
 
-  if (model) {
+  if (model && position) {
     const existing = model.getValue()
-    const isEmpty = existing.trim().length === 0
+    const isFirstLine = position.lineNumber === 1
 
-    // Use the editor's own SQL splitter to detect unterminated trailing SQL.
-    // `nextSql` is non-null iff there is a query at the end of the buffer that
-    // is not closed by `;` — comments, strings, and block comments are all
-    // handled correctly by the lexer.
     const lastPosition = getLastPosition(editor)
     const { nextSql } = lastPosition
       ? getQueriesFromPosition(editor, lastPosition)
@@ -845,8 +842,8 @@ export const appendQuery = (editor: IStandaloneCodeEditor, query: string) => {
     const needsSemicolon = nextSql !== null
 
     const newQueryLines = query.split("\n")
-    const prefix = isEmpty ? 1 : 2
-    const selectStartOffset = isEmpty ? 0 : 1
+    const prefix = isFirstLine ? 1 : 2
+    const selectStartOffset = isFirstLine ? 0 : 1
 
     const lineStart = existing.split("\n").length + 1
     const positionSelect = {
