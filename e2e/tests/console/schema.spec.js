@@ -736,9 +736,10 @@ describe("create materialized view from context menu", () => {
     cy.clearEditor()
     cy.getByDataHook("schema-table-title").contains(sourceTable).rightclick()
     cy.getByDataHook("table-context-menu-create-matview")
-      .filter(":visible")
+      .should("not.be.disabled")
       .click()
 
+    cy.getEditorContent().should("contain.value", "CREATE MATERIALIZED VIEW")
     cy.runLine().clearEditor()
 
     cy.refreshSchema()
@@ -779,6 +780,7 @@ describe("create materialized view from matview context menu", () => {
       .should("not.be.disabled")
       .click()
 
+    cy.getEditorContent().should("contain.value", "CREATE MATERIALIZED VIEW")
     cy.runLine().clearEditor()
 
     cy.refreshSchema()
