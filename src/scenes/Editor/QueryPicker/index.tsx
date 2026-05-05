@@ -132,7 +132,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
   const addQuery = useCallback(
     (query: Query) => {
       hidePicker()
-      appendQuery(query.value, { appendAt: "end" })
+      appendQuery(query.value)
     },
     [hidePicker],
   )

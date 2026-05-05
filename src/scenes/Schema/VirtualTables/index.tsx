@@ -716,7 +716,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                             sourceDDL,
                             existingNames,
                           )
-                          appendQuery(ddl, { appendAt: "end" })
+                          appendQuery(ddl)
                         } catch (e) {
                           console.error(e)
                           toast.error(
