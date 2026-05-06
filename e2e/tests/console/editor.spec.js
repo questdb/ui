@@ -554,6 +554,14 @@ describe("appendQuery", () => {
     cy.getEditorContent().should("have.value", expected)
     cy.getSelectedLines().should("have.length", 1)
   })
+
+  it("should inject a semicolon when the existing query is unterminated", () => {
+    cy.typeQuery(`select 1`)
+    cy.selectQuery(0)
+    const expected = `select 1;\n${queries[0]}`
+    cy.getEditorContent().should("have.value", expected)
+    cy.getSelectedLines().should("have.length", 1)
+  })
 })
 
 describe("&query URL param", () => {

@@ -13,7 +13,6 @@ import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
 
-
 const LoginContainer = styled.div`
   width: 100%;
   height: 100%;
