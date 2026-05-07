@@ -194,6 +194,7 @@ const AIChatWindow: React.FC = () => {
     editorRef,
     showPreviewBuffer,
     closePreviewBuffer,
+    addBuffer,
     executionRefs,
     highlightQuery,
   } = useEditor()
@@ -588,14 +589,12 @@ const AIChatWindow: React.FC = () => {
           conversationId: chatWindowState.activeConversationId,
         })
       } else {
-        void showPreviewBuffer({
-          type: "code",
-          value: content.value,
-        })
+        void addBuffer({ value: content.value })
       }
     },
     [
       showPreviewBuffer,
+      addBuffer,
       chatWindowState.activeConversationId,
       handleContextClick,
     ],
