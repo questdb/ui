@@ -1249,7 +1249,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         })
         // otherwise, append the query
       } else {
-        appendQuery(editor, trimmedQuery, { appendAt: "end" })
+        appendQuery(editor, trimmedQuery)
         const newValue = editor.getValue()
         void updateBuffer(activeBuffer.id as number, { value: newValue })
       }
