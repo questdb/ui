@@ -159,6 +159,7 @@ const LiteEditorToolbar = ({
 }) => {
   const appTheme = useTheme()
   const Icon = diffEditor ? SquareSplitHorizontalIcon : CornersOutIcon
+  const label = diffEditor ? "Diff preview" : "Open in editor"
   return (
     <ButtonsContainer>
       <OpenInEditorButton
@@ -169,10 +170,10 @@ const LiteEditorToolbar = ({
           })
           onOpenInEditor()
         }}
-        title="Open in editor"
+        title={label}
         data-hook="ai-open-in-editor-button"
       >
-        {!compact && "Open in editor"}
+        {!compact && label}
         <Icon size="1.8rem" color={appTheme.color.offWhite} />
       </OpenInEditorButton>
       {!compact && (
