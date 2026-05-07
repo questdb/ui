@@ -16,7 +16,6 @@ export const Import = () => (
             eventBus.publish(EventType.MSG_QUERY_SCHEMA)
             eventBus.publish(EventType.MSG_QUERY_FIND_N_EXEC, {
               query: `"${result.location}"`,
-              options: { appendAt: "end" },
             })
           }
         }}

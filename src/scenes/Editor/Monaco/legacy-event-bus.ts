@@ -21,7 +21,7 @@
  *  limitations under the License.
  *
  ******************************************************************************/
-import { appendQuery, AppendQueryOptions } from "./utils"
+import { appendQuery } from "./utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import type { editor } from "monaco-editor"
@@ -36,12 +36,12 @@ export const registerLegacyEventBusEvents = ({
   toggleRunning: (runningType?: RunningType) => void
   getRunning: () => RunningType
 }) => {
-  eventBus.subscribe<{ query: string; options?: AppendQueryOptions }>(
+  eventBus.subscribe<{ query: string }>(
     EventType.MSG_QUERY_FIND_N_EXEC,
     (payload) => {
       if (payload) {
         const text = `${payload.query};`
-        appendQuery(editor, text, payload.options)
+        appendQuery(editor, text)
         if (getRunning() !== RunningType.NONE) return
         toggleRunning()
       }
