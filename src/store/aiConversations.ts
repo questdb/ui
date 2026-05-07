@@ -18,28 +18,56 @@ export const aiConversationStore = {
 
   saveMeta: (meta: ConversationMeta) => db.ai_conversations.put(meta),
 
-  saveMessages: (
+  async saveMessages(
     conversationId: ConversationId,
     messages: ConversationMessage[],
-  ) =>
-    db.ai_conversation_messages.put({
-      conversationId,
-      data: compressMessages(messages),
-    }),
+    extraMetaUpdates?: Partial<ConversationMeta>,
+  ) {
+    const hasMessages = messages.length > 0
+    await db.transaction(
+      "rw",
+      db.ai_conversations,
+      db.ai_conversation_messages,
+      async () => {
+        await db.ai_conversation_messages.put({
+          conversationId,
+          data: compressMessages(messages),
+        })
+        await db.ai_conversations.update(conversationId, {
+          hasMessages,
+          ...extraMetaUpdates,
+        })
+      },
+    )
+  },
 
   async saveConversation(conversation: AIConversation) {
-    const { messages, ...meta } = conversation
-    await Promise.all([
-      this.saveMeta(meta),
-      this.saveMessages(conversation.id, messages),
-    ])
+    const { messages, ...rest } = conversation
+    const meta: ConversationMeta = { ...rest, hasMessages: messages.length > 0 }
+    await db.transaction(
+      "rw",
+      db.ai_conversations,
+      db.ai_conversation_messages,
+      async () => {
+        await db.ai_conversations.put(meta)
+        await db.ai_conversation_messages.put({
+          conversationId: conversation.id,
+          data: compressMessages(messages),
+        })
+      },
+    )
   },
 
   deleteConversation: (conversationId: ConversationId) =>
-    Promise.all([
-      db.ai_conversations.delete(conversationId),
-      db.ai_conversation_messages.delete(conversationId),
-    ]),
+    db.transaction(
+      "rw",
+      db.ai_conversations,
+      db.ai_conversation_messages,
+      async () => {
+        await db.ai_conversations.delete(conversationId)
+        await db.ai_conversation_messages.delete(conversationId)
+      },
+    ),
 
   updateMeta: (
     conversationId: ConversationId,

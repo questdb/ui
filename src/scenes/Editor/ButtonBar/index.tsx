@@ -8,6 +8,7 @@ import { Box, Button, PopperToggle } from "../../../components"
 import { actions, selectors } from "../../../store"
 import { platform, color } from "../../../utils"
 import { RunningType } from "../../../store/Query/types"
+import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
@@ -144,6 +145,8 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   margin-left: 1rem;
 `
 
+const RUN_DROPDOWN_MENU_ID = "run-query-dropdown-menu"
+
 const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 const shortcutTitles =
   platform.isMacintosh || platform.isIOS
@@ -159,6 +162,7 @@ const shortcutTitles =
 const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
+  const { active: activeQueryExecution } = useQueryExecutionState()
   const queriesToRun = useSelector(selectors.query.getQueriesToRun)
   const [dropdownActive, setDropdownActive] = useState(false)
   const observerRef = useRef<MutationObserver | null>(null)
@@ -241,7 +245,8 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
     }
   }, [])
 
-  const renderRunScriptButton = () => {
+  const renderRunScriptButton = (asMenuItem: boolean = false) => {
+    const menuProps = asMenuItem ? { role: "menuitem" as const } : {}
     if (running === RunningType.SCRIPT) {
       return (
         <StopButton
@@ -249,6 +254,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
           data-hook="button-cancel-script"
           onClick={handleClickScriptButton}
           prefixIcon={<Stop size="18px" />}
+          {...menuProps}
         >
           Cancel
         </StopButton>
@@ -260,7 +266,12 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
-        disabled={running !== RunningType.NONE || isTemporary}
+        disabled={
+          running !== RunningType.NONE ||
+          activeQueryExecution !== null ||
+          isTemporary
+        }
+        {...menuProps}
       >
         Run all queries
         <RunShortcut>
@@ -320,6 +331,7 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
           onClick={handleClickQueryButton}
           disabled={
             running !== RunningType.NONE ||
+            activeQueryExecution !== null ||
             queriesToRun.length === 0 ||
             isTemporary
           }
@@ -348,12 +360,18 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
               data-hook="button-run-query-dropdown"
               $open={dropdownActive}
               title="More run options"
+              aria-label="More run options"
+              aria-haspopup="menu"
+              aria-expanded={dropdownActive}
+              aria-controls={RUN_DROPDOWN_MENU_ID}
             >
               <ChevronDown size="16px" />
             </DropdownButton>
           }
         >
-          <DropdownMenu>{renderRunScriptButton()}</DropdownMenu>
+          <DropdownMenu id={RUN_DROPDOWN_MENU_ID} role="menu">
+            {renderRunScriptButton(true)}
+          </DropdownMenu>
         </PopperToggle>
       </ButtonGroup>
     )

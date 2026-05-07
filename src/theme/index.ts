@@ -29,6 +29,7 @@ const color: ColorShape = {
   black: "#191a21",
   black70: "rgba(25, 26, 33, 0.7)",
   black40: "rgba(25, 26, 33, 0.4)",
+  black32: "rgba(25, 26, 33, 0.32)",
   black20: "rgba(25, 26, 33, 0.2)",
   overlayBackground: "rgba(44, 46, 61, 0.48)",
   gray1: "#585858",
@@ -69,6 +70,13 @@ const color: ColorShape = {
   graphLegend: "#6e7078",
   offWhite: "#bdbdbd",
   offWhite2: "#d1d5db",
+  aiStopButtonBg: "#da152832",
+  aiStopButtonFg: "#da1e28",
+  aiBadgeIconBg: "#290a13",
+  aiBadgeIconBorder: "rgba(122, 31, 58, 0.64)",
+  dividerAccent: "#9c274b",
+  mutedLabel: "#9ca3af",
+  pinkGradientEnd: "#892c6c",
 }
 
 const fontSize: FontSizeShape = {
@@ -94,9 +102,7 @@ export const theme: DefaultThemeShape = {
   borderRadius: "0.8rem",
 }
 
-export const pinkLinearGradientHorizontal =
-  "linear-gradient(90deg, #D14671 0%, #892C6C 100%)"
-export const pinkLinearGradientVertical =
-  "linear-gradient(180deg, #D14671 0%, #892C6C 100%)"
+export const pinkLinearGradientHorizontal = `linear-gradient(90deg, ${color.pink} 0%, ${color.pinkGradientEnd} 100%)`
+export const pinkLinearGradientVertical = `linear-gradient(180deg, ${color.pink} 0%, ${color.pinkGradientEnd} 100%)`
 
 export type ThemeShape = typeof theme

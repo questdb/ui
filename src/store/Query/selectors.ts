@@ -24,11 +24,11 @@
 
 import {
   NotificationShape,
+  NotificationNamespaceKey,
   RunningType,
   StoreShape,
   QueryNotifications,
   QueriesToRun,
-  AISuggestionRequest,
 } from "types"
 import type {
   QueryRawResult,
@@ -42,11 +42,12 @@ const getNotifications: (store: StoreShape) => NotificationShape[] = (store) =>
 
 const getQueryNotifications: (
   store: StoreShape,
-) => Record<number, Record<QueryKey, QueryNotifications>> = (store) =>
-  store.query.queryNotifications
+) => Record<NotificationNamespaceKey, Record<QueryKey, QueryNotifications>> = (
+  store,
+) => store.query.queryNotifications
 
 const getQueryNotificationsForBuffer =
-  (bufferId: number) =>
+  (bufferId: NotificationNamespaceKey) =>
   (store: StoreShape): Record<QueryKey, QueryNotifications> | undefined =>
     store.query.queryNotifications[bufferId]
 
@@ -69,10 +70,6 @@ const getColumns: (
   store: StoreShape,
 ) => Record<string, InformationSchemaColumn[]> = (store) => store.query.columns
 
-const getAISuggestionRequest: (
-  store: StoreShape,
-) => AISuggestionRequest | null = (store) => store.query.aiSuggestionRequest
-
 export default {
   getNotifications,
   getQueryNotifications,
@@ -83,5 +80,4 @@ export default {
   getRunning,
   getTables,
   getColumns,
-  getAISuggestionRequest,
 }

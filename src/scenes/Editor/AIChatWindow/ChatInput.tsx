@@ -12,11 +12,11 @@ import { Box } from "../../../components"
 import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
 import { ArrowUpIcon, CodeBlockIcon } from "@phosphor-icons/react"
-import { Stop as StopFill } from "@styled-icons/remix-fill"
 import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
+import { AIStopButton } from "../../../components/AIStopButton"
 import { slideAnimation } from "../../../components/Animation"
 import { pinkLinearGradientHorizontal } from "../../../theme"
 import { TableIcon } from "../../Schema/table-icon"
@@ -98,7 +98,7 @@ const ContextBadgeContainer = styled.div`
   background: ${color("backgroundDarker")};
 `
 
-const ContextBadge = styled.div`
+const ContextBadge = styled.button`
   display: flex;
   padding: 0.3rem 0.6rem;
   align-items: center;
@@ -111,6 +111,7 @@ const ContextBadge = styled.div`
   font-size: 1.3rem;
   user-select: none;
   cursor: pointer;
+  font-family: inherit;
 
   &:hover {
     border: 1px solid ${color("offWhite")};
@@ -176,27 +177,11 @@ const ThoughtText = styled.div`
   ${slideAnimation}
 `
 
-const StopButton = styled.button`
+const StopButtonWrapper = styled.div`
   position: absolute;
   right: 0.8rem;
   top: 50%;
   transform: translateY(-50%);
-  width: 2.6rem;
-  height: 2.6rem;
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  background: #da152832;
-  color: #da1e28;
-
-  &:hover {
-    background: ${color("red")};
-    color: ${color("foreground")};
-  }
 `
 
 type ChatInputProps = {
@@ -298,24 +283,29 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             <ThoughtStreamContent>
               <CircleNotchSpinner size={20} />
 
-              <ThoughtText>{aiStatus}</ThoughtText>
+              <ThoughtText role="status" aria-live="polite">
+                {aiStatus}
+              </ThoughtText>
             </ThoughtStreamContent>
 
-            <StopButton
-              onClick={handleStop}
-              title="Stop generation"
-              data-hook="chat-stop-button"
-            >
-              <StopFill size="14px" />
-            </StopButton>
+            <StopButtonWrapper>
+              <AIStopButton
+                size="md"
+                onClick={handleStop}
+                title="Stop generation"
+                ariaLabel="Stop AI generation"
+                dataHook="chat-stop-button"
+              />
+            </StopButtonWrapper>
           </ThoughtStream>
         ) : (
           <InputWrapper>
             {hasContext && (
               <ContextBadgeContainer>
                 <ContextBadge
-                  role="presentation"
+                  type="button"
                   onClick={onContextClick}
+                  aria-label={`Change context: ${contextText}`}
                   data-hook="chat-context-badge"
                 >
                   <ContextBadgeIcon>
@@ -340,6 +330,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
+              aria-label="Chat with AI assistant"
+              aria-keyshortcuts="Enter"
               disabled={disabled}
               rows={1}
               $hasContext={hasContext}
@@ -349,6 +341,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               onClick={handleSend}
               disabled={!input.trim() || disabled}
               title="Send (Enter) • New line (Shift+Enter)"
+              aria-label="Send message"
               data-hook="chat-send-button"
             >
               <ArrowUpIcon size={20} weight="bold" />

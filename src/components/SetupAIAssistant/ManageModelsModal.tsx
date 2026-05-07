@@ -14,7 +14,14 @@ const ModalContent = styled.div`
   display: flex;
   flex-direction: column;
   width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+`
+
+const ScrollableContent = styled.div`
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 `
 
 const HeaderSection = styled(Box).attrs({
@@ -118,24 +125,26 @@ export const ManageModelsModal = ({
               </ModalSubtitle>
             </HeaderSection>
             <Separator />
-            {open && (
-              <ModelSettings
-                ref={modelSettingsRef}
-                fetchConfig={{
-                  providerType: definition.type,
-                  providerId,
-                  apiKey: definition.apiKey || "",
-                  baseURL: definition.baseURL,
-                }}
-                initialValues={{
-                  models: definition.models,
-                  contextWindow: definition.contextWindow,
-                  grantSchemaAccess: definition.grantSchemaAccess,
-                }}
-                providerName={definition.name}
-                onLoadingChange={setModelsLoading}
-              />
-            )}
+            <ScrollableContent>
+              {open && (
+                <ModelSettings
+                  ref={modelSettingsRef}
+                  fetchConfig={{
+                    providerType: definition.type,
+                    providerId,
+                    apiKey: definition.apiKey || "",
+                    baseURL: definition.baseURL,
+                  }}
+                  initialValues={{
+                    models: definition.models,
+                    contextWindow: definition.contextWindow,
+                    grantSchemaAccess: definition.grantSchemaAccess,
+                  }}
+                  providerName={definition.name}
+                  onLoadingChange={setModelsLoading}
+                />
+              )}
+            </ScrollableContent>
             <Separator />
             <FooterSection>
               {error && <ErrorText>{error}</ErrorText>}

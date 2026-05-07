@@ -33,7 +33,7 @@ import React, {
 import styled from "styled-components"
 import { DiffEditor, Editor as MonacoEditor } from "@monaco-editor/react"
 
-import { PaneWrapper, Box, Button, Key } from "../../components"
+import { PaneWrapper, PaneContent, Box, Button, Key } from "../../components"
 import { useKeyPress } from "../../hooks"
 
 import Monaco from "./Monaco"
@@ -45,12 +45,12 @@ import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
 import { color, platform } from "../../utils"
-import { getLastUnactionedDiff } from "../../providers/AIConversationProvider/utils"
-import { useDispatch } from "react-redux"
-import { actions } from "../../store"
+import { useDispatch, useSelector } from "react-redux"
+import { actions, selectors } from "../../store"
 import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { getLastTurnWithUnactionedDiff } from "../../utils/ai/turnView"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -65,7 +65,8 @@ export type ExecutionInfo = {
   endOffset: number
 }
 
-// Buffer ID -> QueryKey -> Execution State
+// Execution namespace key -> QueryKey -> Execution State.
+// Key is typically a buffer id string, but can also be a non-buffer id (e.g. conversation id) for detached chat executions.
 export type ExecutionRefs = Record<
   string,
   Record<
@@ -116,7 +117,7 @@ const EditorPane = styled.div`
   overflow: hidden;
 `
 
-const DiffViewWrapper = styled.div`
+const DiffViewWrapper = styled(PaneContent)`
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -178,18 +179,55 @@ const Editor = ({
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
   const dispatch = useDispatch()
-  const { activeBuffer, addBuffer, cleanupExecutionRefs } = useEditor()
+  const { activeBuffer, addBuffer, cleanupExecutionRefs, executionRefs } =
+    useEditor()
   const {
+    chatWindowState,
     getConversationMeta,
     activeConversationMessages,
     acceptSuggestion,
     rejectSuggestion,
   } = useAIConversation()
+  const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const queryNotifications = useSelector(selectors.query.getQueryNotifications)
+  const activeNotification = useSelector(selectors.query.getActiveNotification)
 
-  const handleClearNotifications = (bufferId: number) => {
+  const handleClearNotifications = (bufferId: string | number) => {
     dispatch(actions.query.cleanupBufferNotifications(bufferId))
-    cleanupExecutionRefs(bufferId)
+    if (typeof bufferId === "number") {
+      cleanupExecutionRefs(Number(bufferId))
+    } else if (typeof bufferId === "string") {
+      delete executionRefs.current[bufferId]
+    }
   }
+
+  const targetNotificationsBufferId = useMemo(() => {
+    if (activeSidebar?.type !== "aiChat") return undefined
+
+    const conversationId = chatWindowState.activeConversationId
+    if (!conversationId) return undefined
+
+    if (Object.keys(queryNotifications[conversationId] || {}).length > 0) {
+      return conversationId
+    }
+
+    const meta = getConversationMeta(conversationId)
+    if (
+      meta?.bufferId !== undefined &&
+      activeNotification &&
+      queryNotifications[meta.bufferId]?.[activeNotification.query]
+    ) {
+      return meta.bufferId
+    }
+
+    return undefined
+  }, [
+    activeSidebar?.type,
+    chatWindowState.activeConversationId,
+    getConversationMeta,
+    queryNotifications,
+    activeNotification,
+  ])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -225,7 +263,9 @@ const Editor = ({
       return null
     }
 
-    const lastUnactionedDiff = getLastUnactionedDiff(activeConversationMessages)
+    const lastUnactionedDiff = getLastTurnWithUnactionedDiff(
+      activeConversationMessages,
+    )
     if (!lastUnactionedDiff) {
       return null
     }
@@ -438,10 +478,10 @@ const Editor = ({
             )}
             {/* Metrics view */}
             {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
-            {/* Notifications - show for both regular editor and diff buffer views */}
-            {activeBuffer.editorViewState && (
-              <Notifications onClearNotifications={handleClearNotifications} />
-            )}
+            <Notifications
+              onClearNotifications={handleClearNotifications}
+              targetBufferId={targetNotificationsBufferId}
+            />
           </EditorPane>
         </EditorContent>
       </EditorLeftPane>
