@@ -17,6 +17,19 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.2.2 - 2026.05.07
+### Added
+- add create materialized view table menu action [#557](https://github.com/questdb/ui/pull/557)
+
+### Changed
+- ai assistant revamp, query execution guards [#547](https://github.com/questdb/ui/pull/547)
+
+### Fixed
+- remove implicit select suggestions filtering, context-aware function suggestions [#556](https://github.com/questdb/ui/pull/556)
+- hanging editor when there is a trailing comma in the select list [#556](https://github.com/questdb/ui/pull/556)
+- 'occured' -> 'occurred' in error message [#553](https://github.com/questdb/ui/pull/553)
+
+
 ## 1.2.1 - 2026.04.13
 ### Added
 - custom provider support to AI Assistant [#541](https://github.com/questdb/ui/pull/541)
