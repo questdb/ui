@@ -55,6 +55,12 @@ import { RunningType } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { CircleNotchSpinner } from "../Monaco/icons"
+import { getWorkspace } from "../../../utils/notebookAIBridge"
+import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
+import type {
+  NotebookFlowContext,
+  WorkspaceInfo,
+} from "../../../utils/executeAIFlow"
 
 const HeaderLeft = styled.div`
   display: flex;
@@ -186,6 +192,9 @@ const AIChatWindow: React.FC = () => {
     closePreviewBuffer,
     executionRefs,
     highlightQuery,
+    buffers,
+    activeBuffer,
+    setActiveBuffer,
   } = useEditor()
   const {
     conversationMetas,
@@ -208,6 +217,9 @@ const AIChatWindow: React.FC = () => {
     acceptSuggestion,
     rejectSuggestion,
     persistMessages,
+    bindConversationToNotebook,
+    clearUserActionEvents,
+    readUserActionDigest,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -361,6 +373,47 @@ const AIChatWindow: React.FC = () => {
     return "Ask AI about your tables, or generate a query..."
   }
 
+  // <workspace> always emits when tabs exist so unbound chats can resolve user-said labels to buffer_ids.
+  const buildNotebookFlowContext = useCallback(
+    (conversationId: string): NotebookFlowContext | undefined => {
+      const meta = getConversationMeta(conversationId)
+      const bufferId = meta?.notebookBufferId
+      const snapshot = bufferId ? buildSnapshot(getWorkspace(), bufferId) : null
+      const digest = readUserActionDigest(conversationId)
+      const notebookBuffers = buffers.filter(
+        (b) => !!b.notebookViewState && typeof b.id === "number",
+      )
+      const workspace: WorkspaceInfo | undefined =
+        notebookBuffers.length > 0 || typeof activeBuffer.id === "number"
+          ? {
+              notebooks: notebookBuffers.map((b) => ({
+                buffer_id: b.id as number,
+                label: b.label,
+                archived: !!b.archived,
+                ...(b.id === bufferId ? { bound_to_this_chat: true } : {}),
+              })),
+              active:
+                typeof activeBuffer.id === "number"
+                  ? {
+                      buffer_id: activeBuffer.id,
+                      label: activeBuffer.label,
+                      kind: activeBuffer.notebookViewState
+                        ? "notebook"
+                        : activeBuffer.metricsViewState
+                          ? "metrics"
+                          : activeBuffer.editorViewState
+                            ? "sql"
+                            : "other",
+                    }
+                  : undefined,
+            }
+          : undefined
+      if (!snapshot && !digest && !workspace) return undefined
+      return { snapshot, digest, workspace }
+    },
+    [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
+  )
+
   const handleSendMessage = (
     userMessage: string,
     hasUnactionedDiffParam: boolean = false,
@@ -394,6 +447,7 @@ const AIChatWindow: React.FC = () => {
         tables,
         hasSchemaAccess,
         abortSignal: abortController?.signal,
+        notebookContext: buildNotebookFlowContext(conversationId),
       }),
       {
         addMessage,
@@ -403,6 +457,8 @@ const AIChatWindow: React.FC = () => {
         persistMessages,
         updateConversationName,
         replaceConversationMessages,
+        bindNotebookToConversation: bindConversationToNotebook,
+        clearUserActionEvents,
       },
     )
   }
@@ -582,6 +638,7 @@ const AIChatWindow: React.FC = () => {
       tables,
       hasSchemaAccess,
       abortSignal: abortController?.signal,
+      notebookContext: buildNotebookFlowContext(conversationId),
     }
 
     let isRemoved = false
@@ -603,6 +660,8 @@ const AIChatWindow: React.FC = () => {
       persistMessages,
       updateConversationName,
       replaceConversationMessages,
+      bindNotebookToConversation: bindConversationToNotebook,
+      clearUserActionEvents,
     }
 
     switch (userMessage.displayType) {
@@ -743,6 +802,25 @@ const AIChatWindow: React.FC = () => {
     return null
   }
 
+  const notebookContext = (() => {
+    const boundId = conversation?.notebookBufferId
+    if (typeof boundId !== "number") return undefined
+    const buf = buffers.find((b) => b.id === boundId)
+    const isMissing = !buf
+    const isArchived = !!buf?.archived
+    const label = buf?.label ?? `#${boundId}`
+    const warn: "archived" | "deleted" | null = isMissing
+      ? "deleted"
+      : isArchived
+        ? "archived"
+        : null
+    const onClick = async () => {
+      if (warn) return
+      if (buf) await setActiveBuffer(buf)
+    }
+    return { label, warn, onClick }
+  })()
+
   return (
     <Drawer
       mode="side"
@@ -871,6 +949,7 @@ const AIChatWindow: React.FC = () => {
               placeholder={getPlaceholder()}
               contextSQL={queryInfo.queryText}
               contextTableId={conversation?.tableId}
+              contextNotebook={notebookContext}
               onContextClick={handleContextClick}
             />
           </ChatPanel>

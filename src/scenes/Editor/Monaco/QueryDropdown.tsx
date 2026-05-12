@@ -6,45 +6,10 @@ import { PlayFilled } from "../../../components/icons/play-filled"
 import { AISparkle } from "../../../components/AISparkle"
 import type { Request } from "./utils"
 
-const StyledDropdownContent = styled(DropdownMenu.Content)`
-  background-color: #343846;
-  border-radius: 0.5rem;
-  padding: 0.4rem;
-  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
-  z-index: 9999;
-  min-width: 160px;
-  gap: 0;
-`
-
-const StyledDropdownItem = styled(DropdownMenu.Item)`
-  font-size: 1.3rem;
-  height: 3rem;
-  font-family: "system-ui", sans-serif;
-  cursor: pointer;
-  color: rgb(248, 248, 242);
-  display: flex;
-  align-items: center;
-  padding: 1rem 1.2rem;
-  border-radius: 0.4rem;
-  margin: 0;
-  gap: 0;
-  border: 1px solid transparent;
-
-  &[data-highlighted] {
-    background: #043c5c;
-    border: 1px solid #8be9fd;
-  }
-
-  &[data-disabled] {
-    opacity: 0.5;
-  }
-`
-
 const IconWrapper = styled.span`
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 1.2rem;
 `
 
 const StyledPlayFilled = styled(PlayFilled)`
@@ -114,11 +79,11 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
         />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <StyledDropdownContent>
+        <DropdownMenu.Content>
           {isAIDropdownRef.current
             ? // AI dropdown - show "Ask AI about query X" options
               queriesRef.current.map((query, index) => (
-                <StyledDropdownItem
+                <DropdownMenu.Item
                   // eslint-disable-next-line react/no-array-index-key
                   key={`ask-ai-${query.query}-${index}`}
                   onClick={() => onAskAIRef.current(query)}
@@ -128,14 +93,14 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     <AISparkle size={18} variant="filled" />
                   </IconWrapper>
                   Ask AI about {extractQueryTextToRun(query)}
-                </StyledDropdownItem>
+                </DropdownMenu.Item>
               ))
             : queriesRef.current.length > 1
               ? // Multiple queries - show options for each
                 queriesRef.current
                   .map((query, index) => {
                     const items = [
-                      <StyledDropdownItem
+                      <DropdownMenu.Item
                         // eslint-disable-next-line react/no-array-index-key
                         key={`run-${query.query}-${index}`}
                         onClick={() => onRunQuery(query)}
@@ -145,12 +110,12 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                           <StyledPlayFilled size={18} color="#fff" />
                         </IconWrapper>
                         Run {extractQueryTextToRun(query)}
-                      </StyledDropdownItem>,
+                      </DropdownMenu.Item>,
                     ]
 
                     if (isContextMenuRef.current) {
                       items.push(
-                        <StyledDropdownItem
+                        <DropdownMenu.Item
                           // eslint-disable-next-line react/no-array-index-key
                           key={`explain-${query.query}-${index}`}
                           disabled={isExplainDisabled(query)}
@@ -161,7 +126,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                             <Information size={18} />
                           </IconWrapper>
                           Get query plan for {extractQueryTextToRun(query)}
-                        </StyledDropdownItem>,
+                        </DropdownMenu.Item>,
                       )
                     }
 
@@ -169,7 +134,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                   })
                   .flat()
               : [
-                  <StyledDropdownItem
+                  <DropdownMenu.Item
                     key="run"
                     onClick={() => onRunQuery(queriesRef.current[0])}
                     data-hook="dropdown-item-run-query"
@@ -178,8 +143,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                       <StyledPlayFilled size={18} color="#fff" />
                     </IconWrapper>
                     Run {extractQueryTextToRun(queriesRef.current[0])}
-                  </StyledDropdownItem>,
-                  <StyledDropdownItem
+                  </DropdownMenu.Item>,
+                  <DropdownMenu.Item
                     key="explain"
                     disabled={isExplainDisabled(queriesRef.current[0])}
                     onClick={() => onExplainQuery(queriesRef.current[0])}
@@ -190,9 +155,9 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     </IconWrapper>
                     Get query plan for{" "}
                     {extractQueryTextToRun(queriesRef.current[0])}
-                  </StyledDropdownItem>,
+                  </DropdownMenu.Item>,
                 ]}
-        </StyledDropdownContent>
+        </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
   )

@@ -5,7 +5,7 @@ export type {
   FlowConfig,
 } from "./types"
 export { createProvider } from "./registry"
-export { SCHEMA_TOOLS, REFERENCE_TOOLS, ALL_TOOLS } from "./tools"
+export { toolsForPermission } from "../tools/tools"
 export {
   ExplainFormat,
   FixSQLFormat,
@@ -18,10 +18,10 @@ export {
   StreamingError,
   safeJsonParse,
   extractPartialExplanation,
-  executeTool,
   parseCustomProviderResponse,
   responseFormatToPromptInstruction,
 } from "./shared"
+export { dispatchTool } from "../tools/dispatch"
 export {
   DOCS_INSTRUCTION,
   getUnifiedPrompt,
@@ -48,6 +48,7 @@ export {
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,
+  getAiPermissions,
 } from "./settings"
 export type {
   ProviderId,

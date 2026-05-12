@@ -69,6 +69,7 @@ const color: ColorShape = {
   graphLegend: "#6e7078",
   offWhite: "#bdbdbd",
   offWhite2: "#d1d5db",
+  editorBackground: "#2c2e3d",
 }
 
 const fontSize: FontSizeShape = {

@@ -29,10 +29,21 @@ import { NotificationShape } from "types"
 import { Timestamp } from "../Timestamp"
 
 export const LoadingNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, isMinimized } = props
+  const {
+    createdAt,
+    content,
+    sideContent,
+    isMinimized,
+    compact,
+    hideTimestamp,
+  } = props
   return (
-    <Wrapper isMinimized={isMinimized} data-hook="loading-notification">
-      <Timestamp createdAt={createdAt} />
+    <Wrapper
+      $isMinimized={isMinimized}
+      $compact={compact}
+      data-hook="loading-notification"
+    >
+      {!hideTimestamp && <Timestamp createdAt={createdAt} />}
       <LoaderIcon />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

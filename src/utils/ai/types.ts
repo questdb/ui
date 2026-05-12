@@ -4,7 +4,11 @@ import type {
   StatusCallback,
   StreamingCallback,
 } from "../aiAssistant"
+import type { Permissions, ToolCategory } from "../tools/permissions"
+import type { ValidateQueryResult } from "../questdb/types"
 import type { ProviderId } from "./settings"
+
+export type ToolSurface = "ai" | "mcp"
 
 export interface ToolDefinition {
   name: string
@@ -13,7 +17,12 @@ export interface ToolDefinition {
     type: "object"
     properties: Record<string, unknown>
     required?: string[]
+    // Required by OpenAI strict mode on every object schema.
+    additionalProperties?: boolean
   }
+  category: ToolCategory
+  surfaces?: ToolSurface[]
+  mutatesNotebook?: boolean
 }
 
 export interface ResponseFormatSchema {
@@ -29,19 +38,23 @@ export interface FlowConfig {
   responseFormat: ResponseFormatSchema
 }
 
+export type ExecuteFlowParams = {
+  model: string
+  config: FlowConfig
+  modelToolsClient: ModelToolsClient
+  tools: ToolDefinition[]
+  setStatus: StatusCallback
+  abortSignal?: AbortSignal
+  streaming?: StreamingCallback
+  perms?: Permissions
+  validateSql?: (sql: string) => Promise<ValidateQueryResult>
+}
+
 export interface AIProvider {
   readonly id: ProviderId
   readonly contextWindow: number
 
-  executeFlow<T>(params: {
-    model: string
-    config: FlowConfig
-    modelToolsClient: ModelToolsClient
-    tools: ToolDefinition[]
-    setStatus: StatusCallback
-    abortSignal?: AbortSignal
-    streaming?: StreamingCallback
-  }): Promise<T | AiAssistantAPIError>
+  executeFlow<T>(params: ExecuteFlowParams): Promise<T | AiAssistantAPIError>
 
   generateTitle(params: {
     model: string

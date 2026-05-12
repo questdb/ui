@@ -67,6 +67,77 @@ export const stripSQLComments = (text: string): string =>
     return match
   })
 
+export const getQueriesFromText = (text: string): string[] => {
+  if (!text) return []
+  const queries: string[] = []
+  let buf = ""
+  let inSingle = false
+  let inDouble = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    const next = text[i + 1]
+
+    if (inLineComment) {
+      buf += ch
+      if (ch === "\n") inLineComment = false
+      continue
+    }
+    if (inBlockComment) {
+      buf += ch
+      if (ch === "*" && next === "/") {
+        buf += next
+        i++
+        inBlockComment = false
+      }
+      continue
+    }
+    if (inSingle) {
+      buf += ch
+      if (ch === "'") inSingle = false
+      continue
+    }
+    if (inDouble) {
+      buf += ch
+      if (ch === '"') inDouble = false
+      continue
+    }
+
+    if (ch === "-" && next === "-") {
+      buf += ch
+      inLineComment = true
+      continue
+    }
+    if (ch === "/" && next === "*") {
+      buf += ch
+      inBlockComment = true
+      continue
+    }
+    if (ch === "'") {
+      inSingle = true
+      buf += ch
+      continue
+    }
+    if (ch === '"') {
+      inDouble = true
+      buf += ch
+      continue
+    }
+    if (ch === ";") {
+      const trimmed = buf.trim()
+      if (trimmed) queries.push(trimmed)
+      buf = ""
+      continue
+    }
+    buf += ch
+  }
+  const tail = buf.trim()
+  if (tail) queries.push(tail)
+  return queries
+}
+
 export const getSelectedText = (
   editor: IStandaloneCodeEditor,
 ): string | undefined => {
@@ -169,7 +240,6 @@ export const getQueriesFromPosition = (
     column: editorPosition.column,
   }
 
-  // Calculate starting position - default to beginning if not provided
   const start = startPosition
     ? {
         row: startPosition.lineNumber - 1,
@@ -177,14 +247,13 @@ export const getQueriesFromPosition = (
       }
     : { row: 0, column: 1 }
 
-  // Convert start position to character index
   let startCharIndex = 0
   if (startPosition) {
     const lines = text.split("\n")
     const maxRow = Math.min(start.row, lines.length - 1)
     for (let i = 0; i < maxRow; i++) {
       if (lines[i] !== undefined) {
-        startCharIndex += lines[i].length + 1 // +1 for newline character
+        startCharIndex += lines[i].length + 1
       }
     }
     if (lines[maxRow] !== undefined) {
@@ -412,8 +481,6 @@ export const getQueriesFromPosition = (
     }
   }
 
-  // lastStackItem is the last query that is completed before the current cursor position.
-  // nextSql is the next query that is not completed before the current cursor position, or started after the current cursor position.
   if (!nextSql) {
     const sqlText =
       startPos === -1
@@ -708,8 +775,6 @@ export const getQueryRequestFromLastExecutedQuery = (
   }
 }
 
-// Creates a Request from an AI suggestion, using the original query's start offset
-// so that the queryKey matches the original query position in the editor
 export const getQueryRequestFromAISuggestion = (
   editor: IStandaloneCodeEditor,
   aiSuggestion: { query: string; startOffset: number },
@@ -717,17 +782,14 @@ export const getQueryRequestFromAISuggestion = (
   const model = editor.getModel()
   if (!model) return undefined
 
-  // Convert the startOffset back to row/column position
   const position = model.getPositionAt(aiSuggestion.startOffset)
 
-  // Calculate end position from query length
   const lines = aiSuggestion.query.split("\n")
   const endRow = lines.length
   const endColumn = lines[lines.length - 1].length + 1
 
   return {
     query: aiSuggestion.query,
-    // row is 0-indexed for Request, but position.lineNumber is 1-indexed
     row: position.lineNumber - 1,
     column: position.column,
     endRow: position.lineNumber - 1 + endRow - 1,
@@ -827,11 +889,6 @@ const insertText = ({
   ])
 }
 
-/** `getTextFixes` is used to create correct prefix and suffix for the text that is inserted in the editor.
- * When inserting text, we want it to be neatly aligned with surrounding empty lines.
- * For example, appending text at the last line should add one new line, whereas in other cases it should add two.
- * This function defines these rules.
- */
 const getTextFixes = ({
   appendAt,
   model,
@@ -880,7 +937,6 @@ const getTextFixes = ({
       },
 
       {
-        // default case
         when: () => true,
         then: () => ({ prefix: 2, suffix: 0, selectStartOffset: 1 }),
       },
@@ -1095,14 +1151,7 @@ export const normalizeQueryText = (query: string) => {
 }
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
-  model.findMatches(
-    needle /* searchString */,
-    true /* searchOnlyEditableRange */,
-    false /* isRegex */,
-    true /* matchCase */,
-    null /* wordSeparators */,
-    true /* captureMatches */,
-  ) ?? null
+  model.findMatches(needle, true, false, true, null, true) ?? null
 
 export const getLastPosition = (
   editor: IStandaloneCodeEditor,
@@ -1355,7 +1404,6 @@ export const validateQueryJIT = (
   const queryText = normalizeQueryText(queryAtCursor.query)
   const version = model.getVersionId()
 
-  // Skip if already validated this exact query+version
   const cached = validationRefs[bufferKey]
   if (cached && cached.queryText === queryText && cached.version === version) {
     return
@@ -1369,7 +1417,6 @@ export const validateQueryJIT = (
     return
   }
 
-  // Skip if execution result already exists for this query
   const queryKey = createQueryKeyFromRequest(editor, queryAtCursor)
   const bufferExecutions = getBufferExecutions()
   if (bufferExecutions[queryKey]) {
@@ -1380,7 +1427,6 @@ export const validateQueryJIT = (
     return
   }
 
-  // Abort any previous in-flight validation for this buffer
   validationControllers[bufferKey]?.abort()
   const controller = new AbortController()
   validationControllers[bufferKey] = controller
@@ -1401,7 +1447,6 @@ export const validateQueryJIT = (
         return
       }
 
-      // Query was executed while validation was in flight — skip
       if (getBufferExecutions()[queryKey]) return
 
       if ("error" in result) {
@@ -1437,15 +1482,12 @@ export const validateQueryJIT = (
       }
     })
     .catch(() => {
-      // Abort or network error — silently ignore
       if (validationControllers[bufferKey] === controller) {
         delete validationControllers[bufferKey]
       }
     })
 }
 
-// Creates a QueryKey for schema explanation conversations
-// Uses DDL hash so same schema = same queryKey = cached conversation
 export const createSchemaQueryKey = (
   tableName: string,
   ddl: string,
@@ -1454,37 +1496,29 @@ export const createSchemaQueryKey = (
   return `schema:${tableName}:${ddlHash}@0-0` as QueryKey
 }
 
-/**
- * Check if cursor is inside a line comment (--) or block comment.
- * Skips over string literals and quoted identifiers so quotes
- * inside comments don't cause false positives.
- */
 export function isCursorInComment(text: string, cursorOffset: number): boolean {
   let i = 0
   const end = Math.min(cursorOffset, text.length)
   while (i < end) {
     const ch = text[i]
     const next = text[i + 1]
-    // Line comment: -- until end of line
     if (ch === "-" && next === "-") {
       i += 2
       while (i < end && text[i] !== "\n") i++
       if (i >= cursorOffset) return true
       continue
     }
-    // Block comment: /* until */
     if (ch === "/" && next === "*") {
       i += 2
       while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++
       if (i >= cursorOffset) return true
-      i += 2 // skip */
+      i += 2
       continue
     }
-    // Skip over string literals and quoted identifiers so quotes inside comments don't confuse us
     if (ch === "'" || ch === '"') {
       i++
       while (i < text.length && text[i] !== ch) i++
-      i++ // skip closing quote
+      i++
       continue
     }
     i++
@@ -1492,12 +1526,7 @@ export function isCursorInComment(text: string, cursorOffset: number): boolean {
   return false
 }
 
-/**
- * Check if cursor is inside a double-quoted identifier (e.g. "my-table").
- * Tracks quote state from `startOffset` to `cursorOffset`, handling
- * escaped quotes (""), single-quoted strings, and comments.
- * Returns the offset of the opening " if inside, or -1 if not.
- */
+// Returns the offset of the opening `"` if cursor is inside a double-quoted identifier, else -1.
 export function isCursorInQuotedIdentifier(
   text: string,
   startOffset: number,
@@ -1518,14 +1547,12 @@ export function isCursorInQuotedIdentifier(
       if (ch === '"' && next === '"') i++
       else if (ch === '"') inDouble = false
     } else if (ch === "-" && next === "-") {
-      // Skip line comment
       i += 2
       while (i < cursorOffset && text[i] !== "\n") i++
     } else if (ch === "/" && next === "*") {
-      // Skip block comment
       i += 2
       while (i < cursorOffset && !(text[i] === "*" && text[i + 1] === "/")) i++
-      i++ // skip past */
+      i++
     } else if (ch === '"') {
       inDouble = true
       openQuoteOffset = i

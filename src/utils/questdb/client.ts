@@ -146,17 +146,20 @@ export class Client {
   }
 
   async queryRaw(query: string, options?: Options): Promise<QueryRawResult> {
-    const controller = new AbortController()
+    const externalSignal = options?.signal
+    const controller = externalSignal ? undefined : new AbortController()
+    const signal = externalSignal ?? controller!.signal
+    const { signal: _sig, ...restOptions } = options ?? {}
     const payload = {
       count: true,
       src: "con",
       query,
       timings: true,
       version: API_VERSION,
-      ...options,
+      ...restOptions,
     }
 
-    this._controllers.push(controller)
+    if (controller) this._controllers.push(controller)
     let response: Response
 
     if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
@@ -179,11 +182,11 @@ export class Client {
     const start = new Date()
     try {
       response = await fetch(`exec?${Client.encodeParams(payload)}`, {
-        signal: controller.signal,
+        signal,
         headers: this.commonHeaders,
       })
     } catch (error) {
-      this.removeController(controller)
+      if (controller) this.removeController(controller)
       Client.numOfPendingQueries--
 
       const err = {
@@ -334,7 +337,7 @@ export class Client {
 
       return Promise.reject(errorPayload)
     } finally {
-      this.removeController(controller)
+      if (controller) this.removeController(controller)
       Client.numOfPendingQueries--
     }
   }

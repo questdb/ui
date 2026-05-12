@@ -41,6 +41,8 @@ import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Metrics } from "./Metrics"
+import { Notebook } from "./Notebook"
+import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
 import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
@@ -122,7 +124,7 @@ const DiffViewWrapper = styled.div`
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #2c2e3d;
+  background: ${color("editorBackground")};
 `
 
 const DiffEditorContainer = styled.div`
@@ -200,7 +202,9 @@ const Editor = ({
   }, [])
 
   const isMonacoHidden =
-    !!activeBuffer.isPreviewBuffer || !!activeBuffer.metricsViewState
+    !!activeBuffer.isPreviewBuffer ||
+    !!activeBuffer.metricsViewState ||
+    !!activeBuffer.notebookViewState
 
   const isDiffPreview =
     activeBuffer.isPreviewBuffer && activeBuffer.previewContent?.type === "diff"
@@ -303,6 +307,7 @@ const Editor = ({
 
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
+      <NotebookWorkspaceBridge />
       <EditorLeftPane>
         <Tabs />
         <EditorContent>
@@ -438,6 +443,9 @@ const Editor = ({
             )}
             {/* Metrics view */}
             {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
+            {activeBuffer.notebookViewState && (
+              <Notebook key={activeBuffer.id} />
+            )}
             {/* Notifications - show for both regular editor and diff buffer views */}
             {activeBuffer.editorViewState && (
               <Notifications onClearNotifications={handleClearNotifications} />

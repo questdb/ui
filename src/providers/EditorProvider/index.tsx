@@ -36,6 +36,7 @@ import { toast } from "../../components/Toast"
 import { db } from "../../store/db"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { emitUserAction } from "../../utils/notebookAIBridge"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -106,7 +107,6 @@ export type EditorContext = {
   isNavigatingFromSearchRef: MutableRefObject<boolean>
   showPreviewBuffer: (content: PreviewBufferContent) => Promise<void>
   closePreviewBuffer: () => Promise<void>
-  // Apply AI SQL change to editor
   applyAISQLChange: (options: ApplyAISQLChangeOptions) => ApplyAISQLChangeResult
   executionRefs: MutableRefObject<ExecutionRefs>
   cleanupExecutionRefs: (bufferId: number) => void
@@ -204,7 +204,11 @@ export const EditorProvider: React.FC = ({ children }) => {
           isNavigatingFromSearchRef.current = true
         }
 
-        if (editorRef.current && monacoRef.current) {
+        if (
+          editorRef.current &&
+          monacoRef.current &&
+          !buffer.notebookViewState
+        ) {
           const currentModel = editorRef.current.getModel()
           if (currentModel) {
             currentModel.dispose()
@@ -305,28 +309,32 @@ export const EditorProvider: React.FC = ({ children }) => {
         return undefined
       }
 
+      const bufferType = newBuffer?.notebookViewState
+        ? BufferType.NOTEBOOK
+        : newBuffer?.metricsViewState
+          ? BufferType.METRICS
+          : BufferType.SQL
+
       void trackEvent(ConsoleEvent.TAB_ADD, {
-        type: newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+        type: bufferType,
         count: (buffers?.length ?? 0) + 1,
       })
 
-      const fallback = makeFallbackBuffer(
-        newBuffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
-      )
+      const fallback = makeFallbackBuffer(bufferType)
 
       const currentDefaultTabNumbers = (
         await db.buffers
-          .filter((buffer) =>
-            buffer.label.startsWith(fallback.label) &&
-            newBuffer?.metricsViewState
-              ? buffer.metricsViewState !== undefined
-              : true,
-          )
+          .filter((buffer) => {
+            if (!buffer.label.startsWith(fallback.label)) return false
+            if (newBuffer?.notebookViewState)
+              return buffer.notebookViewState !== undefined
+            if (newBuffer?.metricsViewState)
+              return buffer.metricsViewState !== undefined
+            return true
+          })
           .toArray()
       )
-        .map((buffer) =>
-          buffer.label.slice(fallback.label.length + /* whitespace */ 1),
-        )
+        .map((buffer) => buffer.label.slice(fallback.label.length + 1))
         .filter(Boolean)
         .map((n) => parseInt(n, 10))
         .sort()
@@ -353,8 +361,11 @@ export const EditorProvider: React.FC = ({ children }) => {
 
       await setActiveBuffer(buffer, { focus: true })
 
-      // Select all text if requested (model is already created by setActiveBuffer)
-      if (shouldSelectAll && editorRef.current) {
+      if (
+        shouldSelectAll &&
+        editorRef.current &&
+        !newBuffer?.notebookViewState
+      ) {
         const model = editorRef.current.getModel()
         if (model) {
           editorRef.current.setSelection(model.getFullModelRange())
@@ -388,12 +399,10 @@ export const EditorProvider: React.FC = ({ children }) => {
       const label = content.type === "diff" ? "AI Suggestion" : "Preview"
 
       if (existingPreviewBuffer && existingPreviewBuffer.id) {
-        // Update existing preview buffer
         await bufferStore.update(existingPreviewBuffer.id, {
           previewContent,
           label,
         })
-        // Switch to it
         const updatedBuffer = {
           ...existingPreviewBuffer,
           previewContent,
@@ -401,7 +410,6 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
         await setActiveBuffer(updatedBuffer)
       } else {
-        // Create new preview buffer
         const position = buffers
           ? buffers.filter((b) => !b.archived && !b.isTemporary).length
           : 0
@@ -412,13 +420,11 @@ export const EditorProvider: React.FC = ({ children }) => {
           position,
           previewContent,
         })
-        // addBuffer already switches to it
       }
     },
     [buffers, setActiveBuffer, addBuffer],
   )
 
-  // this effect should run only once, after mount and after `buffers` and `activeBufferId` are ready from the db
   useEffect(() => {
     if (!ranOnce.current && buffers && activeBufferId) {
       const buffer =
@@ -446,14 +452,11 @@ export const EditorProvider: React.FC = ({ children }) => {
 
     if (payload && "isTemporary" in payload) {
       if (payload.isTemporary) {
-        // archived -> temporary
         setTemporaryBufferId(id)
       } else if (id === temporaryBufferId) {
         if (payload?.archived === false) {
-          // temporary -> permanent
           newPosition = getNextPosition()
         } else {
-          // temporary -> archived
           newPosition = -1
         }
         setTemporaryBufferId(null)
@@ -499,7 +502,6 @@ export const EditorProvider: React.FC = ({ children }) => {
   }
 
   const setActiveBufferOnRemoved = async (id: number) => {
-    // set new active buffer only when removing currently active buffer
     const activeBufferId = (await bufferStore.getActiveId())?.value
     if (typeof activeBufferId !== "undefined" && activeBufferId === id) {
       const nextActive = await db.buffers
@@ -518,6 +520,8 @@ export const EditorProvider: React.FC = ({ children }) => {
   }
 
   const archiveBuffer: EditorContext["archiveBuffer"] = async (id) => {
+    // Snapshot before write — live query refresh makes post-update read unreliable.
+    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
     await updateBuffer(id, {
       archived: true,
       archivedAt: new Date().getTime(),
@@ -528,12 +532,16 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "archive",
       bufferId: id,
     })
+    if (wasNotebook) {
+      emitUserAction({ kind: "user_archived_notebook", bufferId: id })
+    }
   }
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (
     id,
     setActiveBuffer = true,
   ) => {
+    const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
     await bufferStore.delete(id)
     cleanupExecutionRefs(id)
     if (setActiveBuffer) {
@@ -543,6 +551,9 @@ export const EditorProvider: React.FC = ({ children }) => {
       type: "delete",
       bufferId: id,
     })
+    if (wasNotebook) {
+      emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
+    }
   }
 
   const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (
@@ -625,12 +636,11 @@ export const EditorProvider: React.FC = ({ children }) => {
           shouldReplace = true
         }
       } catch {
-        // Invalid queryKey or query not found, fall back to appending
+        // Invalid queryKey or query not found — fall back to appending.
       }
     }
 
     if (!shouldReplace || !replaceRange) {
-      // Append to end of editor
       const lineNumber = model.getLineCount()
       const column = model.getLineMaxColumn(lineNumber)
       finalQueryStartOffset = model.getOffsetAt({ lineNumber, column })

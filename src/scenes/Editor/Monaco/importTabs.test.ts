@@ -105,12 +105,14 @@ describe("validateBufferSchema", () => {
       ).toBe("Item [0]: position must be a number")
     })
 
-    it("should reject tabs without editorViewState or metricsViewState", () => {
+    it("should reject tabs without editorViewState, metricsViewState, or notebookViewState", () => {
       expect(
         validateBufferSchema([
           { label: "Tab 1", value: "SELECT 1", position: 0 },
         ]),
-      ).toBe("Item [0]: must have editorViewState or metricsViewState")
+      ).toBe(
+        "Item [0]: must have editorViewState, metricsViewState, or notebookViewState",
+      )
     })
 
     it("should accept tab with editorViewState", () => {
@@ -134,6 +136,20 @@ describe("validateBufferSchema", () => {
             value: "",
             position: 0,
             metricsViewState: {},
+          },
+        ]),
+      ).toBe(true)
+    })
+
+    it("should accept tab with notebookViewState", () => {
+      // Schema layer only checks presence; shape is validated downstream.
+      expect(
+        validateBufferSchema([
+          {
+            label: "Notebook",
+            value: "",
+            position: 0,
+            notebookViewState: {},
           },
         ]),
       ).toBe(true)
@@ -942,6 +958,41 @@ describe("deduplication", () => {
         metricsViewState: undefined,
       }
       expect(createBufferContentKey(buffer)).toBe("Tab|SELECT * FROM t")
+    })
+
+    it("creates key from cell values for notebook tabs", () => {
+      const buffer = {
+        label: "Notebook",
+        value: "",
+        notebookViewState: {
+          cells: [
+            { id: "a", type: "sql", position: 0, value: "SELECT 1" },
+            { id: "b", type: "markdown", position: 1, value: "# title" },
+          ],
+        },
+      } as unknown as Parameters<typeof createBufferContentKey>[0]
+      expect(createBufferContentKey(buffer)).toBe(
+        `Notebook|${JSON.stringify(["SELECT 1", "# title"])}`,
+      )
+    })
+
+    it("notebook branch is guarded against missing cells array", () => {
+      const buffer = {
+        label: "Notebook",
+        value: "",
+        notebookViewState: {},
+      } as unknown as Parameters<typeof createBufferContentKey>[0]
+      expect(createBufferContentKey(buffer)).toBe("Notebook|[]")
+    })
+
+    it("notebook branch takes precedence over metricsViewState", () => {
+      const buffer = {
+        label: "Hybrid",
+        value: "",
+        metricsViewState: { viewMode: MetricViewMode.LIST },
+        notebookViewState: { cells: [] },
+      } as unknown as Parameters<typeof createBufferContentKey>[0]
+      expect(createBufferContentKey(buffer)).toBe("Hybrid|[]")
     })
   })
 })

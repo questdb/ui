@@ -15,6 +15,8 @@ import { LoadingSpinner } from "../LoadingSpinner"
 import { WarningIcon, XIcon } from "@phosphor-icons/react"
 import { createProviderByType } from "../../utils/ai/registry"
 import type { ProviderType } from "../../utils/ai/settings"
+import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
+import type { Permissions } from "../../utils/tools/permissions"
 
 export const InputSection = styled(Box).attrs({
   flexDirection: "column",
@@ -175,70 +177,6 @@ const SelectAllLink = styled.button`
   }
 `
 
-const SchemaAccessSection = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "1.6rem",
-  align: "flex-start",
-})`
-  width: 100%;
-`
-
-const SchemaAccessTitle = styled(Text)`
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.gray2};
-  flex: 1;
-`
-
-const SchemaCheckboxContainer = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "flex-start",
-})`
-  background: rgba(68, 71, 90, 0.56);
-  padding: 0.75rem;
-  border-radius: 0.4rem;
-  width: 100%;
-`
-
-const SchemaCheckboxInner = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "center",
-})`
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-`
-
-const SchemaCheckboxWrapper = styled.div`
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-`
-
-const SchemaCheckboxContent = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.6rem",
-})`
-  flex: 1;
-`
-
-const SchemaCheckboxLabel = styled(Text)`
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const SchemaCheckboxDescription = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
-const SchemaCheckboxDescriptionBold = styled.span`
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
 const ContentSection = styled(Box).attrs({
   flexDirection: "column",
   gap: "2rem",
@@ -271,13 +209,14 @@ export type FetchConfig = {
 export type ModelSettingsInitialValues = {
   models?: string[]
   contextWindow?: number
-  grantSchemaAccess?: boolean
+  // Missing keys fall back to: schema=true, read=false, write=false.
+  permissions?: Partial<Permissions>
 }
 
 export type ModelSettingsData = {
   models: string[]
   contextWindow: number
-  grantSchemaAccess: boolean
+  permissions: Permissions
 }
 
 export type ModelSettingsRef = {
@@ -289,7 +228,6 @@ export type ModelSettingsProps = {
   initialValues?: ModelSettingsInitialValues
   fetchConfig: FetchConfig
   renderSchemaAccess?: boolean
-  providerName?: string
   onLoadingChange?: (loading: boolean) => void
 }
 
@@ -313,13 +251,7 @@ async function fetchProviderModels(
 
 export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
   (
-    {
-      initialValues,
-      fetchConfig,
-      renderSchemaAccess,
-      providerName,
-      onLoadingChange,
-    },
+    { initialValues, fetchConfig, renderSchemaAccess, onLoadingChange },
     ref,
   ) => {
     const theme = useTheme()
@@ -333,9 +265,11 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
     const [contextWindowInput, setContextWindowInput] = useState(() =>
       String(initialValues?.contextWindow ?? 200_000),
     )
-    const [grantSchemaAccess, setGrantSchemaAccess] = useState(
-      () => initialValues?.grantSchemaAccess ?? true,
-    )
+    const [permissions, setPermissions] = useState<Permissions>(() => ({
+      grantSchemaAccess: initialValues?.permissions?.grantSchemaAccess ?? true,
+      read: initialValues?.permissions?.read ?? false,
+      write: initialValues?.permissions?.write ?? false,
+    }))
     const [isLoading, setIsLoading] = useState(true)
 
     const fetchConfigRef = useRef(fetchConfig)
@@ -450,7 +384,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
           }
 
           const contextWindow = Number(contextWindowInput) || 0
-          return { models, contextWindow, grantSchemaAccess }
+          return { models, contextWindow, permissions }
         },
         validate: () => {
           const pending = manualModelInput.trim()
@@ -473,7 +407,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
         selectedModels,
         manualModels,
         contextWindowInput,
-        grantSchemaAccess,
+        permissions,
       ],
     )
 
@@ -638,35 +572,11 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
           <>
             <Separator />
             <ContentSection align="flex-start">
-              <SchemaAccessSection>
-                <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
-                <SchemaCheckboxContainer>
-                  <SchemaCheckboxInner>
-                    <SchemaCheckboxWrapper>
-                      <Checkbox
-                        data-hook="custom-provider-schema-access"
-                        checked={grantSchemaAccess}
-                        onChange={(e) => setGrantSchemaAccess(e.target.checked)}
-                      />
-                    </SchemaCheckboxWrapper>
-                    <SchemaCheckboxContent align="flex-start">
-                      <SchemaCheckboxLabel>
-                        Grant schema access to {providerName || "this provider"}
-                      </SchemaCheckboxLabel>
-                      <SchemaCheckboxDescription>
-                        When enabled, the AI assistant can access your database
-                        schema information to provide more accurate suggestions
-                        and explanations. Schema information helps the AI
-                        understand your table structures, column names, and
-                        relationships.{" "}
-                        <SchemaCheckboxDescriptionBold>
-                          The AI model will not have access to your data.
-                        </SchemaCheckboxDescriptionBold>
-                      </SchemaCheckboxDescription>
-                    </SchemaCheckboxContent>
-                  </SchemaCheckboxInner>
-                </SchemaCheckboxContainer>
-              </SchemaAccessSection>
+              <PermissionsSection
+                value={permissions}
+                onChange={setPermissions}
+                variant="rich"
+              />
             </ContentSection>
           </>
         )}

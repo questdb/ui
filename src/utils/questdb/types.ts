@@ -1,4 +1,9 @@
-export type ColumnDefinition = Readonly<{ name: string; type: string }>
+export type ColumnDefinition = Readonly<{
+  name: string
+  type: string
+  dim?: number
+  elemType?: string
+}>
 
 export type Value = string | number | boolean
 export type RawData = Record<string, Value>
@@ -323,6 +328,7 @@ export type Options = {
   count?: boolean
   cols?: string
   src?: string
+  signal?: AbortSignal
 }
 
 export type Release = {

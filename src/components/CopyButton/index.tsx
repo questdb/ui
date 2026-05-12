@@ -44,6 +44,7 @@ export const CopyButton = ({
       skin="secondary"
       size={size}
       data-hook="copy-value"
+      data-copied={copied || undefined}
       title="Copy to clipboard"
       onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
         void copyToClipboard(text)
@@ -57,9 +58,7 @@ export const CopyButton = ({
       })}
       {...props}
     >
-      {copied && (
-        <StyledCheckboxCircle size={size === "sm" ? "10px" : "14px"} />
-      )}
+      {copied && <StyledCheckboxCircle size={size === "sm" ? "8px" : "14px"} />}
       {iconOnly ? <FileCopy size={size === "sm" ? "12px" : "16px"} /> : "Copy"}
     </StyledButton>
   )

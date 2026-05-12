@@ -94,6 +94,10 @@ export class Storage extends Dexie {
     this.version(6).stores({
       events: "++id, created",
     })
+    this.version(7).stores({
+      ai_conversations:
+        "id, bufferId, tableId, updatedAt, queryKey, notebookBufferId",
+    })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)
     // If you add a new version here that changes the "buffers" table:

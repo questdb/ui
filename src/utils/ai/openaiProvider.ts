@@ -5,7 +5,6 @@ import type {
 } from "openai/resources/responses/responses"
 import type {
   AiAssistantAPIError,
-  ModelToolsClient,
   StatusCallback,
   StreamingCallback,
   TokenUsage,
@@ -15,7 +14,7 @@ import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import type {
   AIProvider,
-  FlowConfig,
+  ExecuteFlowParams,
   ResponseFormatSchema,
   ToolDefinition,
 } from "./types"
@@ -25,10 +24,10 @@ import {
   MaxTokensError,
   safeJsonParse,
   extractPartialExplanation,
-  executeTool,
   parseCustomProviderResponse,
   responseFormatToPromptInstruction,
 } from "./shared"
+import { dispatchTool } from "../tools/dispatch"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 import {
   createHeaderFilteredFetch,
@@ -240,15 +239,9 @@ export function createOpenAIProvider(
       setStatus,
       abortSignal,
       streaming,
-    }: {
-      model: string
-      config: FlowConfig
-      modelToolsClient: ModelToolsClient
-      tools: ToolDefinition[]
-      setStatus: StatusCallback
-      abortSignal?: AbortSignal
-      streaming?: StreamingCallback
-    }): Promise<T | AiAssistantAPIError> {
+      perms,
+      validateSql,
+    }: ExecuteFlowParams): Promise<T | AiAssistantAPIError> {
       let input: OpenAI.Responses.ResponseInput = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
         const validMessages = config.conversationHistory.filter(
@@ -315,11 +308,14 @@ export function createOpenAIProvider(
         const tool_outputs: OpenAI.Responses.ResponseFunctionToolCallOutputItem[] =
           []
         for (const tc of toolCalls) {
-          const exec = await executeTool(
+          const exec = await dispatchTool(
             tc.name,
             tc.arguments,
             modelToolsClient,
             setStatus,
+            perms,
+            validateSql,
+            abortSignal,
           )
           tool_outputs.push({
             type: "function_call_output",

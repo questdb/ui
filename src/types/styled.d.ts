@@ -68,6 +68,7 @@ export type ColorShape = {
   graphLegend: string
   offWhite: string
   offWhite2: string
+  editorBackground: string
 }
 
 export type FontSizeShape = {

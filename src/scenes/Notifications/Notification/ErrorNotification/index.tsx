@@ -36,10 +36,21 @@ const CloseOutlineIcon = styled(CloseOutline)`
 `
 
 export const ErrorNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, isMinimized } = props
+  const {
+    createdAt,
+    content,
+    sideContent,
+    isMinimized,
+    compact,
+    hideTimestamp,
+  } = props
   return (
-    <Wrapper isMinimized={isMinimized} data-hook="error-notification">
-      <Timestamp createdAt={createdAt} />
+    <Wrapper
+      $isMinimized={isMinimized}
+      $compact={compact}
+      data-hook="error-notification"
+    >
+      {!hideTimestamp && <Timestamp createdAt={createdAt} />}
       <CloseOutlineIcon size="18px" />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

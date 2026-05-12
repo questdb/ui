@@ -47,9 +47,19 @@ export enum AIOperationStatus {
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating query",
+  RunningQuery = "Running query",
   GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
+  BuildingNotebook = "Building notebook",
+  AddingCell = "Adding cell",
+  UpdatingCell = "Updating cell",
+  DeletingCell = "Deleting cell",
+  RunningCell = "Running cell",
+  // Layout = positional/structural; Chart = visualization settings.
+  ConfiguringLayout = "Configuring layout",
+  ConfiguringChart = "Configuring chart",
+  InspectingNotebook = "Inspecting notebook",
 }
 
 export type StatusArgs = {
@@ -58,6 +68,8 @@ export type StatusArgs = {
   section?: string
   tableOpType?: "schema" | "details"
   items?: Array<{ name: string; section?: string }>
+  label?: string
+  cellId?: string
 }
 
 export type StatusEntry = {

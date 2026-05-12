@@ -30,10 +30,13 @@ import {
   MetricViewMode,
   SampleBy,
 } from "scenes/Editor/Metrics/utils"
+import type { NotebookViewState } from "./notebook"
+import { createDefaultNotebookViewState } from "./notebook"
 
 export enum BufferType {
   SQL = "SQL",
   METRICS = "Metrics",
+  NOTEBOOK = "Notebook",
 }
 
 export type Metric = {
@@ -81,6 +84,7 @@ export type Buffer = {
   archivedAt?: number
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
+  notebookViewState?: NotebookViewState
   isTemporary?: boolean
   isPreviewBuffer?: boolean
   previewContent?: PreviewContent
@@ -125,6 +129,7 @@ export const makeBuffer = ({
   value,
   editorViewState = defaultEditorViewState,
   metricsViewState,
+  notebookViewState,
   position,
   archived,
   archivedAt,
@@ -136,6 +141,7 @@ export const makeBuffer = ({
   value?: string
   editorViewState?: editor.ICodeEditorViewState
   metricsViewState?: MetricsViewState
+  notebookViewState?: NotebookViewState
   position: number
   archived?: boolean
   archivedAt?: number
@@ -146,8 +152,11 @@ export const makeBuffer = ({
   label,
   value: value ?? "",
   editorViewState:
-    metricsViewState || isPreviewBuffer ? undefined : editorViewState,
+    metricsViewState || notebookViewState || isPreviewBuffer
+      ? undefined
+      : editorViewState,
   metricsViewState,
+  notebookViewState,
   position,
   archived,
   archivedAt,
@@ -159,7 +168,13 @@ export const makeBuffer = ({
 export const makeFallbackBuffer = (bufferType: BufferType): Buffer => {
   return {
     id: 1,
-    ...makeBuffer({ label: bufferType, position: 0 }),
+    ...makeBuffer({
+      label: bufferType,
+      position: 0,
+      ...(bufferType === BufferType.NOTEBOOK
+        ? { notebookViewState: createDefaultNotebookViewState() }
+        : {}),
+    }),
   }
 }
 
@@ -178,7 +193,11 @@ export const bufferStore = {
       archived: buffer?.archived,
       archivedAt: buffer?.archivedAt,
       label: buffer?.label,
-      type: buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+      type: buffer?.notebookViewState
+        ? BufferType.NOTEBOOK
+        : buffer?.metricsViewState
+          ? BufferType.METRICS
+          : BufferType.SQL,
     })),
 
   getActiveId: () =>
@@ -194,7 +213,11 @@ export const bufferStore = {
     db.buffers
       .get(id)
       .then((buffer) =>
-        buffer?.metricsViewState ? BufferType.METRICS : BufferType.SQL,
+        buffer?.notebookViewState
+          ? BufferType.NOTEBOOK
+          : buffer?.metricsViewState
+            ? BufferType.METRICS
+            : BufferType.SQL,
       ),
 
   update: (id: number, buffer: Partial<Buffer>) =>

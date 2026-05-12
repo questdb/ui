@@ -98,8 +98,9 @@ export const validateBufferItem = (item: unknown): ValidationResult => {
 
   const hasEditorViewState = obj.editorViewState !== undefined
   const hasMetricsViewState = obj.metricsViewState !== undefined
-  if (!hasEditorViewState && !hasMetricsViewState)
-    return "must have editorViewState or metricsViewState"
+  const hasNotebookViewState = obj.notebookViewState !== undefined
+  if (!hasEditorViewState && !hasMetricsViewState && !hasNotebookViewState)
+    return "must have editorViewState, metricsViewState, or notebookViewState"
 
   if (hasMetricsViewState) {
     const result = validateMetricsViewState(obj.metricsViewState)
@@ -160,6 +161,7 @@ export const sanitizeBuffer = (
   item: Record<string, unknown>,
 ): Omit<Buffer, "id"> => {
   const hasMetricsViewState = item.metricsViewState !== undefined
+  const hasNotebookViewState = item.notebookViewState !== undefined
 
   const sanitized: Omit<Buffer, "id"> = {
     label: item.label as string,
@@ -167,7 +169,10 @@ export const sanitizeBuffer = (
     position: item.position as number,
   }
 
-  if (hasMetricsViewState) {
+  if (hasNotebookViewState) {
+    sanitized.notebookViewState =
+      item.notebookViewState as Buffer["notebookViewState"]
+  } else if (hasMetricsViewState) {
     sanitized.metricsViewState = sanitizeMetricsViewState(
       item.metricsViewState as Record<string, unknown>,
     )
@@ -198,10 +203,17 @@ export const validateBufferSchema = (data: unknown): ValidationResult => {
 }
 
 export const createBufferContentKey = (
-  buffer: Pick<Buffer, "label" | "value" | "metricsViewState">,
+  buffer: Pick<
+    Buffer,
+    "label" | "value" | "metricsViewState" | "notebookViewState"
+  >,
 ): string => {
-  const content = buffer.metricsViewState
-    ? JSON.stringify(buffer.metricsViewState)
-    : buffer.value
-  return `${buffer.label}|${content}`
+  if (buffer.notebookViewState) {
+    const cellValues = buffer.notebookViewState.cells?.map((c) => c.value) ?? []
+    return `${buffer.label}|${JSON.stringify(cellValues)}`
+  }
+  if (buffer.metricsViewState) {
+    return `${buffer.label}|${JSON.stringify(buffer.metricsViewState)}`
+  }
+  return `${buffer.label}|${buffer.value}`
 }

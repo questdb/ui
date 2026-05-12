@@ -1,0 +1,900 @@
+[
+  {
+    "name": "get_tables",
+    "category": "schema",
+    "description": "Get a list of all tables and materialized views in the QuestDB database",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_table_schema",
+    "category": "schema",
+    "description": "Get the full schema definition (DDL) for a specific table or materialized view",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "table_name": {
+          "type": "string",
+          "description": "The name of the table or materialized view to get schema for"
+        }
+      },
+      "required": [
+        "table_name"
+      ]
+    }
+  },
+  {
+    "name": "get_table_details",
+    "category": "schema",
+    "description": "Get the runtime details/statistics of a specific table or materialized view",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "table_name": {
+          "type": "string",
+          "description": "The name of the table or materialized view to get details for"
+        }
+      },
+      "required": [
+        "table_name"
+      ]
+    }
+  },
+  {
+    "name": "validate_query",
+    "category": "free",
+    "description": "Validate the syntax correctness of a SQL query using QuestDB's SQL syntax validator. All generated SQL queries should be validated using this tool before responding to the user.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The SQL query to validate"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
+    "name": "get_questdb_toc",
+    "category": "free",
+    "description": "Get a table of contents listing all available QuestDB functions, operators, and SQL keywords. Use this first to see what documentation is available before requesting specific items.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+    }
+  },
+  {
+    "name": "get_questdb_documentation",
+    "category": "free",
+    "description": "Get documentation for specific QuestDB functions, operators, or SQL keywords. This is much more efficient than loading all documentation.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "functions",
+            "operators",
+            "sql",
+            "concepts",
+            "schema",
+            "cookbook"
+          ],
+          "description": "The category of documentation to retrieve"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of specific docs items in the category. IMPORTANT: Category of these items must match the category parameter. Name of these items should exactly match the entry in the table of contents you get with get_questdb_toc."
+        }
+      },
+      "required": [
+        "category",
+        "items"
+      ]
+    }
+  },
+  {
+    "name": "create_notebook",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Create a new QuestDB notebook tab in the editor. You never see query data; this only scaffolds the tab and binds the current chat if it isn't already bound to a notebook.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Label shown on the new notebook tab. Pass null to use the default."
+        }
+      },
+      "required": [
+        "label"
+      ]
+    }
+  },
+  {
+    "name": "list_cells",
+    "category": "free",
+    "description": "List the cells in a notebook. Returns id, type, short preview (≤120 chars), position, mode, and last-run status. No cell data values.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Notebook buffer id (from <notebook_context> prefix)."
+        }
+      },
+      "required": [
+        "buffer_id"
+      ]
+    }
+  },
+  {
+    "name": "get_cell",
+    "category": "free",
+    "description": "Get full details of a cell (value up to 4 KB, UI flags, chart config, last-run status + trimmed error). Never includes query result data.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "get_notebook_state",
+    "category": "free",
+    "description": "Full structural snapshot of a notebook (layout, cells with previews, last-run statuses). No cell data values; no columns/rows/count.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "buffer_id"
+      ]
+    }
+  },
+  {
+    "name": "add_cell",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Append a cell to the notebook. Returns only the new cell id and optional run status. You never see query data.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "sql": {
+          "type": "string",
+          "description": "SQL for the cell. May contain multiple statements separated by `;`. In draw mode, multi-statement cells overlay series on a single chart: the first query's timestamp column is the x-axis anchor, subsequent queries contribute additional numeric series merged on the time axis."
+        },
+        "after_cell_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Insert after this cell id; pass null to append to the end."
+        },
+        "run": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "If true, run the cell immediately after inserting. Response includes success/error status — still no data. Pass null to skip. When the user has not granted the 'write' permission, running a DDL/DML cell is refused; the cell is still added."
+        }
+      },
+      "required": [
+        "buffer_id",
+        "sql",
+        "after_cell_id",
+        "run"
+      ]
+    }
+  },
+  {
+    "name": "update_cell",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Replace a cell's value. Overwrites preemptively — cells are auto-saved. Use to fix a broken SQL cell.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "value"
+      ]
+    }
+  },
+  {
+    "name": "delete_cell",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Delete a cell from the notebook.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "move_cell_up",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Swap a cell with the one above it.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "move_cell_down",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Swap a cell with the one below it.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "duplicate_cell",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Duplicate a cell immediately after the original.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "run_cell",
+    "category": "sql",
+    "mutatesNotebook": true,
+    "description": "Execute a SQL cell. Returns ONLY { success: boolean, error?: string }. You do NOT see columns, rows, or counts — the user reads the result. Use this to trigger execution on the user's behalf, not to inspect data.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "set_layout_mode",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Switch a notebook between list and grid layouts.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "list",
+            "grid"
+          ]
+        }
+      },
+      "required": [
+        "buffer_id",
+        "mode"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_layout",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Position a single cell in grid mode. x/y/w/h are integers in the 12-column react-grid-layout grid (w ≤ 12).",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "w": {
+          "type": "number"
+        },
+        "h": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "x",
+        "y",
+        "w",
+        "h"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_mode",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Switch a SQL cell between run (table output) and draw (chart output). Draw cells auto-execute — do not call run_cell afterwards. MULTI-SERIES TIP: a draw-mode cell can hold multiple SELECT statements separated by `;`. The first query's timestamp column is the chart's x-axis (the 'anchor'); every additional query contributes its numeric columns as extra series merged on the time axis. Use this to overlay metrics that come from different tables or different aggregations on a single chart.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "run",
+            "draw"
+          ]
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "mode"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_chart_config",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Configure the chart for a draw-mode cell. `type` is one of line/area/bar/stackedBar/scatter/pie/candlestick. Omitted fields preserve the cell's current values (this is a patch, not a replace). For `candlestick`, supply `ohlc: { open, high, low, close }` with the four column names — or pass `y_columns` of exactly [open, high, low, close] in that order and it will be converted to ohlc automatically. MULTI-QUERY CHARTS: when the cell value contains multiple SELECT statements separated by `;`, the chart treats the FIRST query as the anchor (its timestamp column is the x-axis, its numeric columns are series) and subsequent queries contribute their numeric columns as additional series merged on the time axis. `x_column` should reference an anchor column; `y_columns` may include numeric columns from any query. Series names default to the column names; ensure your queries alias columns distinctly when overlaying similar metrics.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "line",
+            "area",
+            "bar",
+            "stackedBar",
+            "scatter",
+            "pie",
+            "candlestick"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Chart title. Null preserves the current name (patch semantics)."
+        },
+        "x_column": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "X-axis column; null preserves the current value."
+        },
+        "y_columns": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "description": "Y-axis columns; null preserves the current value."
+        },
+        "partition_by_column": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Categorical column to partition series by; null preserves current."
+        },
+        "ohlc": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Column mapping for candlestick charts. All four fields required when used; null preserves current.",
+          "additionalProperties": false,
+          "properties": {
+            "open": {
+              "type": "string"
+            },
+            "high": {
+              "type": "string"
+            },
+            "low": {
+              "type": "string"
+            },
+            "close": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "open",
+            "high",
+            "low",
+            "close"
+          ]
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "type",
+        "name",
+        "x_column",
+        "y_columns",
+        "partition_by_column",
+        "ohlc"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_autorefresh",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Enable or disable auto-refresh polling for a draw-mode cell's chart.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "value"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_chart_maximized",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Toggle chart-fills-cell (maximized chart) for a draw cell.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "value"
+      ]
+    }
+  },
+  {
+    "name": "apply_notebook_state",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply; the response includes a `runs: [{cellId, success, error?}]` array reporting per-cell outcomes (DDL/DML still requires the 'write' permission). Always call get_workspace_state first; the state-freshness gate applies.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "layout_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "list",
+            "grid",
+            null
+          ],
+          "description": "Notebook layout mode after this apply. Null preserves current."
+        },
+        "maximized_cell_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Spotlight one cell id, or null to clear. Pass null to clear."
+        },
+        "cells": {
+          "type": "array",
+          "description": "Complete desired cell list, in order. Cell at index N gets position N. Missing existing-cell ids are deleted.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Existing cell id to update, or null/omitted for a new cell."
+              },
+              "value": {
+                "type": "string",
+                "description": "SQL text of the cell. May contain multiple statements separated by `;`. In draw mode, this overlays series on one chart: the first query's timestamp is the x-axis anchor; subsequent queries contribute extra numeric series merged on time. Use this to combine metrics from different tables or different aggregations into a single chart."
+              },
+              "mode": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "run",
+                  "draw",
+                  null
+                ],
+                "description": "Cell mode. Null defaults to 'run' for new cells, preserves current for existing."
+              },
+              "auto_refresh": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Auto-refresh polling for draw cells. Null defaults to true when mode='draw'."
+              },
+              "is_chart_maximized": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "description": "Chart-fills-cell flag. Null defaults to true when mode='draw'."
+              },
+              "chart_config": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "description": "Chart configuration; required for new draw-mode cells. Null preserves existing.",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "line",
+                      "area",
+                      "bar",
+                      "stackedBar",
+                      "scatter",
+                      "pie",
+                      "candlestick"
+                    ]
+                  },
+                  "x_column": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "y_columns": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "partition_by_column": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "ohlc": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "open": {
+                        "type": "string"
+                      },
+                      "high": {
+                        "type": "string"
+                      },
+                      "low": {
+                        "type": "string"
+                      },
+                      "close": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "open",
+                      "high",
+                      "low",
+                      "close"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "x_column",
+                  "y_columns",
+                  "partition_by_column",
+                  "name",
+                  "ohlc"
+                ]
+              },
+              "grid": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "description": "Grid position when layout_mode='grid'. x/y/w/h in 12-column units (w ≤ 12).",
+                "properties": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "w": {
+                    "type": "integer"
+                  },
+                  "h": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "w",
+                  "h"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "value",
+              "mode",
+              "auto_refresh",
+              "is_chart_maximized",
+              "chart_config",
+              "grid"
+            ]
+          }
+        }
+      },
+      "required": [
+        "buffer_id",
+        "layout_mode",
+        "maximized_cell_id",
+        "cells"
+      ]
+    }
+  },
+  {
+    "name": "set_cell_maximized",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Spotlight one cell (or null to restore normal layout). Hides other cells in the notebook view.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Cell id to spotlight, or null to clear."
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id"
+      ]
+    }
+  },
+  {
+    "name": "run_query",
+    "category": "sql",
+    "description": "Execute an arbitrary SQL statement against the user's QuestDB instance and return the result rows so you can inspect data, validate work, or compose follow-up queries. UNLIKE `run_cell`, this tool DOES return data values. Default limit is 100 rows; pass `limit` (max 1000) to request more. The response is truncated to fit a token budget — individual string cells are capped at ~500 chars and the whole payload at ~50 KB. The response includes `truncated`, `total_count`, and `returned_count` so you know exactly what was clipped. DDL/DML (CREATE / INSERT / UPDATE / DROP / etc.) is allowed and executes against the live database — be deliberate. Auth + connection are handled by the user's already-authenticated browser session.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sql": {
+          "type": "string",
+          "description": "The SQL statement to execute."
+        },
+        "limit": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Maximum rows to return (default 100, max 1000). Pass null for default."
+        }
+      },
+      "required": [
+        "sql",
+        "limit"
+      ]
+    }
+  },
+  {
+    "name": "get_workspace_state",
+    "category": "free",
+    "surfaces": [
+      "mcp"
+    ],
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call connect_web_console to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "include_user_events": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_recent_user_actions",
+    "category": "free",
+    "surfaces": [
+      "mcp"
+    ],
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call connect_web_console to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    }
+  }
+]

@@ -1,5 +1,6 @@
 import { Client } from "./questdb/client"
-import { Type, Table } from "./questdb/types"
+import { Type, Table, ValidateQueryResult } from "./questdb/types"
+import { mapQueryRawToResult, type RunQueryRawResult } from "./tools/runQuery"
 import type { ProviderId } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
 import { formatSql } from "./formatSql"
@@ -15,12 +16,28 @@ import {
   FixSQLFormat,
   ConversationResponseFormat,
   ChatTitleFormat,
-  ALL_TOOLS,
-  REFERENCE_TOOLS,
+  toolsForPermission,
   getUnifiedPrompt,
+  getAiPermissions,
   BUILTIN_PROVIDERS,
 } from "./ai"
 import type { AIProvider } from "./ai"
+import {
+  getController,
+  getWorkspace,
+  NotebookToolError,
+  withBoundNotebook,
+  withBoundNotebookReadOnly,
+  type ApplyNotebookStateRequest,
+  type NotebookController,
+} from "./notebookAIBridge"
+import type { CellMode } from "../store/notebook"
+import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import {
+  buildSnapshot,
+  sanitizeForPromptContext,
+  type NotebookContextSnapshot,
+} from "./ai/notebookSnapshot"
 
 export type ActiveProviderSettings = {
   model: string
@@ -55,11 +72,116 @@ export interface GeneratedSQL {
   tokenUsage?: TokenUsage
 }
 
+export type NotebookCellSummary = {
+  id: string
+  preview: string
+  position: number
+  mode?: "run" | "draw"
+  last_run_status?: "success" | "error" | "none" | "running"
+}
+
+export type NotebookCellDetails = {
+  id: string
+  value: string
+  position: number
+  mode?: "run" | "draw"
+  auto_refresh?: boolean
+  is_chart_maximized?: boolean
+  chart_config?: ChartConfig
+  last_run_status?: "success" | "error" | "none" | "running"
+  last_run_error?: string
+}
+
 export interface ModelToolsClient {
   validateQuery: (query: string) => Promise<AiAssistantValidateQueryResult>
+  // The AI-flavored `validateQuery` above lacks queryType needed to classify DDL/DML.
+  validateSqlRaw: (query: string) => Promise<ValidateQueryResult>
+  runQueryRaw: (
+    sql: string,
+    requestedLimit: number,
+    signal?: AbortSignal,
+  ) => Promise<RunQueryRawResult>
   getTables?: () => Promise<Array<{ name: string; type: "table" | "matview" }>>
   getTableSchema?: (tableName: string) => Promise<string | null>
   getTableDetails?: (tableName: string) => Promise<Table | null>
+
+  createNotebook: (
+    label?: string,
+  ) => Promise<{ bufferId: number; label: string }>
+  listCells: (bufferId: number) => Promise<NotebookCellSummary[]>
+  getCell: (bufferId: number, cellId: string) => Promise<NotebookCellDetails>
+  getNotebookState: (bufferId: number) => Promise<NotebookContextSnapshot>
+  addCell: (
+    bufferId: number,
+    value: string,
+    afterCellId?: string,
+  ) => Promise<{ cellId: string }>
+  updateCell: (
+    bufferId: number,
+    cellId: string,
+    updates: { value: string },
+  ) => Promise<void>
+  deleteCell: (bufferId: number, cellId: string) => Promise<void>
+  moveCellUp: (bufferId: number, cellId: string) => Promise<void>
+  moveCellDown: (bufferId: number, cellId: string) => Promise<void>
+  duplicateCell: (
+    bufferId: number,
+    cellId: string,
+  ) => Promise<{ cellId: string }>
+  runCell: (
+    bufferId: number,
+    cellId: string,
+    signal?: AbortSignal,
+  ) => Promise<{ success: boolean; error?: string }>
+  setLayoutMode: (bufferId: number, mode: "list" | "grid") => Promise<void>
+  setCellLayout: (
+    bufferId: number,
+    cellId: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) => Promise<void>
+  setCellMode: (
+    bufferId: number,
+    cellId: string,
+    mode: CellMode,
+  ) => Promise<void>
+  setCellChartConfig: (
+    bufferId: number,
+    cellId: string,
+    patch: Partial<ChartConfig> & { type: ChartConfig["type"] },
+  ) => Promise<void>
+  setCellAutoRefresh: (
+    bufferId: number,
+    cellId: string,
+    value: boolean,
+  ) => Promise<void>
+  setCellChartMaximized: (
+    bufferId: number,
+    cellId: string,
+    value: boolean,
+  ) => Promise<void>
+  setCellMaximized: (bufferId: number, cellId: string | null) => Promise<void>
+  // cells is the COMPLETE desired list — missing ids are deleted; validation is all-or-nothing.
+  applyNotebookState: (
+    bufferId: number,
+    request: ApplyNotebookStateRequest,
+  ) => Promise<{
+    applied: { added: string[]; updated: string[]; deleted: string[] }
+  }>
+  // null → gate falls through so the executor's not-found error wins.
+  getCellSql?: (bufferId: number, cellId: string) => string | null
+}
+
+export type NotebookClientExtras = {
+  conversationId?: ConversationId
+  bindNotebook?: (
+    conversationId: ConversationId,
+    bufferId: number,
+  ) => Promise<void>
+  // Lets the Abort button cancel a pending waiter instead of blocking for the full waitForController timeout.
+  abortSignal?: AbortSignal
 }
 
 export type StatusCallback = (
@@ -94,10 +216,68 @@ export function isAiAssistantError(
   return false
 }
 
+const CELL_VALUE_MAX = 4096
+const LAST_ERROR_MAX = 200
+
+// Sanitize `<`/`>` so a server-echoed error can't smuggle closing tags into the tool response.
+const trimError = (msg: string | undefined): string | undefined => {
+  if (!msg) return undefined
+  const clipped =
+    msg.length <= LAST_ERROR_MAX
+      ? msg
+      : `${msg.slice(0, LAST_ERROR_MAX - 3)}...`
+  return sanitizeForPromptContext(clipped)
+}
+
+const lastRunStatusForCell = (
+  cell:
+    | {
+        result?: { results: Array<{ type: string; error?: string }> } | null
+      }
+    | undefined,
+): {
+  status: "success" | "error" | "none" | "running"
+  error?: string
+} => {
+  if (!cell || !cell.result) {
+    return { status: "none" }
+  }
+  const results = cell.result.results
+  const last = results[results.length - 1]
+  if (!last) return { status: "none" }
+  if (last.type === "error") {
+    return { status: "error", error: trimError(last.error) }
+  }
+  if (last.type === "dql" || last.type === "ddl" || last.type === "dml") {
+    return { status: "success" }
+  }
+  if (last.type === "running" || last.type === "queued") {
+    return { status: "running" }
+  }
+  return { status: "none" }
+}
+
+const requireCell = (controller: NotebookController, cellId: string) => {
+  const cell = controller.getCellsSnapshot().find((c) => c.id === cellId)
+  if (!cell) {
+    throw new NotebookToolError(
+      "unknown_cell",
+      `Cell ${cellId} is not in notebook ${controller.bufferId}.`,
+    )
+  }
+  return cell
+}
+
 export function createModelToolsClient(
   questClient: Client,
   tables?: Array<Table>,
+  extras?: NotebookClientExtras,
 ): ModelToolsClient {
+  const abortSignal = extras?.abortSignal
+  const bound = <T>(
+    bufferId: number,
+    fn: (controller: NotebookController) => Promise<T>,
+  ): Promise<T> => withBoundNotebook(bufferId, fn, abortSignal)
   return {
     async validateQuery(
       query: string,
@@ -130,6 +310,16 @@ export function createModelToolsClient(
           position: -1,
         }
       }
+    },
+    validateSqlRaw(query: string): Promise<ValidateQueryResult> {
+      return questClient.validateQuery(query)
+    },
+    runQueryRaw(
+      sql: string,
+      requestedLimit: number,
+      signal?: AbortSignal,
+    ): Promise<RunQueryRawResult> {
+      return mapQueryRawToResult(questClient, sql, requestedLimit, signal)
     },
     ...(tables
       ? {
@@ -188,6 +378,239 @@ export function createModelToolsClient(
           },
         }
       : {}),
+
+    async createNotebook(label) {
+      const ws = getWorkspace()
+      if (!ws) {
+        throw new NotebookToolError(
+          "workspace_unavailable",
+          "Notebook workspace is not mounted.",
+        )
+      }
+      const res = await ws.createNotebook(label, abortSignal)
+      // First-binding-wins: bindNotebook no-ops on an already-bound conversation.
+      if (extras?.bindNotebook && extras.conversationId) {
+        await extras.bindNotebook(extras.conversationId, res.bufferId)
+      }
+      return res
+    },
+
+    listCells(bufferId) {
+      return withBoundNotebookReadOnly(
+        bufferId,
+        (view, ctrl) => {
+          const cells = ctrl ? ctrl.getCellsSnapshot() : view.cells
+          const summaries: NotebookCellSummary[] = cells.map((cell) => {
+            const runInfo = lastRunStatusForCell(cell)
+            const summary: NotebookCellSummary = {
+              id: cell.id,
+              preview:
+                cell.value.length <= 120
+                  ? cell.value
+                  : `${cell.value.slice(0, 117)}...`,
+              position: cell.position,
+              last_run_status: runInfo.status,
+            }
+            if (cell.mode) summary.mode = cell.mode
+            return summary
+          })
+          return Promise.resolve(summaries)
+        },
+        abortSignal,
+      )
+    },
+
+    getCell(bufferId, cellId) {
+      return withBoundNotebookReadOnly(
+        bufferId,
+        (view, ctrl) => {
+          const cells = ctrl ? ctrl.getCellsSnapshot() : view.cells
+          const cell = cells.find((c) => c.id === cellId)
+          if (!cell) {
+            throw new NotebookToolError(
+              "unknown_cell",
+              `Cell ${cellId} not found in notebook ${bufferId}.`,
+            )
+          }
+          const value =
+            cell.value.length <= CELL_VALUE_MAX
+              ? cell.value
+              : `${cell.value.slice(0, CELL_VALUE_MAX - 3)}...`
+          const runInfo = lastRunStatusForCell(cell)
+          const out: NotebookCellDetails = {
+            id: cell.id,
+            value,
+            position: cell.position,
+            last_run_status: runInfo.status,
+            last_run_error: runInfo.error,
+          }
+          if (cell.mode) out.mode = cell.mode
+          if (typeof cell.autoRefresh === "boolean")
+            out.auto_refresh = cell.autoRefresh
+          if (typeof cell.isChartMaximized === "boolean")
+            out.is_chart_maximized = cell.isChartMaximized
+          if (cell.chartConfig) out.chart_config = cell.chartConfig
+          return Promise.resolve(out)
+        },
+        abortSignal,
+      )
+    },
+
+    getNotebookState(bufferId) {
+      return withBoundNotebookReadOnly(
+        bufferId,
+        () => {
+          const snap = buildSnapshot(getWorkspace(), bufferId)
+          if (!snap) {
+            throw new NotebookToolError(
+              "not_a_notebook",
+              `Buffer ${bufferId} has no notebook state.`,
+            )
+          }
+          return Promise.resolve(snap)
+        },
+        abortSignal,
+      )
+    },
+
+    addCell(bufferId, value, afterCellId) {
+      return bound(bufferId, (ctrl) => {
+        const cellId = ctrl.addCell(value, afterCellId)
+        return Promise.resolve({ cellId })
+      })
+    },
+
+    updateCell(bufferId, cellId, updates) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.updateCell(cellId, updates)
+        return Promise.resolve()
+      })
+    },
+
+    deleteCell(bufferId, cellId) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.deleteCell(cellId)
+        return Promise.resolve()
+      })
+    },
+
+    moveCellUp(bufferId, cellId) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.moveCellUp(cellId)
+        return Promise.resolve()
+      })
+    },
+
+    moveCellDown(bufferId, cellId) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.moveCellDown(cellId)
+        return Promise.resolve()
+      })
+    },
+
+    duplicateCell(bufferId, cellId) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        const newId = ctrl.duplicateCell(cellId)
+        return Promise.resolve({ cellId: newId })
+      })
+    },
+
+    runCell(bufferId, cellId, signal) {
+      return withBoundNotebook(
+        bufferId,
+        async (ctrl) => {
+          requireCell(ctrl, cellId)
+          return ctrl.runCell(cellId, signal)
+        },
+        signal ?? abortSignal,
+      )
+    },
+
+    setLayoutMode(bufferId, mode) {
+      return bound(bufferId, (ctrl) => {
+        ctrl.setLayoutMode(mode)
+        return Promise.resolve()
+      })
+    },
+
+    setCellLayout(bufferId, cellId, x, y, w, h) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.setCellLayout(cellId, { x, y, w, h })
+        return Promise.resolve()
+      })
+    },
+
+    setCellMode(bufferId, cellId, mode) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.setCellMode(cellId, mode)
+        return Promise.resolve()
+      })
+    },
+
+    setCellChartConfig(bufferId, cellId, patch) {
+      return bound(bufferId, (ctrl) => {
+        const cell = requireCell(ctrl, cellId)
+        // Merge into existing chartConfig so "change chart type" calls preserve xColumn/yColumns/etc.
+        const base: ChartConfig = cell.chartConfig ?? {
+          type: patch.type,
+          xColumn: null,
+          yColumns: [],
+        }
+        const next: ChartConfig = { ...base, ...patch }
+        ctrl.setCellChartConfig(cellId, next)
+        return Promise.resolve()
+      })
+    },
+
+    setCellAutoRefresh(bufferId, cellId, value) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.setCellAutoRefresh(cellId, value)
+        return Promise.resolve()
+      })
+    },
+
+    setCellChartMaximized(bufferId, cellId, value) {
+      return bound(bufferId, (ctrl) => {
+        requireCell(ctrl, cellId)
+        ctrl.setCellChartMaximized(cellId, value)
+        return Promise.resolve()
+      })
+    },
+
+    setCellMaximized(bufferId, cellId) {
+      return bound(bufferId, (ctrl) => {
+        if (cellId !== null) requireCell(ctrl, cellId)
+        ctrl.setCellMaximized(cellId)
+        return Promise.resolve()
+      })
+    },
+
+    applyNotebookState(bufferId, request) {
+      return bound(bufferId, (ctrl) => {
+        const result = ctrl.applyNotebookState(request)
+        return Promise.resolve(result)
+      })
+    },
+
+    getCellSql(bufferId, cellId) {
+      const controller = getController(bufferId)
+      const meta = getWorkspace()?.getBufferMeta(bufferId)
+      const cells = controller
+        ? controller.getCellsSnapshot()
+        : meta && (meta.kind === "active" || meta.kind === "inactive")
+          ? meta.notebookViewState.cells
+          : undefined
+      const cell = cells?.find((c) => c.id === cellId)
+      return cell ? cell.value : null
+    },
   }
 }
 
@@ -426,7 +849,13 @@ export const continueConversation = async ({
   return tryWithRetries(
     async () => {
       const grantSchemaAccess = !!modelToolsClient.getTables
-      const systemPrompt = getUnifiedPrompt(grantSchemaAccess)
+      const aiPerms = settings.aiAssistantSettings
+        ? getAiPermissions(settings.aiAssistantSettings)
+        : { grantSchemaAccess: false, read: false, write: false }
+      const systemPrompt = getUnifiedPrompt(grantSchemaAccess, {
+        read: aiPerms.read,
+        write: aiPerms.write,
+      })
 
       let workingConversationHistory = conversationHistory
       let isCompacted = false
@@ -486,7 +915,7 @@ export const continueConversation = async ({
         }
       }
 
-      const tools = grantSchemaAccess ? ALL_TOOLS : REFERENCE_TOOLS
+      const tools = toolsForPermission(aiPerms, "ai")
 
       const result = await provider.executeFlow<{
         sql?: string | null
@@ -495,7 +924,7 @@ export const continueConversation = async ({
       }>({
         model: settings.model,
         config: {
-          systemInstructions: getUnifiedPrompt(grantSchemaAccess),
+          systemInstructions: systemPrompt,
           initialUserContent: userMessage,
           conversationHistory: workingConversationHistory.filter(
             (m) => !m.isCompacted,
@@ -507,6 +936,8 @@ export const continueConversation = async ({
         setStatus,
         abortSignal,
         streaming,
+        perms: aiPerms,
+        validateSql: modelToolsClient.validateSqlRaw,
       })
 
       if (isAiAssistantError(result)) {

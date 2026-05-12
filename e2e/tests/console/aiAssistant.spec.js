@@ -456,7 +456,7 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
 
       // When
-      cy.getByDataHook("ai-settings-schema-access").click()
+      cy.getByDataHook("permission-schema").click()
       cy.getByDataHook("multi-step-modal-next-button").click()
 
       // Then - AI chat should be available
@@ -481,7 +481,7 @@ describe("ai assistant", () => {
 
       // When - Open settings modal and enable schema access
       cy.getByDataHook("ai-assistant-settings-button").click()
-      cy.getByDataHook("ai-settings-schema-access").click()
+      cy.getByDataHook("permission-schema").click()
       cy.getByDataHook("ai-settings-save").click()
       cy.get(".toast-success-container").should("be.visible").click()
 
@@ -3562,7 +3562,7 @@ describe("custom providers", () => {
     cy.get("[data-model='mistral']").should("exist")
 
     // Schema access toggle is not disabled
-    cy.getByDataHook("ai-settings-schema-access").should("not.be.disabled")
+    cy.getByDataHook("permission-schema").should("not.be.disabled")
 
     // Manage models button visible
     cy.getByDataHook("ai-settings-manage-models").should("be.visible")

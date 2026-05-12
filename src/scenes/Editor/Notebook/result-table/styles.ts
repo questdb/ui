@@ -1,0 +1,325 @@
+import styled, { css, keyframes } from "styled-components"
+import { color } from "../../../../utils"
+import { Button } from "../../../../components"
+import { CopyButton } from "../../../../components/CopyButton"
+
+export type DatasetRow = (boolean | string | number | null)[]
+
+export const ROW_HEIGHT = 28
+export const HEADER_HEIGHT = 44
+
+export const ResultWrapper = styled.div<{
+  $customHeight?: number
+  $maximized?: boolean
+}>`
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  ${({ $maximized, $customHeight }) =>
+    $maximized
+      ? `flex: 1; min-height: 0;`
+      : $customHeight
+        ? `height: ${$customHeight}px;`
+        : `max-height: 300px;`}
+`
+
+export const SuccessMessage = styled.div`
+  padding: 0.6rem 0.8rem;
+  color: ${color("green")};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  background: ${color("backgroundDarker")};
+`
+
+export const TabBarWrapper = styled.div`
+  display: flex;
+  flex-shrink: 0;
+  overflow-x: auto;
+  gap: 0;
+  height: 4rem;
+  border-top: 1px solid ${color("backgroundDarker")};
+
+  &::-webkit-scrollbar {
+    height: 0;
+  }
+`
+
+export const TabLabel = styled.span`
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+export const Tab = styled.button<{ $active: boolean }>`
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  color: ${color("gray2")};
+  cursor: pointer;
+  max-width: 20rem;
+  min-width: 15rem;
+  border-bottom: 2px solid transparent;
+
+  border-right: 1px solid ${color("selection")};
+  flex-shrink: 0;
+  gap: 0.8rem;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.2s ease;
+
+  ${({ $active }) =>
+    $active &&
+    css`
+      color: ${color("foreground")};
+      background: ${color("selection")};
+      border-bottom: 2px solid ${color("pinkPrimary")};
+    `}
+
+  ${({ $active }) =>
+    !$active &&
+    css`
+      &:hover {
+        background: ${color("selectionDarker")};
+        border-bottom: 2px solid ${color("selection")};
+      }
+    `}
+`
+
+export const TabStatusIcon = styled.span<{ $success: boolean }>`
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: ${({ $success }) => ($success ? color("green") : color("red"))};
+`
+
+export const TabSpinner = styled.span`
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  animation: tab-spin 3s linear infinite;
+
+  @keyframes tab-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+`
+
+export const CancelledIcon = styled.span`
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: ${color("gray2")};
+`
+
+export const CancelButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+`
+
+export const NotificationContainer = styled.div`
+  border-top: 1px solid ${color("backgroundDarker")};
+  border-bottom: 1px solid ${color("backgroundDarker")};
+`
+
+export const LiveRegion = styled.div`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+`
+
+export const GridContainer = styled.div<{
+  $shadowLeft: boolean
+}>`
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  font-size: ${({ theme }) => theme.fontSize.xs};
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 6px;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.25), transparent);
+    z-index: 3;
+    pointer-events: none;
+    opacity: ${({ $shadowLeft }) => ($shadowLeft ? 1 : 0)};
+    transition: opacity 0.15s;
+  }
+`
+
+export const ScrollContainer = styled.div<{ $scrollable: boolean }>`
+  flex: 1;
+  overflow: ${({ $scrollable }) => ($scrollable ? "auto" : "hidden")};
+`
+
+export const HeaderRow = styled.div<{ $shadowBottom: boolean }>`
+  display: flex;
+  background: ${color("backgroundDarker")};
+  border-bottom: 1px solid ${color("selection")};
+  flex-shrink: 0;
+  height: ${HEADER_HEIGHT}px;
+  box-shadow: ${({ $shadowBottom }) =>
+    $shadowBottom ? "0 2px 4px rgba(0, 0, 0, 0.3)" : "none"};
+  transition: box-shadow 0.15s;
+`
+
+export const HeaderCell = styled.div<{ $align: string }>`
+  position: relative;
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  user-select: none;
+  text-align: ${({ $align }) => $align};
+  border-right: 1px solid ${color("selection")};
+
+  &:hover .header-copy-btn,
+  .header-copy-btn[data-copied="true"] {
+    visibility: visible;
+  }
+`
+
+export const HeaderNameRow = styled.div<{ $align: string }>`
+  display: flex;
+  align-items: center;
+  flex-direction: ${({ $align }) =>
+    $align === "right" ? "row-reverse" : "row"};
+  justify-content: flex-start;
+  gap: 4px;
+`
+
+export const HeaderName = styled.span`
+  color: ${color("cyan")};
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  font-size: 1.4rem;
+`
+
+export const HeaderType = styled.span`
+  color: ${color("gray2")};
+  font-size: 1rem;
+  white-space: nowrap;
+  text-transform: lowercase;
+`
+
+export const StyledCopyButton = styled(CopyButton)`
+  visibility: hidden;
+  flex-shrink: 0;
+  padding: 0;
+
+  &:hover {
+    background: transparent !important;
+  }
+`
+
+export const ColResizer = styled.div`
+  position: absolute;
+  right: -10px;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 2;
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 25%;
+    transform: translateX(-50%);
+    width: 5px;
+    height: 50%;
+    border-radius: 2px;
+    background: transparent;
+    transition: background 0.1s;
+  }
+
+  &:hover::after {
+    background: ${color("comment")};
+  }
+`
+
+export const Row = styled.div<{ $hover: boolean; $active: boolean }>`
+  display: flex;
+  height: ${ROW_HEIGHT}px;
+
+  ${({ $active }) =>
+    $active &&
+    css`
+      background: ${color("selection")};
+    `}
+
+  ${({ $hover, $active }) =>
+    $hover &&
+    !$active &&
+    css`
+      background: ${color("selectionDarker")};
+    `}
+`
+
+const pulseAnim = keyframes`
+  0% { box-shadow: #8be9fd 0 0 0 1px; }
+  75% { box-shadow: rgba(241, 250, 140, 0) 0 0 0 16px; }
+`
+
+export const Cell = styled.div<{
+  $isNull: boolean
+  $isTimestamp: boolean
+  $isActive: boolean
+  $isPulsing: boolean
+}>`
+  flex-shrink: 0;
+  height: ${ROW_HEIGHT}px;
+  line-height: ${ROW_HEIGHT}px;
+  padding: 0 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 1.3rem;
+  color: ${({ $isNull, $isTimestamp }) =>
+    $isNull ? "#939393" : $isTimestamp ? color("green") : color("foreground")};
+  border-right: 1px solid ${color("selectionDarker")};
+  border-bottom: 1px solid ${color("selectionDarker")};
+  box-sizing: border-box;
+
+  ${({ $isActive }) =>
+    $isActive &&
+    css`
+      background: ${color("tableSelection")};
+      box-shadow: inset 0 0 0 1px ${color("cyan")};
+      border-radius: 0.4rem;
+    `}
+
+  ${({ $isPulsing }) =>
+    $isPulsing &&
+    css`
+      animation: ${pulseAnim} 1s ease-out;
+    `}
+`

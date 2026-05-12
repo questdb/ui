@@ -14,19 +14,21 @@ import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import type {
   AIProvider,
-  FlowConfig,
+  ExecuteFlowParams,
   ResponseFormatSchema,
   ToolDefinition,
 } from "./types"
+import type { Permissions } from "../tools/permissions"
+import type { ValidateQueryResult } from "../questdb/types"
 import {
   StreamingError,
   RefusalError,
   MaxTokensError,
   extractPartialExplanation,
-  executeTool,
   parseCustomProviderResponse,
   responseFormatToPromptInstruction,
 } from "./shared"
+import { dispatchTool } from "../tools/dispatch"
 import {
   createHeaderFilteredFetch,
   ANTHROPIC_ALLOWED_HEADERS,
@@ -214,6 +216,8 @@ async function handleToolCalls(
   abortSignal?: AbortSignal,
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
   streaming?: StreamingCallback,
+  perms?: Permissions,
+  validateSql?: (sql: string) => Promise<ValidateQueryResult>,
 ): Promise<AnthropicToolCallResult | AiAssistantAPIError> {
   const toolUseBlocks = message.content.filter(
     (block) => block.type === "tool_use",
@@ -229,11 +233,14 @@ async function handleToolCalls(
 
   for (const toolUse of toolUseBlocks) {
     if ("name" in toolUse) {
-      const exec = await executeTool(
+      const exec = await dispatchTool(
         toolUse.name,
         toolUse.input,
         modelToolsClient,
         setStatus,
+        perms,
+        validateSql,
+        abortSignal,
       )
       toolResults.push({
         type: "tool_result" as const,
@@ -272,7 +279,6 @@ async function handleToolCalls(
     system: systemPrompt,
     tools,
     messages: updatedHistory,
-    temperature: 0.3,
     ...(outputConfig ? { output_config: outputConfig } : {}),
   }
 
@@ -309,6 +315,8 @@ async function handleToolCalls(
       abortSignal,
       newAccumulatedTokens,
       streaming,
+      perms,
+      validateSql,
     )
   }
 
@@ -349,15 +357,9 @@ export function createAnthropicProvider(
       setStatus,
       abortSignal,
       streaming,
-    }: {
-      model: string
-      config: FlowConfig
-      modelToolsClient: ModelToolsClient
-      tools: ToolDefinition[]
-      setStatus: StatusCallback
-      abortSignal?: AbortSignal
-      streaming?: StreamingCallback
-    }): Promise<T | AiAssistantAPIError> {
+      perms,
+      validateSql,
+    }: ExecuteFlowParams): Promise<T | AiAssistantAPIError> {
       const initialMessages: MessageParam[] = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
         const validMessages = config.conversationHistory.filter(
@@ -393,7 +395,6 @@ export function createAnthropicProvider(
         system: systemPrompt,
         tools: anthropicTools,
         messages: initialMessages,
-        temperature: 0.3,
         ...(outputConfig ? { output_config: outputConfig } : {}),
       }
 
@@ -426,6 +427,8 @@ export function createAnthropicProvider(
           abortSignal,
           { inputTokens: 0, outputTokens: 0 },
           streaming,
+          perms,
+          validateSql,
         )
 
         if ("type" in toolCallResult && "message" in toolCallResult) {
@@ -508,7 +511,6 @@ export function createAnthropicProvider(
           model: toAnthropicModel(model),
           messages: [{ role: "user", content: userContent }],
           max_tokens: 100,
-          temperature: 0.3,
           ...(titleOutputConfig ? { output_config: titleOutputConfig } : {}),
         }
         const message = await createAnthropicMessage(anthropic, messageParams)
