@@ -31,6 +31,7 @@ import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { ToolExecutionContext } from "../ai/shared"
+import { formatSql } from "../formatSql"
 
 const notebookErrorHint = (code: NotebookToolErrorCode): string => {
   switch (code) {
@@ -752,7 +753,13 @@ export const dispatchTool = async (
             return { content: decision.reason, is_error: true }
           }
         }
-        setStatus(AIOperationStatus.RunningQuery)
+        let formattedSql = sql
+        try {
+          formattedSql = formatSql(sql)
+        } catch {
+          // Fall back to raw SQL if the formatter can't parse it.
+        }
+        setStatus(AIOperationStatus.RunningQuery, { content: formattedSql })
         try {
           const requestedLimit =
             typeof limit === "number" && Number.isFinite(limit)

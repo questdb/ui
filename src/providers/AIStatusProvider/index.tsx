@@ -70,6 +70,7 @@ export type StatusArgs = {
   items?: Array<{ name: string; section?: string }>
   label?: string
   cellId?: string
+  content?: string
 }
 
 export type StatusEntry = {
@@ -186,6 +187,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           type: newStatus,
           args: normalizedArgs ?? undefined,
           timestamp: Date.now(),
+          ...(normalizedArgs?.content !== undefined && {
+            content: normalizedArgs.content,
+          }),
         }
         if (
           statusRef.current === null ||
