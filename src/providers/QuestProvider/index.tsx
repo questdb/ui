@@ -38,17 +38,21 @@ import {
   start as startConsoleEvents,
   stop as stopConsoleEvents,
 } from "../../modules/ConsoleEventTracker"
+import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
 
 const questClient = new QuestDB.Client()
+const questExecution = new QuestDB.QueryExecutionManager(questClient)
 
 type ContextProps = {
   quest: QuestDB.Client
+  questExecution: QuestDB.QueryExecutionManager
   buildVersion: Versions
   commitHash: string
 }
 
 const defaultValues: ContextProps = {
   quest: questClient,
+  questExecution,
   buildVersion: {
     type: "oss",
     version: "",
@@ -151,11 +155,13 @@ export const QuestProvider: React.FC = ({ children }) => {
     <QuestContext.Provider
       value={{
         quest: questClient,
+        questExecution,
         buildVersion,
         commitHash,
       }}
     >
       {children}
+      <QueryExecutionConfirmDialog />
     </QuestContext.Provider>
   )
 }

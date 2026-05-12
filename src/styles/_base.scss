@@ -823,11 +823,6 @@ body.modal-open {
   padding-right: inherit !important;
 }
 
-// Fix for modal backdrop with animate.css
-body.modal-open .animated {
-  animation-fill-mode: initial;
-  z-index: inherit;
-}
 
 /* Show profile dropdown on fixed sidebar */
 body.mini-navbar.fixed-sidebar .profile-element,

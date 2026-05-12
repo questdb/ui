@@ -10,6 +10,7 @@ import React, {
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
 import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
+import { MaterializedViewIcon } from "../table-icon"
 import { InfoIcon } from "@phosphor-icons/react"
 import { spinAnimation, toast } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -48,6 +49,8 @@ import {
   MenuItem,
 } from "../../../components/ContextMenu"
 import { copyToClipboard } from "../../../utils/copyToClipboard"
+import { useEditor } from "../../../providers/EditorProvider"
+import { generateMatViewDDL } from "../../../utils/generateMatViewDDL"
 import { SuspensionDialog } from "../SuspensionDialog"
 import {
   useAIStatus,
@@ -199,6 +202,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   } = useAIStatus()
 
   const { handleExplainSchema } = useAIQuickActions()
+  const { appendQuery } = useEditor()
 
   const [schemaTree, setSchemaTree] = useState<SchemaTree>({})
   const [openedContextMenu, setOpenedContextMenu] = useState<string | null>(
@@ -684,6 +688,55 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 >
                   Copy schema
                 </MenuItem>
+                {(item.kind === "table" || item.kind === "matview") && (
+                  <span
+                    title={
+                      item.kind === "table" &&
+                      (!item.table?.designatedTimestamp ||
+                        !item.table?.walEnabled)
+                        ? "Only WAL tables with a designated timestamp can be used as a materialized view base"
+                        : undefined
+                    }
+                  >
+                    <MenuItem
+                      data-hook="table-context-menu-create-matview"
+                      onClick={async () => {
+                        void trackEvent(
+                          ConsoleEvent.SCHEMA_CONTEXT_CREATE_MATVIEW,
+                          { kind: item.kind },
+                        )
+                        const sourceDDL = await getTableSchema(
+                          item.name,
+                          item.kind as "table" | "matview",
+                        )
+                        if (!sourceDDL) return
+                        try {
+                          const existingNames = tables.map((t) => t.table_name)
+                          const ddl = generateMatViewDDL(
+                            sourceDDL,
+                            existingNames,
+                          )
+                          appendQuery(ddl)
+                        } catch (e) {
+                          console.error(e)
+                          toast.error(
+                            e instanceof Error
+                              ? `Failed to generate materialized view DDL: ${e.message}`
+                              : "Failed to generate materialized view DDL",
+                          )
+                        }
+                      }}
+                      icon={<MaterializedViewIcon size="16px" />}
+                      disabled={
+                        item.kind === "table" &&
+                        (!item.table?.designatedTimestamp ||
+                          !item.table?.walEnabled)
+                      }
+                    >
+                      Create materialized view
+                    </MenuItem>
+                  </span>
+                )}
                 {isConfigured && (
                   <MenuItem
                     data-hook="table-context-menu-explain-schema"

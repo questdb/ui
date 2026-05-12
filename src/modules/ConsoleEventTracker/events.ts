@@ -68,6 +68,7 @@ export enum ConsoleEvent {
   SCHEMA_RESUME_WAL_SUBMIT = "schema.resume_wal_submit",
   SCHEMA_CONTEXT_COPY_DDL = "schema.context_copy_ddl",
   SCHEMA_CONTEXT_EXPLAIN = "schema.context_explain",
+  SCHEMA_CONTEXT_CREATE_MATVIEW = "schema.context_create_matview",
   SCHEMA_COPY_MULTIPLE = "schema.copy_multiple",
 
   TABLE_DETAILS_TAB_SWITCH = "table_details.tab_switch",

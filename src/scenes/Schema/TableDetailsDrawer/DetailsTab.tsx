@@ -176,7 +176,7 @@ export const DetailsTab = ({
   onExplainWithAI,
   onAskAIForViewIssue,
 }: DetailsTabProps) => {
-  const { showPreviewBuffer } = useEditor()
+  const { addBuffer } = useEditor()
   const theme = useTheme()
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
@@ -246,10 +246,7 @@ export const DetailsTab = ({
             value={truncatedDDL.text}
             compactToolbar
             onOpenInEditor={async () => {
-              await showPreviewBuffer({
-                type: "code",
-                value: ddl,
-              })
+              await addBuffer({ value: ddl })
             }}
             grayedOutLines={truncatedDDL.grayedOutLines}
           />

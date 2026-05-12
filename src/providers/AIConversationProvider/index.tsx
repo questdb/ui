@@ -8,11 +8,7 @@ import React, {
   useRef,
 } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
-import {
-  db,
-  type ConversationMeta,
-  type ConversationMetaWithStatus,
-} from "../../store/db"
+import { db, type ConversationMeta } from "../../store/db"
 import { aiConversationStore } from "../../store/aiConversations"
 import { actions, selectors } from "../../store"
 import type {
@@ -31,6 +27,7 @@ import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,
   createQueryKey,
+  createDetachedQueryKey,
   getQueryInfoFromKey,
   shiftQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
@@ -39,6 +36,8 @@ import { normalizeSql } from "../../utils/aiAssistant"
 import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { projectConversationTurns } from "../../utils/ai/turnView"
+import { toast } from "../../components/Toast"
 
 export type AcceptSuggestionParams = {
   conversationId: ConversationId
@@ -47,7 +46,7 @@ export type AcceptSuggestionParams = {
 }
 
 type AIConversationContextType = {
-  conversationMetas: Map<ConversationId, ConversationMetaWithStatus>
+  conversationMetas: Map<ConversationId, ConversationMeta>
   activeConversationMessages: ConversationMessage[]
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
@@ -56,16 +55,12 @@ type AIConversationContextType = {
   scrollToMessageId: string | null
   setScrollToMessageId: (messageId: string | null) => void
 
-  getConversationMeta: (
-    id: ConversationId,
-  ) => ConversationMetaWithStatus | undefined
+  getConversationMeta: (id: ConversationId) => ConversationMeta | undefined
   findConversationByQuery: (
     bufferId: number,
     queryKey: QueryKey,
-  ) => ConversationMetaWithStatus | undefined
-  findConversationByTableId: (
-    tableId: number,
-  ) => ConversationMetaWithStatus | undefined
+  ) => ConversationMeta | undefined
+  findConversationByTableId: (tableId: number) => ConversationMeta | undefined
   findQueryByConversationId: (
     conversationId: ConversationId,
   ) => { queryKey: QueryKey; bufferId: number } | null
@@ -77,9 +72,7 @@ type AIConversationContextType = {
     tableId?: number
     notebookBufferId?: number
   }) => Promise<AIConversation>
-  findNotebookChat: (
-    notebookBufferId: number,
-  ) => ConversationMetaWithStatus | undefined
+  findNotebookChat: (notebookBufferId: number) => ConversationMeta | undefined
   findOrCreateNotebookChat: (
     notebookBufferId: number,
   ) => Promise<AIConversation>
@@ -117,12 +110,15 @@ type AIConversationContextType = {
     message: Omit<ConversationMessage, "id"> & { id?: string },
     messageIdsToRemove?: string[],
   ) => void
+  removeMessages: (messageIdsToRemove: string[]) => void
   updateMessage: (
     conversationId: ConversationId,
     messageId: string,
     updates: Partial<ConversationMessage>,
   ) => void
-  replaceConversationMessages: (newMessages: Array<ConversationMessage>) => void
+  updateMessagesWithCompaction: (
+    newMessages: Array<ConversationMessage>,
+  ) => void
   updateConversationName: (
     conversationId: ConversationId,
     name: string,
@@ -161,21 +157,7 @@ export const AIConversationProvider: React.FC<{
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const conversationMetasArray = useLiveQuery(
-    async () => {
-      const metas: ConversationMeta[] = await db.ai_conversations.toArray()
-      const metasWithStatus: ConversationMetaWithStatus[] = []
-      for (const meta of metas) {
-        const hasMessages = await db.ai_conversation_messages
-          .where("conversationId")
-          .equals(meta.id)
-          .count()
-        metasWithStatus.push({
-          ...meta,
-          hasMessages: hasMessages > 0,
-        })
-      }
-      return metasWithStatus
-    },
+    () => db.ai_conversations.toArray(),
     [],
     null,
   )
@@ -244,14 +226,15 @@ export const AIConversationProvider: React.FC<{
       if (conversationId !== activeConversationIdRef.current) {
         return
       }
-      await aiConversationStore.saveMessages(
-        conversationId,
-        activeConversationMessagesRef.current,
-      )
-      if (updateTimestamp) {
-        await aiConversationStore.updateMeta(conversationId, {
-          updatedAt: Date.now(),
-        })
+      try {
+        await aiConversationStore.saveMessages(
+          conversationId,
+          activeConversationMessagesRef.current,
+          updateTimestamp ? { updatedAt: Date.now() } : undefined,
+        )
+      } catch (e) {
+        console.error("Failed to persist messages:", e)
+        toast.error("Failed to save conversation")
       }
     },
     [],
@@ -265,20 +248,33 @@ export const AIConversationProvider: React.FC<{
       lastAssistantMessage?: ConversationMessage
     }> => {
       const messages = await aiConversationStore.getMessages(conversationId)
+      const { visibleEntries, previousVisibleUserByAnchorIndex } =
+        projectConversationTurns(messages)
+      const lastEntry = visibleEntries[visibleEntries.length - 1]
+      const lastAssistantMessage =
+        lastEntry?.type === "assistantTurn"
+          ? lastEntry.anchorMessage
+          : undefined
+
+      let lastUserMessage: ConversationMessage | undefined
+      if (lastEntry?.type === "assistantTurn") {
+        lastUserMessage = previousVisibleUserByAnchorIndex.get(
+          lastEntry.anchorIndex,
+        )
+      } else if (lastEntry?.type === "user") {
+        lastUserMessage = lastEntry.message
+      }
+
       return {
-        lastUserMessage: messages
-          .filter((m) => m.role === "user" && !m.hideFromUI)
-          .at(-1),
-        lastAssistantMessage: messages
-          .filter((m) => m.role === "assistant" && !m.hideFromUI)
-          .at(-1),
+        lastUserMessage,
+        lastAssistantMessage,
       }
     },
     [],
   )
 
   const getConversationMeta = useCallback(
-    (id: ConversationId): ConversationMetaWithStatus | undefined => {
+    (id: ConversationId): ConversationMeta | undefined => {
       return conversationMetas.get(id)
     },
     [conversationMetas],
@@ -288,7 +284,7 @@ export const AIConversationProvider: React.FC<{
     (
       bufferId: string | number,
       queryKey: QueryKey,
-    ): ConversationMetaWithStatus | undefined => {
+    ): ConversationMeta | undefined => {
       for (const meta of conversationMetas.values()) {
         if (meta.bufferId === bufferId && meta.queryKey === queryKey) {
           return meta
@@ -300,7 +296,7 @@ export const AIConversationProvider: React.FC<{
   )
 
   const findConversationByTableId = useCallback(
-    (tableId: number): ConversationMetaWithStatus | undefined => {
+    (tableId: number): ConversationMeta | undefined => {
       for (const meta of conversationMetas.values()) {
         if (meta.tableId === tableId) {
           return meta
@@ -354,6 +350,7 @@ export const AIConversationProvider: React.FC<{
         currentSQL: queryText,
         conversationName: "AI Assistant",
         updatedAt: Date.now(),
+        hasMessages: false,
       }
 
       await aiConversationStore.saveMeta(meta)
@@ -364,8 +361,8 @@ export const AIConversationProvider: React.FC<{
   )
 
   const findNotebookChat = useCallback(
-    (notebookBufferId: number): ConversationMetaWithStatus | undefined => {
-      let best: ConversationMetaWithStatus | undefined
+    (notebookBufferId: number): ConversationMeta | undefined => {
+      let best: ConversationMeta | undefined
       for (const meta of conversationMetas.values()) {
         if (meta.notebookBufferId !== notebookBufferId) continue
         if (!best || meta.updatedAt > best.updatedAt) best = meta
@@ -501,6 +498,13 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
+  const removeMessages = useCallback((messageIdsToRemove: string[]) => {
+    if (messageIdsToRemove.length === 0) return
+    setActiveConversationMessages((prev) =>
+      prev.filter((message) => !messageIdsToRemove.includes(message.id)),
+    )
+  }, [])
+
   const updateMessage = useCallback(
     (
       conversationId: ConversationId,
@@ -516,16 +520,6 @@ export const AIConversationProvider: React.FC<{
 
           let finalUpdates = updates
           const newSql = updates.sql
-
-          if (
-            msg.role === "assistant" &&
-            (updates.content || updates.error) &&
-            !msg.content &&
-            !msg.error &&
-            !msg.responseStart
-          ) {
-            finalUpdates = { ...finalUpdates, responseStart: Date.now() }
-          }
 
           if (
             newSql !== undefined &&
@@ -567,7 +561,7 @@ export const AIConversationProvider: React.FC<{
     [conversationMetas],
   )
 
-  const replaceConversationMessages = useCallback(
+  const updateMessagesWithCompaction = useCallback(
     (newMessages: Array<ConversationMessage>) => {
       setActiveConversationMessages((prev) => {
         const conversationMessages = [...prev]
@@ -581,11 +575,14 @@ export const AIConversationProvider: React.FC<{
             conversationMessages[index] = message
           }
         }
-        conversationMessages.splice(
-          lastReplaceIndex + 1,
-          0,
-          newMessages[newMessages.length - 1],
-        )
+        // Insert the compaction summary message
+        const lastNewMessage = newMessages[newMessages.length - 1]
+        if (
+          lastNewMessage &&
+          !conversationMessages.some((m) => m.id === lastNewMessage.id)
+        ) {
+          conversationMessages.splice(lastReplaceIndex + 1, 0, lastNewMessage)
+        }
         return conversationMessages
       })
     },
@@ -616,7 +613,7 @@ export const AIConversationProvider: React.FC<{
       const meta = conversationMetas.get(conversationId)
       if (!meta) return
 
-      const latestMessage = activeConversationMessages.find(
+      const latestMessage = activeConversationMessagesRef.current.find(
         (m) => m.id === messageId,
       )
       if (!latestMessage || !latestMessage.sql) return
@@ -650,7 +647,7 @@ export const AIConversationProvider: React.FC<{
         return [...updatedMessages, rejectionMessage]
       })
     },
-    [activeConversationId, conversationMetas, activeConversationMessages],
+    [activeConversationId, conversationMetas],
   )
 
   const openChatWindow = useCallback(
@@ -668,7 +665,7 @@ export const AIConversationProvider: React.FC<{
 
         if (prevId && prevId !== conversationId) {
           const prevMeta = conversationMetas.get(prevId)
-          if (prevMeta && activeConversationMessages.length === 0) {
+          if (prevMeta && activeConversationMessagesRef.current.length === 0) {
             await aiConversationStore.deleteConversation(prevId)
           } else {
             await persistMessages(prevId, false)
@@ -704,28 +701,23 @@ export const AIConversationProvider: React.FC<{
         void trackEvent(ConsoleEvent.AI_CHAT_OPEN)
       } finally {
         isOpeningChatWindowRef.current = false
+        setIsLoadingMessages(false)
       }
     },
-    [
-      activeSidebar,
-      chatWindowState,
-      conversationMetas,
-      activeConversationMessages,
-      persistMessages,
-    ],
+    [activeSidebar, chatWindowState, conversationMetas, persistMessages],
   )
 
   const closeChatWindow = useCallback(() => {
     void trackEvent(ConsoleEvent.AI_CHAT_CLOSE)
     dispatch(actions.console.closeSidebar())
     if (chatWindowState.activeConversationId) {
-      if (activeConversationMessages.length === 0) {
+      if (activeConversationMessagesRef.current.length === 0) {
         void aiConversationStore.deleteConversation(
           chatWindowState.activeConversationId,
         )
       }
     }
-  }, [chatWindowState.activeConversationId, activeConversationMessages])
+  }, [chatWindowState.activeConversationId])
 
   const handleGlyphClick = useCallback(
     async (options: {
@@ -889,6 +881,16 @@ export const AIConversationProvider: React.FC<{
         currentSQL: normalizedSQL,
       })
 
+      const detachedQueryKey = createDetachedQueryKey(normalizedSQL)
+      dispatch(
+        actions.query.updateNotificationKey(
+          detachedQueryKey,
+          result.finalQueryKey,
+          meta.bufferId,
+          true,
+        ),
+      )
+
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {
           tableId: undefined,
@@ -963,6 +965,16 @@ export const AIConversationProvider: React.FC<{
         currentSQL: normalizedSQL,
       })
 
+      if (newBuffer.id) {
+        dispatch(
+          actions.query.moveNotificationNamespace(
+            meta.bufferId ?? conversationId,
+            newBuffer.id,
+            newQueryKey,
+          ),
+        )
+      }
+
       if (meta.tableId != null) {
         await aiConversationStore.updateMeta(conversationId, {
           tableId: undefined,
@@ -982,7 +994,9 @@ export const AIConversationProvider: React.FC<{
       const meta = conversationMetas.get(conversationId)
       if (!meta) return
 
-      const message = activeConversationMessages.find((m) => m.id === messageId)
+      const message = activeConversationMessagesRef.current.find(
+        (m) => m.id === messageId,
+      )
       if (!message || !message.sql) return
 
       const normalizedSQL = normalizeSql(message.sql, false)
@@ -1044,7 +1058,6 @@ export const AIConversationProvider: React.FC<{
     [
       activeConversationId,
       conversationMetas,
-      activeConversationMessages,
       buffers,
       activeBuffer.id,
       setActiveBuffer,
@@ -1125,8 +1138,9 @@ export const AIConversationProvider: React.FC<{
         closeHistoryView,
         deleteConversation,
         addMessage,
+        removeMessages,
         updateMessage,
-        replaceConversationMessages,
+        updateMessagesWithCompaction,
         updateConversationName,
         acceptSuggestion,
         rejectSuggestion,

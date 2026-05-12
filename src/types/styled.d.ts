@@ -29,6 +29,7 @@ export type ColorShape = {
   black70: string
   overlayBackground: string
   black40: string
+  black32: string
   black20: string
   gray1: string
   gray2: string
@@ -69,6 +70,13 @@ export type ColorShape = {
   offWhite: string
   offWhite2: string
   editorBackground: string
+  aiStopButtonBg: string
+  aiStopButtonFg: string
+  aiBadgeIconBg: string
+  aiBadgeIconBorder: string
+  dividerAccent: string
+  mutedLabel: string
+  pinkGradientEnd: string
 }
 
 export type FontSizeShape = {

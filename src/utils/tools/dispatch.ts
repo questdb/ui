@@ -30,6 +30,7 @@ import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import type { ToolExecutionContext } from "../ai/shared"
 
 const notebookErrorHint = (code: NotebookToolErrorCode): string => {
   switch (code) {
@@ -85,6 +86,7 @@ export const dispatchTool = async (
   perms?: Permissions,
   validateSql?: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
+  toolContext?: ToolExecutionContext,
 ): Promise<{ content: string; is_error?: boolean }> => {
   if (perms) {
     const decision = runPermissionGate(toolName, {
@@ -97,6 +99,22 @@ export const dispatchTool = async (
   }
   try {
     switch (toolName) {
+      case "suggest_query": {
+        const query = (input as { query: string })?.query
+        if (!query) {
+          return {
+            content: "Error: query parameter is required",
+            is_error: true,
+          }
+        }
+        if (toolContext) {
+          toolContext.suggestedSQL = query
+        }
+        return {
+          content:
+            "Query suggestion registered. It will be shown to the user as a suggestion they can accept or reject.",
+        }
+      }
       case "get_tables": {
         setStatus(AIOperationStatus.RetrievingTables)
         if (!modelToolsClient.getTables) {

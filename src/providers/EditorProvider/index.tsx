@@ -12,7 +12,6 @@ import React, {
 } from "react"
 import {
   appendQuery,
-  AppendQueryOptions,
   clearModelMarkers,
   insertTextAtCursor,
   QuestDBLanguageName,
@@ -77,7 +76,7 @@ export type EditorContext = {
   editorRef: MutableRefObject<IStandaloneCodeEditor | null>
   monacoRef: MutableRefObject<Monaco | null>
   insertTextAtCursor: (text: string) => void
-  appendQuery: (query: string, options?: AppendQueryOptions) => void
+  appendQuery: (query: string) => void
   tabsDisabled: boolean
   setTabsDisabled: (disabled: boolean) => void
   buffers: Buffer[]
@@ -736,9 +735,9 @@ export const EditorProvider: React.FC = ({ children }) => {
             insertTextAtCursor(editorRef.current, text)
           }
         },
-        appendQuery: (text, options) => {
+        appendQuery: (text) => {
           if (editorRef?.current) {
-            appendQuery(editorRef.current, text, options)
+            appendQuery(editorRef.current, text)
           }
         },
         tabsDisabled,

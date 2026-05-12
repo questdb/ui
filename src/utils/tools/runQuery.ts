@@ -96,10 +96,20 @@ export const mapQueryRawToResult = async (
   const startedAt = performance.now()
   try {
     const limit = clampRunQueryLimit(requestedLimit)
-    const res = await questClient.queryRaw(sql, {
+    const { promise, queryId } = questClient.queryRaw(sql, {
       limit: `0,${limit}`,
-      ...(signal ? { signal } : {}),
+      cancellable: true,
     })
+    if (signal) {
+      if (signal.aborted) {
+        questClient.abort(queryId)
+      } else {
+        signal.addEventListener("abort", () => questClient.abort(queryId), {
+          once: true,
+        })
+      }
+    }
+    const res = await promise
     const durationMs = Math.round(performance.now() - startedAt)
     if (res.type === Type.DQL) {
       return {

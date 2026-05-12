@@ -1,10 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
-import styled, { css } from "styled-components"
-import {
-  CheckboxCircle,
-  CloseCircle,
-  Stop as StopFill,
-} from "@styled-icons/remix-fill"
+import styled, { css, useTheme } from "styled-components"
+import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
 import { SidebarSimpleIcon, XIcon } from "@phosphor-icons/react"
 import {
   useAIStatus,
@@ -18,43 +14,47 @@ import { pinkLinearGradientHorizontal } from "../../theme"
 import { getAllModelOptions } from "../../utils/ai"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
+import { AIStopButton } from "../AIStopButton"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import { AssistantModes, buildOperationSections } from "./AssistantModes"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 
-const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    {...props}
-  >
-    <path
-      d="M4.5 15L12 7.5L19.5 15"
-      stroke="url(#paint0_linear_214_5568)"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <defs>
-      <linearGradient
-        id="paint0_linear_214_5568"
-        x1="12"
-        y1="7.5"
-        x2="12"
-        y2="15"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop stopColor="#D14671" />
-        <stop offset="1" stopColor="#892C6C" />
-      </linearGradient>
-    </defs>
-  </svg>
-)
+const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
+  const theme = useTheme()
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      {...props}
+    >
+      <path
+        d="M4.5 15L12 7.5L19.5 15"
+        stroke="url(#paint0_linear_214_5568)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <defs>
+        <linearGradient
+          id="paint0_linear_214_5568"
+          x1="12"
+          y1="7.5"
+          x2="12"
+          y2="15"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor={theme.color.pink} />
+          <stop offset="1" stopColor={theme.color.pinkGradientEnd} />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
 
 const Container = styled.div`
   position: absolute;
@@ -212,26 +212,6 @@ const WorkingText = styled.div`
   font-size: 1.6rem;
   color: ${color("foreground")};
   text-transform: uppercase;
-`
-
-const AIStopButton = styled(Button)`
-  width: 2.2rem;
-  height: 2.2rem;
-  flex-shrink: 0;
-  border-radius: 100%;
-  background: #da152832;
-  border: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-
-  &:hover {
-    background: ${({ theme }) => theme.color.red} !important;
-    svg {
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
 `
 
 const ViewChatButton = styled(Button).attrs({ skin: "transparent" })`
@@ -415,17 +395,20 @@ export const AIStatusIndicator: React.FC = () => {
       <Header>
         <HeaderLeft>
           <AISparkle size={24} variant="filled" />
-          <WorkingText data-hook="ai-status-text">
+          <WorkingText
+            role="status"
+            aria-live="polite"
+            data-hook="ai-status-text"
+          >
             {isAborted ? "Cancelled" : isCompleted ? "Completed" : "Working..."}
           </WorkingText>
           {isBlockingAIStatus(status) && (
             <AIStopButton
               title="Cancel current operation"
+              ariaLabel="Cancel current AI operation"
               onClick={abortOperation}
-              data-hook="ai-status-stop"
-            >
-              <StopFill size="14px" color="#da1e28" />
-            </AIStopButton>
+              dataHook="ai-status-stop"
+            />
           )}
           {chatWindowState.activeConversationId && (
             <ViewChatButton

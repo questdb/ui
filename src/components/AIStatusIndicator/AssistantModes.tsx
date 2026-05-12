@@ -1,9 +1,6 @@
-import React, { useState, useMemo, useRef, useEffect } from "react"
+import React, { useMemo, useRef, useEffect } from "react"
 import styled, { css } from "styled-components"
 import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
-import { Table } from "@styled-icons/remix-line"
-import { FileTextIcon } from "@phosphor-icons/react"
-import { ChevronDown, ChevronRight } from "@styled-icons/boxicons-solid"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
   AIOperationStatus,
@@ -11,7 +8,6 @@ import {
   type OperationHistory,
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
-import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import { Box } from "../Box"
 
 const Container = styled.div`
@@ -20,67 +16,22 @@ const Container = styled.div`
   gap: 0.8rem;
   align-items: flex-start;
   width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
   min-height: 0;
 `
 
-const ModeHeader = styled.div<{ $expanded: boolean; $abort: boolean }>`
+const ModeHeader = styled.div<{ $abort: boolean }>`
   border: 1px solid ${color("selection")};
   border-radius: 0.4rem;
   display: flex;
-  ${({ $expanded }) =>
-    $expanded
-      ? css`
-          flex-direction: column;
-          align-items: flex-start;
-        `
-      : css`
-          align-items: center;
-          justify-content: space-between;
-          padding: 1rem 1.2rem;
-        `}
+  align-items: center;
+  padding: 1rem 1.2rem;
+  gap: 0.8rem;
   ${({ $abort }) =>
     $abort &&
     css`
       border-color: ${color("red")};
     `}
   width: 100%;
-`
-
-const ModeHeaderTop = styled.div<{ $expanded: boolean }>`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  ${({ $expanded }) =>
-    $expanded &&
-    css`
-      border-bottom: 1px solid ${color("selection")};
-      padding: 1rem 1.2rem;
-      width: 100%;
-    `}
-  ${({ $expanded }) =>
-    !$expanded &&
-    css`
-      flex: 1 0 0;
-      min-height: 0;
-      min-width: 0;
-    `}
-`
-
-const ModeChevron = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${color("foreground")};
-  cursor: pointer;
-
-  &:hover {
-    opacity: 0.8;
-  }
 `
 
 const ModeTitle = styled.div`
@@ -91,24 +42,6 @@ const ModeTitle = styled.div`
   margin-right: auto;
 `
 
-const ReasoningThread = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  align-items: flex-start;
-  padding: 1rem 1.2rem;
-  width: 100%;
-`
-
-const ReasoningItem = styled.div`
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  padding: 0.2rem 0.6rem;
-  padding-left: 0;
-  width: 100%;
-`
-
 const ReasoningIcon = styled.div`
   width: 1.6rem;
   height: 1.6rem;
@@ -117,39 +50,6 @@ const ReasoningIcon = styled.div`
   align-items: center;
   justify-content: center;
   color: ${color("foreground")};
-`
-
-const ReasoningText = styled.div`
-  display: flex;
-  flex: 1 0 0;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-  min-height: 0;
-  min-width: 0;
-`
-
-const ReasoningTextPart = styled.span`
-  font-weight: 400;
-  font-size: 1.3rem;
-  color: ${color("gray2")};
-`
-
-const CodeBadge = styled.div`
-  background: #2d303e;
-  border: 1px solid #44475a;
-  border-radius: 0.6rem;
-  padding: 0.2rem 0.6rem;
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  position: relative;
-`
-
-const CodeBadgeText = styled.span`
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
-  color: #9089fc;
 `
 
 const CheckIcon = styled(CheckboxCircle)`
@@ -168,32 +68,20 @@ export type OperationSection = {
   id: string
   type: AIOperationStatus
   active: boolean
-  operations: Array<{ type: AIOperationStatus; args?: StatusArgs }>
+  operations: Array<{
+    type: AIOperationStatus
+    args?: StatusArgs
+    content?: string
+  }>
   abort: boolean
   startTimestamp: number
 }
 
-const formatDetailedStatusMessage = (
-  status: AIOperationStatus,
-  args?: StatusArgs,
-): string => {
-  if (status === AIOperationStatus.Processing && args && "type" in args) {
-    switch (args.type) {
-      case "fix":
-        return "Processing fix request"
-      case "explain":
-        return "Processing explain request"
-      default:
-        return status
-    }
-  }
-  return status
-}
-
-const getIsExpandableSection = (section: OperationSection) => {
+export const getIsExpandableSection = (section: OperationSection) => {
   return [
     AIOperationStatus.InvestigatingTable,
     AIOperationStatus.InvestigatingDocs,
+    AIOperationStatus.Thinking,
   ].includes(section.type)
 }
 
@@ -234,7 +122,7 @@ export const buildOperationSections = (
 }
 
 export const formatDurationMs = (ms: number): string | null => {
-  if (ms < 0) return null
+  if (ms <= 0) return null
   if (ms < 1000) return `${ms}ms`
   return `${Math.round(ms / 1000)}s`
 }
@@ -242,10 +130,10 @@ export const formatDurationMs = (ms: number): string | null => {
 export const getSectionDuration = (
   section: OperationSection,
   nextSection: OperationSection | undefined,
-  responseStart?: number,
+  fallbackEndTimestamp?: number,
 ): string | null => {
   if (section.active || section.abort) return null
-  const endTimestamp = nextSection?.startTimestamp ?? responseStart
+  const endTimestamp = nextSection?.startTimestamp ?? fallbackEndTimestamp
   if (!endTimestamp) return null
   return formatDurationMs(endTimestamp - section.startTimestamp)
 }
@@ -263,7 +151,6 @@ type AssistantModesProps = {
   status?: AIOperationStatus | null
   isLive?: boolean
   onScrollNeeded?: () => void
-  responseStart?: number
 }
 
 export const AssistantModes: React.FC<AssistantModesProps> = ({
@@ -271,263 +158,54 @@ export const AssistantModes: React.FC<AssistantModesProps> = ({
   status,
   isLive = false,
   onScrollNeeded,
-  responseStart,
 }) => {
-  const [collapsedSections, setCollapsedSections] = useState<
-    Record<string, boolean>
-  >({})
   const prevSectionCountRef = useRef(0)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const operationSections = useMemo(
     () => buildOperationSections(operationHistory, status, isLive),
     [operationHistory, status, isLive],
   )
 
-  const prevIsLiveRef = useRef(isLive)
-
   useEffect(() => {
-    // When operation completes (isLive goes from true to false), collapse all sections
-    if (prevIsLiveRef.current && !isLive) {
-      const allCollapsed: Record<string, boolean> = {}
-      operationSections.forEach((section) => {
-        allCollapsed[section.id] = true
-      })
-      setCollapsedSections(allCollapsed)
-    }
-    // During live operation, when a new section is added, collapse previous sections
-    else if (isLive && operationSections.length > prevSectionCountRef.current) {
-      const newCollapsed: Record<string, boolean> = {}
-      operationSections.forEach((section, index) => {
-        if (index < operationSections.length - 1) {
-          newCollapsed[section.id] = true
-        }
-      })
-      setCollapsedSections(newCollapsed)
+    if (isLive && operationSections.length > prevSectionCountRef.current) {
       onScrollNeeded?.()
     }
     prevSectionCountRef.current = operationSections.length
-    prevIsLiveRef.current = isLive
   }, [operationSections, isLive, onScrollNeeded])
-
-  const handleToggleSection = (sectionId: string) => {
-    setCollapsedSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }))
-  }
 
   if (operationHistory.length === 0) {
     return null
   }
 
   return (
-    <Container ref={containerRef} data-hook="assistant-modes-container">
+    <Container data-hook="assistant-modes-container">
       {operationSections.map((section, index) => {
-        const isExpandable = getIsExpandableSection(section)
-        const isLastSection = index === operationSections.length - 1
-        const defaultExpanded = isLive ? isLastSection : true
-        const isExpanded =
-          collapsedSections[section.id] === undefined
-            ? defaultExpanded && isExpandable
-            : !collapsedSections[section.id] && isExpandable
         const nextSection: OperationSection | undefined =
           operationSections[index + 1]
-        const sectionDuration = getSectionDuration(
-          section,
-          nextSection,
-          responseStart,
-        )
+        const sectionDuration = getSectionDuration(section, nextSection)
 
         return (
           <ModeHeader
             key={section.id}
-            $expanded={isExpanded}
             $abort={section.abort}
             data-hook={`assistant-mode-${section.type.toLowerCase().replace(/\s+/g, "-")}`}
           >
-            <ModeHeaderTop $expanded={isExpanded}>
-              <ReasoningIcon>
-                {section.active ? (
-                  <CircleNotchSpinner size={16} />
-                ) : section.abort ? (
-                  <CloseCircleIcon size={16} />
-                ) : (
-                  <CheckIcon />
-                )}
-              </ReasoningIcon>
+            <ReasoningIcon>
+              {section.active ? (
+                <CircleNotchSpinner size={16} />
+              ) : section.abort ? (
+                <CloseCircleIcon size={16} />
+              ) : (
+                <CheckIcon />
+              )}
+            </ReasoningIcon>
 
-              <Box align="flex-end" gap="0.3rem">
-                <ModeTitle>{section.type}</ModeTitle>
-                {sectionDuration && (
-                  <DurationText>({sectionDuration})</DurationText>
-                )}
-                {isExpandable && (
-                  <ModeChevron onClick={() => handleToggleSection(section.id)}>
-                    {isExpanded ? (
-                      <ChevronDown size={16} />
-                    ) : (
-                      <ChevronRight size={16} />
-                    )}
-                  </ModeChevron>
-                )}
-              </Box>
-            </ModeHeaderTop>
-            {isExpanded && (
-              <ReasoningThread>
-                {section.operations.map((op, idx) => {
-                  const opKey = `${section.id}-${idx}-${JSON.stringify(op.args)}`
-
-                  if (op.type === AIOperationStatus.Processing) {
-                    const stepMessage = formatDetailedStatusMessage(
-                      op.type,
-                      op.args,
-                    )
-                    return (
-                      <ReasoningItem key={opKey}>
-                        <ReasoningIcon>
-                          <BrainIcon
-                            style={{ width: "16px", height: "16px" }}
-                          />
-                        </ReasoningIcon>
-                        <ReasoningText>
-                          <ReasoningTextPart>{stepMessage}</ReasoningTextPart>
-                        </ReasoningText>
-                      </ReasoningItem>
-                    )
-                  }
-
-                  if (op.type === AIOperationStatus.InvestigatingTable) {
-                    const tableName =
-                      op.args && "name" in op.args ? op.args.name : "table"
-                    const type =
-                      op.args && "tableOpType" in op.args
-                        ? op.args.tableOpType
-                        : "details"
-                    return (
-                      <ReasoningItem key={opKey}>
-                        <ReasoningIcon>
-                          <Table size={16} />
-                        </ReasoningIcon>
-                        <ReasoningText>
-                          <ReasoningTextPart>Investigating</ReasoningTextPart>
-                          <CodeBadge>
-                            <CodeBadgeText>{tableName}</CodeBadgeText>
-                          </CodeBadge>
-                          <ReasoningTextPart>{type}</ReasoningTextPart>
-                        </ReasoningText>
-                      </ReasoningItem>
-                    )
-                  }
-
-                  if (op.type === AIOperationStatus.InvestigatingDocs) {
-                    const items =
-                      op.args &&
-                      "items" in op.args &&
-                      Array.isArray(op.args.items)
-                        ? op.args.items
-                        : null
-
-                    if (items && items.length > 0) {
-                      return (
-                        <React.Fragment key={opKey}>
-                          {items.map((item, itemIdx) => {
-                            const itemKey = `${opKey}-item-${itemIdx}`
-                            return (
-                              <ReasoningItem key={itemKey}>
-                                <ReasoningIcon>
-                                  <FileTextIcon size={16} />
-                                </ReasoningIcon>
-                                <ReasoningText>
-                                  {item.section ? (
-                                    <>
-                                      <ReasoningTextPart>
-                                        Investigating
-                                      </ReasoningTextPart>
-                                      <CodeBadge>
-                                        <CodeBadgeText>
-                                          {item.section}
-                                        </CodeBadgeText>
-                                      </CodeBadge>
-                                      <ReasoningTextPart>in</ReasoningTextPart>
-                                      <CodeBadge>
-                                        <CodeBadgeText>
-                                          {item.name}
-                                        </CodeBadgeText>
-                                      </CodeBadge>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ReasoningTextPart>
-                                        Investigating
-                                      </ReasoningTextPart>
-                                      <CodeBadge>
-                                        <CodeBadgeText>
-                                          {item.name}
-                                        </CodeBadgeText>
-                                      </CodeBadge>
-                                    </>
-                                  )}
-                                </ReasoningText>
-                              </ReasoningItem>
-                            )
-                          })}
-                        </React.Fragment>
-                      )
-                    }
-
-                    const name =
-                      op.args && "name" in op.args ? op.args.name : null
-                    const docSection =
-                      op.args && "section" in op.args ? op.args.section : null
-                    return (
-                      <ReasoningItem key={opKey}>
-                        <ReasoningIcon>
-                          <FileTextIcon size={16} />
-                        </ReasoningIcon>
-                        <ReasoningText>
-                          {name && docSection ? (
-                            <>
-                              <ReasoningTextPart>
-                                Investigating
-                              </ReasoningTextPart>
-                              <CodeBadge>
-                                <CodeBadgeText>{docSection}</CodeBadgeText>
-                              </CodeBadge>
-                              <ReasoningTextPart>in</ReasoningTextPart>
-                              <CodeBadge>
-                                <CodeBadgeText>{name}</CodeBadgeText>
-                              </CodeBadge>
-                              <ReasoningTextPart>
-                                documentation
-                              </ReasoningTextPart>
-                            </>
-                          ) : name ? (
-                            <>
-                              <ReasoningTextPart>
-                                Investigating
-                              </ReasoningTextPart>
-                              <CodeBadge>
-                                <CodeBadgeText>{name}</CodeBadgeText>
-                              </CodeBadge>
-                              <ReasoningTextPart>
-                                documentation
-                              </ReasoningTextPart>
-                            </>
-                          ) : (
-                            <ReasoningTextPart>
-                              Investigating documentation
-                            </ReasoningTextPart>
-                          )}
-                        </ReasoningText>
-                      </ReasoningItem>
-                    )
-                  }
-
-                  return null
-                })}
-              </ReasoningThread>
-            )}
+            <Box align="flex-end" gap="0.3rem">
+              <ModeTitle>{section.type}</ModeTitle>
+              {sectionDuration && (
+                <DurationText>({sectionDuration})</DurationText>
+              )}
+            </Box>
           </ModeHeader>
         )
       })}

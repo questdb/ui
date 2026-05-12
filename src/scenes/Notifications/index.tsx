@@ -45,6 +45,7 @@ import { selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
+import type { NotificationNamespaceKey } from "../../store/Query/types"
 import { useEditor } from "../../providers"
 
 const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
@@ -111,31 +112,38 @@ const ClearAllNotifications = styled.div`
 
 const Notifications = ({
   onClearNotifications,
+  targetBufferId: targetBufferIdOverride,
 }: {
-  onClearNotifications: (bufferId: number) => void
+  onClearNotifications: (bufferId: NotificationNamespaceKey) => void
+  targetBufferId?: NotificationNamespaceKey
 }) => {
   const { activeBuffer } = useEditor()
   const notifications = useSelector(selectors.query.getNotifications)
-  // Use the active buffer's ID for notifications
-  const targetBufferId = activeBuffer.id as number
-  const queryNotifications =
+
+  const bufferIdKey = activeBuffer.id as number
+  const bufferQueryNotifications =
+    useSelector(selectors.query.getQueryNotificationsForBuffer(bufferIdKey)) ||
+    {}
+  const overrideQueryNotifications =
     useSelector(
-      selectors.query.getQueryNotificationsForBuffer(targetBufferId),
+      selectors.query.getQueryNotificationsForBuffer(
+        targetBufferIdOverride ?? bufferIdKey,
+      ),
     ) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const { sm } = useScreenSize()
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
-  // Show notifications that either:
-  // 1. Have a matching queryKey in queryNotifications (regular queries from editor)
-  // 2. Match the activeNotification (for AI_SUGGESTION and other special cases)
+  // Show notifications that match either the buffer or override namespace,
+  // or match the activeNotification (covers in-flight queries)
   const bufferNotifications = notifications.filter((notification) => {
-    // If queryKey exists in queryNotifications for this buffer, show it
-    if (queryNotifications[notification.query]) {
+    if (bufferQueryNotifications[notification.query]) {
       return true
     }
-    // Also show if this is the active notification (covers AI_SUGGESTION queries)
+    if (overrideQueryNotifications[notification.query]) {
+      return true
+    }
     if (
       activeNotification &&
       notification.query === activeNotification.query &&
@@ -164,10 +172,12 @@ const Notifications = ({
     if (bufferNotifications.length > 0) {
       scrollToBottom()
     }
-  }, [bufferNotifications])
+  }, [bufferNotifications.length])
 
   useLayoutEffect(() => {
-    scrollToBottom()
+    if (!isMinimized) {
+      scrollToBottom()
+    }
   }, [isMinimized])
 
   useEffect(() => {
@@ -192,6 +202,8 @@ const Notifications = ({
           <Button
             skin={`${isMinimized ? "secondary" : "transparent"}`}
             onClick={toggleMinimized}
+            aria-label={isMinimized ? "Expand log" : "Collapse log"}
+            aria-expanded={!isMinimized}
             data-hook={`${isMinimized ? "expand-notifications" : "collapse-notifications"}`}
           >
             {isMinimized ? <ArrowUpS size="18px" /> : <Subtract size="18px" />}
@@ -224,7 +236,13 @@ const Notifications = ({
                 disabled={bufferNotifications.length === 0}
                 onClick={() => {
                   void trackEvent(ConsoleEvent.QUERY_LOG_CLEAR)
-                  onClearNotifications(targetBufferId)
+                  onClearNotifications(bufferIdKey)
+                  if (
+                    targetBufferIdOverride !== undefined &&
+                    targetBufferIdOverride !== bufferIdKey
+                  ) {
+                    onClearNotifications(targetBufferIdOverride)
+                  }
                 }}
               >
                 Clear query log

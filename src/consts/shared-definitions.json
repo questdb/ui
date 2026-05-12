@@ -46,6 +46,27 @@
     }
   },
   {
+    "name": "suggest_query",
+    "category": "free",
+    "surfaces": [
+      "ai"
+    ],
+    "description": "Suggest a SQL query to the user. The query will be displayed as a suggestion that the user can accept or reject. Always validate the query using validate_query before suggesting it.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The SQL query to suggest to the user"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    }
+  },
+  {
     "name": "validate_query",
     "category": "free",
     "description": "Validate the syntax correctness of a SQL query using QuestDB's SQL syntax validator. All generated SQL queries should be validated using this tool before responding to the user.",

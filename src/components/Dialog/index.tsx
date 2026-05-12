@@ -1,5 +1,6 @@
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
+import { Button } from "../Button"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -83,3 +84,16 @@ export const Dialog = {
   `,
   Close: RadixDialog.Close,
 }
+
+export const DialogDescription = styled(Dialog.Description)`
+  font-size: 1.4rem;
+`
+
+export const DialogButton = styled(Button)`
+  padding: 1.2rem 0.6rem;
+  font-size: 1.4rem;
+
+  &:focus {
+    outline: 1px solid ${({ theme }) => theme.color.foreground};
+  }
+`

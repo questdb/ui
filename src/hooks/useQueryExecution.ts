@@ -19,7 +19,20 @@ export const useQueryExecution = () => {
   const executeSingle = useCallback(
     async (sql: string, signal?: AbortSignal): Promise<QueryExecResult> => {
       try {
-        const result = await quest.queryRaw(sql, { limit: "0,1000", signal })
+        const { promise, queryId } = quest.queryRaw(sql, {
+          limit: "0,1000",
+          cancellable: true,
+        })
+        if (signal) {
+          if (signal.aborted) {
+            quest.abort(queryId)
+          } else {
+            signal.addEventListener("abort", () => quest.abort(queryId), {
+              once: true,
+            })
+          }
+        }
+        const result = await promise
 
         if (result.type === QuestDB.Type.DQL) {
           return {

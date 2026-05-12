@@ -328,7 +328,7 @@ export type Options = {
   count?: boolean
   cols?: string
   src?: string
-  signal?: AbortSignal
+  cancellable?: boolean
 }
 
 export type Release = {
