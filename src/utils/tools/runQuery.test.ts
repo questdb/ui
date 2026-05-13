@@ -62,32 +62,45 @@ describe("buildRunQueryPayload", () => {
     expect(out.truncated).toBe(true)
   })
 
-  it("clamps limit at the hard cap (1000)", () => {
-    const out = buildRunQueryPayload(dql(1500), 999_999)
-    expect(out.returned_count).toBe(1000)
-    expect(out.total_count).toBe(1500)
+  it("clamps limit at the hard cap (RUN_QUERY_MAX_LIMIT)", () => {
+    const out = buildRunQueryPayload(dql(15_000), 999_999)
+    expect(out.returned_count).toBe(RUN_QUERY_MAX_LIMIT)
+    expect(out.total_count).toBe(15_000)
     expect(out.truncated).toBe(true)
   })
 
-  it("clips long string cells to ~500 chars and flags truncated=true", () => {
+  it("does not clip long string cells (per-cell cap removed)", () => {
     const longString = "x".repeat(2000)
     const out = buildRunQueryPayload(
       dql(1, () => [longString, "y"]),
       100,
     ) as { rows: string[][]; truncated: boolean }
-    expect(out.rows[0][0].length).toBeLessThanOrEqual(500)
-    expect(out.rows[0][0].endsWith("...")).toBe(true)
-    expect(out.truncated).toBe(true)
+    expect(out.rows[0][0]).toBe(longString)
+    expect(out.rows[0][0].length).toBe(2000)
   })
 
-  it("drops trailing rows to keep payload under ~50 KB", () => {
-    // ~200 chars/row × 1000 rows ≈ 200 KB; cap should clip back to ≤ 50 KB.
-    const filler = "z".repeat(100)
+  it("drops trailing rows to keep payload under ~1 MB", () => {
+    // ~2400 chars/row × 1000 rows ≈ 2.4 MB; cap should clip back to ≤ 1 MB.
+    const filler = "z".repeat(1200)
     const out = buildRunQueryPayload(
       dql(1000, () => [filler, filler]),
       1000,
     ) as { returned_count: number; truncated: boolean }
     expect(out.returned_count).toBeLessThan(1000)
+    expect(out.truncated).toBe(true)
+  })
+
+  it("always includes the first row even when it alone exceeds the byte cap", () => {
+    // 2 MB string in a single cell — single-row payload exceeds the 1 MB
+    // cap. We still return that one row (empty `rows` confuses agents) and
+    // flag truncated:true.
+    const huge = "x".repeat(2_000_000)
+    const out = buildRunQueryPayload(
+      dql(3, () => [huge]),
+      10,
+    ) as { rows: string[][]; returned_count: number; truncated: boolean }
+    expect(out.returned_count).toBe(1)
+    expect(out.rows[0][0].length).toBe(2_000_000)
     expect(out.truncated).toBe(true)
   })
 
@@ -98,53 +111,86 @@ describe("buildRunQueryPayload", () => {
     ) as { rows: unknown[][] }
     expect(out.rows[0]).toEqual([42, true, null, "ok"])
   })
+
+  it("flattens non-primitive cells (arrays/objects) to JSON strings", () => {
+    const out = buildRunQueryPayload(
+      dql(1, () => [{ a: 1 }, [1, 2, 3]]),
+      10,
+    ) as { rows: unknown[][] }
+    expect(out.rows[0]).toEqual(['{"a":1}', "[1,2,3]"])
+  })
 })
 
 describe("mapQueryRawToResult", () => {
-  it("sends the requested row limit to /exec using the grid queryRaw option", async () => {
-    const queryRaw = vi.fn().mockResolvedValue({
+  const stubDqlReturn = () => ({
+    promise: Promise.resolve({
       type: Type.DQL,
       columns: [],
       dataset: [],
       count: 0,
-    })
-    await mapQueryRawToResult({ queryRaw } as never, "SELECT * FROM x", 25)
+    }),
+    queryId: 1,
+  })
+
+  it("sends the requested row limit to /exec using the cancellable queryRaw overload", async () => {
+    const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
+    const abort = vi.fn()
+    await mapQueryRawToResult(
+      { queryRaw, abort } as never,
+      "SELECT * FROM x",
+      25,
+    )
     expect(queryRaw).toHaveBeenCalledWith("SELECT * FROM x", {
       limit: "0,25",
+      cancellable: true,
     })
   })
 
   it("clamps the network limit before sending the request", async () => {
-    const queryRaw = vi.fn().mockResolvedValue({
-      type: Type.DQL,
-      columns: [],
-      dataset: [],
-      count: 0,
-    })
-    await mapQueryRawToResult({ queryRaw } as never, "SELECT * FROM x", 99_999)
+    const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
+    const abort = vi.fn()
+    await mapQueryRawToResult(
+      { queryRaw, abort } as never,
+      "SELECT * FROM x",
+      99_999,
+    )
     expect(queryRaw).toHaveBeenCalledWith("SELECT * FROM x", {
       limit: `0,${RUN_QUERY_MAX_LIMIT}`,
+      cancellable: true,
     })
     expect(clampRunQueryLimit(0)).toBe(1)
   })
 
-  it("passes abort signal alongside the limit option", async () => {
-    const queryRaw = vi.fn().mockResolvedValue({
-      type: Type.DQL,
-      columns: [],
-      dataset: [],
-      count: 0,
-    })
+  it("aborts the live query via questClient.abort(queryId) when the caller signal fires", async () => {
+    const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
+    const abort = vi.fn()
     const ac = new AbortController()
-    await mapQueryRawToResult(
-      { queryRaw } as never,
+    const done = mapQueryRawToResult(
+      { queryRaw, abort } as never,
       "SELECT * FROM x",
       10,
       ac.signal,
     )
+    ac.abort()
+    await done
     expect(queryRaw).toHaveBeenCalledWith("SELECT * FROM x", {
       limit: "0,10",
-      signal: ac.signal,
+      cancellable: true,
     })
+    expect(abort).toHaveBeenCalledWith(1)
+  })
+
+  it("aborts immediately when the caller signal is already aborted at call time", async () => {
+    const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
+    const abort = vi.fn()
+    const ac = new AbortController()
+    ac.abort()
+    await mapQueryRawToResult(
+      { queryRaw, abort } as never,
+      "SELECT * FROM x",
+      10,
+      ac.signal,
+    )
+    expect(abort).toHaveBeenCalledWith(1)
   })
 })

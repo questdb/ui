@@ -106,6 +106,7 @@ export const StatusNotification: React.FC<Props> = ({
         content={
           <QueryResult
             rowCount={activeResult.dataset.length}
+            totalRowCount={activeResult.count}
             count={activeResult.timings.count}
             compiler={activeResult.timings.compiler}
             authentication={activeResult.timings.authentication}

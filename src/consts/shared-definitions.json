@@ -863,7 +863,7 @@
   {
     "name": "run_query",
     "category": "sql",
-    "description": "Execute an arbitrary SQL statement against the user's QuestDB instance and return the result rows so you can inspect data, validate work, or compose follow-up queries. UNLIKE `run_cell`, this tool DOES return data values. Default limit is 100 rows; pass `limit` (max 1000) to request more. The response is truncated to fit a token budget — individual string cells are capped at ~500 chars and the whole payload at ~50 KB. The response includes `truncated`, `total_count`, and `returned_count` so you know exactly what was clipped. DDL/DML (CREATE / INSERT / UPDATE / DROP / etc.) is allowed and executes against the live database — be deliberate. Auth + connection are handled by the user's already-authenticated browser session.",
+    "description": "Execute an arbitrary SQL statement against the user's QuestDB instance and return the result rows so you can inspect data, validate work, or compose follow-up queries. UNLIKE `run_cell`, this tool DOES return data values. Default limit is 100 rows; pass `limit` (max 10000) to request more. The response payload is capped at ~1 MB — rows beyond that are dropped from the tail. The response includes `truncated`, `total_count`, and `returned_count` so you know exactly what was clipped. DDL/DML (CREATE / INSERT / UPDATE / DROP / etc.) is allowed and executes against the live database — be deliberate. Auth + connection are handled by the user's already-authenticated browser session.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -878,8 +878,8 @@
             "null"
           ],
           "minimum": 1,
-          "maximum": 1000,
-          "description": "Maximum rows to return (default 100, max 1000). Pass null for default."
+          "maximum": 10000,
+          "description": "Maximum rows to return (default 100, max 10000). Pass null for default."
         }
       },
       "required": [

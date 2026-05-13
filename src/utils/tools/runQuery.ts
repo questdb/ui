@@ -2,9 +2,8 @@ import type { Client } from "../questdb/client"
 import { Type } from "../questdb/types"
 
 export const RUN_QUERY_DEFAULT_LIMIT = 100
-export const RUN_QUERY_MAX_LIMIT = 1000
-const RUN_QUERY_CELL_CHAR_CAP = 500
-const RUN_QUERY_PAYLOAD_BYTE_CAP = 50_000
+export const RUN_QUERY_MAX_LIMIT = 10_000
+const RUN_QUERY_PAYLOAD_BYTE_CAP = 1_000_000
 
 export type RunQueryRawResult =
   | {
@@ -17,19 +16,14 @@ export type RunQueryRawResult =
   | { type: "ddl" | "dml" | "notice"; durationMs?: number; message?: string }
   | { type: "error"; error: string; position?: number }
 
-const clipCellValue = (raw: unknown): { value: unknown; clipped: boolean } => {
-  if (raw === null || raw === undefined) return { value: null, clipped: false }
-  if (typeof raw === "number" || typeof raw === "boolean") {
-    return { value: raw, clipped: false }
-  }
-  const text = typeof raw === "string" ? raw : JSON.stringify(raw)
-  if (text.length <= RUN_QUERY_CELL_CHAR_CAP) {
-    return { value: text, clipped: false }
-  }
-  return {
-    value: text.slice(0, RUN_QUERY_CELL_CHAR_CAP - 3) + "...",
-    clipped: true,
-  }
+// Wire shape is (string | number | boolean | null)[] — array/object cells
+// (e.g. QuestDB ARRAY columns) get flattened to a JSON string so the agent
+// never has to handle nested structures in tool results.
+const flattenCellValue = (raw: unknown): string | number | boolean | null => {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === "number" || typeof raw === "boolean") return raw
+  if (typeof raw === "string") return raw
+  return JSON.stringify(raw)
 }
 
 export const buildRunQueryPayload = (
@@ -53,35 +47,37 @@ export const buildRunQueryPayload = (
     Math.max(1, Math.floor(requestedLimit)),
     RUN_QUERY_MAX_LIMIT,
   )
-  const rowsBeforeCellClip = raw.dataset.slice(0, limit)
-  const rowCountClipped = totalCount > rowsBeforeCellClip.length
-  let cellClipped = false
-  const rowsAfterCellClip = rowsBeforeCellClip.map((row) =>
-    row.map((value) => {
-      const out = clipCellValue(value)
-      if (out.clipped) cellClipped = true
-      return out.value
-    }),
-  )
+  const rowsCapped = raw.dataset
+    .slice(0, limit)
+    .map((row) => row.map(flattenCellValue))
 
-  let rows = rowsAfterCellClip
-  const buildPayload = (rs: typeof rows) => ({
-    type: "dql" as const,
-    columns: raw.columns,
-    rows: rs,
-    returned_count: rs.length,
-    total_count: totalCount,
-    truncated:
-      rowCountClipped || cellClipped || rs.length < rowsAfterCellClip.length,
-    duration_ms: raw.durationMs ?? null,
-  })
-  while (
-    rows.length > 0 &&
-    JSON.stringify(buildPayload(rows)).length > RUN_QUERY_PAYLOAD_BYTE_CAP
-  ) {
-    rows = rows.slice(0, rows.length - 1)
+  // Single-pass byte-budget aggregator: append rows while keeping the
+  // cumulative JSON size under the cap. Strict — the row that would push
+  // us over is dropped, not included. Exception: always keep the first
+  // row so a pathological wide row doesn't return `rows: []`.
+  const rows: typeof rowsCapped = []
+  let bytes = 0
+  let byteCapped = false
+  for (const row of rowsCapped) {
+    const rowBytes = JSON.stringify(row).length
+    if (rows.length > 0 && bytes + rowBytes > RUN_QUERY_PAYLOAD_BYTE_CAP) {
+      byteCapped = true
+      break
+    }
+    rows.push(row)
+    bytes += rowBytes
   }
-  return buildPayload(rows)
+
+  const rowCountClipped = totalCount > rowsCapped.length
+  return {
+    type: "dql",
+    columns: raw.columns,
+    rows,
+    returned_count: rows.length,
+    total_count: totalCount,
+    truncated: rowCountClipped || byteCapped,
+    duration_ms: raw.durationMs ?? null,
+  }
 }
 
 export const clampRunQueryLimit = (requestedLimit: number): number =>

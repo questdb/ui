@@ -642,13 +642,12 @@ export const dispatchTool = async (
             request,
           )
           // buildAppliedCells pushes new-cell ids to `applied.added` in
-          // request order — walking the request and `added` in parallel maps
-          // each entry to its final cell id.
-          const runs: Array<{
+          type ResolvedRun = {
             cellId: string
-            success: boolean
-            error?: string
-          }> = []
+            value: string
+            runnable: boolean
+          }
+          const resolved: ResolvedRun[] = []
           let newCellIdx = 0
           for (const c of cells) {
             const requestedId =
@@ -662,36 +661,52 @@ export const dispatchTool = async (
                   ? (existingModes.get(requestedId) ?? "run")
                   : "run"
                 : c.mode
-            if (resolvedMode !== "run") continue
-            if (!c.value.trim()) continue
-            if (perms && validateSql) {
-              const decision = await classifyAndCheckSqlForExecution(
-                c.value,
-                perms,
-                validateSql,
-              )
-              if (!decision.granted) {
-                runs.push({
-                  cellId,
-                  success: false,
-                  error: decision.reason,
-                })
-                continue
-              }
-            }
-            try {
-              const r = await modelToolsClient.runCell(
-                buffer_id,
-                cellId,
-                signal,
-              )
-              runs.push({ cellId, success: r.success, error: r.error })
-            } catch (runErr) {
-              const message =
-                runErr instanceof Error ? runErr.message : String(runErr)
-              runs.push({ cellId, success: false, error: message })
-            }
+            const runnable = resolvedMode === "run" && c.value.trim().length > 0
+            resolved.push({ cellId, value: c.value, runnable })
           }
+          type RunEntry = {
+            cellId: string
+            success: boolean
+            error?: string
+          }
+          const settled = await Promise.all(
+            resolved.map(async (r): Promise<RunEntry | null> => {
+              if (!r.runnable) return null
+              if (perms && validateSql) {
+                const decision = await classifyAndCheckSqlForExecution(
+                  r.value,
+                  perms,
+                  validateSql,
+                )
+                if (!decision.granted) {
+                  return {
+                    cellId: r.cellId,
+                    success: false,
+                    error: decision.reason,
+                  }
+                }
+              }
+              try {
+                const result = await modelToolsClient.runCell(
+                  buffer_id,
+                  r.cellId,
+                  signal,
+                )
+                return {
+                  cellId: r.cellId,
+                  success: result.success,
+                  error: result.error,
+                }
+              } catch (runErr) {
+                const message =
+                  runErr instanceof Error ? runErr.message : String(runErr)
+                return { cellId: r.cellId, success: false, error: message }
+              }
+            }),
+          )
+          const runs = settled.filter(
+            (entry): entry is RunEntry => entry !== null,
+          )
           return { content: JSON.stringify({ ...out, runs }) }
         } catch (e) {
           if (e instanceof NotebookToolError) {

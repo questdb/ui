@@ -751,6 +751,64 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(runCell).toHaveBeenCalledWith(1, "run-id", undefined)
   })
 
+  it("dispatches run-mode cells in parallel — total wallclock equals slowest cell, not the sum", async () => {
+    const order: string[] = []
+    const finish: Record<string, () => void> = {}
+    const runCell = vi.fn(
+      (_buf: number, cellId: string) =>
+        new Promise<{ success: true }>((resolve) => {
+          order.push(cellId)
+          finish[cellId] = () => resolve({ success: true })
+        }),
+    )
+    const client = makeClient({
+      runCell,
+      applyNotebookState: vi.fn(() =>
+        Promise.resolve({
+          applied: {
+            added: ["cell-1", "cell-2", "cell-3"],
+            updated: [],
+            deleted: [],
+          },
+        }),
+      ),
+    })
+    const pending = dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [
+          { id: null, value: "SELECT 1", mode: "run" },
+          { id: null, value: "SELECT 2", mode: "run" },
+          { id: null, value: "SELECT 3", mode: "run" },
+        ],
+      },
+      client,
+      noopStatus,
+    )
+    // Flush microtasks so dispatchTool resumes past applyNotebookState and
+    // fires every runCell concurrently.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(order).toEqual(["cell-1", "cell-2", "cell-3"])
+    // Finish out of submission order — only possible if all three are in
+    // flight simultaneously.
+    finish["cell-3"]()
+    finish["cell-1"]()
+    finish["cell-2"]()
+    const res = await pending
+    const parsed = JSON.parse(res.content) as {
+      runs: Array<{ cellId: string; success: boolean }>
+    }
+    // Order in `runs` matches request order, not finish order.
+    expect(parsed.runs.map((r) => r.cellId)).toEqual([
+      "cell-1",
+      "cell-2",
+      "cell-3",
+    ])
+  })
+
   it("reports per-cell runCell failure in the runs array", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({ success: false, error: "boom" }),

@@ -36,6 +36,7 @@ type Props = Timings &
   Readonly<{
     count: number
     rowCount: number
+    totalRowCount?: number
   }>
 
 const Wrapper = styled.div`
@@ -60,6 +61,10 @@ const DetailsColumn = styled.div`
 
 const DetailsText = styled(Text)`
   margin-right: 0.5rem;
+`
+
+const TruncatedTag = styled.span`
+  color: ${color("orange")};
 `
 
 const roundTiming = (time: number): number =>
@@ -100,14 +105,27 @@ const QueryResult = ({
   execute,
   fetch,
   rowCount,
+  totalRowCount,
 }: Props) => {
+  const truncated =
+    typeof totalRowCount === "number" && totalRowCount > rowCount
   return (
     <Wrapper _height={95} duration={TransitionDuration.FAST}>
       <div>
         <Text color="gray2">
-          {rowCount.toLocaleString()} row
-          {rowCount > 1 || rowCount === 0 ? "s" : ""} in&nbsp;
-          {formatTiming(fetch)}
+          {truncated ? (
+            <>
+              {rowCount.toLocaleString()} of {totalRowCount.toLocaleString()}{" "}
+              rows in&nbsp;{formatTiming(fetch)}&nbsp;
+              <TruncatedTag>(truncated)</TruncatedTag>
+            </>
+          ) : (
+            <>
+              {rowCount.toLocaleString()} row
+              {rowCount > 1 || rowCount === 0 ? "s" : ""} in&nbsp;
+              {formatTiming(fetch)}
+            </>
+          )}
         </Text>
       </div>
 

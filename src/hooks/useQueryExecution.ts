@@ -3,6 +3,8 @@ import { QuestContext } from "../providers/QuestProvider"
 import * as QuestDB from "../utils/questdb"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 
+export const RESULT_DISPLAY_LIMIT = 50_000
+
 export type QueryExecResult = {
   type: "dql" | "ddl" | "dml" | "error"
   query: string
@@ -20,7 +22,7 @@ export const useQueryExecution = () => {
     async (sql: string, signal?: AbortSignal): Promise<QueryExecResult> => {
       try {
         const { promise, queryId } = quest.queryRaw(sql, {
-          limit: "0,1000",
+          limit: `0,${RESULT_DISPLAY_LIMIT}`,
           cancellable: true,
         })
         if (signal) {
