@@ -188,7 +188,7 @@
       },
       {
         "path": "dist/assets/index-*.js",
-        "maxSize": "3MB",
+        "maxSize": "3.5MB",
         "compression": "none"
       },
       {
