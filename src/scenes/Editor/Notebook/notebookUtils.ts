@@ -378,6 +378,12 @@ export const buildAppliedCells = (
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     if (isChartMaximized !== undefined)
       created.isChartMaximized = isChartMaximized
+    // Draw cells are double-view from creation (chart visible immediately),
+    // so seed bottomHeight with the chart default. Run cells stay single-
+    // view (no bottomHeight) until the user runs them.
+    if (resolvedMode === "draw") {
+      created.bottomHeight = DEFAULT_CHART_BOTTOM_HEIGHT
+    }
     return created
   })
 
@@ -393,19 +399,189 @@ export const buildAppliedCells = (
   return { nextCells, diff: { added, updated, deleted } }
 }
 
-// 12-column grid units; ROW_HEIGHT (Notebook/index.tsx) is 50 px. 8 ≈ 400 px
-// (run: editor + ~3 result rows), 10 ≈ 500 px (draw: chart room).
-const BULK_DEFAULT_RUN_CELL_H = 8
-const BULK_DEFAULT_DRAW_CELL_H = 10
+// === Cell sizing model ======================================================
+// Cells are in one of two view states:
+//
+//   - Single-view: only the editor (or only the expanded chart) is visible.
+//     Total cell height = topHeight + chrome.
+//   - Double-view: editor on top + result/chart on bottom.
+//     Total cell height = topHeight + bottomHeight + chrome.
+//
+// `topHeight` and `bottomHeight` live on NotebookCell; they replace the four
+// `custom*Height` fields from the old model. In grid mode, the grid h (rows)
+// is *derived* from topHeight + bottomHeight on every render.
+// ============================================================================
 
-export const minHeightForMode = (mode: "run" | "draw" | undefined): number =>
-  mode === "draw" ? BULK_DEFAULT_DRAW_CELL_H : BULK_DEFAULT_RUN_CELL_H
+// Approximate fixed chrome around the editor in a cell, in pixels.
+// Breakdown:
+//   - RunBar: 40 px (1rem vertical padding + ~24 px button glyph)
+//   - CellWrapper top/bottom border: 2 px
+//   - Inner-top ResizeHandle (only when double-view): 10 px
+//   - Safety margin for sub-pixel rounding, grid row bottom-border,
+//     and any single-pixel adornments inside the result panel: 4 px
+// Stays a single conservative constant rather than state-aware: the
+// extra ~14 px in single-view is at most a half-row of trailing
+// whitespace at our 10 px grid granularity — invisible — but avoids
+// the "row cut by 2-3 px" symptom in double-view cells.
+export const CELL_CHROME_PX = 56
+
+// Default editor height for a newly-created cell, before any content arrives.
+// Matches MIN_EDITOR_HEIGHT used by Monaco; kept here so layout math doesn't
+// need to import Cell.tsx constants.
+export const DEFAULT_TOP_HEIGHT = 72
+
+// Default chart height for draw mode (experimental — per user spec).
+export const DEFAULT_CHART_BOTTOM_HEIGHT = 350
+
+export const MIN_BOTTOM_HEIGHT_PX = 88
+
+// Pixel sizes of the result panel's chrome. Kept in sync with the styled-
+// components in result-table/styles.ts; if those constants change, update
+// here.
+const TAB_BAR_PX = 40 // TabBarWrapper height = 4rem
+const NOTIFICATION_PX = 44 // StatusNotification (compact=true → 4rem + 1-2 px borders)
+const GRID_HEADER_PX = 44 // result-table HEADER_HEIGHT
+const GRID_ROW_PX = 28 // result-table ROW_HEIGHT
+const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
+
+const isDqlWithRows = (r: SingleQueryResult): boolean =>
+  r.type === "dql" && r.dataset.length > 0
+
+const dqlRowCount = (r: SingleQueryResult): number =>
+  r.type === "dql" ? r.dataset.length : 0
+
+// Computes the bottom slot height for a result based on its content.
+//
+// Rules:
+//   1. Single-statement, no data (error / DDL / DML / notice / 0-row DQL):
+//      just the notification bar — no wasted blank space.
+//   2. Single-statement DQL with N rows: notification + grid header + min(N, 10)
+//      rows. Shrinks for small results, caps at 10 for large ones.
+//   3. Multi-statement (script) run:
+//      - tab bar always visible.
+//      - If the first result is non-data (error / DDL / DML / notice), height
+//        is just tab bar + notification (the user never saw rows).
+//      - Otherwise reserve a full 10 rows worth of space regardless of how
+//        many rows the active tab actually has (avoids jitter when switching
+//        between tabs that have different row counts).
+export const computeResultBottomHeight = (
+  result: CellResult | null | undefined,
+): number => {
+  if (!result || result.results.length === 0) return NOTIFICATION_PX
+  const isMulti = result.results.length > 1
+  const tabBar = isMulti ? TAB_BAR_PX : 0
+
+  if (isMulti) {
+    const first = result.results[0]
+    if (!first || !isDqlWithRows(first)) {
+      // First query failed / wasn't DQL — we never saw any rows, no point
+      // reserving 10 rows of space. The tab bar still shows so the user can
+      // click through other tabs.
+      return tabBar + NOTIFICATION_PX
+    }
+    return (
+      tabBar +
+      NOTIFICATION_PX +
+      GRID_HEADER_PX +
+      MAX_RESERVED_ROWS * GRID_ROW_PX
+    )
+  }
+
+  // Single-statement: tight-fit up to 10 rows.
+  const only = result.results[0]
+  if (!only || !isDqlWithRows(only)) {
+    return NOTIFICATION_PX
+  }
+  const rows = Math.min(MAX_RESERVED_ROWS, dqlRowCount(only))
+  return NOTIFICATION_PX + GRID_HEADER_PX + rows * GRID_ROW_PX
+}
+
+// Returns the appropriate default bottom-slot height for a cell, based on
+// what the bottom slot will contain. Used as the render-time fallback when
+// cell.bottomHeight is undefined (first paint of a freshly-loaded cell).
+// Always agrees with what runCell would have written into cell.bottomHeight.
+export const defaultBottomHeightFor = (cell: NotebookCell): number =>
+  cell.mode === "draw"
+    ? DEFAULT_CHART_BOTTOM_HEIGHT
+    : computeResultBottomHeight(cell.result)
+
+// True iff this cell occupies vertical space for a bottom slot — i.e. its
+// total height includes bottomHeight. This includes the chart-expanded case
+// (chart fills both slots; the cell footprint still spans topHeight +
+// bottomHeight).
+export const isDoubleView = (cell: NotebookCell): boolean => {
+  if (cell.mode === "draw") return true
+  return cell.result != null
+}
+
+// Derives the react-grid-layout `h` (row count) for a cell from its
+// topHeight + bottomHeight + chrome. Recomputed at render time on every
+// state change.
+//
+// react-grid-layout inserts `marginY` BETWEEN rows, so the actual
+// rendered px of an h-row cell is `h * rowHeight + (h - 1) * marginY`,
+// NOT `h * rowHeight`. To fit a content of `totalPx` we therefore need
+// `ceil((totalPx + marginY) / (rowHeight + marginY))` rows. Forgetting
+// the marginY term inflated cell heights by ~3× at rowHeight=10,
+// marginY=20 (a 500-px content asked for 50 rows that rendered as
+// ~1480 px). Default marginY=0 keeps backwards-compat for tests/callers
+// that ignore margins.
+export const computeCellGridH = (
+  cell: NotebookCell,
+  rowHeight: number,
+  marginY: number = 0,
+): number => {
+  const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
+  const bottom = isDoubleView(cell)
+    ? (cell.bottomHeight ?? defaultBottomHeightFor(cell))
+    : 0
+  const totalPx = CELL_CHROME_PX + top + bottom
+  return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
+}
+
+export const partitionCellHeights = (
+  sum: number,
+  requestedTop: number,
+  minTop: number,
+  minBottom: number,
+): { top: number; bottom: number } => {
+  let top = Math.max(minTop, requestedTop)
+  let bottom = sum - top
+  if (bottom < minBottom) {
+    bottom = minBottom
+    top = sum - bottom
+  }
+  return { top, bottom }
+}
+
+export const scaleCellHeights = (
+  oldTop: number,
+  oldBottom: number,
+  newContent: number,
+  minTop: number,
+  minBottom: number,
+): { top: number; bottom: number } => {
+  const oldContent = oldTop + oldBottom
+  const clampedContent = Math.max(minTop + minBottom, newContent)
+  const scale = oldContent > 0 ? clampedContent / oldContent : 1
+  let top = Math.round(oldTop * scale)
+  let bottom = clampedContent - top
+  if (top < minTop) {
+    top = minTop
+    bottom = clampedContent - top
+  }
+  if (bottom < minBottom) {
+    bottom = minBottom
+    top = clampedContent - bottom
+  }
+  return { top, bottom }
+}
 
 export const buildAppliedLayout = (
   request: ApplyRequest,
   nextCells: NotebookCell[],
   prevLayout: CellLayoutItem[] | undefined,
-  defaults: { gridCols: number; defaultCellH: number },
+  defaults: { gridCols: number; rowHeight: number; marginY?: number },
 ): CellLayoutItem[] => {
   const prevById = new Map((prevLayout ?? []).map((l) => [l.i, l]))
   let nextY = 0
@@ -421,7 +597,7 @@ export const buildAppliedLayout = (
       nextY = Math.max(nextY, existing.y + existing.h)
       return existing
     }
-    const cellH = minHeightForMode(cell.mode)
+    const cellH = computeCellGridH(cell, defaults.rowHeight, defaults.marginY)
     const item: CellLayoutItem = {
       i: cell.id,
       x: 0,
@@ -443,3 +619,25 @@ export const attachScriptSummary = (
     if (c.id !== cellId || !c.result) return c
     return { ...c, result: { ...c.result, script: summary } }
   })
+
+export const COLUMN_SIZING_LRU_MAX = 20
+
+export const upsertColumnSizing = (
+  prev: NotebookCell["columnSizing"] | undefined,
+  key: string,
+  next: Record<string, number>,
+  max: number = COLUMN_SIZING_LRU_MAX,
+): NotebookCell["columnSizing"] => {
+  const { [key]: _evicted, ...rest } = prev ?? {}
+  const merged: Record<string, Record<string, number>> = {
+    ...rest,
+    [key]: next,
+  }
+  const keys = Object.keys(merged)
+  if (keys.length <= max) return merged
+  const dropCount = keys.length - max
+  for (let i = 0; i < dropCount; i++) {
+    delete merged[keys[i]]
+  }
+  return merged
+}

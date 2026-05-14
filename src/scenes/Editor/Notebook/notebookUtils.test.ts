@@ -8,9 +8,12 @@ import {
   buildPersistPayload,
   cancelAllInCell,
   cancelOneInCell,
+  computeCellGridH,
+  computeResultBottomHeight,
   duplicateCellAt,
   generateDefaultLayout,
   insertCell,
+  isDoubleView,
   mergeCellLayout,
   removeCell,
   setResultAt,
@@ -18,6 +21,7 @@ import {
   stripCellResults,
   swapCellDown,
   swapCellUp,
+  upsertColumnSizing,
 } from "./notebookUtils"
 import type { NotebookCell } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
@@ -699,8 +703,244 @@ describe("buildAppliedCells", () => {
   })
 })
 
+describe("isDoubleView", () => {
+  it("returns true for run cell with a result", () => {
+    expect(
+      isDoubleView({
+        id: "x",
+        position: 0,
+        value: "",
+        result: { results: [], activeResultIndex: 0, timestamp: 0 },
+      }),
+    ).toBe(true)
+  })
+  it("returns false for run cell with no result", () => {
+    expect(isDoubleView({ id: "x", position: 0, value: "" })).toBe(false)
+  })
+  it("returns true for draw cell, whether chart-expanded or not", () => {
+    expect(
+      isDoubleView({ id: "x", position: 0, value: "", mode: "draw" }),
+    ).toBe(true)
+    expect(
+      isDoubleView({
+        id: "x",
+        position: 0,
+        value: "",
+        mode: "draw",
+        isChartMaximized: true,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe("computeResultBottomHeight", () => {
+  // Layout constants (kept in sync with notebookUtils.ts):
+  //   TAB_BAR_PX        = 40
+  //   NOTIFICATION_PX   = 44
+  //   GRID_HEADER_PX    = 44
+  //   GRID_ROW_PX       = 28
+  //   MAX_RESERVED_ROWS = 10
+
+  it("null/undefined/empty result → notification-only", () => {
+    expect(computeResultBottomHeight(null)).toBe(44)
+    expect(computeResultBottomHeight(undefined)).toBe(44)
+    expect(
+      computeResultBottomHeight({
+        results: [],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(44)
+  })
+
+  it("single error → notification-only", () => {
+    expect(
+      computeResultBottomHeight({
+        results: [{ type: "error", query: "X", error: "boom" }],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(44)
+  })
+
+  it("single DDL/DML/notice → notification-only", () => {
+    for (const type of ["ddl", "dml"] as const) {
+      expect(
+        computeResultBottomHeight({
+          results: [{ type, query: "X" }],
+          activeResultIndex: 0,
+          timestamp: 0,
+        }),
+      ).toBe(44)
+    }
+  })
+
+  it("single DQL with 0 rows → notification-only (no grid header, no rows)", () => {
+    expect(
+      computeResultBottomHeight({
+        results: [
+          {
+            type: "dql",
+            query: "SELECT 1",
+            columns: [],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(44)
+  })
+
+  it("single DQL with N rows → notification + header + N×row (N capped at 10)", () => {
+    const make = (rowCount: number) => ({
+      results: [
+        {
+          type: "dql" as const,
+          query: "SELECT 1",
+          columns: [],
+          dataset: Array.from({ length: rowCount }, () => [1]),
+          count: rowCount,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+    // 1 row: 44 + 44 + 1*28 = 116
+    expect(computeResultBottomHeight(make(1))).toBe(116)
+    // 5 rows: 44 + 44 + 5*28 = 228
+    expect(computeResultBottomHeight(make(5))).toBe(228)
+    // 10 rows: 44 + 44 + 10*28 = 368
+    expect(computeResultBottomHeight(make(10))).toBe(368)
+    // 50 rows: cap at 10 → still 368
+    expect(computeResultBottomHeight(make(50))).toBe(368)
+  })
+
+  it("multi-statement, first DQL with rows → tab + notification + header + 10 rows", () => {
+    // 40 + 44 + 44 + 10*28 = 408
+    expect(
+      computeResultBottomHeight({
+        results: [
+          {
+            type: "dql",
+            query: "Q1",
+            columns: [],
+            dataset: [[1]],
+            count: 1,
+          },
+          { type: "ddl", query: "Q2" },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(408)
+  })
+
+  it("multi-statement, first is error → tab + notification only (we never saw rows)", () => {
+    // 40 + 44 = 84
+    expect(
+      computeResultBottomHeight({
+        results: [
+          { type: "error", query: "Q1", error: "boom" },
+          { type: "dql", query: "Q2", columns: [], dataset: [[1]], count: 1 },
+        ],
+        activeResultIndex: 1,
+        timestamp: 0,
+      }),
+    ).toBe(84)
+  })
+
+  it("multi-statement, first DQL with 0 rows → tab + notification only", () => {
+    // Same shape as first-is-error: the first query produced no rows, so
+    // we never reserved 10-row space.
+    expect(
+      computeResultBottomHeight({
+        results: [
+          { type: "dql", query: "Q1", columns: [], dataset: [], count: 0 },
+          { type: "dql", query: "Q2", columns: [], dataset: [[1]], count: 1 },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(84)
+  })
+})
+
+describe("computeCellGridH", () => {
+  it("single-view (run, no result): topHeight + chrome rounded up", () => {
+    // 72 + 56 = 128 → ceil(128/50) = 3
+    expect(computeCellGridH({ id: "x", position: 0, value: "" }, 50)).toBe(3)
+  })
+  it("double-view (run with empty result): tight notification-only bottom", () => {
+    // result.results = [] (empty after run) → bottom = NOTIFICATION_PX (44).
+    // 72 + 56 + 44 = 172 → ceil(172/50) = 4
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        50,
+      ),
+    ).toBe(4)
+  })
+  it("respects explicit topHeight and bottomHeight overrides", () => {
+    // 200 + 56 + 300 = 556 → ceil(556/50) = 12
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        50,
+      ),
+    ).toBe(12)
+  })
+  it("draw cell uses chart default 350 when bottomHeight is unset", () => {
+    // 72 + 56 + 350 = 478 → ceil(478/50) = 10
+    expect(
+      computeCellGridH({ id: "x", position: 0, value: "", mode: "draw" }, 50),
+    ).toBe(10)
+  })
+  it("returns at least 1 row even for an empty cell", () => {
+    expect(
+      computeCellGridH({ id: "x", position: 0, value: "", topHeight: 0 }, 50),
+    ).toBeGreaterThanOrEqual(1)
+  })
+  it("accounts for marginY (inter-row gaps from react-grid-layout)", () => {
+    // Same cell as the "respects explicit … overrides" test above
+    // (topHeight=200, bottomHeight=300, chrome=56 → totalPx=556).
+    // With rowHeight=10 and NO margin: 556/10 = 56 rows. With marginY=20,
+    // each row occupies (10+20)=30 px effective, so h = ceil((556+20)/30)
+    // = ceil(576/30) = 20. Rendered px = 20*10 + 19*20 = 200 + 380 = 580,
+    // which fits the 556-px content. Without the marginY term, h would
+    // be 56 → rendered 56*10 + 55*20 = 1660 px (~3× too tall).
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        10,
+        20,
+      ),
+    ).toBe(20)
+  })
+})
+
 describe("buildAppliedLayout", () => {
-  it("uses request.grid when provided, otherwise stacks mode-aware defaults", () => {
+  it("uses request.grid when provided, otherwise derives h from topHeight + bottomHeight", () => {
     const cells: NotebookCell[] = [
       { id: "a", position: 0, value: "" },
       { id: "b", position: 1, value: "" },
@@ -714,14 +954,12 @@ describe("buildAppliedLayout", () => {
       },
       cells,
       [],
-      { gridCols: 12, defaultCellH: 6 },
+      { gridCols: 12, rowHeight: 50 },
     )
-    expect(layout).toEqual([
-      { i: "a", x: 0, y: 0, w: 6, h: 4 },
-      // Run-mode default = BULK_DEFAULT_RUN_CELL_H (8) so the user sees a
-      // few result rows; stacks below 'a' which has y+h = 0+4.
-      { i: "b", x: 0, y: 4, w: 12, h: 8 },
-    ])
+    expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 4 })
+    // Run-mode cell, no result yet → single-view → only topHeight (72) + chrome (40)
+    // = 112 px → ceil(112 / 50) = 3 rows. Stacks below 'a' which had y+h = 4.
+    expect(layout[1]).toEqual({ i: "b", x: 0, y: 4, w: 12, h: 3 })
   })
 
   it("preserves prevLayout entry when request omits grid", () => {
@@ -730,15 +968,24 @@ describe("buildAppliedLayout", () => {
       { cells: [{ id: "a", value: "" }] },
       cells,
       [{ i: "a", x: 3, y: 4, w: 8, h: 5 }],
-      { gridCols: 12, defaultCellH: 6 },
+      { gridCols: 12, rowHeight: 50 },
     )
     expect(layout).toEqual([{ i: "a", x: 3, y: 4, w: 8, h: 5 }])
   })
 
-  it("gives draw-mode cells a taller default than run-mode cells", () => {
+  it("gives draw-mode cells a taller default than run-mode cells (no result yet)", () => {
+    // buildAppliedCells seeds bottomHeight = DEFAULT_CHART_BOTTOM_HEIGHT for
+    // draw cells, so they're double-view from creation. Run cells stay
+    // single-view (no result) and only count topHeight + chrome.
     const cells: NotebookCell[] = [
       { id: "run-cell", position: 0, value: "", mode: "run" },
-      { id: "draw-cell", position: 1, value: "", mode: "draw" },
+      {
+        id: "draw-cell",
+        position: 1,
+        value: "",
+        mode: "draw",
+        bottomHeight: 350,
+      },
     ]
     const layout = buildAppliedLayout(
       {
@@ -749,10 +996,55 @@ describe("buildAppliedLayout", () => {
       },
       cells,
       [],
-      { gridCols: 12, defaultCellH: 6 },
+      { gridCols: 12, rowHeight: 50 },
     )
-    expect(layout[0].h).toBe(8) // run cell — editor + a few result rows
-    expect(layout[1].h).toBe(10) // draw cell — chart room
-    expect(layout[1].y).toBe(8) // stacked below the run cell's height
+    // run: 72 + 40 = 112 → 3 rows
+    expect(layout[0].h).toBe(3)
+    // draw: 72 + 350 + 40 = 462 → 10 rows
+    expect(layout[1].h).toBe(10)
+    expect(layout[1].y).toBe(3) // stacked below the run cell
+  })
+})
+
+describe("upsertColumnSizing", () => {
+  it("creates the map when no prior sizing exists", () => {
+    const out = upsertColumnSizing(undefined, "select 1", { col_0: 200 })
+    expect(out).toEqual({ "select 1": { col_0: 200 } })
+  })
+
+  it("overwrites an existing entry under the same key", () => {
+    const prev = { "select 1": { col_0: 100 } }
+    const out = upsertColumnSizing(prev, "select 1", { col_0: 300, col_1: 150 })
+    expect(out).toEqual({ "select 1": { col_0: 300, col_1: 150 } })
+  })
+
+  it("moves an updated key to the tail (most-recent)", () => {
+    // Iteration order = insertion order. Re-inserting "a" should put it last.
+    const prev = {
+      a: { col_0: 1 },
+      b: { col_0: 2 },
+      c: { col_0: 3 },
+    }
+    const out = upsertColumnSizing(prev, "a", { col_0: 99 })
+    expect(Object.keys(out ?? {})).toEqual(["b", "c", "a"])
+  })
+
+  it("evicts oldest entries when exceeding the LRU cap", () => {
+    let acc: ReturnType<typeof upsertColumnSizing> = undefined
+    for (let i = 0; i < 25; i++) {
+      acc = upsertColumnSizing(acc, `q${i}`, { col_0: i }, 20)
+    }
+    const keys = Object.keys(acc ?? {})
+    // Earliest 5 (q0..q4) dropped; newest 20 (q5..q24) retained, q24 last.
+    expect(keys).toHaveLength(20)
+    expect(keys[0]).toBe("q5")
+    expect(keys[19]).toBe("q24")
+  })
+
+  it("never mutates the input", () => {
+    const prev = { a: { col_0: 1 } }
+    const frozen = Object.freeze(prev)
+    expect(() => upsertColumnSizing(frozen, "b", { col_0: 2 })).not.toThrow()
+    expect(prev).toEqual({ a: { col_0: 1 } })
   })
 })

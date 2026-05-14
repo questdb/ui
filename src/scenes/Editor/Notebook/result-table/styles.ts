@@ -8,19 +8,12 @@ export type DatasetRow = (boolean | string | number | null)[]
 export const ROW_HEIGHT = 28
 export const HEADER_HEIGHT = 44
 
-export const ResultWrapper = styled.div<{
-  $customHeight?: number
-  $maximized?: boolean
-}>`
+export const ResultWrapper = styled.div`
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  ${({ $maximized, $customHeight }) =>
-    $maximized
-      ? `flex: 1; min-height: 0;`
-      : $customHeight
-        ? `height: ${$customHeight}px;`
-        : `max-height: 300px;`}
+  flex: 1;
+  min-height: 0;
 `
 
 export const SuccessMessage = styled.div`

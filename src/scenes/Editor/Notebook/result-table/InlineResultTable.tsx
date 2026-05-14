@@ -8,23 +8,23 @@ import { ResultWrapper, SuccessMessage } from "./styles"
 type Props = {
   result: CellResult
   isFocused?: boolean
-  isMaximized?: boolean
-  customHeight?: number
   onTabChange?: (index: number) => void
   onCancelQuery?: (index: number) => void
+  columnSizing: Record<string, Record<string, number>> | undefined
+  onColumnSizingCommit: (sizing: Record<string, number>, query: string) => void
 }
 
 export const InlineResultTable: React.FC<Props> = ({
   result,
   isFocused,
-  isMaximized,
-  customHeight,
   onTabChange,
   onCancelQuery,
+  columnSizing,
+  onColumnSizingCommit,
 }) => {
   if (result.results.length === 0) {
     return (
-      <ResultWrapper $customHeight={customHeight} $maximized={isMaximized}>
+      <ResultWrapper>
         <SuccessMessage>OK</SuccessMessage>
       </ResultWrapper>
     )
@@ -36,7 +36,7 @@ export const InlineResultTable: React.FC<Props> = ({
   const isActiveDql = activeResult?.type === "dql"
 
   return (
-    <ResultWrapper $customHeight={customHeight} $maximized={isMaximized}>
+    <ResultWrapper>
       {isMultiQuery && <TabBar result={result} onTabChange={onTabChange} />}
 
       {activeResult && (
@@ -50,9 +50,13 @@ export const InlineResultTable: React.FC<Props> = ({
 
       {isActiveDql && activeResult && (
         <ResultGrid
+          key={`${result.activeResultIndex}-${activeResult.query}`}
           data={activeResult}
           isFocused={isFocused}
-          customHeight={customHeight}
+          initialColumnSizing={columnSizing?.[activeResult.query]}
+          onColumnSizingCommit={(sizing) =>
+            onColumnSizingCommit(sizing, activeResult.query)
+          }
         />
       )}
     </ResultWrapper>

@@ -31,7 +31,8 @@ import { sanitizeForPromptContext } from "../../../utils/ai/notebookSnapshot"
 import {
   buildAppliedCells,
   buildAppliedLayout,
-  minHeightForMode,
+  computeResultBottomHeight,
+  DEFAULT_CHART_BOTTOM_HEIGHT,
 } from "./notebookUtils"
 
 // State and actions live in SEPARATE contexts: action-only consumers never
@@ -125,22 +126,19 @@ export const NotebookProvider: React.FC<{
   const { updateBuffer } = useEditor()
   const { executeSingle } = useQueryExecution()
 
-  const [focusedCellId, setFocusedCell] = useState<string | null>(
+  const [focusedCellId, setFocusedCellState] = useState<string | null>(
     initialState.focusedCellId ?? null,
   )
   const [maximizedCellId, setMaximizedCellIdState] = useState<string | null>(
     initialState.maximizedCellId ?? null,
   )
-  const [settings, setSettings] = useState<NotebookSettings>(
+  const [settings, setSettingsState] = useState<NotebookSettings>(
     initialState.settings ?? {},
   )
 
   const focusedCellIdRef = useRef(focusedCellId)
-  focusedCellIdRef.current = focusedCellId
   const maximizedCellIdRef = useRef(maximizedCellId)
-  maximizedCellIdRef.current = maximizedCellId
   const settingsRef = useRef(settings)
-  settingsRef.current = settings
 
   // Forward ref breaks the circular dep between useCellsStore (needs
   // persistCells) and useNotebookPersistence (needs cellsRef).
@@ -181,14 +179,17 @@ export const NotebookProvider: React.FC<{
   const executionRef = useRef(execution)
   executionRef.current = execution
 
+  const setFocusedCell = useCallback((cellId: string | null) => {
+    focusedCellIdRef.current = cellId
+    setFocusedCellState(cellId)
+  }, [])
+
   const updateSettings = useCallback(
     (updates: Partial<NotebookSettings>) => {
-      setSettings((prev) => {
-        const next = { ...prev, ...updates }
-        settingsRef.current = next
-        persistImmediately()
-        return next
-      })
+      const next = { ...settingsRef.current, ...updates }
+      settingsRef.current = next
+      setSettingsState(next)
+      persistImmediately()
     },
     [persistImmediately],
   )
@@ -204,69 +205,98 @@ export const NotebookProvider: React.FC<{
 
   const setCellLayout = useCallback(
     (cellId: string, pos: { x: number; y: number; w: number; h: number }) => {
-      setSettings((prev) => {
-        const layout = prev.layout ?? []
-        const idx = layout.findIndex((l) => l.i === cellId)
-        const nextLayout: CellLayoutItem[] =
-          idx >= 0
-            ? layout.map((l) => (l.i === cellId ? { ...l, ...pos } : l))
-            : [...layout, { i: cellId, ...pos }]
-        const next = { ...prev, layout: nextLayout }
-        settingsRef.current = next
-        persistImmediately()
-        return next
-      })
+      const prev = settingsRef.current
+      const layout = prev.layout ?? []
+      const idx = layout.findIndex((l) => l.i === cellId)
+      const nextLayout: CellLayoutItem[] =
+        idx >= 0
+          ? layout.map((l) => (l.i === cellId ? { ...l, ...pos } : l))
+          : [...layout, { i: cellId, ...pos }]
+      const next = { ...prev, layout: nextLayout }
+      settingsRef.current = next
+      setSettingsState(next)
+      persistImmediately()
     },
     [persistImmediately],
   )
 
-  // Pure grow: after a mode flip, ensure the cell is at least the
-  // mode-appropriate minimum height — never shrinks below current.
-  const ensureMinHeightForMode = useCallback(
-    (cellId: string, mode: CellMode) => {
-      if (settingsRef.current.layoutMode !== "grid") return
-      const minH = minHeightForMode(mode)
-      const layout = settingsRef.current.layout ?? []
-      const existing = layout.find((l) => l.i === cellId)
-      if (existing && existing.h >= minH) return
-      const nextH = Math.max(minH, existing?.h ?? minH)
-      setCellLayout(cellId, {
-        x: existing?.x ?? 0,
-        y: existing?.y ?? 0,
-        w: existing?.w ?? 12,
-        h: nextH,
+  // In grid mode, freshly added cells must land in `settings.layout` so
+  // mergeCellLayout has a real position entry to read. The `h` value
+  // written here is a placeholder — the actual rendered grid h is derived
+  // at render time from cell.topHeight + cell.bottomHeight (see
+  // computeCellGridH).
+  const addCell = useCallback(
+    (afterCellId?: string, value?: string): string => {
+      let newId = ""
+      unstable_batchedUpdates(() => {
+        newId = store.addCell(afterCellId, value)
+        if (settingsRef.current.layoutMode !== "grid") return
+        const layout = settingsRef.current.layout ?? []
+        const maxY =
+          layout.length > 0 ? Math.max(...layout.map((l) => l.y + l.h)) : 0
+        // h = 1 sentinel; computeCellGridH overrides at render.
+        setCellLayout(newId, { x: 0, y: maxY, w: 12, h: 1 })
       })
+      return newId
     },
-    [setCellLayout],
+    [store, setCellLayout],
   )
 
+  // Mode toggle: when a cell flips between run and draw, seed bottomHeight
+  // with the mode-appropriate default. This puts the cell into double-view
+  // immediately for draw, and back to single-view (or result-double-view)
+  // for run.
   const setCellMode = useCallback(
     (cellId: string, mode: CellMode) => {
       store.setCellMode(cellId, mode)
-      ensureMinHeightForMode(cellId, mode)
+      if (mode === "draw") {
+        store.updateCell(cellId, { bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT })
+      } else {
+        // back to run mode: size the bottom slot based on what the
+        // existing result actually contains (DQL-with-rows → 10-row
+        // height; DDL/DML/error/empty → notification-only). No result
+        // yet → drop to single-view by clearing bottomHeight.
+        const cell = store.cellsRef.current.find((c) => c.id === cellId)
+        store.updateCell(cellId, {
+          bottomHeight: cell?.result
+            ? computeResultBottomHeight(cell.result)
+            : undefined,
+        })
+      }
     },
-    [store, ensureMinHeightForMode],
+    [store],
   )
 
   const runCell = useCallback(
     async (cellId: string, sql?: string, signal?: AbortSignal) => {
       const ok = await execution.runCell(cellId, sql, signal)
-      if (ok) {
-        const cell = store.cellsRef.current.find((c) => c.id === cellId)
-        if (cell) ensureMinHeightForMode(cellId, cell.mode ?? "run")
+      // Every run (success OR error) puts the cell into result-double-view.
+      // Height is conditioned on the actual result shape so DDL/DML/empty-
+      // DQL/error results don't reserve 10 blank rows of space. Per rule
+      // 6.c, any prior user drag of the bottom handle is discarded on
+      // re-run.
+      const cell = store.cellsRef.current.find((c) => c.id === cellId)
+      if (cell && cell.mode !== "draw") {
+        store.updateCell(cellId, {
+          bottomHeight: computeResultBottomHeight(cell.result),
+        })
       }
       return ok
     },
-    [execution, store, ensureMinHeightForMode],
+    [execution, store],
   )
 
   const runCellScript = useCallback(
     async (cellId: string, queries: string[]) => {
       await execution.runCellScript(cellId, queries)
       const cell = store.cellsRef.current.find((c) => c.id === cellId)
-      if (cell) ensureMinHeightForMode(cellId, cell.mode ?? "run")
+      if (cell && cell.mode !== "draw") {
+        store.updateCell(cellId, {
+          bottomHeight: computeResultBottomHeight(cell.result),
+        })
+      }
     },
-    [execution, store, ensureMinHeightForMode],
+    [execution, store],
   )
 
   const deleteCell = useCallback(
@@ -330,7 +360,7 @@ export const NotebookProvider: React.FC<{
   const liveActionsRef = useRef<NotebookActions>(NOOP_ACTIONS)
   liveActionsRef.current = {
     updateSettings,
-    addCell: store.addCell,
+    addCell,
     deleteCell,
     updateCell: store.updateCell,
     moveCellUp: store.moveCellUp,
@@ -386,7 +416,7 @@ export const NotebookProvider: React.FC<{
     const controller: NotebookController = {
       bufferId,
       addCell: (valueArg, afterCellId) =>
-        storeRef.current.addCell(afterCellId, valueArg),
+        liveActionsRef.current.addCell(afterCellId, valueArg),
       updateCell: (cellId, updates) =>
         storeRef.current.updateCell(cellId, updates),
       deleteCell: (cellId) => liveActionsRef.current.deleteCell(cellId),
@@ -455,7 +485,7 @@ export const NotebookProvider: React.FC<{
             request,
             nextCells,
             settingsRef.current.layout,
-            { gridCols: 12, defaultCellH: 6 },
+            { gridCols: 12, rowHeight: 10, marginY: 20 },
           )
           liveActionsRef.current.updateSettings({
             layoutMode: "grid",

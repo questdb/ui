@@ -22,4 +22,6 @@ export enum EventType {
   BUFFERS_UPDATED = "buffers.updated",
   EXPLAIN_QUERY_EXEC = "ai.explain.query.exec",
   AI_QUERY_HIGHLIGHT = "ai.query.highlight",
+  NOTEBOOK_CELL_RESET_SIZE = "notebook.cell.reset.size",
+  NOTEBOOK_CELL_EXPAND_WIDTH = "notebook.cell.expand.width",
 }

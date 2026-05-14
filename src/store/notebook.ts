@@ -12,14 +12,15 @@ export type NotebookCell = {
   value: string
   editorViewState?: editor.ICodeEditorViewState
   result?: CellResult | null
-  customHeight?: number
-  customResultHeight?: number
-  customMaximizedHeight?: number
-  customGridEditorHeight?: number
+  topHeight?: number
+  bottomHeight?: number
+  topResized?: boolean
+  spotlightEditorRatio?: number
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: boolean
   isChartMaximized?: boolean
+  columnSizing?: Record<string, Record<string, number>>
 }
 
 export type DqlQueryResult = {

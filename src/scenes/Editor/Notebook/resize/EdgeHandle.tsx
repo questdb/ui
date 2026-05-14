@@ -1,102 +1,127 @@
 import React from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
 
-// Purely visual — RGL owns the drag behaviour; visibility is driven by the parent .react-grid-item:hover.
 const Handle = styled.div<{ $axis: string }>`
   position: absolute;
   z-index: 2;
+  outline: none;
 
   &::after {
     content: "";
     position: absolute;
-    border-radius: 4px;
     background: transparent;
-    transition: background 0.15s;
+    transition: background 0.1s;
   }
 
   &:hover::after,
-  &:active::after {
-    background: ${color("comment")};
+  &:focus-visible::after,
+  &:active::after,
+  &:hover::before,
+  &:focus-visible::before,
+  &:active::before {
+    background: ${color("pinkDarker")};
   }
 
   ${({ $axis }) =>
     $axis === "s" &&
     `
-    bottom: -5px;
+    bottom: -10px;
     left: 10px;
     right: 10px;
-    height: 10px;
+    height: 20px;
     cursor: ns-resize;
     &::after {
-      left: 50%;
+      left: 0;
+      right: 0;
       top: 50%;
-      transform: translateX(-50%) translateY(-50%);
-      width: 32px;
-      height: 5px;
+      transform: translateY(-50%);
+      height: 6px;
     }
   `}
 
   ${({ $axis }) =>
     $axis === "e" &&
     `
-    right: -5px;
+    right: -10px;
     top: 10px;
     bottom: 10px;
-    width: 10px;
+    width: 20px;
     cursor: ew-resize;
     &::after {
-      top: 50%;
+      top: 0;
+      bottom: 0;
       left: 50%;
-      transform: translateX(-50%) translateY(-50%);
-      width: 5px;
-      height: 32px;
+      transform: translateX(-50%);
+      width: 6px;
     }
   `}
 
   ${({ $axis }) =>
     $axis === "w" &&
     `
-    left: -5px;
+    left: -10px;
     top: 10px;
     bottom: 10px;
-    width: 10px;
+    width: 20px;
     cursor: ew-resize;
     &::after {
-      top: 50%;
+      top: 0;
+      bottom: 0;
       left: 50%;
-      transform: translateX(-50%) translateY(-50%);
-      width: 5px;
-      height: 32px;
+      transform: translateX(-50%);
+      width: 6px;
     }
   `}
 
   ${({ $axis }) =>
     $axis === "se" &&
     `
-    right: 0;
-    bottom: 0;
-    width: 16px;
-    height: 16px;
+    right: -10px;
+    bottom: -10px;
+    width: 20px;
+    height: 20px;
     cursor: se-resize;
-    &::after {
-      right: 3px;
-      bottom: 3px;
-      width: 6px;
-      height: 6px;
-      border-radius: 0;
-      border-right: 2px solid transparent;
-      border-bottom: 2px solid transparent;
+    background: transparent;
+
+    &::before {
+      content: "";
+      position: absolute;
       background: transparent;
+      transition: background 0.1s;
+      left: 50%;
+      top: 0;
+      width: 6px;
+      height: 50%;
+      transform: translateX(-50%);
+    }
+    &::after {
+      top: 50%;
+      left: 0;
+      width: 50%;
+      height: 6px;
+      transform: translateY(-50%);
     }
   `}
-
-  &[data-axis="se"]:hover::after,
-  &[data-axis="se"]:active::after {
-    border-color: ${color("comment")};
-    background: transparent;
-  }
 `
+
+const dispatchAxisDoubleClick = (axis: string, target: HTMLElement): void => {
+  const cellEl = target.closest<HTMLElement>("[data-cell-id]")
+  const cellId = cellEl?.dataset.cellId
+  if (!cellId) return
+  if (axis === "s") {
+    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_SIZE, { cellId })
+    return
+  }
+  if (axis === "e" || axis === "w") {
+    eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
+      cellId,
+      kind: axis === "e" ? "right" : "left",
+    })
+  }
+}
 
 // Signature matches react-grid-layout's handleComponent prop.
 export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => (
@@ -108,6 +133,11 @@ export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => (
     aria-orientation={axis === "s" || axis === "se" ? "horizontal" : "vertical"}
     aria-label={`Resize cell (${axis}) — drag to resize`}
     tabIndex={0}
+    onDoubleClick={
+      axis === "s" || axis === "e" || axis === "w"
+        ? (e) => dispatchAxisDoubleClick(axis, e.currentTarget as HTMLElement)
+        : undefined
+    }
   />
 )
 

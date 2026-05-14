@@ -2,8 +2,8 @@ import React, { useCallback, useRef } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
 
-const Handle = styled.div<{ $background?: string }>`
-  height: 10px;
+const Handle = styled.div<{ $background?: string; $doubleView?: boolean }>`
+  height: ${({ $doubleView }) => ($doubleView ? "6px" : "10px")};
   cursor: ns-resize;
   position: relative;
   flex-shrink: 0;
@@ -14,23 +14,19 @@ const Handle = styled.div<{ $background?: string }>`
     content: "";
     position: absolute;
     left: 50%;
-    top: 50%;
+    top: 100%;
     transform: translateX(-50%) translateY(-50%);
-    width: 32px;
-    height: 5px;
-    border-radius: 4px;
-    background: transparent;
+    width: 100%;
+    height: 50%;
     transition: background 0.1s;
+    background: transparent;
   }
 
   &:hover::after,
   &:focus-visible::after {
-    background: ${color("comment")};
+    background: ${color("pinkDarker")};
   }
 `
-
-const KEYBOARD_STEP_PX = 16
-const KEYBOARD_STEP_PX_LARGE = 64
 
 type Props = {
   targetRef: React.RefObject<HTMLElement | null>
@@ -39,6 +35,7 @@ type Props = {
   onDoubleClick: () => void
   minHeight?: number
   background?: string
+  doubleView?: boolean
 }
 
 export const ResizeHandle: React.FC<Props> = ({
@@ -48,6 +45,7 @@ export const ResizeHandle: React.FC<Props> = ({
   onDoubleClick,
   minHeight = 48,
   background,
+  doubleView,
 }) => {
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
@@ -85,38 +83,33 @@ export const ResizeHandle: React.FC<Props> = ({
     [targetRef, onResize, onResizeEnd, minHeight],
   )
 
+  // Enter/Space on a focused handle resets to default. This is the only
+  // keyboard-accessible interaction we offer — mouse-drag resizing has no
+  // ergonomic keyboard equivalent here, so don't pretend otherwise in
+  // the aria-label.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!targetRef.current) return
-      const currentHeight = targetRef.current.getBoundingClientRect().height
-      const step = e.shiftKey ? KEYBOARD_STEP_PX_LARGE : KEYBOARD_STEP_PX
-      if (e.key === "ArrowDown") {
-        e.preventDefault()
-        const next = Math.max(minHeight, currentHeight + step)
-        onResize(next)
-        onResizeEnd(next)
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        const next = Math.max(minHeight, currentHeight - step)
-        onResize(next)
-        onResizeEnd(next)
-      } else if (e.key === "Enter" || e.key === " ") {
+      if (e.key === "Enter" || e.key === " ") {
         e.preventDefault()
         onDoubleClick()
       }
     },
-    [targetRef, onResize, onResizeEnd, onDoubleClick, minHeight],
+    [onDoubleClick],
   )
 
   return (
     <Handle
       $background={background}
+      $doubleView={doubleView}
       onMouseDown={handleMouseDown}
       onDoubleClick={onDoubleClick}
       onKeyDown={handleKeyDown}
       role="separator"
       aria-orientation="horizontal"
-      aria-label="Resize handle (Arrow keys to resize, Enter to reset)"
+      // Sighted mouse users hover for the tooltip; screen-reader users
+      // hear the aria-label. Two audiences, two affordances.
+      aria-label="Resize handle. Press Enter to reset to default size."
+      title="Drag to resize. Double-click to reset."
       tabIndex={0}
     />
   )

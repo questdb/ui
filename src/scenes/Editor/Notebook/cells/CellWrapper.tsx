@@ -50,6 +50,9 @@ export const CellWrapper = styled.div.attrs({
       flex-direction: column;
       height: 100%;
       min-height: 0;
+      > *:last-child {
+        flex-grow: 1;
+      }
     `}
 
   &:hover .cell-toolbar,

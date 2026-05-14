@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { Monaco } from "@monaco-editor/react"
 import type { editor } from "monaco-editor"
 import type * as QuestDB from "../../../../utils/questdb"
@@ -9,37 +9,40 @@ const VALIDATION_DEBOUNCE_MS = 300
 export type UseMonacoCellEditorOptions = {
   cellId: string
   editorViewState?: editor.ICodeEditorViewState
-  isMaximized: boolean
-  minEditorHeight: number
-  maxEditorHeight: number
   quest: QuestDB.Client
   onFocus: () => void
   onSaveViewState: (state: editor.ICodeEditorViewState) => void
   onRunAtCursor: () => void
   onRunAll: () => void
+  // Fires every time Monaco reports a content-size change. Cell.tsx uses
+  // this to drive cell.topHeight (the auto-grow path). Naturally rate-
+  // limited by Monaco to per-line-count changes; no debouncing needed
+  // here. Caller is responsible for guarding on cell.topResized.
+  onContentHeightChange?: (px: number) => void
 }
 
 export const useMonacoCellEditor = ({
   cellId,
   editorViewState,
-  isMaximized,
-  minEditorHeight,
-  maxEditorHeight,
   quest,
   onFocus,
   onSaveViewState,
   onRunAtCursor,
   onRunAll,
+  onContentHeightChange,
 }: UseMonacoCellEditorOptions) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
-  const [autoHeight, setAutoHeight] = useState(minEditorHeight)
 
+  // Refs for handlers so the once-mounted Monaco listeners always read
+  // the latest callbacks instead of capturing stale closures.
   const onRunAtCursorRef = useRef(onRunAtCursor)
   onRunAtCursorRef.current = onRunAtCursor
   const onRunAllRef = useRef(onRunAll)
   onRunAllRef.current = onRunAll
+  const onContentHeightChangeRef = useRef(onContentHeightChange)
+  onContentHeightChangeRef.current = onContentHeightChange
 
   const triggerValidation = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return
@@ -71,17 +74,12 @@ export const useMonacoCellEditor = ({
         ed.restoreViewState(editorViewState)
       }
 
-      const updateHeight = () => {
-        const contentHeight = ed.getContentHeight()
-        const newHeight = Math.max(
-          minEditorHeight,
-          Math.min(contentHeight, isMaximized ? Infinity : maxEditorHeight),
-        )
-        setAutoHeight(newHeight)
+      const reportHeight = () => {
+        onContentHeightChangeRef.current?.(ed.getContentHeight())
       }
 
-      ed.onDidContentSizeChange(updateHeight)
-      updateHeight()
+      ed.onDidContentSizeChange(reportHeight)
+      reportHeight()
 
       ed.onDidFocusEditorWidget(onFocus)
       ed.onDidChangeCursorPosition(scheduleValidation)
@@ -109,14 +107,7 @@ export const useMonacoCellEditor = ({
         run: () => void onRunAllRef.current(),
       })
     },
-    [
-      editorViewState,
-      isMaximized,
-      minEditorHeight,
-      maxEditorHeight,
-      onFocus,
-      scheduleValidation,
-    ],
+    [editorViewState, onFocus, scheduleValidation],
   )
 
   useEffect(() => {
@@ -137,7 +128,6 @@ export const useMonacoCellEditor = ({
   return {
     editorRef,
     monacoRef,
-    autoHeight,
     handleEditorMount,
   }
 }

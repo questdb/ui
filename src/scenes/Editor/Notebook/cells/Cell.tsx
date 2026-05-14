@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled, { css, useTheme } from "styled-components"
+import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
 import {
   QuestDBLanguageName,
@@ -26,10 +27,23 @@ import { useEditor } from "../../../../providers/EditorProvider"
 import { emitUserAction } from "../../../../utils/notebookAIBridge"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
+import {
+  DEFAULT_TOP_HEIGHT,
+  defaultBottomHeightFor,
+  isDoubleView,
+  MIN_BOTTOM_HEIGHT_PX,
+  partitionCellHeights,
+  scaleCellHeights,
+  upsertColumnSizing,
+} from "../notebookUtils"
 
+// Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
+// content height for an empty editor (one line + padding); the previous
+// `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
+// pasted content (user-confirmed: unbounded).
 const MIN_EDITOR_HEIGHT = 72
-const MAX_EDITOR_HEIGHT = 600
-const MIN_RESULT_HEIGHT = 40
 
 const RunBar = styled.div`
   display: flex;
@@ -98,47 +112,36 @@ const DrawButton = styled.button<{ $active: boolean }>`
   }
 `
 
-const EditorContainer = styled.div<{
-  $height: number
-  $maximized: boolean
-  $maximizedHeight?: number
-  $gridMode?: boolean
-  $gridEditorHeight?: number
-}>`
-  ${({
-    $maximized,
-    $height,
-    $maximizedHeight,
-    $gridMode,
-    $gridEditorHeight,
-  }) =>
-    $gridMode
-      ? $gridEditorHeight
-        ? css`
-            height: ${$gridEditorHeight}px;
-            min-height: 0;
-            overflow: hidden;
-            flex-shrink: 0;
-          `
-        : css`
-            flex: 1;
-            min-height: 0;
-            overflow: hidden;
-          `
-      : $maximized
-        ? $maximizedHeight
-          ? css`
-              height: ${$maximizedHeight}px;
-              min-height: ${MIN_EDITOR_HEIGHT}px;
-            `
-          : css`
-              flex: 1;
-              min-height: 0;
-            `
-        : css`
-            height: ${$height}px;
-            min-height: ${MIN_EDITOR_HEIGHT}px;
-          `}
+// Editor slot. Numeric sizing (`height` in list/grid, `flex` in spotlight)
+// is applied via the inline `style` prop on the call site so styled-
+// components doesn't mint a new generated class for every distinct pixel
+// value during a resize drag. Only static, boolean-switched rules live
+// in the template here.
+const EditorContainer = styled.div<{ $spotlight: boolean }>`
+  overflow: hidden;
+  background: ${color("editorBackground")};
+  ${({ $spotlight }) =>
+    $spotlight
+      ? css`
+          min-height: 0;
+        `
+      : css`
+          min-height: ${MIN_EDITOR_HEIGHT}px;
+          flex-shrink: 0;
+        `}
+`
+
+const BottomSlot = styled.div<{ $spotlight: boolean }>`
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  ${({ $spotlight }) =>
+    $spotlight
+      ? null
+      : css`
+          flex-shrink: 0;
+        `}
 `
 
 type Props = {
@@ -180,51 +183,48 @@ const CellInner: React.FC<Props> = ({
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
-  const editorResize = useCellResize(
-    MIN_EDITOR_HEIGHT,
-    useCallback(
-      (height: number) => updateCell(cell.id, { customHeight: height }),
-      [cell.id, updateCell],
-    ),
-    useCallback(
-      () => updateCell(cell.id, { customHeight: undefined }),
-      [cell.id, updateCell],
-    ),
-  )
-  const maximizedResize = useCellResize(
+  const contentHeightGetterRef = useRef<() => number | null>(() => null)
+
+  const topResize = useCellResize(
     MIN_EDITOR_HEIGHT,
     useCallback(
       (height: number) =>
-        updateCell(cell.id, { customMaximizedHeight: height }),
+        updateCell(cell.id, { topHeight: height, topResized: true }),
+      [cell.id, updateCell],
+    ),
+    // Write Monaco's CURRENT content height directly on reset, rather
+    // than setting `topHeight: undefined` and waiting for the next
+    // `onContentHeightChange` to fill it in. The wait creates a
+    // one-frame flicker where `topHeight` falls back to
+    // DEFAULT_TOP_HEIGHT (72 px) and the bottom slot jumps up.
+    useCallback(() => {
+      const contentH = contentHeightGetterRef.current()
+      const next =
+        contentH != null
+          ? Math.max(MIN_EDITOR_HEIGHT, contentH)
+          : MIN_EDITOR_HEIGHT
+      updateCell(cell.id, { topHeight: next, topResized: false })
+    }, [cell.id, updateCell]),
+  )
+  const bottomResize = useCellResize(
+    MIN_BOTTOM_HEIGHT_PX,
+    useCallback(
+      (height: number) => updateCell(cell.id, { bottomHeight: height }),
       [cell.id, updateCell],
     ),
     useCallback(
-      () => updateCell(cell.id, { customMaximizedHeight: undefined }),
+      () => updateCell(cell.id, { bottomHeight: undefined }),
       [cell.id, updateCell],
     ),
   )
-  const gridEditorResize = useCellResize(
-    MIN_EDITOR_HEIGHT,
-    useCallback(
-      (height: number) =>
-        updateCell(cell.id, { customGridEditorHeight: height }),
-      [cell.id, updateCell],
-    ),
-    useCallback(
-      () => updateCell(cell.id, { customGridEditorHeight: undefined }),
-      [cell.id, updateCell],
-    ),
-  )
-  const resultResize = useCellResize(
-    MIN_RESULT_HEIGHT,
-    useCallback(
-      (height: number) => updateCell(cell.id, { customResultHeight: height }),
-      [cell.id, updateCell],
-    ),
-    useCallback(
-      () => updateCell(cell.id, { customResultHeight: undefined }),
-      [cell.id, updateCell],
-    ),
+
+  const handleColumnSizingCommit = useCallback(
+    (sizing: Record<string, number>, query: string) => {
+      updateCell(cell.id, {
+        columnSizing: upsertColumnSizing(cell.columnSizing, query, sizing),
+      })
+    },
+    [cell.id, cell.columnSizing, updateCell],
   )
 
   const handleChartConfigChange = useCallback(
@@ -292,40 +292,72 @@ const CellInner: React.FC<Props> = ({
     if (isDrawMode) setCellMode(cell.id, "run")
   }, [cell.id, isDrawMode, setCellMode])
 
-  const liveEditorHeight = editorResize.liveHeight
-  const liveMaximizedHeight = maximizedResize.liveHeight
-  const liveGridEditorHeight = gridEditorResize.liveHeight
-  const liveResultHeight = resultResize.liveHeight
-  const maximizedEditorHeight =
-    liveMaximizedHeight ?? cell.customMaximizedHeight
-  const gridEditorHeight = liveGridEditorHeight ?? cell.customGridEditorHeight
+  const liveTopHeight = topResize.liveHeight
+  const liveBottomHeight = bottomResize.liveHeight
 
-  const { editorRef, monacoRef, autoHeight, handleEditorMount } =
-    useMonacoCellEditor({
-      cellId: cell.id,
-      editorViewState: cell.editorViewState,
-      isMaximized,
-      minEditorHeight: MIN_EDITOR_HEIGHT,
-      maxEditorHeight: MAX_EDITOR_HEIGHT,
-      quest,
-      onFocus: useCallback(
-        () => setFocusedCell(cell.id),
-        [cell.id, setFocusedCell],
-      ),
-      onSaveViewState: useCallback(
-        (state) => updateCell(cell.id, { editorViewState: state }),
-        [cell.id, updateCell],
-      ),
-      onRunAtCursor: () => void handleRunAtCursor(),
-      onRunAll: () => void handleRunAll(),
-    })
+  const topHeight = liveTopHeight ?? cell.topHeight ?? DEFAULT_TOP_HEIGHT
+  const bottomHeight =
+    liveBottomHeight ?? cell.bottomHeight ?? defaultBottomHeightFor(cell)
+  const doubleView = isDoubleView(cell)
 
-  const editorHeight = liveEditorHeight ?? cell.customHeight ?? autoHeight
+  const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
+    null,
+  )
+  const spotlightEditorRatio =
+    spotlightLiveRatio ??
+    cell.spotlightEditorRatio ??
+    topHeight / (topHeight + bottomHeight)
+
+  // Editor height pipeline (hard-cap model):
+  //   - When NOT user-resized: cell.topHeight tracks Monaco's content height
+  //     exactly. Editor auto-grows / auto-shrinks with content.
+  //   - When user-resized (topResized === true): cell.topHeight is FIXED at
+  //     the user's drag value. Monaco's content-size events are ignored;
+  //     content overflow is handled by Monaco's internal scrollbar.
+  // Per user spec: configured top-height should not expand to fit content —
+  // the user's resize is a hard cap, scrolling stays inside Monaco.
+  const handleContentHeightChange = useCallback(
+    (px: number) => {
+      if (isMaximized) return
+      if (cell.topResized) return
+      const next = Math.max(MIN_EDITOR_HEIGHT, px)
+      if (next === cell.topHeight) return
+      updateCell(cell.id, { topHeight: next })
+    },
+    [isMaximized, cell.id, cell.topResized, cell.topHeight, updateCell],
+  )
+
+  const { editorRef, monacoRef, handleEditorMount } = useMonacoCellEditor({
+    cellId: cell.id,
+    editorViewState: cell.editorViewState,
+    quest,
+    onFocus: useCallback(
+      () => setFocusedCell(cell.id),
+      [cell.id, setFocusedCell],
+    ),
+    onSaveViewState: useCallback(
+      (state) => updateCell(cell.id, { editorViewState: state }),
+      [cell.id, updateCell],
+    ),
+    onRunAtCursor: () => void handleRunAtCursor(),
+    onRunAll: () => void handleRunAll(),
+    onContentHeightChange: handleContentHeightChange,
+  })
 
   const { applyHighlight, clearHighlight } = useCellSelectionDecoration(
     editorRef,
     monacoRef,
   )
+
+  // Install the content-height getter that `topResize.resetHeight`
+  // reads (declared above, before `editorRef` is in scope). The
+  // closure over the stable `editorRef` means we don't need to
+  // re-install when `editorRef.current` later transitions from null
+  // to the mounted instance.
+  useEffect(() => {
+    contentHeightGetterRef.current = () =>
+      editorRef.current?.getContentHeight() ?? null
+  }, [editorRef])
 
   const tryRunSelection = useCallback(async (): Promise<boolean> => {
     const ed = editorRef.current
@@ -368,7 +400,8 @@ const CellInner: React.FC<Props> = ({
     if (allQueries.length === 0) return
 
     if (allQueries.length === 1) {
-      const ok = await runCell(cell.id)
+      const sql = normalizeQueryText(allQueries[0].query)
+      const ok = sql ? await runCell(cell.id, sql) : await runCell(cell.id)
       emitRanEvent(ok)
     } else {
       const queryTexts = allQueries
@@ -475,8 +508,106 @@ const CellInner: React.FC<Props> = ({
     return () => window.removeEventListener("keydown", onKey)
   }, [isFocused, setFocusedCell])
 
+  const middleSum = useCallback(() => {
+    if (!isMaximized) return topHeight + bottomHeight
+    const editorH =
+      editorContainerRef.current?.getBoundingClientRect().height ?? 0
+    const bottomH = resultRef.current?.getBoundingClientRect().height ?? 0
+    return editorH + bottomH
+  }, [isMaximized, topHeight, bottomHeight])
+
+  const middleResizeLive = useCallback(
+    (height: number) => {
+      const sum = middleSum()
+      const { top, bottom } = partitionCellHeights(
+        sum,
+        height,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      if (isMaximized) {
+        setSpotlightLiveRatio(top / (top + bottom))
+        return
+      }
+      topResize.resizeLive(top)
+      bottomResize.resizeLive(bottom)
+    },
+    [isMaximized, middleSum, topResize, bottomResize],
+  )
+
+  const middleResizeEnd = useCallback(
+    (height: number) => {
+      const sum = middleSum()
+      const { top, bottom } = partitionCellHeights(
+        sum,
+        height,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      if (isMaximized) {
+        setSpotlightLiveRatio(null)
+        updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
+        return
+      }
+      topResize.resizeEnd(top)
+      bottomResize.resizeEnd(bottom)
+    },
+    [isMaximized, middleSum, topResize, bottomResize, cell.id, updateCell],
+  )
+
+  const resetToDefaults = useCallback(() => {
+    if (isMaximized) {
+      setSpotlightLiveRatio(null)
+      updateCell(cell.id, { spotlightEditorRatio: undefined })
+      return
+    }
+    bottomResize.resetHeight()
+    topResize.resetHeight()
+  }, [isMaximized, bottomResize, topResize, cell.id, updateCell])
+
+  const bottomEdgeResizeLive = useCallback(
+    (newResultHeight: number) => {
+      const { top, bottom } = scaleCellHeights(
+        topHeight,
+        bottomHeight,
+        topHeight + newResultHeight,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      topResize.resizeLive(top)
+      bottomResize.resizeLive(bottom)
+    },
+    [topHeight, bottomHeight, topResize, bottomResize],
+  )
+
+  const bottomEdgeResizeEnd = useCallback(
+    (newResultHeight: number) => {
+      const { top, bottom } = scaleCellHeights(
+        topHeight,
+        bottomHeight,
+        topHeight + newResultHeight,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      topResize.resizeEnd(top)
+      bottomResize.resizeEnd(bottom)
+    },
+    [topHeight, bottomHeight, topResize, bottomResize],
+  )
+
+  useEffect(() => {
+    const handler = (payload?: { cellId?: string }) => {
+      if (payload?.cellId !== cell.id) return
+      resetToDefaults()
+    }
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
+    return () =>
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
+  }, [cell.id, resetToDefaults])
+
   return (
     <CellWrapper
+      data-cell-id={cell.id}
       $focused={isFocused}
       $maximized={isMaximized}
       $gridMode={layoutMode === "grid"}
@@ -488,7 +619,22 @@ const CellInner: React.FC<Props> = ({
       }}
     >
       {!isChartMaximized && (
-        <RunBar className="cell-drag-handle">
+        <RunBar
+          className="cell-drag-handle"
+          onDoubleClick={(e) => {
+            if (layoutMode !== "grid") return
+            if (
+              (e.target as HTMLElement).closest(
+                "button, a, input, select, textarea, .cell-toolbar",
+              )
+            )
+              return
+            eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
+              cellId: cell.id,
+              kind: "full",
+            })
+          }}
+        >
           <RunButtonGroup>
             {isRunning ? (
               <RunButton
@@ -542,16 +688,9 @@ const CellInner: React.FC<Props> = ({
       {!isChartMaximized && (
         <EditorContainer
           ref={editorContainerRef}
-          $height={editorHeight}
-          $maximized={isMaximized}
-          $maximizedHeight={maximizedEditorHeight}
-          $gridMode={layoutMode === "grid"}
-          $gridEditorHeight={
-            // In grid mode the editor must NOT take flex:1 once content
-            // follows it — otherwise the result table renders 0px tall.
-            cell.result || isDrawMode
-              ? (gridEditorHeight ?? autoHeight)
-              : undefined
+          $spotlight={isMaximized}
+          style={
+            isMaximized ? { flex: spotlightEditorRatio } : { height: topHeight }
           }
         >
           <Editor
@@ -572,6 +711,7 @@ const CellInner: React.FC<Props> = ({
               scrollbar: {
                 useShadows: false,
                 handleMouseWheel: isFocused,
+                alwaysConsumeMouseWheel: false,
               },
               folding: false,
               renderLineHighlight: "gutter",
@@ -579,7 +719,7 @@ const CellInner: React.FC<Props> = ({
               lineDecorationsWidth: 24,
               lineNumbersMinChars: 3,
               scrollBeyondLastLine: false,
-              wordWrap: "on",
+              wordWrap: "off",
               padding: { top: 4, bottom: 4 },
               fontSize: 14,
               lineHeight: 24,
@@ -587,59 +727,36 @@ const CellInner: React.FC<Props> = ({
           />
         </EditorContainer>
       )}
-      {!isChartMaximized &&
-        (layoutMode === "grid" ? (
-          (cell.result || isDrawMode) && (
-            <ResizeHandle
-              targetRef={editorContainerRef}
-              onResize={gridEditorResize.resizeLive}
-              onResizeEnd={gridEditorResize.resizeEnd}
-              onDoubleClick={gridEditorResize.resetHeight}
-            />
-          )
-        ) : (
-          <ResizeHandle
-            background={theme.color.editorBackground}
-            targetRef={editorContainerRef}
-            onResize={
-              isMaximized ? maximizedResize.resizeLive : editorResize.resizeLive
-            }
-            onResizeEnd={
-              isMaximized ? maximizedResize.resizeEnd : editorResize.resizeEnd
-            }
-            onDoubleClick={
-              isMaximized
-                ? maximizedResize.resetHeight
-                : editorResize.resetHeight
-            }
-          />
-        ))}
-      {isDrawMode ? (
-        <>
-          <div
-            ref={resultRef}
-            style={
-              isMaximized || layoutMode === "grid"
-                ? {
-                    flex: 1,
-                    minHeight: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                  }
-                : {
-                    // List + non-maximized: parent isn't flex, so use an
-                    // explicit height (live drag → persisted → viewport).
-                    height:
-                      liveResultHeight != null
-                        ? `${liveResultHeight}px`
-                        : cell.customResultHeight
-                          ? `${cell.customResultHeight}px`
-                          : "60vh",
-                    display: "flex",
-                    flexDirection: "column",
-                  }
-            }
-          >
+      {/* Inner-top resize handle (between editor and bottom slot). Only
+          rendered in double-view, since there's nothing below in single-
+          view. Renders in every layout mode (list / grid / spotlight). */}
+      {!isChartMaximized && doubleView && (
+        <ResizeHandle
+          background={theme.color.editorBackground}
+          targetRef={editorContainerRef}
+          onResize={middleResizeLive}
+          onResizeEnd={middleResizeEnd}
+          onDoubleClick={resetToDefaults}
+          doubleView={doubleView}
+        />
+      )}
+      {/* Bottom slot: result grid OR chart, OR chart filling the whole cell
+          when expanded. */}
+      {(doubleView || isChartMaximized) && (
+        <BottomSlot
+          ref={resultRef}
+          $spotlight={isMaximized}
+          style={
+            isChartMaximized
+              ? isMaximized
+                ? { flex: 1 }
+                : { height: topHeight + bottomHeight }
+              : isMaximized
+                ? { flex: 1 - spotlightEditorRatio }
+                : { height: bottomHeight }
+          }
+        >
+          {isDrawMode ? (
             <DrawCanvas
               cell={cell}
               isFocused={isFocused}
@@ -647,57 +764,31 @@ const CellInner: React.FC<Props> = ({
               onAutoRefreshChange={handleAutoRefreshChange}
               onMaximizedChange={handleChartMaximizedChange}
             />
-          </div>
-          {!isMaximized && layoutMode !== "grid" && (
-            <ResizeHandle
-              targetRef={resultRef}
-              onResize={resultResize.resizeLive}
-              onResizeEnd={resultResize.resizeEnd}
-              onDoubleClick={resultResize.resetHeight}
-            />
-          )}
-        </>
-      ) : (
-        cell.result && (
-          <>
-            <div
-              ref={resultRef}
-              style={
-                isMaximized || layoutMode === "grid"
-                  ? {
-                      flex: 1,
-                      minHeight: 0,
-                      display: "flex",
-                      flexDirection: "column",
-                    }
-                  : undefined
-              }
-            >
+          ) : (
+            cell.result && (
               <InlineResultTable
                 result={cell.result}
                 isFocused={isFocused}
-                isMaximized={isMaximized || layoutMode === "grid"}
-                customHeight={
-                  layoutMode === "grid"
-                    ? undefined
-                    : (liveResultHeight ?? cell.customResultHeight)
-                }
                 onTabChange={(index) => setActiveResultIndex(cell.id, index)}
                 onCancelQuery={(index) => {
                   cancelQuery(cell.id, index)
                 }}
+                columnSizing={cell.columnSizing}
+                onColumnSizingCommit={handleColumnSizingCommit}
               />
-            </div>
-            {!isMaximized && layoutMode !== "grid" && (
-              <ResizeHandle
-                targetRef={resultRef}
-                onResize={resultResize.resizeLive}
-                onResizeEnd={resultResize.resizeEnd}
-                onDoubleClick={resultResize.resetHeight}
-              />
-            )}
-          </>
-        )
+            )
+          )}
+        </BottomSlot>
+      )}
+      {!isChartMaximized && !isMaximized && layoutMode !== "grid" && (
+        <ResizeHandle
+          background={theme.color.editorBackground}
+          targetRef={doubleView ? resultRef : editorContainerRef}
+          onResize={doubleView ? bottomEdgeResizeLive : topResize.resizeLive}
+          onResizeEnd={doubleView ? bottomEdgeResizeEnd : topResize.resizeEnd}
+          onDoubleClick={doubleView ? resetToDefaults : topResize.resetHeight}
+          minHeight={doubleView ? MIN_BOTTOM_HEIGHT_PX : undefined}
+        />
       )}
     </CellWrapper>
   )

@@ -52,13 +52,15 @@ declare module "@tanstack/react-table" {
 type Props = {
   data: DqlQueryResult
   isFocused?: boolean
-  customHeight?: number
+  initialColumnSizing?: Record<string, number>
+  onColumnSizingCommit: (sizing: Record<string, number>) => void
 }
 
 export const ResultGrid: React.FC<Props> = ({
   data,
   isFocused = true,
-  customHeight: _customHeight,
+  initialColumnSizing,
+  onColumnSizingCommit,
 }) => {
   const gridRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -109,6 +111,9 @@ export const ResultGrid: React.FC<Props> = ({
     data: data.dataset,
     columns: columnDefs,
     columnResizeMode: "onChange",
+    initialState: initialColumnSizing
+      ? { columnSizing: initialColumnSizing }
+      : undefined,
     getCoreRowModel: getCoreRowModel(),
   })
 
@@ -169,6 +174,15 @@ export const ResultGrid: React.FC<Props> = ({
   })
 
   const columnSizing = table.getState().columnSizing
+  const isResizingColumn = !!table.getState().columnSizingInfo.isResizingColumn
+
+  const wasResizingRef = useRef(isResizingColumn)
+  useEffect(() => {
+    if (wasResizingRef.current && !isResizingColumn) {
+      onColumnSizingCommit(columnSizing)
+    }
+    wasResizingRef.current = isResizingColumn
+  }, [isResizingColumn, columnSizing, onColumnSizingCommit])
 
   const columnVirtualizer = useVirtualizer({
     horizontal: true,
@@ -260,10 +274,12 @@ export const ResultGrid: React.FC<Props> = ({
                     const delta = e.key === "ArrowRight" ? step : -step
                     const current = header.getSize()
                     const next = Math.max(60, current + delta)
-                    table.setColumnSizing((prev) => ({
-                      ...prev,
+                    const nextSizing = {
+                      ...table.getState().columnSizing,
                       [header.column.id]: next,
-                    }))
+                    }
+                    table.setColumnSizing(nextSizing)
+                    onColumnSizingCommit(nextSizing)
                   }}
                   role="separator"
                   aria-orientation="vertical"

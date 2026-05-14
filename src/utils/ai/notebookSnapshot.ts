@@ -21,7 +21,6 @@ export type NotebookContextCell = {
   chart?: { name?: string; type?: string }
   last_run_status?: "success" | "error" | "none" | "running"
   last_run_error_summary?: string
-  custom_height_px?: number
   grid?: { x: number; y: number; w: number; h: number }
 }
 
@@ -106,9 +105,6 @@ const buildCell = (
       name: cell.chartConfig.name,
       type: cell.chartConfig.type,
     }
-  }
-  if (typeof cell.customHeight === "number") {
-    out.custom_height_px = cell.customHeight
   }
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
@@ -212,8 +208,6 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
           c.last_run_error_summary,
         )}`,
       )
-    if (c.custom_height_px !== undefined)
-      lines.push(`      custom_height_px: ${c.custom_height_px}`)
     if (c.grid) {
       lines.push(
         `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w}, h: ${c.grid.h} }`,
