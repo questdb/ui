@@ -47,6 +47,100 @@ const CHECK_ICON_SVG =
   '<path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-6 7.07-7.071-1.414-1.414-5.656 5.657-2.829-2.829-1.414 1.414L11.003 16z"></path>' +
   "</svg>"
 
+// Rotate icon for bar/ohlc visualization toggle (screen_rotation inspired)
+const ROTATE_ICON_SVG =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' +
+  '<path d="M7.34 6.41L.86 12.9l6.49 6.48 6.49-6.48-6.5-6.49zM3.69 12.9l3.66-3.66L11 12.9l-3.66 3.66-3.65-3.66zm15.67-6.26A8.95 8.95 0 0 0 13 4V1L8.45 5.55 13 10V7a6 6 0 0 1 4.9 2.55l2.46-2.91zM19.36 17.1A8.95 8.95 0 0 0 21 12h-3a6 6 0 0 1-1.64 4.13l2 1.97z"/>' +
+  "</svg>"
+
+// Regex to detect visualization function calls in SQL.
+// Uses word boundary to avoid matching e.g. "foobar(" or "sidebar("
+const BAR_FN_REGEX =
+  /\b(?:ohlc_bar_labels|ohlc_bar|bar|sparkline|depth_chart_labels|depth_chart)\s*\(/i
+
+function queryContainsBarFunction(sqlText) {
+  if (!sqlText) return false
+  return BAR_FN_REGEX.test(sqlText)
+}
+
+function detectVisualizationType(value) {
+  if (!value || typeof value !== "string") return null
+
+  // Step 1: depth_chart
+  // U+254E (box drawings light double dash vertical) is the spread separator
+  if (value.includes("\u254e")) {
+    return "depth_chart"
+  }
+
+  // Step 2: ohlc_bar
+  // U+2800 (braille blank) is used as padding in ohlc_bar output.
+  // U+2591 (light shade) is used for bearish candle bodies.
+  if (value.includes("\u2800") || value.includes("\u2591")) {
+    return "ohlc_bar"
+  }
+
+  let hasFullBlock = false
+  let hasFractionalBlock = false
+  let hasLowerBlock = false
+  let hasBoxHorizontal = false
+
+  for (const ch of value) {
+    const cp = ch.codePointAt(0)
+    if (cp >= 0x2589 && cp <= 0x258f) hasFractionalBlock = true
+    if (cp === 0x2588) hasFullBlock = true
+    if (cp >= 0x2581 && cp <= 0x2587) hasLowerBlock = true
+    if (cp === 0x2500) hasBoxHorizontal = true
+  }
+
+  // Bullish-only ohlc_bar candles have full blocks + box horizontal (wicks)
+  // but no fractional blocks and no lower blocks
+  if (hasFullBlock && hasBoxHorizontal && !hasFractionalBlock && !hasLowerBlock) {
+    return "ohlc_bar"
+  }
+
+  // Step 3: bar
+  if (hasFractionalBlock) return "bar"
+  if (hasFullBlock && !hasLowerBlock) return "bar"
+
+  // Step 4: sparkline
+  if (hasLowerBlock) return "sparkline"
+
+  return null
+}
+
+// Split visualization labels output into bar portion, separator, and label portion.
+// OHLC labels start with "O:", depth_chart labels start with "bb:"
+const VIZ_LABEL_REGEX = /^(.*?)([\s\u2800]+)((?:O:|bb:).*)$/
+
+function splitVizLabels(value) {
+  const m = VIZ_LABEL_REGEX.exec(value)
+  if (m) {
+    return { bar: m[1], sep: m[2], labels: m[3] }
+  }
+  return { bar: value, sep: null, labels: null }
+}
+
+// Check at least 2 out of 3 non-null values match
+function detectVisualizationFromData(dataPage, varcharColIndex) {
+  if (!dataPage || dataPage.length === 0) return null
+  let matches = 0
+  let checked = 0
+  let detectedType = null
+
+  for (let i = 0; i < dataPage.length && checked < 3; i++) {
+    const val = dataPage[i][varcharColIndex]
+    if (val === null) continue
+    checked++
+    const vtype = detectVisualizationType(val)
+    if (vtype) {
+      if (!detectedType) detectedType = vtype
+      if (vtype === detectedType) matches++
+    }
+  }
+
+  return matches >= 2 ? detectedType : null
+}
+
 export function grid(rootElement, _paginationFn, id) {
   const defaults = {
     gridID: "qdb-grid",
@@ -65,6 +159,7 @@ export function grid(rootElement, _paginationFn, id) {
     cellWidthMultiplier: 9.6,
     arrayCellWidthMultiplier: 8.3,
     maxCellWidthMultiplier: 0.8,
+    vizCellWidthMultiplier: 1.4,
   }
   const ACTIVE_CELL_CLASS = "qg-c-active"
   const NAV_EVENT_ANY_VERTICAL = 0
@@ -199,6 +294,11 @@ export function grid(rootElement, _paginationFn, id) {
   let activeCellPulseClearTimer
 
   let initialFocusSkipped = false
+
+  // Bar/OHLC visualization state
+  let vizType = null // 'bar', 'ohlc_bar', or null
+  let vizRotated = false // whether the rotated (horizontal) view is active
+  let rotatedContainer
 
   function getColumn(index) {
     return columns[columnPositions[index]]
@@ -806,6 +906,16 @@ export function grid(rootElement, _paginationFn, id) {
     return lines.join("\n")
   }
 
+  // Get cell text values from a row, using data-viz-raw for viz cells
+  function getCellTexts(row) {
+    const texts = []
+    for (const cell of row.childNodes) {
+      const raw = cell.getAttribute && cell.getAttribute("data-viz-raw")
+      texts.push(raw || cell.innerText || "")
+    }
+    return texts
+  }
+
   function getResultSetGridAsMarkdown() {
     // first, we get a starting width, based on the column header
     // this is necessary to get a properly formatted, pipe-aligned table
@@ -824,7 +934,7 @@ export function grid(rootElement, _paginationFn, id) {
 
     // then we loop over our rows to check how wide it needs to be according to the data
     for (const row of rows) {
-      let row_splits = row.innerText.split(/\n/)
+      let row_splits = getCellTexts(row)
       for (const [i, row_split] of row_splits.entries()) {
         column_widths[i] = Math.max(column_widths[i], row_split.length)
       }
@@ -852,7 +962,7 @@ export function grid(rootElement, _paginationFn, id) {
     let data_rows_builder = []
 
     for (const row of rows) {
-      let row_splits = row.innerText.split(/\n/)
+      let row_splits = getCellTexts(row)
 
       // sometimes we get arrays like this: [""] in rows
       // this usually happens at the end of the result set
@@ -1013,6 +1123,28 @@ export function grid(rootElement, _paginationFn, id) {
       addClass(hNameRow, "qg-header-name-row")
       hNameRow.append(hName, copyBtn)
 
+      // Add rotate icon only for 2-column (timestamp + varchar) bar/ohlc results
+      const canRotate = (vizType === "ohlc_bar" || vizType === "bar") && findVizColumns()
+      if (canRotate && c.type.toUpperCase() === "VARCHAR") {
+        const rotateBtn = document.createElement("div")
+        addClass(rotateBtn, "qg-header-rotate")
+        if (vizRotated) {
+          addClass(rotateBtn, "qg-header-rotate-active")
+        }
+        rotateBtn.innerHTML = ROTATE_ICON_SVG
+        rotateBtn.onclick = function (e) {
+          e.stopPropagation()
+          vizRotated = !vizRotated
+          if (vizRotated) {
+            addClass(rotateBtn, "qg-header-rotate-active")
+          } else {
+            removeClass(rotateBtn, "qg-header-rotate-active")
+          }
+          triggerEvent("viz.rotate", { rotated: vizRotated, type: vizType })
+        }
+        hNameRow.append(rotateBtn)
+      }
+
       h.append(hysteresis, hBorderSpan)
       h.append(hNameRow, hType)
 
@@ -1080,6 +1212,15 @@ export function grid(rootElement, _paginationFn, id) {
     layoutStoreColumnSetSha256 = undefined
     panelLeftWidth = 0
     deferVisualsCompute = false
+    vizType = null
+    vizRotated = false
+    if (rotatedContainer) {
+      rotatedContainer.style.display = "none"
+      rotatedContainer.innerHTML = ""
+    }
+    // Restore normal grid elements that showRotatedView may have hidden
+    if (header) header.style.display = ""
+    if (viewport) viewport.style.display = ""
     setFreezeLeft0(0)
     enableHover()
   }
@@ -1185,9 +1326,34 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.textContent = unescapeHtml(
+      const displayValue = unescapeHtml(
         getDisplayedCellValue(column, cellData, columnWidth),
       )
+
+      // Apply coloring and monospace font for visualization columns
+      if (
+        vizType &&
+        column.type.toUpperCase() === "VARCHAR" &&
+        typeof displayValue === "string"
+      ) {
+        if (vizType === "ohlc_bar") {
+          renderOhlcCell(cell, displayValue)
+        } else if (vizType === "depth_chart") {
+          renderDepthChartCell(cell, displayValue)
+        } else {
+          // bar and sparkline: monospace font, preserve whitespace
+          cell.textContent = displayValue
+          cell.style.whiteSpace = "pre"
+          addClass(cell, "qg-ohlc-cell")
+          cell.title = ""
+        }
+      } else {
+        cell.textContent = displayValue
+        cell.title = ""
+        cell.style.whiteSpace = ""
+        removeClass(cell, "qg-ohlc-cell")
+        cell.removeAttribute("data-viz-raw")
+      }
 
       cell.classList.remove("qg-null")
 
@@ -1197,6 +1363,168 @@ export function grid(rootElement, _paginationFn, id) {
     } else {
       cell.textContent = "null"
       cell.classList.add("qg-null")
+    }
+  }
+
+  // Regex to match O:, H:, L:, C: prefixes in labels
+  // Parse "O:1.234 H:5.678 L:0.123 C:4.567" into key-value pairs
+  const OHLC_PAIR_REGEX = /([OHLC]):(\S+)/g
+
+  function renderOhlcLabels(container, labels) {
+    let m
+    OHLC_PAIR_REGEX.lastIndex = 0
+    while ((m = OHLC_PAIR_REGEX.exec(labels)) !== null) {
+      const pair = document.createElement("span")
+      pair.className = "qg-ohlc-label-pair"
+
+      const keySpan = document.createElement("span")
+      keySpan.className = "qg-ohlc-label-key"
+      keySpan.textContent = m[1] + ":"
+      pair.appendChild(keySpan)
+
+      pair.appendChild(document.createTextNode(m[2]))
+      container.appendChild(pair)
+    }
+  }
+
+  function renderOhlcCell(cell, value, stripLabels) {
+    cell.textContent = ""
+    cell.removeAttribute("title")
+    cell.style.whiteSpace = "pre"
+    addClass(cell, "qg-ohlc-cell")
+    // Store raw value for markdown export
+    cell.setAttribute("data-viz-raw", value)
+
+    // Always split bar from labels
+    const parts = splitVizLabels(value)
+    const textToRender = parts.bar
+
+    if (stripLabels) {
+      // In rotated view: show labels as tooltip
+      if (parts.labels) {
+        cell.title = parts.labels
+      }
+    }
+
+    let currentRun = ""
+    let currentType = null // null, 'bullish', 'bearish'
+
+    for (const ch of textToRender) {
+      const cp = ch.codePointAt(0)
+      let charType = null
+      if (cp === 0x2588) {
+        charType = "bullish"
+      } else if (cp === 0x2591) {
+        charType = "bearish"
+      }
+
+      if (charType !== currentType) {
+        if (currentRun) {
+          if (currentType) {
+            const span = document.createElement("span")
+            span.className =
+              currentType === "bullish"
+                ? "qg-ohlc-bullish"
+                : "qg-ohlc-bearish"
+            span.textContent = currentRun
+            cell.appendChild(span)
+          } else {
+            cell.appendChild(document.createTextNode(currentRun))
+          }
+        }
+        currentRun = ch
+        currentType = charType
+      } else {
+        currentRun += ch
+      }
+    }
+
+    // Flush remaining
+    if (currentRun) {
+      if (currentType) {
+        const span = document.createElement("span")
+        span.className =
+          currentType === "bullish" ? "qg-ohlc-bullish" : "qg-ohlc-bearish"
+        span.textContent = currentRun
+        cell.appendChild(span)
+      } else {
+        cell.appendChild(document.createTextNode(currentRun))
+      }
+    }
+
+    // In normal view, render labels right-aligned in a floated container
+    if (!stripLabels && parts.labels) {
+      const labelsContainer = document.createElement("span")
+      labelsContainer.className = "qg-ohlc-labels"
+      renderOhlcLabels(labelsContainer, parts.labels)
+      cell.insertBefore(labelsContainer, cell.firstChild)
+    }
+  }
+
+  // Parse "bb:73339 ba:80708 tb:4.24B ta:4.42B" into key-value pairs
+  const DEPTH_PAIR_REGEX = /(bb|ba|tb|ta):(\S+)/g
+
+  function renderDepthChartLabels(container, labels) {
+    let m
+    DEPTH_PAIR_REGEX.lastIndex = 0
+    while ((m = DEPTH_PAIR_REGEX.exec(labels)) !== null) {
+      const pair = document.createElement("span")
+      pair.className = "qg-ohlc-label-pair"
+
+      const keySpan = document.createElement("span")
+      keySpan.className = "qg-ohlc-label-key"
+      keySpan.textContent = m[1] + ":"
+      pair.appendChild(keySpan)
+
+      pair.appendChild(document.createTextNode(m[2]))
+      container.appendChild(pair)
+    }
+  }
+
+  function renderDepthChartCell(cell, value) {
+    cell.textContent = ""
+    cell.removeAttribute("title")
+    cell.style.whiteSpace = "pre"
+    addClass(cell, "qg-ohlc-cell")
+    // Store raw value for markdown export
+    cell.setAttribute("data-viz-raw", value)
+
+    const parts = splitVizLabels(value)
+    const barPart = parts.bar
+
+    // Split on spread character U+254E
+    const spreadIdx = barPart.indexOf("\u254e")
+    if (spreadIdx === -1) {
+      // No spread char found, render as plain
+      cell.textContent = barPart
+    } else {
+      const bidPart = barPart.slice(0, spreadIdx)
+      const askPart = barPart.slice(spreadIdx + 1)
+
+      if (bidPart) {
+        const bidSpan = document.createElement("span")
+        bidSpan.className = "qg-ohlc-bullish"
+        bidSpan.textContent = bidPart
+        cell.appendChild(bidSpan)
+      }
+
+      // Spread character in default color
+      cell.appendChild(document.createTextNode("\u254e"))
+
+      if (askPart) {
+        const askSpan = document.createElement("span")
+        askSpan.className = "qg-ohlc-bearish"
+        askSpan.textContent = askPart
+        cell.appendChild(askSpan)
+      }
+    }
+
+    // Render labels right-aligned
+    if (parts.labels) {
+      const labelsContainer = document.createElement("span")
+      labelsContainer.className = "qg-ohlc-labels"
+      renderDepthChartLabels(labelsContainer, parts.labels)
+      cell.insertBefore(labelsContainer, cell.firstChild)
     }
   }
 
@@ -1675,6 +2003,11 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function render() {
+    // Skip normal grid rendering when rotated view is active
+    if (vizRotated && vizType) {
+      return
+    }
+
     if (noData()) {
       renderColumns()
       renderRows(0)
@@ -2002,6 +2335,37 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  function isVizColumn(columnIndex) {
+    return vizType && getColumn(columnIndex).type.toUpperCase() === "VARCHAR"
+  }
+
+  // Find timestamp and varchar column indices for a 2-column viz result
+  function findVizColumns() {
+    if (columnCount !== 2) return null
+    let tsCol = -1
+    let varcharCol = -1
+    for (let i = 0; i < 2; i++) {
+      const t = columns[i].type.toUpperCase()
+      if (t === "TIMESTAMP" || t === "TIMESTAMP_NS") tsCol = i
+      else if (t === "VARCHAR") varcharCol = i
+    }
+    if (tsCol === -1 || varcharCol === -1) return null
+    return { tsCol, varcharCol }
+  }
+
+  // Width calculation for viz columns. Unicode block and braille characters
+  // render wider than the standard cellWidthMultiplier assumes.
+  function getVizCellWidth(str) {
+    return Math.max(
+      defaults.minColumnWidth,
+      Math.ceil(
+        str.length *
+          defaults.cellWidthMultiplier *
+          defaults.vizCellWidthMultiplier,
+      ),
+    )
+  }
+
   function computeColumnWidthsFromData() {
     const maxWidth =
       viewport.getBoundingClientRect().width * defaults.maxCellWidthMultiplier
@@ -2014,6 +2378,7 @@ export function grid(rootElement, _paginationFn, id) {
       // a little inefficient, but lets traverse
       for (let i = 0; i < columnCount; i++) {
         let w = getColumnWidth(i)
+        const uncapped = isVizColumn(i)
 
         // Traverse the page to find the widest value in the column, set the width to the widest value
         for (let j = 0; j < (dataPage?.length ?? 0); j++) {
@@ -2023,12 +2388,15 @@ export function grid(rootElement, _paginationFn, id) {
             str = "null"
           } else if (Array.isArray(value)) {
             const arrayColumnWidth = getArrayColumnWidth(value, i)
-            w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+            w = uncapped
+              ? Math.max(w, arrayColumnWidth)
+              : Math.min(maxWidth, Math.max(w, arrayColumnWidth))
             continue
           } else {
             str = value.toString()
           }
-          w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+          const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
+          w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
         }
         offsets[i] = offset
         offset += w
@@ -2062,7 +2430,8 @@ export function grid(rootElement, _paginationFn, id) {
         // this assumes that initial width has been set to the width of the header
         let w
 
-        if (deviants) {
+        const uncapped = isVizColumn(i)
+        if (deviants && !uncapped) {
           w = deviants[getColumn(i).name]
         }
 
@@ -2076,12 +2445,15 @@ export function grid(rootElement, _paginationFn, id) {
               str = "null"
             } else if (getColumn(i).type === "ARRAY") {
               const arrayColumnWidth = getArrayColumnWidth(value, i)
-              w = Math.min(maxWidth, Math.max(w, arrayColumnWidth))
+              w = uncapped
+                ? Math.max(w, arrayColumnWidth)
+                : Math.min(maxWidth, Math.max(w, arrayColumnWidth))
               continue
             } else {
               str = value.toString()
             }
-            w = Math.min(maxWidth, Math.max(w, getCellWidth(str.length)))
+            const cellW = uncapped ? getVizCellWidth(str) : getCellWidth(str.length)
+            w = uncapped ? Math.max(w, cellW) : Math.min(maxWidth, Math.max(w, cellW))
           }
         } else {
           columnOffsets[i] = offset
@@ -2117,6 +2489,8 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function setDataPart1(_data) {
+    const prevVizRotated = vizRotated
+    const prevSql = sql
     clear()
     sql = _data.query
     data.push(_data.dataset)
@@ -2126,6 +2500,37 @@ export function grid(rootElement, _paginationFn, id) {
     ogTimestampIndex = _data.timestamp
     timestampIndex = ogTimestampIndex
     rowCount = _data.count
+
+    // Detect bar/ohlc/sparkline visualization
+    const isBarQuery = queryContainsBarFunction(sql)
+    if (isBarQuery && data[0]) {
+      // For 2-column results (timestamp + varchar), use strict detection
+      const vizCols = findVizColumns()
+      if (vizCols) {
+        vizType = detectVisualizationFromData(data[0], vizCols.varcharCol)
+      } else {
+        // For multi-column results, check each VARCHAR column
+        for (let i = 0; i < columnCount; i++) {
+          if (columns[i].type.toUpperCase() === "VARCHAR") {
+            const detected = detectVisualizationFromData(data[0], i)
+            if (detected) {
+              vizType = detected
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // Preserve rotation state only if the new result can actually rotate
+    // (bar/ohlc type with exactly 2 columns: timestamp + varchar)
+    const canRotate =
+      (vizType === "ohlc_bar" || vizType === "bar") && findVizColumns()
+    if (canRotate && queryContainsBarFunction(prevSql)) {
+      vizRotated = prevVizRotated
+    }
+    // Otherwise vizRotated stays false (reset by clear())
+
     computeHeaderWidths()
     computeVisibleAreaAfterDataIsSet()
   }
@@ -2181,6 +2586,14 @@ export function grid(rootElement, _paginationFn, id) {
     // we can assume that viewport already rendered top left corner of the data set
     focusTopLeftCell()
     setBothRowsActive()
+
+    // If vizRotated was preserved from a previous bar/ohlc query, show rotated view
+    if (vizRotated && vizType) {
+      showRotatedView()
+    } else if (rotatedContainer) {
+      rotatedContainer.style.display = "none"
+      rotatedContainer.innerHTML = ""
+    }
   }
 
   function showPanelLeft() {
@@ -2295,6 +2708,136 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
+  function showRotatedView() {
+    // Keep header visible so the rotate icon remains clickable
+    viewport.style.display = "none"
+    panelLeft.style.display = "none"
+    panelLeftGhost.style.display = "none"
+    panelLeftSnapGhost.style.display = "none"
+    panelLeftInitialHysteresis.style.display = "none"
+    rotatedContainer.style.display = "flex"
+    renderRotatedView()
+  }
+
+  function hideRotatedView() {
+    viewport.style.display = ""
+    rotatedContainer.style.display = "none"
+    rotatedContainer.innerHTML = ""
+    render()
+  }
+
+  function renderRotatedView() {
+    rotatedContainer.innerHTML = ""
+    if (!data || data.length === 0) return
+
+    const vizCols = findVizColumns()
+    if (!vizCols) return
+    const tsColIndex = vizCols.tsCol
+    const varcharColIndex = vizCols.varcharCol
+
+    // Collect all rows from all data pages
+    const allRows = []
+    for (let p = 0; p < data.length; p++) {
+      if (data[p]) {
+        for (let r = 0; r < data[p].length; r++) {
+          allRows.push(data[p][r])
+        }
+      }
+    }
+    if (allRows.length === 0) return
+
+    // Layout: each original row becomes a visual column.
+    // The bar string is kept intact and rotated via writing-mode so the
+    // horizontal bar becomes vertical. Time flows left-to-right.
+
+    const scrollArea = document.createElement("div")
+    addClass(scrollArea, "qg-rotated-scroll")
+
+    const barCells = []
+
+    for (let ri = 0; ri < allRows.length; ri++) {
+      const row = allRows[ri]
+      const colDiv = document.createElement("div")
+      addClass(colDiv, "qg-rotated-col")
+
+      // Bar cell: the entire bar string, rotated via CSS
+      const barCell = document.createElement("div")
+      addClass(barCell, "qg-rotated-bar")
+      const barVal = row[varcharColIndex]
+      if (barVal !== null) {
+        // Strip labels before reversing, show as tooltip
+        const parts = splitVizLabels(barVal)
+        if (parts.labels) {
+          colDiv.title = parts.labels
+        }
+        // Reverse the bar string so that in vertical-rl writing mode,
+        // char[0] (low price) is at the bottom and char[last] (high price)
+        // is at the top, matching a traditional chart orientation.
+        const reversed = [...parts.bar].reverse().join("")
+        if (vizType === "ohlc_bar") {
+          renderOhlcCell(barCell, reversed)
+        } else {
+          // For bar charts, replace left fractional blocks (U+2589-U+258F)
+          // in rotated view: >= 1/2 becomes full block, < 1/2 becomes light
+          // shade to suggest a partial fill without rendering artifacts
+          let cleaned = ""
+          for (const ch of reversed) {
+            const cp = ch.codePointAt(0)
+            if (cp >= 0x2589 && cp <= 0x258c) {
+              // 7/8, 3/4, 5/8, 1/2 -> full block
+              cleaned += "\u2588"
+            } else if (cp >= 0x258d && cp <= 0x258f) {
+              // 3/8, 1/4, 1/8 -> light shade
+              cleaned += "\u2591"
+            } else {
+              cleaned += ch
+            }
+          }
+          barCell.textContent = cleaned
+        }
+      }
+      barCells.push(barCell)
+      colDiv.appendChild(barCell)
+
+      // Timestamp label at bottom - time + date on two lines
+      const tsCell = document.createElement("div")
+      addClass(tsCell, "qg-rotated-ts")
+      const tsVal = row[tsColIndex]
+      if (tsVal !== null) {
+        const ts = tsVal.toString()
+        const timeMatch = ts.match(/T(\d{2}:\d{2})/)
+        const dateMatch = ts.match(/^(\d{4}-\d{2}-\d{2})/)
+        const timeLine = document.createElement("div")
+        timeLine.textContent = timeMatch ? timeMatch[1] : ts.slice(11, 16)
+        tsCell.appendChild(timeLine)
+        if (dateMatch) {
+          const dateLine = document.createElement("div")
+          addClass(dateLine, "qg-rotated-ts-date")
+          dateLine.textContent = dateMatch[1]
+          tsCell.appendChild(dateLine)
+        }
+        tsCell.title = ts
+      }
+      colDiv.appendChild(tsCell)
+
+      scrollArea.appendChild(colDiv)
+    }
+
+    rotatedContainer.appendChild(scrollArea)
+
+    // After DOM insertion, compute available height and cap bars to 80%
+    requestAnimationFrame(function () {
+      const containerH = rotatedContainer.getBoundingClientRect().height
+      // Reserve space for timestamps (~35px) and top gap
+      const tsHeight = 35
+      const availableH = containerH - tsHeight
+      const maxBarH = Math.floor(availableH * 0.8)
+      for (const barCell of barCells) {
+        barCell.style.maxHeight = maxBarH + "px"
+      }
+    })
+  }
+
   function triggerEvent(eventName, data) {
     grid.dispatchEvent(new CustomEvent(eventName, { detail: data }))
   }
@@ -2377,6 +2920,10 @@ export function grid(rootElement, _paginationFn, id) {
     panelLeftInitialHysteresis.onmousemove = colFreezeMouseMoveGhostHandle
     panelLeftInitialHysteresis.onmousedown = colFreezeMouseDown
 
+    rotatedContainer = document.createElement("div")
+    rotatedContainer.className = "qg-rotated-container"
+    rotatedContainer.style.display = "none"
+
     grid.append(
       header,
       viewport,
@@ -2384,7 +2931,17 @@ export function grid(rootElement, _paginationFn, id) {
       panelLeftGhost,
       panelLeftSnapGhost,
       panelLeftInitialHysteresis,
+      rotatedContainer,
     )
+
+    // Listen for rotation toggle
+    grid.addEventListener("viz.rotate", function (e) {
+      if (e.detail.rotated) {
+        showRotatedView()
+      } else {
+        hideRotatedView()
+      }
+    })
     // when grid is navigated via keyboard, mouse hover is disabled
     // to not confuse user. Hover is then re-enabled on mouse move
     grid.onmousemove = enableHover
