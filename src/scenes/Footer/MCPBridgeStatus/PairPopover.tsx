@@ -21,6 +21,8 @@ const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
 
 const SUCCESS_AUTOCLOSE_MS = 3_000
 
+const DEFAULT_WS_URL_PREFIX = "ws://127.0.0.1:"
+
 const Root = styled.div`
   background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px solid ${({ theme }) => theme.color.selection};
@@ -171,7 +173,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       permissions,
       setPermissions,
     } = useMCPBridge()
-    const [draftUrl, setDraftUrl] = useState("")
+    const [draftUrl, setDraftUrl] = useState(DEFAULT_WS_URL_PREFIX)
     const [draftToken, setDraftToken] = useState("")
     const [draftPermissions, setDraftPermissions] = useState<Permissions>(
       () => permissions,
@@ -190,7 +192,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     permissionsRef.current = permissions
     useEffect(() => {
       if (!open) return
-      setDraftUrl(urlRef.current ?? "")
+      setDraftUrl(urlRef.current || DEFAULT_WS_URL_PREFIX)
       setDraftToken(tokenRef.current ?? "")
       setDraftPermissions(permissionsRef.current)
       setValidationError(null)
@@ -259,7 +261,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
     const onDisconnect = () => {
       disconnect()
-      setDraftUrl("")
+      setDraftUrl(DEFAULT_WS_URL_PREFIX)
       setDraftToken("")
       setSubmitted(false)
       setSucceeded(false)
@@ -270,7 +272,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     const onCancel = () => {
       if (isConnecting) {
         disconnect()
-        setDraftUrl("")
+        setDraftUrl(DEFAULT_WS_URL_PREFIX)
         setDraftToken("")
         setValidationError(null)
         setSubmitted(false)
