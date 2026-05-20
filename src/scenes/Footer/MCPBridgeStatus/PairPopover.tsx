@@ -190,6 +190,8 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     tokenRef.current = token
     const permissionsRef = React.useRef(permissions)
     permissionsRef.current = permissions
+    const sawDisconnectAfterSubmitRef = React.useRef(false)
+
     useEffect(() => {
       if (!open) return
       setDraftUrl(urlRef.current || DEFAULT_WS_URL_PREFIX)
@@ -198,11 +200,28 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       setValidationError(null)
       setSubmitted(false)
       setSucceeded(false)
+      sawDisconnectAfterSubmitRef.current = false
     }, [open])
+
+    useEffect(() => {
+      if (!submitted) {
+        sawDisconnectAfterSubmitRef.current = false
+        return
+      }
+      if (status !== "connected") {
+        sawDisconnectAfterSubmitRef.current = true
+      }
+    }, [submitted, status])
 
     // In-render setState so the green icon, success title, and hidden
     // body all commit in the same paint — no one-frame flicker.
-    if (open && submitted && status === "connected" && !succeeded) {
+    if (
+      open &&
+      submitted &&
+      sawDisconnectAfterSubmitRef.current &&
+      status === "connected" &&
+      !succeeded
+    ) {
       setSucceeded(true)
     }
 

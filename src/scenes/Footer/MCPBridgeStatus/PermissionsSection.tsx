@@ -1,67 +1,68 @@
 import React from "react"
 import styled from "styled-components"
-import {
-  togglePermission,
-  type Permissions,
-} from "../../../utils/tools/permissions"
+import { CaretDown } from "@styled-icons/boxicons-regular"
+import { Button } from "../../../components"
+import { DropdownMenu } from "../../../components/DropdownMenu"
+import type { Permissions } from "../../../utils/tools/permissions"
 
-const CompactWrapper = styled.fieldset`
+type Level = "none" | "schema" | "read" | "write"
+
+const PERMISSIONS_BY_LEVEL: Record<Level, Permissions> = {
+  none: { grantSchemaAccess: false, read: false, write: false },
+  schema: { grantSchemaAccess: true, read: false, write: false },
+  read: { grantSchemaAccess: true, read: true, write: false },
+  write: { grantSchemaAccess: true, read: true, write: true },
+}
+
+const levelFromPermissions = (p: Permissions): Level => {
+  if (p.write) return "write"
+  if (p.read) return "read"
+  if (p.grantSchemaAccess) return "schema"
+  return "none"
+}
+
+type Option = {
+  level: Level
+  label: string
+  hint: string
+}
+
+const OPTIONS: Option[] = [
+  {
+    level: "none",
+    label: "None",
+    hint: "AI cannot read schema or data, and cannot execute SQL.",
+  },
+  {
+    level: "schema",
+    label: "Schema access",
+    hint: "Read table list, columns, and details.",
+  },
+  {
+    level: "read",
+    label: "Read",
+    hint: "Read data and schema (DQL).",
+  },
+  {
+    level: "write",
+    label: "Write",
+    hint: "Read data and schema, modify data (DQL, DDL, DML).",
+  },
+]
+
+const Field = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
-  margin: 0;
-  padding: 1rem 1.2rem;
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.6rem;
+  gap: 0.4rem;
+  font-size: 1.1rem;
+  width: 100%;
 `
 
-const CompactLegend = styled.legend`
-  font-size: 1.1rem;
+const FieldLabel = styled.span`
+  color: ${({ theme }) => theme.color.gray2};
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.gray2};
-  padding: 0 0.4rem;
-`
-
-const CompactRow = styled.label<{ $disabled?: boolean }>`
-  display: flex;
-  align-items: flex-start;
-  gap: 0.8rem;
-  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
-  opacity: ${({ $disabled }) => ($disabled ? 0.7 : 1)};
-
-  input[type="checkbox"] {
-    margin-top: 0.3rem;
-    cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
-    flex-shrink: 0;
-  }
-`
-
-const CompactBody = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-  line-height: 1.4;
-`
-
-const CompactLabel = styled.span`
-  font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.foreground};
-  font-weight: 500;
-`
-
-const CompactHint = styled.span`
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
-const RichWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  width: 100%;
 `
 
 const RichTitle = styled.span`
@@ -70,41 +71,73 @@ const RichTitle = styled.span`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const RichRow = styled.label<{ $disabled?: boolean }>`
-  display: flex;
+const TriggerButton = styled(Button).attrs({ skin: "secondary" })`
   justify-content: space-between;
-  align-items: center;
-  gap: 2.4rem;
   width: 100%;
-  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
-  opacity: ${({ $disabled }) => ($disabled ? 0.7 : 1)};
-
-  input[type="checkbox"] {
-    cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
-    flex-shrink: 0;
-    width: 1.6rem;
-    height: 1.6rem;
-  }
+  height: 4.4rem;
+  padding: 0.6rem 1.2rem;
+  gap: 1.2rem;
+  font-weight: 400;
 `
 
-const RichInfoColumn = styled.div`
+const TriggerLabel = styled.span`
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  flex: 1;
   align-items: flex-start;
+  gap: 0.2rem;
   min-width: 0;
+  text-align: left;
 `
 
-const RichName = styled.span`
+const TriggerTitle = styled.span`
   font-size: 1.4rem;
-  font-weight: 400;
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const RichDescription = styled.span`
+const TriggerHint = styled.span`
   font-size: 1.1rem;
   color: ${({ theme }) => theme.color.gray2};
+`
+
+const Content = styled(DropdownMenu.Content)`
+  background: ${({ theme }) => theme.color.backgroundLighter};
+  border: 1px solid ${({ theme }) => theme.color.selection};
+  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
+  padding: 0.4rem;
+  min-width: var(--radix-dropdown-menu-trigger-width);
+`
+
+const ItemRoot = styled.div`
+  position: relative;
+`
+
+const Item = styled(DropdownMenu.Item)`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.8rem 2.4rem 0.8rem 1rem;
+`
+
+const ItemLabel = styled.span`
+  font-size: 1.3rem;
+  font-weight: 500;
+  color: ${({ theme }) => theme.color.foreground};
+`
+
+const ItemHint = styled.span`
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.gray2};
+`
+
+const Check = styled.span`
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${({ theme }) => theme.color.pinkPrimary};
+  font-size: 1.3rem;
+  pointer-events: none;
 `
 
 type Props = {
@@ -114,104 +147,69 @@ type Props = {
   variant?: "compact" | "rich"
 }
 
-type RowSpec = {
-  key: "grantSchemaAccess" | "read" | "write"
-  hook: string
-  label: string
-  hint: string
-  checked: boolean
-  disabled: boolean
-  title?: string
-}
-
 export const PermissionsSection: React.FC<Props> = ({
   value,
   onChange,
   disabled = false,
   variant = "compact",
 }) => {
-  const schemaLockedByRead = value.read
-  const readLockedByWrite = value.write
+  const currentLevel = levelFromPermissions(value)
+  const current = OPTIONS.find((o) => o.level === currentLevel) ?? OPTIONS[0]
 
-  const handle =
-    (key: RowSpec["key"]) => (e: React.ChangeEvent<HTMLInputElement>) => {
-      onChange(togglePermission(value, key, e.target.checked))
-    }
+  const handleSelect = (level: Level) => {
+    onChange(PERMISSIONS_BY_LEVEL[level])
+  }
 
-  const rows: RowSpec[] = [
-    {
-      key: "grantSchemaAccess",
-      hook: "permission-schema",
-      label: "Schema access",
-      hint: "Read table list, columns, and details",
-      checked: value.grantSchemaAccess,
-      disabled: disabled || schemaLockedByRead,
-      title: schemaLockedByRead
-        ? "Reading data requires schema access."
-        : undefined,
-    },
-    {
-      key: "read",
-      hook: "permission-read",
-      label: "Read",
-      hint: "Read data and schema, run DQL",
-      checked: value.read,
-      disabled: disabled || readLockedByWrite,
-      title: readLockedByWrite
-        ? "Writing data requires the read permission."
-        : undefined,
-    },
-    {
-      key: "write",
-      hook: "permission-write",
-      label: "Write",
-      hint: "Modify data (DDL/DML)",
-      checked: value.write,
-      disabled,
-    },
-  ]
+  const trigger = (
+    <DropdownMenu.Trigger asChild>
+      <TriggerButton disabled={disabled} dataHook="permissions-trigger">
+        <TriggerLabel>
+          <TriggerTitle>{current.label}</TriggerTitle>
+          <TriggerHint>{current.hint}</TriggerHint>
+        </TriggerLabel>
+        <CaretDown size={16} />
+      </TriggerButton>
+    </DropdownMenu.Trigger>
+  )
+
+  const content = (
+    <DropdownMenu.Portal>
+      <Content sideOffset={4} align="start">
+        {OPTIONS.map((opt) => (
+          <ItemRoot key={opt.level}>
+            <Item
+              onSelect={() => handleSelect(opt.level)}
+              data-hook={`permission-level-${opt.level}`}
+            >
+              <ItemLabel>{opt.label}</ItemLabel>
+              <ItemHint>{opt.hint}</ItemHint>
+            </Item>
+            {opt.level === currentLevel && <Check>✓</Check>}
+          </ItemRoot>
+        ))}
+      </Content>
+    </DropdownMenu.Portal>
+  )
 
   if (variant === "rich") {
     return (
-      <RichWrapper data-hook="permissions">
+      <Field data-hook="permissions">
         <RichTitle>Permissions</RichTitle>
-        {rows.map((row) => (
-          <RichRow key={row.key} $disabled={row.disabled} title={row.title}>
-            <RichInfoColumn>
-              <RichName>{row.label}</RichName>
-              <RichDescription>{row.hint}</RichDescription>
-            </RichInfoColumn>
-            <input
-              type="checkbox"
-              checked={row.checked}
-              disabled={row.disabled}
-              onChange={handle(row.key)}
-              data-hook={row.hook}
-            />
-          </RichRow>
-        ))}
-      </RichWrapper>
+        <DropdownMenu.Root>
+          {trigger}
+          {content}
+        </DropdownMenu.Root>
+      </Field>
     )
   }
 
   return (
-    <CompactWrapper data-hook="permissions">
-      <CompactLegend>Permissions</CompactLegend>
-      {rows.map((row) => (
-        <CompactRow key={row.key} $disabled={row.disabled} title={row.title}>
-          <input
-            type="checkbox"
-            checked={row.checked}
-            disabled={row.disabled}
-            onChange={handle(row.key)}
-            data-hook={row.hook}
-          />
-          <CompactBody>
-            <CompactLabel>{row.label}</CompactLabel>
-            <CompactHint>{row.hint}</CompactHint>
-          </CompactBody>
-        </CompactRow>
-      ))}
-    </CompactWrapper>
+    <Field data-hook="permissions">
+      <FieldLabel>Permissions</FieldLabel>
+      <DropdownMenu.Root>
+        {trigger}
+        {content}
+      </DropdownMenu.Root>
+    </Field>
   )
 }

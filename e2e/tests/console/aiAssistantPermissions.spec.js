@@ -23,31 +23,23 @@ describe("ai assistant permissions", () => {
       cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
     })
 
-    it("renders three permission checkboxes with cascade visible in SettingsModal", () => {
+    it("renders permission level select with cascading levels in SettingsModal", () => {
       cy.getByDataHook("ai-assistant-settings-button")
         .should("be.visible")
         .click()
 
       cy.getByDataHook("permissions").should("be.visible")
-      cy.getByDataHook("permission-schema").should("be.checked")
-      cy.getByDataHook("permission-read").should("not.be.checked")
-      cy.getByDataHook("permission-write").should("not.be.checked")
+      cy.getByDataHook("permissions-trigger").should("contain", "Schema access")
 
-      // Cascade: check Write → both Read and Schema lock as checked.
-      cy.getByDataHook("permission-write").check()
-      cy.getByDataHook("permission-write").should("be.checked")
-      cy.getByDataHook("permission-read").should("be.checked")
-      cy.getByDataHook("permission-read").should("be.disabled")
-      cy.getByDataHook("permission-schema").should("be.checked")
-      cy.getByDataHook("permission-schema").should("be.disabled")
+      // Raise to Write: trigger label updates and all levels listed in menu.
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-write").click()
+      cy.getByDataHook("permissions-trigger").should("contain", "Write")
 
-      // Reverse cascade: unchecking Schema also clears Read and Write.
-      cy.getByDataHook("permission-write").uncheck()
-      cy.getByDataHook("permission-read").uncheck()
-      cy.getByDataHook("permission-schema").uncheck()
-      cy.getByDataHook("permission-schema").should("not.be.checked")
-      cy.getByDataHook("permission-read").should("not.be.checked")
-      cy.getByDataHook("permission-write").should("not.be.checked")
+      // Drop to None: trigger label updates back.
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-none").click()
+      cy.getByDataHook("permissions-trigger").should("contain", "None")
     })
   })
 

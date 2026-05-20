@@ -160,24 +160,15 @@ describe("MCP bridge permissions (e2e)", () => {
   })
 
   describe("consent modal", () => {
-    it("user unchecks Write before Connect; hello carries { grantSchemaAccess:T, read:T, write:F }", () => {
+    it("user lowers to Read before Connect; hello carries { grantSchemaAccess:T, read:T, write:F }", () => {
       loginAndVisitDeepLink()
 
       cy.getByDataHook("permissions").should("be.visible")
-      cy.getByDataHook("permission-schema").should("be.checked")
-      cy.getByDataHook("permission-read").should("be.checked")
-      cy.getByDataHook("permission-write").should("be.checked")
-      cy.getByDataHook("permission-read").should("be.disabled")
-      cy.getByDataHook("permission-schema").should("be.disabled")
+      cy.getByDataHook("permissions-trigger").should("contain", "Write")
 
-      cy.getByDataHook("permission-write").uncheck()
-      cy.getByDataHook("permission-write").should("not.be.checked")
-      cy.getByDataHook("permission-read")
-        .should("be.checked")
-        .and("not.be.disabled")
-      cy.getByDataHook("permission-schema")
-        .should("be.checked")
-        .and("be.disabled")
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-read").click()
+      cy.getByDataHook("permissions-trigger").should("contain", "Read")
 
       cy.getByDataHook("mcp-pair-consent-connect").click()
 
@@ -208,18 +199,12 @@ describe("MCP bridge permissions (e2e)", () => {
       })
     })
 
-    it("user unchecks Write, Read, then Schema; hello carries all-false (cascade respected)", () => {
+    it("user drops to None; hello carries all-false", () => {
       loginAndVisitDeepLink()
 
-      cy.getByDataHook("permission-write").uncheck()
-      cy.getByDataHook("permission-read").uncheck()
-      cy.getByDataHook("permission-schema")
-        .should("be.checked")
-        .and("not.be.disabled")
-      cy.getByDataHook("permission-schema").uncheck()
-      cy.getByDataHook("permission-schema").should("not.be.checked")
-      cy.getByDataHook("permission-read").should("not.be.checked")
-      cy.getByDataHook("permission-write").should("not.be.checked")
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-none").click()
+      cy.getByDataHook("permissions-trigger").should("contain", "None")
 
       cy.getByDataHook("mcp-pair-consent-connect").click()
       cy.window().should((win) => {
@@ -235,18 +220,19 @@ describe("MCP bridge permissions (e2e)", () => {
   })
 
   describe("permission gate over the wire", () => {
+    const expectedLabel = (p) => {
+      if (p.write) return "Write"
+      if (p.read) return "Read"
+      if (p.grantSchemaAccess) return "Schema access"
+      return "None"
+    }
     const setupPaired = (permissions) => {
       loginAndVisitDeepLink({
         "mcp:permissions": JSON.stringify(permissions),
       })
-      cy.getByDataHook("permission-schema").should(
-        permissions.grantSchemaAccess ? "be.checked" : "not.be.checked",
-      )
-      cy.getByDataHook("permission-read").should(
-        permissions.read ? "be.checked" : "not.be.checked",
-      )
-      cy.getByDataHook("permission-write").should(
-        permissions.write ? "be.checked" : "not.be.checked",
+      cy.getByDataHook("permissions-trigger").should(
+        "contain",
+        expectedLabel(permissions),
       )
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
@@ -359,7 +345,7 @@ describe("MCP bridge permissions (e2e)", () => {
   })
 
   describe("popover: submit-only persistence", () => {
-    it("toggling Write off without clicking Apply does NOT change localStorage", () => {
+    it("lowering to Read without clicking Apply does NOT change localStorage", () => {
       loginAndVisitDeepLink()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
@@ -373,7 +359,8 @@ describe("MCP bridge permissions (e2e)", () => {
         ).to.deep.equal({ grantSchemaAccess: true, read: true, write: true })
       })
 
-      cy.getByDataHook("permission-write").uncheck()
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-read").click()
       cy.getByDataHook("mcp-pair-cancel").click()
 
       cy.window().then((win) => {
@@ -383,16 +370,17 @@ describe("MCP bridge permissions (e2e)", () => {
       })
 
       cy.getByDataHook("mcp-bridge-status-pill").click()
-      cy.getByDataHook("permission-write").should("be.checked")
+      cy.getByDataHook("permissions-trigger").should("contain", "Write")
     })
 
-    it("toggle Write off + Apply: localStorage updates, no reconnect", () => {
+    it("lower to Read + Apply: localStorage updates, no reconnect", () => {
       loginAndVisitDeepLink()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 
       cy.getByDataHook("mcp-bridge-status-pill").click()
-      cy.getByDataHook("permission-write").uncheck()
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-read").click()
       cy.getByDataHook("mcp-pair-submit").should("contain", "Connect").click()
 
       cy.window().then((win) => {
@@ -411,7 +399,8 @@ describe("MCP bridge permissions (e2e)", () => {
   describe("persistence across refresh", () => {
     it("consented pair auto-restores; new hello carries the previously-committed permissions", () => {
       loginAndVisitDeepLink()
-      cy.getByDataHook("permission-write").uncheck()
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-read").click()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 

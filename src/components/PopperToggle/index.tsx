@@ -86,6 +86,10 @@ export const PopperToggle = ({
         return
       }
 
+      if (target?.closest?.("[data-radix-popper-content-wrapper]")) {
+        return
+      }
+
       if (_active) {
         setActive(false)
         if (onToggle) {
