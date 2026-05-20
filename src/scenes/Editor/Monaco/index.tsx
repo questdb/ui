@@ -963,7 +963,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       validationTimeoutRef.current = window.setTimeout(() => {
         triggerJitValidation()
         validationTimeoutRef.current = null
-      }, 300)
+      }, 500)
     })
 
     editor.onDidChangeModelContent(async (e) => {
@@ -1116,7 +1116,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       validationTimeoutRef.current = window.setTimeout(() => {
         triggerJitValidation()
         validationTimeoutRef.current = null
-      }, 300)
+      }, 1000)
     })
 
     editor.onDidChangeModel(() => {

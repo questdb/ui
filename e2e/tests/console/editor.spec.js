@@ -878,6 +878,30 @@ describe("errors", () => {
       "Invalid JSON response from the server",
     )
   })
+
+  it("JIT-validates queries after content-change (1000ms) and cursor-change (500ms) debounces", () => {
+    cy.intercept("/api/v1/sql/validate*").as("validate")
+
+    cy.typeQuery("selec 1;\n\n   selec 2")
+
+    cy.wait(750)
+    cy.getErrorMarker().should("not.exist")
+
+    cy.typeQuery("34")
+    cy.wait(750)
+    cy.getErrorMarker().should("not.exist")
+
+    // Let the debounce expire and the validate request return
+    cy.wait("@validate")
+    cy.matchErrorMarkerPosition({ left: 24, width: 40 })
+
+    cy.typeQuery(";\n\nselect * from tables()")
+    cy.wait(2000)
+    cy.getErrorMarker().should("not.exist")
+
+    cy.clickLine(3)
+    cy.matchErrorMarkerPosition({ left: 24, width: 40 })
+  })
 })
 
 describe("running query with F9", () => {
