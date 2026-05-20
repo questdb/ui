@@ -1573,3 +1573,46 @@ export function isCursorInQuotedIdentifier(
   }
   return inDouble ? openQuoteOffset : -1
 }
+
+export const pinMonacoContextMenu = (
+  editor: IStandaloneCodeEditor,
+): (() => void) => {
+  const cleanups: Array<() => void> = []
+  const containerDomNode = editor.getContainerDomNode()
+  const contextMenuObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of Array.from(mutation.addedNodes)) {
+        if (
+          node instanceof HTMLElement &&
+          node.classList.contains("context-view") &&
+          node.classList.contains("monaco-menu-container")
+        ) {
+          const rect = node.getBoundingClientRect()
+          node.style.position = "fixed"
+          node.style.left = `${rect.left}px`
+          node.style.top = `${rect.top}px`
+
+          // Monaco reuses the node on subsequent opens, resetting styles.
+          const styleObserver = new MutationObserver(() => {
+            if (node.style.position !== "fixed") {
+              const rect = node.getBoundingClientRect()
+              node.style.position = "fixed"
+              node.style.left = `${rect.left}px`
+              node.style.top = `${rect.top}px`
+            }
+          })
+          styleObserver.observe(node, {
+            attributes: true,
+            attributeFilter: ["style"],
+          })
+          cleanups.push(() => styleObserver.disconnect())
+        }
+      }
+    }
+  })
+  contextMenuObserver.observe(containerDomNode, { childList: true })
+  cleanups.push(() => contextMenuObserver.disconnect())
+  return () => {
+    for (const c of cleanups) c()
+  }
+}

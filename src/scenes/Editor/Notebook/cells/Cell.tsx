@@ -727,6 +727,7 @@ const CellInner: React.FC<Props> = ({
               padding: { top: 4, bottom: 4 },
               fontSize: 14,
               lineHeight: 24,
+              fixedOverflowWidgets: true,
             }}
           />
         </EditorContainer>

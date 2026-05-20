@@ -7,6 +7,7 @@ import {
   type LayoutItem,
   verticalCompactor,
 } from "react-grid-layout"
+import { absoluteStrategy } from "react-grid-layout/core"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -395,6 +396,7 @@ const GridLayout: React.FC = () => {
         compactor={verticalCompactor}
         onDragStop={handleDragStop}
         onResizeStop={handleResizeStop}
+        positionStrategy={absoluteStrategy}
       >
         {cells.map((cell) => (
           <GridCellWrapper key={cell.id} cellId={cell.id}>

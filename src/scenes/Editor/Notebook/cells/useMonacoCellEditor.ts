@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef } from "react"
 import type { Monaco } from "@monaco-editor/react"
 import type { editor } from "monaco-editor"
 import type * as QuestDB from "../../../../utils/questdb"
-import { clearModelMarkers, validateQueryJIT } from "../../Monaco/utils"
+import {
+  clearModelMarkers,
+  pinMonacoContextMenu,
+  validateQueryJIT,
+} from "../../Monaco/utils"
 
 const VALIDATION_DEBOUNCE_MS = 300
 
@@ -44,6 +48,7 @@ export const useMonacoCellEditor = ({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
+  const contextMenuCleanupRef = useRef<(() => void) | null>(null)
 
   // Refs for handlers so the once-mounted Monaco listeners always read
   // the latest callbacks instead of capturing stale closures.
@@ -96,6 +101,8 @@ export const useMonacoCellEditor = ({
       ed.onDidContentSizeChange(reportHeight)
       reportHeight()
 
+      contextMenuCleanupRef.current = pinMonacoContextMenu(ed)
+
       ed.onDidFocusEditorWidget(onFocus)
       ed.onDidChangeCursorPosition(scheduleValidation)
       ed.onDidChangeModelContent(scheduleValidation)
@@ -130,6 +137,8 @@ export const useMonacoCellEditor = ({
       if (validationTimeoutRef.current) {
         window.clearTimeout(validationTimeoutRef.current)
       }
+      contextMenuCleanupRef.current?.()
+      contextMenuCleanupRef.current = null
       if (editorRef.current && monacoRef.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
         const state = editorRef.current.saveViewState()
