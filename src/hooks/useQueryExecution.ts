@@ -2,6 +2,11 @@ import { useCallback, useContext } from "react"
 import { QuestContext } from "../providers/QuestProvider"
 import * as QuestDB from "../utils/questdb"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
+import {
+  normalizeVariables,
+  prependGlobalsDeclare,
+} from "../scenes/Editor/Notebook/declareUtils"
+import type { NotebookVariable } from "../store/notebook"
 
 export const RESULT_DISPLAY_LIMIT = 50_000
 
@@ -15,13 +20,16 @@ export type QueryExecResult = {
   error?: string
 }
 
-export const useQueryExecution = () => {
+export const useQueryExecution = (globals?: NotebookVariable[]) => {
   const { quest } = useContext(QuestContext)
 
   const executeSingle = useCallback(
     async (sql: string, signal?: AbortSignal): Promise<QueryExecResult> => {
+      const normalized = normalizeVariables(globals)
+      const expanded =
+        normalized.length > 0 ? prependGlobalsDeclare(sql, normalized).sql : sql
       try {
-        const { promise, queryId } = quest.queryRaw(sql, {
+        const { promise, queryId } = quest.queryRaw(expanded, {
           limit: `0,${RESULT_DISPLAY_LIMIT}`,
           cancellable: true,
         })
@@ -80,7 +88,7 @@ export const useQueryExecution = () => {
         }
       }
     },
-    [quest],
+    [quest, globals],
   )
 
   return { executeSingle }

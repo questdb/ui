@@ -13,6 +13,7 @@ import {
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { emitUserAction } from "../../../utils/notebookAIBridge"
+import { VariablesPopover } from "./globals/VariablesPopover"
 
 const Toolbar = styled(Box).attrs({
   align: "center",
@@ -123,22 +124,25 @@ export const NotebookToolbar: React.FC = () => {
       >
         Build with AI
       </BuildWithAIButton>
-      <ToggleGroup>
-        <ToggleButton
-          $active={mode === "list"}
-          onClick={() => handleModeChange("list")}
-          title="List layout"
-        >
-          <ListIcon size={18} />
-        </ToggleButton>
-        <ToggleButton
-          $active={mode === "grid"}
-          onClick={() => handleModeChange("grid")}
-          title="Grid layout"
-        >
-          <SquaresFourIcon size={18} />
-        </ToggleButton>
-      </ToggleGroup>
+      <Box align="center" gap="0.8rem">
+        <VariablesPopover />
+        <ToggleGroup>
+          <ToggleButton
+            $active={mode === "list"}
+            onClick={() => handleModeChange("list")}
+            title="List layout"
+          >
+            <ListIcon size={18} />
+          </ToggleButton>
+          <ToggleButton
+            $active={mode === "grid"}
+            onClick={() => handleModeChange("grid")}
+            title="Grid layout"
+          >
+            <SquaresFourIcon size={18} />
+          </ToggleButton>
+        </ToggleGroup>
+      </Box>
     </Toolbar>
   )
 }

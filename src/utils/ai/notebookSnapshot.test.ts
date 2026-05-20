@@ -45,6 +45,7 @@ const makeController = (
   duplicateCell: () => "c",
   runCell: () => Promise.resolve({ success: true }),
   setLayoutMode: () => undefined,
+  setVariables: () => undefined,
   setCellLayout: () => undefined,
   setCellMode: () => undefined,
   setCellChartConfig: () => undefined,
@@ -197,6 +198,38 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("includes settings.variables when non-empty and omits when missing", () => {
+    const cells = [sql("a", "SELECT @x FROM trades")]
+    const withVars = makeWorkspace(
+      new Map([
+        [
+          1,
+          {
+            cells,
+            settings: {
+              variables: [
+                { name: "x", value: "10" },
+                { name: "sym", value: "'BTC'" },
+              ],
+            },
+          },
+        ],
+      ]),
+    )
+    const withoutVars = makeWorkspace(new Map([[2, { cells }]]))
+    const a = buildSnapshot(withVars, 1)
+    const b = buildSnapshot(withoutVars, 2)
+    if (a?.status === "ok" && b?.status === "ok") {
+      expect(a.variables).toEqual([
+        { name: "x", value: "10" },
+        { name: "sym", value: "'BTC'" },
+      ])
+      expect(b.variables).toBeUndefined()
+    } else {
+      throw new Error("expected ok snapshots")
+    }
+  })
+
   it("surfaces chart summary without leaking series data", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
@@ -262,6 +295,35 @@ describe("formatSnapshot", () => {
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("- id: a")
     expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 4 }")
+  })
+
+  it("emits a variables block when present, omits when empty", () => {
+    const withVars = makeWorkspace(
+      new Map([
+        [
+          1,
+          {
+            cells: [sql("a", "SELECT @x")],
+            settings: {
+              variables: [
+                { name: "x", value: "10" },
+                { name: "sym", value: "'BTC'" },
+              ],
+            },
+          },
+        ],
+      ]),
+    )
+    const out = formatSnapshot(buildSnapshot(withVars, 1)!)
+    expect(out).toContain("variables:")
+    expect(out).toMatch(/x: "10"/)
+    expect(out).toMatch(/sym: "'BTC'"/)
+
+    const noVars = makeWorkspace(
+      new Map([[2, { cells: [sql("a", "SELECT 1")] }]]),
+    )
+    const out2 = formatSnapshot(buildSnapshot(noVars, 2)!)
+    expect(out2).not.toContain("variables:")
   })
 })
 

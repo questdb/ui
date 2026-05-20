@@ -9,6 +9,7 @@ import type {
 } from "../../store/notebook"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "../executeAIFlow"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
 // Never includes columns/rows/count from query results.
@@ -31,6 +32,7 @@ export type NotebookContextSnapshot =
       label: string
       layout_mode: "list" | "grid"
       maximized_cell_id: string | null
+      variables?: Array<{ name: string; value: string }>
       cells: NotebookContextCell[]
     }
   | {
@@ -144,7 +146,7 @@ export const buildSnapshot = (
     (settings.layout ?? []).map((l) => [l.i, l]),
   )
 
-  return {
+  const out: NotebookContextSnapshot = {
     status: "ok",
     buffer_id: bufferId,
     label: meta.label,
@@ -152,6 +154,11 @@ export const buildSnapshot = (
     maximized_cell_id: maximizedCellId,
     cells: cells.map((c) => buildCell(c, gridByCellId, layoutMode)),
   }
+  const variables = normalizeVariables(settings.variables)
+  if (variables.length > 0) {
+    out.variables = variables
+  }
+  return out
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
@@ -182,6 +189,14 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.variables && snap.variables.length > 0) {
+    lines.push("  variables:")
+    for (const { name, value } of snap.variables) {
+      lines.push(
+        `    ${name}: ${JSON.stringify(sanitizeForPromptContext(value))}`,
+      )
+    }
+  }
   lines.push("  cells:")
   for (const c of snap.cells) {
     lines.push(`    - id: ${c.id}`)

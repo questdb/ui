@@ -110,15 +110,6 @@ const GridScrollContainer = styled.div`
 
 const renderResizeHandle = renderEdgeHandle
 
-const EmptyState = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  color: ${color("comment")};
-`
-
 const MIN_CELL_W = 2
 // Minimum grid rows. Sized so the rendered floor is ~editor + chrome
 // (`MIN_EDITOR_HEIGHT 72 + CELL_CHROME_PX 40 ≈ 112 px`), letting the
@@ -434,8 +425,7 @@ const NotebookContent: React.FC = () => {
       <NotebookWrapper>
         <NotebookToolbar />
         <CellListContainer>
-          <EmptyState>No cells yet</EmptyState>
-          <AddCellBottom />
+          <AddCellBottom alignCenter />
         </CellListContainer>
       </NotebookWrapper>
     )

@@ -6,6 +6,11 @@ import { clearModelMarkers, validateQueryJIT } from "../../Monaco/utils"
 
 const VALIDATION_DEBOUNCE_MS = 300
 
+type ValidateFn = (
+  sql: string,
+  signal?: AbortSignal,
+) => ReturnType<QuestDB.Client["validateQuery"]>
+
 export type UseMonacoCellEditorOptions = {
   cellId: string
   editorViewState?: editor.ICodeEditorViewState
@@ -19,6 +24,10 @@ export type UseMonacoCellEditorOptions = {
   // limited by Monaco to per-line-count changes; no debouncing needed
   // here. Caller is responsible for guarding on cell.topResized.
   onContentHeightChange?: (px: number) => void
+  // Optional override for the JIT validator. Notebook passes a wrapped
+  // function that prepends global variables as DECLARE so `@symbol`
+  // references resolve. Falls back to quest.validateQuery if absent.
+  validate?: ValidateFn
 }
 
 export const useMonacoCellEditor = ({
@@ -30,6 +39,7 @@ export const useMonacoCellEditor = ({
   onRunAtCursor,
   onRunAll,
   onContentHeightChange,
+  validate,
 }: UseMonacoCellEditorOptions) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
@@ -43,6 +53,8 @@ export const useMonacoCellEditor = ({
   onRunAllRef.current = onRunAll
   const onContentHeightChangeRef = useRef(onContentHeightChange)
   onContentHeightChangeRef.current = onContentHeightChange
+  const validateRef = useRef<ValidateFn | undefined>(validate)
+  validateRef.current = validate
 
   const triggerValidation = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return
@@ -51,7 +63,10 @@ export const useMonacoCellEditor = ({
       editorRef.current,
       cellId.charCodeAt(0),
       () => ({}),
-      (q, signal) => quest.validateQuery(q, signal),
+      (q, signal) =>
+        validateRef.current
+          ? validateRef.current(q, signal)
+          : quest.validateQuery(q, signal),
     )
   }, [cellId, quest])
 

@@ -38,7 +38,7 @@ const ConnectionStatus = () => {
     <Wrapper>
       <StatusIcon isConnected={isConnected} />
       {isConnected ? (
-        <Text color="white">Connected</Text>
+        <Text color="white">QuestDB Connected</Text>
       ) : (
         <Text color="white">Error connecting to QuestDB</Text>
       )}

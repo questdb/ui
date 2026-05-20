@@ -12,7 +12,9 @@ const StyledButton = styled(Button)`
 
 const StyledCheckboxCircle = styled(CheckboxCircle)`
   position: absolute;
-  transform: translate(75%, -75%);
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
   color: ${({ theme }) => theme.color.green};
 `
 

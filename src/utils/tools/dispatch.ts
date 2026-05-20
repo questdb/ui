@@ -13,6 +13,7 @@ import {
   type NotebookToolErrorCode,
 } from "../notebookAIBridge"
 import type { CellMode } from "../../store/notebook"
+import type { NotebookVariable } from "../../store/notebook"
 import type {
   ChartConfig,
   ChartType,
@@ -28,6 +29,11 @@ import {
 import { categoryFor } from "./tools"
 import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
+import {
+  isValidVariableName,
+  renderDeclareValidationQuery,
+  validateVariableShape,
+} from "../../scenes/Editor/Notebook/declareUtils"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { ToolExecutionContext } from "../ai/shared"
@@ -510,11 +516,12 @@ export const dispatchTool = async (
         )
       }
       case "apply_notebook_state": {
-        const { buffer_id, layout_mode, maximized_cell_id, cells } =
+        const { buffer_id, layout_mode, maximized_cell_id, variables, cells } =
           (input as {
             buffer_id: number
             layout_mode?: "list" | "grid" | null
             maximized_cell_id?: string | null
+            variables?: NotebookVariable[] | null
             cells: Array<{
               id?: string | null
               value: string
@@ -562,6 +569,87 @@ export const dispatchTool = async (
             is_error: true,
           }
         }
+        if (
+          variables !== undefined &&
+          variables !== null &&
+          !Array.isArray(variables)
+        ) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message:
+                "VALIDATION_ERROR: variables must be an ordered array of {name,value} entries (or null to preserve).",
+            }),
+            is_error: true,
+          }
+        }
+        if (Array.isArray(variables)) {
+          const seen = new Set<string>()
+          for (const [idx, variable] of variables.entries()) {
+            if (
+              !variable ||
+              typeof variable !== "object" ||
+              typeof variable.name !== "string" ||
+              typeof variable.value !== "string"
+            ) {
+              return {
+                content: JSON.stringify({
+                  error_code: "validation",
+                  message: `VALIDATION_ERROR: variables[${idx}] must be an object with string name and value fields.`,
+                }),
+                is_error: true,
+              }
+            }
+            const { name } = variable
+            if (!isValidVariableName(name)) {
+              return {
+                content: JSON.stringify({
+                  error_code: "validation",
+                  message: `VALIDATION_ERROR: variables[${idx}].name "${name}" is not a valid QuestDB identifier. First char must be a letter, underscore, or non-ASCII Unicode char (U+0080..U+FFFF); remaining chars may also include digits. No leading '@'.`,
+                }),
+                is_error: true,
+              }
+            }
+            if (seen.has(name)) {
+              return {
+                content: JSON.stringify({
+                  error_code: "validation",
+                  message: `VALIDATION_ERROR: duplicate variable name "${name}". Variables are ordered, but each name may only appear once.`,
+                }),
+                is_error: true,
+              }
+            }
+            seen.add(name)
+          }
+          for (let idx = 0; idx < variables.length; idx += 1) {
+            const shapeError = validateVariableShape(variables[idx])
+            if (shapeError) {
+              return {
+                content: JSON.stringify({
+                  error_code: "validation",
+                  message: `VALIDATION_ERROR: variables[${idx}] (${variables[idx].name}) shape check failed (${shapeError.kind}). Each value must be a single expression with no embedded assignments, top-level commas, or DECLARE syntax. Use parentheses to group expressions if commas are needed.`,
+                }),
+                is_error: true,
+              }
+            }
+          }
+          if (validateSql) {
+            for (let idx = 0; idx < variables.length; idx += 1) {
+              const result = await validateSql(
+                renderDeclareValidationQuery(variables.slice(0, idx + 1)),
+              )
+              if ("error" in result) {
+                return {
+                  content: JSON.stringify({
+                    error_code: "validation",
+                    message: `VALIDATION_ERROR: variables[${idx}] (${variables[idx].name}) failed QuestDB validation: ${result.error}`,
+                  }),
+                  is_error: true,
+                }
+              }
+            }
+          }
+        }
         // Shared by the draw-invariant gate (below) and the post-apply
         // auto-run loop (after applyNotebookState).
         const existingModes = new Map<string, CellMode | undefined>()
@@ -600,6 +688,10 @@ export const dispatchTool = async (
           layoutMode: layout_mode ?? null,
           maximizedCellId:
             maximized_cell_id === undefined ? undefined : maximized_cell_id,
+          variables:
+            variables === undefined || variables === null
+              ? undefined
+              : variables,
           cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
             const cell: ApplyNotebookStateCellRequest = { value: c.value }
             if (c.id !== undefined && c.id !== null) cell.id = c.id

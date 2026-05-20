@@ -2,6 +2,7 @@ import type {
   CellMode,
   NotebookCell,
   NotebookSettings,
+  NotebookVariable,
   NotebookViewState,
 } from "../store/notebook"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
@@ -35,6 +36,7 @@ export type NotebookController = {
     signal?: AbortSignal,
   ) => Promise<{ success: boolean; error?: string }>
   setLayoutMode: (mode: "list" | "grid") => void
+  setVariables: (variables: NotebookVariable[]) => void
   setCellLayout: (
     cellId: string,
     pos: { x: number; y: number; w: number; h: number },
@@ -68,6 +70,7 @@ export type ApplyNotebookStateCellRequest = {
 export type ApplyNotebookStateRequest = {
   layoutMode?: "list" | "grid" | null
   maximizedCellId?: string | null
+  variables?: NotebookVariable[] | null
   cells: ApplyNotebookStateCellRequest[]
 }
 

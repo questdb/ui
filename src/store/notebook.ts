@@ -76,9 +76,15 @@ export type CellLayoutItem = {
 
 export type NotebookLayoutMode = "list" | "grid"
 
+export type NotebookVariable = {
+  name: string
+  value: string
+}
+
 export type NotebookSettings = {
   layoutMode?: NotebookLayoutMode
   layout?: CellLayoutItem[]
+  variables?: NotebookVariable[]
 }
 
 export type NotebookViewState = {

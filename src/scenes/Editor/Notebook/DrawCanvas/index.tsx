@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
@@ -28,8 +21,9 @@ import { useAdaptivePoll } from "../../../../hooks/useAdaptivePoll"
 import { useQueryExecution } from "../../../../hooks/useQueryExecution"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { getQueriesFromText } from "../../Monaco/utils"
-import { QuestContext } from "../../../../providers/QuestProvider"
 import { resultsEquivalent, successResults } from "./drawCanvasUtils"
+import { useNotebookActions } from "../NotebookProvider"
+import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -91,8 +85,9 @@ export const DrawCanvas: React.FC<Props> = ({
   onAutoRefreshChange,
   onMaximizedChange,
 }) => {
-  const { executeSingle } = useQueryExecution()
-  const { quest } = useContext(QuestContext)
+  const { getVariables } = useNotebookActions()
+  const { executeSingle } = useQueryExecution(getVariables())
+  const validateWithGlobals = useValidateWithGlobals()
   const [results, setResults] = useState<QueryExecResult[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settledKey, setSettledKey] = useState<string | null>(null)
@@ -102,14 +97,10 @@ export const DrawCanvas: React.FC<Props> = ({
     | { kind: "failed"; message: string }
     | null
   >(null)
-  const classifyCacheRef = useRef<Map<string, "DQL" | "DDL_DML" | "ERROR">>(
-    new Map(),
+  const classifyCache = useMemo(
+    () => new Map<string, "DQL" | "DDL_DML" | "ERROR">(),
+    [cell.value],
   )
-  const classifyCacheValueKeyRef = useRef<string>(cell.value)
-  if (classifyCacheValueKeyRef.current !== cell.value) {
-    classifyCacheRef.current = new Map()
-    classifyCacheValueKeyRef.current = cell.value
-  }
 
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
   const [zoomStart, setZoomStart] = useState(0)
@@ -146,30 +137,33 @@ export const DrawCanvas: React.FC<Props> = ({
     try {
       // Runtime backstop: a user typing DDL into an already-draw cell would
       // otherwise reach executeSingle on the next poll tick.
-      const cache = classifyCacheRef.current
       try {
         await Promise.all(
           queries.map(async (q) => {
-            if (cache.has(q)) return
-            const res = await quest.validateQuery(q)
-            if ("error" in res) cache.set(q, "ERROR")
-            else if ("columns" in res) cache.set(q, "DQL")
-            else cache.set(q, "DDL_DML")
+            if (classifyCache.has(q)) return
+            const res = await validateWithGlobals(q, ac.signal)
+            if ("error" in res) classifyCache.set(q, "ERROR")
+            else if ("columns" in res) classifyCache.set(q, "DQL")
+            else classifyCache.set(q, "DDL_DML")
           }),
         )
       } catch (e) {
+        if (ac.signal.aborted) return
         const message = e instanceof Error ? e.message : "validate failed"
         setClassifyBlock({ kind: "failed", message })
         setSettledKey(queriesKey)
         return
       }
+      if (ac.signal.aborted) return
       const offender = queries
-        .map((q) => ({ q, klass: cache.get(q) }))
+        .map((q) => ({ q, klass: classifyCache.get(q) }))
         .find((x) => x.klass === "DDL_DML")
       if (offender) {
-        const validateResult = await quest
-          .validateQuery(offender.q)
-          .catch(() => null)
+        const validateResult = await validateWithGlobals(
+          offender.q,
+          ac.signal,
+        ).catch(() => null)
+        if (ac.signal.aborted) return
         const queryType =
           validateResult && "queryType" in validateResult
             ? validateResult.queryType
@@ -192,7 +186,7 @@ export const DrawCanvas: React.FC<Props> = ({
     } finally {
       if (inFlightRef.current === ac) inFlightRef.current = null
     }
-  }, [executeSingle, quest, queries, queriesKey])
+  }, [classifyCache, executeSingle, validateWithGlobals, queries, queriesKey])
 
   useEffect(() => {
     void fetchAll()

@@ -6,9 +6,10 @@ import { useNotebookActions } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import { emitUserAction } from "../../../../utils/notebookAIBridge"
 
-const BottomButton = styled.div`
+const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   display: flex;
   justify-content: center;
+  height: ${({ $alignCenter }) => ($alignCenter ? "100%" : "auto")};
   padding: 0.8rem 0;
   margin-top: 1rem;
 `
@@ -97,16 +98,18 @@ const useUserAddCell = () => {
 }
 
 type AddCellBottomProps = {
+  alignCenter?: boolean
   afterCellId?: string
 }
 
 export const AddCellBottom: React.FC<AddCellBottomProps> = ({
   afterCellId,
+  alignCenter = false,
 }) => {
   const addCell = useUserAddCell()
 
   return (
-    <BottomButton>
+    <BottomButton $alignCenter={alignCenter}>
       <AddButton onClick={() => addCell(afterCellId)}>
         <Plus />
         Add Cell

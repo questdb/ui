@@ -22,9 +22,7 @@
           "description": "The name of the table or materialized view to get schema for"
         }
       },
-      "required": [
-        "table_name"
-      ]
+      "required": ["table_name"]
     }
   },
   {
@@ -40,17 +38,13 @@
           "description": "The name of the table or materialized view to get details for"
         }
       },
-      "required": [
-        "table_name"
-      ]
+      "required": ["table_name"]
     }
   },
   {
     "name": "suggest_query",
     "category": "free",
-    "surfaces": [
-      "ai"
-    ],
+    "surfaces": ["ai"],
     "description": "Suggest a SQL query to the user. The query will be displayed as a suggestion that the user can accept or reject. Always validate the query using validate_query before suggesting it.",
     "inputSchema": {
       "type": "object",
@@ -61,9 +55,7 @@
           "description": "The SQL query to suggest to the user"
         }
       },
-      "required": [
-        "query"
-      ]
+      "required": ["query"]
     }
   },
   {
@@ -79,9 +71,7 @@
           "description": "The SQL query to validate"
         }
       },
-      "required": [
-        "query"
-      ]
+      "required": ["query"]
     }
   },
   {
@@ -122,10 +112,7 @@
           "description": "List of specific docs items in the category. IMPORTANT: Category of these items must match the category parameter. Name of these items should exactly match the entry in the table of contents you get with get_questdb_toc."
         }
       },
-      "required": [
-        "category",
-        "items"
-      ]
+      "required": ["category", "items"]
     }
   },
   {
@@ -138,16 +125,11 @@
       "additionalProperties": false,
       "properties": {
         "label": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Label shown on the new notebook tab. Pass null to use the default."
         }
       },
-      "required": [
-        "label"
-      ]
+      "required": ["label"]
     }
   },
   {
@@ -163,9 +145,7 @@
           "description": "Notebook buffer id (from <notebook_context> prefix)."
         }
       },
-      "required": [
-        "buffer_id"
-      ]
+      "required": ["buffer_id"]
     }
   },
   {
@@ -183,10 +163,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -201,9 +178,7 @@
           "type": "number"
         }
       },
-      "required": [
-        "buffer_id"
-      ]
+      "required": ["buffer_id"]
     }
   },
   {
@@ -223,26 +198,15 @@
           "description": "SQL for the cell. May contain multiple statements separated by `;`. In draw mode, multi-statement cells overlay series on a single chart: the first query's timestamp column is the x-axis anchor, subsequent queries contribute additional numeric series merged on the time axis."
         },
         "after_cell_id": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Insert after this cell id; pass null to append to the end."
         },
         "run": {
-          "type": [
-            "boolean",
-            "null"
-          ],
+          "type": ["boolean", "null"],
           "description": "If true, run the cell immediately after inserting. Response includes success/error status — still no data. Pass null to skip. When the user has not granted the 'write' permission, running a DDL/DML cell is refused; the cell is still added."
         }
       },
-      "required": [
-        "buffer_id",
-        "sql",
-        "after_cell_id",
-        "run"
-      ]
+      "required": ["buffer_id", "sql", "after_cell_id", "run"]
     }
   },
   {
@@ -264,11 +228,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "value"
-      ]
+      "required": ["buffer_id", "cell_id", "value"]
     }
   },
   {
@@ -287,10 +247,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -309,10 +266,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -331,10 +285,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -353,10 +304,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -375,10 +323,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -395,16 +340,10 @@
         },
         "mode": {
           "type": "string",
-          "enum": [
-            "list",
-            "grid"
-          ]
+          "enum": ["list", "grid"]
         }
       },
-      "required": [
-        "buffer_id",
-        "mode"
-      ]
+      "required": ["buffer_id", "mode"]
     }
   },
   {
@@ -435,14 +374,7 @@
           "type": "number"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "x",
-        "y",
-        "w",
-        "h"
-      ]
+      "required": ["buffer_id", "cell_id", "x", "y", "w", "h"]
     }
   },
   {
@@ -462,17 +394,10 @@
         },
         "mode": {
           "type": "string",
-          "enum": [
-            "run",
-            "draw"
-          ]
+          "enum": ["run", "draw"]
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "mode"
-      ]
+      "required": ["buffer_id", "cell_id", "mode"]
     }
   },
   {
@@ -503,41 +428,26 @@
           ]
         },
         "name": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Chart title. Null preserves the current name (patch semantics)."
         },
         "x_column": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "X-axis column; null preserves the current value."
         },
         "y_columns": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "string"
           },
           "description": "Y-axis columns; null preserves the current value."
         },
         "partition_by_column": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Categorical column to partition series by; null preserves current."
         },
         "ohlc": {
-          "type": [
-            "object",
-            "null"
-          ],
+          "type": ["object", "null"],
           "description": "Column mapping for candlestick charts. All four fields required when used; null preserves current.",
           "additionalProperties": false,
           "properties": {
@@ -554,12 +464,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "open",
-            "high",
-            "low",
-            "close"
-          ]
+          "required": ["open", "high", "low", "close"]
         }
       },
       "required": [
@@ -593,11 +498,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "value"
-      ]
+      "required": ["buffer_id", "cell_id", "value"]
     }
   },
   {
@@ -619,11 +520,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "value"
-      ]
+      "required": ["buffer_id", "cell_id", "value"]
     }
   },
   {
@@ -639,23 +536,30 @@
           "type": "number"
         },
         "layout_mode": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "enum": [
-            "list",
-            "grid",
-            null
-          ],
+          "type": ["string", "null"],
+          "enum": ["list", "grid", null],
           "description": "Notebook layout mode after this apply. Null preserves current."
         },
         "maximized_cell_id": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Spotlight one cell id, or null to clear. Pass null to clear."
+        },
+        "variables": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "value"]
+          },
+          "description": "Ordered notebook-scoped global variables to be referenced as @var in the query (the DECLARE block surfaced in the Variables popover). Each item is {\"name\": \"from\", \"value\": \"dateadd('d', -7, now())\"}; names have no leading '@'. Order matters: if one variable references another, place the dependency first and the dependent variable later. Values are sent as a notebook-scoped `DECLARE` block prepended to each cell statement (or merged into the cell's own `DECLARE` block when present). Globals are server-resolved at parse time, so operator precedence and lexical shadowing follow QuestDB's `DECLARE` semantics. For non-`SELECT` statement forms (`INSERT`/`CREATE`/`UPDATE`/`ALTER`/…) globals are not injected; declare locally inside the inner `SELECT` if needed. Pass null to preserve current; pass [] to clear all."
         },
         "cells": {
           "type": "array",
@@ -665,10 +569,7 @@
             "additionalProperties": false,
             "properties": {
               "id": {
-                "type": [
-                  "string",
-                  "null"
-                ],
+                "type": ["string", "null"],
                 "description": "Existing cell id to update, or null/omitted for a new cell."
               },
               "value": {
@@ -676,36 +577,20 @@
                 "description": "SQL text of the cell. May contain multiple statements separated by `;`. In draw mode, this overlays series on one chart: the first query's timestamp is the x-axis anchor; subsequent queries contribute extra numeric series merged on time. Use this to combine metrics from different tables or different aggregations into a single chart."
               },
               "mode": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "run",
-                  "draw",
-                  null
-                ],
+                "type": ["string", "null"],
+                "enum": ["run", "draw", null],
                 "description": "Cell mode. Null defaults to 'run' for new cells, preserves current for existing."
               },
               "auto_refresh": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
+                "type": ["boolean", "null"],
                 "description": "Auto-refresh polling for draw cells. Null defaults to true when mode='draw'."
               },
               "is_chart_maximized": {
-                "type": [
-                  "boolean",
-                  "null"
-                ],
+                "type": ["boolean", "null"],
                 "description": "Chart-fills-cell flag. Null defaults to true when mode='draw'."
               },
               "chart_config": {
-                "type": [
-                  "object",
-                  "null"
-                ],
+                "type": ["object", "null"],
                 "additionalProperties": false,
                 "description": "Chart configuration; required for new draw-mode cells. Null preserves existing.",
                 "properties": {
@@ -722,37 +607,22 @@
                     ]
                   },
                   "x_column": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "y_columns": {
-                    "type": [
-                      "array",
-                      "null"
-                    ],
+                    "type": ["array", "null"],
                     "items": {
                       "type": "string"
                     }
                   },
                   "partition_by_column": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "name": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "ohlc": {
-                    "type": [
-                      "object",
-                      "null"
-                    ],
+                    "type": ["object", "null"],
                     "additionalProperties": false,
                     "properties": {
                       "open": {
@@ -768,12 +638,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "open",
-                      "high",
-                      "low",
-                      "close"
-                    ]
+                    "required": ["open", "high", "low", "close"]
                   }
                 },
                 "required": [
@@ -786,10 +651,7 @@
                 ]
               },
               "grid": {
-                "type": [
-                  "object",
-                  "null"
-                ],
+                "type": ["object", "null"],
                 "additionalProperties": false,
                 "description": "Grid position when layout_mode='grid'. x/y/w/h in 12-column units (w ≤ 12).",
                 "properties": {
@@ -806,12 +668,7 @@
                     "type": "integer"
                   }
                 },
-                "required": [
-                  "x",
-                  "y",
-                  "w",
-                  "h"
-                ]
+                "required": ["x", "y", "w", "h"]
               }
             },
             "required": [
@@ -830,6 +687,7 @@
         "buffer_id",
         "layout_mode",
         "maximized_cell_id",
+        "variables",
         "cells"
       ]
     }
@@ -847,17 +705,11 @@
           "type": "number"
         },
         "cell_id": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "description": "Cell id to spotlight, or null to clear."
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -873,27 +725,19 @@
           "description": "The SQL statement to execute."
         },
         "limit": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "minimum": 1,
           "maximum": 10000,
           "description": "Maximum rows to return (default 100, max 10000). Pass null for default."
         }
       },
-      "required": [
-        "sql",
-        "limit"
-      ]
+      "required": ["sql", "limit"]
     }
   },
   {
     "name": "get_workspace_state",
     "category": "free",
-    "surfaces": [
-      "mcp"
-    ],
+    "surfaces": ["mcp"],
     "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
@@ -908,9 +752,7 @@
   {
     "name": "get_recent_user_actions",
     "category": "free",
-    "surfaces": [
-      "mcp"
-    ],
+    "surfaces": ["mcp"],
     "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
     "inputSchema": {
       "type": "object",

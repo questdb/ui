@@ -38,6 +38,7 @@ import {
   scaleCellHeights,
   upsertColumnSizing,
 } from "../notebookUtils"
+import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 
 // Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
 // content height for an empty editor (one line + padding); the previous
@@ -185,6 +186,8 @@ const CellInner: React.FC<Props> = ({
 
   const contentHeightGetterRef = useRef<() => number | null>(() => null)
 
+  const validateWithGlobals = useValidateWithGlobals()
+
   const topResize = useCellResize(
     MIN_EDITOR_HEIGHT,
     useCallback(
@@ -259,7 +262,7 @@ const CellInner: React.FC<Props> = ({
     validatingDrawRef.current = true
     try {
       const decision = await requireAllDQL(cell.value, (s) =>
-        quest.validateQuery(s),
+        validateWithGlobals(s),
       )
       if (!decision.granted) {
         toast.error(decision.reason)
@@ -285,7 +288,7 @@ const CellInner: React.FC<Props> = ({
     setCellMode,
     setCellChartMaximized,
     bufferIdForEvents,
-    quest,
+    validateWithGlobals,
   ])
 
   const exitDrawIfNeeded = useCallback(() => {
@@ -342,6 +345,7 @@ const CellInner: React.FC<Props> = ({
     onRunAtCursor: () => void handleRunAtCursor(),
     onRunAll: () => void handleRunAll(),
     onContentHeightChange: handleContentHeightChange,
+    validate: validateWithGlobals,
   })
 
   const { applyHighlight, clearHighlight } = useCellSelectionDecoration(

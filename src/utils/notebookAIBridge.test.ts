@@ -33,6 +33,7 @@ const makeController = (
   duplicateCell: () => "c2",
   runCell: () => Promise.resolve({ success: true }),
   setLayoutMode: () => undefined,
+  setVariables: () => undefined,
   setCellLayout: () => undefined,
   setCellMode: () => undefined,
   setCellChartConfig: () => undefined,

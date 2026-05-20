@@ -330,6 +330,184 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
+  it("apply_notebook_state forwards ordered variables; null/undefined preserve, [] clears", async () => {
+    const client = makeClient()
+    const variables = [
+      { name: "x", value: "10" },
+      { name: "from_ts", value: "dateadd('d', -7, now())" },
+    ]
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables,
+        cells: [{ value: "SELECT @x FROM trades WHERE ts > @from_ts" }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(client.applyNotebookState).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        variables,
+      }),
+    )
+
+    const client2 = makeClient()
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: null,
+        cells: [{ value: "SELECT 1" }],
+      },
+      client2,
+      noopStatus,
+    )
+    expect(client2.applyNotebookState).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variables: undefined }),
+    )
+
+    const client3 = makeClient()
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [],
+        cells: [{ value: "SELECT 1" }],
+      },
+      client3,
+      noopStatus,
+    )
+    expect(client3.applyNotebookState).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ variables: [] }),
+    )
+  })
+
+  it("apply_notebook_state rejects invalid variable names with a VALIDATION_ERROR", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [{ name: "bad-name", value: "1" }],
+        cells: [{ value: "SELECT 1" }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code: string }
+    expect(parsed.error_code).toBe("validation")
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("apply_notebook_state rejects invalid variable values via QuestDB validation", async () => {
+    for (const value of ["", "select", "(1,2,3)"]) {
+      const client = makeClient()
+      const validateSql = vi.fn(() =>
+        Promise.resolve({
+          query: "DECLARE @x := bad SELECT 1",
+          position: 14,
+          error: "bad variable value",
+        }),
+      )
+      const res = await dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          layout_mode: null,
+          maximized_cell_id: null,
+          variables: [{ name: "x", value }],
+          cells: [{ value: "SELECT 1" }],
+        },
+        client,
+        noopStatus,
+        undefined,
+        validateSql,
+      )
+      expect(res.is_error).toBe(true)
+      const parsed = JSON.parse(res.content) as { error_code: string }
+      expect(parsed.error_code).toBe("validation")
+      expect(client.applyNotebookState).not.toHaveBeenCalled()
+    }
+  })
+
+  it("apply_notebook_state rejects multi-assignment value injection before validateSql", async () => {
+    const client = makeClient()
+    const validateSql = vi.fn()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [{ name: "x", value: "1, @evil := 999" }],
+        cells: [{ value: "SELECT 1" }],
+      },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as {
+      error_code: string
+      message: string
+    }
+    expect(parsed.error_code).toBe("validation")
+    expect(parsed.message).toContain("shape check failed")
+    expect(validateSql).not.toHaveBeenCalled()
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("apply_notebook_state validates ordered variable prefixes with QuestDB", async () => {
+    const client = makeClient()
+    const validateSql = vi.fn(() =>
+      Promise.resolve({
+        query: "SELECT 1",
+        columns: [{ name: "1", type: "INT" }],
+        timestamp: 0,
+      }),
+    )
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [
+          { name: "base", value: "10" },
+          { name: "derived", value: "@base + 1" },
+        ],
+        cells: [{ value: "SELECT @derived" }],
+      },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(validateSql).toHaveBeenNthCalledWith(
+      1,
+      "DECLARE\n  @base := 10\nSELECT 1",
+    )
+    expect(validateSql).toHaveBeenNthCalledWith(
+      2,
+      "DECLARE\n  @base := 10,\n  @derived := @base + 1\nSELECT 1",
+    )
+    expect(client.applyNotebookState).toHaveBeenCalled()
+  })
+
   it("apply_notebook_state auto-derives ohlc for candlestick when y_columns has 4 entries", async () => {
     const client = makeClient()
     await dispatchTool(

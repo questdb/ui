@@ -12,6 +12,7 @@ import { useEditor } from "../../../providers/EditorProvider"
 import type {
   CellLayoutItem,
   NotebookCell,
+  NotebookVariable,
   NotebookViewState,
   NotebookSettings,
   CellMode,
@@ -47,6 +48,7 @@ export type NotebookState = {
 }
 
 export type NotebookActions = {
+  getVariables: () => NotebookVariable[] | undefined
   updateSettings: (updates: Partial<NotebookSettings>) => void
   addCell: (afterCellId?: string, value?: string) => string
   deleteCell: (cellId: string) => void
@@ -78,6 +80,7 @@ export type NotebookActions = {
 export type NotebookContextType = NotebookState & NotebookActions
 
 const NOOP_ACTIONS: NotebookActions = {
+  getVariables: () => undefined,
   updateSettings: () => undefined,
   addCell: () => "",
   deleteCell: () => undefined,
@@ -124,7 +127,6 @@ export const NotebookProvider: React.FC<{
   bufferId: number
 }> = ({ initialState, bufferId, children }) => {
   const { updateBuffer } = useEditor()
-  const { executeSingle } = useQueryExecution()
 
   const [focusedCellId, setFocusedCellState] = useState<string | null>(
     initialState.focusedCellId ?? null,
@@ -135,6 +137,8 @@ export const NotebookProvider: React.FC<{
   const [settings, setSettingsState] = useState<NotebookSettings>(
     initialState.settings ?? {},
   )
+
+  const { executeSingle } = useQueryExecution(settings.variables)
 
   const focusedCellIdRef = useRef(focusedCellId)
   const maximizedCellIdRef = useRef(maximizedCellId)
@@ -359,6 +363,7 @@ export const NotebookProvider: React.FC<{
   // consumers don't re-render when the underlying callbacks are recreated.
   const liveActionsRef = useRef<NotebookActions>(NOOP_ACTIONS)
   liveActionsRef.current = {
+    getVariables: () => settingsRef.current.variables,
     updateSettings,
     addCell,
     deleteCell,
@@ -382,6 +387,7 @@ export const NotebookProvider: React.FC<{
 
   const actionsValue = useMemo<NotebookActions>(
     () => ({
+      getVariables: () => liveActionsRef.current.getVariables(),
       updateSettings: (...args) =>
         liveActionsRef.current.updateSettings(...args),
       addCell: (...args) => liveActionsRef.current.addCell(...args),
@@ -454,6 +460,8 @@ export const NotebookProvider: React.FC<{
       },
       setLayoutMode: (mode) =>
         liveActionsRef.current.updateSettings({ layoutMode: mode }),
+      setVariables: (variables) =>
+        liveActionsRef.current.updateSettings({ variables }),
       setCellLayout: (cellId, pos) =>
         liveActionsRef.current.setCellLayout(cellId, pos),
       setCellMode: (cellId, mode) => {
@@ -508,6 +516,11 @@ export const NotebookProvider: React.FC<{
           !nextCells.some((c) => c.id === maximizedCellIdRef.current)
         ) {
           liveActionsRef.current.setMaximizedCellId(null)
+        }
+        if (request.variables !== undefined) {
+          liveActionsRef.current.updateSettings({
+            variables: request.variables ?? [],
+          })
         }
         return { applied: diff }
       },
