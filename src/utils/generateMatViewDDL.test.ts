@@ -33,8 +33,8 @@ describe("generateMatViewDDL", () => {
     const result = generateMatViewDDL(ddl)
     expect(result).toMatch(/SAMPLE BY 5m/i)
     expect(result).toMatch(/PARTITION BY MONTH/i)
-    // Source TTL 3 DAYS → next TTL-ladder rung is 7 DAYS.
-    expect(result).toMatch(/TTL\s+7\s+DAYS/i)
+    // Source TTL 3 DAYS is below MONTH partition unit → floored to 1M, bumped → 1 YEARS.
+    expect(result).toMatch(/TTL\s+1\s+YEARS/i)
     expect(result).not.toMatch(/bids/i)
     expect(result).not.toMatch(/asks/i)
   })
@@ -178,17 +178,17 @@ describe("generateMatViewDDL", () => {
   it("handles GEOHASH columns via last()", () => {
     const ddl = `CREATE TABLE 'sometable2' (
       timestamp TIMESTAMP,
-      emre INT,
-      berk BOOLEAN,
-      kaya GEOHASH(5c)
+      foo INT,
+      bar BOOLEAN,
+      baz GEOHASH(5c)
     ) timestamp(timestamp) PARTITION BY DAY TTL 5 DAYS;`
 
     const result = generateMatViewDDL(ddl)
-    expect(result).toMatch(/last\(\s*kaya\s*\)\s+AS\s+last_kaya/i)
-    expect(result).toMatch(/last\(\s*emre\s*\)/i)
-    expect(result).toMatch(/last\(\s*berk\s*\)/i)
-    // Source TTL 5 DAYS → next TTL-ladder rung is 7 DAYS.
-    expect(result).toMatch(/TTL\s+7\s+DAYS/i)
+    expect(result).toMatch(/last\(\s*baz\s*\)\s+AS\s+last_baz/i)
+    expect(result).toMatch(/last\(\s*foo\s*\)/i)
+    expect(result).toMatch(/last\(\s*bar\s*\)/i)
+    // Source TTL 5 DAYS is below MONTH partition unit → floored to 1M, bumped → 1 YEARS.
+    expect(result).toMatch(/TTL\s+1\s+YEARS/i)
   })
 
   it("handles non-designated TIMESTAMP / TIMESTAMP_NS via last()", () => {
@@ -613,8 +613,21 @@ describe("generateMatViewDDL", () => {
   })
 
   describe("TTL ladder", () => {
-    // TTL of the new mat view = next ladder rung strictly greater than the source TTL.
-    const mv = (
+    // TTL of the new mat view = next ladder rung strictly greater than
+    // max(source TTL, new partition unit). The floor avoids a degenerate
+    // "TTL == partition" view that retains only a single partition.
+
+    // Source SAMPLE BY 30s → new SAMPLE BY 1m → new PARTITION BY DAY,
+    // so the visible ladder above 1d is 7d, 1M, 1y.
+    const mvDay = (
+      ttl: string,
+    ) => `CREATE MATERIALIZED VIEW 'src_30s' WITH BASE 'base' AS (
+      SELECT timestamp, last(price) AS price FROM base SAMPLE BY 30s
+    ) PARTITION BY DAY TTL ${ttl};`
+
+    // Source SAMPLE BY 5m → new SAMPLE BY 30m → new PARTITION BY MONTH,
+    // used to verify the floor-at-partition behavior.
+    const mvMonth = (
       ttl: string,
     ) => `CREATE MATERIALIZED VIEW 'src_5m' WITH BASE 'base' AS (
       SELECT timestamp, last(price) AS price FROM base SAMPLE BY 5m
@@ -627,28 +640,42 @@ describe("generateMatViewDDL", () => {
       expect(generateMatViewDDL(ddl)).not.toMatch(/TTL\s+\d/i)
     })
 
-    it("2 HOURS → 6 HOURS", () => {
-      expect(generateMatViewDDL(mv("2 HOURS"))).toMatch(/TTL\s+6\s+HOURS/i)
+    it("partition DAY, 1 DAYS → 7 DAYS", () => {
+      expect(generateMatViewDDL(mvDay("1 DAYS"))).toMatch(/TTL\s+7\s+DAYS/i)
     })
 
-    it("1 DAYS → 7 DAYS", () => {
-      expect(generateMatViewDDL(mv("1 DAYS"))).toMatch(/TTL\s+7\s+DAYS/i)
+    it("partition DAY, 1 WEEKS (7d) → 1 MONTHS", () => {
+      expect(generateMatViewDDL(mvDay("1 WEEKS"))).toMatch(/TTL\s+1\s+MONTHS/i)
     })
 
-    it("1 WEEKS (converted to 7d) → 1 MONTHS", () => {
-      expect(generateMatViewDDL(mv("1 WEEKS"))).toMatch(/TTL\s+1\s+MONTHS/i)
+    it("partition DAY, 3 MONTHS → 1 YEARS", () => {
+      expect(generateMatViewDDL(mvDay("3 MONTHS"))).toMatch(/TTL\s+1\s+YEARS/i)
     })
 
-    it("3 MONTHS → 1 YEARS", () => {
-      expect(generateMatViewDDL(mv("3 MONTHS"))).toMatch(/TTL\s+1\s+YEARS/i)
+    it("partition DAY, 1 YEARS → 2 YEARS (step in whole years above the cap)", () => {
+      expect(generateMatViewDDL(mvDay("1 YEARS"))).toMatch(/TTL\s+2\s+YEARS/i)
     })
 
-    it("1 YEARS → 2 YEARS (step in whole years above the cap)", () => {
-      expect(generateMatViewDDL(mv("1 YEARS"))).toMatch(/TTL\s+2\s+YEARS/i)
+    it("partition DAY, 5 YEARS → 6 YEARS", () => {
+      expect(generateMatViewDDL(mvDay("5 YEARS"))).toMatch(/TTL\s+6\s+YEARS/i)
     })
 
-    it("5 YEARS → 6 YEARS", () => {
-      expect(generateMatViewDDL(mv("5 YEARS"))).toMatch(/TTL\s+6\s+YEARS/i)
+    it("partition MONTH floors sub-month source TTL: 2 HOURS → 1 YEARS", () => {
+      expect(generateMatViewDDL(mvMonth("2 HOURS"))).toMatch(/TTL\s+1\s+YEARS/i)
+    })
+
+    it("partition MONTH floors sub-month source TTL: 7 DAYS → 1 YEARS", () => {
+      expect(generateMatViewDDL(mvMonth("7 DAYS"))).toMatch(/TTL\s+1\s+YEARS/i)
+    })
+
+    it("partition MONTH, 3 MONTHS → 1 YEARS (source already above partition unit)", () => {
+      expect(generateMatViewDDL(mvMonth("3 MONTHS"))).toMatch(
+        /TTL\s+1\s+YEARS/i,
+      )
+    })
+
+    it("partition DAY floors sub-day source TTL: 2 HOURS → 7 DAYS", () => {
+      expect(generateMatViewDDL(mvDay("2 HOURS"))).toMatch(/TTL\s+7\s+DAYS/i)
     })
 
     it("accepts singular-unit TTL from QuestDB's SHOW CREATE output", () => {
@@ -667,6 +694,169 @@ describe("generateMatViewDDL", () => {
         symbol SYMBOL, price DOUBLE, amount DOUBLE, timestamp TIMESTAMP
       ) timestamp(timestamp) PARTITION BY DAY TTL 1 YEARS;`
       expect(generateMatViewDDL(ddl)).toMatch(/TTL\s+2\s+YEARS/i)
+    })
+  })
+
+  describe("Enterprise TTL suppression", () => {
+    // Enterprise rejects CREATE ... TTL with "TTL settings are deprecated".
+    // When isEnterprise=true the generator must omit the TTL clause entirely,
+    // regardless of what the source had. OSS (default) keeps the existing
+    // ladder behavior.
+    const tableWithTTL = (ttl: string) => `CREATE TABLE 'trades' (
+      symbol SYMBOL, price DOUBLE, ts TIMESTAMP
+    ) timestamp(ts) PARTITION BY DAY TTL ${ttl};`
+
+    it("isEnterprise=true drops the TTL clause from a CREATE TABLE source", () => {
+      const result = generateMatViewDDL(tableWithTTL("7 DAYS"), [], true)
+      expect(result).not.toMatch(/\bTTL\s+\d/i)
+    })
+
+    it("isEnterprise=true drops the TTL clause from a CREATE MATERIALIZED VIEW source", () => {
+      const ddl = `CREATE MATERIALIZED VIEW 'src_5m' WITH BASE 'base' AS (
+        SELECT timestamp, last(price) AS price FROM base SAMPLE BY 5m
+      ) PARTITION BY MONTH TTL 3 MONTHS;`
+      const result = generateMatViewDDL(ddl, [], true)
+      expect(result).not.toMatch(/\bTTL\s+\d/i)
+    })
+
+    it("isEnterprise=false (default) keeps escalated TTL — regression coverage", () => {
+      const ddl = tableWithTTL("7 DAYS")
+      // PARTITION BY DAY → matview PARTITION BY MONTH (1h SAMPLE BY rung).
+      // Source 7 DAYS floors to 1 MONTH → bumped → 1 YEARS.
+      expect(generateMatViewDDL(ddl)).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(generateMatViewDDL(ddl, [], false)).toMatch(/TTL\s+1\s+YEARS/i)
+    })
+  })
+
+  describe("STORAGE POLICY propagation", () => {
+    // QuestDB Enterprise (PartitionBy.validateTtlGranularity) requires each
+    // STORAGE POLICY clause to be an integer multiple of the matview partition
+    // size, and toParquet ≤ dropNative ≤ dropLocal ≤ dropRemote. The generator
+    // projects every clause into the matview partition's natural unit (DAYS
+    // for DAY, MONTHS for MONTH, YEARS for YEAR), preserves monotonic order,
+    // and ladder-bumps the terminal clause so the matview outlives the source.
+    // Behavior is edition-agnostic.
+    const tableWithPolicy = (policy: string) => `CREATE TABLE 'trades' (
+      symbol SYMBOL, price DOUBLE, ts TIMESTAMP
+    ) timestamp(ts) PARTITION BY DAY STORAGE POLICY(${policy});`
+
+    it("projects sub-month TO PARQUET to partition unit and ladder-bumps the terminal", () => {
+      // Source PARTITION BY DAY → matview PARTITION BY MONTH (1h SAMPLE BY rung).
+      // 3 DAYS rounds up to 1 MONTHS; terminal bump → next ladder rung → 1 YEARS.
+      const result = generateMatViewDDL(tableWithPolicy("TO PARQUET 3 DAYS"))
+      expect(result).toMatch(
+        /STORAGE\s+POLICY\(\s*TO\s+PARQUET\s+1\s+YEARS\s*\)/i,
+      )
+    })
+
+    it("all four clauses: each projected to MONTH partition, terminal bumped", () => {
+      const result = generateMatViewDDL(
+        tableWithPolicy(
+          "TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 MONTHS, DROP REMOTE 1 YEARS",
+        ),
+      )
+      // 3d, 10d, 1M all round up to 1 MONTHS (≤-ordering allows equal).
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+MONTHS/i)
+      // Terminal 1 YEARS (= 13 partition units after rounding) bumps to 2 YEARS.
+      expect(result).toMatch(/DROP\s+REMOTE\s+2\s+YEARS/i)
+    })
+
+    it("three clauses: non-terminals projected, terminal ladder-bumped", () => {
+      const result = generateMatViewDDL(
+        tableWithPolicy(
+          "TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 MONTHS",
+        ),
+      )
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
+      // Terminal 1 MONTHS bumps one rung up the ladder → 1 YEARS.
+      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+YEARS/i)
+    })
+
+    it("non-terminal clauses below the matview partition are all rounded up to 1 partition", () => {
+      // 3d, 10d both round up to 1 MONTHS for a MONTH-partitioned matview.
+      // Verifies compliance with validateTtlGranularity for MONTH partition
+      // (which rejects any hour-based value).
+      const result = generateMatViewDDL(
+        tableWithPolicy(
+          "TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 YEARS",
+        ),
+      )
+      expect(result).toMatch(/PARTITION\s+BY\s+MONTH/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
+      // Terminal 1 YEARS (13 partition units after rounding) bumps to 2 YEARS.
+      expect(result).toMatch(/DROP\s+LOCAL\s+2\s+YEARS/i)
+    })
+
+    it("all-1-year clauses: stay at 1 YEARS span, terminal bumps to 2 YEARS", () => {
+      // 1y rounds to 13 partition units (1y = 365d ÷ 30d ≈ 12.16 → ceil 13).
+      // ≤-ordering allows the equal 13-month spans for non-terminals; terminal
+      // bumps off the ladder to 2 YEARS.
+      const result = generateMatViewDDL(
+        tableWithPolicy(
+          "TO PARQUET 1 YEARS, DROP NATIVE 1 YEARS, DROP LOCAL 1 YEARS, DROP REMOTE 1 YEARS",
+        ),
+      )
+      expect(result).toMatch(/TO\s+PARQUET\s+13\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+13\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+LOCAL\s+13\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+REMOTE\s+2\s+YEARS/i)
+    })
+
+    it("isEnterprise=true: TTL dropped, STORAGE POLICY projected to partition multiples", () => {
+      const ddl = `CREATE TABLE 'trades' (
+        symbol SYMBOL, price DOUBLE, ts TIMESTAMP
+      ) timestamp(ts) PARTITION BY DAY STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS);`
+      const result = generateMatViewDDL(ddl, [], true)
+      expect(result).not.toMatch(/\bTTL\s+\d/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      // DROP NATIVE is the terminal clause; 1 MONTHS bumps to 1 YEARS.
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEARS/i)
+    })
+
+    it("isEnterprise=false also projects STORAGE POLICY (edition-agnostic)", () => {
+      const result = generateMatViewDDL(
+        tableWithPolicy("TO PARQUET 3 DAYS"),
+        [],
+        false,
+      )
+      expect(result).toMatch(
+        /STORAGE\s+POLICY\(\s*TO\s+PARQUET\s+1\s+YEARS\s*\)/i,
+      )
+    })
+
+    it("source materialized view with STORAGE POLICY propagates to derived matview", () => {
+      const ddl = `CREATE MATERIALIZED VIEW 'src_5m' WITH BASE 'base' AS (
+        SELECT timestamp, last(price) AS price FROM base SAMPLE BY 5m
+      ) PARTITION BY MONTH STORAGE POLICY(TO PARQUET 7 DAYS, DROP NATIVE 14 DAYS);`
+      const result = generateMatViewDDL(ddl)
+      // Matview partition stays MONTH (5m → 30m → MONTH). Both clauses round
+      // up to 1 MONTHS; terminal bumps to 1 YEARS.
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEARS/i)
+    })
+
+    it("source has no STORAGE POLICY → output has none", () => {
+      const ddl = `CREATE TABLE 'trades' (
+        symbol SYMBOL, price DOUBLE, ts TIMESTAMP
+      ) timestamp(ts) PARTITION BY DAY;`
+      expect(generateMatViewDDL(ddl)).not.toMatch(/STORAGE\s+POLICY/i)
+    })
+
+    it("user repro: PARTITION BY DAY source with mixed-unit policy projects to MONTH matview", () => {
+      // Regression test for the failure: QuestDB Enterprise rejected
+      // `PARTITION BY MONTH STORAGE POLICY(TO PARQUET 3 DAYS, ...)` because
+      // day-based values aren't integer multiples of MONTH.
+      const ddl = `CREATE TABLE 'abc' (col1 DOUBLE, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 YEARS);`
+      const result = generateMatViewDDL(ddl, [], true)
+      expect(result).toMatch(/PARTITION\s+BY\s+MONTH/i)
+      // Every clause must be a months-based value (validateTtlGranularity).
+      expect(result).not.toMatch(
+        /STORAGE\s+POLICY[^)]*\d+\s+(?:HOURS|DAYS|WEEKS)\b/i,
+      )
     })
   })
 })

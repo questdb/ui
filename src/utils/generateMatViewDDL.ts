@@ -11,12 +11,13 @@ import {
   type ColumnDefinition,
   type SampleByClause,
   type MaterializedViewRefresh,
+  type StoragePolicy,
 } from "@questdb/sql-parser"
 import { formatSql } from "./formatSql"
 
-// Aggregates kept verbatim in the chain (first arg → layer-1 alias, trailing
-// args pass through). Anything outside this set falls back to `last(alias)`.
-// `count` is handled separately: count() → sum(alias); count(DISTINCT …) → dropped.
+type TTLUnit = "HOURS" | "DAYS" | "WEEKS" | "MONTHS" | "YEARS"
+type TTLAst = { value: number; unit: TTLUnit }
+
 const PRESERVED_AGGREGATES = new Set([
   "min",
   "max",
@@ -80,7 +81,6 @@ const NUMERIC_TYPES = new Set([
   "DECIMAL",
 ])
 
-// Types where QuestDB has no matching `last()` overload, so we have to skip.
 const EXCLUDED_TYPES = new Set(["BINARY", "LONG128", "INTERVAL"])
 
 const LAST_TYPES = new Set([
@@ -96,10 +96,6 @@ const LAST_TYPES = new Set([
   "IPV4",
 ])
 
-// GEOHASH columns are typed as `GEOHASH(<size>)` so they need a prefix check.
-const isLastType = (dataType: string): boolean =>
-  LAST_TYPES.has(dataType) || dataType.startsWith("GEOHASH")
-
 const SAMPLE_BY_MAP: Record<string, string> = {
   HOUR: "5m",
   DAY: "1h",
@@ -109,7 +105,6 @@ const SAMPLE_BY_MAP: Record<string, string> = {
   NONE: "1h",
 }
 
-// Above 1y we step in whole-year increments (1y → 2y → 3y …) via YEAR_RE.
 const INTERVAL_LADDER = [
   "1s",
   "5s",
@@ -125,11 +120,8 @@ const INTERVAL_LADDER = [
   "1y",
 ] as const
 
-// TTL ladder = INTERVAL_LADDER trimmed to ≥ 1h.
 const TTL_LADDER = ["1h", "6h", "1d", "7d", "1M", "1y"] as const
 
-// Default partitioning per docs/concepts/materialized-views.md:
-// SAMPLE BY > 1h → YEAR, > 1m → MONTH.
 const PARTITION_BY_FOR_SAMPLE: Record<
   string,
   CreateMaterializedViewStatement["partitionBy"]
@@ -153,13 +145,45 @@ const UNIT_SECONDS: Record<string, number> = {
   m: 60,
   h: 60 * 60,
   d: 24 * 60 * 60,
-  // Approximate — used only to order intervals against the ladder, never for time math.
+  // Approximations — used only to order intervals against the ladder.
   M: 30 * 24 * 60 * 60,
   y: 365 * 24 * 60 * 60,
 }
 
 const INTERVAL_RE = /^(\d+)([smhdMy])$/
 const YEAR_RE = /^(\d+)y$/
+
+const TTL_UNIT_TO_LETTER: Partial<Record<TTLUnit, string>> = {
+  HOURS: "h",
+  DAYS: "d",
+  MONTHS: "M",
+  YEARS: "y",
+}
+
+const TTL_LETTER_TO_UNIT: Record<string, TTLUnit> = {
+  h: "HOURS",
+  d: "DAYS",
+  M: "MONTHS",
+  y: "YEARS",
+}
+
+const PARTITION_INFO: Partial<
+  Record<string, { interval: string; ttlUnit: TTLUnit }>
+> = {
+  DAY: { interval: "1d", ttlUnit: "DAYS" },
+  MONTH: { interval: "1M", ttlUnit: "MONTHS" },
+  YEAR: { interval: "1y", ttlUnit: "YEARS" },
+}
+
+const STORAGE_POLICY_PIPELINE_ORDER = [
+  "toParquet",
+  "dropNative",
+  "dropLocal",
+  "dropRemote",
+] as const
+
+const HEADER =
+  "-- Review SAMPLE BY, PARTITION BY, TTL, refresh clause, and aggregates before running."
 
 const escapeRegExp = (s: string): string =>
   s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -185,7 +209,6 @@ const nextOnLadder = (
     const rungSec = toSeconds(rung)
     if (rungSec != null && rungSec > srcSec) return rung
   }
-  // Past the top of the ladder via a non-year unit (e.g. 400d) → smallest Ny strictly > source.
   const years = Math.floor(srcSec / UNIT_SECONDS.y) + 1
   return `${years}y`
 }
@@ -195,23 +218,6 @@ const nextInterval = (current: string): string =>
 
 const nextTTL = (current: string): string =>
   nextOnLadder(current, TTL_LADDER, "1h")
-
-type TTLUnit = "HOURS" | "DAYS" | "WEEKS" | "MONTHS" | "YEARS"
-type TTLAst = { value: number; unit: TTLUnit }
-
-const TTL_UNIT_TO_LETTER: Partial<Record<TTLUnit, string>> = {
-  HOURS: "h",
-  DAYS: "d",
-  MONTHS: "M",
-  YEARS: "y",
-}
-
-const TTL_LETTER_TO_UNIT: Record<string, TTLUnit> = {
-  h: "HOURS",
-  d: "DAYS",
-  M: "MONTHS",
-  y: "YEARS",
-}
 
 const ttlToLadderString = (ttl: TTLAst): string | null => {
   if (ttl.unit === "WEEKS") return `${ttl.value * 7}d`
@@ -227,14 +233,14 @@ const ladderStringToTTL = (s: string): TTLAst | null => {
   return { value: Number(m[1]), unit }
 }
 
-// Returns null when source had no TTL — we never invent one.
-const deriveNextTTL = (src: TTLAst | undefined): TTLAst | null => {
-  if (!src) return null
-  const srcStr = ttlToLadderString(src)
-  if (!srcStr) return null
-  const nextStr = nextTTL(srcStr)
-  return ladderStringToTTL(nextStr)
+const ttlSeconds = (ttl: TTLAst): number | null => {
+  const s = ttlToLadderString(ttl)
+  return s ? toSeconds(s) : null
 }
+
+const partitionInfo = (
+  partition: CreateMaterializedViewStatement["partitionBy"],
+) => (partition ? PARTITION_INFO[partition] : undefined)
 
 const partitionFor = (
   interval: string,
@@ -245,31 +251,99 @@ const partitionFor = (
   return "MONTH"
 }
 
-// Pass `srcInterval = ""` for tables (no SAMPLE BY) — skips the embedded-replace branch.
-const deriveNextName = (
-  srcName: string,
-  srcInterval: string,
-  newInterval: string,
-): string => {
-  // Trailing period suffix, optionally with collision counter: `_5m`, `_5m_2`, `_2y`.
-  const trailing = /_(\d+(?:s|m|h|d|M|y))(_\d+)?$/
-  if (trailing.test(srcName)) {
-    return srcName.replace(trailing, `_${newInterval}`)
-  }
-  if (srcInterval) {
-    const embedded = new RegExp(`(^|_)${escapeRegExp(srcInterval)}(?=_|$)`)
-    if (embedded.test(srcName)) {
-      return srcName.replace(
-        embedded,
-        (_m, pre: string) => `${pre}${newInterval}`,
-      )
+const deriveNextTTL = (
+  src: TTLAst | undefined,
+  partition: CreateMaterializedViewStatement["partitionBy"],
+): TTLAst | null => {
+  if (!src) return null
+  const srcStr = ttlToLadderString(src)
+  if (!srcStr) return null
+
+  const info = partitionInfo(partition)
+  const srcSec = toSeconds(srcStr)
+  const partSec = info ? toSeconds(info.interval) : null
+  const baseline =
+    info && srcSec != null && partSec != null && partSec > srcSec
+      ? info.interval
+      : srcStr
+
+  return ladderStringToTTL(nextTTL(baseline))
+}
+
+const projectClauseToPartition = (
+  src: TTLAst,
+  partition: CreateMaterializedViewStatement["partitionBy"],
+): TTLAst | null => {
+  const info = partitionInfo(partition)
+  if (!info) return null
+  const partSec = toSeconds(info.interval)
+  const srcSec = ttlSeconds(src)
+  if (partSec == null || srcSec == null) return null
+  const count = Math.max(1, Math.ceil(srcSec / partSec))
+  return { value: count, unit: info.ttlUnit }
+}
+
+const projectStoragePolicyForMatView = (
+  source: StoragePolicy,
+  partition: CreateMaterializedViewStatement["partitionBy"],
+): StoragePolicy | null => {
+  const present = STORAGE_POLICY_PIPELINE_ORDER.filter(
+    (k) => source[k] !== undefined,
+  )
+  if (present.length === 0) return null
+
+  const next: StoragePolicy = { type: "storagePolicy" }
+  const terminal = present[present.length - 1]
+  let prevSec = 0
+  for (const kind of present) {
+    let projected = projectClauseToPartition(source[kind] as TTLAst, partition)
+    if (!projected) continue
+
+    let projectedSec = ttlSeconds(projected) ?? 0
+    while (projectedSec > 0 && projectedSec < prevSec) {
+      projected = { ...projected, value: projected.value + 1 }
+      projectedSec = ttlSeconds(projected) ?? 0
     }
+
+    if (kind === terminal) {
+      const bumpedStr = ttlToLadderString(projected)
+      const bumped = bumpedStr ? ladderStringToTTL(nextTTL(bumpedStr)) : null
+      if (bumped) {
+        projected = bumped
+        projectedSec = ttlSeconds(projected) ?? projectedSec
+      }
+    }
+
+    next[kind] = projected
+    prevSec = projectedSec
   }
-  return `${srcName}_${newInterval}`
+  return next
+}
+
+const projectRetention = (
+  src: { ttl?: TTLAst; storagePolicy?: StoragePolicy },
+  partitionBy: CreateMaterializedViewStatement["partitionBy"],
+  isEnterprise: boolean,
+): Pick<CreateMaterializedViewStatement, "ttl" | "storagePolicy"> => {
+  const storagePolicy = src.storagePolicy
+    ? (projectStoragePolicyForMatView(src.storagePolicy, partitionBy) ??
+      undefined)
+    : undefined
+  const ttl =
+    isEnterprise || storagePolicy
+      ? undefined
+      : (deriveNextTTL(src.ttl, partitionBy) ?? undefined)
+  return { ttl, storagePolicy }
 }
 
 const matchesPattern = (name: string, patterns: string[]): boolean =>
   patterns.some((p) => name.toLowerCase().includes(p))
+
+const isLastType = (dataType: string): boolean =>
+  LAST_TYPES.has(dataType) || dataType.startsWith("GEOHASH")
+
+const isExcludedType = (dataType: string): boolean =>
+  dataType.endsWith("[]") || EXCLUDED_TYPES.has(dataType)
 
 const mkColumnRef = (name: string): ColumnRef => ({
   type: "column",
@@ -291,9 +365,6 @@ const mkSelectItem = (
   alias,
 })
 
-const isExcludedType = (dataType: string): boolean =>
-  dataType.endsWith("[]") || EXCLUDED_TYPES.has(dataType)
-
 const buildSelectItem = (
   col: ColumnDefinition,
 ): ExpressionSelectItem | null => {
@@ -312,21 +383,6 @@ const buildSelectItem = (
   return null
 }
 
-const pickUniqueViewName = (
-  base: string,
-  existingNames: readonly string[],
-): string => {
-  const taken = new Set(existingNames.map((n) => n.toLowerCase()))
-  if (!taken.has(base.toLowerCase())) return base
-  for (let i = 2; ; i++) {
-    const candidate = `${base}_${i}`
-    if (!taken.has(candidate.toLowerCase())) return candidate
-  }
-}
-
-const HEADER =
-  "-- Review SAMPLE BY, PARTITION BY, TTL, refresh clause, and aggregates before running."
-
 const outputName = (item: ExpressionSelectItem): string | null => {
   if (item.alias) return item.alias
   const e = item.expression
@@ -338,10 +394,6 @@ const outputName = (item: ExpressionSelectItem): string | null => {
   return null
 }
 
-// Chain SELECT items must reference the source mat view's OUTPUT columns
-// (aliases), since the base-table columns no longer exist at this layer.
-// Non-preserved fns fall back to last(). count(DISTINCT …) can't decompose
-// from a scalar, so we drop it entirely (returns null).
 const rewriteSelectItemForChain = (
   item: ExpressionSelectItem,
 ): ExpressionSelectItem | null => {
@@ -354,9 +406,9 @@ const rewriteSelectItemForChain = (
   if (e.type === "function") {
     const fnLower = e.name.toLowerCase()
     if (fnLower === "count") {
+      // count(DISTINCT …) can't decompose from a scalar — drop it.
       if (e.distinct === true) return null
-      // count() / count(*) / count(col) → sum(alias) — sum-of-per-bucket-counts
-      // is the correct chained total.
+      // count(…) → sum(alias): sum-of-per-bucket-counts is the chained total.
       return {
         type: "selectItem",
         expression: {
@@ -380,16 +432,55 @@ const rewriteSelectItemForChain = (
     return { type: "selectItem", expression: newExpr, alias: out }
   }
 
-  // Cast / arithmetic / etc. — layer 1 already materialised it; reference the alias.
   return {
     type: "selectItem",
     expression: mkColumnRef(out),
   }
 }
 
+const deriveNextName = (
+  srcName: string,
+  srcInterval: string,
+  newInterval: string,
+): string => {
+  const trailing = /_(\d+(?:s|m|h|d|M|y))(_\d+)?$/
+  if (trailing.test(srcName)) {
+    return srcName.replace(trailing, `_${newInterval}`)
+  }
+  if (srcInterval) {
+    const embedded = new RegExp(`(^|_)${escapeRegExp(srcInterval)}(?=_|$)`)
+    if (embedded.test(srcName)) {
+      return srcName.replace(
+        embedded,
+        (_m, pre: string) => `${pre}${newInterval}`,
+      )
+    }
+  }
+  return `${srcName}_${newInterval}`
+}
+
+const pickUniqueViewName = (
+  base: string,
+  existingNames: readonly string[],
+): string => {
+  const taken = new Set(existingNames.map((n) => n.toLowerCase()))
+  if (!taken.has(base.toLowerCase())) return base
+  for (let i = 2; ; i++) {
+    const candidate = `${base}_${i}`
+    if (!taken.has(candidate.toLowerCase())) return candidate
+  }
+}
+
+const normalizeTTLUnits = (ddl: string): string =>
+  ddl.replace(
+    /\bTTL\s+(\d+)\s+(HOUR|DAY|WEEK|MONTH|YEAR)(?!S)\b/gi,
+    (_m: string, n: string, unit: string) => `TTL ${n} ${unit.toUpperCase()}S`,
+  )
+
 const fromTable = (
   stmt: CreateTableStatement,
   existingNames: readonly string[],
+  isEnterprise: boolean,
 ): string => {
   const columns = stmt.columns ?? []
   const tableName = stmt.table.parts[stmt.table.parts.length - 1]
@@ -440,22 +531,16 @@ const fromTable = (
     mode: "immediate",
   }
 
+  const partitionBy = PARTITION_BY_FOR_SAMPLE[interval]
   const matViewStmt: CreateMaterializedViewStatement = {
     type: "createMaterializedView",
-    view: {
-      type: "qualifiedName",
-      parts: [viewName],
-    },
+    view: { type: "qualifiedName", parts: [viewName] },
     refresh,
     query: selectStmt,
     asParens: true,
-    partitionBy: PARTITION_BY_FOR_SAMPLE[interval],
-  }
-
-  const nextTtl = deriveNextTTL(stmt.ttl)
-  if (nextTtl) matViewStmt.ttl = nextTtl
-  if (stmt.ownedBy) {
-    matViewStmt.ownedBy = stmt.ownedBy
+    partitionBy,
+    ...projectRetention(stmt, partitionBy, isEnterprise),
+    ownedBy: stmt.ownedBy,
   }
 
   return `${HEADER}\n${formatSql(toSql(matViewStmt))};`
@@ -464,6 +549,7 @@ const fromTable = (
 const fromMatView = (
   src: CreateMaterializedViewStatement,
   existingNames: readonly string[],
+  isEnterprise: boolean,
 ): string => {
   const srcName = src.view.parts[src.view.parts.length - 1]
   const srcQuery = src.query
@@ -495,53 +581,45 @@ const fromMatView = (
         table: { type: "qualifiedName", parts: [srcName] },
       },
     ],
-    // WHERE / GROUP BY / LATEST ON reference base-table columns that don't
-    // exist at the chain layer (and the source mat view already applied them
-    // at layer 1).
+    // Source columns referenced by these clauses don't exist at the chain layer.
     where: undefined,
     groupBy: undefined,
     latestOn: undefined,
     sampleBy: { ...srcSampleBy, duration: newInterval },
   }
 
+  const partitionBy = partitionFor(newInterval)
   const matViewStmt: CreateMaterializedViewStatement = {
     type: "createMaterializedView",
     view: { type: "qualifiedName", parts: [newName] },
     baseTable: { type: "qualifiedName", parts: [srcName] },
+    refresh: src.refresh ?? {
+      type: "materializedViewRefresh",
+      mode: "immediate",
+    },
     query: newQuery,
     asParens: true,
-    partitionBy: partitionFor(newInterval),
+    partitionBy,
+    ...projectRetention(src, partitionBy, isEnterprise),
+    period: src.period,
+    ownedBy: src.ownedBy,
   }
-
-  // Default to IMMEDIATE so the chain DDL has an explicit refresh clause.
-  matViewStmt.refresh = src.refresh ?? {
-    type: "materializedViewRefresh",
-    mode: "immediate",
-  }
-  const nextTtl = deriveNextTTL(src.ttl)
-  if (nextTtl) matViewStmt.ttl = nextTtl
-  if (src.period) matViewStmt.period = src.period
-  if (src.ownedBy) matViewStmt.ownedBy = src.ownedBy
 
   return `${HEADER}\n${formatSql(toSql(matViewStmt))};`
 }
 
-const normalizeTTLUnits = (ddl: string): string =>
-  ddl.replace(
-    /\bTTL\s+(\d+)\s+(HOUR|DAY|WEEK|MONTH|YEAR)(?!S)\b/gi,
-    (_m: string, n: string, unit: string) => `TTL ${n} ${unit.toUpperCase()}S`,
-  )
-
 export const generateMatViewDDL = (
   ddl: string,
   existingNames: readonly string[] = [],
+  isEnterprise: boolean = false,
 ): string => {
   const stmt = parseOne(normalizeTTLUnits(ddl)) as
     | CreateTableStatement
     | CreateMaterializedViewStatement
-  if (stmt.type === "createTable") return fromTable(stmt, existingNames)
+  if (stmt.type === "createTable")
+    return fromTable(stmt, existingNames, isEnterprise)
   if (stmt.type === "createMaterializedView")
-    return fromMatView(stmt, existingNames)
+    return fromMatView(stmt, existingNames, isEnterprise)
   throw new Error(
     "Expected a CREATE TABLE or CREATE MATERIALIZED VIEW statement",
   )
