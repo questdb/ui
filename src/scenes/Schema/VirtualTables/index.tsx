@@ -188,8 +188,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   loadingError,
 }) => {
   const { query, focusedIndex, setFocusedIndex } = useSchema()
-  const { quest, buildVersion } = useContext(QuestContext)
-  const isEnterprise = buildVersion.type.includes("enterprise")
+  const { quest } = useContext(QuestContext)
   const allColumns = useSelector(selectors.query.getColumns)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const tableDetailsTarget = useSelector(
@@ -716,7 +715,6 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                           const ddl = generateMatViewDDL(
                             sourceDDL,
                             existingNames,
-                            isEnterprise,
                           )
                           appendQuery(ddl)
                         } catch (e) {

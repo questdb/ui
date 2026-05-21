@@ -697,34 +697,24 @@ describe("generateMatViewDDL", () => {
     })
   })
 
-  describe("Enterprise TTL suppression", () => {
-    // Enterprise rejects CREATE ... TTL with "TTL settings are deprecated".
-    // When isEnterprise=true the generator must omit the TTL clause entirely,
-    // regardless of what the source had. OSS (default) keeps the existing
-    // ladder behavior.
-    const tableWithTTL = (ttl: string) => `CREATE TABLE 'trades' (
-      symbol SYMBOL, price DOUBLE, ts TIMESTAMP
-    ) timestamp(ts) PARTITION BY DAY TTL ${ttl};`
-
-    it("isEnterprise=true drops the TTL clause from a CREATE TABLE source", () => {
-      const result = generateMatViewDDL(tableWithTTL("7 DAYS"), [], true)
+  describe("STORAGE POLICY wins over TTL when source has both", () => {
+    it("source has STORAGE POLICY only → matview has STORAGE POLICY, no TTL", () => {
+      const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
+        timestamp(ts) PARTITION BY DAY
+        STORAGE POLICY(TO PARQUET 3 DAYS);`
+      const result = generateMatViewDDL(ddl)
       expect(result).not.toMatch(/\bTTL\s+\d/i)
+      expect(result).toMatch(/STORAGE\s+POLICY/i)
     })
 
-    it("isEnterprise=true drops the TTL clause from a CREATE MATERIALIZED VIEW source", () => {
-      const ddl = `CREATE MATERIALIZED VIEW 'src_5m' WITH BASE 'base' AS (
-        SELECT timestamp, last(price) AS price FROM base SAMPLE BY 5m
-      ) PARTITION BY MONTH TTL 3 MONTHS;`
-      const result = generateMatViewDDL(ddl, [], true)
-      expect(result).not.toMatch(/\bTTL\s+\d/i)
-    })
-
-    it("isEnterprise=false (default) keeps escalated TTL — regression coverage", () => {
-      const ddl = tableWithTTL("7 DAYS")
+    it("source has TTL only → matview has TTL, no STORAGE POLICY", () => {
+      const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
+        timestamp(ts) PARTITION BY DAY TTL 7 DAYS;`
+      const result = generateMatViewDDL(ddl)
       // PARTITION BY DAY → matview PARTITION BY MONTH (1h SAMPLE BY rung).
       // Source 7 DAYS floors to 1 MONTH → bumped → 1 YEARS.
-      expect(generateMatViewDDL(ddl)).toMatch(/TTL\s+1\s+YEARS/i)
-      expect(generateMatViewDDL(ddl, [], false)).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(result).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(result).not.toMatch(/STORAGE\s+POLICY/i)
     })
   })
 
@@ -806,26 +796,15 @@ describe("generateMatViewDDL", () => {
       expect(result).toMatch(/DROP\s+REMOTE\s+2\s+YEARS/i)
     })
 
-    it("isEnterprise=true: TTL dropped, STORAGE POLICY projected to partition multiples", () => {
+    it("source with STORAGE POLICY only: TTL absent, clauses projected to partition multiples", () => {
       const ddl = `CREATE TABLE 'trades' (
         symbol SYMBOL, price DOUBLE, ts TIMESTAMP
       ) timestamp(ts) PARTITION BY DAY STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS);`
-      const result = generateMatViewDDL(ddl, [], true)
+      const result = generateMatViewDDL(ddl)
       expect(result).not.toMatch(/\bTTL\s+\d/i)
       expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
       // DROP NATIVE is the terminal clause; 1 MONTHS bumps to 1 YEARS.
       expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEARS/i)
-    })
-
-    it("isEnterprise=false also projects STORAGE POLICY (edition-agnostic)", () => {
-      const result = generateMatViewDDL(
-        tableWithPolicy("TO PARQUET 3 DAYS"),
-        [],
-        false,
-      )
-      expect(result).toMatch(
-        /STORAGE\s+POLICY\(\s*TO\s+PARQUET\s+1\s+YEARS\s*\)/i,
-      )
     })
 
     it("source materialized view with STORAGE POLICY propagates to derived matview", () => {
@@ -851,7 +830,7 @@ describe("generateMatViewDDL", () => {
       // `PARTITION BY MONTH STORAGE POLICY(TO PARQUET 3 DAYS, ...)` because
       // day-based values aren't integer multiples of MONTH.
       const ddl = `CREATE TABLE 'abc' (col1 DOUBLE, ts TIMESTAMP) timestamp(ts) PARTITION BY DAY STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 YEARS);`
-      const result = generateMatViewDDL(ddl, [], true)
+      const result = generateMatViewDDL(ddl)
       expect(result).toMatch(/PARTITION\s+BY\s+MONTH/i)
       // Every clause must be a months-based value (validateTtlGranularity).
       expect(result).not.toMatch(

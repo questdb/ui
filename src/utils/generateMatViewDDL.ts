@@ -323,16 +323,14 @@ const projectStoragePolicyForMatView = (
 const projectRetention = (
   src: { ttl?: TTLAst; storagePolicy?: StoragePolicy },
   partitionBy: CreateMaterializedViewStatement["partitionBy"],
-  isEnterprise: boolean,
 ): Pick<CreateMaterializedViewStatement, "ttl" | "storagePolicy"> => {
   const storagePolicy = src.storagePolicy
     ? (projectStoragePolicyForMatView(src.storagePolicy, partitionBy) ??
       undefined)
     : undefined
-  const ttl =
-    isEnterprise || storagePolicy
-      ? undefined
-      : (deriveNextTTL(src.ttl, partitionBy) ?? undefined)
+  const ttl = storagePolicy
+    ? undefined
+    : (deriveNextTTL(src.ttl, partitionBy) ?? undefined)
   return { ttl, storagePolicy }
 }
 
@@ -480,7 +478,6 @@ const normalizeTTLUnits = (ddl: string): string =>
 const fromTable = (
   stmt: CreateTableStatement,
   existingNames: readonly string[],
-  isEnterprise: boolean,
 ): string => {
   const columns = stmt.columns ?? []
   const tableName = stmt.table.parts[stmt.table.parts.length - 1]
@@ -539,7 +536,7 @@ const fromTable = (
     query: selectStmt,
     asParens: true,
     partitionBy,
-    ...projectRetention(stmt, partitionBy, isEnterprise),
+    ...projectRetention(stmt, partitionBy),
     ownedBy: stmt.ownedBy,
   }
 
@@ -549,7 +546,6 @@ const fromTable = (
 const fromMatView = (
   src: CreateMaterializedViewStatement,
   existingNames: readonly string[],
-  isEnterprise: boolean,
 ): string => {
   const srcName = src.view.parts[src.view.parts.length - 1]
   const srcQuery = src.query
@@ -600,7 +596,7 @@ const fromMatView = (
     query: newQuery,
     asParens: true,
     partitionBy,
-    ...projectRetention(src, partitionBy, isEnterprise),
+    ...projectRetention(src, partitionBy),
     period: src.period,
     ownedBy: src.ownedBy,
   }
@@ -611,15 +607,13 @@ const fromMatView = (
 export const generateMatViewDDL = (
   ddl: string,
   existingNames: readonly string[] = [],
-  isEnterprise: boolean = false,
 ): string => {
   const stmt = parseOne(normalizeTTLUnits(ddl)) as
     | CreateTableStatement
     | CreateMaterializedViewStatement
-  if (stmt.type === "createTable")
-    return fromTable(stmt, existingNames, isEnterprise)
+  if (stmt.type === "createTable") return fromTable(stmt, existingNames)
   if (stmt.type === "createMaterializedView")
-    return fromMatView(stmt, existingNames, isEnterprise)
+    return fromMatView(stmt, existingNames)
   throw new Error(
     "Expected a CREATE TABLE or CREATE MATERIALIZED VIEW statement",
   )

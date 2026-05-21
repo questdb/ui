@@ -1,4 +1,5 @@
 import { formatDistance } from "date-fns"
+import { parseOne, type StoragePolicy } from "@questdb/sql-parser"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 
 export function formatRelativeTimestamp(timestamp: string | null): string {
@@ -37,6 +38,36 @@ export function formatRowCount(count: number | string | null): string {
 export function formatTTL(value: number, unit: string): string {
   if (value === 0) return "None"
   return `${value} ${unit}`
+}
+
+export type StoragePolicyClause = { action: string; duration: string }
+
+const STORAGE_POLICY_LABELS = [
+  ["toParquet", "To Parquet"],
+  ["dropNative", "Drop Native"],
+  ["dropLocal", "Drop Local"],
+  ["dropRemote", "Drop Remote"],
+] as const
+
+export function extractStoragePolicyClauses(
+  ddl: string,
+): StoragePolicyClause[] {
+  let stmt: { storagePolicy?: StoragePolicy } | undefined
+  try {
+    stmt = parseOne(ddl) as { storagePolicy?: StoragePolicy }
+  } catch {
+    return []
+  }
+  const policy = stmt?.storagePolicy
+  if (!policy) return []
+  return STORAGE_POLICY_LABELS.flatMap(([key, label]) => {
+    const v = policy[key]
+    if (!v) return []
+    const unit = v.unit.charAt(0).toUpperCase() + v.unit.slice(1).toLowerCase()
+    const normalizedUnit =
+      v.value === 1 ? (unit.endsWith("s") ? unit.slice(0, -1) : unit) : unit
+    return [{ action: label, duration: `${v.value} ${normalizedUnit}` }]
+  })
 }
 
 export type MetricType = "count" | "p50" | "p90" | "p99" | "max"

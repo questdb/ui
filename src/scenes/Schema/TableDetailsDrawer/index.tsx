@@ -23,7 +23,7 @@ import {
   truncateLongDDL,
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
-import { QuestContext } from "../../../providers"
+import { QuestContext, useSettings } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
 import {
   getTableKind,
@@ -234,6 +234,8 @@ export const TableDetailsDrawer = () => {
   )
 
   const { quest } = useContext(QuestContext)
+  const { settings } = useSettings()
+  const isEnterprise = settings["release.type"] === "EE"
   const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
   const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
@@ -790,6 +792,7 @@ export const TableDetailsDrawer = () => {
                 ddl={ddl}
                 isMatView={isMatView}
                 isView={isView}
+                isEnterprise={isEnterprise}
                 truncatedDDL={truncatedDDL}
                 baseTableStatus={baseTableStatus}
                 columnsExpanded={columnsExpanded}
