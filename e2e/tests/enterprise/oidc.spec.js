@@ -94,6 +94,10 @@ describe("OIDC", () => {
 
       cy.wait("@tokens")
       cy.getEditor().should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
 
       cy.reload()
       cy.getEditor().should("be.visible")
