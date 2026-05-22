@@ -79,6 +79,7 @@ describe("OIDC", () => {
       cy.getGridRow(0).should("contain", "john doe")
 
       cy.logout()
+      cy.getByDataHook("auth-login").should("be.visible")
     })
 
     it("should request a new token on page reload, even if there is no refresh token", () => {
@@ -163,6 +164,60 @@ describe("OIDC", () => {
         const url = new URL(interception.request.url)
         expect(url.searchParams.get("prompt")).to.equal("login")
       })
+    })
+
+    it("should keep silent re-auth on refresh, suppress it after logout, and reset state across users", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+        refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+        token_type: "Bearer",
+        expires_in: 300,
+      })
+
+      // Step 1 — log in as OIDC user
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@tokens")
+      cy.getEditor().should("be.visible")
+      // Wait for the toolbar to write the SSO username to localStorage,
+      // otherwise the boot-time silent re-auth gate won't fire on reload.
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      // Step 2 — refresh: silent re-auth keeps the user signed in
+      cy.reload()
+      cy.wait("@authorizationCode")
+      cy.wait("@tokens")
+      cy.getEditor().should("be.visible")
+
+      // Step 3 — logout lands on login screen; refreshing must NOT silently log back in
+      cy.logout()
+      cy.getByDataHook("button-sso-continue").should("be.visible")
+      cy.getEditor().should("not.exist")
+
+      cy.reload()
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.getByDataHook("button-sso-continue").should("be.visible")
+      cy.getEditor().should("not.exist")
+
+      // Step 4 — log back in via "Continue as ...", run a query, see results
+      cy.getByDataHook("button-sso-continue").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@tokens")
+      cy.getEditor().should("be.visible")
+
+      cy.executeSQL("select * from long_sequence(100);")
+      cy.getGridRows().should("have.length.greaterThan", 0)
+
+      // Step 5 — logout, log in as admin: previous user's grid must be gone
+      cy.logout()
+      cy.loginWithUserAndPassword()
+      cy.getEditor().should("be.visible")
+      cy.get(".qg-r").should("not.exist")
     })
 
     it("display import panel", () => {

@@ -1,8 +1,61 @@
 #!/bin/bash -x
 
 # Run it from the 'scripts' subdirectory as:
-# JAVA_HOME=<your java> MVN_REPO=<your maven repo> ./run_ent_browser_tests.sh
-# Example: JAVA_HOME=/opt/homebrew/opt/openjdk@17 MVN_REPO=/Users/john/.m2/repository ./run_ent_browser_tests.sh
+# ./run_ent_browser_tests.sh [--cached]
+# Java 25 is required (questdb-enterprise maven enforcer needs the java25+
+# profile to activate). The script auto-selects JDK 25 from the system.
+# Override by exporting JAVA_HOME and/or MVN_REPO before running.
+# --cached: reuse the tmp/questdb-enterprise clone and maven build from the
+# previous run (falls back to cloning/building if missing). Always wipes tmp/dbroot.
+
+# Parse args
+CACHED=0
+for arg in "$@"; do
+    case "$arg" in
+        --cached) CACHED=1 ;;
+    esac
+done
+
+# Track background PIDs so cleanup runs on success, failure, and Ctrl+C
+PID1=""
+PID2=""
+cleanup() {
+    set +e
+    trap - EXIT INT TERM
+    echo "Cleaning up background processes..."
+    for pid in "$PID1" "$PID2"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            pkill -P "$pid" 2>/dev/null
+            kill -SIGTERM "$pid" 2>/dev/null
+        fi
+    done
+    sleep 1
+    for pid in "$PID1" "$PID2"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -SIGKILL "$pid" 2>/dev/null
+        fi
+    done
+}
+trap cleanup EXIT INT TERM
+
+# Auto-select JDK 25 if JAVA_HOME isn't already set to one
+if [ -z "$JAVA_HOME" ] || ! "$JAVA_HOME/bin/java" -version 2>&1 | grep -q '"25'; then
+    if [ -x /usr/libexec/java_home ]; then
+        JAVA_HOME=$(/usr/libexec/java_home -v 25 2>/dev/null)
+    fi
+fi
+if [ -z "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+    echo "Error: could not locate JDK 25. Install one (e.g. 'brew install openjdk@25') or set JAVA_HOME." >&2
+    exit 1
+fi
+export JAVA_HOME
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# Default maven local repo
+if [ -z "$MVN_REPO" ]; then
+    MVN_REPO="$HOME/.m2/repository"
+fi
+export MVN_REPO
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -64,7 +117,6 @@ JAR_JNI=org/questdb/jar-jni/1.1.1/jar-jni-1.1.1.jar
 $JAVA_HOME/bin/java -cp $CORE_CLASSES:$ENT_CLASSES:$MVN_REPO/$JAR_JNI com.questdb.EntServerMain -d tmp/dbroot &
 PID2="$!"
 yarn test:e2e:enterprise
-kill -SIGTERM $PID2
-
-# Stop proxy
-kill -SIGTERM $PID1
+TEST_EXIT=$?
+# Background processes are torn down by the EXIT trap above.
+exit $TEST_EXIT

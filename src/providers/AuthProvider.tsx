@@ -35,11 +35,13 @@ type ContextProps = {
     errorTitle,
     errorMessage,
     isDisconnection,
+    reload,
   }?: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
+    reload?: boolean
   }) => void
   refreshAuthToken: (
     settings: Settings,
@@ -106,6 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       ).toString() // convert from the sec offset
       ssoAuthState.setAuthPayload(tokenResponse)
       setSessionData(tokenResponse)
+      setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
       // Remove the code from the URL
       if (history.replaceState) {
         history.replaceState(
@@ -233,9 +236,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               oauth2Error.error + ": " + oauth2Error.error_description,
           })
         }
-      } else if (ssoUsername && !getValue(StoreKey.REST_TOKEN)) {
+      } else if (
+        ssoUsername &&
+        getValue(StoreKey.SSO_SESSION_ACTIVE) &&
+        !getValue(StoreKey.REST_TOKEN)
+      ) {
         // No REST token, so it is a page reload for an SSO user
-        // We should try to request a token silently
+        // who didn't explicitly log out — try to request a token silently
         redirectToAuthorizationUrl("none")
       } else {
         // Stop loading and display the login state
@@ -311,21 +318,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     errorTitle,
     errorMessage,
     isDisconnection,
+    reload,
   }: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
+    reload?: boolean
   } = {}) => {
     ssoAuthState.clearAuthPayload()
     setSessionData(undefined)
     removeValue(StoreKey.OAUTH_PROMPT)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
+    removeValue(StoreKey.SSO_SESSION_ACTIVE)
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     destroyServerSession()
+    if (reload) {
+      window.location.reload()
+      return
+    }
     dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
   }
 
