@@ -185,7 +185,7 @@
     "name": "add_cell",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Append a cell to the notebook. Returns only the new cell id and optional run status. You never see query data.",
+    "description": "Append a cell to the notebook. Returns the new cell id and, if run=true, a per-query status array. You never see query rows or column data.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -203,7 +203,7 @@
         },
         "run": {
           "type": ["boolean", "null"],
-          "description": "If true, run the cell immediately after inserting. Response includes success/error status — still no data. Pass null to skip. When the user has not granted the 'write' permission, running a DDL/DML cell is refused; the cell is still added."
+          "description": "If true, run the cell immediately after inserting. Response then includes `ran` (true iff every statement succeeded), `queryCount`, and `results: string[]` — one entry per `;`-separated statement, each `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`. The order matches the cell's SQL. Still no row data. Pass null to skip. When the user has not granted the 'write' permission, running a DDL/DML cell is refused via `{ ran: false, error: <reason> }`; the cell is still added."
         }
       },
       "required": ["buffer_id", "sql", "after_cell_id", "run"]
@@ -311,7 +311,7 @@
     "name": "run_cell",
     "category": "sql",
     "mutatesNotebook": true,
-    "description": "Execute a SQL cell. Returns ONLY { success: boolean, error?: string }. You do NOT see columns, rows, or counts — the user reads the result. Use this to trigger execution on the user's behalf, not to inspect data.",
+    "description": "Execute a SQL cell. Each `;`-separated statement runs sequentially; if one fails, the remaining statements are NOT attempted. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -527,7 +527,7 @@
     "name": "apply_notebook_state",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply; the response includes a `runs: [{cellId, success, error?}]` array reporting per-cell outcomes (DDL/DML still requires the 'write' permission). Always call get_workspace_state first; the state-freshness gate applies.",
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply; the response includes a `runs: [{cellId, success, queryCount?, results?, error?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed (e.g. missing 'write' permission). Always call get_workspace_state first; the state-freshness gate applies.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,

@@ -5,7 +5,6 @@ import { Editor } from "@monaco-editor/react"
 import {
   QuestDBLanguageName,
   getQueryFromCursor,
-  getAllQueries,
   normalizeQueryText,
   stripSQLComments,
 } from "../../Monaco/utils"
@@ -162,7 +161,6 @@ const CellInner: React.FC<Props> = ({
 }) => {
   const {
     runCell,
-    runCellScript,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,
@@ -395,29 +393,15 @@ const CellInner: React.FC<Props> = ({
 
   const handleRunAll = useCallback(async () => {
     if (await tryRunSelection()) return
-    const ed = editorRef.current
-    if (!ed) return
+    if (!editorRef.current) return
 
     clearHighlight()
 
-    const allQueries = getAllQueries(ed)
-    if (allQueries.length === 0) return
-
-    if (allQueries.length === 1) {
-      const sql = normalizeQueryText(allQueries[0].query)
-      const ok = sql ? await runCell(cell.id, sql) : await runCell(cell.id)
-      emitRanEvent(ok)
-    } else {
-      const queryTexts = allQueries
-        .map((q) => normalizeQueryText(q.query))
-        .filter((q) => q.length > 0)
-      await runCellScript(cell.id, queryTexts)
-      emitRanEvent(true)
-    }
+    const ok = await runCell(cell.id)
+    emitRanEvent(ok)
   }, [
     cell.id,
     runCell,
-    runCellScript,
     tryRunSelection,
     editorRef,
     clearHighlight,

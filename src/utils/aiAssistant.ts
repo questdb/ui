@@ -129,7 +129,11 @@ export interface ModelToolsClient {
     bufferId: number,
     cellId: string,
     signal?: AbortSignal,
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<{
+    success: boolean
+    queryCount: number
+    results: string[]
+  }>
   setLayoutMode: (bufferId: number, mode: "list" | "grid") => Promise<void>
   setCellLayout: (
     bufferId: number,

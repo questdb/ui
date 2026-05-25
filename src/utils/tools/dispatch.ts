@@ -306,7 +306,12 @@ export const dispatchTool = async (
             }
             setStatus(AIOperationStatus.RunningCell, { cellId })
             const r = await modelToolsClient.runCell(buffer_id, cellId, signal)
-            return { cellId, ran: r.success, error: r.error }
+            return {
+              cellId,
+              ran: r.success,
+              queryCount: r.queryCount,
+              results: r.results,
+            }
           }
           return { cellId }
         })
@@ -759,6 +764,8 @@ export const dispatchTool = async (
           type RunEntry = {
             cellId: string
             success: boolean
+            queryCount?: number
+            results?: string[]
             error?: string
           }
           const settled = await Promise.all(
@@ -787,7 +794,8 @@ export const dispatchTool = async (
                 return {
                   cellId: r.cellId,
                   success: result.success,
-                  error: result.error,
+                  queryCount: result.queryCount,
+                  results: result.results,
                 }
               } catch (runErr) {
                 const message =

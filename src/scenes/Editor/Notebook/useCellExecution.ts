@@ -8,6 +8,7 @@ import type {
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { getQueriesFromText } from "../Monaco/utils"
 import {
   buildInitialScriptResults,
   singleResultFromExec,
@@ -55,69 +56,28 @@ export const useCellExecution = ({
 
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
-  const runCell = useCallback(
+  const runScript = useCallback(
     async (
       cellId: string,
-      sql?: string,
+      queries: string[],
       externalSignal?: AbortSignal,
     ): Promise<boolean> => {
-      const cell = cellsRef.current.find((c) => c.id === cellId)
-      if (!cell) return false
-
-      const queryText = sql ?? cell.value
-      if (!queryText.trim()) return false
-      if (externalSignal?.aborted) return false
-
-      const prior = abortControllersRef.current.get(cellId)
-      prior?.forEach((c) => c.abort())
-
-      const ac = new AbortController()
-      const onExternalAbort = () => ac.abort(externalSignal?.reason)
-      externalSignal?.addEventListener("abort", onExternalAbort, {
-        once: true,
-      })
-      abortControllersRef.current.set(cellId, [ac])
-
-      const runningResult: CellResult = {
-        results: [{ type: "running", query: queryText }],
-        activeResultIndex: 0,
-        timestamp: Date.now(),
-      }
-      updateCell(cellId, { result: runningResult })
-
-      setRunningCellIds((prev) => new Set(prev).add(cellId))
-      try {
-        const execResult = await executeSingle(queryText, ac.signal)
-        const cellResult: CellResult = {
-          results: [singleResultFromExec(execResult, queryText)],
-          activeResultIndex: 0,
-          timestamp: Date.now(),
-        }
-        updateCell(cellId, { result: cellResult })
-        publishSchemaIfMutating(execResult.type)
-        return execResult.type !== "error"
-      } finally {
-        externalSignal?.removeEventListener("abort", onExternalAbort)
-        abortControllersRef.current.delete(cellId)
-        setRunningCellIds((prev) => {
-          const next = new Set(prev)
-          next.delete(cellId)
-          return next
-        })
-      }
-    },
-    [cellsRef, executeSingle, updateCell],
-  )
-
-  const runCellScript = useCallback(
-    async (cellId: string, queries: string[]) => {
-      if (queries.length === 0) return
+      if (queries.length === 0) return false
 
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
 
       // One AbortController per query so `cancelQuery(index)` cancels just that slot.
       const controllers = queries.map(() => new AbortController())
+      const onExternalAbort = () =>
+        controllers.forEach((c) => c.abort(externalSignal?.reason))
+      if (externalSignal?.aborted) {
+        onExternalAbort()
+      } else {
+        externalSignal?.addEventListener("abort", onExternalAbort, {
+          once: true,
+        })
+      }
       abortControllersRef.current.set(cellId, controllers)
       autoFocusRef.current.set(cellId, true)
 
@@ -180,6 +140,7 @@ export const useCellExecution = ({
           durationMs: Date.now() - startTime,
         })
       } finally {
+        externalSignal?.removeEventListener("abort", onExternalAbort)
         abortControllersRef.current.delete(cellId)
         autoFocusRef.current.delete(cellId)
         setRunningCellIds((prev) => {
@@ -188,8 +149,69 @@ export const useCellExecution = ({
           return next
         })
       }
+
+      return failedCount === 0
     },
     [executeSingle, updateCell, updateCellResult, setScriptSummary],
+  )
+
+  const runCell = useCallback(
+    async (
+      cellId: string,
+      sql?: string,
+      externalSignal?: AbortSignal,
+    ): Promise<boolean> => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell) return false
+
+      const queryText = sql ?? cell.value
+      if (!queryText.trim()) return false
+      if (externalSignal?.aborted) return false
+
+      const queries = getQueriesFromText(queryText)
+      if (queries.length > 1) {
+        return runScript(cellId, queries, externalSignal)
+      }
+
+      const prior = abortControllersRef.current.get(cellId)
+      prior?.forEach((c) => c.abort())
+
+      const ac = new AbortController()
+      const onExternalAbort = () => ac.abort(externalSignal?.reason)
+      externalSignal?.addEventListener("abort", onExternalAbort, {
+        once: true,
+      })
+      abortControllersRef.current.set(cellId, [ac])
+
+      const runningResult: CellResult = {
+        results: [{ type: "running", query: queryText }],
+        activeResultIndex: 0,
+        timestamp: Date.now(),
+      }
+      updateCell(cellId, { result: runningResult })
+
+      setRunningCellIds((prev) => new Set(prev).add(cellId))
+      try {
+        const execResult = await executeSingle(queryText, ac.signal)
+        const cellResult: CellResult = {
+          results: [singleResultFromExec(execResult, queryText)],
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        }
+        updateCell(cellId, { result: cellResult })
+        publishSchemaIfMutating(execResult.type)
+        return execResult.type !== "error"
+      } finally {
+        externalSignal?.removeEventListener("abort", onExternalAbort)
+        abortControllersRef.current.delete(cellId)
+        setRunningCellIds((prev) => {
+          const next = new Set(prev)
+          next.delete(cellId)
+          return next
+        })
+      }
+    },
+    [cellsRef, executeSingle, updateCell, runScript],
   )
 
   const cancelCell = useCallback(
@@ -236,7 +258,6 @@ export const useCellExecution = ({
   return {
     runningCellIds,
     runCell,
-    runCellScript,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,

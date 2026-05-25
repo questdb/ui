@@ -31,7 +31,8 @@ const makeController = (
   moveCellUp: () => undefined,
   moveCellDown: () => undefined,
   duplicateCell: () => "c2",
-  runCell: () => Promise.resolve({ success: true }),
+  runCell: () =>
+    Promise.resolve({ success: true, queryCount: 1, results: ["success"] }),
   setLayoutMode: () => undefined,
   setVariables: () => undefined,
   setCellLayout: () => undefined,

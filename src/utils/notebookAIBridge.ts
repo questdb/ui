@@ -34,7 +34,11 @@ export type NotebookController = {
   runCell: (
     cellId: string,
     signal?: AbortSignal,
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<{
+    success: boolean
+    queryCount: number
+    results: string[]
+  }>
   setLayoutMode: (mode: "list" | "grid") => void
   setVariables: (variables: NotebookVariable[]) => void
   setCellLayout: (

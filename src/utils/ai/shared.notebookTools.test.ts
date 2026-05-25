@@ -41,7 +41,13 @@ const makeClient = (
   moveCellUp: vi.fn(() => Promise.resolve()),
   moveCellDown: vi.fn(() => Promise.resolve()),
   duplicateCell: vi.fn(() => Promise.resolve({ cellId: "dup" })),
-  runCell: vi.fn(() => Promise.resolve({ success: true })),
+  runCell: vi.fn(() =>
+    Promise.resolve({
+      success: true,
+      queryCount: 1,
+      results: ["success"] as Array<"success">,
+    }),
+  ),
   setLayoutMode: vi.fn(() => Promise.resolve()),
   setCellLayout: vi.fn(() => Promise.resolve()),
   setCellMode: vi.fn(() => Promise.resolve()),
@@ -86,13 +92,19 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(JSON.parse(res.content)).toEqual({ cellId: "new-cell" })
   })
 
-  it("add_cell with run:true chains runCell and reports status", async () => {
+  it("add_cell with run:true chains runCell and reports per-query status", async () => {
     const client = makeClient({
-      runCell: vi.fn(() => Promise.resolve({ success: false, error: "boom" })),
+      runCell: vi.fn(() =>
+        Promise.resolve({
+          success: false,
+          queryCount: 3,
+          results: ["success", "ERROR: boom", "cancelled"],
+        }),
+      ),
     })
     const res = await dispatchTool(
       "add_cell",
-      { buffer_id: 1, sql: "SELECT 1", run: true },
+      { buffer_id: 1, sql: "SELECT 1; SELECT bad; SELECT 2", run: true },
       client,
       noopStatus,
     )
@@ -100,7 +112,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(JSON.parse(res.content)).toEqual({
       cellId: "new-cell",
       ran: false,
-      error: "boom",
+      queryCount: 3,
+      results: ["success", "ERROR: boom", "cancelled"],
     })
   })
 
@@ -117,10 +130,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
-  it("run_cell serialises { success, error? } and never leaks data keys", async () => {
+  it("run_cell serialises the explicit per-query shape and never leaks data keys", async () => {
     const client = makeClient({
       runCell: vi.fn(() =>
-        Promise.resolve({ success: false, error: "syntax" }),
+        Promise.resolve({
+          success: false,
+          queryCount: 1,
+          results: ["ERROR: syntax"],
+        }),
       ),
     })
     const res = await dispatchTool(
@@ -130,8 +147,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
     const parsed = JSON.parse(res.content) as Record<string, unknown>
-    expect(parsed).toEqual({ success: false, error: "syntax" })
-    // No data fields under any circumstance.
+    expect(parsed).toEqual({
+      success: false,
+      queryCount: 1,
+      results: ["ERROR: syntax"],
+    })
+    // No QuestDB result-row leak keys under any circumstance. `queryCount`
+    // (capital C) is intentional — won't match a case-sensitive `count` regex.
     expect(res.content).not.toMatch(/columns|dataset|count|rows/)
   })
 
@@ -689,7 +711,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   it("allows run_cell with SELECT when read and write are both denied", async () => {
     const client = makeClient({
       getCellSql: vi.fn(() => "SELECT 1"),
-      runCell: vi.fn(() => Promise.resolve({ success: true })),
+      runCell: vi.fn(() =>
+        Promise.resolve({
+          success: true,
+          queryCount: 1,
+          results: ["success"] as Array<"success">,
+        }),
+      ),
     })
     const res = await dispatchTool(
       "run_cell",
@@ -709,7 +737,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("allows add_cell with run=true and SELECT when read and write are both denied", async () => {
     const client = makeClient({
-      runCell: vi.fn(() => Promise.resolve({ success: true })),
+      runCell: vi.fn(() =>
+        Promise.resolve({
+          success: true,
+          queryCount: 1,
+          results: ["success"] as Array<"success">,
+        }),
+      ),
     })
     const res = await dispatchTool(
       "add_cell",
@@ -737,7 +771,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("runs new cells with mode='run' (explicit) after apply", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const client = makeClient({
       runCell,
       applyNotebookState: vi.fn(() =>
@@ -760,13 +800,26 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith(1, "new-1", undefined)
     const parsed = JSON.parse(res.content) as {
-      runs: Array<{ cellId: string; success: boolean }>
+      runs: Array<{
+        cellId: string
+        success: boolean
+        queryCount?: number
+        results?: string[]
+      }>
     }
-    expect(parsed.runs).toEqual([{ cellId: "new-1", success: true }])
+    expect(parsed.runs).toEqual([
+      { cellId: "new-1", success: true, queryCount: 1, results: ["success"] },
+    ])
   })
 
   it("defaults omitted mode to 'run' for new cells and runs them", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const client = makeClient({
       runCell,
       applyNotebookState: vi.fn(() =>
@@ -790,7 +843,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips cells whose resolved mode is 'draw'", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const client = makeClient({
       runCell,
       applyNotebookState: vi.fn(() =>
@@ -821,7 +880,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips cells with empty SQL", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const client = makeClient({
       runCell,
       applyNotebookState: vi.fn(() =>
@@ -845,7 +910,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("denies execution of DDL/DML run cells when write permission is absent", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const client = makeClient({
       runCell,
       applyNotebookState: vi.fn(() =>
@@ -878,7 +949,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("preserves existing mode when mode is omitted on an existing cell (draw stays draw, run stays run)", async () => {
-    const runCell = vi.fn(() => Promise.resolve({ success: true }))
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
     const getCell = vi.fn(
       (
         _buf: number,
@@ -934,9 +1011,14 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     const finish: Record<string, () => void> = {}
     const runCell = vi.fn(
       (_buf: number, cellId: string) =>
-        new Promise<{ success: true }>((resolve) => {
+        new Promise<{
+          success: true
+          queryCount: number
+          results: Array<"success">
+        }>((resolve) => {
           order.push(cellId)
-          finish[cellId] = () => resolve({ success: true })
+          finish[cellId] = () =>
+            resolve({ success: true, queryCount: 1, results: ["success"] })
         }),
     )
     const client = makeClient({
@@ -987,9 +1069,13 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     ])
   })
 
-  it("reports per-cell runCell failure in the runs array", async () => {
+  it("reports per-cell runCell failure in the runs array with per-query results", async () => {
     const runCell = vi.fn(() =>
-      Promise.resolve({ success: false, error: "boom" }),
+      Promise.resolve({
+        success: false,
+        queryCount: 3,
+        results: ["success", "ERROR: boom", "cancelled"],
+      }),
     )
     const client = makeClient({
       runCell,
@@ -1005,16 +1091,28 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
         buffer_id: 1,
         layout_mode: null,
         maximized_cell_id: null,
-        cells: [{ id: null, value: "SELECT 1", mode: "run" }],
+        cells: [
+          { id: null, value: "SELECT 1; SELECT bad; SELECT 2", mode: "run" },
+        ],
       },
       client,
       noopStatus,
     )
     const parsed = JSON.parse(res.content) as {
-      runs: Array<{ cellId: string; success: boolean; error?: string }>
+      runs: Array<{
+        cellId: string
+        success: boolean
+        queryCount?: number
+        results?: string[]
+      }>
     }
     expect(parsed.runs).toEqual([
-      { cellId: "new-1", success: false, error: "boom" },
+      {
+        cellId: "new-1",
+        success: false,
+        queryCount: 3,
+        results: ["success", "ERROR: boom", "cancelled"],
+      },
     ])
   })
 })
@@ -1124,7 +1222,13 @@ describe("dispatchMCPTool — data-leak invariant", () => {
 
   it("run_cell happy-path response carries no data field keys", async () => {
     const client = makeClient({
-      runCell: vi.fn(() => Promise.resolve({ success: true })),
+      runCell: vi.fn(() =>
+        Promise.resolve({
+          success: true,
+          queryCount: 1,
+          results: ["success"] as Array<"success">,
+        }),
+      ),
     })
     const result = await dispatchMCPTool(
       callOf("run_cell", { buffer_id: 1, cell_id: "c" }),
@@ -1137,7 +1241,11 @@ describe("dispatchMCPTool — data-leak invariant", () => {
   it("run_cell error-path response carries no data field keys", async () => {
     const client = makeClient({
       runCell: vi.fn(() =>
-        Promise.resolve({ success: false, error: "syntax near (1)" }),
+        Promise.resolve({
+          success: false,
+          queryCount: 1,
+          results: ["ERROR: syntax near (1)"],
+        }),
       ),
     })
     const result = await dispatchMCPTool(
@@ -1152,7 +1260,13 @@ describe("dispatchMCPTool — data-leak invariant", () => {
   it("add_cell with run:true similarly never leaks data fields", async () => {
     const client = makeClient({
       addCell: vi.fn(() => Promise.resolve({ cellId: "new" })),
-      runCell: vi.fn(() => Promise.resolve({ success: true })),
+      runCell: vi.fn(() =>
+        Promise.resolve({
+          success: true,
+          queryCount: 1,
+          results: ["success"] as Array<"success">,
+        }),
+      ),
     })
     const result = await dispatchMCPTool(
       callOf("add_cell", { buffer_id: 1, sql: "select 1", run: true }),

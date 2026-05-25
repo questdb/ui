@@ -61,7 +61,6 @@ export type NotebookActions = {
     sql?: string,
     signal?: AbortSignal,
   ) => Promise<boolean>
-  runCellScript: (cellId: string, queries: string[]) => Promise<void>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
   setActiveResultIndex: (cellId: string, index: number) => void
@@ -89,7 +88,6 @@ const NOOP_ACTIONS: NotebookActions = {
   moveCellDown: () => undefined,
   duplicateCell: () => "",
   runCell: () => Promise.resolve(false),
-  runCellScript: () => Promise.resolve(),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
   setActiveResultIndex: () => undefined,
@@ -290,19 +288,6 @@ export const NotebookProvider: React.FC<{
     [execution, store],
   )
 
-  const runCellScript = useCallback(
-    async (cellId: string, queries: string[]) => {
-      await execution.runCellScript(cellId, queries)
-      const cell = store.cellsRef.current.find((c) => c.id === cellId)
-      if (cell && cell.mode !== "draw") {
-        store.updateCell(cellId, {
-          bottomHeight: computeResultBottomHeight(cell.result),
-        })
-      }
-    },
-    [execution, store],
-  )
-
   const deleteCell = useCallback(
     (cellId: string) => {
       store.removeCellById(cellId)
@@ -372,7 +357,6 @@ export const NotebookProvider: React.FC<{
     moveCellDown: store.moveCellDown,
     duplicateCell,
     runCell,
-    runCellScript,
     cancelCell: execution.cancelCell,
     cancelQuery: execution.cancelQuery,
     setActiveResultIndex: execution.setActiveResultIndex,
@@ -397,7 +381,6 @@ export const NotebookProvider: React.FC<{
       moveCellDown: (...args) => liveActionsRef.current.moveCellDown(...args),
       duplicateCell: (...args) => liveActionsRef.current.duplicateCell(...args),
       runCell: (...args) => liveActionsRef.current.runCell(...args),
-      runCellScript: (...args) => liveActionsRef.current.runCellScript(...args),
       cancelCell: (...args) => liveActionsRef.current.cancelCell(...args),
       cancelQuery: (...args) => liveActionsRef.current.cancelQuery(...args),
       setActiveResultIndex: (...args) =>
@@ -430,32 +413,34 @@ export const NotebookProvider: React.FC<{
       moveCellDown: (cellId) => storeRef.current.moveCellDown(cellId),
       duplicateCell: (cellId) => liveActionsRef.current.duplicateCell(cellId),
       runCell: async (cellId, signal) => {
-        const ok = await liveActionsRef.current.runCell(
-          cellId,
-          undefined,
-          signal,
+        const cellBefore = storeRef.current.cellsRef.current.find(
+          (c) => c.id === cellId,
         )
-        if (ok) return { success: true }
+        const priorResult = cellBefore?.result ?? null
+        await liveActionsRef.current.runCell(cellId, undefined, signal)
         const cell = storeRef.current.cellsRef.current.find(
           (c) => c.id === cellId,
         )
-        if (!cell || !cell.result) {
-          return { success: false }
+        const freshResult =
+          cell?.result && cell.result !== priorResult ? cell.result : null
+        if (!freshResult) {
+          return { success: false, queryCount: 0, results: [] }
         }
-        const errorResult = cell.result.results.find((r) => r.type === "error")
-        const rawError =
-          errorResult && errorResult.type === "error"
-            ? errorResult.error
-            : cell.result.error
-        const trimmed = rawError
-          ? rawError.length > 200
-            ? `${rawError.slice(0, 197)}...`
-            : rawError
-          : undefined
+        const results = freshResult.results.map((r) => {
+          if (r.type === "cancelled") return "cancelled"
+          if (r.type === "error") {
+            const trimmed =
+              r.error.length > 200 ? `${r.error.slice(0, 197)}...` : r.error
+            return `ERROR: ${sanitizeForPromptContext(trimmed)}`
+          }
+          return "success"
+        })
+        const success =
+          results.length > 0 && results.every((r) => r === "success")
         return {
-          // sanitize to neutralize </notebook_context>-style smuggling.
-          success: false,
-          error: trimmed ? sanitizeForPromptContext(trimmed) : undefined,
+          success,
+          queryCount: results.length,
+          results,
         }
       },
       setLayoutMode: (mode) =>
