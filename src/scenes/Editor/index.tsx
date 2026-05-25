@@ -47,7 +47,11 @@ import type { ErrorResult } from "../../utils"
 import { color, platform } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
-import { QuestDBLanguageName, normalizeQueryText } from "./Monaco/utils"
+import {
+  QuestDBLanguageName,
+  normalizeQueryText,
+  readShareLinkParams,
+} from "./Monaco/utils"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { getLastTurnWithUnactionedDiff } from "../../utils/ai/turnView"
@@ -230,8 +234,7 @@ const Editor = ({
   ])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const query = params.get("query")
+    const { query } = readShareLinkParams()
     if (query && activeBuffer.metricsViewState) {
       void addBuffer({ label: "Query" })
     }

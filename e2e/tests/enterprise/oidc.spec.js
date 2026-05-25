@@ -165,6 +165,46 @@ describe("OIDC", () => {
       })
     })
 
+    it("should preserve query and executeQuery params across OIDC redirect and show share-link confirmation dialog", () => {
+      // Given
+      const query =
+        "DROP TABLE IF EXISTS share_link_oidc_a; DROP TABLE IF EXISTS share_link_oidc_b"
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+        refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+        token_type: "Bearer",
+        expires_in: 300,
+      })
+
+      // When
+      cy.visit(
+        `${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`,
+      )
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@tokens")
+
+      // Then
+      cy.getEditor().should("be.visible")
+      cy.getByDataHook("share-link-confirmation-dialog").should("be.visible")
+
+      // When
+      cy.getByDataHook("share-link-confirmation-confirm").click()
+
+      // Then
+      cy.getByDataHook("success-notification")
+        .invoke("text")
+        .should(
+          "match",
+          /Running completed in \d+ms with\s+2 successful\s+queries/,
+        )
+
+      cy.logout()
+    })
+
     it("display import panel", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({

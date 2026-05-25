@@ -43,19 +43,32 @@ const viewSchemas = {
     "CREATE VIEW IF NOT EXISTS btc_trades_view AS SELECT * FROM btc_trades;",
 }
 
-before(() => {
-  Cypress.on("uncaught:exception", (err) => {
-    // this error can be safely ignored
-    if (err.message.includes("ResizeObserver loop")) {
-      return false
-    }
-    // Monaco editor's word highlighter throws "Canceled" errors during rapid tab switching
-    // when restoreViewState cancels pending async operations - this is harmless
-    if (err.message.includes("Canceled")) {
-      return false
-    }
-  })
+Cypress.on("uncaught:exception", (err) => {
+  // Monaco editor's word highlighter throws "Canceled" errors during rapid tab switching
+  // when restoreViewState cancels pending async operations - this is harmless
+  if (err.message.includes("Canceled")) {
+    return false
+  }
+})
 
+Cypress.on("window:before:load", (win) => {
+  const OriginalRO = win.ResizeObserver
+  win.ResizeObserver = class extends OriginalRO {
+    constructor(cb) {
+      super((entries, observer) => {
+        win.requestAnimationFrame(() => {
+          try {
+            cb(entries, observer)
+          } catch {
+            /* swallow callback errors */
+          }
+        })
+      })
+    }
+  }
+})
+
+before(() => {
   indexedDB.deleteDatabase("web-console")
 })
 

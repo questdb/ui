@@ -12,6 +12,7 @@ import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 
 type ButtonBarProps = {
   onTriggerRunScript: (runAll?: boolean) => void
+  onCopyLinkAllQueries: () => void
   isTemporary: boolean | undefined
 }
 
@@ -124,6 +125,25 @@ const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
   }
 `
 
+const CopyLinkMenuButton = styled(Button)`
+  background-color: ${color("backgroundDarker")};
+  border-color: ${color("backgroundDarker")};
+  color: ${color("foreground")};
+
+  &:hover:not(:disabled) {
+    background-color: ${color("selection")};
+    border-color: ${color("selection")};
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+
+  svg {
+    color: ${color("foreground")};
+  }
+`
+
 const DropdownMenu = styled.div`
   background: ${color("backgroundDarker")};
   border-radius: 0.4rem;
@@ -133,6 +153,8 @@ const DropdownMenu = styled.div`
   padding: 0;
   min-width: unset;
   border: 0;
+  display: flex;
+  flex-direction: column;
 
   > * {
     justify-content: space-between;
@@ -147,19 +169,27 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
 
 const RUN_DROPDOWN_MENU_ID = "run-query-dropdown-menu"
 
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-const shortcutTitles =
-  platform.isMacintosh || platform.isIOS
-    ? {
-        [RunningType.QUERY]: "Run query (Cmd+Enter)",
-        [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
-      }
-    : {
-        [RunningType.QUERY]: "Run query (Ctrl+Enter)",
-        [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
-      }
+const isMac = platform.isMacintosh || platform.isIOS
+const ctrlCmd = isMac ? "⌘" : "Ctrl"
+const altOpt = isMac ? "⌥" : "Alt"
+const shortcutTitles = isMac
+  ? {
+      [RunningType.QUERY]: "Run query (Cmd+Enter)",
+      [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
+    }
+  : {
+      [RunningType.QUERY]: "Run query (Ctrl+Enter)",
+      [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
+    }
+const copyLinkShortcutTitle = isMac
+  ? "Copy query link (Option+Shift+L)"
+  : "Copy query link (Alt+Shift+L)"
 
-const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
+const ButtonBar = ({
+  onTriggerRunScript,
+  onCopyLinkAllQueries,
+  isTemporary,
+}: ButtonBarProps) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
@@ -183,6 +213,11 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
     onTriggerRunScript(true)
     setDropdownActive(false)
   }, [dispatch, onTriggerRunScript])
+
+  const handleClickCopyLink = useCallback(() => {
+    onCopyLinkAllQueries()
+    setDropdownActive(false)
+  }, [onCopyLinkAllQueries])
 
   const handleDropdownToggle = useCallback((active: boolean) => {
     setDropdownActive(active)
@@ -261,8 +296,8 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
       )
     }
     return (
-      <SuccessButton
-        skin="success"
+      <CopyLinkMenuButton
+        skin="secondary"
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
@@ -277,21 +312,21 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
         <RunShortcut>
           <Key
             keyString={ctrlCmd}
-            color={color("green")}
-            hoverColor={color("green")}
+            color={color("foreground")}
+            hoverColor={color("foreground")}
           />
           <Key
             keyString="⇧"
-            color={color("green")}
-            hoverColor={color("green")}
+            color={color("foreground")}
+            hoverColor={color("foreground")}
           />
           <Key
             keyString="Enter"
-            color={color("green")}
-            hoverColor={color("green")}
+            color={color("foreground")}
+            hoverColor={color("foreground")}
           />
         </RunShortcut>
-      </SuccessButton>
+      </CopyLinkMenuButton>
     )
   }
 
@@ -371,6 +406,33 @@ const ButtonBar = ({ onTriggerRunScript, isTemporary }: ButtonBarProps) => {
         >
           <DropdownMenu id={RUN_DROPDOWN_MENU_ID} role="menu">
             {renderRunScriptButton(true)}
+            <CopyLinkMenuButton
+              skin="secondary"
+              data-hook="button-copy-query-link"
+              title={copyLinkShortcutTitle}
+              onClick={handleClickCopyLink}
+              disabled={isTemporary}
+              {...{ role: "menuitem" as const }}
+            >
+              Copy link to all queries
+              <RunShortcut>
+                <Key
+                  keyString={altOpt}
+                  color={color("foreground")}
+                  hoverColor={color("foreground")}
+                />
+                <Key
+                  keyString="⇧"
+                  color={color("foreground")}
+                  hoverColor={color("foreground")}
+                />
+                <Key
+                  keyString="L"
+                  color={color("foreground")}
+                  hoverColor={color("foreground")}
+                />
+              </RunShortcut>
+            </CopyLinkMenuButton>
           </DropdownMenu>
         </PopperToggle>
       </ButtonGroup>

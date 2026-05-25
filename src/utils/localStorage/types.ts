@@ -26,6 +26,7 @@ export enum StoreKey {
   RELEASE_TYPE = "RELEASE_TYPE",
   OAUTH_PROMPT = "oauth.prompt",
   OAUTH_REDIRECT_COUNT = "oauth.redirect.count",
+  OAUTH_RETURN_PARAMS = "oauth.return.params",
   OAUTH_STATE = "oauth.state",
   PKCE_CODE_VERIFIER = "pkce.code.verifier",
   QUERY_TEXT = "query.text",
