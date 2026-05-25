@@ -65,19 +65,31 @@ UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 # Change to UI directory
 cd "$UI_DIR"
 
-# Cleanup
+# Cleanup (always wipe dbroot; only wipe checkout/build when not cached)
 rm -rf tmp/dbroot
-rm -rf tmp/questdb-*
+if [ "$CACHED" -eq 0 ]; then
+    rm -rf tmp/questdb-*
+fi
 
-# Clone questdb-enterprise
-git clone https://github.com/questdb/questdb-enterprise.git tmp/questdb-enterprise
-cd tmp/questdb-enterprise || exit 1
-git submodule init
-git submodule update
-cd ../..
+# Clone questdb-enterprise (skip if a checkout already exists)
+if [ -d tmp/questdb-enterprise/.git ]; then
+    echo "Reusing existing tmp/questdb-enterprise checkout"
+else
+    git clone https://github.com/questdb/questdb-enterprise.git tmp/questdb-enterprise
+    cd tmp/questdb-enterprise || exit 1
+    git submodule init
+    git submodule update
+    cd ../..
+fi
 
-# Build server
-mvn clean package -e -f tmp/questdb-enterprise/pom.xml -DskipTests -P build-ent-binaries 2>&1
+# Build server (skip if --cached and previous build output exists)
+ENT_MAIN_CLASS=tmp/questdb-enterprise/questdb-ent/target/classes/com/questdb/EntServerMain.class
+CORE_MAIN_DIR=tmp/questdb-enterprise/questdb/core/target/classes
+if [ "$CACHED" -eq 1 ] && [ -f "$ENT_MAIN_CLASS" ] && [ -d "$CORE_MAIN_DIR" ]; then
+    echo "Reusing existing maven build output"
+else
+    mvn clean package -e -f tmp/questdb-enterprise/pom.xml -DskipTests -P build-ent-binaries 2>&1
+fi
 
 # Create dbroot
 mkdir tmp/dbroot
