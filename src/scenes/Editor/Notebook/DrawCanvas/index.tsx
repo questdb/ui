@@ -28,7 +28,7 @@ import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
 
-const Wrapper = styled.div<{ $hideActionsUntilHover: boolean }>`
+const Wrapper = styled.div`
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -36,21 +36,16 @@ const Wrapper = styled.div<{ $hideActionsUntilHover: boolean }>`
   position: relative;
   background: ${({ theme }) => theme.color.backgroundLighter};
 
-  ${({ $hideActionsUntilHover }) =>
-    $hideActionsUntilHover
-      ? `
-    & [data-hook="chart-actions"] {
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.15s ease;
-    }
-    &:hover [data-hook="chart-actions"],
-    & [data-hook="chart-actions"]:focus-within {
-      opacity: 1;
-      pointer-events: auto;
-    }
-  `
-      : ""}
+  & [data-hook="chart-actions"] {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+  &:hover [data-hook="chart-actions"],
+  & [data-hook="chart-actions"]:focus-within {
+    opacity: 1;
+    pointer-events: auto;
+  }
 `
 
 const Canvas = styled.div`
@@ -273,7 +268,7 @@ export const DrawCanvas: React.FC<Props> = ({
   }
 
   return (
-    <Wrapper $hideActionsUntilHover={!!cell.isChartMaximized}>
+    <Wrapper>
       <ChartActions
         autoRefresh={autoRefresh}
         onAutoRefreshChange={onAutoRefreshChange}

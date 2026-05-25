@@ -50,6 +50,7 @@ const RunBar = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 1rem;
+  background: ${({ theme }) => theme.color.backgroundDarker};
   cursor: grab;
 
   &:active {

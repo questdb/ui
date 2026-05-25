@@ -228,6 +228,7 @@ export const buildEchartsOption = (
         return {
           name,
           type: "scatter" as const,
+          large: true,
           data: dataset.map((row) => [
             toNumberOrNull(row[xIdx]) ?? 0,
             toNumberOrNull(row[yIdx]) ?? 0,
@@ -269,6 +270,10 @@ export const buildEchartsOption = (
       ? { areaStyle: {}, smooth: true, symbol: "none" as const }
       : {}
 
+  const perfExtras: { sampling?: "lttb"; large?: boolean } = isLineFamily
+    ? { sampling: "lttb" }
+    : { large: true }
+
   // Long → wide pivot: each distinct partitionByColumn value → its own series.
   const partIdx =
     config.partitionByColumn != null
@@ -283,6 +288,8 @@ export const buildEchartsOption = (
     smooth?: boolean
     symbol?: "none"
     stack?: string
+    sampling?: "lttb"
+    large?: boolean
   }[] = []
 
   if (partIdx !== undefined) {
@@ -321,6 +328,7 @@ export const buildEchartsOption = (
           type: seriesType,
           data: (xIsTime ? pts : pts.map((p) => p[0])) as never,
           ...lineExtras,
+          ...perfExtras,
           ...(isStacked && { stack: "total" }),
         })
       }
@@ -337,6 +345,7 @@ export const buildEchartsOption = (
         type: seriesType,
         data: data as never,
         ...lineExtras,
+        ...perfExtras,
         ...(isStacked && { stack: "total" }),
       })
     }
@@ -369,6 +378,7 @@ export const buildEchartsOption = (
           type: seriesType,
           data: data as never,
           ...lineExtras,
+          ...perfExtras,
         })
       }
     }
