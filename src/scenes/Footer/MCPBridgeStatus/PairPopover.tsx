@@ -245,9 +245,14 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       !isConnecting && (credsDirty || permsDirty || !isPaired || inErrorState)
     const submitLabel = isConnecting ? "Connecting…" : "Connect"
 
+    const clearValidationError = () => {
+      if (validationError) setValidationError(null)
+    }
+
     const onConnect = () => {
-      const wantsCredsChange = credsDirty || !isPaired
-      if (!wantsCredsChange && permsDirty) {
+      const isConnected = status === "connected"
+      const needsConnect = credsDirty || !isConnected
+      if (!needsConnect && permsDirty) {
         setPermissions(draftPermissions)
         onClose()
         return
@@ -300,11 +305,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       onClose()
     }
 
-    const paired = !!(url && token)
-    const tone = deriveTone(paired, status)
+    const tone = deriveTone(isPaired, status)
     const HeaderIcon = tone === "connected" ? PlugsConnectedIcon : PlugsIcon
 
-    const canDisconnect = paired && status === "connected"
+    const canDisconnect = isPaired && status === "connected"
 
     const title = succeeded ? "MCP Bridge connected" : "MCP Bridge"
 
@@ -334,7 +338,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
               <FullWidthInput
                 name="mcp-pair-url"
                 value={draftUrl}
-                onChange={(e) => setDraftUrl(e.target.value)}
+                onChange={(e) => {
+                  setDraftUrl(e.target.value)
+                  clearValidationError()
+                }}
                 placeholder="ws://127.0.0.1:57123"
                 disabled={isConnecting}
                 data-hook="mcp-pair-url-input"
@@ -347,7 +354,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
               <FullWidthInput
                 name="mcp-pair-token"
                 value={draftToken}
-                onChange={(e) => setDraftToken(e.target.value)}
+                onChange={(e) => {
+                  setDraftToken(e.target.value)
+                  clearValidationError()
+                }}
                 placeholder="Paste the token from the agent's reply"
                 disabled={isConnecting}
                 data-hook="mcp-pair-token-input"
@@ -356,7 +366,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
             <PermissionsSection
               value={draftPermissions}
-              onChange={setDraftPermissions}
+              onChange={(next) => {
+                setDraftPermissions(next)
+                clearValidationError()
+              }}
               disabled={isConnecting}
             />
           </Body>

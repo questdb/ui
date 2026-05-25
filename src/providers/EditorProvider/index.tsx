@@ -1,4 +1,4 @@
-import type { Monaco } from "@monaco-editor/react"
+import { loader, type Monaco } from "@monaco-editor/react"
 import type { editor, IRange } from "monaco-editor"
 import React, {
   createContext,
@@ -20,6 +20,7 @@ import {
   parseQueryKey,
   createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
+import { useSchemaCompletionProvider } from "../../scenes/Editor/Monaco/questdb-sql/useSchemaCompletionProvider"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
 import type { Buffer, PreviewContent } from "../../store/buffers"
@@ -146,6 +147,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   const editorRef = useRef<IStandaloneCodeEditor>(null)
   const monacoRef = useRef<Monaco>(null)
   const executionRefs = useRef<ExecutionRefs>({})
+  const [loadedMonaco, setLoadedMonaco] = useState<Monaco | null>(null)
   const [temporaryBufferId, setTemporaryBufferId] = useState<number | null>(
     null,
   )
@@ -170,6 +172,8 @@ export const EditorProvider: React.FC = ({ children }) => {
   const isNavigatingFromSearchRef = useRef(false)
 
   const ranOnce = useRef(false)
+
+  useSchemaCompletionProvider(loadedMonaco)
 
   const getNextPosition = useCallback(() => {
     if (!buffers) return 0
@@ -423,6 +427,16 @@ export const EditorProvider: React.FC = ({ children }) => {
     },
     [buffers, setActiveBuffer, addBuffer],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    void loader.init().then((m) => {
+      if (!cancelled) setLoadedMonaco(m)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!ranOnce.current && buffers && activeBufferId) {

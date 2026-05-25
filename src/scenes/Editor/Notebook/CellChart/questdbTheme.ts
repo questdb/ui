@@ -52,6 +52,7 @@ export const questdbTheme = {
     pageIconInactiveColor: COMMENT,
   },
   tooltip: {
+    appendToBody: true,
     backgroundColor: BACKGROUND_DARKER,
     borderColor: SELECTION,
     borderWidth: 1,

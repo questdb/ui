@@ -100,7 +100,7 @@ const TriggerHint = styled.span`
 `
 
 const Content = styled(DropdownMenu.Content)`
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.backgroundDarker};
   border: 1px solid ${({ theme }) => theme.color.selection};
   box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
   padding: 0.4rem;
@@ -195,7 +195,7 @@ export const PermissionsSection: React.FC<Props> = ({
     return (
       <Field data-hook="permissions">
         <RichTitle>Permissions</RichTitle>
-        <DropdownMenu.Root>
+        <DropdownMenu.Root modal={false}>
           {trigger}
           {content}
         </DropdownMenu.Root>
@@ -206,7 +206,7 @@ export const PermissionsSection: React.FC<Props> = ({
   return (
     <Field data-hook="permissions">
       <FieldLabel>Permissions</FieldLabel>
-      <DropdownMenu.Root>
+      <DropdownMenu.Root modal={false}>
         {trigger}
         {content}
       </DropdownMenu.Root>
