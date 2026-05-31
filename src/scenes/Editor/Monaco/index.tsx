@@ -537,6 +537,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const sql = requests
       .map((r) => (r.selection ? r.selection.queryText : r.query))
       .join(";\n\n")
+      .concat(";")
+
     const url = buildShareLinkUrl(sql)
     copyToClipboard(url)
       .then(() => {

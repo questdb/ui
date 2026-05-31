@@ -788,7 +788,7 @@ describe("&query URL param", () => {
     cy.window()
       .its("navigator.clipboard")
       .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1"))
+      .should("eq", expectedUrl("SELECT 1;"))
 
     // When — glyph dropdown copies a selection inside a single query
     cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 7 })
@@ -800,7 +800,7 @@ describe("&query URL param", () => {
     cy.window()
       .its("navigator.clipboard")
       .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT"))
+      .should("eq", expectedUrl("SELECT;"))
 
     // When — Alt+L copies single query at cursor
     cy.clickLine(3)
@@ -811,7 +811,7 @@ describe("&query URL param", () => {
     cy.window()
       .its("navigator.clipboard")
       .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 3"))
+      .should("eq", expectedUrl("SELECT 3;"))
 
     // When — Alt+L copies selection spanning multiple queries
     cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 2, column: 9 })
@@ -825,7 +825,7 @@ describe("&query URL param", () => {
     cy.window()
       .its("navigator.clipboard")
       .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2"))
+      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;"))
 
     // When — Alt+Shift+L copies all queries in tab
     cy.realPress(["Alt", "Shift", "L"])
@@ -834,7 +834,7 @@ describe("&query URL param", () => {
     cy.window()
       .its("navigator.clipboard")
       .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;\n\nSELECT 3"))
+      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;\n\nSELECT 3;"))
   })
 })
 
