@@ -569,17 +569,24 @@ describe("&query URL param", () => {
     cy.loadConsoleWithAuth()
   })
 
-  it("should append and select single line query", () => {
+  it("should open single line query in a new tab and select it", () => {
     cy.typeQueryDirectly("select x from long_sequence(1)") // running query caches it, it's available after refresh
     cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1 from long_sequence(1)")
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`)
-    cy.getEditorContent().should("be.visible")
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should(
+      "have.value",
+      "select x+1 from long_sequence(1)",
+    )
     cy.getGridRow(0).should("contain", "2")
     cy.getSelectedLines().should("have.length", 1)
   })
 
-  it("should append and select multiline query", () => {
+  it("should open multiline query in a new tab and select it", () => {
     cy.typeQueryDirectly(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5,
@@ -588,32 +595,40 @@ describe("&query URL param", () => {
     cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);")
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`)
-    cy.getEditorContent().should("be.visible")
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
     cy.getGridRow(0).should("contain", "2")
     cy.getSelectedLines().should("have.length", 4)
   })
 
-  it("should not append query if it already exists in editor", () => {
+  it("should not open a new tab if the query already exists in the editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c"
     cy.typeQueryDirectly(query)
     cy.clickRunIconInLine(1)
     cy.wait(1000)
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
     cy.getEditorContent().should("be.visible")
+    cy.getEditorTabs().should("have.length", 1)
     cy.getEditorContent().should("have.value", query)
   })
 
-  it("should append query and scroll to it", () => {
+  it("should open the query in a new tab and reveal it", () => {
     cy.typeQueryDirectly("select x from long_sequence(1);")
     cy.getCursorQueryGlyph().should("be.visible")
     cy.typeQuery("\n".repeat(20))
 
-    const appendedQuery = "-- hello world"
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`)
-    cy.getEditorContent().should("be.visible")
+    const sharedQuery = "-- hello world"
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(sharedQuery)}`)
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should("have.value", sharedQuery)
     cy.getVisibleLines()
       .invoke("text")
-      .should("match", /hello.world$/) // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
+      .should("match", /hello.world$/) // not matching on sharedQuery, because query should be selected for which Monaco adds special chars between words
   })
 
   it("should open a new editor tab when the last active buffer is a metrics buffer", () => {
@@ -631,7 +646,7 @@ describe("&query URL param", () => {
     cy.getEditor().should("be.visible")
     cy.getEditorTabs().should("have.length", 3)
     cy.getEditorTabByTitle("Metrics 1").should("be.visible")
-    cy.getEditorTabByTitle("Query")
+    cy.getEditorTabByTitle("Shared Query")
       .should("be.visible")
       .should("have.attr", "active")
   })

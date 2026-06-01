@@ -51,7 +51,6 @@ import { QueryInNotification } from "./query-in-notification"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
-  appendQuery,
   applyValidationMarkers,
   cancelAllValidationRequests,
   clearModelMarkers,
@@ -1270,94 +1269,102 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     // Support multi-line queries (URL encoded).
     const { query, executeQuery } = readShareLinkParams()
     const model = editor.getModel()
-    if (query && model && !queryParamProcessedRef.current) {
-      const trimmedQuery = query.trim()
-      // Find if the query is already in the editor
-      const matches = findMatches(model, trimmedQuery)
-      if (matches && matches.length > 0) {
-        editor.setSelection(matches[0].range)
-        editor.revealPositionInCenter({
-          lineNumber: matches[0].range.startLineNumber,
-          column: matches[0].range.startColumn,
-        })
-        // otherwise, append the query
-      } else {
-        appendQuery(editor, trimmedQuery)
-        const newValue = editor.getValue()
-        void updateBuffer(activeBuffer.id as number, { value: newValue })
-      }
-      queryParamProcessedRef.current = true
-    }
 
-    const initialVisibleRanges = editor.getVisibleRanges()
-    if (initialVisibleRanges.length > 0) {
-      const firstRange = initialVisibleRanges[0]
-
-      visibleLinesRef.current = {
-        startLine: firstRange.startLineNumber,
-        endLine: firstRange.endLineNumber,
-      }
-    }
-
-    // Initial decoration setup
-    applyGlyphsAndLineMarkings(monaco, editor)
-    const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
-    queriesToRunRef.current = queriesToRun
-    dispatch(actions.query.setQueriesToRun(queriesToRun))
-
-    if (!query || !executeQuery) {
-      triggerJitValidation()
-    } else if (queriesToRun.length > 0) {
-      const runQueries = () => {
-        if (queriesToRun.length > 1) {
-          handleTriggerRunScript()
+    // Using IIFE to await the new buffer creation before computing/executing the queries against the model.
+    void (async () => {
+      if (query && model && !queryParamProcessedRef.current) {
+        const trimmedQuery = query.trim()
+        // Find if the query is already in the editor
+        const matches = findMatches(model, trimmedQuery)
+        if (matches && matches.length > 0) {
+          editor.setSelection(matches[0].range)
+          editor.revealPositionInCenter({
+            lineNumber: matches[0].range.startLineNumber,
+            column: matches[0].range.startColumn,
+          })
+          // otherwise, open the query in a new buffer
         } else {
-          toggleRunning()
+          await editorContext.addBuffer(
+            { label: "Shared Query", value: trimmedQuery },
+            { shouldSelectAll: true },
+          )
+        }
+        queryParamProcessedRef.current = true
+      }
+
+      const initialVisibleRanges = editor.getVisibleRanges()
+      if (initialVisibleRanges.length > 0) {
+        const firstRange = initialVisibleRanges[0]
+
+        visibleLinesRef.current = {
+          startLine: firstRange.startLineNumber,
+          endLine: firstRange.endLineNumber,
         }
       }
 
-      const statements = queriesToRun.map((q) =>
-        q.selection ? q.selection.queryText : q.query,
+      // Initial decoration setup
+      applyGlyphsAndLineMarkings(monaco, editor)
+      const queriesToRun = getQueriesToRun(
+        editor,
+        queryOffsetsRef.current ?? [],
       )
-      const sharedSql = query.trim()
-      setTabsDisabled(true)
-      editor.updateOptions({ readOnly: true })
-      const unlockEditor = () => {
-        setTabsDisabled(false)
-        editorRef.current?.updateOptions({ readOnly: false })
-      }
-      void Promise.all(statements.map((sql) => quest.validateQuery(sql)))
-        .then((results) => {
-          const writeQueryTypes = results
-            .map((r) =>
-              !("error" in r) && !("columns" in r) ? r.queryType : undefined,
-            )
-            .filter((t): t is string => t !== undefined)
-          unlockEditor()
-          if (writeQueryTypes.length > 0) {
+      queriesToRunRef.current = queriesToRun
+      dispatch(actions.query.setQueriesToRun(queriesToRun))
+
+      if (!query || !executeQuery) {
+        triggerJitValidation()
+      } else if (queriesToRun.length > 0) {
+        const runQueries = () => {
+          if (queriesToRun.length > 1) {
+            handleTriggerRunScript()
+          } else {
+            toggleRunning()
+          }
+        }
+
+        const statements = queriesToRun.map((q) =>
+          q.selection ? q.selection.queryText : q.query,
+        )
+        const sharedSql = query.trim()
+        setTabsDisabled(true)
+        editor.updateOptions({ readOnly: true })
+        const unlockEditor = () => {
+          setTabsDisabled(false)
+          editorRef.current?.updateOptions({ readOnly: false })
+        }
+        void Promise.all(statements.map((sql) => quest.validateQuery(sql)))
+          .then((results) => {
+            const writeQueryTypes = results
+              .map((r) =>
+                !("error" in r) && !("columns" in r) ? r.queryType : undefined,
+              )
+              .filter((t): t is string => t !== undefined)
+            unlockEditor()
+            if (writeQueryTypes.length > 0) {
+              shareLinkRunRef.current = runQueries
+              setShareLinkConfirmation({
+                sql: sharedSql,
+                statementCount: statements.length,
+                writeQueryTypes,
+              })
+            } else {
+              runQueries()
+            }
+          })
+          .catch(() => {
+            unlockEditor()
             shareLinkRunRef.current = runQueries
             setShareLinkConfirmation({
               sql: sharedSql,
               statementCount: statements.length,
-              writeQueryTypes,
+              writeQueryTypes: [],
+              unclassified: true,
             })
-          } else {
-            runQueries()
-          }
-        })
-        .catch(() => {
-          unlockEditor()
-          shareLinkRunRef.current = runQueries
-          setShareLinkConfirmation({
-            sql: sharedSql,
-            statementCount: statements.length,
-            writeQueryTypes: [],
-            unclassified: true,
           })
-        })
-    }
+      }
 
-    clearShareLinkParams()
+      clearShareLinkParams()
+    })()
   }
 
   const runIndividualQuery = async (

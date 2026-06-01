@@ -235,8 +235,8 @@ const Editor = ({
 
   useEffect(() => {
     const { query } = readShareLinkParams()
-    if (query && activeBuffer.metricsViewState) {
-      void addBuffer({ label: "Query" })
+    if (query && !activeBuffer.editorViewState) {
+      void addBuffer({ label: "Shared Query", value: query.trim() })
     }
   }, [])
 
