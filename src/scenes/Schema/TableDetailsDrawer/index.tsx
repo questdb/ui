@@ -230,7 +230,7 @@ export const TableDetailsDrawer = () => {
         }),
       )
     },
-    [dispatch],
+    [],
   )
 
   const { quest } = useContext(QuestContext)
@@ -500,9 +500,9 @@ export const TableDetailsDrawer = () => {
   useAdaptivePoll({
     fetchFn: fetchTableData,
     enabled: isOpen && hasTarget && !loading && !isView,
-    key: tableName,
-    minIntervalMs: 200,
-    maxIntervalMs: 5000,
+    key: `${tableName}-${activeTab}`,
+    minIntervalMs: activeTab === "monitoring" ? 200 : 1000,
+    maxIntervalMs: activeTab === "monitoring" ? 5000 : 1000,
     multiplier: 1.5,
   })
 
@@ -569,6 +569,8 @@ export const TableDetailsDrawer = () => {
 
   useEffect(() => {
     if (!isOpen || !hasTarget) return
+    // Not needed for monitoring
+    if (!isView && activeTab !== "details") return
 
     const interval = setInterval(() => {
       void fetchColumns()
@@ -576,7 +578,7 @@ export const TableDetailsDrawer = () => {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [isOpen, hasTarget, fetchColumns, fetchDDL])
+  }, [isOpen, hasTarget, isView, activeTab, fetchColumns, fetchDDL])
 
   const rawHealthStatus = useMemo(() => {
     if (!tableData) return null
@@ -645,6 +647,49 @@ export const TableDetailsDrawer = () => {
     }
   }, [hasIngestionWarning, hasAutoExpanded, walExpanded])
 
+  const drawerTitle = useMemo(
+    () => (
+      <TitleContainer>
+        {hasTarget && (
+          <HealthStatusLabel
+            severity={
+              isView
+                ? viewData?.view_status === "invalid"
+                  ? "critical"
+                  : "healthy"
+                : (healthStatus?.overallSeverity ?? "healthy")
+            }
+          />
+        )}
+
+        <TableSelector
+          titleDataHook="table-details-name"
+          options={tableOptions}
+          onSelect={handleTableSelect}
+          value={hasTarget ? tableName : ""}
+          placeholder="Select a table"
+          defaultOpen={!hasTarget}
+        />
+        {hasTarget && (
+          <StyledCopyButton
+            size="sm"
+            text={tableName}
+            iconOnly
+            data-hook="table-details-copy-name"
+          />
+        )}
+      </TitleContainer>
+    ),
+    [
+      hasTarget,
+      isView,
+      viewData?.view_status,
+      healthStatus?.overallSeverity,
+      tableOptions,
+      tableName,
+    ],
+  )
+
   return (
     <Drawer
       mode="side"
@@ -660,38 +705,7 @@ export const TableDetailsDrawer = () => {
             ? theme.color.tableSelection
             : theme.color.backgroundLighter
       }
-      title={
-        <TitleContainer>
-          {hasTarget && (
-            <HealthStatusLabel
-              severity={
-                isView
-                  ? viewData?.view_status === "invalid"
-                    ? "critical"
-                    : "healthy"
-                  : (healthStatus?.overallSeverity ?? "healthy")
-              }
-            />
-          )}
-
-          <TableSelector
-            titleDataHook="table-details-name"
-            options={tableOptions}
-            onSelect={handleTableSelect}
-            value={hasTarget ? tableName : ""}
-            placeholder="Select a table"
-            defaultOpen={!hasTarget}
-          />
-          {hasTarget && (
-            <StyledCopyButton
-              size="sm"
-              text={tableName}
-              iconOnly
-              data-hook="table-details-copy-name"
-            />
-          )}
-        </TitleContainer>
-      }
+      title={drawerTitle}
       afterTitle={
         hasTarget ? (
           <TypeBadge data-hook="table-details-type-badge">

@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useMemo } from "react"
 import styled, { useTheme } from "styled-components"
 import {
   CodeIcon,
@@ -184,7 +184,10 @@ export const DetailsTab = ({
   const theme = useTheme()
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
-  const storagePolicyClauses = extractStoragePolicyClauses(ddl)
+  const storagePolicyClauses = useMemo(
+    () => extractStoragePolicyClauses(ddl),
+    [ddl],
+  )
   const hasStoragePolicy = storagePolicyClauses.length > 0
   const hasTtl = tableData.ttlValue !== 0
   const showStoragePolicySection = isEnterprise || hasStoragePolicy

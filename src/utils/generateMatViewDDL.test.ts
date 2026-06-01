@@ -34,7 +34,7 @@ describe("generateMatViewDDL", () => {
     expect(result).toMatch(/SAMPLE BY 5m/i)
     expect(result).toMatch(/PARTITION BY MONTH/i)
     // Source TTL 3 DAYS is below MONTH partition unit → floored to 1M, bumped → 1 YEARS.
-    expect(result).toMatch(/TTL\s+1\s+YEARS/i)
+    expect(result).toMatch(/TTL\s+1\s+YEAR\b/i)
     expect(result).not.toMatch(/bids/i)
     expect(result).not.toMatch(/asks/i)
   })
@@ -65,7 +65,7 @@ describe("generateMatViewDDL", () => {
     expect(result).toMatch(/last\(\s*price\s*\)/i)
     expect(result).toMatch(/sum\(\s*quantity\s*\)/i)
     // Source TTL 1 MONTH → next TTL-ladder rung is 1 YEAR.
-    expect(result).toMatch(/TTL\s+1\s+YEARS/i)
+    expect(result).toMatch(/TTL\s+1\s+YEAR\b/i)
   })
 
   it("handles array-only table gracefully (only timestamp + array)", () => {
@@ -188,7 +188,7 @@ describe("generateMatViewDDL", () => {
     expect(result).toMatch(/last\(\s*foo\s*\)/i)
     expect(result).toMatch(/last\(\s*bar\s*\)/i)
     // Source TTL 5 DAYS is below MONTH partition unit → floored to 1M, bumped → 1 YEARS.
-    expect(result).toMatch(/TTL\s+1\s+YEARS/i)
+    expect(result).toMatch(/TTL\s+1\s+YEAR\b/i)
   })
 
   it("handles non-designated TIMESTAMP / TIMESTAMP_NS via last()", () => {
@@ -645,11 +645,11 @@ describe("generateMatViewDDL", () => {
     })
 
     it("partition DAY, 1 WEEKS (7d) → 1 MONTHS", () => {
-      expect(generateMatViewDDL(mvDay("1 WEEKS"))).toMatch(/TTL\s+1\s+MONTHS/i)
+      expect(generateMatViewDDL(mvDay("1 WEEKS"))).toMatch(/TTL\s+1\s+MONTH\b/i)
     })
 
     it("partition DAY, 3 MONTHS → 1 YEARS", () => {
-      expect(generateMatViewDDL(mvDay("3 MONTHS"))).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(generateMatViewDDL(mvDay("3 MONTHS"))).toMatch(/TTL\s+1\s+YEAR\b/i)
     })
 
     it("partition DAY, 1 YEARS → 2 YEARS (step in whole years above the cap)", () => {
@@ -661,16 +661,16 @@ describe("generateMatViewDDL", () => {
     })
 
     it("partition MONTH floors sub-month source TTL: 2 HOURS → 1 YEARS", () => {
-      expect(generateMatViewDDL(mvMonth("2 HOURS"))).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(generateMatViewDDL(mvMonth("2 HOURS"))).toMatch(/TTL\s+1\s+YEAR\b/i)
     })
 
     it("partition MONTH floors sub-month source TTL: 7 DAYS → 1 YEARS", () => {
-      expect(generateMatViewDDL(mvMonth("7 DAYS"))).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(generateMatViewDDL(mvMonth("7 DAYS"))).toMatch(/TTL\s+1\s+YEAR\b/i)
     })
 
     it("partition MONTH, 3 MONTHS → 1 YEARS (source already above partition unit)", () => {
       expect(generateMatViewDDL(mvMonth("3 MONTHS"))).toMatch(
-        /TTL\s+1\s+YEARS/i,
+        /TTL\s+1\s+YEAR\b/i,
       )
     })
 
@@ -695,6 +695,15 @@ describe("generateMatViewDDL", () => {
       ) timestamp(timestamp) PARTITION BY DAY TTL 1 YEARS;`
       expect(generateMatViewDDL(ddl)).toMatch(/TTL\s+2\s+YEARS/i)
     })
+
+    it("emits singular time units for value 1, plural otherwise (matches SHOW CREATE)", () => {
+      // value 1 → singular unit (no trailing S)
+      const singular = generateMatViewDDL(mvDay("1 WEEKS"))
+      expect(singular).toMatch(/TTL\s+1\s+MONTH\b/i)
+      expect(singular).not.toMatch(/TTL\s+1\s+MONTHS\b/i)
+      // value > 1 → plural unit stays plural
+      expect(generateMatViewDDL(mvDay("1 DAYS"))).toMatch(/TTL\s+7\s+DAYS\b/i)
+    })
   })
 
   describe("STORAGE POLICY wins over TTL when source has both", () => {
@@ -713,7 +722,7 @@ describe("generateMatViewDDL", () => {
       const result = generateMatViewDDL(ddl)
       // PARTITION BY DAY → matview PARTITION BY MONTH (1h SAMPLE BY rung).
       // Source 7 DAYS floors to 1 MONTH → bumped → 1 YEARS.
-      expect(result).toMatch(/TTL\s+1\s+YEARS/i)
+      expect(result).toMatch(/TTL\s+1\s+YEAR\b/i)
       expect(result).not.toMatch(/STORAGE\s+POLICY/i)
     })
   })
@@ -735,7 +744,7 @@ describe("generateMatViewDDL", () => {
       // 3 DAYS rounds up to 1 MONTHS; terminal bump → next ladder rung → 1 YEARS.
       const result = generateMatViewDDL(tableWithPolicy("TO PARQUET 3 DAYS"))
       expect(result).toMatch(
-        /STORAGE\s+POLICY\(\s*TO\s+PARQUET\s+1\s+YEARS\s*\)/i,
+        /STORAGE\s+POLICY\(\s*TO\s+PARQUET\s+1\s+YEAR\s*\)/i,
       )
     })
 
@@ -746,9 +755,9 @@ describe("generateMatViewDDL", () => {
         ),
       )
       // 3d, 10d, 1M all round up to 1 MONTHS (≤-ordering allows equal).
-      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
-      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
-      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+MONTHS/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTH\b/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTH\b/i)
+      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+MONTH\b/i)
       // Terminal 1 YEARS (= 13 partition units after rounding) bumps to 2 YEARS.
       expect(result).toMatch(/DROP\s+REMOTE\s+2\s+YEARS/i)
     })
@@ -759,10 +768,10 @@ describe("generateMatViewDDL", () => {
           "TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 MONTHS",
         ),
       )
-      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
-      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTH\b/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTH\b/i)
       // Terminal 1 MONTHS bumps one rung up the ladder → 1 YEARS.
-      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+YEARS/i)
+      expect(result).toMatch(/DROP\s+LOCAL\s+1\s+YEAR\b/i)
     })
 
     it("non-terminal clauses below the matview partition are all rounded up to 1 partition", () => {
@@ -775,8 +784,8 @@ describe("generateMatViewDDL", () => {
         ),
       )
       expect(result).toMatch(/PARTITION\s+BY\s+MONTH/i)
-      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
-      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTHS/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTH\b/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+MONTH\b/i)
       // Terminal 1 YEARS (13 partition units after rounding) bumps to 2 YEARS.
       expect(result).toMatch(/DROP\s+LOCAL\s+2\s+YEARS/i)
     })
@@ -802,9 +811,9 @@ describe("generateMatViewDDL", () => {
       ) timestamp(ts) PARTITION BY DAY STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS);`
       const result = generateMatViewDDL(ddl)
       expect(result).not.toMatch(/\bTTL\s+\d/i)
-      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTH\b/i)
       // DROP NATIVE is the terminal clause; 1 MONTHS bumps to 1 YEARS.
-      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEARS/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEAR\b/i)
     })
 
     it("source materialized view with STORAGE POLICY propagates to derived matview", () => {
@@ -814,8 +823,8 @@ describe("generateMatViewDDL", () => {
       const result = generateMatViewDDL(ddl)
       // Matview partition stays MONTH (5m → 30m → MONTH). Both clauses round
       // up to 1 MONTHS; terminal bumps to 1 YEARS.
-      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTHS/i)
-      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEARS/i)
+      expect(result).toMatch(/TO\s+PARQUET\s+1\s+MONTH\b/i)
+      expect(result).toMatch(/DROP\s+NATIVE\s+1\s+YEAR\b/i)
     })
 
     it("source has no STORAGE POLICY → output has none", () => {

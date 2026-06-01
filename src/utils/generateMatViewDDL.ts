@@ -297,7 +297,8 @@ const projectStoragePolicyForMatView = (
   let prevSec = 0
   for (const kind of present) {
     let projected = projectClauseToPartition(source[kind] as TTLAst, partition)
-    if (!projected) continue
+    // Unreachable in practice: partition is always DAY/MONTH/YEAR here
+    if (!projected) return null
 
     let projectedSec = ttlSeconds(projected) ?? 0
     while (projectedSec > 0 && projectedSec < prevSec) {
