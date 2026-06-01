@@ -35,11 +35,15 @@ type ContextProps = {
     errorTitle,
     errorMessage,
     isDisconnection,
+    reload,
+    clearSSOSession,
   }?: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
+    reload?: boolean
+    clearSSOSession?: boolean
   }) => void
   refreshAuthToken: (
     settings: Settings,
@@ -124,6 +128,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       ).toString() // convert from the sec offset
       ssoAuthState.setAuthPayload(tokenResponse)
       setSessionData(tokenResponse)
+      setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
+      // Remove the code from the URL
       if (history.replaceState) {
         const restored = stripOAuthCallbackParams(window.location.search)
         const savedParams = sessionStorage.getItem(StoreKey.OAUTH_RETURN_PARAMS)
@@ -184,7 +190,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (!isNaN(count) && count >= 5) {
             // redirect to /logout and force user authentication to avoid infinite loop
             removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-            logout({ promptForLogin: true })
+            logout({ promptForLogin: true, clearSSOSession: true })
           } else {
             setValue(
               StoreKey.OAUTH_REDIRECT_COUNT,
@@ -257,7 +263,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               oauth2Error.error + ": " + oauth2Error.error_description,
           })
         }
-      } else if (ssoUsername && !getValue(StoreKey.REST_TOKEN)) {
+      } else if (
+        ssoUsername &&
+        getValue(StoreKey.SSO_SESSION_ACTIVE) &&
+        !getValue(StoreKey.REST_TOKEN)
+      ) {
         // No REST token, so it is a page reload for an SSO user
         // who didn't explicitly log out — try to request a token silently
         redirectToAuthorizationUrl({ prompt: "none" })
@@ -298,10 +308,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const destroyServerSession = () => {
-    // execute a simple query with session=false
-    void fetch(`exec?query=select 2&session=false`).catch(() => {
-      // ignore result
-    })
+    void fetch(`exec?query=select 2&session=false`, { keepalive: true }).catch(
+      () => {
+        // ignore result
+      },
+    )
   }
 
   const uiAuthLogin = () => {
@@ -352,11 +363,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     errorTitle,
     errorMessage,
     isDisconnection,
+    reload,
+    clearSSOSession,
   }: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
+    reload?: boolean
+    clearSSOSession?: boolean
   } = {}) => {
     ssoAuthState.clearAuthPayload()
     setSessionData(undefined)
@@ -364,10 +379,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
+    if (clearSSOSession) {
+      removeValue(StoreKey.SSO_SESSION_ACTIVE)
+    }
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
     destroyServerSession()
+    if (reload) {
+      window.location.reload()
+      return
+    }
     dispatch({ view: View.login, errorTitle, errorMessage, isDisconnection })
   }
 
