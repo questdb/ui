@@ -36,12 +36,14 @@ type ContextProps = {
     errorMessage,
     isDisconnection,
     reload,
+    clearSSOSession,
   }?: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
     reload?: boolean
+    clearSSOSession?: boolean
   }) => void
   refreshAuthToken: (
     settings: Settings,
@@ -162,7 +164,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (!isNaN(count) && count >= 5) {
             // redirect to /logout and force user authentication to avoid infinite loop
             removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-            logout({ promptForLogin: true })
+            logout({ promptForLogin: true, clearSSOSession: true })
           } else {
             setValue(
               StoreKey.OAUTH_REDIRECT_COUNT,
@@ -281,10 +283,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const destroyServerSession = () => {
-    // execute a simple query with session=false
-    void fetch(`exec?query=select 2&session=false`).catch(() => {
-      // ignore result
-    })
+    void fetch(`exec?query=select 2&session=false`, { keepalive: true }).catch(
+      () => {
+        // ignore result
+      },
+    )
   }
 
   const uiAuthLogin = () => {
@@ -319,19 +322,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     errorMessage,
     isDisconnection,
     reload,
+    clearSSOSession,
   }: {
     promptForLogin?: boolean
     errorTitle?: string
     errorMessage?: string
     isDisconnection?: boolean
     reload?: boolean
+    clearSSOSession?: boolean
   } = {}) => {
     ssoAuthState.clearAuthPayload()
     setSessionData(undefined)
     removeValue(StoreKey.OAUTH_PROMPT)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
-    removeValue(StoreKey.SSO_SESSION_ACTIVE)
+    if (clearSSOSession) {
+      removeValue(StoreKey.SSO_SESSION_ACTIVE)
+    }
     if (promptForLogin && settings["acl.oidc.client.id"]) {
       removeSSOUserNameWithClientID(settings["acl.oidc.client.id"])
     }
