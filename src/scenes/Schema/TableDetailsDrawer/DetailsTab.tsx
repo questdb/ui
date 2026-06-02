@@ -115,15 +115,6 @@ const MetricCard = styled(Box).attrs<{ $background?: string }>({
     $background ?? theme.color.backgroundLighter};
 `
 
-const StoragePolicyClauses = styled.div<{ $columns: number }>`
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
-  gap: 0.2rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-`
-
 const MetricLabel = styled(Text).attrs({
   color: "gray2",
   size: "sm",
@@ -407,7 +398,7 @@ export const DetailsTab = ({
             <SectionTitle>Storage policy</SectionTitle>
           </SectionTitleContainer>
           {hasStoragePolicy ? (
-            <StoragePolicyClauses $columns={storagePolicyClauses.length}>
+            <MetricsGrid $columns={storagePolicyClauses.length}>
               {storagePolicyClauses.map((clause) => (
                 <MetricCard
                   key={clause.action}
@@ -417,10 +408,14 @@ export const DetailsTab = ({
                   <MetricValue>{clause.duration}</MetricValue>
                 </MetricCard>
               ))}
-            </StoragePolicyClauses>
+            </MetricsGrid>
           ) : (
             <Box gap="0.5rem" align="center">
-              <XCircleIcon size={16} weight="fill" color={theme.color.gray2} />
+              <XCircleIcon
+                size="16px"
+                weight="fill"
+                color={theme.color.gray2}
+              />
               <Text color="gray2">Not configured</Text>
             </Box>
           )}
