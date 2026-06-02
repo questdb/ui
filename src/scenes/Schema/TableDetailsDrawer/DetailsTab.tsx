@@ -1,10 +1,12 @@
-import React from "react"
+import React, { useMemo } from "react"
 import styled, { useTheme } from "styled-components"
 import {
   CodeIcon,
   TextColumnsIcon,
   ArrowSquareInIcon,
   InfoIcon,
+  DatabaseIcon,
+  XCircleIcon,
 } from "@phosphor-icons/react"
 import { Box, Text, CopyButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
@@ -14,7 +16,7 @@ import type {
   View,
   Column,
 } from "../../../utils/questdb/types"
-import { formatTTL } from "./utils"
+import { formatTTL, extractStoragePolicyClauses } from "./utils"
 import { ColumnIcon } from "../Row"
 import {
   Section,
@@ -39,6 +41,7 @@ export interface DetailsTabProps {
   ddl: string
   isMatView: boolean
   isView: boolean
+  isEnterprise: boolean
   truncatedDDL: { text: string; grayedOutLines: [number, number] | null }
   baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
   columnsExpanded: boolean
@@ -92,19 +95,10 @@ const BaseTableLinkButton = styled.button<{ $disabled?: boolean }>`
   }
 `
 
-const DetailsGrid = styled.div`
+const MetricsGrid = styled.div<{ $columns: number }>`
   width: 100%;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.2rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-`
-
-const MetricsGrid = styled.div`
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
   gap: 0.2rem;
   border-radius: 0.5rem;
   overflow: hidden;
@@ -168,6 +162,7 @@ export const DetailsTab = ({
   ddl,
   isMatView,
   isView,
+  isEnterprise,
   truncatedDDL,
   baseTableStatus,
   columnsExpanded,
@@ -180,6 +175,13 @@ export const DetailsTab = ({
   const theme = useTheme()
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
+  const storagePolicyClauses = useMemo(
+    () => extractStoragePolicyClauses(ddl),
+    [ddl],
+  )
+  const hasStoragePolicy = storagePolicyClauses.length > 0
+  const hasTtl = tableData.ttlValue !== 0
+  const showStoragePolicySection = isEnterprise || hasStoragePolicy
 
   return (
     <>
@@ -325,14 +327,16 @@ export const DetailsTab = ({
           </SectionTitleContainer>
 
           {isMatView && matViewData ? (
-            /* Matview: 2 rows × 2 columns */
-            <MetricsGrid>
-              <MetricCard $background={theme.color.backgroundDarker}>
-                <MetricLabel>TTL</MetricLabel>
-                <MetricValue>
-                  {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
-                </MetricValue>
-              </MetricCard>
+            /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
+            <MetricsGrid $columns={hasTtl ? 2 : 3}>
+              {hasTtl && (
+                <MetricCard $background={theme.color.backgroundDarker}>
+                  <MetricLabel>TTL</MetricLabel>
+                  <MetricValue>
+                    {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
+                  </MetricValue>
+                </MetricCard>
+              )}
               <MetricCard $background={theme.color.backgroundDarker}>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
@@ -357,14 +361,16 @@ export const DetailsTab = ({
               </MetricCard>
             </MetricsGrid>
           ) : (
-            /* Table: 3 items in single row */
-            <DetailsGrid>
-              <MetricCard $background={theme.color.backgroundDarker}>
-                <MetricLabel>TTL</MetricLabel>
-                <MetricValue>
-                  {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
-                </MetricValue>
-              </MetricCard>
+            /* Table: 3 cards (1 row) when TTL is configured, 2 cards (1 row) when not. */
+            <MetricsGrid $columns={hasTtl ? 3 : 2}>
+              {hasTtl && (
+                <MetricCard $background={theme.color.backgroundDarker}>
+                  <MetricLabel>TTL</MetricLabel>
+                  <MetricValue>
+                    {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
+                  </MetricValue>
+                </MetricCard>
+              )}
               <MetricCard $background={theme.color.backgroundDarker}>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
@@ -380,7 +386,38 @@ export const DetailsTab = ({
                       tableData.partitionBy.slice(1).toLowerCase()}
                 </MetricValue>
               </MetricCard>
-            </DetailsGrid>
+            </MetricsGrid>
+          )}
+        </Section>
+      )}
+
+      {!isView && showStoragePolicySection && (
+        <Section data-hook="table-details-storage-policy-section">
+          <SectionTitleContainer>
+            <DatabaseIcon size="16px" weight="bold" />
+            <SectionTitle>Storage policy</SectionTitle>
+          </SectionTitleContainer>
+          {hasStoragePolicy ? (
+            <MetricsGrid $columns={storagePolicyClauses.length}>
+              {storagePolicyClauses.map((clause) => (
+                <MetricCard
+                  key={clause.action}
+                  $background={theme.color.backgroundDarker}
+                >
+                  <MetricLabel>{clause.action}</MetricLabel>
+                  <MetricValue>{clause.duration}</MetricValue>
+                </MetricCard>
+              ))}
+            </MetricsGrid>
+          ) : (
+            <Box gap="0.5rem" align="center">
+              <XCircleIcon
+                size="16px"
+                weight="fill"
+                color={theme.color.gray2}
+              />
+              <Text color="gray2">Not configured</Text>
+            </Box>
           )}
         </Section>
       )}

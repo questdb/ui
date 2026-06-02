@@ -2491,12 +2491,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@questdb/sql-parser@npm:0.1.11":
-  version: 0.1.11
-  resolution: "@questdb/sql-parser@npm:0.1.11"
+"@questdb/sql-parser@npm:0.1.14":
+  version: 0.1.14
+  resolution: "@questdb/sql-parser@npm:0.1.14"
   dependencies:
     chevrotain: "npm:11.1.1"
-  checksum: 10/5449fa95d2c9a25873b953997782a59cc8a89a3cc56f3cc0dd91657fca76ef6905fbd4f940c7d0215db8d64bc86e013ace2f0145a5e29ef02fe3ac318bee035a
+  checksum: 10/394b0f5877d7d76886030a02067b48fefd0f287446d67f22658072d52b7505d93db0b5b842256e625b278d4a6fee9557a84d8ce87d48feea91b57f599db0416e
   languageName: node
   linkType: hard
 
@@ -2518,7 +2518,7 @@ __metadata:
     "@monaco-editor/react": "npm:^4.7.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@popperjs/core": "npm:2.4.2"
-    "@questdb/sql-parser": "npm:0.1.11"
+    "@questdb/sql-parser": "npm:0.1.14"
     "@radix-ui/react-alert-dialog": "npm:^1.1.15"
     "@radix-ui/react-context-menu": "npm:^2.2.16"
     "@radix-ui/react-dialog": "npm:^1.1.15"
