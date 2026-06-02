@@ -16,6 +16,28 @@ for arg in "$@"; do
     esac
 done
 
+# Track background PIDs so cleanup runs on success, failure, and Ctrl+C
+PID1=""
+PID2=""
+cleanup() {
+    set +e
+    trap - EXIT INT TERM
+    echo "Cleaning up background processes..."
+    for pid in "$PID1" "$PID2"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            pkill -P "$pid" 2>/dev/null
+            kill -SIGTERM "$pid" 2>/dev/null
+        fi
+    done
+    sleep 1
+    for pid in "$PID1" "$PID2"; do
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+            kill -SIGKILL "$pid" 2>/dev/null
+        fi
+    done
+}
+trap cleanup EXIT INT TERM
+
 # Auto-select JDK 25 if JAVA_HOME isn't already set to one
 if [ -z "$JAVA_HOME" ] || ! "$JAVA_HOME/bin/java" -version 2>&1 | grep -q '"25'; then
     if [ -x /usr/libexec/java_home ]; then
@@ -43,13 +65,13 @@ UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 # Change to UI directory
 cd "$UI_DIR"
 
-# Cleanup
+# Cleanup (always wipe dbroot; only wipe checkout/build when not cached)
 rm -rf tmp/dbroot
 if [ "$CACHED" -eq 0 ]; then
     rm -rf tmp/questdb-*
 fi
 
-# Clone questdb-enterprise (skip if cached clone exists)
+# Clone questdb-enterprise (skip if a checkout already exists)
 if [ -d tmp/questdb-enterprise/.git ]; then
     echo "Reusing existing tmp/questdb-enterprise checkout"
 else
@@ -60,7 +82,7 @@ else
     cd ../..
 fi
 
-# Build server (skip if cached classes exist)
+# Build server (skip if --cached and previous build output exists)
 ENT_MAIN_CLASS=tmp/questdb-enterprise/questdb-ent/target/classes/com/questdb/EntServerMain.class
 CORE_MAIN_DIR=tmp/questdb-enterprise/questdb/core/target/classes
 if [ "$CACHED" -eq 1 ] && [ -f "$ENT_MAIN_CLASS" ] && [ -d "$CORE_MAIN_DIR" ]; then
@@ -107,7 +129,6 @@ JAR_JNI=org/questdb/jar-jni/1.1.1/jar-jni-1.1.1.jar
 $JAVA_HOME/bin/java -cp $CORE_CLASSES:$ENT_CLASSES:$MVN_REPO/$JAR_JNI com.questdb.EntServerMain -d tmp/dbroot &
 PID2="$!"
 yarn test:e2e:enterprise
-kill -SIGTERM $PID2
-
-# Stop proxy
-kill -SIGTERM $PID1
+TEST_EXIT=$?
+# Background processes are torn down by the EXIT trap above.
+exit $TEST_EXIT
