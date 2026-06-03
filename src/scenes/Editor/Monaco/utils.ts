@@ -31,6 +31,47 @@ type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
 export const QuestDBLanguageName: string = "questdb-sql"
 
+const SHARE_LINK_PARAM_QUERY = "query"
+const SHARE_LINK_PARAM_EXECUTE = "executeQuery"
+
+export const readShareLinkParams = (): {
+  query: string | null
+  executeQuery: string | null
+} => {
+  const params = new URLSearchParams(window.location.search)
+  const query = params.get(SHARE_LINK_PARAM_QUERY)
+  if (!query) return { query: null, executeQuery: null }
+  return { query, executeQuery: params.get(SHARE_LINK_PARAM_EXECUTE) }
+}
+
+export const clearShareLinkParams = () => {
+  if (!history.replaceState) return
+  const params = new URLSearchParams(window.location.search)
+  if (
+    !params.has(SHARE_LINK_PARAM_QUERY) &&
+    !params.has(SHARE_LINK_PARAM_EXECUTE)
+  ) {
+    return
+  }
+  params.delete(SHARE_LINK_PARAM_QUERY)
+  params.delete(SHARE_LINK_PARAM_EXECUTE)
+  const queryString = params.toString()
+  history.replaceState(
+    null,
+    "",
+    window.location.pathname +
+      (queryString ? `?${queryString}` : "") +
+      window.location.hash,
+  )
+}
+
+export const buildShareLinkUrl = (sql: string): string => {
+  const params = new URLSearchParams()
+  params.set(SHARE_LINK_PARAM_QUERY, sql)
+  params.set(SHARE_LINK_PARAM_EXECUTE, "true")
+  return `${window.location.origin}${window.location.pathname}?${params.toString()}`
+}
+
 export type QueryKey = `${string}@${number}-${number}`
 
 export type Request = Readonly<{

@@ -51,7 +51,6 @@ import { QueryInNotification } from "./query-in-notification"
 import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
-  appendQuery,
   applyValidationMarkers,
   cancelAllValidationRequests,
   clearModelMarkers,
@@ -75,8 +74,13 @@ import {
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
+  readShareLinkParams,
+  clearShareLinkParams,
+  buildShareLinkUrl,
 } from "./utils"
 import { toast } from "../../../components/Toast"
+import { LiteEditor } from "../../../components/LiteEditor"
+import { copyToClipboard } from "../../../utils/copyToClipboard"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import ButtonBar from "../ButtonBar"
@@ -244,6 +248,21 @@ const EditorWrapper = styled.div`
   padding: 8px 0 0 0;
 `
 
+const ShareLinkDescription = styled.div`
+  font-size: 1.4rem;
+  margin-top: 2rem;
+  padding: 0 2rem;
+  color: ${({ theme }) => theme.color.foreground};
+  max-height: 70vh;
+  overflow-y: auto;
+`
+
+const StyledErrorIcon = styled(ErrorIcon)`
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 0.2rem;
+`
+
 const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
   return canUseAI ? 7 : 5
 }
@@ -276,6 +295,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const scriptConfirmationOpenRef = useRef(false)
+  const [shareLinkConfirmation, setShareLinkConfirmation] = useState<{
+    sql: string
+    statementCount: number
+    writeQueryTypes: string[]
+    unclassified?: boolean
+  } | null>(null)
+  const shareLinkRunRef = useRef<(() => void) | null>(null)
   const editorQueryIdRef = useRef<QuestDB.QueryId | null>(null)
   const scriptQueryKeyRef = useRef<QueryKey | null>(null)
   const dispatch = useDispatch()
@@ -500,6 +526,51 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     void trackEvent(ConsoleEvent.EDITOR_GLYPH_CONTEXT_QUERY_PLAN)
     setDropdownOpen(false)
     runQueryAction(query, RunningType.EXPLAIN)
+  }
+
+  const buildAndCopyShareLink = (requests: Request[]) => {
+    if (requests.length === 0) {
+      toast.error("Nothing to copy")
+      return
+    }
+    const sql = requests
+      .map((r) => (r.selection ? r.selection.queryText : r.query))
+      .join(";\n\n")
+      .concat(";")
+
+    const url = buildShareLinkUrl(sql)
+    copyToClipboard(url)
+      .then(() => {
+        toast.success(
+          `Copied link to the ${requests.length > 1 ? "queries" : "query"}`,
+          { autoClose: 2000 },
+        )
+      })
+      .catch(() => {
+        toast.error("Failed to copy query link")
+      })
+  }
+
+  const handleCopyQueryLink = (query: Request) => {
+    void trackEvent(ConsoleEvent.EDITOR_COPY_QUERY_LINK, { from: "glyph" })
+    setDropdownOpen(false)
+    buildAndCopyShareLink([query])
+  }
+
+  const handleCopyLinkSelection = () => {
+    void trackEvent(ConsoleEvent.EDITOR_COPY_QUERY_LINK, {
+      from: "shortcut",
+    })
+    buildAndCopyShareLink(queriesToRunRef.current ?? [])
+  }
+
+  const handleCopyLinkAllQueries = (shortcut?: boolean) => {
+    void trackEvent(ConsoleEvent.EDITOR_COPY_QUERY_LINK, {
+      from: shortcut ? "shortcut-all" : "all",
+    })
+    const editor = editorRef.current
+    if (!editor) return
+    buildAndCopyShareLink(getAllQueries(editor))
   }
 
   const runQueryAction = (
@@ -889,6 +960,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         runScript: () => {
           handleTriggerRunScript(true)
         },
+        copyQueryLink: () => {
+          handleCopyLinkSelection()
+        },
+        copyQueriesLink: () => {
+          handleCopyLinkAllQueries(true)
+        },
         deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
         addBuffer: () => editorContext.addBuffer(),
       }),
@@ -1188,56 +1265,106 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }, 200)
     })
 
-    // Insert query, if one is found in the URL
-    const params = new URLSearchParams(window.location.search)
-    // Support multi-line queries (URL encoded)
-    const query = params.get("query")
+    // Insert query, if one is found in the URL.
+    // Support multi-line queries (URL encoded).
+    const { query, executeQuery } = readShareLinkParams()
     const model = editor.getModel()
-    if (query && model && !queryParamProcessedRef.current) {
-      const trimmedQuery = query.trim()
-      // Find if the query is already in the editor
-      const matches = findMatches(model, trimmedQuery)
-      if (matches && matches.length > 0) {
-        editor.setSelection(matches[0].range)
-        editor.revealPositionInCenter({
-          lineNumber: matches[0].range.startLineNumber,
-          column: matches[0].range.startColumn,
-        })
-        // otherwise, append the query
-      } else {
-        appendQuery(editor, trimmedQuery)
-        const newValue = editor.getValue()
-        void updateBuffer(activeBuffer.id as number, { value: newValue })
+
+    // Using IIFE to await the new buffer creation before computing/executing the queries against the model.
+    void (async () => {
+      if (query && model && !queryParamProcessedRef.current) {
+        const trimmedQuery = query.trim()
+        // Find if the query is already in the editor
+        const matches = findMatches(model, trimmedQuery)
+        if (matches && matches.length > 0) {
+          editor.setSelection(matches[0].range)
+          editor.revealPositionInCenter({
+            lineNumber: matches[0].range.startLineNumber,
+            column: matches[0].range.startColumn,
+          })
+          // otherwise, open the query in a new buffer
+        } else {
+          await editorContext.addBuffer(
+            { label: "Shared Query", value: trimmedQuery },
+            { shouldSelectAll: true },
+          )
+        }
+        queryParamProcessedRef.current = true
       }
-      queryParamProcessedRef.current = true
-    }
 
-    const initialVisibleRanges = editor.getVisibleRanges()
-    if (initialVisibleRanges.length > 0) {
-      const firstRange = initialVisibleRanges[0]
+      const initialVisibleRanges = editor.getVisibleRanges()
+      if (initialVisibleRanges.length > 0) {
+        const firstRange = initialVisibleRanges[0]
 
-      visibleLinesRef.current = {
-        startLine: firstRange.startLineNumber,
-        endLine: firstRange.endLineNumber,
+        visibleLinesRef.current = {
+          startLine: firstRange.startLineNumber,
+          endLine: firstRange.endLineNumber,
+        }
       }
-    }
 
-    // Initial decoration setup
-    applyGlyphsAndLineMarkings(monaco, editor)
-    const queriesToRun = getQueriesToRun(editor, queryOffsetsRef.current ?? [])
-    queriesToRunRef.current = queriesToRun
-    dispatch(actions.query.setQueriesToRun(queriesToRun))
+      // Initial decoration setup
+      applyGlyphsAndLineMarkings(monaco, editor)
+      const queriesToRun = getQueriesToRun(
+        editor,
+        queryOffsetsRef.current ?? [],
+      )
+      queriesToRunRef.current = queriesToRun
+      dispatch(actions.query.setQueriesToRun(queriesToRun))
 
-    const executeQuery = params.get("executeQuery")
-    if (executeQuery) {
-      if (queriesToRun.length > 1) {
-        handleTriggerRunScript()
-      } else {
-        toggleRunning()
+      if (!query || !executeQuery) {
+        triggerJitValidation()
+      } else if (queriesToRun.length > 0) {
+        const runQueries = () => {
+          if (queriesToRun.length > 1) {
+            handleTriggerRunScript()
+          } else {
+            toggleRunning()
+          }
+        }
+
+        const statements = queriesToRun.map((q) =>
+          q.selection ? q.selection.queryText : q.query,
+        )
+        const sharedSql = query.trim()
+        setTabsDisabled(true)
+        editor.updateOptions({ readOnly: true })
+        const unlockEditor = () => {
+          setTabsDisabled(false)
+          editorRef.current?.updateOptions({ readOnly: false })
+        }
+        void Promise.all(statements.map((sql) => quest.validateQuery(sql)))
+          .then((results) => {
+            const writeQueryTypes = results
+              .map((r) =>
+                !("error" in r) && !("columns" in r) ? r.queryType : undefined,
+              )
+              .filter((t): t is string => t !== undefined)
+            unlockEditor()
+            if (writeQueryTypes.length > 0) {
+              shareLinkRunRef.current = runQueries
+              setShareLinkConfirmation({
+                sql: sharedSql,
+                statementCount: statements.length,
+                writeQueryTypes,
+              })
+            } else {
+              runQueries()
+            }
+          })
+          .catch(() => {
+            unlockEditor()
+            shareLinkRunRef.current = runQueries
+            setShareLinkConfirmation({
+              sql: sharedSql,
+              statementCount: statements.length,
+              writeQueryTypes: [],
+              unclassified: true,
+            })
+          })
       }
-    } else {
-      triggerJitValidation()
-    }
+
+      clearShareLinkParams()
+    })()
   }
 
   const runIndividualQuery = async (
@@ -1473,6 +1600,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (!scriptConfirmationOpen) return
     pendingActionRef.current = undefined
     handleToggleDialog(false)
+  }
+
+  const handleConfirmShareLinkRun = () => {
+    const run = shareLinkRunRef.current
+    shareLinkRunRef.current = null
+    setShareLinkConfirmation(null)
+    run?.()
+  }
+
+  const handleCancelShareLinkRun = () => {
+    shareLinkRunRef.current = null
+    setShareLinkConfirmation(null)
+    setTimeout(() => editorRef.current?.focus())
   }
 
   const handleRunScript = async () => {
@@ -2151,6 +2291,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         {!hidden && (
           <ButtonBar
             onTriggerRunScript={handleTriggerRunScript}
+            onCopyLinkAllQueries={handleCopyLinkAllQueries}
             isTemporary={activeBuffer.isTemporary}
           />
         )}
@@ -2209,6 +2350,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         isAIDropdownRef={isAIDropdownRef}
         onRunQuery={handleRunQuery}
         onExplainQuery={handleExplainQuery}
+        onCopyQueryLink={handleCopyQueryLink}
         onAskAIRef={handleAskAIRef}
       />
 
@@ -2282,6 +2424,75 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                 onClick={handleConfirmRunScript}
               >
                 Run all queries
+              </DialogButton>
+            </Dialog.ActionButtons>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root
+        open={shareLinkConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open) handleCancelShareLinkRun()
+        }}
+      >
+        <Dialog.Portal>
+          <ForwardRef>
+            <Overlay primitive={Dialog.Overlay} />
+          </ForwardRef>
+
+          <Dialog.Content
+            onEscapeKeyDown={handleCancelShareLinkRun}
+            onInteractOutside={handleCancelShareLinkRun}
+            data-hook="share-link-confirmation-dialog"
+            maxwidth="56rem"
+          >
+            <Dialog.Title>
+              {(shareLinkConfirmation?.statementCount ?? 0) > 1
+                ? "Run shared queries?"
+                : "Run shared query?"}
+            </Dialog.Title>
+
+            <ShareLinkDescription>
+              <Box margin="0 0 2rem 0" gap="0.5rem">
+                <StyledErrorIcon size="16px" color={theme.color.orange} />
+                <Text color="orange">
+                  {shareLinkConfirmation?.unclassified
+                    ? "Could not classify the shared SQL. Review it before running."
+                    : `This link contains ${
+                        shareLinkConfirmation?.writeQueryTypes.length === 1
+                          ? "a write statement"
+                          : "write statements"
+                      } that may modify or delete data.\nOnly run shared queries from sources you trust.`}
+                </Text>
+              </Box>
+              {shareLinkConfirmation && (
+                <LiteEditor
+                  value={shareLinkConfirmation.sql}
+                  onOpenInEditor={handleCancelShareLinkRun}
+                />
+              )}
+            </ShareLinkDescription>
+
+            <Dialog.ActionButtons>
+              <Dialog.Close asChild>
+                <DialogButton
+                  skin="secondary"
+                  onClick={handleCancelShareLinkRun}
+                  data-hook="share-link-confirmation-cancel"
+                >
+                  Cancel
+                </DialogButton>
+              </Dialog.Close>
+
+              <DialogButton
+                skin="primary"
+                data-hook="share-link-confirmation-confirm"
+                onClick={handleConfirmShareLinkRun}
+              >
+                {(shareLinkConfirmation?.statementCount ?? 0) > 1
+                  ? "Run queries"
+                  : "Run query"}
               </DialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>

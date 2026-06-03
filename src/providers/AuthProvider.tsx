@@ -49,7 +49,7 @@ type ContextProps = {
     settings: Settings,
     refreshToken: string | undefined,
   ) => Promise<AuthPayload>
-  redirectToAuthorizationUrl: () => void
+  redirectToAuthorizationUrl: (options?: { prompt?: "login" | "none" }) => void
 }
 
 enum View {
@@ -91,6 +91,24 @@ class OAuth2Error {
   }
 }
 
+const OAUTH_CALLBACK_PARAMS = [
+  "code",
+  "state",
+  "error",
+  "error_description",
+  "session_state",
+  "iss",
+] as const
+
+const stripOAuthCallbackParams = (search: string) => {
+  const params = new URLSearchParams(search)
+  OAUTH_CALLBACK_PARAMS.forEach((key) => params.delete(key))
+  return params
+}
+
+const getDefaultRedirectUri = () =>
+  window.location.origin + window.location.pathname
+
 export const AuthContext = createContext<ContextProps>(defaultValues)
 
 const reducer = (s: State, n: Partial<State>) => ({ ...s, ...n })
@@ -113,11 +131,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
       // Remove the code from the URL
       if (history.replaceState) {
+        const restored = stripOAuthCallbackParams(window.location.search)
+        const savedParams = sessionStorage.getItem(StoreKey.OAUTH_RETURN_PARAMS)
+        sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
+        if (savedParams) {
+          new URLSearchParams(savedParams).forEach((value, key) => {
+            if (!restored.has(key)) restored.set(key, value)
+          })
+        }
+        const queryString = restored.toString()
         history.replaceState(
           null,
           "",
-          location.pathname +
-            location.search.replace(/[?&]code=[^&]+/, "").replace(/^&/, "?"),
+          location.pathname + (queryString ? `?${queryString}` : ""),
         )
       }
     } else {
@@ -216,8 +242,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           code_verifier,
           client_id: settings["acl.oidc.client.id"],
           redirect_uri:
-            settings["acl.oidc.redirect.uri"] ||
-            window.location.origin + window.location.pathname,
+            settings["acl.oidc.redirect.uri"] || getDefaultRedirectUri(),
         })
         const tokenResponse = (await response.json()) as AuthPayload
         setAuthToken(tokenResponse, settings)
@@ -229,7 +254,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (previousPrompt === "none") {
           // If we requested authorization code silently (prompt=none), it could be that the user
           // does not have an active SSO session, so let's send the user to re-authenticate (prompt=login)
-          redirectToAuthorizationUrl()
+          redirectToAuthorizationUrl({ isRetry: true })
         } else {
           // If the error is not in response for a silent authorization code request, display the error
           logout({
@@ -245,7 +270,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       ) {
         // No REST token, so it is a page reload for an SSO user
         // who didn't explicitly log out — try to request a token silently
-        redirectToAuthorizationUrl("none")
+        redirectToAuthorizationUrl({ prompt: "none" })
       } else {
         // Stop loading and display the login state
         uiAuthLogin()
@@ -302,17 +327,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }
 
-  const redirectToAuthorizationUrl = (prompt?: "login" | "none") => {
+  const redirectToAuthorizationUrl = ({
+    prompt,
+    isRetry = false,
+  }: {
+    prompt?: "login" | "none"
+    isRetry?: boolean
+  } = {}) => {
     const state = generateState(settings)
     const code_verifier = generateCodeVerifier(settings)
     const code_challenge = generateCodeChallenge(code_verifier)
     setValue(StoreKey.OAUTH_PROMPT, prompt ?? "")
+    if (!isRetry) {
+      const returnParams = stripOAuthCallbackParams(
+        window.location.search,
+      ).toString()
+      if (returnParams) {
+        sessionStorage.setItem(StoreKey.OAUTH_RETURN_PARAMS, returnParams)
+      } else {
+        sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
+      }
+    }
     window.location.href = getAuthorisationURL({
       settings,
       code_challenge,
       state,
       prompt,
-      redirect_uri: settings["acl.oidc.redirect.uri"] || window.location.href,
+      redirect_uri:
+        settings["acl.oidc.redirect.uri"] || getDefaultRedirectUri(),
     })
   }
 
@@ -334,6 +376,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ssoAuthState.clearAuthPayload()
     setSessionData(undefined)
     removeValue(StoreKey.OAUTH_PROMPT)
+    sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
     removeValue(StoreKey.REST_TOKEN)
     removeValue(StoreKey.BASIC_AUTH_HEADER)
     if (clearSSOSession) {
@@ -396,9 +439,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     [View.login]: () => (
       <Login
         onOAuthLogin={(loginWithDifferentAccount) => {
-          redirectToAuthorizationUrl(
-            loginWithDifferentAccount ? "login" : undefined,
-          )
+          redirectToAuthorizationUrl({
+            prompt: loginWithDifferentAccount ? "login" : undefined,
+          })
         }}
         onBasicAuthSuccess={() => {
           dispatch({ view: View.ready })

@@ -44,6 +44,8 @@ enum Command {
   CLOSE_ACTIVE_TAB = "close_active_tab",
   SEARCH_DOCS = "search_docs",
   EXPLAIN_QUERY = "explain_query",
+  COPY_QUERY_LINK = "copy_query_link",
+  COPY_QUERIES_LINK = "copy_queries_link",
 }
 
 export const registerEditorActions = ({
@@ -51,6 +53,8 @@ export const registerEditorActions = ({
   monaco,
   runQuery,
   runScript,
+  copyQueryLink,
+  copyQueriesLink,
   onTabClosed,
   deleteBuffer,
   addBuffer,
@@ -59,6 +63,8 @@ export const registerEditorActions = ({
   monaco: Monaco
   runQuery: () => void
   runScript: () => void
+  copyQueryLink: () => void
+  copyQueriesLink: () => void
   deleteBuffer: (id: number) => void
   addBuffer: () => void
   onTabClosed?: () => void
@@ -151,6 +157,30 @@ export const registerEditorActions = ({
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyE],
       run: () => {
         eventBus.publish(EventType.EXPLAIN_QUERY_EXEC)
+      },
+    }),
+  )
+
+  actions.push(
+    editor.addAction({
+      id: Command.COPY_QUERY_LINK,
+      label: "Copy query link",
+      keybindings: [monaco.KeyMod.Alt | monaco.KeyCode.KeyL],
+      run: () => {
+        copyQueryLink()
+      },
+    }),
+  )
+
+  actions.push(
+    editor.addAction({
+      id: Command.COPY_QUERIES_LINK,
+      label: "Copy queries link",
+      keybindings: [
+        monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyL,
+      ],
+      run: () => {
+        copyQueriesLink()
       },
     }),
   )

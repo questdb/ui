@@ -11,6 +11,7 @@ export enum ConsoleEvent {
   EDITOR_GLYPH_RUN = "editor.glyph_run",
   EDITOR_GLYPH_CONTEXT_OPEN = "editor.glyph_context_open",
   EDITOR_GLYPH_CONTEXT_QUERY_PLAN = "editor.glyph_context_query_plan",
+  EDITOR_COPY_QUERY_LINK = "editor.copy_query_link",
 
   CHART_DRAW = "chart.draw",
 
