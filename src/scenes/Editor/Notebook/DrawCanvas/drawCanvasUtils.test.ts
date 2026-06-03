@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { resultsEquivalent, successResults } from "./drawCanvasUtils"
+import {
+  resolveDraw,
+  resultsEquivalent,
+  successResults,
+} from "./drawCanvasUtils"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
+import type { ChartConfig } from "../CellChart/chartTypes"
 
 const dql = (
   columns: { name: string; type: string }[],
@@ -122,5 +127,46 @@ describe("resultsEquivalent", () => {
     const c = [dql([{ name: "x", type: "INT" }], [[null], [null]])]
     const d = [dql([{ name: "x", type: "INT" }], [[null], [1]])]
     expect(resultsEquivalent(c, d)).toBe(false)
+  })
+})
+
+describe("resolveDraw — unresolved statements use a null slot, not an inert config", () => {
+  const tsPrice = (query: string) =>
+    dql(
+      [
+        { name: "ts", type: "TIMESTAMP" },
+        { name: "price", type: "DOUBLE" },
+      ],
+      [[1000, 5]],
+      query,
+    )
+
+  it("writes null (not {type:'line',yColumns:[]}) for a statement that hasn't resolved", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
+    // Only the 2nd statement resolved; the 1st is still awaiting a result.
+    const results = [tsPrice("SELECT ts, price FROM b")]
+    const { effectiveConfig } = resolveDraw(statements, results, undefined)
+    // Slot 0 has no result and nothing saved → null, so a Save can't bake in a
+    // blank placeholder that would later suppress inference.
+    expect(effectiveConfig.queries[0]).toBeNull()
+    expect(effectiveConfig.queries[1]).not.toBeNull()
+  })
+
+  it("a saved null does not suppress inference once the statement resolves", () => {
+    const statements = ["SELECT ts, price FROM a", "SELECT ts, price FROM b"]
+    // Config saved earlier while statement 0 was unresolved → its slot is null.
+    const saved: ChartConfig = {
+      xColumn: "ts",
+      queries: [null, { type: "line", yColumns: ["price"] }],
+    }
+    // Both statements now return rows.
+    const results = [
+      tsPrice("SELECT ts, price FROM a"),
+      tsPrice("SELECT ts, price FROM b"),
+    ]
+    const { renderQueries } = resolveDraw(statements, results, saved)
+    const q0 = renderQueries.find((q) => q.index === 0)
+    // Inference ran for slot 0 (yColumns populated) — not a blank render.
+    expect(q0?.yColumns).toEqual(["price"])
   })
 })

@@ -103,3 +103,19 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
 export const createDefaultNotebookViewState = (): NotebookViewState => ({
   cells: [createCell(0)],
 })
+
+const isLegacyChartConfig = (cell: NotebookCell): boolean =>
+  cell.chartConfig != null && !Array.isArray(cell.chartConfig.queries)
+
+export const dropLegacyChartConfigs = (
+  state: NotebookViewState,
+): NotebookViewState => {
+  if (!state.cells.some(isLegacyChartConfig)) return state
+  const cells = state.cells.map((cell) => {
+    if (!isLegacyChartConfig(cell)) return cell
+    const next = { ...cell }
+    delete next.chartConfig
+    return next
+  })
+  return { ...state, cells }
+}

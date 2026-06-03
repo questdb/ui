@@ -52,8 +52,10 @@ const ToggleButton = styled.button<{ $active: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 3.2rem;
+  gap: 0.6rem;
+  padding: 0 1rem;
   height: 2.8rem;
+  font-size: 1.3rem;
   border: none;
   background: transparent;
   color: ${color("gray2")};
@@ -133,6 +135,7 @@ export const NotebookToolbar: React.FC = () => {
             title="List layout"
           >
             <ListIcon size={18} />
+            List
           </ToggleButton>
           <ToggleButton
             $active={mode === "grid"}
@@ -140,6 +143,7 @@ export const NotebookToolbar: React.FC = () => {
             title="Grid layout"
           >
             <SquaresFourIcon size={18} />
+            Grid
           </ToggleButton>
         </ToggleGroup>
       </Box>

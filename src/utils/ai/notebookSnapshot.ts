@@ -10,6 +10,23 @@ import type {
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "../executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+
+type ChartQueryWire = {
+  type: string
+  y_columns: string[]
+  ohlc?: { open: string; high: string; low: string; close: string }
+  partition_by_column?: string
+  axis?: "left" | "right"
+  enabled?: boolean
+  name?: string
+}
+export type ChartConfigWire = {
+  x_column: string | null
+  name?: string
+  queries: (ChartQueryWire | null)[]
+  right_axis?: { name?: string; min?: number; max?: number }
+}
 
 // Structural data only — previews ≤ 120 chars, error summaries ≤ 200 chars.
 // Never includes columns/rows/count from query results.
@@ -19,7 +36,7 @@ export type NotebookContextCell = {
   mode?: "run" | "draw"
   auto_refresh?: boolean
   is_chart_maximized?: boolean
-  chart?: { name?: string; type?: string }
+  chart_config?: ChartConfigWire
   last_run_status?: "success" | "error" | "none" | "running"
   last_run_error_summary?: string
   grid?: { x: number; y: number; w: number; h: number }
@@ -56,6 +73,27 @@ export const sanitizeForPromptContext = (s: string): string =>
 
 const preview = (value: string): string =>
   sanitizeForPromptContext(escapeNewlines(truncate(value, PREVIEW_MAX)))
+
+export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
+  x_column: cfg.xColumn,
+  ...(cfg.name != null ? { name: cfg.name } : {}),
+  queries: cfg.queries.map((q) =>
+    q == null
+      ? null
+      : {
+          type: q.type,
+          y_columns: q.yColumns,
+          ...(q.ohlc ? { ohlc: q.ohlc } : {}),
+          ...(q.partitionByColumn
+            ? { partition_by_column: q.partitionByColumn }
+            : {}),
+          ...(q.axis ? { axis: q.axis } : {}),
+          ...(q.enabled === false ? { enabled: false } : {}),
+          ...(q.name != null ? { name: q.name } : {}),
+        },
+  ),
+  ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
+})
 
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
@@ -102,11 +140,9 @@ const buildCell = (
   if (typeof cell.isChartMaximized === "boolean") {
     out.is_chart_maximized = cell.isChartMaximized
   }
-  if (cell.chartConfig) {
-    out.chart = {
-      name: cell.chartConfig.name,
-      type: cell.chartConfig.type,
-    }
+  const chartConfig = cell.chartConfig
+  if (chartConfig && Array.isArray(chartConfig.queries)) {
+    out.chart_config = toChartConfigWire(chartConfig)
   }
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
@@ -206,14 +242,12 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
     if (c.is_chart_maximized !== undefined)
       lines.push(`      is_chart_maximized: ${c.is_chart_maximized}`)
-    if (c.chart) {
-      const parts: string[] = []
-      if (c.chart.name !== undefined)
-        parts.push(
-          `name: ${JSON.stringify(sanitizeForPromptContext(c.chart.name))}`,
-        )
-      if (c.chart.type !== undefined) parts.push(`type: ${c.chart.type}`)
-      lines.push(`      chart: { ${parts.join(", ")} }`)
+    if (c.chart_config) {
+      lines.push(
+        `      chart_config: ${sanitizeForPromptContext(
+          JSON.stringify(c.chart_config),
+        )}`,
+      )
     }
     if (c.last_run_status)
       lines.push(`      last_run_status: ${c.last_run_status}`)

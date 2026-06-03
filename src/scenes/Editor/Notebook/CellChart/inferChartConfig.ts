@@ -1,6 +1,8 @@
 import { parseToAst } from "@questdb/sql-parser"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { ChartConfig, ChartType, ColumnRole } from "./chartTypes"
+import type { ChartType, ColumnRole, QueryChart } from "./chartTypes"
+
+export type InferredChart = { xColumn: string | null; chart: QueryChart }
 
 const TEMPORAL = new Set(["TIMESTAMP", "TIMESTAMP_NS", "DATE"])
 const NUMERIC = new Set([
@@ -14,7 +16,7 @@ const NUMERIC = new Set([
 ])
 const CATEGORICAL = new Set(["SYMBOL", "STRING", "VARCHAR", "CHAR", "BOOLEAN"])
 
-const MAX_DEFAULT_SERIES = 8
+export const MAX_DEFAULT_SERIES = 10
 const PIE_THRESHOLD = 12
 export const MAX_AUTO_PARTITION_CARDINALITY = 20
 export const MAX_PARTITION_SERIES = 30
@@ -55,9 +57,9 @@ export const isResultChartable = (columns: ColumnDefinition[]): boolean => {
   )
 }
 
-const findOhlc = (
+export const findOhlc = (
   numeric: ColumnDefinition[],
-): ChartConfig["ohlc"] | undefined => {
+): QueryChart["ohlc"] | undefined => {
   const byName = new Map<string, string>()
   for (const c of numeric) byName.set(c.name.toLowerCase(), c.name)
   const open = byName.get("open")
@@ -106,7 +108,7 @@ export const inferChartConfig = (
   columns: ColumnDefinition[],
   dataset: (boolean | string | number | null)[][],
   query: string,
-): ChartConfig => {
+): InferredChart => {
   const groups = groupColumns(columns)
   const hints = parseQueryHints(query)
 
@@ -117,10 +119,12 @@ export const inferChartConfig = (
     const ohlc = findOhlc(groups.numeric)
     if (ohlc) {
       return {
-        type: "candlestick",
         xColumn: groups.temporal[0].name,
-        yColumns: [ohlc.open, ohlc.high, ohlc.low, ohlc.close],
-        ohlc,
+        chart: {
+          type: "candlestick",
+          yColumns: [ohlc.open, ohlc.high, ohlc.low, ohlc.close],
+          ohlc,
+        },
       }
     }
   }
@@ -138,19 +142,20 @@ export const inferChartConfig = (
         MAX_AUTO_PARTITION_CARDINALITY
     ) {
       return {
-        type: "line",
         xColumn: groups.temporal[0].name,
-        yColumns: capSeries(groups.numeric),
-        partitionByColumn: catCol.name,
+        chart: {
+          type: "line",
+          yColumns: capSeries(groups.numeric),
+          partitionByColumn: catCol.name,
+        },
       }
     }
   }
 
   if (groups.temporal.length > 0 && groups.numeric.length > 0) {
     return {
-      type: "line",
       xColumn: groups.temporal[0].name,
-      yColumns: capSeries(groups.numeric),
+      chart: { type: "line", yColumns: capSeries(groups.numeric) },
     }
   }
 
@@ -160,9 +165,8 @@ export const inferChartConfig = (
     groups.numeric.length > 0
   ) {
     return {
-      type: "bar",
       xColumn: groups.categorical[0].name,
-      yColumns: capSeries(groups.numeric),
+      chart: { type: "bar", yColumns: capSeries(groups.numeric) },
     }
   }
 
@@ -170,46 +174,30 @@ export const inferChartConfig = (
     const xIdx = columns.findIndex((c) => c.name === groups.categorical[0].name)
     if (xIdx >= 0 && distinctCount(dataset, xIdx) < PIE_THRESHOLD) {
       return {
-        type: "pie",
         xColumn: groups.categorical[0].name,
-        yColumns: [groups.numeric[0].name],
+        chart: { type: "pie", yColumns: [groups.numeric[0].name] },
       }
     }
   }
 
   if (groups.categorical.length > 0 && groups.numeric.length > 0) {
     return {
-      type: "bar",
       xColumn: groups.categorical[0].name,
-      yColumns: capSeries(groups.numeric),
+      chart: { type: "bar", yColumns: capSeries(groups.numeric) },
     }
   }
 
   if (groups.numeric.length >= 2 && groups.temporal.length === 0) {
     return {
-      type: "scatter",
       xColumn: groups.numeric[0].name,
-      yColumns: capSeries(groups.numeric.slice(1)),
+      chart: { type: "scatter", yColumns: capSeries(groups.numeric.slice(1)) },
     }
   }
 
   const x = columns[0]?.name ?? null
   const ys = columns.slice(1, 1 + MAX_DEFAULT_SERIES).map((c) => c.name)
-  return {
-    type: "bar",
-    xColumn: x,
-    yColumns: ys,
-  }
+  return { xColumn: x, chart: { type: "bar", yColumns: ys } }
 }
-
-export const ensureChartConfig = (
-  existing: ChartConfig | undefined,
-  columns: ColumnDefinition[],
-  dataset: (boolean | string | number | null)[][],
-  query: string,
-): ChartConfig => existing ?? inferChartConfig(columns, dataset, query)
-
-export const __testing = { parseQueryHints, findOhlc }
 
 export const availableChartTypes = (
   groups: ColumnGroups,
@@ -220,10 +208,17 @@ export const availableChartTypes = (
   const hasTemporal = groups.temporal.length > 0
   const hasCategorical = groups.categorical.length > 0
   if (hasNumeric && (hasTemporal || hasCategorical)) {
-    types.push("line", "area", "bar", "stackedBar")
+    types.push("line", "area", "stepLine", "stepArea", "bar", "stackedBar")
+  } else if (groups.numeric.length >= 2) {
+    types.push("line", "area", "stepLine", "stepArea")
   }
-  if (hasNumeric && groups.numeric.length >= 2) types.push("scatter")
+  if (
+    hasNumeric &&
+    (groups.numeric.length >= 2 || hasTemporal || hasCategorical)
+  )
+    types.push("scatter")
   if (hasNumeric && hasCategorical) types.push("pie")
-  if (hasOhlc && hasTemporal) types.push("candlestick")
+  if (hasTemporal && (hasOhlc || groups.numeric.length >= 4))
+    types.push("candlestick")
   return types.length ? types : ["bar"]
 }

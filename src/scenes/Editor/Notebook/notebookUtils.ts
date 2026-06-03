@@ -8,7 +8,8 @@ import type {
   SingleQueryResult,
 } from "../../../store/notebook"
 import { createCell } from "../../../store/notebook"
-import type { ChartConfig } from "./CellChart/chartTypes"
+import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
+import { getQueriesFromText } from "../Monaco/utils"
 
 export const singleResultFromExec = (
   exec: QueryExecResult,
@@ -266,27 +267,27 @@ const generateId = (): string =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2)
 
+const normalizeQueryChart = (q: QueryChart): QueryChart => {
+  const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
+  if (q.ohlc) next.ohlc = q.ohlc
+  if (q.partitionByColumn) next.partitionByColumn = q.partitionByColumn
+  if (q.axis) next.axis = q.axis
+  if (q.enabled === false) next.enabled = false
+  if (q.name) next.name = q.name
+  return next
+}
+
 const normalizeChartConfig = (
   cfg: ChartConfig | null | undefined,
 ): ChartConfig | undefined => {
   if (!cfg) return undefined
   const next: ChartConfig = {
-    type: cfg.type,
     xColumn: cfg.xColumn ?? null,
-    yColumns: cfg.yColumns ?? [],
+    queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
-  if (cfg.partitionByColumn) next.partitionByColumn = cfg.partitionByColumn
   if (cfg.name) next.name = cfg.name
-  if (cfg.ohlc) {
-    next.ohlc = cfg.ohlc
-  } else if (
-    cfg.type === "candlestick" &&
-    cfg.yColumns &&
-    cfg.yColumns.length === 4
-  ) {
-    const [open, high, low, close] = cfg.yColumns
-    next.ohlc = { open, high, low, close }
-  }
+  if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
+  if (cfg.autoRefresh !== undefined) next.autoRefresh = cfg.autoRefresh
   return next
 }
 
@@ -315,35 +316,56 @@ export const buildAppliedCells = (
     else if (!existing) seenIds.add(id)
     else seenIds.add(existing.id)
 
+    // apply_notebook_state is a PUT: each requested cell fully describes itself.
     const resolvedMode: CellMode | undefined =
-      req.mode === undefined || req.mode === null ? existing?.mode : req.mode
+      req.mode === undefined || req.mode === null ? undefined : req.mode
 
-    const chartConfig = normalizeChartConfig(
-      req.chartConfig ?? existing?.chartConfig,
-    )
+    const chartConfig = normalizeChartConfig(req.chartConfig)
 
     if (resolvedMode === "draw" && !chartConfig) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has mode='draw' but no chart_config.`,
+        `Cell at index ${index} has mode='draw' but no chart_config. apply replaces the cell wholesale — send the full chart_config (read the current one from <notebook_context> / get_notebook_state).`,
         "cells",
       )
     }
-    if (chartConfig?.type === "candlestick" && !chartConfig.ohlc) {
+    if (req.chartConfig && req.chartConfig.queries.length === 0) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has chart_config.type='candlestick' but no ohlc mapping.`,
+        `Cell at index ${index} has a chart_config with no queries. Provide one entry per ;-split query (apply replaces the chart wholesale).`,
+        "cells",
+      )
+    }
+    if (req.chartConfig && req.chartConfig.queries.length > 0) {
+      const statementCount = getQueriesFromText(req.value).length
+      if (
+        statementCount > 0 &&
+        req.chartConfig.queries.length !== statementCount
+      ) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has ${req.chartConfig.queries.length} chart queries but ${statementCount} ;-split statement${statementCount === 1 ? "" : "s"}. Send exactly one entry per statement (index-aligned); apply replaces all per-query configs.`,
+          "cells",
+        )
+      }
+    }
+    if (
+      chartConfig?.queries.some(
+        (q) => q != null && q.type === "candlestick" && !q.ohlc,
+      )
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has a candlestick query with no ohlc mapping.`,
         "cells",
       )
     }
 
     const isDraw = resolvedMode === "draw"
     const isChartMaximized =
-      req.isChartMaximized !== undefined && req.isChartMaximized !== null
+      req.isChartMaximized != null
         ? req.isChartMaximized
-        : (existing?.isChartMaximized ?? (isDraw ? true : undefined))
+        : isDraw
+          ? true
+          : undefined
     const autoRefresh =
-      req.autoRefresh !== undefined && req.autoRefresh !== null
-        ? req.autoRefresh
-        : (existing?.autoRefresh ?? (isDraw ? true : undefined))
+      req.autoRefresh != null ? req.autoRefresh : isDraw ? true : undefined
 
     if (existing) {
       updated.push(existing.id)

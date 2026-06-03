@@ -4,9 +4,74 @@ import {
   inferChartConfig,
   isResultChartable,
   classifyColumn,
+  availableChartTypes,
+  groupColumns,
+  MAX_DEFAULT_SERIES,
 } from "./inferChartConfig"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
+
+describe("availableChartTypes", () => {
+  it("offers step types alongside line/area for temporal + numeric", () => {
+    const groups = groupColumns([col("ts", "TIMESTAMP"), col("v", "DOUBLE")])
+    const types = availableChartTypes(groups, false)
+    expect(types).toContain("stepLine")
+    expect(types).toContain("stepArea")
+    expect(types).toContain("line")
+  })
+
+  it("offers line family + steps (no bars) for numeric-only x (depth charts)", () => {
+    const groups = groupColumns([
+      col("price", "DOUBLE"),
+      col("cum_bid", "DOUBLE"),
+      col("cum_ask", "DOUBLE"),
+    ])
+    const types = availableChartTypes(groups, false)
+    expect(types).toEqual(
+      expect.arrayContaining([
+        "line",
+        "area",
+        "stepLine",
+        "stepArea",
+        "scatter",
+      ]),
+    )
+    expect(types).not.toContain("bar")
+    expect(types).not.toContain("stackedBar")
+  })
+
+  it("offers candlestick for temporal + 4 numeric even when columns aren't named open/high/low/close", () => {
+    const groups = groupColumns([
+      col("time", "TIMESTAMP"),
+      col("open", "DOUBLE"),
+      col("close", "DOUBLE"),
+      col("lo", "DOUBLE"),
+      col("hi", "DOUBLE"),
+    ])
+    expect(availableChartTypes(groups, false)).toContain("candlestick")
+  })
+
+  it("does not offer candlestick without a temporal axis, nor with fewer than 4 numeric", () => {
+    const fourNumericNoTime = groupColumns([
+      col("a", "DOUBLE"),
+      col("b", "DOUBLE"),
+      col("c", "DOUBLE"),
+      col("d", "DOUBLE"),
+    ])
+    expect(availableChartTypes(fourNumericNoTime, false)).not.toContain(
+      "candlestick",
+    )
+    const temporalThreeNumeric = groupColumns([
+      col("ts", "TIMESTAMP"),
+      col("a", "DOUBLE"),
+      col("b", "DOUBLE"),
+      col("c", "DOUBLE"),
+    ])
+    expect(availableChartTypes(temporalThreeNumeric, false)).not.toContain(
+      "candlestick",
+    )
+  })
+})
 
 describe("classifyColumn", () => {
   it("identifies temporal", () => {
@@ -53,9 +118,9 @@ describe("inferChartConfig", () => {
       [],
       "SELECT ts, open, high, low, close FROM t SAMPLE BY 1h",
     )
-    expect(config.type).toBe("candlestick")
+    expect(config.chart.type).toBe("candlestick")
     expect(config.xColumn).toBe("ts")
-    expect(config.ohlc).toEqual({
+    expect(config.chart.ohlc).toEqual({
       open: "open",
       high: "high",
       low: "low",
@@ -72,7 +137,7 @@ describe("inferChartConfig", () => {
       col("CLOSE", "DOUBLE"),
     ]
     const config = inferChartConfig(columns, [], "SELECT * FROM t")
-    expect(config.type).toBe("candlestick")
+    expect(config.chart.type).toBe("candlestick")
   })
 
   it("picks line for temporal + numeric without OHLC", () => {
@@ -82,10 +147,10 @@ describe("inferChartConfig", () => {
       [],
       "SELECT ts, price FROM trades SAMPLE BY 1m",
     )
-    expect(config.type).toBe("line")
+    expect(config.chart.type).toBe("line")
     expect(config.xColumn).toBe("ts")
-    expect(config.yColumns).toEqual(["price"])
-    expect(config.partitionByColumn).toBeUndefined()
+    expect(config.chart.yColumns).toEqual(["price"])
+    expect(config.chart.partitionByColumn).toBeUndefined()
   })
 
   it("auto-partitions long-format temporal + categorical + numeric", () => {
@@ -105,10 +170,10 @@ describe("inferChartConfig", () => {
       dataset,
       "SELECT time, symbol, rsi_14 FROM ...",
     )
-    expect(config.type).toBe("line")
+    expect(config.chart.type).toBe("line")
     expect(config.xColumn).toBe("time")
-    expect(config.partitionByColumn).toBe("symbol")
-    expect(config.yColumns).toEqual(["rsi_14"])
+    expect(config.chart.partitionByColumn).toBe("symbol")
+    expect(config.chart.yColumns).toEqual(["rsi_14"])
   })
 
   it("does not auto-partition when categorical cardinality is too high", () => {
@@ -126,9 +191,9 @@ describe("inferChartConfig", () => {
       dataset,
       "SELECT time, trade_id, price FROM ...",
     )
-    expect(config.type).toBe("line")
-    expect(config.partitionByColumn).toBeUndefined()
-    expect(config.yColumns).toEqual(["price"])
+    expect(config.chart.type).toBe("line")
+    expect(config.chart.partitionByColumn).toBeUndefined()
+    expect(config.chart.yColumns).toEqual(["price"])
   })
 
   it("picks pie for low-cardinality categorical + numeric", () => {
@@ -143,9 +208,9 @@ describe("inferChartConfig", () => {
       dataset,
       "SELECT symbol, count() FROM trades",
     )
-    expect(config.type).toBe("pie")
+    expect(config.chart.type).toBe("pie")
     expect(config.xColumn).toBe("symbol")
-    expect(config.yColumns).toEqual(["c"])
+    expect(config.chart.yColumns).toEqual(["c"])
   })
 
   it("picks bar for high-cardinality categorical + numeric", () => {
@@ -159,7 +224,7 @@ describe("inferChartConfig", () => {
       dataset,
       "SELECT symbol, count() FROM trades",
     )
-    expect(config.type).toBe("bar")
+    expect(config.chart.type).toBe("bar")
   })
 
   it("picks bar for LATEST ON snapshot", () => {
@@ -172,40 +237,42 @@ describe("inferChartConfig", () => {
       ],
       "SELECT symbol, price FROM trades LATEST ON ts PARTITION BY symbol",
     )
-    expect(config.type).toBe("bar")
+    expect(config.chart.type).toBe("bar")
     expect(config.xColumn).toBe("symbol")
   })
 
   it("picks scatter when only numerics, no temporal", () => {
     const columns = [col("x", "DOUBLE"), col("y", "DOUBLE")]
     const config = inferChartConfig(columns, [], "SELECT x, y FROM t")
-    expect(config.type).toBe("scatter")
+    expect(config.chart.type).toBe("scatter")
     expect(config.xColumn).toBe("x")
-    expect(config.yColumns).toEqual(["y"])
+    expect(config.chart.yColumns).toEqual(["y"])
   })
 
   it("falls back to bar for unclassifiable shapes", () => {
     const columns = [col("u", "UUID"), col("b", "BINARY")]
     const config = inferChartConfig(columns, [], "SELECT u, b FROM t")
-    expect(config.type).toBe("bar")
+    expect(config.chart.type).toBe("bar")
     expect(config.xColumn).toBe("u")
-    expect(config.yColumns).toEqual(["b"])
+    expect(config.chart.yColumns).toEqual(["b"])
   })
 
-  it("caps default series at 8", () => {
+  it("caps default series at MAX_DEFAULT_SERIES", () => {
     const columns = [
       col("ts", "TIMESTAMP"),
-      ...Array.from({ length: 12 }, (_, i) => col(`m${i}`, "DOUBLE")),
+      ...Array.from({ length: MAX_DEFAULT_SERIES + 4 }, (_, i) =>
+        col(`m${i}`, "DOUBLE"),
+      ),
     ]
     const config = inferChartConfig(columns, [], "SELECT * FROM t")
-    expect(config.type).toBe("line")
-    expect(config.yColumns).toHaveLength(8)
+    expect(config.chart.type).toBe("line")
+    expect(config.chart.yColumns).toHaveLength(MAX_DEFAULT_SERIES)
   })
 
   it("does not throw on empty columns", () => {
     const config = inferChartConfig([], [], "")
-    expect(config.type).toBe("bar")
+    expect(config.chart.type).toBe("bar")
     expect(config.xColumn).toBeNull()
-    expect(config.yColumns).toEqual([])
+    expect(config.chart.yColumns).toEqual([])
   })
 })

@@ -2,15 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
-import {
-  buildEchartsOption,
-  type ExtraSeriesSource,
-} from "../CellChart/buildEchartsOption"
-import {
-  classifyColumn,
-  ensureChartConfig,
-} from "../CellChart/inferChartConfig"
-import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import { buildEchartsOption } from "../CellChart/buildEchartsOption"
 import {
   ChartRenderer,
   type ChartRendererHandle,
@@ -21,9 +13,14 @@ import { useAdaptivePoll } from "../../../../hooks/useAdaptivePoll"
 import { useQueryExecution } from "../../../../hooks/useQueryExecution"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { getQueriesFromText } from "../../Monaco/utils"
-import { resultsEquivalent, successResults } from "./drawCanvasUtils"
+import {
+  resolveDraw,
+  resultsEquivalent,
+  successResults,
+} from "./drawCanvasUtils"
 import { useNotebookActions } from "../NotebookProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
+import { toast } from "../../../../components/Toast"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -71,8 +68,6 @@ type Props = {
   onMaximizedChange: (value: boolean) => void
 }
 
-const ANCHOR_EMPTY = { columns: [], dataset: [] as never[][], query: "" }
-
 export const DrawCanvas: React.FC<Props> = ({
   cell,
   isFocused,
@@ -92,14 +87,15 @@ export const DrawCanvas: React.FC<Props> = ({
     | { kind: "failed"; message: string }
     | null
   >(null)
+  const [zoomStart, setZoomStart] = useState(0)
+  const [zoomEnd, setZoomEnd] = useState(100)
   const classifyCache = useMemo(
     () => new Map<string, "DQL" | "DDL_DML" | "ERROR">(),
     [cell.value],
   )
 
+  const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
-  const [zoomStart, setZoomStart] = useState(0)
-  const [zoomEnd, setZoomEnd] = useState(100)
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 
   const handleZoomChange = useCallback((start: number, end: number) => {
@@ -204,49 +200,19 @@ export const DrawCanvas: React.FC<Props> = ({
     maxIntervalMs: REFRESH_MAX_MS,
   })
 
-  const anchor = results[0] ?? ANCHOR_EMPTY
-  const extras: ExtraSeriesSource[] = useMemo(
-    () =>
-      results.slice(1).map((r, i) => ({
-        label: `Q${i + 2}`,
-        columns: r.columns,
-        dataset: r.dataset,
-      })),
-    [results],
+  const resolution = useMemo(
+    () => resolveDraw(queries, results, cell.chartConfig),
+    [queries, results, cell.chartConfig],
   )
 
-  const pickerColumns: ColumnDefinition[] = useMemo(() => {
-    const out = [...anchor.columns]
-    const seen = new Set(out.map((c) => c.name))
-    for (const src of extras) {
-      for (const col of src.columns) {
-        if (classifyColumn(col) !== "numeric") continue
-        if (seen.has(col.name)) continue
-        seen.add(col.name)
-        out.push(col)
-      }
-    }
-    return out
-  }, [anchor.columns, extras])
-
-  const config = useMemo(() => {
-    const base = ensureChartConfig(
-      cell.chartConfig,
-      anchor.columns,
-      anchor.dataset,
-      anchor.query,
-    )
-    if (cell.chartConfig) return base
-    const all = pickerColumns
-      .filter((c) => classifyColumn(c) === "numeric")
-      .map((c) => c.name)
-    const merged = Array.from(new Set([...base.yColumns, ...all]))
-    return { ...base, yColumns: merged }
-  }, [cell.chartConfig, anchor, pickerColumns])
+  const openSettings = useCallback(() => {
+    configAtSettingsOpenRef.current = cell.chartConfig
+    setSettingsOpen(true)
+  }, [cell.chartConfig])
 
   const option = useMemo(
-    () => buildEchartsOption(config, anchor.columns, anchor.dataset, extras),
-    [config, anchor.columns, anchor.dataset, extras],
+    () => buildEchartsOption(resolution.chart, resolution.renderQueries),
+    [resolution],
   )
 
   const empty =
@@ -267,6 +233,16 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "No data to plot."
   }
 
+  useEffect(() => {
+    if (!settingsOpen) return
+    if (cell.chartConfig !== configAtSettingsOpenRef.current) {
+      setSettingsOpen(false)
+      toast.info(
+        "Chart settings were updated by the assistant. Reopen chart configuration to edit.",
+      )
+    }
+  }, [cell.chartConfig, settingsOpen])
+
   return (
     <Wrapper>
       <ChartActions
@@ -275,7 +251,7 @@ export const DrawCanvas: React.FC<Props> = ({
         onManualRefresh={() => void fetchAll()}
         isMaximized={!!cell.isChartMaximized}
         onMaximizedChange={onMaximizedChange}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettings}
         canResetZoom={isZoomed}
         onResetZoom={handleResetZoom}
         cellId={cell.id}
@@ -295,8 +271,8 @@ export const DrawCanvas: React.FC<Props> = ({
       <ChartSettingsDrawer
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        columns={pickerColumns}
-        config={config}
+        tabs={resolution.tabs}
+        config={resolution.effectiveConfig}
         onSave={onConfigChange}
       />
     </Wrapper>

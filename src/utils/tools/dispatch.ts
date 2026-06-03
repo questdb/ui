@@ -17,6 +17,7 @@ import type { NotebookVariable } from "../../store/notebook"
 import type {
   ChartConfig,
   ChartType,
+  QueryChart,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   classifyAndCheckSqlForExecution,
@@ -27,6 +28,7 @@ import {
   type Permissions,
 } from "./permissions"
 import { categoryFor } from "./tools"
+import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import {
@@ -38,6 +40,41 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { ToolExecutionContext } from "../ai/shared"
 import { formatSql } from "../formatSql"
+
+// Snake-case shapes the agent tools speak, and their mapping to the internal
+// camelCase ChartConfig. Shared by set_cell_chart_config and apply_notebook_state.
+type ToolQueryChart = {
+  type: ChartType
+  y_columns?: string[] | null
+  ohlc?: { open: string; high: string; low: string; close: string } | null
+  partition_by_column?: string | null
+  axis?: "left" | "right" | null
+  enabled?: boolean | null
+  name?: string | null
+}
+type ToolRightAxis = {
+  name?: string | null
+  min?: number | null
+  max?: number | null
+}
+
+const mapQueryChart = (q: ToolQueryChart): QueryChart => {
+  const out: QueryChart = { type: q.type, yColumns: q.y_columns ?? [] }
+  if (q.ohlc) out.ohlc = q.ohlc
+  if (q.partition_by_column) out.partitionByColumn = q.partition_by_column
+  if (q.axis) out.axis = q.axis
+  if (q.enabled === false) out.enabled = false
+  if (q.name) out.name = q.name
+  return out
+}
+
+const mapRightAxis = (ra: ToolRightAxis): ChartConfig["rightAxis"] => {
+  const out: NonNullable<ChartConfig["rightAxis"]> = {}
+  if (ra.name) out.name = ra.name
+  if (ra.min != null) out.min = ra.min
+  if (ra.max != null) out.max = ra.max
+  return out
+}
 
 const notebookErrorHint = (code: NotebookToolErrorCode): string => {
   switch (code) {
@@ -447,50 +484,61 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const {
-          buffer_id,
-          cell_id,
-          type,
-          x_column,
-          y_columns,
-          partition_by_column,
-          name,
-          ohlc,
-        } =
+        const { buffer_id, cell_id, x_column, name, queries, right_axis } =
           (input as {
             buffer_id: number
             cell_id: string
-            type: ChartType
             x_column?: string | null
-            y_columns?: string[] | null
-            partition_by_column?: string | null
             name?: string | null
-            ohlc?: {
-              open: string
-              high: string
-              low: string
-              close: string
-            } | null
+            queries?: (ToolQueryChart | null)[] | null
+            right_axis?: ToolRightAxis | null
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
-        const patch: Partial<ChartConfig> & { type: ChartType } = { type }
+        // Patch: top-level null = preserve; a non-null queries array replaces
+        // all per-query configs (queries:[] clears them, back to inference).
+        const patch: Partial<ChartConfig> = {}
         if (x_column !== undefined && x_column !== null)
           patch.xColumn = x_column
-        if (y_columns !== undefined && y_columns !== null)
-          patch.yColumns = y_columns
-        if (partition_by_column !== undefined && partition_by_column !== null)
-          patch.partitionByColumn = partition_by_column
         if (name !== undefined && name !== null) patch.name = name
-        if (ohlc) patch.ohlc = ohlc
-        // Candlestick renders from config.ohlc, not yColumns.
+        if (queries !== undefined && queries !== null)
+          patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
+        if (right_axis !== undefined && right_axis !== null)
+          patch.rightAxis = mapRightAxis(right_axis)
         if (
-          type === "candlestick" &&
-          !patch.ohlc &&
-          y_columns &&
-          y_columns.length === 4
+          patch.queries?.some(
+            (q) => q != null && q.type === "candlestick" && !q.ohlc,
+          )
         ) {
-          const [open, high, low, close] = y_columns
-          patch.ohlc = { open, high, low, close }
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message:
+                "VALIDATION_ERROR: a candlestick query requires an ohlc mapping (open/high/low/close). Provide ohlc, or use a non-candlestick type.",
+            }),
+            is_error: true,
+          }
+        }
+        // A non-null queries array REPLACES every per-query config
+        if (patch.queries && patch.queries.length > 0) {
+          const cellSql = modelToolsClient.getCellSql
+            ? modelToolsClient.getCellSql(buffer_id, cell_id)
+            : null
+          if (cellSql !== null) {
+            const statementCount = getQueriesFromText(cellSql).length
+            if (statementCount > 0 && patch.queries.length !== statementCount) {
+              return {
+                content: JSON.stringify({
+                  error_code: "validation",
+                  message: `VALIDATION_ERROR: queries has ${patch.queries.length} ${
+                    patch.queries.length === 1 ? "entry" : "entries"
+                  } but the cell has ${statementCount} \`;\`-split statement${
+                    statementCount === 1 ? "" : "s"
+                  }. A non-null queries array replaces all per-query configs, so send exactly one entry per statement (index-aligned). Use queries:[] to reset to inference, or omit queries to preserve the existing config.`,
+                }),
+                is_error: true,
+              }
+            }
+          }
         }
         return routeNotebookTool(() =>
           modelToolsClient.setCellChartConfig(buffer_id, cell_id, patch),
@@ -534,17 +582,10 @@ export const dispatchTool = async (
               auto_refresh?: boolean | null
               is_chart_maximized?: boolean | null
               chart_config?: {
-                type: ChartType
                 x_column?: string | null
-                y_columns?: string[] | null
-                partition_by_column?: string | null
                 name?: string | null
-                ohlc?: {
-                  open: string
-                  high: string
-                  low: string
-                  close: string
-                } | null
+                queries?: (ToolQueryChart | null)[] | null
+                right_axis?: ToolRightAxis | null
               } | null
               grid?: { x: number; y: number; w: number; h: number } | null
             }>
@@ -711,22 +752,14 @@ export const dispatchTool = async (
             if (c.chart_config) {
               const cfg = c.chart_config
               const chartConfig: ChartConfig = {
-                type: cfg.type,
                 xColumn: cfg.x_column ?? null,
-                yColumns: cfg.y_columns ?? [],
+                queries: (cfg.queries ?? []).map((q) =>
+                  q ? mapQueryChart(q) : null,
+                ),
               }
-              if (cfg.partition_by_column)
-                chartConfig.partitionByColumn = cfg.partition_by_column
               if (cfg.name) chartConfig.name = cfg.name
-              if (cfg.ohlc) chartConfig.ohlc = cfg.ohlc
-              else if (
-                cfg.type === "candlestick" &&
-                cfg.y_columns &&
-                cfg.y_columns.length === 4
-              ) {
-                const [open, high, low, close] = cfg.y_columns
-                chartConfig.ohlc = { open, high, low, close }
-              }
+              if (cfg.right_axis)
+                chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
               cell.chartConfig = chartConfig
             }
             if (c.grid) cell.grid = c.grid

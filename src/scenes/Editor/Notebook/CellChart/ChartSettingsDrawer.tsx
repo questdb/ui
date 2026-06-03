@@ -1,21 +1,18 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
-import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { Button, Input, MultiSelect, Text } from "../../../../components"
+import { Button, Input } from "../../../../components"
 import { Select } from "../../../../components/Select"
-import type { ChartConfig, ChartType } from "./chartTypes"
-import { availableChartTypes, groupColumns } from "./inferChartConfig"
-
-const TYPE_LABELS: Record<ChartType, string> = {
-  line: "Line",
-  area: "Area",
-  bar: "Bar",
-  stackedBar: "Stacked bar",
-  scatter: "Scatter",
-  pie: "Pie",
-  candlestick: "Candlestick",
-}
+import type { ChartConfig, QueryChart } from "./chartTypes"
+import { groupColumns } from "./inferChartConfig"
+import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+  IncompatibleIcon,
+} from "./chartSettingsStyles"
+import { QueryControls } from "./QueryControls"
 
 const fadeIn = keyframes`
   from { opacity: 0; }
@@ -73,15 +70,13 @@ const Body = styled.form`
   gap: 1.4rem;
 `
 
-const Field = styled.label`
+const Row = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-`
-
-const FieldLabel = styled.span`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  gap: 0.8rem;
+  & > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 `
 
 const Footer = styled.div`
@@ -92,10 +87,56 @@ const Footer = styled.div`
   gap: 0.8rem;
 `
 
+const Divider = styled.div`
+  border-top: 1px solid ${({ theme }) => theme.color.selection};
+`
+
+const TabStrip = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+`
+
+const Tab = styled.button<{ active: boolean }>`
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  padding: 0.8rem 1.4rem;
+  border: none;
+  border-bottom: 2px solid
+    ${({ active, theme }) => (active ? theme.color.pink : "transparent")};
+  margin-bottom: -1px;
+  background: ${({ active, theme }) =>
+    active ? theme.color.backgroundLighter : "transparent"};
+  color: ${({ active, theme }) =>
+    active ? theme.color.foreground : theme.color.gray2};
+  cursor: pointer;
+  font-size: 1.3rem;
+
+  &:hover {
+    color: ${({ theme }) => theme.color.foreground};
+  }
+`
+
+const parseBound = (v: string): number | undefined => {
+  const n = Number(v)
+  return v === "" || !Number.isFinite(n) ? undefined : n
+}
+
+const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
+  if (!q || q.type !== "candlestick" || q.enabled === false) return false
+  const o = q.ohlc
+  if (!o || !o.open || !o.high || !o.low || !o.close) return true
+  return new Set([o.open, o.high, o.low, o.close]).size !== 4
+}
+
 type Props = {
   open: boolean
   onClose: () => void
-  columns: ColumnDefinition[]
+  tabs: QueryTab[]
   config: ChartConfig
   onSave: (next: ChartConfig) => void
 }
@@ -103,19 +144,19 @@ type Props = {
 export const ChartSettingsDrawer: React.FC<Props> = ({
   open,
   onClose,
-  columns,
+  tabs,
   config,
   onSave,
 }) => {
   const [draft, setDraft] = useState<ChartConfig>(config)
-  // Snapshot at open so commit diffs against it and only writes user-changed fields; otherwise external updates (auto-refresh columns, AI tool calls) would be wiped on Save.
-  const openSnapshotRef = useRef<ChartConfig>(config)
-  const latestConfigRef = useRef<ChartConfig>(config)
-  latestConfigRef.current = config
+  const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
+  const [saveAttempted, setSaveAttempted] = useState(false)
+
   useEffect(() => {
     if (open) {
       setDraft(config)
-      openSnapshotRef.current = config
+      setActiveIndex(tabs[0]?.index ?? 0)
+      setSaveAttempted(false)
     }
   }, [open])
 
@@ -137,34 +178,47 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
 
   if (!open) return null
 
-  const groups = groupColumns(columns)
-  const hasOhlc = !!draft.ohlc
-  const types = availableChartTypes(groups, hasOhlc)
+  const anchorTab = tabs[0]
+  const anchorGroups = anchorTab
+    ? groupColumns(anchorTab.columns)
+    : { temporal: [], numeric: [], categorical: [], other: [] }
+  const xCandidates = [
+    ...anchorGroups.temporal,
+    ...anchorGroups.categorical,
+    ...anchorGroups.numeric,
+  ]
 
-  const xCandidates =
-    draft.type === "candlestick" || draft.type === "line"
-      ? [...groups.temporal, ...groups.categorical]
-      : draft.type === "scatter"
-        ? groups.numeric
-        : [...groups.categorical, ...groups.temporal, ...groups.numeric]
+  const activeTab = tabs.find((t) => t.index === activeIndex) ?? anchorTab
+  const isAnchorTab = activeTab != null && activeTab.index === anchorTab?.index
+  const query: QueryChart | undefined =
+    activeTab != null
+      ? (draft.queries[activeTab.index] ?? undefined)
+      : undefined
 
-  const yCandidates = groups.numeric
+  const hasRight = draft.queries.some((q) => q?.axis === "right")
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    commit()
-  }
+  const updateQuery = (index: number, patch: Partial<QueryChart>) =>
+    setDraft((d) => ({
+      ...d,
+      queries: d.queries.map((q, i) =>
+        i === index && q ? { ...q, ...patch } : q,
+      ),
+    }))
+
+  const setQuery = (index: number, next: QueryChart) =>
+    setDraft((d) => ({
+      ...d,
+      queries: d.queries.map((q, i) => (i === index ? next : q)),
+    }))
 
   const commit = () => {
-    const snapshot = openSnapshotRef.current
-    const latest = latestConfigRef.current
-    const userChanges: Partial<ChartConfig> = {}
-    for (const key of Object.keys(draft) as Array<keyof ChartConfig>) {
-      if (draft[key] !== snapshot[key]) {
-        ;(userChanges as Record<string, unknown>)[key] = draft[key]
-      }
+    const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
+    if (badIdx >= 0) {
+      setSaveAttempted(true)
+      setActiveIndex(badIdx)
+      return
     }
-    onSave({ ...latest, ...userChanges })
+    onSave(draft)
     onClose()
   }
 
@@ -184,7 +238,12 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
           </Button>
         </Header>
 
-        <Body onSubmit={handleSubmit}>
+        <Body
+          onSubmit={(e) => {
+            e.preventDefault()
+            commit()
+          }}
+        >
           <Field>
             <FieldLabel>Name</FieldLabel>
             <Input
@@ -198,116 +257,107 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
           </Field>
 
           <Field>
-            <FieldLabel>Type</FieldLabel>
+            <FieldLabel>X-axis</FieldLabel>
             <Select
-              name="chart-type"
-              value={draft.type}
+              name="x-axis"
+              value={draft.xColumn ?? ""}
               onChange={(e) =>
-                setDraft((d) => ({ ...d, type: e.target.value as ChartType }))
+                setDraft((d) => ({ ...d, xColumn: e.target.value || null }))
               }
-              options={types.map((t) => ({ label: TYPE_LABELS[t], value: t }))}
+              options={xCandidates.map((c) => ({
+                label: c.name,
+                value: c.name,
+              }))}
             />
           </Field>
 
-          {draft.type !== "pie" && (
-            <Field>
-              <FieldLabel>X-axis</FieldLabel>
-              <Select
-                name="x-axis"
-                value={draft.xColumn ?? ""}
+          {hasRight && (
+            <FieldGroup>
+              <FieldLabel>Right axis</FieldLabel>
+              <Input
+                name="right-axis-name"
+                placeholder="Name (e.g. RSI)"
+                value={draft.rightAxis?.name ?? ""}
                 onChange={(e) =>
-                  setDraft((d) => ({ ...d, xColumn: e.target.value || null }))
+                  setDraft((d) => ({
+                    ...d,
+                    rightAxis: { ...d.rightAxis, name: e.target.value },
+                  }))
                 }
-                options={xCandidates.map((c) => ({
-                  label: c.name,
-                  value: c.name,
-                }))}
               />
-            </Field>
-          )}
-
-          {draft.type === "pie" && (
-            <Field>
-              <FieldLabel>Category</FieldLabel>
-              <Select
-                name="category"
-                value={draft.xColumn ?? ""}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, xColumn: e.target.value || null }))
-                }
-                options={[...groups.categorical, ...groups.temporal].map(
-                  (c) => ({ label: c.name, value: c.name }),
-                )}
-              />
-            </Field>
-          )}
-
-          {draft.type !== "candlestick" && (
-            <Field>
-              <FieldLabel>
-                {draft.type === "pie" ? "Value" : "Series"}
-                {yCandidates.length > 8 && (
-                  <Text color="gray2" size="xs">
-                    {" "}
-                    · {draft.yColumns.length}/{yCandidates.length}
-                  </Text>
-                )}
-              </FieldLabel>
-              {draft.type === "pie" ? (
-                <Select
-                  name="value"
-                  value={draft.yColumns[0] ?? ""}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, yColumns: [e.target.value] }))
-                  }
-                  options={yCandidates.map((c) => ({
-                    label: c.name,
-                    value: c.name,
-                  }))}
-                />
-              ) : (
-                <MultiSelect
-                  name="y-columns"
-                  value={draft.yColumns}
-                  onChange={(next) =>
-                    setDraft((d) => ({ ...d, yColumns: next }))
-                  }
-                  options={yCandidates.map((c) => ({
-                    label: c.name,
-                    value: c.name,
-                  }))}
-                  placeholder="None selected"
-                />
-              )}
-            </Field>
-          )}
-
-          {(draft.type === "line" ||
-            draft.type === "area" ||
-            draft.type === "bar" ||
-            draft.type === "stackedBar") &&
-            groups.categorical.length > 0 && (
-              <Field>
-                <FieldLabel>Partition by</FieldLabel>
-                <Select
-                  name="partition-by"
-                  value={draft.partitionByColumn ?? ""}
+              <Row>
+                <Input
+                  name="right-axis-min"
+                  type="number"
+                  placeholder="min"
+                  value={draft.rightAxis?.min ?? ""}
                   onChange={(e) =>
                     setDraft((d) => ({
                       ...d,
-                      partitionByColumn: e.target.value || undefined,
+                      rightAxis: {
+                        ...d.rightAxis,
+                        min: parseBound(e.target.value),
+                      },
                     }))
                   }
-                  options={[
-                    { label: "None", value: "" },
-                    ...groups.categorical.map((c) => ({
-                      label: c.name,
-                      value: c.name,
-                    })),
-                  ]}
                 />
-              </Field>
-            )}
+                <Input
+                  name="right-axis-max"
+                  type="number"
+                  placeholder="max"
+                  value={draft.rightAxis?.max ?? ""}
+                  onChange={(e) =>
+                    setDraft((d) => ({
+                      ...d,
+                      rightAxis: {
+                        ...d.rightAxis,
+                        max: parseBound(e.target.value),
+                      },
+                    }))
+                  }
+                />
+              </Row>
+            </FieldGroup>
+          )}
+
+          {tabs.length > 1 && (
+            <>
+              <Divider />
+              <FieldLabel>Queries</FieldLabel>
+              <TabStrip>
+                {tabs.map((t) => (
+                  <Tab
+                    key={t.index}
+                    type="button"
+                    active={t.index === activeIndex}
+                    onClick={() => setActiveIndex(t.index)}
+                    title={
+                      t.compatible
+                        ? t.query
+                        : `${t.query}\n\n(x-axis incompatible — excluded)`
+                    }
+                  >
+                    {t.label}
+                    {!t.compatible && (
+                      <IncompatibleIcon size={14} weight="fill" />
+                    )}
+                  </Tab>
+                ))}
+              </TabStrip>
+            </>
+          )}
+
+          {activeTab && query && (
+            <QueryControls
+              activeTab={activeTab}
+              query={query}
+              anchorLabel={anchorTab?.label ?? "Q1"}
+              isAnchorTab={isAnchorTab}
+              ohlcError={saveAttempted && candlestickMissingOhlc(query)}
+              onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
+              onSetQuery={(next) => setQuery(activeTab.index, next)}
+            />
+          )}
         </Body>
 
         <Footer>

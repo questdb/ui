@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo } from "react"
+import React, { useCallback, useEffect, useMemo, useRef } from "react"
 import styled from "styled-components"
 import {
   ResponsiveGridLayout,
   useContainerWidth,
+  type EventCallback,
   type Layout,
   type LayoutItem,
   verticalCompactor,
@@ -12,6 +13,7 @@ import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { useEditor } from "../../../providers/EditorProvider"
 import type { CellLayoutItem } from "../../../store/notebook"
+import { dropLegacyChartConfigs } from "../../../store/notebook"
 import { color } from "../../../utils"
 import {
   NotebookProvider,
@@ -165,6 +167,66 @@ const useScrollAddedCellIntoView = (cells: { id: string }[]) => {
   }, [cells])
 }
 
+const readClientY = (event: Event): number | null => {
+  if ("clientY" in event) return (event as MouseEvent).clientY
+  const touch =
+    (event as TouchEvent).touches?.[0] ??
+    (event as TouchEvent).changedTouches?.[0]
+  return touch ? touch.clientY : null
+}
+
+const EDGE_ZONE_PX = 64
+const MAX_SCROLL_SPEED_PX = 18
+
+const useGridDragAutoScroll = (containerRef: React.RefObject<HTMLElement>) => {
+  const pointerYRef = useRef<number | null>(null)
+  const rafRef = useRef<number | null>(null)
+
+  const stop = useCallback(() => {
+    pointerYRef.current = null
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }, [])
+
+  const tick = useCallback(() => {
+    const el = containerRef.current
+    const y = pointerYRef.current
+    if (!el || y === null) {
+      rafRef.current = null
+      return
+    }
+    const rect = el.getBoundingClientRect()
+    const distTop = y - rect.top
+    const distBottom = rect.bottom - y
+    let dy = 0
+    if (distTop < EDGE_ZONE_PX) {
+      dy = -MAX_SCROLL_SPEED_PX * (1 - Math.max(distTop, 0) / EDGE_ZONE_PX)
+    } else if (distBottom < EDGE_ZONE_PX) {
+      dy = MAX_SCROLL_SPEED_PX * (1 - Math.max(distBottom, 0) / EDGE_ZONE_PX)
+    }
+    if (dy !== 0) el.scrollBy(0, dy)
+    rafRef.current = requestAnimationFrame(tick)
+  }, [containerRef])
+
+  const onDragStart = useCallback<EventCallback>(
+    (_l, _o, _n, _p, event) => {
+      pointerYRef.current = readClientY(event)
+      if (rafRef.current === null) rafRef.current = requestAnimationFrame(tick)
+    },
+    [tick],
+  )
+
+  const onDrag = useCallback<EventCallback>((_l, _o, _n, _p, event) => {
+    pointerYRef.current = readClientY(event)
+  }, [])
+
+  useEffect(() => stop, [stop])
+
+  return { onDragStart, onDrag, stop }
+}
+
 const ListLayout: React.FC = () => {
   const { cells, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
@@ -207,6 +269,9 @@ const GridLayout: React.FC = () => {
   const { width: containerWidth, containerRef } = useContainerWidth({
     initialWidth: 800,
   })
+  const autoScroll = useGridDragAutoScroll(
+    containerRef as React.RefObject<HTMLElement>,
+  )
   useScrollAddedCellIntoView(cells)
 
   // Derive each cell's grid h from topHeight + bottomHeight + chrome.
@@ -260,6 +325,7 @@ const GridLayout: React.FC = () => {
   // Drag-stop = move (x/y change). Just persist positions.
   const handleDragStop = useCallback(
     (newLayout: Layout, ..._args: unknown[]) => {
+      autoScroll.stop()
       updateSettings({ layout: mapLayoutXYW(newLayout) })
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
@@ -268,7 +334,7 @@ const GridLayout: React.FC = () => {
         })
       }
     },
-    [mapLayoutXYW, updateSettings, activeBuffer.id],
+    [autoScroll, mapLayoutXYW, updateSettings, activeBuffer.id],
   )
 
   const handleResizeStop = useCallback(
@@ -394,6 +460,8 @@ const GridLayout: React.FC = () => {
         dragConfig={DRAG_CONFIG}
         resizeConfig={RESIZE_CONFIG}
         compactor={verticalCompactor}
+        onDragStart={autoScroll.onDragStart}
+        onDrag={autoScroll.onDrag}
         onDragStop={handleDragStop}
         onResizeStop={handleResizeStop}
         positionStrategy={absoluteStrategy}
@@ -471,7 +539,7 @@ export const Notebook: React.FC = () => {
 
   return (
     <NotebookProvider
-      initialState={activeBuffer.notebookViewState}
+      initialState={dropLegacyChartConfigs(activeBuffer.notebookViewState)}
       bufferId={activeBuffer.id}
     >
       <NotebookContent />

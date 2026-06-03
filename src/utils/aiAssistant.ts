@@ -38,6 +38,8 @@ import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes
 import {
   buildSnapshot,
   sanitizeForPromptContext,
+  toChartConfigWire,
+  type ChartConfigWire,
   type NotebookContextSnapshot,
 } from "./ai/notebookSnapshot"
 
@@ -84,7 +86,7 @@ export type NotebookCellDetails = {
   mode?: "run" | "draw"
   auto_refresh?: boolean
   is_chart_maximized?: boolean
-  chart_config?: ChartConfig
+  chart_config?: ChartConfigWire
   last_run_status?: "success" | "error" | "none" | "running"
   last_run_error?: string
 }
@@ -151,7 +153,7 @@ export interface ModelToolsClient {
   setCellChartConfig: (
     bufferId: number,
     cellId: string,
-    patch: Partial<ChartConfig> & { type: ChartConfig["type"] },
+    patch: Partial<ChartConfig>,
   ) => Promise<void>
   setCellAutoRefresh: (
     bufferId: number,
@@ -452,7 +454,8 @@ export function createModelToolsClient(
             out.auto_refresh = cell.autoRefresh
           if (typeof cell.isChartMaximized === "boolean")
             out.is_chart_maximized = cell.isChartMaximized
-          if (cell.chartConfig) out.chart_config = cell.chartConfig
+          if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
+            out.chart_config = toChartConfigWire(cell.chartConfig)
           return Promise.resolve(out)
         },
         abortSignal,
@@ -560,11 +563,10 @@ export function createModelToolsClient(
     setCellChartConfig(bufferId, cellId, patch) {
       return bound(bufferId, (ctrl) => {
         const cell = requireCell(ctrl, cellId)
-        // Merge into existing chartConfig so "change chart type" calls preserve xColumn/yColumns/etc.
+        // Merge into existing config so partial calls preserve xColumn/queries/etc.
         const base: ChartConfig = cell.chartConfig ?? {
-          type: patch.type,
           xColumn: null,
-          yColumns: [],
+          queries: [],
         }
         const next: ChartConfig = { ...base, ...patch }
         ctrl.setCellChartConfig(cellId, next)

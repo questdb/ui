@@ -38,7 +38,7 @@ const Bar = styled.div<{ $maximized: boolean }>`
       `
       : `
         top: 0;
-        left: 0;
+        right: 0;
         padding: 0.3rem 0.6rem;
         border: 1px solid ${theme.color.selection};
         border-radius: 0.6rem;

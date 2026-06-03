@@ -231,22 +231,26 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("surfaces chart summary without leaking series data", () => {
+  it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: true,
       isChartMaximized: false,
       chartConfig: {
         name: "Trades",
-        type: "line",
         xColumn: "ts",
-        yColumns: ["price", "volume"],
+        queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
     })
     const ws = makeWorkspace(new Map([[1, { cells: [cell] }]]))
     const snap = buildSnapshot(ws, 1)
     if (snap?.status === "ok") {
-      expect(snap.cells[0].chart).toEqual({ name: "Trades", type: "line" })
+      // Snake-case wire shape the model can copy straight back into apply_notebook_state.
+      expect(snap.cells[0].chart_config).toEqual({
+        x_column: "ts",
+        name: "Trades",
+        queries: [{ type: "line", y_columns: ["price", "volume"] }],
+      })
       expect(snap.cells[0].mode).toBe("draw")
       expect(snap.cells[0].auto_refresh).toBe(true)
     } else {
@@ -296,6 +300,21 @@ describe("formatSnapshot", () => {
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("- id: a")
     expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 4 }")
+  })
+
+  it("renders chart_config as one-line wire JSON the model can copy back", () => {
+    const cell = sql("a", "SELECT 1", {
+      mode: "draw",
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "line", yColumns: ["price"] }],
+      },
+    })
+    const ws = makeWorkspace(new Map([[1, { cells: [cell] }]]))
+    const out = formatSnapshot(buildSnapshot(ws, 1)!)
+    expect(out).toContain(
+      'chart_config: {"x_column":"ts","queries":[{"type":"line","y_columns":["price"]}]}',
+    )
   })
 
   it("emits a variables block when present, omits when empty", () => {

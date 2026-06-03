@@ -164,36 +164,44 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       {
         buffer_id: 1,
         cell_id: "c",
-        type: "line",
         x_column: "ts",
-        y_columns: ["price", "volume"],
-        partition_by_column: "symbol",
         name: "Trades",
+        queries: [
+          {
+            type: "line",
+            y_columns: ["price", "volume"],
+            partition_by_column: "symbol",
+          },
+        ],
       },
       client,
       noopStatus,
     )
     expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
-      type: "line",
       xColumn: "ts",
-      yColumns: ["price", "volume"],
-      partitionByColumn: "symbol",
       name: "Trades",
+      queries: [
+        {
+          type: "line",
+          yColumns: ["price", "volume"],
+          partitionByColumn: "symbol",
+        },
+      ],
     })
   })
 
-  it("set_cell_chart_config with only `type` does NOT send x/y defaults (no clobber)", async () => {
+  it("set_cell_chart_config with only `queries` does NOT send x/name defaults (no clobber)", async () => {
     const client = makeClient()
     await dispatchTool(
       "set_cell_chart_config",
-      { buffer_id: 1, cell_id: "c", type: "bar" },
+      { buffer_id: 1, cell_id: "c", queries: [{ type: "bar" }] },
       client,
       noopStatus,
     )
-    // Only `type` goes over the wire; client-side merge preserves the cell's
-    // existing xColumn/yColumns. Missing fields must not appear as defaults.
+    // Only `queries` goes over the wire; client-side merge preserves the cell's
+    // existing xColumn/name. Omitted top-level fields must not appear as defaults.
     expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
-      type: "bar",
+      queries: [{ type: "bar", yColumns: [] }],
     })
   })
 
@@ -204,43 +212,48 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       {
         buffer_id: 1,
         cell_id: "c",
-        type: "candlestick",
         x_column: "ts",
-        ohlc: { open: "o", high: "h", low: "l", close: "cl" },
+        queries: [
+          {
+            type: "candlestick",
+            ohlc: { open: "o", high: "h", low: "l", close: "cl" },
+          },
+        ],
       },
       client,
       noopStatus,
     )
     expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
-      type: "candlestick",
       xColumn: "ts",
-      ohlc: { open: "o", high: "h", low: "l", close: "cl" },
+      queries: [
+        {
+          type: "candlestick",
+          yColumns: [],
+          ohlc: { open: "o", high: "h", low: "l", close: "cl" },
+        },
+      ],
     })
   })
 
-  it("auto-derives ohlc when candlestick + y_columns of length 4 and no explicit ohlc", async () => {
-    // Rationale: buildEchartsOption dispatches candlestick on config.ohlc,
-    // not yColumns. Without this conversion the AI's "set candlestick with
-    // [open,high,low,close]" produces a non-candlestick chart.
+  it("rejects a candlestick query with no ohlc (no derive from y_columns)", async () => {
     const client = makeClient()
-    await dispatchTool(
+    const res = await dispatchTool(
       "set_cell_chart_config",
       {
         buffer_id: 1,
         cell_id: "c",
-        type: "candlestick",
         x_column: "ts",
-        y_columns: ["open", "high", "low", "close"],
+        queries: [
+          { type: "candlestick", y_columns: ["open", "high", "low", "close"] },
+        ],
       },
       client,
       noopStatus,
     )
-    expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
-      type: "candlestick",
-      xColumn: "ts",
-      yColumns: ["open", "high", "low", "close"],
-      ohlc: { open: "open", high: "high", low: "low", close: "close" },
-    })
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code: string }
+    expect(parsed.error_code).toBe("validation")
+    expect(client.setCellChartConfig).not.toHaveBeenCalled()
   })
 
   it("treats null fields on set_cell_chart_config as 'omit' (not overwrite)", async () => {
@@ -253,39 +266,126 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       {
         buffer_id: 1,
         cell_id: "c",
-        type: "line",
         x_column: null,
-        y_columns: null,
-        partition_by_column: null,
         name: null,
-        ohlc: null,
+        right_axis: null,
+        queries: [
+          {
+            type: "line",
+            y_columns: null,
+            partition_by_column: null,
+            axis: null,
+            enabled: null,
+            name: null,
+            ohlc: null,
+          },
+        ],
       },
       client,
       noopStatus,
     )
     expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
-      type: "line",
+      queries: [{ type: "line", yColumns: [] }],
     })
   })
 
-  it("does NOT auto-derive ohlc when y_columns has a different length", async () => {
+  it("rejects a candlestick query with no ohlc (y_columns of a non-ohlc length)", async () => {
     const client = makeClient()
+    const res = await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        queries: [{ type: "candlestick", y_columns: ["a", "b"] }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code: string }
+    expect(parsed.error_code).toBe("validation")
+    expect(client.setCellChartConfig).not.toHaveBeenCalled()
+  })
+
+  it("rejects a non-empty queries array whose length != the cell's statement count", async () => {
+    const client = makeClient({
+      getCellSql: () => "SELECT a FROM t; SELECT b FROM t",
+    })
+    const res = await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        // One config for a two-statement cell — would silently drop Q2.
+        queries: [{ type: "line", y_columns: ["a"] }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code: string }
+    expect(parsed.error_code).toBe("validation")
+    expect(client.setCellChartConfig).not.toHaveBeenCalled()
+  })
+
+  it("forwards a queries array that matches the cell's statement count", async () => {
+    const client = makeClient({
+      getCellSql: () => "SELECT a FROM t; SELECT b FROM t",
+    })
     await dispatchTool(
       "set_cell_chart_config",
       {
         buffer_id: 1,
         cell_id: "c",
-        type: "candlestick",
-        y_columns: ["a", "b"],
+        queries: [
+          { type: "line", y_columns: ["a"] },
+          { type: "bar", y_columns: ["b"] },
+        ],
       },
       client,
       noopStatus,
     )
-    const mockFn = client.setCellChartConfig as unknown as ReturnType<
-      typeof vi.fn
-    >
-    const call = mockFn.mock.calls[0][2] as Record<string, unknown>
-    expect(call).not.toHaveProperty("ohlc")
+    expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
+      queries: [
+        { type: "line", yColumns: ["a"] },
+        { type: "bar", yColumns: ["b"] },
+      ],
+    })
+  })
+
+  it("allows queries:[] (reset to inference) regardless of statement count", async () => {
+    const client = makeClient({
+      getCellSql: () => "SELECT a FROM t; SELECT b FROM t",
+    })
+    await dispatchTool(
+      "set_cell_chart_config",
+      { buffer_id: 1, cell_id: "c", queries: [] },
+      client,
+      noopStatus,
+    )
+    expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
+      queries: [],
+    })
+  })
+
+  it("preserves a null queries entry (infer this statement) instead of crashing", async () => {
+    const client = makeClient({
+      getCellSql: () => "SELECT a FROM t; SELECT b FROM t",
+    })
+    await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        // First statement left to inference (null), second configured explicitly.
+        queries: [null, { type: "bar", y_columns: ["b"] }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
+      queries: [null, { type: "bar", yColumns: ["b"] }],
+    })
   })
 
   it("apply_notebook_state translates snake_case wire shape to camelCase request", async () => {
@@ -310,12 +410,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             auto_refresh: true,
             is_chart_maximized: true,
             chart_config: {
-              type: "line",
               x_column: "ts",
-              y_columns: ["price"],
-              partition_by_column: "symbol",
               name: "Trades",
-              ohlc: null,
+              right_axis: null,
+              queries: [
+                {
+                  type: "line",
+                  y_columns: ["price"],
+                  partition_by_column: "symbol",
+                },
+              ],
             },
             grid: { x: 0, y: 0, w: 6, h: 6 },
           },
@@ -336,11 +440,15 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           autoRefresh: true,
           isChartMaximized: true,
           chartConfig: {
-            type: "line",
             xColumn: "ts",
-            yColumns: ["price"],
-            partitionByColumn: "symbol",
             name: "Trades",
+            queries: [
+              {
+                type: "line",
+                yColumns: ["price"],
+                partitionByColumn: "symbol",
+              },
+            ],
           },
           grid: { x: 0, y: 0, w: 6, h: 6 },
         },
@@ -530,7 +638,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(client.applyNotebookState).toHaveBeenCalled()
   })
 
-  it("apply_notebook_state auto-derives ohlc for candlestick when y_columns has 4 entries", async () => {
+  it("apply_notebook_state does not derive ohlc from y_columns for candlestick", async () => {
     const client = makeClient()
     await dispatchTool(
       "apply_notebook_state",
@@ -546,12 +654,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             auto_refresh: null,
             is_chart_maximized: null,
             chart_config: {
-              type: "candlestick",
               x_column: "ts",
-              y_columns: ["o", "h", "l", "c"],
-              partition_by_column: null,
               name: null,
-              ohlc: null,
+              right_axis: null,
+              queries: [
+                { type: "candlestick", y_columns: ["o", "h", "l", "c"] },
+              ],
             },
             grid: null,
           },
@@ -564,14 +672,11 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       typeof vi.fn
     >
     const req = mockFn.mock.calls[0][1] as {
-      cells: Array<{ chartConfig?: { ohlc?: unknown } }>
+      cells: Array<{
+        chartConfig?: { queries?: Array<Record<string, unknown>> }
+      }>
     }
-    expect(req.cells[0].chartConfig?.ohlc).toEqual({
-      open: "o",
-      high: "h",
-      low: "l",
-      close: "c",
-    })
+    expect(req.cells[0].chartConfig?.queries?.[0]).not.toHaveProperty("ohlc")
   })
 
   it("apply_notebook_state surfaces ApplyNotebookStateError as VALIDATION_ERROR", async () => {

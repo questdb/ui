@@ -28,10 +28,12 @@ const structuralKey = (option: EChartsOption): string => {
   const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
   const yAxis = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis
   const hasZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
+  const axisCount = Array.isArray(option.yAxis) ? "2y" : "1y"
   return [
     seriesTypes.join("|"),
     (xAxis as { type?: string } | undefined)?.type ?? "",
     (yAxis as { type?: string } | undefined)?.type ?? "",
+    axisCount,
     hasZoom ? "z" : "nz",
   ].join("::")
 }
@@ -62,6 +64,36 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       node.addEventListener("wheel", stop, { capture: true })
       return () => node.removeEventListener("wheel", stop, { capture: true })
     }, [isFocused])
+
+    useEffect(() => {
+      const wrapper = wrapperRef.current
+      if (!wrapper) return
+
+      const resizeTo = (width: number, height: number) => {
+        if (width === 0 || height === 0) return
+        reactEchartsRef.current?.getEchartsInstance()?.resize({ width, height })
+      }
+
+      const observer = new ResizeObserver((entries) => {
+        const box = entries[0]?.contentRect
+        if (box) resizeTo(box.width, box.height)
+      })
+      observer.observe(wrapper)
+
+      const handleVisibility = () => {
+        if (document.visibilityState !== "visible") return
+        requestAnimationFrame(() => {
+          const rect = wrapper.getBoundingClientRect()
+          resizeTo(rect.width, rect.height)
+        })
+      }
+      document.addEventListener("visibilitychange", handleVisibility)
+
+      return () => {
+        observer.disconnect()
+        document.removeEventListener("visibilitychange", handleVisibility)
+      }
+    }, [])
 
     useImperativeHandle(
       ref,
@@ -112,7 +144,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           theme={QUESTDB_THEME}
           notMerge={false}
           lazyUpdate
-          autoResize
+          autoResize={false}
           onEvents={events}
           style={{ height: "100%", width: "100%" }}
           opts={{ renderer: "canvas" }}

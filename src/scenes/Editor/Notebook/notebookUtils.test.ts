@@ -642,7 +642,7 @@ describe("buildAppliedCells", () => {
     ).toThrow(/no chart_config/)
   })
 
-  it("throws when candlestick has no ohlc and y_columns are not 4", () => {
+  it("throws when candlestick has no ohlc", () => {
     expect(() =>
       buildAppliedCells([], {
         cells: [
@@ -650,9 +650,8 @@ describe("buildAppliedCells", () => {
             value: "SELECT 1",
             mode: "draw",
             chartConfig: {
-              type: "candlestick",
               xColumn: "ts",
-              yColumns: ["a", "b"],
+              queries: [{ type: "candlestick", yColumns: ["a", "b"] }],
             },
           },
         ],
@@ -660,26 +659,74 @@ describe("buildAppliedCells", () => {
     ).toThrow(/ohlc/)
   })
 
-  it("auto-derives ohlc from 4 yColumns for candlestick", () => {
+  it("does not derive ohlc from 4 yColumns — candlestick still requires explicit ohlc", () => {
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [
+          {
+            value: "SELECT 1",
+            mode: "draw",
+            chartConfig: {
+              xColumn: "ts",
+              queries: [
+                { type: "candlestick", yColumns: ["o", "h", "l", "c"] },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toThrow(/ohlc/)
+  })
+
+  it("throws when a sent chart_config has no queries (null or empty)", () => {
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [
+          {
+            value: "SELECT 1",
+            mode: "draw",
+            chartConfig: { xColumn: "ts", queries: [] },
+          },
+        ],
+      }),
+    ).toThrow(/no queries/)
+  })
+
+  it("throws when chart queries count != the cell's ;-split statement count", () => {
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [
+          {
+            value: "SELECT 1; SELECT 2",
+            mode: "draw",
+            chartConfig: {
+              xColumn: "ts",
+              // One config for a two-statement cell — would silently drop Q2.
+              queries: [{ type: "line", yColumns: ["v"] }],
+            },
+          },
+        ],
+      }),
+    ).toThrow(/2 ;-split statements/)
+  })
+
+  it("accepts chart queries that match the ;-split statement count", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
-          value: "SELECT 1",
+          value: "SELECT 1; SELECT 2",
           mode: "draw",
           chartConfig: {
-            type: "candlestick",
             xColumn: "ts",
-            yColumns: ["o", "h", "l", "c"],
+            queries: [
+              { type: "line", yColumns: ["a"] },
+              { type: "bar", yColumns: ["b"] },
+            ],
           },
         },
       ],
     })
-    expect(nextCells[0].chartConfig?.ohlc).toEqual({
-      open: "o",
-      high: "h",
-      low: "l",
-      close: "c",
-    })
+    expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
   it("defaults isChartMaximized and autoRefresh to true on new draw cells", () => {
@@ -688,12 +735,61 @@ describe("buildAppliedCells", () => {
         {
           value: "SELECT 1",
           mode: "draw",
-          chartConfig: { type: "line", xColumn: "ts", yColumns: ["v"] },
+          chartConfig: {
+            xColumn: "ts",
+            queries: [{ type: "line", yColumns: ["v"] }],
+          },
         },
       ],
     })
     expect(nextCells[0].autoRefresh).toBe(true)
     expect(nextCells[0].isChartMaximized).toBe(true)
+  })
+
+  it("apply is a PUT: mode='draw' with no chart_config throws even when the existing cell had one (no merge)", () => {
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT 1",
+        mode: "draw",
+        chartConfig: {
+          xColumn: "ts",
+          queries: [{ type: "line", yColumns: ["v"] }],
+        },
+      },
+    ]
+    // Re-send as draw but omit chart_config. The old `?? existing` merge would
+    // have silently inherited the saved chart; under PUT this must fail.
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", value: "SELECT 1", mode: "draw" }],
+      }),
+    ).toThrow(/no chart_config/)
+  })
+
+  it("apply is a PUT: omitted fields on an existing cell are cleared, not inherited", () => {
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT 1",
+        mode: "draw",
+        autoRefresh: true,
+        isChartMaximized: true,
+        chartConfig: {
+          xColumn: "ts",
+          queries: [{ type: "line", yColumns: ["v"] }],
+        },
+      },
+    ]
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "SELECT 1" }], // bare cell — everything omitted
+    })
+    expect(nextCells[0].mode).toBeUndefined()
+    expect(nextCells[0].chartConfig).toBeUndefined()
+    expect(nextCells[0].autoRefresh).toBeUndefined()
+    expect(nextCells[0].isChartMaximized).toBeUndefined()
   })
 
   it("refuses an empty cells array", () => {

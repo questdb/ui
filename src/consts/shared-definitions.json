@@ -404,7 +404,7 @@
     "name": "set_cell_chart_config",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Configure the chart for a draw-mode cell. `type` is one of line/area/bar/stackedBar/scatter/pie/candlestick. Omitted fields preserve the cell's current values (this is a patch, not a replace). For `candlestick`, supply `ohlc: { open, high, low, close }` with the four column names — or pass `y_columns` of exactly [open, high, low, close] in that order and it will be converted to ohlc automatically. MULTI-QUERY CHARTS: when the cell value contains multiple SELECT statements separated by `;`, the chart treats the FIRST query as the anchor (its timestamp column is the x-axis, its numeric columns are series) and subsequent queries contribute their numeric columns as additional series merged on the time axis. `x_column` should reference an anchor column; `y_columns` may include numeric columns from any query. Series names default to the column names; ensure your queries alias columns distinctly when overlaying similar metrics.",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`name`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -415,68 +415,92 @@
         "cell_id": {
           "type": "string"
         },
-        "type": {
-          "type": "string",
-          "enum": [
-            "line",
-            "area",
-            "bar",
-            "stackedBar",
-            "scatter",
-            "pie",
-            "candlestick"
-          ]
+        "x_column": {
+          "type": ["string", "null"],
+          "description": "Shared x-axis column (the first query's). Null preserves."
         },
         "name": {
           "type": ["string", "null"],
-          "description": "Chart title. Null preserves the current name (patch semantics)."
+          "description": "Chart title. Null preserves."
         },
-        "x_column": {
-          "type": ["string", "null"],
-          "description": "X-axis column; null preserves the current value."
-        },
-        "y_columns": {
+        "queries": {
           "type": ["array", "null"],
+          "description": "One config per `;`-split query, index-aligned. Send the FULL array — one entry per statement, never a partial subset: a non-null array REPLACES all per-query configs, so any omitted statement loses its config. A non-empty array whose length ≠ the cell's `;`-split statement count is REJECTED. Null (the whole array) preserves the current config; `[]` resets every statement to inference; a `null` entry infers just that statement.",
           "items": {
-            "type": "string"
-          },
-          "description": "Y-axis columns; null preserves the current value."
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "line",
+                  "area",
+                  "stepLine",
+                  "stepArea",
+                  "bar",
+                  "stackedBar",
+                  "scatter",
+                  "pie",
+                  "candlestick"
+                ]
+              },
+              "y_columns": {
+                "type": ["array", "null"],
+                "items": { "type": "string" },
+                "description": "Columns to plot from THIS query; null = all numeric. Not used for candlestick — set `ohlc` instead."
+              },
+              "ohlc": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "description": "Candlestick OHLC mapping. All four required when used; null otherwise.",
+                "properties": {
+                  "open": { "type": "string" },
+                  "high": { "type": "string" },
+                  "low": { "type": "string" },
+                  "close": { "type": "string" }
+                },
+                "required": ["open", "high", "low", "close"]
+              },
+              "partition_by_column": {
+                "type": ["string", "null"],
+                "description": "Categorical column to partition this query's series by; null = none."
+              },
+              "axis": {
+                "type": ["string", "null"],
+                "enum": ["left", "right", null],
+                "description": "'right' = shared secondary axis for a different unit/scale. null = left."
+              },
+              "enabled": {
+                "type": ["boolean", "null"],
+                "description": "false opts this query out of the chart. null = included. The first query is always included."
+              },
+              "name": {
+                "type": ["string", "null"],
+                "description": "Legend label for this query."
+              }
+            },
+            "required": ["type"]
+          }
         },
-        "partition_by_column": {
-          "type": ["string", "null"],
-          "description": "Categorical column to partition series by; null preserves current."
-        },
-        "ohlc": {
+        "right_axis": {
           "type": ["object", "null"],
-          "description": "Column mapping for candlestick charts. All four fields required when used; null preserves current.",
           "additionalProperties": false,
+          "description": "Shared right y-axis; meaningful when some query has axis='right'. Null preserves.",
           "properties": {
-            "open": {
-              "type": "string"
+            "name": { "type": ["string", "null"] },
+            "min": {
+              "type": ["number", "null"],
+              "description": "Pin axis min (e.g. 0). Null = autoscale."
             },
-            "high": {
-              "type": "string"
-            },
-            "low": {
-              "type": "string"
-            },
-            "close": {
-              "type": "string"
+            "max": {
+              "type": ["number", "null"],
+              "description": "Pin axis max (e.g. 100). Null = autoscale."
             }
           },
-          "required": ["open", "high", "low", "close"]
+          "required": ["name", "min", "max"]
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "type",
-        "name",
-        "x_column",
-        "y_columns",
-        "partition_by_column",
-        "ohlc"
-      ]
+      "required": ["buffer_id", "cell_id"]
     }
   },
   {
@@ -592,63 +616,79 @@
               "chart_config": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Chart configuration; required for new draw-mode cells. Null preserves existing.",
+                "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale).",
                 "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "line",
-                      "area",
-                      "bar",
-                      "stackedBar",
-                      "scatter",
-                      "pie",
-                      "candlestick"
-                    ]
-                  },
                   "x_column": {
-                    "type": ["string", "null"]
-                  },
-                  "y_columns": {
-                    "type": ["array", "null"],
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "partition_by_column": {
                     "type": ["string", "null"]
                   },
                   "name": {
                     "type": ["string", "null"]
                   },
-                  "ohlc": {
+                  "queries": {
+                    "type": ["array", "null"],
+                    "description": "One config per `;`-split query, index-aligned — send the FULL array, exactly one entry per statement (its length must equal the cell's `;`-split statement count, else REJECTED). These entries are the chart's per-query configs in full (apply is a PUT); a `null` entry infers that statement. To keep a chart unchanged, re-send its full config from <notebook_context>.",
+                    "items": {
+                      "type": ["object", "null"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "line",
+                            "area",
+                            "stepLine",
+                            "stepArea",
+                            "bar",
+                            "stackedBar",
+                            "scatter",
+                            "pie",
+                            "candlestick"
+                          ]
+                        },
+                        "y_columns": {
+                          "type": ["array", "null"],
+                          "items": { "type": "string" }
+                        },
+                        "ohlc": {
+                          "type": ["object", "null"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "open": { "type": "string" },
+                            "high": { "type": "string" },
+                            "low": { "type": "string" },
+                            "close": { "type": "string" }
+                          },
+                          "required": ["open", "high", "low", "close"]
+                        },
+                        "partition_by_column": {
+                          "type": ["string", "null"]
+                        },
+                        "axis": {
+                          "type": ["string", "null"],
+                          "enum": ["left", "right", null]
+                        },
+                        "enabled": {
+                          "type": ["boolean", "null"]
+                        },
+                        "name": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["type"]
+                    }
+                  },
+                  "right_axis": {
                     "type": ["object", "null"],
                     "additionalProperties": false,
                     "properties": {
-                      "open": {
-                        "type": "string"
-                      },
-                      "high": {
-                        "type": "string"
-                      },
-                      "low": {
-                        "type": "string"
-                      },
-                      "close": {
-                        "type": "string"
-                      }
+                      "name": { "type": ["string", "null"] },
+                      "min": { "type": ["number", "null"] },
+                      "max": { "type": ["number", "null"] }
                     },
-                    "required": ["open", "high", "low", "close"]
+                    "required": ["name", "min", "max"]
                   }
                 },
-                "required": [
-                  "type",
-                  "x_column",
-                  "y_columns",
-                  "partition_by_column",
-                  "name",
-                  "ohlc"
-                ]
+                "required": ["queries"]
               },
               "grid": {
                 "type": ["object", "null"],
