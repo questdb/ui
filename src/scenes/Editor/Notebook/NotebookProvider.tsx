@@ -451,9 +451,8 @@ export const NotebookProvider: React.FC<{
         liveActionsRef.current.setCellLayout(cellId, pos),
       setCellMode: (cellId, mode) => {
         liveActionsRef.current.setCellMode(cellId, mode)
-        // Match Cell.tsx user-click — entering Draw auto-maximizes.
         if (mode === "draw") {
-          storeRef.current.setCellChartMaximized(cellId, true)
+          storeRef.current.setCellChartMaximized(cellId, false)
         }
       },
       setCellChartConfig: (cellId, cfg) =>

@@ -268,7 +268,7 @@ const CellInner: React.FC<Props> = ({
         return
       }
       setCellMode(cell.id, "draw")
-      setCellChartMaximized(cell.id, true)
+      setCellChartMaximized(cell.id, false)
       if (bufferIdForEvents !== undefined) {
         emitUserAction({
           kind: "user_changed_cell_mode",
