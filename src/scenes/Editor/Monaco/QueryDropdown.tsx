@@ -1,6 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { Information } from "@styled-icons/remix-line"
+import { LinkSimpleIcon } from "@phosphor-icons/react"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
 import { AISparkle } from "../../../components/AISparkle"
@@ -36,6 +37,7 @@ type QueryDropdownProps = {
   isAIDropdownRef: React.MutableRefObject<boolean>
   onRunQuery: (query: Request) => void
   onExplainQuery: (query: Request) => void
+  onCopyQueryLink: (query: Request) => void
   onAskAIRef: React.MutableRefObject<(query?: Request) => void>
 }
 
@@ -48,6 +50,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
   isAIDropdownRef,
   onRunQuery,
   onExplainQuery,
+  onCopyQueryLink,
   onAskAIRef,
 }) => {
   const handleOpenChange = (isOpen: boolean) => {
@@ -127,6 +130,17 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                           </IconWrapper>
                           Get query plan for {extractQueryTextToRun(query)}
                         </DropdownMenu.Item>,
+                        <DropdownMenu.Item
+                          // eslint-disable-next-line react/no-array-index-key
+                          key={`copy-link-${query.query}-${index}`}
+                          onClick={() => onCopyQueryLink(query)}
+                          data-hook={`dropdown-item-copy-query-link-${index}`}
+                        >
+                          <IconWrapper>
+                            <LinkSimpleIcon size={18} />
+                          </IconWrapper>
+                          Copy link to {extractQueryTextToRun(query)}
+                        </DropdownMenu.Item>,
                       )
                     }
 
@@ -155,6 +169,16 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     </IconWrapper>
                     Get query plan for{" "}
                     {extractQueryTextToRun(queriesRef.current[0])}
+                  </DropdownMenu.Item>,
+                  <DropdownMenu.Item
+                    key="copy-link"
+                    onClick={() => onCopyQueryLink(queriesRef.current[0])}
+                    data-hook="dropdown-item-copy-query-link"
+                  >
+                    <IconWrapper>
+                      <LinkSimpleIcon size={18} />
+                    </IconWrapper>
+                    Copy link to {extractQueryTextToRun(queriesRef.current[0])}
                   </DropdownMenu.Item>,
                 ]}
         </DropdownMenu.Content>

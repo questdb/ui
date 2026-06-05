@@ -1186,4 +1186,63 @@ describe("TableDetailsDrawer", () => {
       cy.dropTable(TEST_TABLE_2)
     })
   })
+
+  describe("table with STORAGE POLICY", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /SHOW\s+CREATE/i },
+        },
+        (req) => {
+          req.continue((res) => {
+            const row = res.body?.dataset?.[0]
+            if (row && typeof row[0] === "string") {
+              row[0] = row[0].replace(
+                /(\bPARTITION\s+BY\s+\w+)/i,
+                "$1 STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 YEARS)",
+              )
+            }
+          })
+        },
+      ).as("showCreate")
+
+      cy.loadConsoleWithAuth()
+      cy.expandTables()
+    })
+
+    it("hides TTL and renders the storage policy section", () => {
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-storage-policy-section")
+        .should("be.visible")
+        .within(() => {
+          cy.contains("To Parquet").should("be.visible")
+          cy.contains("3 Days").should("be.visible")
+          cy.contains("Drop Native").should("be.visible")
+          cy.contains("10 Days").should("be.visible")
+          cy.contains("Drop Local").should("be.visible")
+          cy.contains("1 Year").should("be.visible")
+        })
+
+      cy.getByDataHook("table-details-details-section")
+        .should("be.visible")
+        .within(() => {
+          cy.contains("TTL").should("not.exist")
+        })
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
 })

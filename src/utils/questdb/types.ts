@@ -133,31 +133,6 @@ export type QueryResult<T extends Record<string, unknown>> =
   | DdlResult
   | NoticeResult
 
-type QueryType =
-  | "INSERT"
-  | "TRUNCATE"
-  | "ALTER TABLE"
-  | "SET"
-  | "DROP"
-  | "COPY"
-  | "CREATE TABLE"
-  | "INSERT AS SELECT"
-  | "COPY REMOTE"
-  | "RENAME TABLE"
-  | "REPAIR"
-  | "BACKUP TABLE"
-  | "UPDATE"
-  | "VACUUM"
-  | "BEGIN"
-  | "COMMIT"
-  | "ROLLBACK"
-  | "CREATE AS SELECT"
-  | "CHECKPOINT CREATE"
-  | "CHECKPOINT RELEASE"
-  | "DEALLOCATE"
-  | "EXPLAIN"
-  | "TABLE RESUME"
-
 export type ValidateQuerySuccessResult =
   | {
       query: string
@@ -170,7 +145,7 @@ export type ValidateQuerySuccessResult =
       timestamp: number
     }
   | {
-      queryType: QueryType
+      queryType: string
     }
 
 export type ValidateQueryErrorResult = {

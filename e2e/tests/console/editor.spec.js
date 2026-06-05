@@ -569,17 +569,24 @@ describe("&query URL param", () => {
     cy.loadConsoleWithAuth()
   })
 
-  it("should append and select single line query", () => {
+  it("should open single line query in a new tab and select it", () => {
     cy.typeQueryDirectly("select x from long_sequence(1)") // running query caches it, it's available after refresh
     cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1 from long_sequence(1)")
     cy.visit(`${baseUrl}/?query=${query}&executeQuery=true`)
-    cy.getEditorContent().should("be.visible")
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should(
+      "have.value",
+      "select x+1 from long_sequence(1)",
+    )
     cy.getGridRow(0).should("contain", "2")
     cy.getSelectedLines().should("have.length", 1)
   })
 
-  it("should append and select multiline query", () => {
+  it("should open multiline query in a new tab and select it", () => {
     cy.typeQueryDirectly(
       `select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c\n${"{upArrow}".repeat(
         5,
@@ -588,32 +595,40 @@ describe("&query URL param", () => {
     cy.getCursorQueryGlyph().should("be.visible")
     const query = encodeURIComponent("select x+1\nfrom\nlong_sequence(1);")
     cy.visit(`${baseUrl}?query=${query}&executeQuery=true`)
-    cy.getEditorContent().should("be.visible")
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
     cy.getGridRow(0).should("contain", "2")
     cy.getSelectedLines().should("have.length", 4)
   })
 
-  it("should not append query if it already exists in editor", () => {
+  it("should not open a new tab if the query already exists in the editor", () => {
     const query = "select x\nfrom long_sequence(1);\n\n-- a\n-- b\n-- c"
     cy.typeQueryDirectly(query)
     cy.clickRunIconInLine(1)
     cy.wait(1000)
     cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
     cy.getEditorContent().should("be.visible")
+    cy.getEditorTabs().should("have.length", 1)
     cy.getEditorContent().should("have.value", query)
   })
 
-  it("should append query and scroll to it", () => {
+  it("should open the query in a new tab and reveal it", () => {
     cy.typeQueryDirectly("select x from long_sequence(1);")
     cy.getCursorQueryGlyph().should("be.visible")
     cy.typeQuery("\n".repeat(20))
 
-    const appendedQuery = "-- hello world"
-    cy.visit(`${baseUrl}?query=${encodeURIComponent(appendedQuery)}`)
-    cy.getEditorContent().should("be.visible")
+    const sharedQuery = "-- hello world"
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(sharedQuery)}`)
+    cy.getEditor().should("be.visible")
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should("have.value", sharedQuery)
     cy.getVisibleLines()
       .invoke("text")
-      .should("match", /hello.world$/) // not matching on appendedQuery, because query should be selected for which Monaco adds special chars between words
+      .should("match", /hello.world$/) // not matching on sharedQuery, because query should be selected for which Monaco adds special chars between words
   })
 
   it("should open a new editor tab when the last active buffer is a metrics buffer", () => {
@@ -631,9 +646,210 @@ describe("&query URL param", () => {
     cy.getEditor().should("be.visible")
     cy.getEditorTabs().should("have.length", 3)
     cy.getEditorTabByTitle("Metrics 1").should("be.visible")
-    cy.getEditorTabByTitle("Query")
+    cy.getEditorTabByTitle("Shared Query")
       .should("be.visible")
       .should("have.attr", "active")
+  })
+
+  it("should lock editor and show confirmation dialog for DML mixed with SELECT, then run on confirm", () => {
+    // Given
+    const tableName = "share_link_a1"
+    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.execQuery(`INSERT INTO ${tableName} VALUES (1)`)
+    cy.intercept("/api/v1/sql/validate*", {
+      delay: 1500,
+      body: { queryType: "UPDATE" },
+    }).as("validate")
+    const query = `UPDATE ${tableName} SET val=999; SELECT val FROM ${tableName}`
+
+    // When
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+
+    // Then
+    cy.getByDataHook("editor-tabs-disabled").should("be.visible")
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getRawOptions().readOnly).to.eq(
+        true,
+      )
+    })
+    cy.getByDataHook("success-notification").should("not.exist")
+
+    // When
+    cy.getByDataHook("share-link-confirmation-dialog").should("be.visible")
+
+    // Then
+    cy.getByDataHook("editor-tabs").should("be.visible")
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getRawOptions().readOnly).to.eq(
+        false,
+      )
+    })
+
+    // When
+    cy.getByDataHook("share-link-confirmation-confirm").click()
+
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+2 successful\s+queries/,
+      )
+    cy.execQuery(`DROP TABLE ${tableName}`)
+  })
+
+  it("should lock editor and show confirmation dialog for DDL mixed with SELECT, then NOT run on cancel", () => {
+    // Given
+    const tableName = "share_link_a2"
+    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.intercept("/api/v1/sql/validate*", {
+      delay: 1500,
+      body: { queryType: "DROP" },
+    }).as("validate")
+    const query = `DROP TABLE ${tableName}; SELECT 1`
+
+    // When
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+
+    // Then
+    cy.getByDataHook("editor-tabs-disabled").should("be.visible")
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getRawOptions().readOnly).to.eq(
+        true,
+      )
+    })
+
+    // When
+    cy.getByDataHook("share-link-confirmation-dialog").should("be.visible")
+
+    // Then
+    cy.getByDataHook("editor-tabs").should("be.visible")
+    cy.window().then((win) => {
+      expect(win.monaco.editor.getEditors()[0].getRawOptions().readOnly).to.eq(
+        false,
+      )
+    })
+
+    // When
+    cy.getByDataHook("share-link-confirmation-cancel").click()
+
+    // Then
+    cy.getByDataHook("share-link-confirmation-dialog").should("not.exist")
+    cy.getByDataHook("success-notification").should("not.exist")
+    cy.execQuery(`SELECT * FROM ${tableName}`)
+    cy.execQuery(`DROP TABLE ${tableName}`)
+  })
+
+  it("should auto-run multiple SELECT statements without confirmation", () => {
+    // Given
+    const query = "SELECT 1; SELECT 2"
+
+    // When
+    cy.visit(`${baseUrl}?query=${encodeURIComponent(query)}&executeQuery=true`)
+
+    // Then
+    cy.getByDataHook("success-notification")
+      .invoke("text")
+      .should(
+        "match",
+        /Running completed in \d+ms with\s+2 successful\s+queries/,
+      )
+    cy.getByDataHook("share-link-confirmation-dialog").should("not.exist")
+  })
+
+  it("should drop standalone executeQuery param and not auto-run buffer contents", () => {
+    // Given
+    const tableName = "share_link_c11"
+    cy.execQuery(`DROP TABLE IF EXISTS ${tableName}`)
+    cy.execQuery(`CREATE TABLE ${tableName} (val INT)`)
+    cy.getEditorContent().should("be.visible")
+    cy.typeQueryDirectly(`DROP TABLE ${tableName}`)
+    cy.getCursorQueryGlyph().should("be.visible")
+    cy.wait(1000)
+
+    // When
+    cy.visit(`${baseUrl}?executeQuery=true`)
+
+    // Then
+    cy.getEditor().should("be.visible")
+    cy.location("search").should("not.contain", "executeQuery")
+    cy.getByDataHook("share-link-confirmation-dialog").should("not.exist")
+    cy.getByDataHook("success-notification").should("not.exist")
+    cy.execQuery(`SELECT * FROM ${tableName}`)
+    cy.execQuery(`DROP TABLE ${tableName}`)
+  })
+
+  it("should copy share-link URL from glyph dropdown, Alt+L, and Alt+Shift+L", () => {
+    if (!Cypress.isBrowser("electron")) return
+
+    // Given
+    cy.getEditorContent().should("be.visible")
+    cy.typeQueryDirectly("SELECT 1;\nSELECT 2;\nSELECT 3;")
+    cy.getCursorQueryGlyph().should("be.visible")
+    const expectedUrl = (sql) => {
+      const params = new URLSearchParams()
+      params.set("query", sql)
+      params.set("executeQuery", "true")
+      return `${baseUrl}/?${params.toString()}`
+    }
+
+    // When — glyph dropdown copies single full query
+    cy.openRunDropdownInLine(1)
+    cy.getByDataHook("dropdown-item-copy-query-link").click()
+
+    // Then
+    cy.window()
+      .its("navigator.clipboard")
+      .then((clip) => clip.readText())
+      .should("eq", expectedUrl("SELECT 1;"))
+
+    // When — glyph dropdown copies a selection inside a single query
+    cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 7 })
+    cy.getByDataHook("button-run-query").should("contain", "Run selected query")
+    cy.openRunDropdownInLine(2)
+    cy.getByDataHook("dropdown-item-copy-query-link").click()
+
+    // Then
+    cy.window()
+      .its("navigator.clipboard")
+      .then((clip) => clip.readText())
+      .should("eq", expectedUrl("SELECT;"))
+
+    // When — Alt+L copies single query at cursor
+    cy.clickLine(3)
+    cy.getEditor().realClick()
+    cy.realPress(["Alt", "L"])
+
+    // Then
+    cy.window()
+      .its("navigator.clipboard")
+      .then((clip) => clip.readText())
+      .should("eq", expectedUrl("SELECT 3;"))
+
+    // When — Alt+L copies selection spanning multiple queries
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 2, column: 9 })
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run 2 selected queries",
+    )
+    cy.realPress(["Alt", "L"])
+
+    // Then
+    cy.window()
+      .its("navigator.clipboard")
+      .then((clip) => clip.readText())
+      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;"))
+
+    // When — Alt+Shift+L copies all queries in tab
+    cy.realPress(["Alt", "Shift", "L"])
+
+    // Then
+    cy.window()
+      .its("navigator.clipboard")
+      .then((clip) => clip.readText())
+      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;\n\nSELECT 3;"))
   })
 })
 
@@ -877,6 +1093,30 @@ describe("errors", () => {
       "contain",
       "Invalid JSON response from the server",
     )
+  })
+
+  it("JIT-validates queries after content-change (1000ms) and cursor-change (500ms) debounces", () => {
+    cy.intercept("/api/v1/sql/validate*").as("validate")
+
+    cy.typeQuery("selec 1;\n\n   selec 2")
+
+    cy.wait(750)
+    cy.getErrorMarker().should("not.exist")
+
+    cy.typeQuery("34")
+    cy.wait(750)
+    cy.getErrorMarker().should("not.exist")
+
+    // Let the debounce expire and the validate request return
+    cy.wait("@validate")
+    cy.matchErrorMarkerPosition({ left: 24, width: 40 })
+
+    cy.typeQuery(";\n\nselect * from tables()")
+    cy.wait(2000)
+    cy.getErrorMarker().should("not.exist")
+
+    cy.clickLine(3)
+    cy.matchErrorMarkerPosition({ left: 24, width: 40 })
   })
 })
 

@@ -642,7 +642,7 @@ export const Toolbar = () => {
         )}
         {hasUIAuth(settings) && (
           <Button
-            onClick={() => logout()}
+            onClick={() => logout({ reload: true, clearSSOSession: true })}
             prefixIcon={<LogoutCircle size="18px" />}
             skin="secondary"
             data-hook="button-logout"

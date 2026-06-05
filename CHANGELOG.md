@@ -17,6 +17,16 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 1.2.3 - 2026.06.03
+### Added
+- share links to the queries using editor dropdown and shortcuts [#565](https://github.com/questdb/ui/pull/565)
+- support storage policy in table details and create matview quick action [#563](https://github.com/questdb/ui/pull/563)
+
+### Fixed
+- stale user and data issue on SSO logout [#564](https://github.com/questdb/ui/pull/564)
+- increase query validation debounce time [#562](https://github.com/questdb/ui/pull/562)
+
+
 ## 1.2.2 - 2026.05.07
 ### Added
 - add create materialized view table menu action [#557](https://github.com/questdb/ui/pull/557)
