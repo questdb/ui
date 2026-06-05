@@ -1221,7 +1221,7 @@ export const cancelAllValidationRequests = () => {
 export const clearValidationMarkers = (
   monaco: Monaco | null,
   editor: IStandaloneCodeEditor | null,
-  bufferId?: number,
+  bufferId?: string | number,
 ) => {
   const model = editor?.getModel()
   if (model && monaco) {
@@ -1238,7 +1238,7 @@ export const clearValidationMarkers = (
 export const applyValidationMarkers = (
   monaco: Monaco,
   editor: IStandaloneCodeEditor,
-  bufferId: number,
+  bufferId: string | number,
 ) => {
   const model = editor.getModel()
   if (!model) return
@@ -1257,7 +1257,7 @@ export const applyValidationMarkers = (
 export const validateQueryJIT = (
   monaco: Monaco,
   editor: IStandaloneCodeEditor,
-  bufferId: number,
+  bufferId: string | number,
   getBufferExecutions: () => Record<QueryKey, unknown>,
   validateQuery: (
     query: string,

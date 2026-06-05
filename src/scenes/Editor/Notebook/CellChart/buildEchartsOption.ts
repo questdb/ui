@@ -221,6 +221,8 @@ const buildCartesianSeries = (
   return out
 }
 
+const EMPTY_CANDLE: (number | string)[] = ["-", "-", "-", "-"]
+
 const buildCandlestickSeries = (
   q: ResolvedQuery,
   ctx: SeriesContext,
@@ -241,21 +243,24 @@ const buildCandlestickSeries = (
   ) {
     return []
   }
-  const candle = (row: Dataset[number]): number[] => [
-    toNumberOrNull(row[oIdx]) ?? 0,
-    toNumberOrNull(row[cIdx]) ?? 0,
-    toNumberOrNull(row[lIdx]) ?? 0,
-    toNumberOrNull(row[hIdx]) ?? 0,
-  ]
+  const candle = (row: Dataset[number]): (number | string)[] => {
+    const o = toNumberOrNull(row[oIdx])
+    const c = toNumberOrNull(row[cIdx])
+    const l = toNumberOrNull(row[lIdx])
+    const h = toNumberOrNull(row[hIdx])
+    if (o === null || c === null || l === null || h === null)
+      return EMPTY_CANDLE
+    return [o, c, l, h]
+  }
   let data: unknown[]
   if (ctx.xMode === "time") {
     data = q.dataset.map((row) => [row[xIdx], ...candle(row)])
   } else if (ctx.xMode === "value") {
     data = q.dataset.map((row) => [toNumberOrNull(row[xIdx]), ...candle(row)])
   } else if (ctx.categoryUnion) {
-    const m = new Map<string, number[]>()
+    const m = new Map<string, (number | string)[]>()
     for (const row of q.dataset) m.set(toCategoryLabel(row[xIdx]), candle(row))
-    data = ctx.categoryUnion.map((lbl) => m.get(lbl) ?? [0, 0, 0, 0])
+    data = ctx.categoryUnion.map((lbl) => m.get(lbl) ?? EMPTY_CANDLE)
   } else {
     data = q.dataset.map((row) => candle(row))
   }
@@ -326,8 +331,8 @@ const buildScatterChartOption = (
         type: "scatter" as const,
         large: true,
         data: q.dataset.map((row) => [
-          toNumberOrNull(row[xIdx]) ?? 0,
-          toNumberOrNull(row[yIdx]) ?? 0,
+          toNumberOrNull(row[xIdx]),
+          toNumberOrNull(row[yIdx]),
         ]),
       }
     })

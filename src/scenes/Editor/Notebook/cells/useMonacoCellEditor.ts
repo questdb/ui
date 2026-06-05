@@ -4,6 +4,7 @@ import type { editor } from "monaco-editor"
 import type * as QuestDB from "../../../../utils/questdb"
 import {
   clearModelMarkers,
+  clearValidationMarkers,
   pinMonacoContextMenu,
   validateQueryJIT,
 } from "../../Monaco/utils"
@@ -66,7 +67,7 @@ export const useMonacoCellEditor = ({
     validateQueryJIT(
       monacoRef.current,
       editorRef.current,
-      cellId.charCodeAt(0),
+      cellId,
       () => ({}),
       (q, signal) =>
         validateRef.current
@@ -141,6 +142,7 @@ export const useMonacoCellEditor = ({
       contextMenuCleanupRef.current = null
       if (editorRef.current && monacoRef.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
+        clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
         const state = editorRef.current.saveViewState()
         if (state) {
           onSaveViewState(state)

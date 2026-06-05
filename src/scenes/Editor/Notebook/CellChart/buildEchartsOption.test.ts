@@ -167,6 +167,60 @@ describe("buildEchartsOption — volume bars overlaid on candlesticks", () => {
     const bar = seriesList(opt.series).find((s) => s.type === "bar")
     expect(bar?.itemStyle).toBeUndefined()
   })
+
+  it("emits an empty candle ('-') when any OHLC component is null", () => {
+    const ohlcColumns = [
+      col("ts", "TIMESTAMP"),
+      col("open", "DOUBLE"),
+      col("high", "DOUBLE"),
+      col("low", "DOUBLE"),
+      col("close", "DOUBLE"),
+    ]
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns: ohlcColumns,
+        dataset: [
+          [1000, 10, 12, 9, 11],
+          [2000, null, null, null, null],
+        ],
+        xColumn: "ts",
+        type: "candlestick",
+        ohlc: { open: "open", high: "high", low: "low", close: "close" },
+      }),
+    ])
+    const candle = seriesList(opt.series).find((s) => s.type === "candlestick")
+    // [ts, open, close, low, high]; the empty bucket must stay a gap, not [0,0,0,0].
+    expect(candle?.data).toEqual([
+      [1000, 10, 11, 9, 12],
+      [2000, "-", "-", "-", "-"],
+    ])
+  })
+})
+
+describe("buildEchartsOption — scatter keeps nulls as gaps (no fabricated zeros)", () => {
+  it("emits null for a missing x or y instead of plotting a point at 0", () => {
+    const opt = buildEchartsOption({ xColumn: "a" }, [
+      resolved({
+        columns: [col("a", "DOUBLE"), col("b", "DOUBLE")],
+        dataset: [
+          [1, 100],
+          [2, null],
+          [null, 300],
+        ],
+        xColumn: "a",
+        type: "scatter",
+        yColumns: ["b"],
+      }),
+    ])
+    const s = seriesList(opt.series)[0]
+    expect(s.type).toBe("scatter")
+    // A null measurement must be a gap, not a real point pinned to 0.
+    expect(s.data).toEqual([
+      [1, 100],
+      [2, null],
+      [null, 300],
+    ])
+  })
 })
 
 describe("buildEchartsOption — categorical x preserves duplicate rows", () => {
