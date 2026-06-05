@@ -92,18 +92,17 @@ export const mapQueryRawToResult = async (
   const startedAt = performance.now()
   try {
     const limit = clampRunQueryLimit(requestedLimit)
+    if (signal?.aborted) {
+      return { type: "error", error: "Query aborted before execution." }
+    }
     const { promise, queryId } = questClient.queryRaw(sql, {
       limit: `0,${limit}`,
       cancellable: true,
     })
     if (signal) {
-      if (signal.aborted) {
-        questClient.abort(queryId)
-      } else {
-        signal.addEventListener("abort", () => questClient.abort(queryId), {
-          once: true,
-        })
-      }
+      signal.addEventListener("abort", () => questClient.abort(queryId), {
+        once: true,
+      })
     }
     const res = await promise
     const durationMs = Math.round(performance.now() - startedAt)

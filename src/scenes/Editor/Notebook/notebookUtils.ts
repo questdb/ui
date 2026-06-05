@@ -311,10 +311,15 @@ export const buildAppliedCells = (
     }
 
     const existing = requestedId ? prevById.get(requestedId) : undefined
+    if (requestedId && !existing) {
+      throw new ApplyNotebookStateError(
+        `Unknown cell id "${requestedId}". Omit id to create a new cell; use an id from the current notebook to update one.`,
+        "cells",
+      )
+    }
     const id = requestedId ?? generateId()
-    if (requestedId && !existing) seenIds.add(requestedId)
-    else if (!existing) seenIds.add(id)
-    else seenIds.add(existing.id)
+    if (existing) seenIds.add(existing.id)
+    else seenIds.add(id)
 
     // apply_notebook_state is a PUT: each requested cell fully describes itself.
     const resolvedMode: CellMode | undefined =

@@ -180,17 +180,22 @@ describe("mapQueryRawToResult", () => {
     expect(abort).toHaveBeenCalledWith(1)
   })
 
-  it("aborts immediately when the caller signal is already aborted at call time", async () => {
+  it("does not submit the query when the signal is already aborted (e.g. write revoked mid-validation)", async () => {
     const queryRaw = vi.fn().mockReturnValue(stubDqlReturn())
     const abort = vi.fn()
     const ac = new AbortController()
     ac.abort()
-    await mapQueryRawToResult(
+    const res = await mapQueryRawToResult(
       { queryRaw, abort } as never,
-      "SELECT * FROM x",
+      "DROP TABLE important",
       10,
       ac.signal,
     )
-    expect(abort).toHaveBeenCalledWith(1)
+    expect(queryRaw).not.toHaveBeenCalled()
+    expect(abort).not.toHaveBeenCalled()
+    expect(res).toEqual({
+      type: "error",
+      error: "Query aborted before execution.",
+    })
   })
 })

@@ -634,6 +634,26 @@ describe("buildAppliedCells", () => {
     ).toThrow(ApplyNotebookStateError)
   })
 
+  it("throws on a supplied unknown id instead of creating it (would silently delete omitted cells)", () => {
+    const prev: NotebookCell[] = [
+      { id: "real-a", position: 0, value: "a" },
+      {
+        id: "real-b",
+        position: 1,
+        value: "IMPORTANT",
+        result: dql("IMPORTANT"),
+      },
+    ]
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [
+          { id: "real-a", value: "a" },
+          { id: "typo-b", value: "b" }, // mistyped id — must throw, not create + drop real-b
+        ],
+      }),
+    ).toThrow(ApplyNotebookStateError)
+  })
+
   it("throws when a draw-mode cell has no chart_config", () => {
     expect(() =>
       buildAppliedCells([], {

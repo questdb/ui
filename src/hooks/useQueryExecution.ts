@@ -29,18 +29,24 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
       const expanded =
         normalized.length > 0 ? prependGlobalsDeclare(sql, normalized).sql : sql
       try {
+        if (signal?.aborted) {
+          return {
+            type: "error",
+            query: sql,
+            columns: [],
+            dataset: [],
+            count: 0,
+            error: "Query aborted before execution.",
+          }
+        }
         const { promise, queryId } = quest.queryRaw(expanded, {
           limit: `0,${RESULT_DISPLAY_LIMIT}`,
           cancellable: true,
         })
         if (signal) {
-          if (signal.aborted) {
-            quest.abort(queryId)
-          } else {
-            signal.addEventListener("abort", () => quest.abort(queryId), {
-              once: true,
-            })
-          }
+          signal.addEventListener("abort", () => quest.abort(queryId), {
+            once: true,
+          })
         }
         const result = await promise
 
