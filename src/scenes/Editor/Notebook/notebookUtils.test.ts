@@ -8,6 +8,7 @@ import {
   buildPersistPayload,
   cancelAllInCell,
   cancelOneInCell,
+  cloneNotebookViewState,
   computeCellGridH,
   computeResultBottomHeight,
   duplicateCellAt,
@@ -15,6 +16,7 @@ import {
   insertCell,
   isDoubleView,
   mergeCellLayout,
+  nextCopyLabel,
   removeCell,
   setResultAt,
   singleResultFromExec,
@@ -23,7 +25,8 @@ import {
   swapCellUp,
   upsertColumnSizing,
 } from "./notebookUtils"
-import type { NotebookCell } from "../../../store/notebook"
+import type { NotebookCell, NotebookViewState } from "../../../store/notebook"
+import { createDefaultNotebookViewState } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 
 const cell = (
@@ -1162,5 +1165,155 @@ describe("upsertColumnSizing", () => {
     const frozen = Object.freeze(prev)
     expect(() => upsertColumnSizing(frozen, "b", { col_0: 2 })).not.toThrow()
     expect(prev).toEqual({ a: { col_0: 1 } })
+  })
+})
+
+describe("cloneNotebookViewState", () => {
+  const seqIds = () => {
+    let i = 0
+    return () => `new-${i++}`
+  }
+
+  const source = (): NotebookViewState => ({
+    cells: [
+      { id: "a", position: 0, value: "SELECT 1", topHeight: 120 },
+      {
+        id: "b",
+        position: 1,
+        value: "SELECT 2",
+        mode: "draw",
+        autoRefresh: true,
+        isChartMaximized: true,
+        chartConfig: {
+          xColumn: "ts",
+          queries: [{ type: "line", yColumns: ["v"] }],
+        },
+        result: {
+          results: [
+            {
+              type: "dql",
+              query: "SELECT 2",
+              columns: [],
+              dataset: [],
+              count: 0,
+            },
+          ],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      },
+    ],
+    maximizedCellId: "b",
+    focusedCellId: "a",
+    settings: {
+      layoutMode: "grid",
+      layout: [
+        { i: "a", x: 0, y: 0, w: 6, h: 4 },
+        { i: "b", x: 6, y: 0, w: 6, h: 4 },
+      ],
+      variables: [{ name: "x", value: "1" }],
+    },
+  })
+
+  it("regenerates every cell id and preserves order/position/count", () => {
+    const src = source()
+    const out = cloneNotebookViewState(src, seqIds())
+    expect(out.cells.map((c) => c.id)).toEqual(["new-0", "new-1"])
+    expect(out.cells.map((c) => c.position)).toEqual([0, 1])
+    const srcIds = new Set(src.cells.map((c) => c.id))
+    expect(out.cells.every((c) => !srcIds.has(c.id))).toBe(true)
+  })
+
+  it("strips results but preserves structural fields", () => {
+    const out = cloneNotebookViewState(source(), seqIds())
+    expect(out.cells[1].result).toBeUndefined()
+    expect(out.cells[0].topHeight).toBe(120)
+    expect(out.cells[1].mode).toBe("draw")
+    expect(out.cells[1].autoRefresh).toBe(true)
+    expect(out.cells[1].isChartMaximized).toBe(true)
+    expect(out.cells[1].chartConfig).toEqual({
+      xColumn: "ts",
+      queries: [{ type: "line", yColumns: ["v"] }],
+    })
+  })
+
+  it("remaps settings.layout[].i to the new ids and keeps geometry", () => {
+    const out = cloneNotebookViewState(source(), seqIds())
+    expect(out.settings?.layout).toEqual([
+      { i: "new-0", x: 0, y: 0, w: 6, h: 4 },
+      { i: "new-1", x: 6, y: 0, w: 6, h: 4 },
+    ])
+    expect(out.settings?.layoutMode).toBe("grid")
+  })
+
+  it("drops orphan layout items that reference no cell", () => {
+    const src = source()
+    src.settings!.layout!.push({ i: "ghost", x: 0, y: 9, w: 1, h: 1 })
+    const out = cloneNotebookViewState(src, seqIds())
+    expect(out.settings?.layout).toHaveLength(2)
+    expect(out.settings?.layout?.some((l) => l.i === "ghost")).toBe(false)
+  })
+
+  it("remaps maximizedCellId and focusedCellId", () => {
+    const out = cloneNotebookViewState(source(), seqIds())
+    expect(out.maximizedCellId).toBe("new-1")
+    expect(out.focusedCellId).toBe("new-0")
+  })
+
+  it("copies variables by value, not by reference", () => {
+    const src = source()
+    const out = cloneNotebookViewState(src, seqIds())
+    expect(out.settings?.variables).toEqual([{ name: "x", value: "1" }])
+    expect(out.settings?.variables).not.toBe(src.settings?.variables)
+  })
+
+  it("does not mutate the source when the clone is edited", () => {
+    const src = source()
+    const out = cloneNotebookViewState(src, seqIds())
+    out.cells[0].value = "EDITED"
+    expect(src.cells[0].value).toBe("SELECT 1")
+  })
+
+  it("clones a default (single empty cell, no settings) notebook", () => {
+    const out = cloneNotebookViewState(
+      createDefaultNotebookViewState(),
+      seqIds(),
+    )
+    expect(out.cells).toHaveLength(1)
+    expect(out.cells[0].id).toBe("new-0")
+    expect(out.settings).toBeUndefined()
+    expect(out.maximizedCellId).toBeUndefined()
+  })
+
+  it("handles settings without a layout", () => {
+    const src: NotebookViewState = {
+      cells: [{ id: "a", position: 0, value: "x" }],
+      settings: { variables: [{ name: "v", value: "1" }] },
+    }
+    const out = cloneNotebookViewState(src, seqIds())
+    expect(out.settings?.layout).toBeUndefined()
+    expect(out.settings?.variables).toEqual([{ name: "v", value: "1" }])
+  })
+})
+
+describe("nextCopyLabel", () => {
+  it("appends (copy) to a label with no copy suffix", () => {
+    expect(nextCopyLabel("notebook")).toBe("notebook (copy)")
+    expect(nextCopyLabel("My Notebook")).toBe("My Notebook (copy)")
+  })
+
+  it("bumps (copy) to (copy 2), not (copy) (copy)", () => {
+    expect(nextCopyLabel("notebook (copy)")).toBe("notebook (copy 2)")
+  })
+
+  it("increments an existing numbered copy suffix", () => {
+    expect(nextCopyLabel("notebook (copy 2)")).toBe("notebook (copy 3)")
+    expect(nextCopyLabel("report (copy 9)")).toBe("report (copy 10)")
+  })
+
+  it("does not treat unrelated parentheses as a copy suffix", () => {
+    expect(nextCopyLabel("my (draft) notebook")).toBe(
+      "my (draft) notebook (copy)",
+    )
   })
 })

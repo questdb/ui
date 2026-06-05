@@ -53,6 +53,8 @@ export enum AIOperationStatus {
   Compacting = "Compacting conversation",
   Thinking = "Thinking",
   BuildingNotebook = "Building notebook",
+  DuplicatingNotebook = "Duplicating notebook",
+  DeletingNotebook = "Deleting notebook",
   AddingCell = "Adding cell",
   UpdatingCell = "Updating cell",
   DeletingCell = "Deleting cell",

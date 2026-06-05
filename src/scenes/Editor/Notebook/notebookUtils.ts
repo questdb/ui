@@ -4,6 +4,7 @@ import type {
   CellMode,
   CellResult,
   NotebookCell,
+  NotebookSettings,
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
@@ -266,6 +267,49 @@ const generateId = (): string =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2)
+
+export const nextCopyLabel = (label: string): string => {
+  const match = label.match(/^(.*) \(copy(?: (\d+))?\)$/)
+  if (!match) return `${label} (copy)`
+  const n = match[2] ? parseInt(match[2], 10) : 1
+  return `${match[1]} (copy ${n + 1})`
+}
+
+export const cloneNotebookViewState = (
+  source: NotebookViewState,
+  newId: () => string = generateId,
+): NotebookViewState => {
+  const idMap = new Map<string, string>()
+  const cells: NotebookCell[] = source.cells.map((cell) => {
+    const id = newId()
+    idMap.set(cell.id, id)
+    return { ...cell, id, result: undefined }
+  })
+
+  const next: NotebookViewState = { cells }
+
+  if (source.settings) {
+    const settings: NotebookSettings = { ...source.settings }
+    if (source.settings.layout) {
+      settings.layout = source.settings.layout
+        .filter((item) => idMap.has(item.i))
+        .map((item) => ({ ...item, i: idMap.get(item.i) as string }))
+    }
+    if (source.settings.variables) {
+      settings.variables = source.settings.variables.map((v) => ({ ...v }))
+    }
+    next.settings = settings
+  }
+
+  if (source.maximizedCellId && idMap.has(source.maximizedCellId)) {
+    next.maximizedCellId = idMap.get(source.maximizedCellId)
+  }
+  if (source.focusedCellId && idMap.has(source.focusedCellId)) {
+    next.focusedCellId = idMap.get(source.focusedCellId)
+  }
+
+  return next
+}
 
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }

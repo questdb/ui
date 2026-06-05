@@ -44,6 +44,8 @@ const minimalMetaCtx = (): MetaToolContext => ({
 
 const minimalWorkspace = () => ({
   createNotebook: () => Promise.resolve({ bufferId: 1, label: "n1" }),
+  duplicateNotebook: () => Promise.resolve({ bufferId: 2, label: "n1 (copy)" }),
+  deleteNotebook: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   getBufferMeta: () => ({
     kind: "active" as const,

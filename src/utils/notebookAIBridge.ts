@@ -254,6 +254,11 @@ export type NotebookWorkspaceController = {
     label?: string,
     signal?: AbortSignal,
   ) => Promise<{ bufferId: number; label: string }>
+  duplicateNotebook: (
+    bufferId: number,
+    signal?: AbortSignal,
+  ) => Promise<{ bufferId: number; label: string }>
+  deleteNotebook: (bufferId: number) => Promise<void>
   activateNotebook: (bufferId: number) => Promise<boolean>
   getBufferMeta: (bufferId: number) => NotebookWorkspaceBufferMeta
   listNotebookBuffers: () => Array<{
@@ -303,6 +308,7 @@ export type NotebookToolErrorCode =
   | "activation_failed"
   | "unknown_cell"
   | "workspace_unavailable"
+  | "last_tab"
 
 export class NotebookToolError extends Error {
   readonly code: NotebookToolErrorCode

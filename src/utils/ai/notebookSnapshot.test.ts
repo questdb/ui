@@ -67,6 +67,8 @@ const makeWorkspace = (
   deletedSet = new Set<number>(),
 ): NotebookWorkspaceController => ({
   createNotebook: () => Promise.resolve({ bufferId: 0, label: "x" }),
+  duplicateNotebook: () => Promise.resolve({ bufferId: 0, label: "x (copy)" }),
+  deleteNotebook: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   getBufferMeta(bufferId) {
     if (deletedSet.has(bufferId)) return { kind: "deleted" }

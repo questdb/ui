@@ -3,6 +3,7 @@ import styled, { css } from "styled-components"
 import { Box, Button } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ListIcon, SquaresFourIcon } from "@phosphor-icons/react"
+import { CopyAlt } from "@styled-icons/boxicons-regular"
 import { color } from "../../../utils"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
@@ -82,7 +83,7 @@ const ToggleButton = styled.button<{ $active: boolean }>`
 export const NotebookToolbar: React.FC = () => {
   const { settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
-  const { activeBuffer } = useEditor()
+  const { activeBuffer, duplicateNotebook } = useEditor()
   const { openNotebookChat } = useAIConversation()
   const { canUse, status: aiStatus } = useAIStatus()
   const isOperationInProgress = isBlockingAIStatus(aiStatus)
@@ -106,26 +107,42 @@ export const NotebookToolbar: React.FC = () => {
     void openNotebookChat(activeBuffer.id)
   }
 
+  const handleDuplicate = () => {
+    if (typeof activeBuffer.id !== "number") return
+    void duplicateNotebook(activeBuffer.id)
+  }
+
   return (
     <Toolbar>
-      <BuildWithAIButton
-        disabled={
-          !canUse ||
-          isOperationInProgress ||
-          typeof activeBuffer.id !== "number"
-        }
-        disabledTooltip={
-          !canUse
-            ? "AI Assistant is not configured"
-            : isOperationInProgress
-              ? "An operation is in progress"
-              : undefined
-        }
-        onClick={handleBuildWithAI}
-        title="Open AI chat for this notebook"
-      >
-        Build with AI
-      </BuildWithAIButton>
+      <Box align="center" gap="0.8rem">
+        <BuildWithAIButton
+          disabled={
+            !canUse ||
+            isOperationInProgress ||
+            typeof activeBuffer.id !== "number"
+          }
+          disabledTooltip={
+            !canUse
+              ? "AI Assistant is not configured"
+              : isOperationInProgress
+                ? "An operation is in progress"
+                : undefined
+          }
+          onClick={handleBuildWithAI}
+          title="Open AI chat for this notebook"
+        >
+          Build with AI
+        </BuildWithAIButton>
+        <Button
+          skin="secondary"
+          prefixIcon={<CopyAlt size={14} />}
+          disabled={typeof activeBuffer.id !== "number"}
+          onClick={handleDuplicate}
+          title="Duplicate this notebook"
+        >
+          Duplicate
+        </Button>
+      </Box>
       <Box align="center" gap="0.8rem">
         <VariablesPopover />
         <ToggleGroup>

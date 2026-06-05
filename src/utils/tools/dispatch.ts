@@ -92,6 +92,8 @@ const notebookErrorHint = (code: NotebookToolErrorCode): string => {
       return "The cell id is not in the notebook. Call list_cells to resync, then retry."
     case "workspace_unavailable":
       return "The notebook workspace is not ready yet. Retry in a moment."
+    case "last_tab":
+      return "This is the only open tab. Call create_notebook first, then delete this one."
     default:
       return "Notebook tool failed."
   }
@@ -294,6 +296,20 @@ export const dispatchTool = async (
         const { label } = (input as { label?: string }) || {}
         setStatus(AIOperationStatus.BuildingNotebook, { label })
         return routeNotebookTool(() => modelToolsClient.createNotebook(label))
+      }
+      case "duplicate_notebook": {
+        const { buffer_id } = (input as { buffer_id: number }) || {}
+        setStatus(AIOperationStatus.DuplicatingNotebook)
+        return routeNotebookTool(() =>
+          modelToolsClient.duplicateNotebook(buffer_id),
+        )
+      }
+      case "delete_notebook": {
+        const { buffer_id } = (input as { buffer_id: number }) || {}
+        setStatus(AIOperationStatus.DeletingNotebook)
+        return routeNotebookTool(() =>
+          modelToolsClient.deleteNotebook(buffer_id),
+        )
       }
       case "list_cells": {
         const { buffer_id } = (input as { buffer_id: number }) || {}

@@ -133,6 +133,40 @@
     }
   },
   {
+    "name": "duplicate_notebook",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Duplicate a notebook tab. Copies every cell (SQL, mode, chart config) and the layout into a NEW notebook labelled \"<label> (copy)\" placed right after the original; cell ids are regenerated and last-run results are cleared. Returns the new { bufferId, label }.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Source notebook buffer id (from <notebook_context> prefix)."
+        }
+      },
+      "required": ["buffer_id"]
+    }
+  },
+  {
+    "name": "delete_notebook",
+    "category": "free",
+    "mutatesNotebook": true,
+    "description": "Archive (soft-delete) a notebook tab — the same as the user closing it with the X. It moves to history and the user can restore it; it is not permanently destroyed and query data is untouched. If this notebook is bound to the current chat, the binding goes stale (start a new one with create_notebook).",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Notebook buffer id (from <notebook_context> prefix)."
+        }
+      },
+      "required": ["buffer_id"]
+    }
+  },
+  {
     "name": "list_cells",
     "category": "free",
     "description": "List the cells in a notebook. Returns id, type, short preview (≤120 chars), position, mode, and last-run status. No cell data values.",
@@ -479,7 +513,15 @@
                 "description": "Legend label for this query."
               }
             },
-            "required": ["type", "y_columns", "ohlc", "partition_by_column", "axis", "enabled", "name"]
+            "required": [
+              "type",
+              "y_columns",
+              "ohlc",
+              "partition_by_column",
+              "axis",
+              "enabled",
+              "name"
+            ]
           }
         },
         "right_axis": {
@@ -500,7 +542,14 @@
           "required": ["name", "min", "max"]
         }
       },
-      "required": ["buffer_id", "cell_id", "x_column", "name", "queries", "right_axis"]
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "x_column",
+        "name",
+        "queries",
+        "right_axis"
+      ]
     }
   },
   {
@@ -674,7 +723,15 @@
                           "type": ["string", "null"]
                         }
                       },
-                      "required": ["type", "y_columns", "ohlc", "partition_by_column", "axis", "enabled", "name"]
+                      "required": [
+                        "type",
+                        "y_columns",
+                        "ohlc",
+                        "partition_by_column",
+                        "axis",
+                        "enabled",
+                        "name"
+                      ]
                     }
                   },
                   "right_axis": {

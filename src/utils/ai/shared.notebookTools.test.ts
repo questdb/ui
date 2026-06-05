@@ -22,6 +22,10 @@ const makeClient = (
   createNotebook: vi.fn(() =>
     Promise.resolve({ bufferId: 1, label: "Notebook 1" }),
   ),
+  duplicateNotebook: vi.fn(() =>
+    Promise.resolve({ bufferId: 2, label: "Notebook 1 (copy)" }),
+  ),
+  deleteNotebook: vi.fn(() => Promise.resolve()),
   listCells: vi.fn(() => Promise.resolve([])),
   getCell: vi.fn(() =>
     Promise.resolve({ id: "c", type: "sql", value: "", position: 0 }),

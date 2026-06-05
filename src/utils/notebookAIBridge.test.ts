@@ -55,6 +55,9 @@ const makeWorkspace = (
 ): NotebookWorkspaceController => ({
   createNotebook: (label) =>
     Promise.resolve({ bufferId: 1, label: label ?? "Notebook" }),
+  duplicateNotebook: (bufferId) =>
+    Promise.resolve({ bufferId, label: "Notebook (copy)" }),
+  deleteNotebook: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   getBufferMeta: () => ({
     kind: "active",

@@ -21,6 +21,10 @@ import {
   createQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
 import { useSchemaCompletionProvider } from "../../scenes/Editor/Monaco/questdb-sql/useSchemaCompletionProvider"
+import {
+  cloneNotebookViewState,
+  nextCopyLabel,
+} from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/aiAssistant"
 import type { Buffer, PreviewContent } from "../../store/buffers"
@@ -88,10 +92,11 @@ export type EditorContext = {
   ) => Promise<void>
   addBuffer: (
     buffer?: Partial<Buffer>,
-    options?: { shouldSelectAll?: boolean },
+    options?: { shouldSelectAll?: boolean; afterBufferId?: number },
   ) => Promise<Buffer | undefined>
   deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
   archiveBuffer: (id: number) => Promise<void>
+  duplicateNotebook: (id: number) => Promise<Buffer | undefined>
   updateBuffer: (
     id: number,
     buffer?: Partial<Buffer>,
@@ -126,6 +131,7 @@ const defaultValues = {
   addBuffer: () => Promise.resolve(fallbackBuffer),
   deleteBuffer: () => Promise.resolve(),
   archiveBuffer: () => Promise.resolve(),
+  duplicateNotebook: () => Promise.resolve(undefined),
   updateBuffer: () => Promise.resolve(),
   updateBuffersPositions: () => Promise.resolve(),
   editorReadyTrigger: () => undefined,
@@ -304,7 +310,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   )
 
   const addBuffer: EditorContext["addBuffer"] = useCallback(
-    async (newBuffer, { shouldSelectAll = false } = {}) => {
+    async (newBuffer, { shouldSelectAll = false, afterBufferId } = {}) => {
       if (buffers && buffers.length >= MAX_TABS) {
         toast.error(
           `Tab limit reached (${MAX_TABS}). Please clear history to free up space.`,
@@ -351,16 +357,39 @@ export const EditorProvider: React.FC = ({ children }) => {
         }
       }
 
-      const position = buffers
-        ? buffers.filter((b) => !b.archived && !b.isTemporary).length
-        : 0
+      const activeBuffers = buffers
+        ? buffers.filter((b) => !b.archived && !b.isTemporary)
+        : []
+      const insertAfter =
+        afterBufferId !== undefined
+          ? activeBuffers.find((b) => b.id === afterBufferId)
+          : undefined
+      const position = insertAfter
+        ? insertAfter.position + 1
+        : activeBuffers.length
 
       const buffer = makeBuffer({
         ...newBuffer,
         label: newBuffer?.label ?? `${fallback.label} ${nextNumber()}`,
         position,
       })
-      const id = await db.buffers.add(buffer)
+
+      let id: number
+      if (insertAfter) {
+        const toShift = activeBuffers.filter(
+          (b) => typeof b.id === "number" && b.position >= position,
+        )
+        id = await db.transaction("rw", db.buffers, async () => {
+          for (const b of toShift) {
+            await db.buffers.update(b.id as number, {
+              position: b.position + 1,
+            })
+          }
+          return db.buffers.add(buffer)
+        })
+      } else {
+        id = await db.buffers.add(buffer)
+      }
 
       await setActiveBuffer(buffer, { focus: true })
 
@@ -548,6 +577,21 @@ export const EditorProvider: React.FC = ({ children }) => {
     if (wasNotebook) {
       emitUserAction({ kind: "user_archived_notebook", bufferId: id })
     }
+  }
+
+  const duplicateNotebook: EditorContext["duplicateNotebook"] = async (id) => {
+    const source = buffers.find((b) => b.id === id)
+    if (!source?.notebookViewState) return undefined
+
+    const persisted = await bufferStore.getById(id)
+    const view = persisted?.notebookViewState ?? source.notebookViewState
+    return addBuffer(
+      {
+        label: nextCopyLabel(source.label),
+        notebookViewState: cloneNotebookViewState(view),
+      },
+      { afterBufferId: id },
+    )
   }
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (
@@ -762,6 +806,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         addBuffer,
         deleteBuffer,
         archiveBuffer,
+        duplicateNotebook,
         updateBuffer,
         updateBuffersPositions,
         setTemporaryBuffer,

@@ -109,6 +109,10 @@ export interface ModelToolsClient {
   createNotebook: (
     label?: string,
   ) => Promise<{ bufferId: number; label: string }>
+  duplicateNotebook: (
+    bufferId: number,
+  ) => Promise<{ bufferId: number; label: string }>
+  deleteNotebook: (bufferId: number) => Promise<void>
   listCells: (bufferId: number) => Promise<NotebookCellSummary[]>
   getCell: (bufferId: number, cellId: string) => Promise<NotebookCellDetails>
   getNotebookState: (bufferId: number) => Promise<NotebookContextSnapshot>
@@ -400,6 +404,28 @@ export function createModelToolsClient(
         await extras.bindNotebook(extras.conversationId, res.bufferId)
       }
       return res
+    },
+
+    async duplicateNotebook(bufferId) {
+      const ws = getWorkspace()
+      if (!ws) {
+        throw new NotebookToolError(
+          "workspace_unavailable",
+          "Notebook workspace is not mounted.",
+        )
+      }
+      return ws.duplicateNotebook(bufferId, abortSignal)
+    },
+
+    async deleteNotebook(bufferId) {
+      const ws = getWorkspace()
+      if (!ws) {
+        throw new NotebookToolError(
+          "workspace_unavailable",
+          "Notebook workspace is not mounted.",
+        )
+      }
+      await ws.deleteNotebook(bufferId)
     },
 
     listCells(bufferId) {
