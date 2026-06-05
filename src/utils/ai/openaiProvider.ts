@@ -308,6 +308,7 @@ export function createOpenAIProvider(
       streaming,
       perms,
       validateSql,
+      toolContext: incomingToolContext,
     }: ExecuteFlowParams): Promise<FlowResult | AiAssistantAPIError> {
       let input: OpenAI.Responses.ResponseInput = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -323,7 +324,7 @@ export function createOpenAIProvider(
 
       let totalInputTokens = 0
       let totalOutputTokens = 0
-      const toolContext: ToolExecutionContext = {}
+      const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const requestParams = {
         ...toResponsesAPIProps(model),

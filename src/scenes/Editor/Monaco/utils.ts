@@ -889,222 +889,48 @@ const insertText = ({
   ])
 }
 
-const getTextFixes = ({
-  appendAt,
-  model,
-  position,
-}: {
-  appendAt: AppendQueryOptions["appendAt"]
-  model: ReturnType<typeof editor.getModel>
-  position: IPosition
-}): {
-  prefix: number
-  suffix: number
-  lineStartOffset: number
-  selectStartOffset: number
-} => {
-  const isFirstLine = position.lineNumber === 1
-  const isLastLine =
-    position.lineNumber === model?.getValue().split("\n").length
-  const lineAtCursor = model?.getLineContent(position.lineNumber)
-  const nextLine = isLastLine
-    ? undefined
-    : model?.getLineContent(position.lineNumber + 1)
-  const inMiddle = !isFirstLine && !isLastLine
+export const appendQuery = (editor: IStandaloneCodeEditor, query: string) => {
+  const model = editor.getModel()
+  const position = editor.getPosition()
 
-  type Rule = {
-    when: () => boolean
-    then: () => {
-      prefix?: number
-      suffix?: number
-      lineStartOffset?: number
-      selectStartOffset?: number
-    }
-  }
+  if (model && position) {
+    const existing = model.getValue()
+    const isFirstLine = position.lineNumber === 1
 
-  const defaultResult = {
-    prefix: 1,
-    suffix: 2,
-    lineStartOffset: 1,
-    selectStartOffset: 0,
-  }
+    const lastPosition = getLastPosition(editor)
+    const { nextSql } = lastPosition
+      ? getQueriesFromPosition(editor, lastPosition)
+      : { nextSql: null }
+    const needsSemicolon = nextSql !== null
 
-  const rules: { [key in AppendQueryOptions["appendAt"]]: Rule[] } = {
-    end: [
-      {
-        when: () => isFirstLine,
-        then: () => ({ prefix: 1, suffix: 0 }),
-      },
+    const newQueryLines = query.split("\n")
+    const prefix = isFirstLine ? 1 : 2
+    const selectStartOffset = isFirstLine ? 0 : 1
 
-      {
-        when: () => true,
-        then: () => ({ prefix: 2, suffix: 0, selectStartOffset: 1 }),
-      },
-    ],
-
-    cursor: [
-      {
-        when: () => model?.getValue() === "",
-        then: () => ({ prefix: 0, suffix: 1, lineStartOffset: 0 }),
-      },
-
-      {
-        when: () => isFirstLine && lineAtCursor === "",
-        then: () => ({
-          prefix: 0,
-          lineStartOffset: 0,
-          suffix: nextLine === "" ? 0 : 1,
-        }),
-      },
-
-      {
-        when: () => isFirstLine && lineAtCursor !== "",
-        then: () => ({
-          prefix: nextLine === "" ? 1 : 2,
-          suffix: 1,
-          selectStartOffset: 1,
-        }),
-      },
-
-      {
-        when: () => inMiddle && lineAtCursor === "",
-        then: () => ({
-          prefix: 0,
-          suffix: nextLine === "" ? 1 : 2,
-        }),
-      },
-
-      {
-        when: () => inMiddle && lineAtCursor !== "" && nextLine !== "",
-        then: () => ({ prefix: 1, suffix: 2 }),
-      },
-
-      {
-        when: () => inMiddle && lineAtCursor !== "" && nextLine === "",
-        then: () => ({ prefix: 1, suffix: 1, selectStartOffset: 1 }),
-      },
-
-      {
-        when: () => isLastLine,
-        then: () => ({
-          prefix: lineAtCursor === "" ? 1 : 2,
-          suffix: 1,
-          lineStartOffset: 1,
-          selectStartOffset: lineAtCursor === "" ? 0 : 1,
-        }),
-      },
-    ],
-  }
-
-  const result = (
-    rules[appendAt].find(({ when }) => when()) ?? { then: () => defaultResult }
-  ).then()
-
-  return {
-    ...defaultResult,
-    ...result,
-  }
-}
-
-const getInsertPosition = ({
-  model,
-  position,
-  lineStartOffset,
-  newQueryLines,
-  appendAt,
-}: {
-  model: ReturnType<typeof editor.getModel>
-  position: IPosition
-  lineStartOffset: number
-  appendAt: AppendQueryOptions["appendAt"]
-  newQueryLines: string[]
-}): {
-  lineStart: number
-  lineEnd: number
-  columnStart: number
-  columnEnd: number
-} => {
-  if (appendAt === "cursor") {
-    return {
-      lineStart: position.lineNumber + lineStartOffset,
-      lineEnd: position.lineNumber + newQueryLines.length,
+    const lineStart = existing.split("\n").length + 1
+    const positionSelect = {
+      lineStart: lineStart + selectStartOffset,
+      lineEnd: lineStart + selectStartOffset + (newQueryLines.length - 1),
       columnStart: 1,
       columnEnd: newQueryLines[newQueryLines.length - 1].length + 1,
     }
-  }
 
-  const lineStart =
-    (model?.getValue().split("\n").length ?? 0) + lineStartOffset
-  return {
-    lineStart,
-    lineEnd: lineStart + newQueryLines.length,
-    columnStart: 1,
-    columnEnd: newQueryLines[newQueryLines.length - 1].length + 1,
-  }
-}
+    insertText({
+      editor,
+      lineNumber: lineStart,
+      column: 1,
+      text: `${needsSemicolon ? ";" : ""}${"\n".repeat(prefix)}${query}`,
+    })
 
-export type AppendQueryOptions = {
-  appendAt: "cursor" | "end"
-}
-
-export const appendQuery = (
-  editor: IStandaloneCodeEditor,
-  query: string,
-  options: AppendQueryOptions = { appendAt: "cursor" },
-) => {
-  const model = editor.getModel()
-
-  if (model) {
-    const position = editor.getPosition()
-
-    if (position) {
-      const newQueryLines = query.split("\n")
-
-      const { prefix, suffix, lineStartOffset, selectStartOffset } =
-        getTextFixes({
-          appendAt: options.appendAt,
-          model,
-          position,
-        })
-
-      const positionInsert = getInsertPosition({
-        model,
-        position,
-        lineStartOffset,
-        appendAt: options.appendAt,
-        newQueryLines,
-      })
-
-      const positionSelect = {
-        lineStart: positionInsert.lineStart + selectStartOffset,
-        lineEnd:
-          positionInsert.lineStart +
-          selectStartOffset +
-          (newQueryLines.length - 1),
-        columnStart: 1,
-        columnEnd: positionInsert.columnEnd,
-      }
-
-      insertText({
-        editor,
-        lineNumber: positionInsert.lineStart,
-        column: positionInsert.columnStart,
-        text: `${"\n".repeat(prefix)}${query}${"\n".repeat(suffix)}`,
-      })
-
-      editor.setSelection({
-        startLineNumber: positionSelect.lineStart,
-        endLineNumber: positionSelect.lineEnd,
-        startColumn: positionSelect.columnStart,
-        endColumn: positionSelect.columnEnd,
-      })
-    }
+    editor.setSelection({
+      startLineNumber: positionSelect.lineStart,
+      endLineNumber: positionSelect.lineEnd,
+      startColumn: positionSelect.columnStart,
+      endColumn: positionSelect.columnEnd,
+    })
 
     editor.focus()
-
-    if (options.appendAt === "end") {
-      editor.revealLine(model.getLineCount())
-    }
+    editor.revealLine(model.getLineCount())
   }
 }
 

@@ -71,6 +71,8 @@ export function getMessageTextLength(m: {
 
 export type ToolExecutionContext = {
   suggestedSQL?: string
+  notebookMutated?: boolean
+  sqlWriteExecuted?: boolean
 }
 
 export const executeTool = async (

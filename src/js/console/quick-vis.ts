@@ -90,6 +90,7 @@ export function quickVis(
   let cachedQuery: AnyIfEmpty
   let requestActive: boolean = false
   let executionToken = 0
+  let activeQueryId: QuestDB.QueryId | null = null
 
   const chartTypePicker = new SlimSelect({
     select: "#_qvis_frm_chart_type",
@@ -283,13 +284,14 @@ export function quickVis(
 
       // time the query because control that displays query success expected time delta
       queryExecutionTimestamp = new Date().getTime()
-      const { promise: queryPromise } = quest.queryRaw(query, {
+      const { promise: queryPromise, queryId } = quest.queryRaw(query, {
         count: false,
         timings: false,
         cols: urlColumns,
         src: "vis",
         cancellable: true,
       })
+      activeQueryId = queryId
       try {
         const response = await queryPromise
         if (response.type === QuestDB.Type.DQL) {
@@ -299,6 +301,7 @@ export function quickVis(
         }
         eventBus.publish(EventType.MSG_QUERY_RUNNING)
       } finally {
+        activeQueryId = null
         releaseIfOwner()
         setDrawBtnToDraw()
       }
@@ -307,13 +310,20 @@ export function quickVis(
 
   function requestExecuteQueryAndDraw() {
     if (!query) return
-    questExecution.requestExecution(
-      QUICK_VIS_BUFFER_ID,
-      createDetachedQueryKey(query),
-      () => {
+    const queryKey = createDetachedQueryKey(query)
+    questExecution.requestExecution({
+      abort: () => {
+        if (activeQueryId !== null) {
+          quest.abort(activeQueryId)
+          activeQueryId = null
+        }
+      },
+      bufferId: QUICK_VIS_BUFFER_ID,
+      execute: () => {
         void executeQueryAndDraw()
       },
-    )
+      queryKey,
+    })
   }
 
   function clearChart() {

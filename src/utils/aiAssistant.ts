@@ -21,9 +21,11 @@ import {
   toolsForPermission,
   getUnifiedPrompt,
   getAiPermissions,
+  readLiveAiPermissions,
   BUILTIN_PROVIDERS,
 } from "./ai"
 import type { AIProvider } from "./ai"
+import type { ToolExecutionContext } from "./ai/shared"
 import {
   getController,
   getWorkspace,
@@ -641,6 +643,7 @@ const tryWithRetries = async <T>(
   provider: AIProvider,
   setStatus: StatusCallback,
   abortSignal?: AbortSignal,
+  isReplaySafe?: () => boolean,
 ): Promise<T | AiAssistantAPIError> => {
   let retries = 0
   while (retries <= MAX_RETRIES) {
@@ -662,7 +665,11 @@ const tryWithRetries = async <T>(
           : "Remaining retries: " + (MAX_RETRIES - retries) + ".",
       )
       retries++
-      if (retries > MAX_RETRIES || provider.isNonRetryableError(error)) {
+      if (
+        retries > MAX_RETRIES ||
+        provider.isNonRetryableError(error) ||
+        isReplaySafe?.() === false
+      ) {
         return provider.classifyError(error, setStatus)
       }
 
@@ -789,6 +796,8 @@ export const continueConversation = async ({
     }
   }
 
+  const flowToolContext: ToolExecutionContext = {}
+
   return tryWithRetries(
     async () => {
       const grantSchemaAccess = !!modelToolsClient.getTables
@@ -871,8 +880,9 @@ export const continueConversation = async ({
         setStatus,
         abortSignal,
         streaming,
-        perms: aiPerms,
+        perms: () => readLiveAiPermissions(aiPerms),
         validateSql: modelToolsClient.validateSqlRaw,
+        toolContext: flowToolContext,
       })
 
       if (isAiAssistantError(result)) {
@@ -891,5 +901,6 @@ export const continueConversation = async ({
     provider,
     setStatus,
     abortSignal,
+    () => !flowToolContext.notebookMutated && !flowToolContext.sqlWriteExecuted,
   )
 }

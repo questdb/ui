@@ -51,6 +51,7 @@ declare module "@tanstack/react-table" {
 
 type Props = {
   data: DqlQueryResult
+  runToken?: number // timestamp of the run to track focus/selection on grid
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
   onColumnSizingCommit: (sizing: Record<string, number>) => void
@@ -58,6 +59,7 @@ type Props = {
 
 export const ResultGrid: React.FC<Props> = ({
   data,
+  runToken,
   isFocused = true,
   initialColumnSizing,
   onColumnSizingCommit,
@@ -126,6 +128,11 @@ export const ResultGrid: React.FC<Props> = ({
     [data.dataset],
   )
 
+  const getColumn = useCallback(
+    (col: number) => data.columns[col],
+    [data.columns],
+  )
+
   const scrollContextRef = useRef<{
     scrollElement: HTMLElement
     rowHeight: number
@@ -152,13 +159,22 @@ export const ResultGrid: React.FC<Props> = ({
     }
   }, [headers])
 
-  const { focusedCell, copyPulse, onCellClick, onKeyDown, onBlur } =
-    useGridKeyboardNav(
-      rows.length,
-      data.columns.length,
-      getData,
-      scrollContextRef,
-    )
+  const {
+    focusedCell,
+    setFocusedCell,
+    copyPulse,
+    onCellClick,
+    onKeyDown,
+    onBlur,
+  } = useGridKeyboardNav(
+    rows.length,
+    data.columns.length,
+    getData,
+    getColumn,
+    scrollContextRef,
+  )
+
+  const prevRunTokenRef = useRef(runToken)
 
   const isCellFocused = (row: number, col: number) =>
     focusedCell?.row === row && focusedCell?.col === col
@@ -195,6 +211,13 @@ export const ResultGrid: React.FC<Props> = ({
   useEffect(() => {
     columnVirtualizer.measure()
   }, [columnSizing, columnVirtualizer])
+
+  useEffect(() => {
+    if (prevRunTokenRef.current === runToken) return
+    prevRunTokenRef.current = runToken
+    setFocusedCell(null)
+    gridRef.current?.blur()
+  }, [runToken, setFocusedCell])
 
   const totalWidth = columnVirtualizer.getTotalSize()
   const totalHeight = rowVirtualizer.getTotalSize()

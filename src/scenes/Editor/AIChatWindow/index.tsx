@@ -230,8 +230,8 @@ const AIChatWindow: React.FC = () => {
     rejectSuggestion,
     persistMessages,
     bindConversationToNotebook,
-    clearUserActionEvents,
     readUserActionDigest,
+    rotateUserActionDigest,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -474,8 +474,8 @@ const AIChatWindow: React.FC = () => {
         setIsStreaming,
         persistMessages,
         updateConversationName,
-        bindNotebookToConversation: bindConversationToNotebook,
-        clearUserActionEvents,
+        bindConversationToNotebook,
+        rotateUserActionDigest,
         updateMessagesWithCompaction,
       },
     )
@@ -514,11 +514,17 @@ const AIChatWindow: React.FC = () => {
 
       const normalizedSQL = normalizeQueryText(sql)
       const queryKey = createDetachedQueryKey(normalizedSQL)
+      let queryId: QuestDB.QueryId | null = null
 
-      questExecution.requestExecution(
-        notificationNamespaceKey,
+      questExecution.requestExecution({
+        abort: () => {
+          if (queryId !== null) {
+            quest.abort(queryId)
+          }
+        },
+        bufferId: notificationNamespaceKey,
         queryKey,
-        () => {
+        execute: () => {
           const timeoutId = window.setTimeout(() => {
             dispatch(
               actions.query.addNotification(
@@ -555,6 +561,9 @@ const AIChatWindow: React.FC = () => {
             dispatch,
             executionRefs,
             releaseExecution: questExecution.releaseExecution,
+            onQueryStarted: (nextQueryId) => {
+              queryId = nextQueryId
+            },
             onSettled: () => {
               if (notificationTimeoutRef.current === timeoutId) {
                 window.clearTimeout(timeoutId)
@@ -563,7 +572,7 @@ const AIChatWindow: React.FC = () => {
             },
           })
         },
-      )
+      })
     },
     [
       conversation,
@@ -732,8 +741,8 @@ const AIChatWindow: React.FC = () => {
         persistMessages,
         updateConversationName,
         updateMessagesWithCompaction,
-        bindNotebookToConversation: bindConversationToNotebook,
-        clearUserActionEvents,
+        bindConversationToNotebook,
+        rotateUserActionDigest,
       }
 
       switch (userMessage.displayType) {
@@ -858,7 +867,6 @@ const AIChatWindow: React.FC = () => {
       updateConversationName,
       updateMessagesWithCompaction,
       bindConversationToNotebook,
-      clearUserActionEvents,
       buildNotebookFlowContext,
       currentSQL,
     ],

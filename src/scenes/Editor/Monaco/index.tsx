@@ -514,9 +514,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const targetBufferId = activeBufferRef.current.id as number
     const queryKey = createQueryKeyFromRequest(editor, query)
 
-    questExecution.requestExecution(targetBufferId, queryKey, () => {
-      setCursorBeforeRunning(query)
-      toggleRunning(type)
+    questExecution.requestExecution({
+      abort: () => {
+        if (editorQueryIdRef.current !== null) {
+          quest.abort(editorQueryIdRef.current)
+          editorQueryIdRef.current = null
+        }
+      },
+      bufferId: targetBufferId,
+      execute: () => {
+        setCursorBeforeRunning(query)
+        toggleRunning(type)
+      },
+      queryKey,
     })
   }
 
@@ -1676,7 +1686,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
         const parentQueryKey = createQueryKeyFromRequest(editor, request)
-        questExecution.markActive(targetBufferId, parentQueryKey)
+        questExecution.markActive(targetBufferId, parentQueryKey, () => {
+          if (editorQueryIdRef.current !== null) {
+            quest.abort(editorQueryIdRef.current)
+            editorQueryIdRef.current = null
+          }
+        })
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query

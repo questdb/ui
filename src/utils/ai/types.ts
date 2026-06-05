@@ -8,6 +8,7 @@ import type {
 import type { Permissions, ToolCategory } from "../tools/permissions"
 import type { ValidateQueryResult } from "../questdb/types"
 import type { ProviderId } from "./settings"
+import type { ToolExecutionContext } from "./shared"
 
 export type ToolSurface = "ai" | "mcp"
 
@@ -67,8 +68,9 @@ export type ExecuteFlowParams = {
   setStatus: StatusCallback
   abortSignal?: AbortSignal
   streaming?: StreamingCallback
-  perms?: Permissions
+  perms?: Permissions | (() => Permissions)
   validateSql?: (sql: string) => Promise<ValidateQueryResult>
+  toolContext?: ToolExecutionContext
 }
 
 export interface AIProvider {

@@ -52,6 +52,7 @@ export const InlineResultTable: React.FC<Props> = ({
         <ResultGrid
           key={`${result.activeResultIndex}-${activeResult.query}`}
           data={activeResult}
+          runToken={result.timestamp}
           isFocused={isFocused}
           initialColumnSizing={columnSizing?.[activeResult.query]}
           onColumnSizingCommit={(sizing) =>

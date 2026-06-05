@@ -6,6 +6,10 @@ import type {
   NotebookViewState,
 } from "../store/notebook"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import {
+  buildAppliedCells,
+  buildAppliedLayout,
+} from "../scenes/Editor/Notebook/notebookUtils"
 
 // Bridges the AI tool-execution layer (plain async code, no React context)
 // to notebook React state. Two controllers live here:
@@ -58,6 +62,34 @@ export type NotebookController = {
   getMaximizedCellId: () => string | null
 }
 
+export type NotebookControllerActions = {
+  addCell: (afterCellId?: string, value?: string) => string
+  updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
+  deleteCell: (cellId: string) => void
+  moveCellUp: (cellId: string) => void
+  moveCellDown: (cellId: string) => void
+  duplicateCell: (cellId: string) => string
+  runCell: (
+    cellId: string,
+    sql?: string,
+    signal?: AbortSignal,
+  ) => Promise<boolean>
+  updateSettings: (updates: Partial<NotebookSettings>) => void
+  setCellLayout: (
+    cellId: string,
+    pos: { x: number; y: number; w: number; h: number },
+  ) => void
+  setCellMode: (cellId: string, mode: CellMode) => void
+  setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  setCellAutoRefresh: (cellId: string, value: boolean) => void
+  setCellChartMaximized: (cellId: string, value: boolean) => void
+  setMaximizedCellId: (cellId: string | null) => void
+  updateCells: (updater: (prev: NotebookCell[]) => NotebookCell[]) => void
+  getCellsSnapshot: () => NotebookCell[]
+  getSettings: () => NotebookSettings
+  getMaximizedCellId: () => string | null
+}
+
 // Wire shape accepted by `applyNotebookState`. The fields are camelCase here
 // (controller-level); the snake_case JSON-schema shape is translated at the
 // dispatchTool boundary.
@@ -77,6 +109,135 @@ export type ApplyNotebookStateRequest = {
   variables?: NotebookVariable[] | null
   cells: ApplyNotebookStateCellRequest[]
 }
+
+const sanitizeForPromptContext = (s: string): string =>
+  s.replace(/</g, "\u2039").replace(/>/g, "\u203A")
+
+const summarizeCellResults = (cell: NotebookCell | undefined) => {
+  const freshResult = cell?.result
+  if (!freshResult) {
+    return { success: false, queryCount: 0, results: [] }
+  }
+
+  const results = freshResult.results.map((r) => {
+    if (r.type === "cancelled") return "cancelled"
+    if (r.type === "error") {
+      const trimmed =
+        r.error.length > 200 ? `${r.error.slice(0, 197)}...` : r.error
+      return `ERROR: ${sanitizeForPromptContext(trimmed)}`
+    }
+    return "success"
+  })
+
+  return {
+    success: results.length > 0 && results.every((r) => r === "success"),
+    queryCount: results.length,
+    results,
+  }
+}
+
+export const createNotebookController = (
+  bufferId: number,
+  liveActionsRef: { current: NotebookControllerActions },
+): NotebookController => ({
+  bufferId,
+  addCell: (valueArg, afterCellId) =>
+    liveActionsRef.current.addCell(afterCellId, valueArg),
+  updateCell: (cellId, updates) =>
+    liveActionsRef.current.updateCell(cellId, updates),
+  deleteCell: (cellId) => liveActionsRef.current.deleteCell(cellId),
+  moveCellUp: (cellId) => liveActionsRef.current.moveCellUp(cellId),
+  moveCellDown: (cellId) => liveActionsRef.current.moveCellDown(cellId),
+  duplicateCell: (cellId) => liveActionsRef.current.duplicateCell(cellId),
+  runCell: async (cellId, signal) => {
+    const cellBefore = liveActionsRef.current
+      .getCellsSnapshot()
+      .find((c) => c.id === cellId)
+    const priorResult = cellBefore?.result ?? null
+
+    await liveActionsRef.current.runCell(cellId, undefined, signal)
+
+    const cell = liveActionsRef.current
+      .getCellsSnapshot()
+      .find((c) => c.id === cellId)
+    const freshCell =
+      cell?.result && cell.result !== priorResult ? cell : undefined
+
+    return summarizeCellResults(freshCell)
+  },
+  setLayoutMode: (mode) =>
+    liveActionsRef.current.updateSettings({ layoutMode: mode }),
+  setVariables: (variables) =>
+    liveActionsRef.current.updateSettings({ variables }),
+  setCellLayout: (cellId, pos) =>
+    liveActionsRef.current.setCellLayout(cellId, pos),
+  setCellMode: (cellId, mode) => {
+    liveActionsRef.current.setCellMode(cellId, mode)
+    if (mode === "draw") {
+      liveActionsRef.current.setCellChartMaximized(cellId, false)
+    }
+  },
+  setCellChartConfig: (cellId, cfg) =>
+    liveActionsRef.current.setCellChartConfig(cellId, cfg),
+  setCellAutoRefresh: (cellId, value) =>
+    liveActionsRef.current.setCellAutoRefresh(cellId, value),
+  setCellChartMaximized: (cellId, value) =>
+    liveActionsRef.current.setCellChartMaximized(cellId, value),
+  setCellMaximized: (cellId) =>
+    liveActionsRef.current.setMaximizedCellId(cellId),
+  applyNotebookState: (request) => {
+    // All-or-nothing: buildAppliedCells throws before any mutation.
+    const prev = liveActionsRef.current.getCellsSnapshot()
+    const { nextCells, diff } = buildAppliedCells(prev, request)
+    const settings = liveActionsRef.current.getSettings()
+    const targetLayoutMode =
+      request.layoutMode === undefined || request.layoutMode === null
+        ? settings.layoutMode
+        : request.layoutMode
+
+    liveActionsRef.current.updateCells(() => nextCells)
+
+    if (targetLayoutMode === "grid") {
+      const nextLayout = buildAppliedLayout(
+        request,
+        nextCells,
+        settings.layout,
+        { gridCols: 12, rowHeight: 10, marginY: 20 },
+      )
+      liveActionsRef.current.updateSettings({
+        layoutMode: "grid",
+        layout: nextLayout,
+      })
+    } else if (
+      request.layoutMode !== undefined &&
+      request.layoutMode !== null
+    ) {
+      liveActionsRef.current.updateSettings({
+        layoutMode: request.layoutMode,
+      })
+    }
+
+    if (request.maximizedCellId !== undefined) {
+      liveActionsRef.current.setMaximizedCellId(request.maximizedCellId ?? null)
+    } else {
+      const maximizedCellId = liveActionsRef.current.getMaximizedCellId()
+      if (maximizedCellId && !nextCells.some((c) => c.id === maximizedCellId)) {
+        liveActionsRef.current.setMaximizedCellId(null)
+      }
+    }
+
+    if (request.variables !== undefined) {
+      liveActionsRef.current.updateSettings({
+        variables: request.variables ?? [],
+      })
+    }
+
+    return { applied: diff }
+  },
+  getCellsSnapshot: () => liveActionsRef.current.getCellsSnapshot(),
+  getSettings: () => ({ ...liveActionsRef.current.getSettings() }),
+  getMaximizedCellId: () => liveActionsRef.current.getMaximizedCellId(),
+})
 
 export type NotebookWorkspaceBufferMeta =
   | {

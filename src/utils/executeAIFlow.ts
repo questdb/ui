@@ -159,12 +159,11 @@ export type AIFlowCallbacks = {
     lastUserMessage?: ConversationMessage
     lastAssistantMessage?: ConversationMessage
   }>
-  // bindNotebookToConversation is a no-op when meta is already bound, so passing it always is safe.
-  bindNotebookToConversation?: (
+  bindConversationToNotebook?: (
     conversationId: ConversationId,
     bufferId: number,
   ) => Promise<void>
-  clearUserActionEvents?: (conversationId: ConversationId) => void
+  rotateUserActionDigest?: (conversationId: ConversationId) => void
 }
 
 export type AIFlowResult = {
@@ -431,6 +430,8 @@ export async function executeAIFlow(
 
   const userMsg = buildUserMessage(config)
 
+  callbacks.rotateUserActionDigest?.(conversationId)
+
   if (useLastMessage && callbacks.getLastRoundMessages) {
     const { lastUserMessage, lastAssistantMessage } =
       await callbacks.getLastRoundMessages(conversationId)
@@ -509,7 +510,7 @@ export async function executeAIFlow(
     hasSchemaAccess ? tables : undefined,
     {
       conversationId,
-      bindNotebook: callbacks.bindNotebookToConversation,
+      bindNotebook: callbacks.bindConversationToNotebook,
       abortSignal,
     },
   )
@@ -792,11 +793,6 @@ export async function executeAIFlow(
       callbacks,
       compactedHistory: result.compactedConversationHistory,
     })
-
-    // Only clear on success — failed/aborted turns replay the same events so user actions aren't lost.
-    if (flowResult.success && callbacks.clearUserActionEvents) {
-      callbacks.clearUserActionEvents(conversationId)
-    }
 
     void trackEvent(ConsoleEvent.AI_FLOW_COMPLETE, {
       type: config.type,

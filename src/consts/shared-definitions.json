@@ -479,7 +479,7 @@
                 "description": "Legend label for this query."
               }
             },
-            "required": ["type"]
+            "required": ["type", "y_columns", "ohlc", "partition_by_column", "axis", "enabled", "name"]
           }
         },
         "right_axis": {
@@ -500,7 +500,7 @@
           "required": ["name", "min", "max"]
         }
       },
-      "required": ["buffer_id", "cell_id"]
+      "required": ["buffer_id", "cell_id", "x_column", "name", "queries", "right_axis"]
     }
   },
   {
@@ -674,7 +674,7 @@
                           "type": ["string", "null"]
                         }
                       },
-                      "required": ["type"]
+                      "required": ["type", "y_columns", "ohlc", "partition_by_column", "axis", "enabled", "name"]
                     }
                   },
                   "right_axis": {
@@ -688,7 +688,7 @@
                     "required": ["name", "min", "max"]
                   }
                 },
-                "required": ["queries"]
+                "required": ["x_column", "name", "queries", "right_axis"]
               },
               "grid": {
                 "type": ["object", "null"],

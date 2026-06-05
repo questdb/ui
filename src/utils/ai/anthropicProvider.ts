@@ -298,7 +298,7 @@ async function handleToolCalls(
   abortSignal?: AbortSignal,
   accumulatedTokens: TokenUsage = { inputTokens: 0, outputTokens: 0 },
   streaming?: StreamingCallback,
-  perms?: Permissions,
+  perms?: Permissions | (() => Permissions),
   validateSql?: (sql: string) => Promise<ValidateQueryResult>,
   toolContext?: ToolExecutionContext,
   round: number = 1,
@@ -483,6 +483,7 @@ export function createAnthropicProvider(
       streaming,
       perms,
       validateSql,
+      toolContext: incomingToolContext,
     }: ExecuteFlowParams): Promise<FlowResult | AiAssistantAPIError> {
       const initialMessages: MessageParam[] = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
@@ -497,7 +498,7 @@ export function createAnthropicProvider(
       const anthropicTools = toAnthropicTools(tools)
       const systemPrompt = config.systemInstructions
 
-      const toolContext: ToolExecutionContext = {}
+      const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const resolvedModel = toAnthropicModel(model)
 

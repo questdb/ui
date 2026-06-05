@@ -4,6 +4,7 @@ import type { ModelToolsClient, StatusCallback } from "../aiAssistant"
 import { NotebookToolError } from "../notebookAIBridge"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
+import type { ToolExecutionContext } from "./shared"
 
 const makeClient = (
   overrides: Partial<ModelToolsClient> = {},
@@ -1293,6 +1294,53 @@ describe("dispatchTool — non-NotebookToolError falls through to default handle
     )
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/network boom/)
+  })
+})
+
+describe("dispatchTool — run_query replay guard (sqlWriteExecuted)", () => {
+  const runQuery = async (
+    sql: string,
+    rawType: "dql" | "dml" | "ddl",
+  ): Promise<ToolExecutionContext> => {
+    const client = makeClient({
+      runQueryRaw: vi.fn(() =>
+        rawType === "dql"
+          ? Promise.resolve({
+              type: "dql" as const,
+              columns: [],
+              dataset: [],
+              count: 0,
+            })
+          : Promise.resolve({ type: rawType }),
+      ),
+    })
+    const toolContext: ToolExecutionContext = {}
+    await dispatchTool(
+      "run_query",
+      { sql },
+      client,
+      noopStatus,
+      undefined,
+      undefined,
+      undefined,
+      toolContext,
+    )
+    return toolContext
+  }
+
+  it("flags sqlWriteExecuted when a DML statement executes", async () => {
+    const ctx = await runQuery("INSERT INTO t VALUES (1)", "dml")
+    expect(ctx.sqlWriteExecuted).toBe(true)
+  })
+
+  it("flags sqlWriteExecuted when a DDL statement executes", async () => {
+    const ctx = await runQuery("DROP TABLE t", "ddl")
+    expect(ctx.sqlWriteExecuted).toBe(true)
+  })
+
+  it("does not flag sqlWriteExecuted for a read-only (DQL) query", async () => {
+    const ctx = await runQuery("SELECT 1", "dql")
+    expect(ctx.sqlWriteExecuted).toBeUndefined()
   })
 })
 

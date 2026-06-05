@@ -11,6 +11,7 @@ import type {
   QueryAction,
 } from "../store/Query/types"
 import type { Client } from "./questdb/client"
+import type { QueryId } from "./questdb/client"
 import * as QuestDB from "./questdb"
 import type { ExecutionRefs } from "../scenes/Editor/index"
 import type { Dispatch } from "redux"
@@ -24,6 +25,7 @@ export type RunDetachedQueryConfig = {
   dispatch: Dispatch<QueryAction>
   executionRefs: React.MutableRefObject<ExecutionRefs>
   releaseExecution: (queryKey: QueryKey) => void
+  onQueryStarted?: (queryId: QueryId) => void
   onSettled?: () => void
 }
 
@@ -40,11 +42,12 @@ export async function runDetachedQuery(
     releaseExecution,
   } = config
 
-  const { promise } = quest.queryRaw(normalizedSQL, {
+  const { promise, queryId } = quest.queryRaw(normalizedSQL, {
     limit: "0,1000",
     explain: true,
     cancellable: true,
   })
+  config.onQueryStarted?.(queryId)
 
   try {
     const result = await promise

@@ -101,10 +101,10 @@ describe("resultsEquivalent", () => {
     expect(resultsEquivalent(a, b)).toBe(false)
   })
 
-  it("does not compare middle rows (shape+endpoints heuristic)", () => {
+  it("returns false when a middle row differs (full deep compare)", () => {
     const a = [dql([{ name: "x", type: "INT" }], [[1], [2], [3]])]
     const b = [dql([{ name: "x", type: "INT" }], [[1], [99], [3]])]
-    expect(resultsEquivalent(a, b)).toBe(true)
+    expect(resultsEquivalent(a, b)).toBe(false)
   })
 
   it("compares multiple results side-by-side", () => {

@@ -27,7 +27,7 @@ import {
   runPermissionGate,
   type Permissions,
 } from "./permissions"
-import { categoryFor } from "./tools"
+import { categoryFor, mutatesNotebook } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
@@ -127,11 +127,14 @@ export const dispatchTool = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
-  perms?: Permissions,
+  permsOrResolver?: Permissions | (() => Permissions),
   validateSql?: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
   toolContext?: ToolExecutionContext,
 ): Promise<{ content: string; is_error?: boolean }> => {
+  const perms =
+    typeof permsOrResolver === "function" ? permsOrResolver() : permsOrResolver
+
   if (perms) {
     const decision = runPermissionGate(toolName, {
       permissions: perms,
@@ -140,6 +143,9 @@ export const dispatchTool = async (
     if (!decision.granted) {
       return { content: decision.reason, is_error: true }
     }
+  }
+  if (toolContext && mutatesNotebook(toolName)) {
+    toolContext.notebookMutated = true
   }
   try {
     switch (toolName) {
@@ -920,6 +926,9 @@ export const dispatchTool = async (
           )
           // Schema panel listens for MSG_QUERY_SCHEMA and refreshes its cache.
           if (raw.type === "ddl" || raw.type === "dml") {
+            if (toolContext) {
+              toolContext.sqlWriteExecuted = true
+            }
             eventBus.publish(EventType.MSG_QUERY_SCHEMA)
           }
           const payload = buildRunQueryPayload(raw, requestedLimit)

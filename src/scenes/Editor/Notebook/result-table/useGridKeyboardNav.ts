@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { copyToClipboard } from "../../../../utils/copyToClipboard"
 import { toast } from "../../../../components/Toast"
 import { formatCellValueForCopy } from "./inlineGridUtils"
@@ -51,6 +52,7 @@ export const useGridKeyboardNav = (
   rowCount: number,
   colCount: number,
   getData: (row: number, col: number) => boolean | string | number | null,
+  getColumn: (col: number) => ColumnDefinition | undefined,
   scrollContextRef: React.RefObject<ScrollContext | null>,
 ) => {
   const [focusedCell, setFocusedCell] = useState<CellCoord | null>(null)
@@ -150,7 +152,7 @@ export const useGridKeyboardNav = (
           if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
             const value = getData(row, col)
-            const text = formatCellValueForCopy(value)
+            const text = formatCellValueForCopy(value, getColumn(col))
             void copyToClipboard(text).then(() => {
               toast.success("Copied to clipboard")
               setCopyPulse({ row, col })
@@ -160,7 +162,15 @@ export const useGridKeyboardNav = (
           break
       }
     },
-    [focusedCell, rowCount, colCount, getData, moveTo, scrollContextRef],
+    [
+      focusedCell,
+      rowCount,
+      colCount,
+      getData,
+      getColumn,
+      moveTo,
+      scrollContextRef,
+    ],
   )
 
   return {

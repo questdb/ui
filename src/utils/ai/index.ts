@@ -43,6 +43,7 @@ export {
   canUseAiAssistant,
   hasSchemaAccess,
   getAiPermissions,
+  readLiveAiPermissions,
 } from "./settings"
 export type {
   ProviderId,

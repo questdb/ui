@@ -398,6 +398,7 @@ export function createOpenAIChatCompletionsProvider(
       streaming,
       perms,
       validateSql,
+      toolContext: incomingToolContext,
     }: ExecuteFlowParams): Promise<FlowResult | AiAssistantAPIError> {
       const systemContent = config.systemInstructions
 
@@ -415,7 +416,7 @@ export function createOpenAIChatCompletionsProvider(
       let totalInputTokens = 0
       let totalOutputTokens = 0
       let lastPromptTokens = 0
-      const toolContext: ToolExecutionContext = {}
+      const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const baseParams = {
         ...toChatCompletionsAPIProps(model),

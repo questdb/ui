@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { MutableRefObject } from "react"
+import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import type {
   CellResult,
   NotebookCell,
@@ -19,6 +19,41 @@ const publishSchemaIfMutating = (type: QueryExecResult["type"]): void => {
   if (type === "ddl" || type === "dml") {
     eventBus.publish(EventType.MSG_QUERY_SCHEMA)
   }
+}
+
+const beginCellRun = (
+  runGenerationRef: MutableRefObject<Map<string, number>>,
+  cellId: string,
+) => {
+  const generation = (runGenerationRef.current.get(cellId) ?? 0) + 1
+  runGenerationRef.current.set(cellId, generation)
+
+  return () => runGenerationRef.current.get(cellId) === generation
+}
+
+const supersedeCellRun = (
+  runGenerationRef: MutableRefObject<Map<string, number>>,
+  cellId: string,
+) => {
+  runGenerationRef.current.set(
+    cellId,
+    (runGenerationRef.current.get(cellId) ?? 0) + 1,
+  )
+}
+
+const clearRunningCell = (
+  abortControllersRef: MutableRefObject<Map<string, AbortController[]>>,
+  autoFocusRef: MutableRefObject<Map<string, boolean>>,
+  setRunningCellIds: Dispatch<SetStateAction<Set<string>>>,
+  cellId: string,
+) => {
+  abortControllersRef.current.delete(cellId)
+  autoFocusRef.current.delete(cellId)
+  setRunningCellIds((prev) => {
+    const next = new Set(prev)
+    next.delete(cellId)
+    return next
+  })
 }
 
 type Options = {
@@ -54,6 +89,8 @@ export const useCellExecution = ({
 
   const abortControllersRef = useRef<Map<string, AbortController[]>>(new Map())
 
+  const runGenerationRef = useRef<Map<string, number>>(new Map())
+
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
   const runScript = useCallback(
@@ -66,6 +103,8 @@ export const useCellExecution = ({
 
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
+
+      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
 
       // One AbortController per query so `cancelQuery(index)` cancels just that slot.
       const controllers = queries.map(() => new AbortController())
@@ -118,6 +157,7 @@ export const useCellExecution = ({
           )
 
           const result = await executeSingle(sql, perQuery.signal)
+          if (!isCurrentRun()) return failedCount === 0
           updateCellResult(cellId, i, singleResultFromExec(result, sql))
           publishSchemaIfMutating(result.type)
 
@@ -141,13 +181,14 @@ export const useCellExecution = ({
         })
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
-        abortControllersRef.current.delete(cellId)
-        autoFocusRef.current.delete(cellId)
-        setRunningCellIds((prev) => {
-          const next = new Set(prev)
-          next.delete(cellId)
-          return next
-        })
+        if (isCurrentRun()) {
+          clearRunningCell(
+            abortControllersRef,
+            autoFocusRef,
+            setRunningCellIds,
+            cellId,
+          )
+        }
       }
 
       return failedCount === 0
@@ -176,6 +217,8 @@ export const useCellExecution = ({
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
 
+      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+
       const ac = new AbortController()
       const onExternalAbort = () => ac.abort(externalSignal?.reason)
       externalSignal?.addEventListener("abort", onExternalAbort, {
@@ -193,6 +236,8 @@ export const useCellExecution = ({
       setRunningCellIds((prev) => new Set(prev).add(cellId))
       try {
         const execResult = await executeSingle(queryText, ac.signal)
+        // A newer run (or a cancel) superseded this one; don't write its result.
+        if (!isCurrentRun()) return execResult.type !== "error"
         const cellResult: CellResult = {
           results: [singleResultFromExec(execResult, queryText)],
           activeResultIndex: 0,
@@ -203,12 +248,14 @@ export const useCellExecution = ({
         return execResult.type !== "error"
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
-        abortControllersRef.current.delete(cellId)
-        setRunningCellIds((prev) => {
-          const next = new Set(prev)
-          next.delete(cellId)
-          return next
-        })
+        if (isCurrentRun()) {
+          clearRunningCell(
+            abortControllersRef,
+            autoFocusRef,
+            setRunningCellIds,
+            cellId,
+          )
+        }
       }
     },
     [cellsRef, executeSingle, updateCell, runScript],
@@ -218,7 +265,15 @@ export const useCellExecution = ({
     (cellId: string) => {
       const controllers = abortControllersRef.current.get(cellId)
       if (!controllers) return
+      // Supersede the in-flight run so its late resolution can't write back
+      supersedeCellRun(runGenerationRef, cellId)
       controllers.forEach((ac) => ac.abort())
+      clearRunningCell(
+        abortControllersRef,
+        autoFocusRef,
+        setRunningCellIds,
+        cellId,
+      )
       markCancelledAll(cellId)
     },
     [markCancelledAll],

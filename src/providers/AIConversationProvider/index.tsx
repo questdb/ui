@@ -84,7 +84,9 @@ type AIConversationContextType = {
   readUserActionDigest: (
     conversationId: ConversationId,
   ) => UserActionDigest | undefined
-  clearUserActionEvents: (conversationId: ConversationId) => void
+  rotateUserActionDigest: (
+    conversationId: ConversationId,
+  ) => UserActionDigest | undefined
   handleGlyphClick: (options: {
     bufferId: number
     queryKey: QueryKey
@@ -408,9 +410,12 @@ export const AIConversationProvider: React.FC<{
     [],
   )
 
-  const clearUserActionEvents = useCallback(
-    (conversationId: ConversationId): void => {
-      userActionDigestsRef.current.delete(conversationId)
+  const rotateUserActionDigest = useCallback(
+    (conversationId: ConversationId): UserActionDigest | undefined => {
+      const current = userActionDigestsRef.current.get(conversationId)
+      if (!current) return undefined
+      userActionDigestsRef.current.set(conversationId, createEmptyDigest())
+      return current
     },
     [],
   )
@@ -1132,7 +1137,7 @@ export const AIConversationProvider: React.FC<{
         findOrCreateNotebookChat,
         bindConversationToNotebook,
         readUserActionDigest,
-        clearUserActionEvents,
+        rotateUserActionDigest,
         closeChatWindow,
         openHistoryView,
         closeHistoryView,
