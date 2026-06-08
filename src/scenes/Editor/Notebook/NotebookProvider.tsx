@@ -379,6 +379,7 @@ export const NotebookProvider: React.FC<{
 
   const deleteCell = useCallback(
     (cellId: string) => {
+      cancelCell(cellId)
       store.removeCellById(cellId)
       if (focusedCellIdRef.current === cellId) {
         setFocusedCell(null)
@@ -387,7 +388,7 @@ export const NotebookProvider: React.FC<{
         setMaximizedCellId(null)
       }
     },
-    [store, setMaximizedCellId],
+    [store, setMaximizedCellId, cancelCell],
   )
 
   const duplicateCell = useCallback(

@@ -57,7 +57,7 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { Stop } from "@styled-icons/remix-line"
 import { CircleNotchSpinner } from "../Monaco/icons"
-import { getWorkspace } from "../../../utils/notebookAIBridge"
+import { getUserActionSeq, getWorkspace } from "../../../utils/notebookAIBridge"
 import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
 import type {
   NotebookFlowContext,
@@ -395,6 +395,7 @@ const AIChatWindow: React.FC = () => {
     (conversationId: string): NotebookFlowContext | undefined => {
       const meta = getConversationMeta(conversationId)
       const bufferId = meta?.notebookBufferId
+      const readSeq = getUserActionSeq()
       const snapshot = bufferId ? buildSnapshot(getWorkspace(), bufferId) : null
       const digest = readUserActionDigest(conversationId)
       const notebookBuffers = buffers.filter(
@@ -426,7 +427,7 @@ const AIChatWindow: React.FC = () => {
             }
           : undefined
       if (!snapshot && !digest && !workspace) return undefined
-      return { snapshot, digest, workspace }
+      return { snapshot, digest, workspace, readSeq }
     },
     [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
   )

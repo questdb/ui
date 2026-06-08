@@ -32,7 +32,7 @@ import {
 } from "../../utils/tools/permissions"
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
 import { QuestContext } from "../QuestProvider"
-import { on as onUserAction } from "../../utils/notebookAIBridge"
+import { on as onUserAction, onUserEdit } from "../../utils/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
 import {
   applyUserActionToDigest,
@@ -182,11 +182,17 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const clientRef = useRef<MCPBridgeClient | null>(null)
 
   useEffect(() => {
-    const off = onUserAction("user-action", (evt) => {
+    const cleanupUserActionListener = onUserAction("user-action", (evt) => {
       digestRef.current = applyUserActionToDigest(digestRef.current, evt)
       freshnessRef.current = "stale"
     })
-    return off
+    const cleanupUserEditListener = onUserEdit(() => {
+      freshnessRef.current = "stale"
+    })
+    return () => {
+      cleanupUserActionListener()
+      cleanupUserEditListener()
+    }
   }, [])
 
   useEffect(() => {

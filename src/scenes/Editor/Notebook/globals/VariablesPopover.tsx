@@ -26,6 +26,7 @@ import {
   readFromClipboard,
 } from "../../../../utils/copyToClipboard"
 import type { NotebookVariable } from "../../../../store/notebook"
+import { signalUserEdit } from "../../../../utils/notebookAIBridge"
 import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import {
   isValidVariableName,
@@ -439,6 +440,7 @@ export const VariablesPopover: React.FC = () => {
       if (!(await validateOnServer(list))) return
       if (cancelledRef.current) return
       if (!variablesEqual(normalizeVariables(settings.variables), list)) {
+        signalUserEdit()
         updateSettings({ variables: list })
       }
       setOpen(false)

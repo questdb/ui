@@ -73,6 +73,7 @@ export type ToolExecutionContext = {
   suggestedSQL?: string
   notebookMutated?: boolean
   sqlWriteExecuted?: boolean
+  notebookReadSeq?: number
 }
 
 export const executeTool = async (

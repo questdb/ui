@@ -330,12 +330,31 @@ type Waiter = {
 
 type Listener = (evt: UserActionEvent) => void
 
-// Module-level singletons. HMR-safe: re-registration from a remounted provider
-// simply replaces the stored handle.
 const controllers = new Map<number, NotebookController>()
 const waiters = new Map<number, Waiter[]>()
 const listeners = new Set<Listener>()
 let workspace: NotebookWorkspaceController | undefined
+
+let userActionSeq = 0
+export const getUserActionSeq = (): number => userActionSeq
+
+const editListeners = new Set<() => void>()
+export const onUserEdit = (cb: () => void): (() => void) => {
+  editListeners.add(cb)
+  return () => {
+    editListeners.delete(cb)
+  }
+}
+export const signalUserEdit = (): void => {
+  userActionSeq += 1
+  for (const cb of Array.from(editListeners)) {
+    try {
+      cb()
+    } catch {
+      // One bad subscriber must not break the others.
+    }
+  }
+}
 
 export const registerController = (controller: NotebookController): void => {
   controllers.set(controller.bufferId, controller)
@@ -421,6 +440,9 @@ export const on = (_event: "user-action", cb: Listener): (() => void) => {
 }
 
 export const emitUserAction = (evt: UserActionEvent): void => {
+  if (evt.kind !== "user_updated_cell") {
+    userActionSeq += 1
+  }
   // Snapshot to guard against subscribers mutating the set during emit.
   for (const cb of Array.from(listeners)) {
     try {

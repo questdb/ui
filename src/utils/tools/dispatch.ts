@@ -7,6 +7,7 @@ import {
   DocCategory,
 } from "../questdbDocsRetrieval"
 import {
+  getUserActionSeq,
   NotebookToolError,
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
@@ -27,7 +28,7 @@ import {
   runPermissionGate,
   type Permissions,
 } from "./permissions"
-import { categoryFor, mutatesNotebook } from "./tools"
+import { categoryFor, editsCells, mutatesNotebook } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
@@ -124,6 +125,21 @@ const routeNotebookTool = async <T>(
   }
 }
 
+const reSyncTool = (toolContext?: ToolExecutionContext): string =>
+  toolContext?.notebookReadSeq !== undefined
+    ? "get_notebook_state"
+    : "get_workspace_state"
+
+const staleNotebookResult = (toolContext?: ToolExecutionContext) => ({
+  content: JSON.stringify({
+    error_code: "stale",
+    message:
+      "STATE_STALE: The user changed the notebook. " +
+      `Call ${reSyncTool(toolContext)} to re-sync, then retry.`,
+  }),
+  is_error: true,
+})
+
 export const dispatchTool = async (
   toolName: string,
   input: unknown,
@@ -148,6 +164,13 @@ export const dispatchTool = async (
   }
   if (toolContext && mutatesNotebook(toolName)) {
     toolContext.notebookMutated = true
+  }
+  if (
+    toolContext?.notebookReadSeq !== undefined &&
+    editsCells(toolName) &&
+    getUserActionSeq() !== toolContext.notebookReadSeq
+  ) {
+    return staleNotebookResult(toolContext)
   }
   try {
     switch (toolName) {
@@ -329,9 +352,13 @@ export const dispatchTool = async (
       case "get_notebook_state": {
         const { buffer_id } = (input as { buffer_id: number }) || {}
         setStatus(AIOperationStatus.InspectingNotebook)
-        return routeNotebookTool(() =>
+        const res = await routeNotebookTool(() =>
           modelToolsClient.getNotebookState(buffer_id),
         )
+        if (!res.is_error && toolContext) {
+          toolContext.notebookReadSeq = getUserActionSeq()
+        }
+        return res
       }
       case "add_cell": {
         const { buffer_id, sql, after_cell_id, run } =
@@ -383,6 +410,8 @@ export const dispatchTool = async (
             value: string
           }) || {}
         setStatus(AIOperationStatus.UpdatingCell, { cellId: cell_id })
+        const updateBaseline =
+          toolContext?.notebookReadSeq ?? getUserActionSeq()
         if (validateSql) {
           const current = await modelToolsClient.getCell(buffer_id, cell_id)
           if (current.mode === "draw") {
@@ -391,6 +420,9 @@ export const dispatchTool = async (
               return { content: decision.reason, is_error: true }
             }
           }
+        }
+        if (getUserActionSeq() !== updateBaseline) {
+          return staleNotebookResult(toolContext)
         }
         return routeNotebookTool(() =>
           modelToolsClient.updateCell(buffer_id, cell_id, { value }),
@@ -613,6 +645,10 @@ export const dispatchTool = async (
             }>
           }) || {}
         setStatus(AIOperationStatus.BuildingNotebook)
+        // The MCP freshness gate is checked once before dispatch, but the
+        // per-variable/per-cell validation below awaits server round-trips.
+        // Snapshot user edits now and re-check before the destructive commit.
+        const userActionSeqAtStart = getUserActionSeq()
         if (!Array.isArray(cells)) {
           return {
             content: JSON.stringify({
@@ -787,6 +823,28 @@ export const dispatchTool = async (
             if (c.grid) cell.grid = c.grid
             return cell
           }),
+        }
+        if (signal?.aborted) {
+          return {
+            content: JSON.stringify({
+              error_code: "aborted",
+              message: "ABORTED: notebook state was not applied.",
+            }),
+            is_error: true,
+          }
+        }
+        const staleBaseline =
+          toolContext?.notebookReadSeq ?? userActionSeqAtStart
+        if (getUserActionSeq() !== staleBaseline) {
+          return {
+            content: JSON.stringify({
+              error_code: "stale",
+              message:
+                "STATE_STALE: The user changed the notebook while applying. " +
+                `Call ${reSyncTool(toolContext)} to re-sync, then retry.`,
+            }),
+            is_error: true,
+          }
         }
         try {
           const out = await modelToolsClient.applyNotebookState(

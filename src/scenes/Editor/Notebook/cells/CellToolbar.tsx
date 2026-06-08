@@ -14,7 +14,10 @@ import {
 import { DropdownMenu, Button } from "../../../../components"
 import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
-import { emitUserAction } from "../../../../utils/notebookAIBridge"
+import {
+  emitUserAction,
+  signalUserEdit,
+} from "../../../../utils/notebookAIBridge"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -116,7 +119,10 @@ export const CellToolbar: React.FC<Props> = ({ cellId, inline }) => {
     >
       <Button
         skin="transparent"
-        onClick={() => setMaximizedCellId(isMaximized ? null : cellId)}
+        onClick={() => {
+          signalUserEdit()
+          setMaximizedCellId(isMaximized ? null : cellId)
+        }}
         title={isMaximized ? "Restore" : "Maximize"}
       >
         {isMaximized ? (

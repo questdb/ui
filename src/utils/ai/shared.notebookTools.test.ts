@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from "vitest"
 import { dispatchTool } from "../tools/dispatch"
 import type { ModelToolsClient, StatusCallback } from "../aiAssistant"
-import { NotebookToolError } from "../notebookAIBridge"
+import {
+  NotebookToolError,
+  emitUserAction,
+  getUserActionSeq,
+  signalUserEdit,
+} from "../notebookAIBridge"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
@@ -641,6 +646,122 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "DECLARE\n  @base := 10,\n  @derived := @base + 1\nSELECT 1",
     )
     expect(client.applyNotebookState).toHaveBeenCalled()
+  })
+
+  it("apply_notebook_state rejects as STATE_STALE when the user edits during validation", async () => {
+    const client = makeClient()
+    // The user edits a cell (keystroke) while the per-variable validation awaits.
+    const validateSql = vi.fn(() => {
+      signalUserEdit()
+      return Promise.resolve({
+        query: "SELECT 1",
+        columns: [{ name: "1", type: "INT" }],
+        timestamp: 0,
+      })
+    })
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        variables: [{ name: "base", value: "10" }],
+        cells: [{ value: "SELECT @base" }],
+      },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code?: string }
+    expect(parsed.error_code).toBe("stale")
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("apply_notebook_state rejects STATE_STALE on a user edit since the read baseline (in-app generation window)", async () => {
+    const client = makeClient()
+    const readSeq = getUserActionSeq()
+    emitUserAction({ kind: "user_added_cell", bufferId: 1, cellId: "x" })
+    const toolContext = { notebookReadSeq: readSeq }
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
+      client,
+      noopStatus,
+      undefined,
+      undefined,
+      undefined,
+      toolContext,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code?: string }
+    expect(parsed.error_code).toBe("stale")
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("update_cell rejects STATE_STALE when the user edited since the read baseline", async () => {
+    const client = makeClient()
+    const readSeq = getUserActionSeq()
+    signalUserEdit()
+    const res = await dispatchTool(
+      "update_cell",
+      { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
+      client,
+      noopStatus,
+      undefined,
+      undefined,
+      undefined,
+      { notebookReadSeq: readSeq },
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code?: string }
+    expect(parsed.error_code).toBe("stale")
+    expect(client.updateCell).not.toHaveBeenCalled()
+  })
+
+  it("apply_notebook_state rejects after a user auto-refresh/maximize/spotlight toggle (signalUserEdit) since the read baseline", async () => {
+    const client = makeClient()
+    const readSeq = getUserActionSeq()
+    // handleAutoRefreshChange / handleChartMaximizedChange / the spotlight toggle
+    // all call signalUserEdit(); the agent's stale full-state apply must reject.
+    signalUserEdit()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
+      client,
+      noopStatus,
+      undefined,
+      undefined,
+      undefined,
+      { notebookReadSeq: readSeq },
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code?: string }
+    expect(parsed.error_code).toBe("stale")
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("update_cell rejects STATE_STALE when the user edits during validation", async () => {
+    const client = makeClient({
+      getCell: vi.fn(() => {
+        signalUserEdit()
+        return Promise.resolve({ id: "c", type: "sql", value: "", position: 0 })
+      }),
+    })
+    const validateSql = vi.fn(() =>
+      Promise.resolve({ query: "", columns: [], timestamp: 0 }),
+    )
+    const res = await dispatchTool(
+      "update_cell",
+      { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as { error_code?: string }
+    expect(parsed.error_code).toBe("stale")
+    expect(client.updateCell).not.toHaveBeenCalled()
   })
 
   it("apply_notebook_state does not derive ohlc from y_columns for candlestick", async () => {

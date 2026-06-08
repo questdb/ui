@@ -25,6 +25,8 @@ export interface ToolDefinition {
   category: ToolCategory
   surfaces?: ToolSurface[]
   mutatesNotebook?: boolean
+  // Modifies existing cell content/arrangement in place
+  editsCells?: boolean
 }
 
 export type ToolCall = {

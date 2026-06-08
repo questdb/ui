@@ -178,18 +178,21 @@ export const AIConversationProvider: React.FC<{
   }, [conversationMetas])
 
   useEffect(() => {
-    const off = onUserAction("user-action", (evt: UserActionEvent) => {
-      for (const meta of conversationMetasRef.current.values()) {
-        if (meta.notebookBufferId !== evt.bufferId) continue
-        let digest = userActionDigestsRef.current.get(meta.id)
-        if (!digest) {
-          digest = createEmptyDigest()
-          userActionDigestsRef.current.set(meta.id, digest)
+    const cleanupUserActionListener = onUserAction(
+      "user-action",
+      (evt: UserActionEvent) => {
+        for (const meta of conversationMetasRef.current.values()) {
+          if (meta.notebookBufferId !== evt.bufferId) continue
+          let digest = userActionDigestsRef.current.get(meta.id)
+          if (!digest) {
+            digest = createEmptyDigest()
+            userActionDigestsRef.current.set(meta.id, digest)
+          }
+          applyUserActionToDigest(digest, evt)
         }
-        applyUserActionToDigest(digest, evt)
-      }
-    })
-    return off
+      },
+    )
+    return cleanupUserActionListener
   }, [])
 
   const [activeConversationMessages, setActiveConversationMessages] = useState<

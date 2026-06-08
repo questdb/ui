@@ -28,6 +28,7 @@ import type { AIProvider } from "./ai"
 import type { ToolExecutionContext } from "./ai/shared"
 import {
   getController,
+  getUserActionSeq,
   getWorkspace,
   NotebookToolError,
   withBoundNotebook,
@@ -775,6 +776,7 @@ export const continueConversation = async ({
   setStatus,
   abortSignal,
   streaming,
+  notebookReadSeq,
 }: {
   userMessage: string
   conversationHistory: Array<ConversationMessage>
@@ -784,6 +786,7 @@ export const continueConversation = async ({
   abortSignal?: AbortSignal
   conversationId?: ConversationId
   streaming?: StreamingCallback
+  notebookReadSeq?: number
 }): Promise<
   (GeneratedSQL | AiAssistantAPIError) & {
     compactedConversationHistory?: Array<ConversationMessage>
@@ -822,7 +825,9 @@ export const continueConversation = async ({
     }
   }
 
-  const flowToolContext: ToolExecutionContext = {}
+  const flowToolContext: ToolExecutionContext = {
+    notebookReadSeq: notebookReadSeq ?? getUserActionSeq(),
+  }
 
   return tryWithRetries(
     async () => {

@@ -23,7 +23,10 @@ import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
 import { useEditor } from "../../../../providers/EditorProvider"
-import { emitUserAction } from "../../../../utils/notebookAIBridge"
+import {
+  emitUserAction,
+  signalUserEdit,
+} from "../../../../utils/notebookAIBridge"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
@@ -230,15 +233,24 @@ const CellInner: React.FC<Props> = ({
   )
 
   const handleChartConfigChange = useCallback(
-    (config: ChartConfig) => setCellChartConfig(cell.id, config),
+    (config: ChartConfig) => {
+      signalUserEdit()
+      setCellChartConfig(cell.id, config)
+    },
     [cell.id, setCellChartConfig],
   )
   const handleAutoRefreshChange = useCallback(
-    (value: boolean) => setCellAutoRefresh(cell.id, value),
+    (value: boolean) => {
+      signalUserEdit()
+      setCellAutoRefresh(cell.id, value)
+    },
     [cell.id, setCellAutoRefresh],
   )
   const handleChartMaximizedChange = useCallback(
-    (value: boolean) => setCellChartMaximized(cell.id, value),
+    (value: boolean) => {
+      signalUserEdit()
+      setCellChartMaximized(cell.id, value)
+    },
     [cell.id, setCellChartMaximized],
   )
 
@@ -424,6 +436,8 @@ const CellInner: React.FC<Props> = ({
     }
   }, [cell.id, runCell, tryRunSelection, editorRef, clearHighlight])
 
+  const isExternalSyncRef = useRef(false)
+
   // 500 ms-debounced — one event per cell per typing burst keeps the digest tiny.
   const updateEmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleUpdateEvent = useCallback(() => {
@@ -450,9 +464,11 @@ const CellInner: React.FC<Props> = ({
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
+      if (isExternalSyncRef.current) return
       if (value !== undefined) {
         const viewState = editorRef.current?.saveViewState() ?? undefined
         updateCell(cell.id, { value, editorViewState: viewState })
+        signalUserEdit()
         scheduleUpdateEvent()
       }
     },
@@ -468,13 +484,18 @@ const CellInner: React.FC<Props> = ({
     if (ed.getValue() === cell.value) return
     const model = ed.getModel()
     if (!model) return
-    ed.executeEdits("external-sync", [
-      {
-        range: model.getFullModelRange(),
-        text: cell.value,
-        forceMoveMarkers: true,
-      },
-    ])
+    isExternalSyncRef.current = true
+    try {
+      ed.executeEdits("external-sync", [
+        {
+          range: model.getFullModelRange(),
+          text: cell.value,
+          forceMoveMarkers: true,
+        },
+      ])
+    } finally {
+      isExternalSyncRef.current = false
+    }
   }, [cell.value, editorRef])
 
   useEffect(() => {

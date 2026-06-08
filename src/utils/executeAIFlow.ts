@@ -41,6 +41,7 @@ export type NotebookFlowContext = {
   snapshot: NotebookContextSnapshot | null
   digest?: UserActionDigest
   workspace?: WorkspaceInfo
+  readSeq?: number
 }
 
 export type WorkspaceInfo = {
@@ -782,6 +783,7 @@ export async function executeAIFlow(
       setStatus: setStatusWithHistoryAndResetFlags,
       abortSignal,
       streaming: streamingCallback,
+      notebookReadSeq: config.notebookContext?.readSeq,
     })
 
     const flowResult = processResult({

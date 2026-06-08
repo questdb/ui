@@ -34,6 +34,9 @@ export const categoryFor = (name: string): ToolCategory =>
 export const mutatesNotebook = (name: string): boolean =>
   !!_DEF_BY_NAME.get(name)?.mutatesNotebook
 
+export const editsCells = (name: string): boolean =>
+  !!_DEF_BY_NAME.get(name)?.editsCells
+
 export const MCP_META_TOOL_NAMES: readonly string[] = ALL_DEFINITIONS.filter(
   (d) => d.surfaces?.length === 1 && d.surfaces[0] === "mcp",
 ).map((d) => d.name)

@@ -247,6 +247,7 @@
     "name": "update_cell",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Replace a cell's value. Overwrites preemptively — cells are auto-saved. Use to fix a broken SQL cell.",
     "inputSchema": {
       "type": "object",
@@ -269,6 +270,7 @@
     "name": "delete_cell",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Delete a cell from the notebook.",
     "inputSchema": {
       "type": "object",
@@ -288,6 +290,7 @@
     "name": "move_cell_up",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Swap a cell with the one above it.",
     "inputSchema": {
       "type": "object",
@@ -307,6 +310,7 @@
     "name": "move_cell_down",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Swap a cell with the one below it.",
     "inputSchema": {
       "type": "object",
@@ -364,6 +368,7 @@
     "name": "set_layout_mode",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Switch a notebook between list and grid layouts.",
     "inputSchema": {
       "type": "object",
@@ -384,6 +389,7 @@
     "name": "set_cell_layout",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Position a single cell in grid mode. x/y/w/h are integers in the 12-column react-grid-layout grid (w ≤ 12).",
     "inputSchema": {
       "type": "object",
@@ -415,6 +421,7 @@
     "name": "set_cell_mode",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Switch a SQL cell between run (table output) and draw (chart output). Draw cells auto-execute — do not call run_cell afterwards. MULTI-SERIES TIP: a draw-mode cell can hold multiple SELECT statements separated by `;`. The first query's timestamp column is the chart's x-axis (the 'anchor'); every additional query contributes its numeric columns as extra series merged on the time axis. Use this to overlay metrics that come from different tables or different aggregations on a single chart.",
     "inputSchema": {
       "type": "object",
@@ -438,6 +445,7 @@
     "name": "set_cell_chart_config",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`name`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
     "inputSchema": {
       "type": "object",
@@ -556,6 +564,7 @@
     "name": "set_cell_autorefresh",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Enable or disable auto-refresh polling for a draw-mode cell's chart.",
     "inputSchema": {
       "type": "object",
@@ -578,6 +587,7 @@
     "name": "set_cell_chart_maximized",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Toggle chart-fills-cell (maximized chart) for a draw cell.",
     "inputSchema": {
       "type": "object",
@@ -793,6 +803,7 @@
     "name": "set_cell_maximized",
     "category": "free",
     "mutatesNotebook": true,
+    "editsCells": true,
     "description": "Spotlight one cell (or null to restore normal layout). Hides other cells in the notebook view.",
     "inputSchema": {
       "type": "object",
