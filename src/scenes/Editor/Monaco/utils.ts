@@ -109,74 +109,22 @@ export const stripSQLComments = (text: string): string =>
   })
 
 export const getQueriesFromText = (text: string): string[] => {
-  if (!text) return []
-  const queries: string[] = []
-  let buf = ""
-  let inSingle = false
-  let inDouble = false
-  let inLineComment = false
-  let inBlockComment = false
+  if (!text || !stripSQLComments(text)) return []
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    const next = text[i + 1]
-
-    if (inLineComment) {
-      buf += ch
-      if (ch === "\n") inLineComment = false
-      continue
-    }
-    if (inBlockComment) {
-      buf += ch
-      if (ch === "*" && next === "/") {
-        buf += next
-        i++
-        inBlockComment = false
-      }
-      continue
-    }
-    if (inSingle) {
-      buf += ch
-      if (ch === "'") inSingle = false
-      continue
-    }
-    if (inDouble) {
-      buf += ch
-      if (ch === '"') inDouble = false
-      continue
-    }
-
-    if (ch === "-" && next === "-") {
-      buf += ch
-      inLineComment = true
-      continue
-    }
-    if (ch === "/" && next === "*") {
-      buf += ch
-      inBlockComment = true
-      continue
-    }
-    if (ch === "'") {
-      inSingle = true
-      buf += ch
-      continue
-    }
-    if (ch === '"') {
-      inDouble = true
-      buf += ch
-      continue
-    }
-    if (ch === ";") {
-      const trimmed = buf.trim()
-      if (trimmed) queries.push(trimmed)
-      buf = ""
-      continue
-    }
-    buf += ch
+  const lines = text.split("\n")
+  const lastPosition: IPosition = {
+    lineNumber: lines.length,
+    column: (lines[lines.length - 1]?.length ?? 0) + 1,
   }
-  const tail = buf.trim()
-  if (tail) queries.push(tail)
-  return queries
+
+  const { sqlTextStack, nextSql } = getQueriesFromPositionInText(
+    text,
+    lastPosition,
+  )
+  const items = nextSql ? [...sqlTextStack, nextSql] : sqlTextStack
+  return items
+    .map((item) => text.substring(item.position, item.limit).trim())
+    .filter((query) => query.length > 0)
 }
 
 export const getSelectedText = (
@@ -265,17 +213,11 @@ export const getQueriesToRun = (
   return requests.filter(Boolean) as Request[]
 }
 
-export const getQueriesFromPosition = (
-  editor: IStandaloneCodeEditor,
+export const getQueriesFromPositionInText = (
+  text: string,
   editorPosition: IPosition,
   startPosition?: IPosition,
 ): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
-  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
-
-  if (!text || !stripSQLComments(text)) {
-    return { sqlTextStack: [], nextSql: null }
-  }
-
   const position = {
     row: editorPosition.lineNumber - 1,
     column: editorPosition.column,
@@ -550,6 +492,20 @@ export const getQueriesFromPosition = (
       : null
 
   return { sqlTextStack: filteredSqlTextStack, nextSql: filteredNextSql }
+}
+
+export const getQueriesFromPosition = (
+  editor: IStandaloneCodeEditor,
+  editorPosition: IPosition,
+  startPosition?: IPosition,
+): { sqlTextStack: SqlTextItem[]; nextSql: SqlTextItem | null } => {
+  const text = editor.getValue({ preserveBOM: false, lineEnding: "\n" })
+
+  if (!text || !stripSQLComments(text)) {
+    return { sqlTextStack: [], nextSql: null }
+  }
+
+  return getQueriesFromPositionInText(text, editorPosition, startPosition)
 }
 
 export const getQueryFromCursor = (

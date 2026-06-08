@@ -138,6 +138,7 @@ export interface ModelToolsClient {
     bufferId: number,
     cellId: string,
     signal?: AbortSignal,
+    sql?: string,
   ) => Promise<{
     success: boolean
     queryCount: number
@@ -555,12 +556,12 @@ export function createModelToolsClient(
       })
     },
 
-    runCell(bufferId, cellId, signal) {
+    runCell(bufferId, cellId, signal, sql) {
       return withBoundNotebook(
         bufferId,
         async (ctrl) => {
           requireCell(ctrl, cellId)
-          return ctrl.runCell(cellId, signal)
+          return ctrl.runCell(cellId, signal, sql)
         },
         signal ?? abortSignal,
       )

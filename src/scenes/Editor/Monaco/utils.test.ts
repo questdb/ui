@@ -45,6 +45,33 @@ describe("getQueriesFromText", () => {
     ])
   })
 
+  it("drops a trailing line-comment-only segment", () => {
+    expect(getQueriesFromText("select 1; -- note")).toEqual(["select 1"])
+  })
+
+  it("drops a trailing block-comment-only segment", () => {
+    expect(getQueriesFromText("select 1; /* note */")).toEqual(["select 1"])
+  })
+
+  it("drops standalone comment-only segments after the last statement", () => {
+    expect(
+      getQueriesFromText(
+        "--comment;\nselect 1;\n-- select /* comment */ 2;\n-- -- comment;",
+      ),
+    ).toEqual(["select 1"])
+  })
+
+  it("strips a leading comment but keeps a following statement", () => {
+    expect(
+      getQueriesFromText("--some comment;\nselect 1;\nselect /*comment*/ 2;\n"),
+    ).toEqual(["select 1", "select /*comment*/ 2"])
+  })
+
+  it("returns empty for comment-only input", () => {
+    expect(getQueriesFromText("-- just a comment")).toEqual([])
+    expect(getQueriesFromText("/* block only */")).toEqual([])
+  })
+
   it("preserves WITH..SELECT and DECLARE prefixes (VWAP example)", () => {
     const sql = `declare
   @symbol := 'BTC-USDT'

@@ -8,6 +8,7 @@ import {
   on,
   registerController,
   registerWorkspace,
+  summarizeCellResults,
   unregisterController,
   unregisterWorkspace,
   waitForController,
@@ -16,7 +17,11 @@ import {
   type NotebookWorkspaceController,
   type UserActionEvent,
 } from "./notebookAIBridge"
-import type { NotebookViewState } from "../store/notebook"
+import type {
+  CellResult,
+  NotebookCell,
+  NotebookViewState,
+} from "../store/notebook"
 
 const emptyState: NotebookViewState = { cells: [] }
 
@@ -262,5 +267,58 @@ describe("withBoundNotebook", () => {
     await expect(
       withBoundNotebook(1, () => Promise.reject(new Error("inner"))),
     ).rejects.toThrow(/inner/)
+  })
+})
+
+describe("summarizeCellResults", () => {
+  const cellWith = (results: CellResult["results"]): NotebookCell =>
+    ({
+      id: "c1",
+      value: "select 1",
+      mode: "run",
+      result: { results, activeResultIndex: 0, timestamp: 0 },
+    }) as unknown as NotebookCell
+
+  it("reports success only when all entries are terminal-success", () => {
+    expect(
+      summarizeCellResults(
+        cellWith([{ type: "dql" } as never, { type: "ddl" } as never]),
+      ),
+    ).toEqual({ success: true, queryCount: 2, results: ["success", "success"] })
+  })
+
+  it("does NOT report success for a non-terminal running/queued entry", () => {
+    // Reachable via a superseded agent run: user re-runs the same cell
+    // (Ctrl+Enter) while the agent's run_cell is in flight. The agent must
+    // not be told success for a query that never completed.
+    expect(
+      summarizeCellResults(cellWith([{ type: "running" } as never])),
+    ).toEqual({ success: false, queryCount: 1, results: ["pending"] })
+    expect(
+      summarizeCellResults(cellWith([{ type: "queued" } as never])),
+    ).toEqual({ success: false, queryCount: 1, results: ["pending"] })
+  })
+
+  it("surfaces cancelled and error entries without success", () => {
+    expect(
+      summarizeCellResults(
+        cellWith([
+          { type: "cancelled" } as never,
+          { type: "error", error: "boom" } as never,
+        ]),
+      ),
+    ).toEqual({
+      success: false,
+      queryCount: 2,
+      results: ["cancelled", "ERROR: boom"],
+    })
+  })
+
+  it("reports failure for a cell with no result", () => {
+    expect(summarizeCellResults(undefined)).toEqual({
+      success: false,
+      queryCount: 0,
+      results: [],
+    })
   })
 })

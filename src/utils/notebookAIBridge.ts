@@ -38,6 +38,7 @@ export type NotebookController = {
   runCell: (
     cellId: string,
     signal?: AbortSignal,
+    sql?: string,
   ) => Promise<{
     success: boolean
     queryCount: number
@@ -113,7 +114,7 @@ export type ApplyNotebookStateRequest = {
 const sanitizeForPromptContext = (s: string): string =>
   s.replace(/</g, "\u2039").replace(/>/g, "\u203A")
 
-const summarizeCellResults = (cell: NotebookCell | undefined) => {
+export const summarizeCellResults = (cell: NotebookCell | undefined) => {
   const freshResult = cell?.result
   if (!freshResult) {
     return { success: false, queryCount: 0, results: [] }
@@ -121,6 +122,7 @@ const summarizeCellResults = (cell: NotebookCell | undefined) => {
 
   const results = freshResult.results.map((r) => {
     if (r.type === "cancelled") return "cancelled"
+    if (r.type === "running" || r.type === "queued") return "pending"
     if (r.type === "error") {
       const trimmed =
         r.error.length > 200 ? `${r.error.slice(0, 197)}...` : r.error
@@ -149,13 +151,13 @@ export const createNotebookController = (
   moveCellUp: (cellId) => liveActionsRef.current.moveCellUp(cellId),
   moveCellDown: (cellId) => liveActionsRef.current.moveCellDown(cellId),
   duplicateCell: (cellId) => liveActionsRef.current.duplicateCell(cellId),
-  runCell: async (cellId, signal) => {
+  runCell: async (cellId, signal, sql) => {
     const cellBefore = liveActionsRef.current
       .getCellsSnapshot()
       .find((c) => c.id === cellId)
     const priorResult = cellBefore?.result ?? null
 
-    await liveActionsRef.current.runCell(cellId, undefined, signal)
+    await liveActionsRef.current.runCell(cellId, sql, signal)
 
     const cell = liveActionsRef.current
       .getCellsSnapshot()

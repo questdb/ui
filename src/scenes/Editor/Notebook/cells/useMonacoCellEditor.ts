@@ -5,6 +5,7 @@ import type * as QuestDB from "../../../../utils/questdb"
 import {
   clearModelMarkers,
   clearValidationMarkers,
+  getQueryFromCursor,
   pinMonacoContextMenu,
   validateQueryJIT,
 } from "../../Monaco/utils"
@@ -50,6 +51,33 @@ export const useMonacoCellEditor = ({
   const monacoRef = useRef<Monaco | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
   const contextMenuCleanupRef = useRef<(() => void) | null>(null)
+  const cursorQueryDecorationIdsRef = useRef<string[]>([])
+
+  const decorateCursorQuery = useCallback(() => {
+    const ed = editorRef.current
+    const mon = monacoRef.current
+    if (!ed || !mon) return
+    const query = getQueryFromCursor(ed)
+    cursorQueryDecorationIdsRef.current = ed.deltaDecorations(
+      cursorQueryDecorationIdsRef.current,
+      query
+        ? [
+            {
+              range: new mon.Range(
+                query.row + 1,
+                query.column,
+                query.endRow + 1,
+                query.endColumn,
+              ),
+              options: {
+                isWholeLine: true,
+                linesDecorationsClassName: "cursorQueryDecoration",
+              },
+            },
+          ]
+        : [],
+    )
+  }, [])
 
   // Refs for handlers so the once-mounted Monaco listeners always read
   // the latest callbacks instead of capturing stale closures.
@@ -105,8 +133,15 @@ export const useMonacoCellEditor = ({
       contextMenuCleanupRef.current = pinMonacoContextMenu(ed)
 
       ed.onDidFocusEditorWidget(onFocus)
-      ed.onDidChangeCursorPosition(scheduleValidation)
-      ed.onDidChangeModelContent(scheduleValidation)
+      ed.onDidChangeCursorPosition(() => {
+        scheduleValidation()
+        decorateCursorQuery()
+      })
+      ed.onDidChangeModelContent(() => {
+        scheduleValidation()
+        decorateCursorQuery()
+      })
+      decorateCursorQuery()
 
       // Clear built-in Ctrl+Shift+Enter handler (same pattern as editor-addons.ts)
       ed.addCommand(
@@ -130,7 +165,7 @@ export const useMonacoCellEditor = ({
         run: () => void onRunAllRef.current(),
       })
     },
-    [editorViewState, onFocus, scheduleValidation],
+    [editorViewState, onFocus, scheduleValidation, decorateCursorQuery],
   )
 
   useEffect(() => {

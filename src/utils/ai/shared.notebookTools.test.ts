@@ -118,7 +118,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       client,
       noopStatus,
     )
-    expect(client.runCell).toHaveBeenCalledWith(1, "new-cell", undefined)
+    expect(client.runCell).toHaveBeenCalledWith(
+      1,
+      "new-cell",
+      undefined,
+      undefined,
+    )
     expect(JSON.parse(res.content)).toEqual({
       cellId: "new-cell",
       ran: false,
@@ -963,6 +968,50 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       }),
     )
     expect(res.is_error).toBeFalsy()
+    // The exact authorization-checked SQL is threaded to execution.
+    expect(client.runCell).toHaveBeenCalledWith(1, "c", undefined, "SELECT 1")
+  })
+
+  it("run_cell executes the checked SQL, not a value swapped in during the validate round-trip", async () => {
+    // A run-mode cell starts at a read query the gate will allow.
+    let liveValue = "SELECT 1"
+    const client = makeClient({ getCellSql: vi.fn(() => liveValue) })
+    // Simulate a concurrent ungated update_cell landing while run_cell awaits
+    // the /sql/validate round-trip: the live cell value flips to a write
+    // between classification and execution.
+    const validateSql = vi.fn((sql: string) => {
+      liveValue = "DROP TABLE t"
+      return Promise.resolve({
+        query: sql,
+        columns: [{ name: "c1", type: "LONG" }],
+        timestamp: -1,
+      })
+    })
+    const res = await dispatchTool(
+      "run_cell",
+      { buffer_id: 1, cell_id: "c" },
+      client,
+      noopStatus,
+      { grantSchemaAccess: false, read: true, write: false },
+      validateSql,
+    )
+    expect(res.is_error).toBeFalsy()
+    // The race is real: the live value did change mid-flight...
+    expect(liveValue).toBe("DROP TABLE t")
+    // ...but the executor was handed the checked SELECT, never the DROP.
+    expect(client.runCell).toHaveBeenCalledWith(1, "c", undefined, "SELECT 1")
+  })
+
+  it("run_cell with no gate leaves execution to re-read the live cell", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "run_cell",
+      { buffer_id: 1, cell_id: "c" },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBeFalsy()
+    // No gate ran, so no SQL is pinned — the executor re-reads the cell.
     expect(client.runCell).toHaveBeenCalledWith(1, "c", undefined)
   })
 
@@ -1029,7 +1078,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       noopStatus,
     )
     expect(res.is_error).toBeFalsy()
-    expect(runCell).toHaveBeenCalledWith(1, "new-1", undefined)
+    expect(runCell).toHaveBeenCalledWith(1, "new-1", undefined, undefined)
     const parsed = JSON.parse(res.content) as {
       runs: Array<{
         cellId: string
@@ -1070,7 +1119,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       client,
       noopStatus,
     )
-    expect(runCell).toHaveBeenCalledWith(1, "new-1", undefined)
+    expect(runCell).toHaveBeenCalledWith(1, "new-1", undefined, undefined)
   })
 
   it("skips cells whose resolved mode is 'draw'", async () => {
@@ -1234,7 +1283,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       dqlValidate,
     )
     expect(runCell).toHaveBeenCalledTimes(1)
-    expect(runCell).toHaveBeenCalledWith(1, "run-id", undefined)
+    expect(runCell).toHaveBeenCalledWith(1, "run-id", undefined, "SELECT 1")
   })
 
   it("dispatches run-mode cells in parallel — total wallclock equals slowest cell, not the sum", async () => {

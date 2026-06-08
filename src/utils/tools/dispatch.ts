@@ -391,7 +391,12 @@ export const dispatchTool = async (
               }
             }
             setStatus(AIOperationStatus.RunningCell, { cellId })
-            const r = await modelToolsClient.runCell(buffer_id, cellId, signal)
+            const r = await modelToolsClient.runCell(
+              buffer_id,
+              cellId,
+              signal,
+              perms && validateSql ? sql : undefined,
+            )
             return {
               cellId,
               ran: r.success,
@@ -482,6 +487,9 @@ export const dispatchTool = async (
           if (!decision.granted) {
             return { content: decision.reason, is_error: true }
           }
+          return routeNotebookTool(() =>
+            modelToolsClient.runCell(buffer_id, cell_id, signal, cellSql),
+          )
         }
         return routeNotebookTool(() =>
           modelToolsClient.runCell(buffer_id, cell_id, signal),
@@ -903,6 +911,7 @@ export const dispatchTool = async (
                   buffer_id,
                   r.cellId,
                   signal,
+                  perms && validateSql ? r.value : undefined,
                 )
                 return {
                   cellId: r.cellId,

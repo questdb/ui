@@ -116,14 +116,16 @@ const DrawButton = styled.button<{ $active: boolean }>`
   }
 `
 
-// Editor slot. Numeric sizing (`height` in list/grid, `flex` in spotlight)
-// is applied via the inline `style` prop on the call site so styled-
-// components doesn't mint a new generated class for every distinct pixel
-// value during a resize drag. Only static, boolean-switched rules live
-// in the template here.
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
   overflow: hidden;
   background: ${color("editorBackground")};
+
+  .cursorQueryDecoration {
+    width: 0.2rem !important;
+    background: ${color("green")};
+    margin-left: 0.5rem;
+  }
+
   ${({ $spotlight }) =>
     $spotlight
       ? css`
@@ -303,7 +305,10 @@ const CellInner: React.FC<Props> = ({
   ])
 
   const exitDrawIfNeeded = useCallback(() => {
-    if (isDrawMode) setCellMode(cell.id, "run")
+    if (isDrawMode) {
+      signalUserEdit()
+      setCellMode(cell.id, "run")
+    }
   }, [cell.id, isDrawMode, setCellMode])
 
   const liveTopHeight = topResize.liveHeight
