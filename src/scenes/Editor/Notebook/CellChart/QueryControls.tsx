@@ -1,16 +1,10 @@
 import React from "react"
 import styled from "styled-components"
-import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { Button, CopyButton, MultiSelect, Text } from "../../../../components"
 import { Select } from "../../../../components/Select"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
 import type { ChartType, QueryChart, SeriesAxis } from "./chartTypes"
-import {
-  availableChartTypes,
-  findOhlc,
-  groupColumns,
-  MAX_DEFAULT_SERIES,
-} from "./inferChartConfig"
+import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
   Field,
@@ -40,27 +34,6 @@ const PARTITION_TYPES: ChartType[] = [
   "stackedBar",
   "scatter",
 ]
-
-const inferQueryFromColumns = (columns: ColumnDefinition[]): QueryChart => {
-  const g = groupColumns(columns)
-  const cap = (cols: ColumnDefinition[]) =>
-    cols.slice(0, MAX_DEFAULT_SERIES).map((c) => c.name)
-  const ohlc = findOhlc(g.numeric)
-  if (g.temporal.length > 0 && ohlc) {
-    return {
-      type: "candlestick",
-      yColumns: [ohlc.open, ohlc.high, ohlc.low, ohlc.close],
-      ohlc,
-    }
-  }
-  if (g.temporal.length > 0 && g.numeric.length > 0)
-    return { type: "line", yColumns: cap(g.numeric) }
-  if (g.categorical.length > 0 && g.numeric.length > 0)
-    return { type: "bar", yColumns: cap(g.numeric) }
-  if (g.numeric.length >= 2)
-    return { type: "scatter", yColumns: cap(g.numeric.slice(1)) }
-  return { type: "bar", yColumns: cap(g.numeric) }
-}
 
 const QueryCard = styled.div`
   display: flex;
@@ -326,7 +299,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       <Button
         type="button"
         skin="secondary"
-        onClick={() => onSetQuery(inferQueryFromColumns(activeTab.columns))}
+        onClick={() => onSetQuery(activeTab.inferredChart)}
       >
         Reset to auto
       </Button>

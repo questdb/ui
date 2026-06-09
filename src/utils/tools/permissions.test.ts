@@ -88,7 +88,7 @@ describe("togglePermission cascade (write ⇒ read ⇒ grantSchemaAccess)", () =
   })
 
   it("default constants", () => {
-    expect(DEFAULT_GRANTED).toEqual(ALL_ON)
+    expect(DEFAULT_GRANTED).toEqual(READ_ONLY)
     expect(DEFAULT_DENIED).toEqual(ALL_OFF)
   })
 })

@@ -160,15 +160,15 @@ describe("MCP bridge permissions (e2e)", () => {
   })
 
   describe("consent modal", () => {
-    it("user lowers to Read before Connect; hello carries { grantSchemaAccess:T, read:T, write:F }", () => {
+    it("default is Read; user raises to Write before Connect; hello carries { grantSchemaAccess:T, read:T, write:T }", () => {
       loginAndVisitDeepLink()
 
       cy.getByDataHook("permissions").should("be.visible")
-      cy.getByDataHook("permissions-trigger").should("contain", "Write")
+      cy.getByDataHook("permissions-trigger").should("contain", "Read")
 
       cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-read").click()
-      cy.getByDataHook("permissions-trigger").should("contain", "Read")
+      cy.getByDataHook("permission-level-write").click()
+      cy.getByDataHook("permissions-trigger").should("contain", "Write")
 
       cy.getByDataHook("mcp-pair-consent-connect").click()
 
@@ -178,7 +178,7 @@ describe("MCP bridge permissions (e2e)", () => {
         expect(hellos[0].permissions).to.deep.equal({
           grantSchemaAccess: true,
           read: true,
-          write: false,
+          write: true,
         })
         expect(hellos[0].token).to.equal(TEST_BRIDGE_TOKEN)
       })
@@ -194,7 +194,7 @@ describe("MCP bridge permissions (e2e)", () => {
         ).to.deep.equal({
           grantSchemaAccess: true,
           read: true,
-          write: false,
+          write: true,
         })
       })
     })
@@ -345,7 +345,7 @@ describe("MCP bridge permissions (e2e)", () => {
   })
 
   describe("popover: submit-only persistence", () => {
-    it("lowering to Read without clicking Apply does NOT change localStorage", () => {
+    it("raising to Write without clicking Apply does NOT change localStorage", () => {
       loginAndVisitDeepLink()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
@@ -356,37 +356,37 @@ describe("MCP bridge permissions (e2e)", () => {
       cy.window().then((win) => {
         expect(
           JSON.parse(win.localStorage.getItem("mcp:permissions")),
-        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: true })
+        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: false })
       })
 
       cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-read").click()
+      cy.getByDataHook("permission-level-write").click()
       cy.getByDataHook("mcp-pair-cancel").click()
 
       cy.window().then((win) => {
         expect(
           JSON.parse(win.localStorage.getItem("mcp:permissions")),
-        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: true })
+        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: false })
       })
 
       cy.getByDataHook("mcp-bridge-status-pill").click()
-      cy.getByDataHook("permissions-trigger").should("contain", "Write")
+      cy.getByDataHook("permissions-trigger").should("contain", "Read")
     })
 
-    it("lower to Read + Apply: localStorage updates, no reconnect", () => {
+    it("raise to Write + Apply: localStorage updates, no reconnect", () => {
       loginAndVisitDeepLink()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 
       cy.getByDataHook("mcp-bridge-status-pill").click()
       cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-read").click()
+      cy.getByDataHook("permission-level-write").click()
       cy.getByDataHook("mcp-pair-submit").should("contain", "Connect").click()
 
       cy.window().then((win) => {
         expect(
           JSON.parse(win.localStorage.getItem("mcp:permissions")),
-        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: false })
+        ).to.deep.equal({ grantSchemaAccess: true, read: true, write: true })
         expect(win.__mcpFakeWS.framesOfType("hello")).to.have.length(1)
       })
       cy.getByDataHook("mcp-bridge-status-pill").should(
@@ -400,7 +400,7 @@ describe("MCP bridge permissions (e2e)", () => {
     it("consented pair auto-restores; new hello carries the previously-committed permissions", () => {
       loginAndVisitDeepLink()
       cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-read").click()
+      cy.getByDataHook("permission-level-write").click()
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 
@@ -420,7 +420,7 @@ describe("MCP bridge permissions (e2e)", () => {
         expect(hello.permissions).to.deep.equal({
           grantSchemaAccess: true,
           read: true,
-          write: false,
+          write: true,
         })
         win.__mcpFakeWS.helloAck()
       })

@@ -38,6 +38,7 @@ import {
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
+const FETCH_DEBOUNCE_MS = 300
 // Draw auto-refresh can poll every few seconds; throttle snapshot writes so a
 // live chart doesn't churn IndexedDB. A reload restores the last saved frame.
 const SNAPSHOT_THROTTLE_MS = 10000
@@ -108,9 +109,18 @@ export const DrawCanvas: React.FC<Props> = ({
   >(null)
   const [zoomStart, setZoomStart] = useState(0)
   const [zoomEnd, setZoomEnd] = useState(100)
+  const [debouncedSql, setDebouncedSql] = useState(cell.value)
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setDebouncedSql(cell.value),
+      FETCH_DEBOUNCE_MS,
+    )
+    return () => clearTimeout(timer)
+  }, [cell.value])
+
   const classifyCache = useMemo(
     () => new Map<string, "DQL" | "DDL_DML" | "ERROR">(),
-    [cell.value],
+    [debouncedSql],
   )
 
   const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
@@ -128,7 +138,10 @@ export const DrawCanvas: React.FC<Props> = ({
     setZoomEnd(100)
   }, [])
 
-  const queries = useMemo(() => getQueriesFromText(cell.value), [cell.value])
+  const queries = useMemo(
+    () => getQueriesFromText(debouncedSql),
+    [debouncedSql],
+  )
   const queriesKey = queries.join("\u0001")
 
   const inFlightRef = useRef<AbortController | null>(null)
@@ -148,12 +161,12 @@ export const DrawCanvas: React.FC<Props> = ({
       void saveCellSnapshot({
         bufferId,
         cellId: cell.id,
-        sqlHash: sqlHash(cell.value),
+        sqlHash: sqlHash(debouncedSql),
         results,
         savedAt: now,
       }).then(() => pruneToRecentNotebooks())
     },
-    [bufferId, cell.id, cell.value],
+    [bufferId, cell.id, debouncedSql],
   )
 
   const fetchAll = useCallback(async () => {
@@ -246,7 +259,7 @@ export const DrawCanvas: React.FC<Props> = ({
           () => undefined,
         )
         if (cancelled) return
-        if (snap && snap.sqlHash === sqlHash(cell.value)) {
+        if (snap && snap.sqlHash === sqlHash(debouncedSql)) {
           const hydrated = successResults(snap.results.map(toExecResult))
           if (hydrated.length > 0) {
             // Don't clobber live data that may already have landed.
@@ -261,7 +274,7 @@ export const DrawCanvas: React.FC<Props> = ({
     return () => {
       cancelled = true
     }
-  }, [fetchAll, bufferId, cell.id, cell.value, queriesKey])
+  }, [fetchAll, bufferId, cell.id, debouncedSql, queriesKey])
 
   useEffect(
     () => () => {

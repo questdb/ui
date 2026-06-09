@@ -85,6 +85,7 @@ export type QueryTab = {
   query: string
   columns: ColumnDefinition[]
   compatible: boolean
+  inferredChart: QueryChart
 }
 
 export type DrawResolution = {
@@ -187,6 +188,7 @@ export const resolveDraw = (
         query: it.r.query,
         columns: it.r.columns,
         compatible,
+        inferredChart: it.inferred.chart,
       })
     }
     if (!compatible || !enabled) return

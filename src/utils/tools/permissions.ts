@@ -15,7 +15,7 @@ export type ToolCategory = "free" | "schema" | "sql"
 export const DEFAULT_GRANTED: Permissions = {
   grantSchemaAccess: true,
   read: true,
-  write: true,
+  write: false,
 }
 
 export const DEFAULT_DENIED: Permissions = {

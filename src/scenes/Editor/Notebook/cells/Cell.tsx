@@ -658,6 +658,13 @@ const CellInner: React.FC<Props> = ({
       e.preventDefault()
       if (e.key === "ArrowUp") moveCellUp(cell.id)
       else moveCellDown(cell.id)
+      if (bufferIdForEvents !== undefined) {
+        emitUserAction({
+          kind: "user_moved_cell",
+          bufferId: bufferIdForEvents,
+          cellId: cell.id,
+        })
+      }
       requestAnimationFrame(() => {
         const node = wrapperRef.current
         if (!node) return
@@ -665,7 +672,7 @@ const CellInner: React.FC<Props> = ({
         node.scrollIntoView({ block: "nearest" })
       })
     },
-    [canArrowMove, cell.id, moveCellUp, moveCellDown],
+    [canArrowMove, cell.id, moveCellUp, moveCellDown, bufferIdForEvents],
   )
 
   return (

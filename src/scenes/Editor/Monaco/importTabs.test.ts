@@ -141,18 +141,73 @@ describe("validateBufferSchema", () => {
       ).toBe(true)
     })
 
-    it("should accept tab with notebookViewState", () => {
-      // Schema layer only checks presence; shape is validated downstream.
+    it("should accept tab with a well-formed notebookViewState", () => {
       expect(
         validateBufferSchema([
           {
             label: "Notebook",
             value: "",
             position: 0,
-            notebookViewState: {},
+            notebookViewState: {
+              cells: [
+                { id: "c1", position: 0, value: "SELECT 1" },
+                { id: "c2", position: 1, value: "SELECT 2", mode: "draw" },
+              ],
+            },
           },
         ]),
       ).toBe(true)
+    })
+  })
+
+  describe("notebookViewState validation", () => {
+    const notebookTab = (notebookViewState: unknown) => [
+      { label: "Notebook", value: "", position: 0, notebookViewState },
+    ]
+
+    it("rejects a non-object notebookViewState", () => {
+      expect(validateBufferSchema(notebookTab("nope"))).toContain(
+        "notebookViewState: must be an object",
+      )
+    })
+
+    it("rejects a missing/non-array cells field", () => {
+      expect(validateBufferSchema(notebookTab({}))).toContain(
+        "notebookViewState.cells: must be an array",
+      )
+      expect(validateBufferSchema(notebookTab({ cells: {} }))).toContain(
+        "notebookViewState.cells: must be an array",
+      )
+    })
+
+    it("rejects non-object and malformed cells", () => {
+      expect(validateBufferSchema(notebookTab({ cells: [null] }))).toContain(
+        "cells[0]: must be an object",
+      )
+      expect(
+        validateBufferSchema(notebookTab({ cells: [{ id: 1, value: "x" }] })),
+      ).toContain("cells[0].id: must be a non-empty string")
+      expect(
+        validateBufferSchema(notebookTab({ cells: [{ id: "a", value: 5 }] })),
+      ).toContain("cells[0].value: must be a string")
+      expect(
+        validateBufferSchema(
+          notebookTab({ cells: [{ id: "a", value: "x", mode: "chart" }] }),
+        ),
+      ).toContain("cells[0].mode: invalid value")
+    })
+
+    it("rejects duplicate cell ids", () => {
+      expect(
+        validateBufferSchema(
+          notebookTab({
+            cells: [
+              { id: "a", value: "x" },
+              { id: "a", value: "y" },
+            ],
+          }),
+        ),
+      ).toContain('cells[1].id: duplicate "a"')
     })
   })
 
@@ -677,6 +732,98 @@ describe("sanitizeBuffer", () => {
       const result = sanitizeBuffer(input) as Record<string, unknown>
       expect(result.maliciousField).toBeUndefined()
       expect(result.anotherField).toBeUndefined()
+    })
+  })
+
+  describe("notebookViewState sanitization", () => {
+    it("whitelists cell fields, reindexes positions, drops session state", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              position: 7,
+              value: "SELECT 1",
+              mode: "draw",
+              autoRefresh: true,
+              result: { results: "garbage" },
+              editorViewState: { broken: true },
+              columnSizing: "garbage",
+              extraField: "should not be copied",
+            },
+            { id: "c2", position: 2, value: "SELECT 2" },
+          ],
+          focusedCellId: "c1",
+          maximizedCellId: "missing-cell",
+          settings: {
+            layoutMode: "grid",
+            layout: [
+              { i: "c1", x: 0, y: 0, w: 6, h: 4 },
+              { i: "bad", x: "0", y: 0, w: 6, h: 4 },
+              null,
+            ],
+            variables: [
+              { name: "v", value: "1" },
+              { name: 5, value: "x" },
+            ],
+          },
+        },
+      }
+      const result = sanitizeBuffer(input)
+      const state = result.notebookViewState
+      expect(state).toBeDefined()
+      expect(state?.cells.map((c) => [c.id, c.position, c.value])).toEqual([
+        ["c1", 0, "SELECT 1"],
+        ["c2", 1, "SELECT 2"],
+      ])
+      expect(state?.cells[0].mode).toBe("draw")
+      expect(state?.cells[0].autoRefresh).toBe(true)
+      const cell = state?.cells[0] as unknown as Record<string, unknown>
+      expect(cell.result).toBeUndefined()
+      expect(cell.editorViewState).toBeUndefined()
+      expect(cell.columnSizing).toBeUndefined()
+      expect(cell.extraField).toBeUndefined()
+      // maximizedCellId referencing a non-existent cell is dropped
+      expect(state?.maximizedCellId).toBeUndefined()
+      expect(state?.settings?.layoutMode).toBe("grid")
+      expect(state?.settings?.layout).toEqual([
+        { i: "c1", x: 0, y: 0, w: 6, h: 4 },
+      ])
+      expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
+    })
+
+    it("drops legacy chartConfig (non-array queries) and keeps valid ones", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              value: "SELECT 1",
+              chartConfig: { type: "line", series: "legacy-shape" },
+            },
+            {
+              id: "c2",
+              value: "SELECT 2",
+              chartConfig: {
+                xColumn: "ts",
+                queries: [{ type: "line", yColumns: ["price"] }, "junk"],
+              },
+            },
+          ],
+        },
+      }
+      const result = sanitizeBuffer(input)
+      expect(result.notebookViewState?.cells[0].chartConfig).toBeUndefined()
+      expect(result.notebookViewState?.cells[1].chartConfig).toEqual({
+        xColumn: "ts",
+        queries: [{ type: "line", yColumns: ["price"] }, null],
+      })
     })
   })
 

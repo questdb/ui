@@ -108,10 +108,11 @@ export const useCellExecution = ({
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
   // Persist a faithful, already-capped copy of the cell's result so it survives
-  // tab-switch / reload. One record per cell (mode-agnostic). Keyed to the SQL
-  // so a later edit invalidates it on restore.
+  // tab-switch / reload. One record per cell (mode-agnostic). Keyed to the
+  // executed SQL — not the cell's live value, which the user may have edited
+  // mid-run — so restore never attributes these rows to a different query.
   const persistSnapshot = useCallback(
-    (cellId: string, explicitResult?: CellResult) => {
+    (cellId: string, executedSql: string, explicitResult?: CellResult) => {
       const cell = cellsRef.current.find((c) => c.id === cellId)
       if (!cell) return
       const result = explicitResult ?? cell.result
@@ -119,7 +120,7 @@ export const useCellExecution = ({
       void saveCellSnapshot({
         bufferId,
         cellId,
-        sqlHash: sqlHash(cell.value),
+        sqlHash: sqlHash(executedSql),
         results: result.results,
         savedAt: Date.now(),
       }).then(() => pruneToRecentNotebooks())
@@ -130,6 +131,7 @@ export const useCellExecution = ({
   const runScript = useCallback(
     async (
       cellId: string,
+      queryText: string,
       queries: string[],
       externalSignal?: AbortSignal,
     ): Promise<boolean> => {
@@ -224,7 +226,7 @@ export const useCellExecution = ({
           failedCount,
           durationMs: Date.now() - startTime,
         })
-        persistSnapshot(cellId)
+        persistSnapshot(cellId, queryText)
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -263,7 +265,7 @@ export const useCellExecution = ({
 
       const queries = getQueriesFromText(queryText)
       if (queries.length > 1) {
-        return runScript(cellId, queries, externalSignal)
+        return runScript(cellId, queryText, queries, externalSignal)
       }
 
       const prior = abortControllersRef.current.get(cellId)
@@ -294,6 +296,11 @@ export const useCellExecution = ({
         )
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) return execResult.type !== "error"
+        publishSchemaIfMutating(execResult.type)
+        // Mirrors setResultAt's guard on the script path: a null result means
+        // apply_notebook_state invalidated this cell mid-run; don't resurrect it.
+        const liveCell = cellsRef.current.find((c) => c.id === cellId)
+        if (!liveCell?.result) return execResult.type !== "error"
         const cellResult: CellResult = {
           results: [
             capResultBytes(
@@ -305,8 +312,7 @@ export const useCellExecution = ({
           timestamp: Date.now(),
         }
         updateCell(cellId, { result: cellResult })
-        publishSchemaIfMutating(execResult.type)
-        persistSnapshot(cellId, cellResult)
+        persistSnapshot(cellId, queryText, cellResult)
         return execResult.type !== "error"
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
@@ -367,7 +373,13 @@ export const useCellExecution = ({
   useEffect(() => {
     const controllersMap = abortControllersRef.current
     return () => {
-      controllersMap.forEach((list) => list.forEach((c) => c.abort()))
+      // Supersede before aborting so the in-flight continuations bail at their
+      // isCurrentRun() checks instead of overwriting the cell's last good
+      // snapshot with an abort-error (or a frozen "running" state) on unmount.
+      controllersMap.forEach((list, cellId) => {
+        supersedeCellRun(runGenerationRef, cellId)
+        list.forEach((c) => c.abort())
+      })
       controllersMap.clear()
     }
   }, [])
