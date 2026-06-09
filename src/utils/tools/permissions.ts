@@ -191,6 +191,49 @@ export const classifyAndCheckSqlForExecution = async (
   return { granted: true }
 }
 
+export type AutoRunDecision =
+  | { action: "run" }
+  | { action: "deny"; reason: string }
+  | { action: "skip"; reason: string }
+
+const skipReasonForRanWrite = (queryType: string): string =>
+  `AUTO_RUN_SKIPPED: this cell contains a '${queryType}' (write) statement and has run before, ` +
+  "so it was NOT executed — auto-run never re-executes DDL/DML side effects. " +
+  "If re-execution is intended, call run_cell explicitly."
+
+export const classifyAndCheckSqlForAutoRun = async (
+  sql: string,
+  perms: Permissions,
+  validate: (sql: string) => Promise<ValidateQueryResult>,
+  ranBefore: boolean,
+): Promise<AutoRunDecision> => {
+  let stmts: ClassifiedStatement[]
+  try {
+    stmts = await classifyStatements(sql, validate)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "validate failed"
+    return {
+      action: "deny",
+      reason: denyReasonFailClosedClassify("execution", message),
+    }
+  }
+  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
+  if (!writeStmt) return { action: "run" }
+  if (!perms.write) {
+    return {
+      action: "deny",
+      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
+    }
+  }
+  if (ranBefore) {
+    return {
+      action: "skip",
+      reason: skipReasonForRanWrite(writeStmt.queryType ?? "write"),
+    }
+  }
+  return { action: "run" }
+}
+
 // Permission-independent: drawing a write query is semantically incoherent,
 // not a perms question. Empty cells pass.
 export const requireAllDQL = async (

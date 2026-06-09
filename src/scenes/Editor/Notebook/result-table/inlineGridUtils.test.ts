@@ -5,7 +5,6 @@ import {
   formatCellValueForCopy,
   formatColumnType,
   isLeftAligned,
-  isTimestampColumn,
 } from "./inlineGridUtils"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 
@@ -31,15 +30,6 @@ describe("isLeftAligned", () => {
     expect(isLeftAligned("DOUBLE")).toBe(false)
     expect(isLeftAligned("TIMESTAMP")).toBe(false)
     expect(isLeftAligned("BOOLEAN")).toBe(false)
-  })
-})
-
-describe("isTimestampColumn", () => {
-  it("is true only for exact TIMESTAMP (case-insensitive)", () => {
-    expect(isTimestampColumn("TIMESTAMP")).toBe(true)
-    expect(isTimestampColumn("timestamp")).toBe(true)
-    expect(isTimestampColumn("DATE")).toBe(false)
-    expect(isTimestampColumn("")).toBe(false)
   })
 })
 

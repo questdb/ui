@@ -16,6 +16,7 @@ export type QueryExecResult = {
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
+  timestamp?: number
   timings?: Timings
   error?: string
 }
@@ -61,6 +62,7 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
             columns: result.columns,
             dataset: result.dataset,
             count: result.count,
+            timestamp: result.timestamp,
             timings: result.timings,
           }
         }

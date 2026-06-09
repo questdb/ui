@@ -55,6 +55,7 @@ export type RawDqlResult = {
   notice: undefined
   error: undefined
   query: string
+  timestamp: number
   timings: Timings
   explain?: Explain
 }

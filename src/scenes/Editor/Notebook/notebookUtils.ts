@@ -25,6 +25,7 @@ export const singleResultFromExec = (
         columns: exec.columns,
         dataset: exec.dataset,
         count: exec.count,
+        timestamp: exec.timestamp,
         timings: exec.timings,
       }
     case "error":

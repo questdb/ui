@@ -21,6 +21,7 @@ import type {
   QueryChart,
 } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
+  classifyAndCheckSqlForAutoRun,
   classifyAndCheckSqlForExecution,
   classifyAndCheckSqlForRunQuery,
   denyReasonUnresolvedSql,
@@ -770,16 +771,22 @@ export const dispatchTool = async (
           }
         }
         // Shared by the draw-invariant gate (below) and the post-apply
-        // auto-run loop (after applyNotebookState).
+        // auto-run loop (after applyNotebookState). Run history is captured
+        // pre-apply so the auto-run gate can tell re-sent cells from new ones.
         const existingModes = new Map<string, CellMode | undefined>()
+        const existingRanBefore = new Map<string, boolean>()
         if (validateSql) {
           await Promise.all(
             cells.map(async (c) => {
               if (typeof c.id !== "string" || c.id.length === 0) return
-              if (c.mode !== undefined && c.mode !== null) return
               try {
                 const existing = await modelToolsClient.getCell(buffer_id, c.id)
                 existingModes.set(c.id, existing.mode)
+                existingRanBefore.set(
+                  c.id,
+                  existing.last_run_status !== undefined &&
+                    existing.last_run_status !== "none",
+                )
               } catch {
                 // Let applyNotebookState's all-or-nothing validation surface
                 // the precise unknown-cell error.
@@ -871,6 +878,7 @@ export const dispatchTool = async (
             cellId: string
             value: string
             runnable: boolean
+            ranBefore: boolean
           }
           const resolved: ResolvedRun[] = []
           let newCellIdx = 0
@@ -887,7 +895,11 @@ export const dispatchTool = async (
                   : "run"
                 : c.mode
             const runnable = resolvedMode === "run" && c.value.trim().length > 0
-            resolved.push({ cellId, value: c.value, runnable })
+            const ranBefore =
+              requestedId !== undefined
+                ? (existingRanBefore.get(requestedId) ?? false)
+                : false
+            resolved.push({ cellId, value: c.value, runnable, ranBefore })
           }
           type RunEntry = {
             cellId: string
@@ -897,21 +909,31 @@ export const dispatchTool = async (
             error?: string
             unverified?: boolean
             note?: string
+            skipped?: boolean
           }
           const settled = await Promise.all(
             resolved.map(async (r): Promise<RunEntry | null> => {
               if (!r.runnable) return null
               if (perms && validateSql) {
-                const decision = await classifyAndCheckSqlForExecution(
+                const decision = await classifyAndCheckSqlForAutoRun(
                   r.value,
                   perms,
                   validateSql,
+                  r.ranBefore,
                 )
-                if (!decision.granted) {
+                if (decision.action === "deny") {
                   return {
                     cellId: r.cellId,
                     success: false,
                     error: decision.reason,
+                  }
+                }
+                if (decision.action === "skip") {
+                  return {
+                    cellId: r.cellId,
+                    success: true,
+                    skipped: true,
+                    note: decision.reason,
                   }
                 }
               }

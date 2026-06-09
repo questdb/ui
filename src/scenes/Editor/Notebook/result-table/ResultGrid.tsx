@@ -19,7 +19,6 @@ import type { DqlQueryResult } from "../../../../store/notebook"
 import {
   computeColumnWidths,
   isLeftAligned,
-  isTimestampColumn,
   formatCellValue,
   formatColumnType,
 } from "./inlineGridUtils"
@@ -367,7 +366,7 @@ export const ResultGrid: React.FC<Props> = ({
                         textAlign: align,
                       }}
                       $isNull={rawValue === null}
-                      $isTimestamp={isTimestampColumn(colType)}
+                      $isTimestamp={colIdx === data.timestamp}
                       $isActive={active}
                       $isPulsing={isCellPulsing(rowIndex, colIdx)}
                       onClick={() => onCellClick(rowIndex, colIdx)}

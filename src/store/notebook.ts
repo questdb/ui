@@ -31,6 +31,7 @@ export type DqlQueryResult = {
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
+  timestamp?: number
   timings?: Timings
 }
 

@@ -1316,6 +1316,151 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(parsed.runs[0].error).toMatch(/'write' permission/)
   })
 
+  it("skips re-sent DDL/DML cells that ran before (no implicit re-execution)", async () => {
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const getCell = vi.fn(() =>
+      Promise.resolve({
+        id: "ins-1",
+        value: "INSERT INTO t VALUES (1)",
+        position: 0,
+        mode: "run" as const,
+        last_run_status: "success" as const,
+      }),
+    )
+    const client = makeClient({
+      runCell,
+      getCell,
+      applyNotebookState: vi.fn(() =>
+        Promise.resolve({
+          applied: { added: [], updated: ["ins-1"], deleted: [] },
+        }),
+      ),
+    })
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "ins-1", value: "INSERT INTO t VALUES (1)" }],
+      },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+    )
+    expect(res.is_error).toBeFalsy()
+    expect(runCell).not.toHaveBeenCalled()
+    const parsed = JSON.parse(res.content) as {
+      runs: Array<{
+        cellId: string
+        success: boolean
+        skipped?: boolean
+        note?: string
+      }>
+    }
+    expect(parsed.runs).toHaveLength(1)
+    expect(parsed.runs[0]).toMatchObject({
+      cellId: "ins-1",
+      success: true,
+      skipped: true,
+    })
+    expect(parsed.runs[0].note).toMatch(/run_cell/)
+  })
+
+  it("runs DDL/DML cells that never ran before (new or unrun existing)", async () => {
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const getCell = vi.fn(() =>
+      Promise.resolve({
+        id: "ins-1",
+        value: "INSERT INTO t VALUES (1)",
+        position: 0,
+        mode: "run" as const,
+        last_run_status: "none" as const,
+      }),
+    )
+    const client = makeClient({
+      runCell,
+      getCell,
+      applyNotebookState: vi.fn(() =>
+        Promise.resolve({
+          applied: { added: ["new-1"], updated: ["ins-1"], deleted: [] },
+        }),
+      ),
+    })
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [
+          { id: "ins-1", value: "INSERT INTO t VALUES (1)" },
+          { id: null, value: "INSERT INTO t VALUES (2)", mode: "run" },
+        ],
+      },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+    )
+    expect(runCell).toHaveBeenCalledTimes(2)
+  })
+
+  it("re-runs DQL cells that ran before (only writes are history-gated)", async () => {
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const getCell = vi.fn(() =>
+      Promise.resolve({
+        id: "sel-1",
+        value: "SELECT 1",
+        position: 0,
+        mode: "run" as const,
+        last_run_status: "success" as const,
+      }),
+    )
+    const client = makeClient({
+      runCell,
+      getCell,
+      applyNotebookState: vi.fn(() =>
+        Promise.resolve({
+          applied: { added: [], updated: ["sel-1"], deleted: [] },
+        }),
+      ),
+    })
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "sel-1", value: "SELECT 1" }],
+      },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      dqlValidate,
+    )
+    expect(runCell).toHaveBeenCalledWith(1, "sel-1", undefined, "SELECT 1")
+  })
+
   it("preserves existing mode when mode is omitted on an existing cell (draw stays draw, run stays run)", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({
