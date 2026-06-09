@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react"
-import styled from "styled-components"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import styled, { css } from "styled-components"
 import {
   ResponsiveGridLayout,
   useContainerWidth,
@@ -31,6 +31,7 @@ import {
   DEFAULT_TOP_HEIGHT,
   generateDefaultLayout as generateDefaultLayoutPure,
   isDoubleView,
+  isExpectingResult,
   mergeCellLayout,
   MIN_BOTTOM_HEIGHT_PX,
   scaleCellHeights,
@@ -64,6 +65,11 @@ const CellListContainer = styled.div<{ $maximized?: boolean }>`
   padding: ${({ $maximized }) => ($maximized ? "0" : "2rem")};
   gap: 2rem;
   background: ${color("editorBackground")};
+  /* Scroll anchoring fights arrow-key reordering: on a move-up React keeps the
+     focused cell's DOM node in place, the browser anchors to it and adjusts
+     scrollTop so the cell looks frozen while the cells above shuffle. Disabled
+     so the moved cell visibly travels and scrollIntoView can pin it. */
+  overflow-anchor: none;
 `
 
 const CellItem = styled.div<{ $maximized?: boolean }>`
@@ -95,7 +101,7 @@ const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
   ),
 )
 
-const GridScrollContainer = styled.div`
+const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
   flex: 1;
   overflow-y: auto;
   padding: 2rem;
@@ -109,6 +115,18 @@ const GridScrollContainer = styled.div`
   .react-grid-item {
     border-radius: 0.4rem;
   }
+
+  /* On first mount, react-grid-layout's items would otherwise animate from
+     their initial state to their computed position/size (the "expanding"
+     glitch). Kill the transition until the layout has settled; it's re-enabled
+     for drag/resize. */
+  ${({ $suppressTransitions }) =>
+    $suppressTransitions &&
+    css`
+      .react-grid-item {
+        transition: none !important;
+      }
+    `}
 `
 
 const renderResizeHandle = renderEdgeHandle
@@ -228,7 +246,7 @@ const useGridDragAutoScroll = (containerRef: React.RefObject<HTMLElement>) => {
 }
 
 const ListLayout: React.FC = () => {
-  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
+  const { cells, focusedCellId, maximizedCellId, runningCellIds, isHydrating } =
     useNotebookState()
   const { setFocusedCell } = useNotebookActions()
   useScrollAddedCellIntoView(cells)
@@ -249,6 +267,7 @@ const ListLayout: React.FC = () => {
               isFocused={focusedCellId === cell.id}
               isMaximized={maximizedCellId === cell.id}
               isRunning={runningCellIds.has(cell.id)}
+              isHydrating={isHydrating}
             />
           </CellItem>
           {index < cells.length - 1 && <AddCellBetween afterCellId={cell.id} />}
@@ -262,17 +281,44 @@ const ListLayout: React.FC = () => {
 }
 
 const GridLayout: React.FC = () => {
-  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
-    useNotebookState()
+  const {
+    cells,
+    settings,
+    focusedCellId,
+    maximizedCellId,
+    runningCellIds,
+    isHydrating,
+  } = useNotebookState()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
-  const { width: containerWidth, containerRef } = useContainerWidth({
-    initialWidth: 800,
-  })
+  // measureBeforeMount: don't render the grid until the container width is
+  // measured, so cells first paint at their real width instead of animating
+  // from the guessed initialWidth (react-grid-layout transitions the change).
+  const {
+    width: containerWidth,
+    containerRef,
+    mounted: gridMeasured,
+  } = useContainerWidth({ measureBeforeMount: true })
   const autoScroll = useGridDragAutoScroll(
     containerRef as React.RefObject<HTMLElement>,
   )
   useScrollAddedCellIntoView(cells)
+
+  // Suppress react-grid-layout's item transition until the grid has rendered
+  // and the width has settled, so cells don't animate into place on mount.
+  // Two frames cover the initial render + the ResizeObserver's first callback.
+  const [gridReady, setGridReady] = useState(false)
+  useEffect(() => {
+    if (!gridMeasured) return
+    let raf2 = 0
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setGridReady(true))
+    })
+    return () => {
+      cancelAnimationFrame(raf1)
+      cancelAnimationFrame(raf2)
+    }
+  }, [gridMeasured])
 
   // Derive each cell's grid h from topHeight + bottomHeight + chrome.
   // The h value in settings.layout is ignored on read — it's a stale
@@ -291,7 +337,9 @@ const GridLayout: React.FC = () => {
     return base.map((item) => {
       const cell = cellById.get(item.i)
       if (!cell) return item
-      const minBottomPx = isDoubleView(cell) ? MIN_BOTTOM_HEIGHT_PX : 0
+      const expectingResult = isExpectingResult(cell, isHydrating)
+      const minBottomPx =
+        isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
       const minTotalPx = DEFAULT_TOP_HEIGHT + minBottomPx + CELL_CHROME_PX
       const minH = Math.max(
         MIN_CELL_H,
@@ -299,11 +347,11 @@ const GridLayout: React.FC = () => {
       )
       return {
         ...item,
-        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y),
+        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
         minH,
       }
     })
-  }, [settings.layout, cells])
+  }, [settings.layout, cells, isHydrating])
 
   const mapLayoutXYW = useCallback(
     (rglLayout: Layout): CellLayoutItem[] =>
@@ -435,6 +483,7 @@ const GridLayout: React.FC = () => {
   return (
     <GridScrollContainer
       ref={containerRef as React.RefObject<HTMLDivElement>}
+      $suppressTransitions={!gridReady}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement
         const gridItem = target.closest<HTMLElement>("[data-cell-id]")
@@ -449,35 +498,38 @@ const GridLayout: React.FC = () => {
        * unmount every Cell/DrawCanvas on add/remove and wipe chart state.
        * rgl reconciles children by their own key matched against
        * layouts.lg[].i. */}
-      <ResponsiveGridLayout
-        width={containerWidth}
-        layouts={{ lg: currentLayout as unknown as Layout }}
-        breakpoints={GRID_BREAKPOINTS}
-        cols={GRID_COLS_MAP}
-        rowHeight={ROW_HEIGHT}
-        margin={GRID_MARGIN}
-        containerPadding={GRID_CONTAINER_PADDING}
-        dragConfig={DRAG_CONFIG}
-        resizeConfig={RESIZE_CONFIG}
-        compactor={verticalCompactor}
-        onDragStart={autoScroll.onDragStart}
-        onDrag={autoScroll.onDrag}
-        onDragStop={handleDragStop}
-        onResizeStop={handleResizeStop}
-        positionStrategy={absoluteStrategy}
-      >
-        {cells.map((cell) => (
-          <GridCellWrapper key={cell.id} cellId={cell.id}>
-            <Cell
-              cell={cell}
-              layoutMode="grid"
-              isFocused={focusedCellId === cell.id}
-              isMaximized={maximizedCellId === cell.id}
-              isRunning={runningCellIds.has(cell.id)}
-            />
-          </GridCellWrapper>
-        ))}
-      </ResponsiveGridLayout>
+      {gridMeasured && (
+        <ResponsiveGridLayout
+          width={containerWidth}
+          layouts={{ lg: currentLayout as unknown as Layout }}
+          breakpoints={GRID_BREAKPOINTS}
+          cols={GRID_COLS_MAP}
+          rowHeight={ROW_HEIGHT}
+          margin={GRID_MARGIN}
+          containerPadding={GRID_CONTAINER_PADDING}
+          dragConfig={DRAG_CONFIG}
+          resizeConfig={RESIZE_CONFIG}
+          compactor={verticalCompactor}
+          onDragStart={autoScroll.onDragStart}
+          onDrag={autoScroll.onDrag}
+          onDragStop={handleDragStop}
+          onResizeStop={handleResizeStop}
+          positionStrategy={absoluteStrategy}
+        >
+          {cells.map((cell) => (
+            <GridCellWrapper key={cell.id} cellId={cell.id}>
+              <Cell
+                cell={cell}
+                layoutMode="grid"
+                isFocused={focusedCellId === cell.id}
+                isMaximized={maximizedCellId === cell.id}
+                isRunning={runningCellIds.has(cell.id)}
+                isHydrating={isHydrating}
+              />
+            </GridCellWrapper>
+          ))}
+        </ResponsiveGridLayout>
+      )}
       <AddCellBottom
         afterCellId={cells.length > 0 ? cells[cells.length - 1].id : undefined}
       />
@@ -486,8 +538,14 @@ const GridLayout: React.FC = () => {
 }
 
 const NotebookContent: React.FC = () => {
-  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
-    useNotebookState()
+  const {
+    cells,
+    settings,
+    focusedCellId,
+    maximizedCellId,
+    runningCellIds,
+    isHydrating,
+  } = useNotebookState()
   const layoutMode = settings.layoutMode ?? "list"
 
   if (cells.length === 0) {
@@ -515,6 +573,7 @@ const NotebookContent: React.FC = () => {
               isFocused={focusedCellId === cell.id}
               isMaximized
               isRunning={runningCellIds.has(cell.id)}
+              isHydrating={isHydrating}
             />
           </CellItem>
         </CellListContainer>

@@ -17,13 +17,30 @@ import {
   resolveDraw,
   resultsEquivalent,
   successResults,
+  toExecResult,
 } from "./drawCanvasUtils"
 import { useNotebookActions } from "../NotebookProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { toast } from "../../../../components/Toast"
+import { CircleNotchSpinner } from "../../Monaco/icons"
+import {
+  capResultBytes,
+  NOTEBOOK_BYTE_CAP,
+  NOTEBOOK_ROW_CAP,
+  singleResultFromExec,
+  sqlHash,
+} from "../notebookUtils"
+import {
+  loadCellSnapshot,
+  pruneToRecentNotebooks,
+  saveCellSnapshot,
+} from "../../../../store/notebookResults"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
+// Draw auto-refresh can poll every few seconds; throttle snapshot writes so a
+// live chart doesn't churn IndexedDB. A reload restores the last saved frame.
+const SNAPSHOT_THROTTLE_MS = 10000
 
 const Wrapper = styled.div`
   display: flex;
@@ -62,6 +79,7 @@ const EmptyState = styled.div`
 
 type Props = {
   cell: NotebookCell
+  bufferId?: number
   isFocused: boolean
   onConfigChange: (config: ChartConfig) => void
   onAutoRefreshChange: (value: boolean) => void
@@ -70,6 +88,7 @@ type Props = {
 
 export const DrawCanvas: React.FC<Props> = ({
   cell,
+  bufferId,
   isFocused,
   onConfigChange,
   onAutoRefreshChange,
@@ -113,6 +132,29 @@ export const DrawCanvas: React.FC<Props> = ({
   const queriesKey = queries.join("\u0001")
 
   const inFlightRef = useRef<AbortController | null>(null)
+  const lastSnapshotAtRef = useRef(0)
+
+  // Persist a bounded, throttled copy of the chart's rows — shared with run
+  // mode (one snapshot per cell) so the chart survives reload without re-fetch.
+  const saveDrawSnapshot = useCallback(
+    (execResults: QueryExecResult[]) => {
+      if (bufferId === undefined) return
+      const now = Date.now()
+      if (now - lastSnapshotAtRef.current < SNAPSHOT_THROTTLE_MS) return
+      lastSnapshotAtRef.current = now
+      const results = execResults.map((r) =>
+        capResultBytes(singleResultFromExec(r, r.query), NOTEBOOK_BYTE_CAP),
+      )
+      void saveCellSnapshot({
+        bufferId,
+        cellId: cell.id,
+        sqlHash: sqlHash(cell.value),
+        results,
+        savedAt: now,
+      }).then(() => pruneToRecentNotebooks())
+    },
+    [bufferId, cell.id, cell.value],
+  )
 
   const fetchAll = useCallback(async () => {
     if (queries.length === 0) {
@@ -167,21 +209,59 @@ export const DrawCanvas: React.FC<Props> = ({
       }
       setClassifyBlock(null)
       const out = await Promise.all(
-        queries.map((q) => executeSingle(q, ac.signal).catch(() => null)),
+        queries.map((q) =>
+          executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP).catch(() => null),
+        ),
       )
       if (ac.signal.aborted) return
       const next = successResults(out)
       setResults((prev) => (resultsEquivalent(prev, next) ? prev : next))
       setLastFetchHadError(out.some((r) => r === null))
       setSettledKey(queriesKey)
+      if (next.length > 0) saveDrawSnapshot(next)
     } finally {
       if (inFlightRef.current === ac) inFlightRef.current = null
     }
-  }, [classifyCache, executeSingle, validateWithGlobals, queries, queriesKey])
+  }, [
+    classifyCache,
+    executeSingle,
+    validateWithGlobals,
+    queries,
+    queriesKey,
+    saveDrawSnapshot,
+  ])
 
+  // On mount, render instantly from the persisted snapshot (shared with run
+  // mode) when it still matches this cell's SQL. autoRefresh-off cells then stay
+  // on the cached frame (no DB hit on load); autoRefresh-on cells let the poll
+  // refresh in the background. Falls back to a live fetch when there's no
+  // matching snapshot.
   useEffect(() => {
-    void fetchAll()
-  }, [fetchAll])
+    let cancelled = false
+    void (async () => {
+      if (bufferId !== undefined) {
+        // Best-effort: a failed read falls through to a live fetch instead of
+        // leaving the chart on its loading spinner forever.
+        const snap = await loadCellSnapshot(bufferId, cell.id).catch(
+          () => undefined,
+        )
+        if (cancelled) return
+        if (snap && snap.sqlHash === sqlHash(cell.value)) {
+          const hydrated = successResults(snap.results.map(toExecResult))
+          if (hydrated.length > 0) {
+            // Don't clobber live data that may already have landed.
+            setResults((prev) => (prev.length > 0 ? prev : hydrated))
+            setSettledKey(queriesKey)
+            return
+          }
+        }
+      }
+      if (!cancelled) void fetchAll()
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchAll, bufferId, cell.id, cell.value, queriesKey])
 
   useEffect(
     () => () => {
@@ -218,6 +298,13 @@ export const DrawCanvas: React.FC<Props> = ({
   const empty =
     classifyBlock !== null || queries.length === 0 || results.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
+  // Initial load (snapshot hydration or first fetch) with nothing to show yet:
+  // a spinner replaces the chart area until data lands.
+  const loading =
+    queries.length > 0 &&
+    classifyBlock === null &&
+    !settledForCurrentQueries &&
+    results.length === 0
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
@@ -256,7 +343,11 @@ export const DrawCanvas: React.FC<Props> = ({
         onResetZoom={handleResetZoom}
         cellId={cell.id}
       />
-      {empty ? (
+      {loading ? (
+        <EmptyState>
+          <CircleNotchSpinner size={24} />
+        </EmptyState>
+      ) : empty ? (
         <EmptyState>{emptyMessage}</EmptyState>
       ) : (
         <Canvas>

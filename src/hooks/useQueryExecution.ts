@@ -24,7 +24,11 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
   const { quest } = useContext(QuestContext)
 
   const executeSingle = useCallback(
-    async (sql: string, signal?: AbortSignal): Promise<QueryExecResult> => {
+    async (
+      sql: string,
+      signal?: AbortSignal,
+      limit: number = RESULT_DISPLAY_LIMIT,
+    ): Promise<QueryExecResult> => {
       const normalized = normalizeVariables(globals)
       const expanded =
         normalized.length > 0 ? prependGlobalsDeclare(sql, normalized).sql : sql
@@ -40,7 +44,7 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
           }
         }
         const { promise, queryId } = quest.queryRaw(expanded, {
-          limit: `0,${RESULT_DISPLAY_LIMIT}`,
+          limit: `0,${limit}`,
           cancellable: true,
         })
         if (signal) {

@@ -6,6 +6,7 @@ import {
   buildAppliedLayout,
   buildInitialScriptResults,
   buildPersistPayload,
+  capResultBytes,
   cancelAllInCell,
   cancelOneInCell,
   cloneNotebookViewState,
@@ -15,18 +16,24 @@ import {
   generateDefaultLayout,
   insertCell,
   isDoubleView,
+  isExpectingResult,
   isUnverifiableExecError,
   mergeCellLayout,
   nextCopyLabel,
   removeCell,
   setResultAt,
   singleResultFromExec,
+  sqlHash,
   stripCellResults,
   swapCellDown,
   swapCellUp,
   upsertColumnSizing,
 } from "./notebookUtils"
-import type { NotebookCell, NotebookViewState } from "../../../store/notebook"
+import type {
+  NotebookCell,
+  NotebookViewState,
+  SingleQueryResult,
+} from "../../../store/notebook"
 import { createDefaultNotebookViewState } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 
@@ -1123,6 +1130,88 @@ describe("computeCellGridH", () => {
       ),
     ).toBe(20)
   })
+  it("expectingResult reserves the result area when bottomHeight is unset", () => {
+    // RESERVED_RESULT_BOTTOM_HEIGHT = 44 + 44 + 10*28 = 368.
+    // 72 + 56 + 368 = 496 → ceil(496/50) = 10
+    expect(
+      computeCellGridH(
+        { id: "x", position: 0, value: "", lastRunStatus: "success" },
+        50,
+        0,
+        true,
+      ),
+    ).toBe(10)
+  })
+  it("expectingResult uses the cell's own bottomHeight when set", () => {
+    // 72 + 56 + 300 = 428 → ceil(428/50) = 9
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          bottomHeight: 300,
+          lastRunStatus: "success",
+        },
+        50,
+        0,
+        true,
+      ),
+    ).toBe(9)
+  })
+  it("expectingResult is ignored once a result is present (double-view wins)", () => {
+    // Same as the "double-view (run with empty result)" case: bottom = 44.
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        50,
+        0,
+        true,
+      ),
+    ).toBe(4)
+  })
+})
+
+describe("isExpectingResult", () => {
+  const ranCell = {
+    id: "x",
+    position: 0,
+    value: "select 1",
+    lastRunStatus: "success" as const,
+  }
+  it("true for a hydrating run cell that ran but has no result yet", () => {
+    expect(isExpectingResult(ranCell, true)).toBe(true)
+  })
+  it("false once hydration has settled", () => {
+    expect(isExpectingResult(ranCell, false)).toBe(false)
+  })
+  it("false when a result has already landed", () => {
+    expect(
+      isExpectingResult(
+        {
+          ...ranCell,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        true,
+      ),
+    ).toBe(false)
+  })
+  it("false for a cell that never ran", () => {
+    expect(isExpectingResult({ id: "x", position: 0, value: "" }, true)).toBe(
+      false,
+    )
+    expect(isExpectingResult({ ...ranCell, lastRunStatus: "none" }, true)).toBe(
+      false,
+    )
+  })
+  it("false for draw cells (they size via the chart default)", () => {
+    expect(isExpectingResult({ ...ranCell, mode: "draw" }, true)).toBe(false)
+  })
 })
 
 describe("buildAppliedLayout", () => {
@@ -1390,5 +1479,54 @@ describe("nextCopyLabel", () => {
     expect(nextCopyLabel("my (draft) notebook")).toBe(
       "my (draft) notebook (copy)",
     )
+  })
+})
+
+describe("capResultBytes", () => {
+  const dql = (rows: number): Extract<SingleQueryResult, { type: "dql" }> => ({
+    type: "dql",
+    query: "q",
+    columns: [{ name: "x", type: "INT" }],
+    dataset: Array.from({ length: rows }, (_, i) => [i]),
+    count: rows,
+  })
+
+  it("returns the result unchanged when under the byte cap", () => {
+    const r = dql(5)
+    expect(capResultBytes(r, 1_000_000)).toBe(r)
+  })
+
+  it("slices the dataset to fit the byte cap, preserving count", () => {
+    const r = dql(100)
+    const capped = capResultBytes(r, 50) // tiny cap
+    expect(capped.type).toBe("dql")
+    if (capped.type !== "dql") throw new Error("expected dql")
+    expect(capped.dataset.length).toBeGreaterThanOrEqual(1)
+    expect(capped.dataset.length).toBeLessThan(100)
+    // kept rows are a prefix; count is left as the server-returned value so the
+    // existing "X of Y rows" indicator still reflects truncation
+    expect(capped.dataset).toEqual(r.dataset.slice(0, capped.dataset.length))
+    expect(capped.count).toBe(100)
+  })
+
+  it("passes non-DQL and empty results through untouched", () => {
+    const ddl: SingleQueryResult = { type: "ddl", query: "q" }
+    expect(capResultBytes(ddl, 1)).toBe(ddl)
+    const empty: SingleQueryResult = {
+      type: "dql",
+      query: "q",
+      columns: [],
+      dataset: [],
+      count: 0,
+    }
+    expect(capResultBytes(empty, 1)).toBe(empty)
+  })
+})
+
+describe("sqlHash", () => {
+  it("is stable for the same SQL and differs for different SQL", () => {
+    expect(sqlHash("select 1")).toBe(sqlHash("select 1"))
+    expect(sqlHash("select 1")).not.toBe(sqlHash("select 2"))
+    expect(typeof sqlHash("anything")).toBe("string")
   })
 })

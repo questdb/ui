@@ -8,7 +8,7 @@ import {
   normalizeQueryText,
   stripSQLComments,
 } from "../../Monaco/utils"
-import { PlayIcon, CancelIcon } from "../../Monaco/icons"
+import { PlayIcon, CancelIcon, CircleNotchSpinner } from "../../Monaco/icons"
 import { ChartLineUpIcon } from "@phosphor-icons/react"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions } from "../NotebookProvider"
@@ -36,8 +36,10 @@ import {
   DEFAULT_TOP_HEIGHT,
   defaultBottomHeightFor,
   isDoubleView,
+  isExpectingResult,
   MIN_BOTTOM_HEIGHT_PX,
   partitionCellHeights,
+  RESERVED_RESULT_BOTTOM_HEIGHT,
   scaleCellHeights,
   upsertColumnSizing,
 } from "../notebookUtils"
@@ -151,12 +153,22 @@ const BottomSlot = styled.div<{ $spotlight: boolean }>`
         `}
 `
 
+const HydrationLoader = styled.div`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  color: ${({ theme }) => theme.color.gray2};
+`
+
 type Props = {
   cell: NotebookCell
   layoutMode?: "list" | "grid"
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
+  isHydrating: boolean
 }
 
 const CellInner: React.FC<Props> = ({
@@ -165,6 +177,7 @@ const CellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
   isRunning,
+  isHydrating,
 }) => {
   const {
     runCell,
@@ -178,6 +191,8 @@ const CellInner: React.FC<Props> = ({
     updateCell,
     setFocusedCell,
     getCellsSnapshot,
+    moveCellUp,
+    moveCellDown,
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -187,6 +202,7 @@ const CellInner: React.FC<Props> = ({
   const isDrawMode = cell.mode === "draw"
   const isChartMaximized = isDrawMode && !!cell.isChartMaximized
 
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
@@ -317,9 +333,18 @@ const CellInner: React.FC<Props> = ({
   const liveBottomHeight = bottomResize.liveHeight
 
   const topHeight = liveTopHeight ?? cell.topHeight ?? DEFAULT_TOP_HEIGHT
+  // A run cell that had a persisted result (lastRunStatus is set, known
+  // synchronously from the view state) reserves its result area from the FIRST
+  // render while the snapshot hydrates
+  // computeCellGridH applies the same reservation to the grid item's height.
+  const expectingResult = isExpectingResult(cell, isHydrating)
   const bottomHeight =
-    liveBottomHeight ?? cell.bottomHeight ?? defaultBottomHeightFor(cell)
-  const doubleView = isDoubleView(cell)
+    liveBottomHeight ??
+    cell.bottomHeight ??
+    (expectingResult
+      ? RESERVED_RESULT_BOTTOM_HEIGHT
+      : defaultBottomHeightFor(cell))
+  const doubleView = isDoubleView(cell) || expectingResult
 
   const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
     null,
@@ -438,14 +463,11 @@ const CellInner: React.FC<Props> = ({
     const ed = editorRef.current
     if (!ed) return
 
-    clearHighlight()
-
     const queryAtCursor = getQueryFromCursor(ed)
-    if (queryAtCursor) {
-      void runCell(cell.id, normalizeQueryText(queryAtCursor.query))
-    } else {
-      void runCell(cell.id)
-    }
+    if (!queryAtCursor) return
+
+    clearHighlight()
+    void runCell(cell.id, normalizeQueryText(queryAtCursor.query))
   }, [cell.id, runCell, tryRunSelection, editorRef, clearHighlight])
 
   const isExternalSyncRef = useRef(false)
@@ -627,17 +649,48 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
   }, [cell.id, resetToDefaults])
 
+  const canArrowMove = layoutMode !== "grid" && !isMaximized
+
+  const handleWrapperKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!canArrowMove || e.target !== e.currentTarget) return
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
+      e.preventDefault()
+      if (e.key === "ArrowUp") moveCellUp(cell.id)
+      else moveCellDown(cell.id)
+      requestAnimationFrame(() => {
+        const node = wrapperRef.current
+        if (!node) return
+        node.focus({ preventScroll: true })
+        node.scrollIntoView({ block: "nearest" })
+      })
+    },
+    [canArrowMove, cell.id, moveCellUp, moveCellDown],
+  )
+
   return (
     <CellWrapper
+      ref={wrapperRef}
       data-cell-id={cell.id}
+      tabIndex={-1}
       $focused={isFocused}
       $maximized={isMaximized}
       $gridMode={layoutMode === "grid"}
+      onKeyDown={handleWrapperKeyDown}
       onMouseDown={(e) => {
-        if (!(e.target as HTMLElement).closest?.(".cell-drag-handle")) {
+        const target = e.target as HTMLElement
+        if (!target.closest?.(".cell-drag-handle")) {
           e.stopPropagation()
         }
         setFocusedCell(cell.id)
+        if (
+          canArrowMove &&
+          !target.closest(
+            "button, a, input, select, textarea, [contenteditable], .monaco-editor",
+          )
+        ) {
+          wrapperRef.current?.focus({ preventScroll: true })
+        }
       }}
     >
       {!isChartMaximized && (
@@ -676,7 +729,7 @@ const CellInner: React.FC<Props> = ({
                   exitDrawIfNeeded()
                   void handleRunAll()
                 }}
-                title="Run (Ctrl+Enter)"
+                title="Run (Ctrl+Shift+Enter)"
               >
                 <PlayIcon />
               </RunButton>
@@ -719,6 +772,10 @@ const CellInner: React.FC<Props> = ({
             defaultValue={cell.value}
             language={QuestDBLanguageName}
             theme="dracula"
+            // Default is the literal text "loading..."; the container already
+            // shows the editor background, so render nothing until Monaco mounts
+            // instead of a flashing placeholder.
+            loading={null}
             onMount={handleEditorMount}
             onChange={handleEditorChange}
             options={{
@@ -782,25 +839,28 @@ const CellInner: React.FC<Props> = ({
           {isDrawMode ? (
             <DrawCanvas
               cell={cell}
+              bufferId={bufferIdForEvents}
               isFocused={isFocused}
               onConfigChange={handleChartConfigChange}
               onAutoRefreshChange={handleAutoRefreshChange}
               onMaximizedChange={handleChartMaximizedChange}
             />
-          ) : (
-            cell.result && (
-              <InlineResultTable
-                result={cell.result}
-                isFocused={isFocused}
-                onTabChange={(index) => setActiveResultIndex(cell.id, index)}
-                onCancelQuery={(index) => {
-                  cancelQuery(cell.id, index)
-                }}
-                columnSizing={cell.columnSizing}
-                onColumnSizingCommit={handleColumnSizingCommit}
-              />
-            )
-          )}
+          ) : cell.result ? (
+            <InlineResultTable
+              result={cell.result}
+              isFocused={isFocused}
+              onTabChange={(index) => setActiveResultIndex(cell.id, index)}
+              onCancelQuery={(index) => {
+                cancelQuery(cell.id, index)
+              }}
+              columnSizing={cell.columnSizing}
+              onColumnSizingCommit={handleColumnSizingCommit}
+            />
+          ) : expectingResult ? (
+            <HydrationLoader>
+              <CircleNotchSpinner size={24} />
+            </HydrationLoader>
+          ) : null}
         </BottomSlot>
       )}
       {!isChartMaximized && !isMaximized && layoutMode !== "grid" && (

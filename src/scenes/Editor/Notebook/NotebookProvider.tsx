@@ -33,7 +33,12 @@ import {
 import {
   computeResultBottomHeight,
   DEFAULT_CHART_BOTTOM_HEIGHT,
+  sqlHash,
 } from "./notebookUtils"
+import {
+  deleteCellSnapshot,
+  loadNotebookSnapshots,
+} from "../../../store/notebookResults"
 import type { QueryKey } from "../../../store/Query/types"
 
 // State and actions live in SEPARATE contexts: action-only consumers never
@@ -45,6 +50,10 @@ export type NotebookState = {
   focusedCellId: string | null
   maximizedCellId: string | null
   runningCellIds: Set<string>
+  // True until persisted result snapshots have been loaded on mount. Cells that
+  // had a result (lastRunStatus set) reserve their result area + show a spinner
+  // while this is true, so the hydrated grid lands without elongating the cell.
+  isHydrating: boolean
 }
 
 export type NotebookActions = {
@@ -134,6 +143,7 @@ const EMPTY_STATE: NotebookState = {
   focusedCellId: null,
   maximizedCellId: null,
   runningCellIds: new Set(),
+  isHydrating: false,
 }
 
 const createNotebookQueryKey = (
@@ -196,7 +206,47 @@ export const NotebookProvider: React.FC<{
     persistCells,
   })
 
+  // Restore persisted result snapshots on mount. Results are stripped before
+  // persist, so cells load empty; rehydrate each from its bounded snapshot when
+  // the cell's SQL still matches and no live result has landed yet. Cells that
+  // had a result (`lastRunStatus` set — known synchronously) reserve their
+  // result area + show a spinner while `isHydrating`, so the grid lands in
+  // place rather than elongating the cell once this async load resolves.
+  const { hydrateCells } = store
+  const [hydrationSettled, setHydrationSettled] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    loadNotebookSnapshots(bufferId)
+      .then((snapshots) => {
+        if (cancelled) return
+        const byCell = new Map(snapshots.map((s) => [s.cellId, s]))
+        hydrateCells((prev) =>
+          prev.map((cell) => {
+            if (cell.result) return cell
+            const snap = byCell.get(cell.id)
+            if (!snap || snap.sqlHash !== sqlHash(cell.value)) return cell
+            return {
+              ...cell,
+              result: {
+                results: snap.results,
+                activeResultIndex: 0,
+                timestamp: snap.savedAt,
+              },
+            }
+          }),
+        )
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setHydrationSettled(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [bufferId, hydrateCells])
+
   const execution = useCellExecution({
+    bufferId,
     cellsRef: store.cellsRef,
     executeSingle,
     updateCellResult: store.updateCellResult,
@@ -382,6 +432,7 @@ export const NotebookProvider: React.FC<{
     (cellId: string) => {
       cancelCell(cellId)
       store.removeCellById(cellId)
+      void deleteCellSnapshot(bufferId, cellId)
       if (focusedCellIdRef.current === cellId) {
         setFocusedCell(null)
       }
@@ -389,7 +440,7 @@ export const NotebookProvider: React.FC<{
         setMaximizedCellId(null)
       }
     },
-    [store, setMaximizedCellId, cancelCell],
+    [store, setMaximizedCellId, cancelCell, bufferId],
   )
 
   const duplicateCell = useCallback(
@@ -451,6 +502,7 @@ export const NotebookProvider: React.FC<{
       focusedCellId,
       maximizedCellId,
       runningCellIds: execution.runningCellIds,
+      isHydrating: !hydrationSettled,
     }),
     [
       store.cells,
@@ -458,6 +510,7 @@ export const NotebookProvider: React.FC<{
       focusedCellId,
       maximizedCellId,
       execution.runningCellIds,
+      hydrationSettled,
     ],
   )
 

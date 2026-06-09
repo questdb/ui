@@ -55,6 +55,19 @@ export const CellWrapper = styled.div.attrs({
       }
     `}
 
+  ${({ $gridMode }) =>
+    !$gridMode &&
+    css`
+      .cell-drag-handle,
+      .cell-drag-handle:active {
+        cursor: default;
+      }
+    `}
+
+  &:focus {
+    outline: none;
+  }
+
   &:hover .cell-toolbar,
   &:focus-within .cell-toolbar {
     opacity: 1;

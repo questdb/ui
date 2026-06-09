@@ -34,6 +34,38 @@ export const singleResultFromExec = (
   }
 }
 
+// Notebook-scoped result caps. Rows are bounded at the fetch; the byte cap
+// bounds wide results so a persisted snapshot stays small. Deliberately NOT the
+// shared RESULT_DISPLAY_LIMIT (which the main Result panel uses).
+export const NOTEBOOK_ROW_CAP = 10_000
+export const NOTEBOOK_BYTE_CAP = 2_000_000
+
+// Cap a DQL result's dataset to ~`maxBytes` of serialized rows. `count` is left
+// as the server-returned value so the existing "X of Y rows" indicator still
+// reflects that rows were dropped. Non-DQL / empty results pass through.
+export const capResultBytes = (
+  result: SingleQueryResult,
+  maxBytes: number,
+): SingleQueryResult => {
+  if (result.type !== "dql" || result.dataset.length === 0) return result
+  const serialized = JSON.stringify(result.dataset)
+  if (serialized.length <= maxBytes) return result
+  const avgRowBytes = serialized.length / result.dataset.length
+  const keepRows = Math.max(1, Math.floor(maxBytes / avgRowBytes))
+  if (keepRows >= result.dataset.length) return result
+  return { ...result, dataset: result.dataset.slice(0, keepRows) }
+}
+
+// Cheap stable hash of a cell's SQL — a restored snapshot is only reused while
+// the cell's current SQL still matches what was saved.
+export const sqlHash = (value: string): string => {
+  let h = 5381
+  for (let i = 0; i < value.length; i++) {
+    h = ((h << 5) + h) ^ value.charCodeAt(i)
+  }
+  return (h >>> 0).toString(36)
+}
+
 const UNVERIFIABLE_ERROR_MARKERS = [
   "Cancelled by user",
   "An error occurred, please try again",
@@ -546,6 +578,23 @@ const GRID_HEADER_PX = 44 // result-table HEADER_HEIGHT
 const GRID_ROW_PX = 28 // result-table ROW_HEIGHT
 const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
 
+// Height to reserve for a run cell's result area while its snapshot hydrates —
+// the same max single-statement grid height `computeResultBottomHeight` settles
+// to for a ≥10-row result, so the grid drops in without a height jump. Mirrors
+// how draw reserves a fixed DEFAULT_CHART_BOTTOM_HEIGHT before its data lands.
+export const RESERVED_RESULT_BOTTOM_HEIGHT =
+  NOTIFICATION_PX + GRID_HEADER_PX + MAX_RESERVED_ROWS * GRID_ROW_PX
+
+export const isExpectingResult = (
+  cell: NotebookCell,
+  isHydrating: boolean,
+): boolean =>
+  isHydrating &&
+  cell.mode !== "draw" &&
+  cell.lastRunStatus != null &&
+  cell.lastRunStatus !== "none" &&
+  cell.result == null
+
 const isDqlWithRows = (r: SingleQueryResult): boolean =>
   r.type === "dql" && r.dataset.length > 0
 
@@ -632,11 +681,14 @@ export const computeCellGridH = (
   cell: NotebookCell,
   rowHeight: number,
   marginY: number = 0,
+  expectingResult: boolean = false,
 ): number => {
   const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
   const bottom = isDoubleView(cell)
     ? (cell.bottomHeight ?? defaultBottomHeightFor(cell))
-    : 0
+    : expectingResult
+      ? (cell.bottomHeight ?? RESERVED_RESULT_BOTTOM_HEIGHT)
+      : 0
   const totalPx = CELL_CHROME_PX + top + bottom
   return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
 }

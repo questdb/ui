@@ -3,8 +3,10 @@ import {
   resolveDraw,
   resultsEquivalent,
   successResults,
+  toExecResult,
 } from "./drawCanvasUtils"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
+import type { SingleQueryResult } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 
 const dql = (
@@ -168,5 +170,34 @@ describe("resolveDraw — unresolved statements use a null slot, not an inert co
     const q0 = renderQueries.find((q) => q.index === 0)
     // Inference ran for slot 0 (yColumns populated) — not a blank render.
     expect(q0?.yColumns).toEqual(["price"])
+  })
+})
+
+describe("toExecResult", () => {
+  it("maps a DQL snapshot entry to a chartable QueryExecResult", () => {
+    const snap: SingleQueryResult = {
+      type: "dql",
+      query: "select x",
+      columns: [{ name: "x", type: "INT" }],
+      dataset: [[1], [2]],
+      count: 2,
+    }
+    const exec = toExecResult(snap)
+    expect(exec.type).toBe("dql")
+    expect(exec.dataset).toEqual([[1], [2]])
+    expect(exec.columns).toEqual([{ name: "x", type: "INT" }])
+    // round-trips through successResults (DQL with rows survives)
+    expect(successResults([exec])).toHaveLength(1)
+  })
+
+  it("maps non-DQL/transient entries to empty results that successResults drops", () => {
+    const entries: SingleQueryResult[] = [
+      { type: "ddl", query: "create table t (x int)" },
+      { type: "error", query: "bad", error: "boom" },
+      { type: "cancelled", query: "c" },
+    ]
+    const execs = entries.map(toExecResult)
+    expect(execs.every((e) => e.dataset.length === 0)).toBe(true)
+    expect(successResults(execs)).toHaveLength(0)
   })
 })

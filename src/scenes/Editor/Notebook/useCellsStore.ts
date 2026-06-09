@@ -39,6 +39,17 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [persistCells],
   )
 
+  // Hydration-only setter: restoring persisted result snapshots must NOT
+  // schedule a persist. Results are stripped from the persist payload, so the
+  // write would be pure churn — and because persistCells' identity changes with
+  // every EditorProvider render (via updateBuffer), a persisting hydrate effect
+  // re-triggers itself off its own buffer write, looping forever. Stable
+  // identity ([] deps) so the hydration effect runs once per mount.
+  const hydrateCells = useCallback(
+    (updater: (prev: NotebookCell[]) => NotebookCell[]) => setCells(updater),
+    [],
+  )
+
   // Id generated up-front so the synchronous return matches the deferred state update.
   const addCell = useCallback(
     (afterCellId?: string, value?: string): string => {
@@ -159,6 +170,7 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     cells,
     cellsRef,
     updateCells,
+    hydrateCells,
     updateCell,
     updateCellResult,
     addCell,

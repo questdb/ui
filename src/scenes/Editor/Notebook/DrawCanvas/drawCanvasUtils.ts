@@ -1,4 +1,5 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
+import type { SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
@@ -21,6 +22,37 @@ export const successResults = (
     (r): r is QueryExecResult =>
       r !== null && r.type === "dql" && r.dataset.length > 0,
   )
+
+// Rehydrate a persisted snapshot entry into the QueryExecResult shape DrawCanvas
+// works with. Only DQL carries chartable data; other types map to empty results
+// (which successResults() then filters out).
+export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
+  if (r.type === "dql") {
+    return {
+      type: "dql",
+      query: r.query,
+      columns: r.columns,
+      dataset: r.dataset,
+      count: r.count,
+      timings: r.timings,
+    }
+  }
+  if (r.type === "error") {
+    return {
+      type: "error",
+      query: r.query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: r.error,
+    }
+  }
+  if (r.type === "ddl" || r.type === "dml") {
+    return { type: r.type, query: r.query, columns: [], dataset: [], count: 0 }
+  }
+  // transient (running/queued/cancelled) — not chartable
+  return { type: "error", query: r.query, columns: [], dataset: [], count: 0 }
+}
 
 export const resultsEquivalent = (
   a: QueryExecResult[],

@@ -38,6 +38,7 @@ import {
 } from "../../store/buffers"
 import { toast } from "../../components/Toast"
 import { db } from "../../store/db"
+import { deleteNotebookSnapshots } from "../../store/notebookResults"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { emitUserAction } from "../../utils/notebookAIBridge"
@@ -609,6 +610,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       bufferId: id,
     })
     if (wasNotebook) {
+      void deleteNotebookSnapshots(id)
       emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
   }

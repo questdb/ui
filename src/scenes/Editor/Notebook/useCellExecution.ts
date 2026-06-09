@@ -11,8 +11,16 @@ import { EventType } from "../../../modules/EventBus/types"
 import { getQueriesFromText } from "../Monaco/utils"
 import {
   buildInitialScriptResults,
+  capResultBytes,
+  NOTEBOOK_BYTE_CAP,
+  NOTEBOOK_ROW_CAP,
   singleResultFromExec,
+  sqlHash,
 } from "./notebookUtils"
+import {
+  pruneToRecentNotebooks,
+  saveCellSnapshot,
+} from "../../../store/notebookResults"
 
 // Schema panel + completions listen for MSG_QUERY_SCHEMA to refresh.
 const publishSchemaIfMutating = (type: QueryExecResult["type"]): void => {
@@ -57,8 +65,13 @@ const clearRunningCell = (
 }
 
 type Options = {
+  bufferId: number
   cellsRef: MutableRefObject<NotebookCell[]>
-  executeSingle: (sql: string, signal?: AbortSignal) => Promise<QueryExecResult>
+  executeSingle: (
+    sql: string,
+    signal?: AbortSignal,
+    limit?: number,
+  ) => Promise<QueryExecResult>
   updateCellResult: (
     cellId: string,
     index: number,
@@ -76,6 +89,7 @@ type Options = {
 }
 
 export const useCellExecution = ({
+  bufferId,
   cellsRef,
   executeSingle,
   updateCellResult,
@@ -92,6 +106,26 @@ export const useCellExecution = ({
   const runGenerationRef = useRef<Map<string, number>>(new Map())
 
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
+
+  // Persist a faithful, already-capped copy of the cell's result so it survives
+  // tab-switch / reload. One record per cell (mode-agnostic). Keyed to the SQL
+  // so a later edit invalidates it on restore.
+  const persistSnapshot = useCallback(
+    (cellId: string, explicitResult?: CellResult) => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell) return
+      const result = explicitResult ?? cell.result
+      if (!result) return
+      void saveCellSnapshot({
+        bufferId,
+        cellId,
+        sqlHash: sqlHash(cell.value),
+        results: result.results,
+        savedAt: Date.now(),
+      }).then(() => pruneToRecentNotebooks())
+    },
+    [bufferId, cellsRef],
+  )
 
   const runScript = useCallback(
     async (
@@ -156,9 +190,20 @@ export const useCellExecution = ({
             isAuto ? i : undefined,
           )
 
-          const result = await executeSingle(sql, perQuery.signal)
+          const result = await executeSingle(
+            sql,
+            perQuery.signal,
+            NOTEBOOK_ROW_CAP,
+          )
           if (!isCurrentRun()) return failedCount === 0
-          updateCellResult(cellId, i, singleResultFromExec(result, sql))
+          updateCellResult(
+            cellId,
+            i,
+            capResultBytes(
+              singleResultFromExec(result, sql),
+              NOTEBOOK_BYTE_CAP,
+            ),
+          )
           publishSchemaIfMutating(result.type)
 
           if (result.type === "error") {
@@ -179,6 +224,7 @@ export const useCellExecution = ({
           failedCount,
           durationMs: Date.now() - startTime,
         })
+        persistSnapshot(cellId)
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -193,7 +239,13 @@ export const useCellExecution = ({
 
       return failedCount === 0
     },
-    [executeSingle, updateCell, updateCellResult, setScriptSummary],
+    [
+      executeSingle,
+      updateCell,
+      updateCellResult,
+      setScriptSummary,
+      persistSnapshot,
+    ],
   )
 
   const runCell = useCallback(
@@ -235,16 +287,26 @@ export const useCellExecution = ({
 
       setRunningCellIds((prev) => new Set(prev).add(cellId))
       try {
-        const execResult = await executeSingle(queryText, ac.signal)
+        const execResult = await executeSingle(
+          queryText,
+          ac.signal,
+          NOTEBOOK_ROW_CAP,
+        )
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) return execResult.type !== "error"
         const cellResult: CellResult = {
-          results: [singleResultFromExec(execResult, queryText)],
+          results: [
+            capResultBytes(
+              singleResultFromExec(execResult, queryText),
+              NOTEBOOK_BYTE_CAP,
+            ),
+          ],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
         updateCell(cellId, { result: cellResult })
         publishSchemaIfMutating(execResult.type)
+        persistSnapshot(cellId, cellResult)
         return execResult.type !== "error"
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
@@ -258,7 +320,7 @@ export const useCellExecution = ({
         }
       }
     },
-    [cellsRef, executeSingle, updateCell, runScript],
+    [cellsRef, executeSingle, updateCell, runScript, persistSnapshot],
   )
 
   const cancelCell = useCallback(
