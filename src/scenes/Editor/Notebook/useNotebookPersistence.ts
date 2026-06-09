@@ -59,13 +59,16 @@ export const useNotebookPersistence = ({
 
   const persistImmediately = useCallback(
     (cells: NotebookCell[]) => {
+      // A pending debounced write holds newer cells than callers' cellsRef
+      // (which only updates at render) — never replace it with older state.
+      const effective = pendingCellsRef.current ?? cells
       if (persistTimeoutRef.current) {
         window.clearTimeout(persistTimeoutRef.current)
         persistTimeoutRef.current = null
       }
       pendingCellsRef.current = null
       void updateBuffer(bufferId, {
-        notebookViewState: buildPayload(cells),
+        notebookViewState: buildPayload(effective),
       })
     },
     [bufferId, updateBuffer, buildPayload],
