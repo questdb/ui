@@ -27,6 +27,7 @@ import {
   emitUserAction,
   signalUserEdit,
 } from "../../../../utils/notebookAIBridge"
+import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
@@ -176,6 +177,7 @@ const CellInner: React.FC<Props> = ({
     setCellChartMaximized,
     updateCell,
     setFocusedCell,
+    getCellsSnapshot,
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -397,13 +399,13 @@ const CellInner: React.FC<Props> = ({
   }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
 
   const emitRanEvent = useCallback(
-    (success: boolean) => {
+    (status: RanStatus) => {
       if (bufferIdForEvents === undefined) return
       emitUserAction({
         kind: "user_ran_cell",
         bufferId: bufferIdForEvents,
         cellId: cell.id,
-        status: success ? "success" : "error",
+        status,
       })
     },
     [bufferIdForEvents, cell.id],
@@ -415,8 +417,12 @@ const CellInner: React.FC<Props> = ({
 
     clearHighlight()
 
+    const priorResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
     const ok = await runCell(cell.id)
-    emitRanEvent(ok)
+    const freshResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
   }, [
     cell.id,
     runCell,
@@ -424,6 +430,7 @@ const CellInner: React.FC<Props> = ({
     editorRef,
     clearHighlight,
     emitRanEvent,
+    getCellsSnapshot,
   ])
 
   const handleRunAtCursor = useCallback(async () => {

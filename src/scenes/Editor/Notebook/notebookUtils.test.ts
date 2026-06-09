@@ -15,6 +15,7 @@ import {
   generateDefaultLayout,
   insertCell,
   isDoubleView,
+  isUnverifiableExecError,
   mergeCellLayout,
   nextCopyLabel,
   removeCell,
@@ -126,6 +127,37 @@ describe("singleResultFromExec", () => {
   })
 })
 
+describe("isUnverifiableExecError", () => {
+  // Abort / transport / parse failures carry no server verdict → the write may
+  // have committed → unverifiable (route through cancelled, not a retryable error).
+  it("flags abort and transport-level errors (no server verdict)", () => {
+    for (const error of [
+      "Cancelled by user",
+      "An error occurred, please try again",
+      "Failed to read response: TypeError",
+      "Invalid JSON response from the server: x",
+      "QuestDB is not reachable [504]",
+    ]) {
+      expect(isUnverifiableExecError({ type: "error", error })).toBe(true)
+    }
+  })
+
+  it("does NOT flag a real server error (definitively did not commit)", () => {
+    expect(
+      isUnverifiableExecError({
+        type: "error",
+        error: "table does not exist [table=trades]",
+      }),
+    ).toBe(false)
+  })
+
+  it("does NOT flag non-error results", () => {
+    expect(isUnverifiableExecError({ type: "dml" })).toBe(false)
+    expect(isUnverifiableExecError({ type: "dql" })).toBe(false)
+    expect(isUnverifiableExecError({ type: "error" })).toBe(false)
+  })
+})
+
 describe("stripCellResults", () => {
   it("removes result from every cell", () => {
     const cells: NotebookCell[] = [
@@ -149,6 +181,40 @@ describe("stripCellResults", () => {
     expect(out[1].result).toBeUndefined()
   })
 
+  // The stripped result is the only run signal an unmounted notebook can report
+  // to the agent — record it so a committed write isn't read back as "none".
+  it("records lastRunStatus from the result before stripping", () => {
+    const committed: NotebookCell[] = [
+      cell("a", "INSERT INTO t VALUES(1)", {
+        results: [{ type: "dml", query: "INSERT INTO t VALUES(1)" }],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+      cell("b", "SELECT 2"),
+    ]
+    const out = stripCellResults(committed)
+    expect(out[0].result).toBeUndefined()
+    expect(out[0].lastRunStatus).toBe("success")
+    // never-run cell gets no run status
+    expect(out[1].lastRunStatus).toBeUndefined()
+  })
+
+  // A run still in-flight at persist time was interrupted by the unmount; an
+  // aborted write may have committed, so persist "cancelled" (→ unverified on
+  // re-read), never a perpetual "running" the agent would re-run into a dup.
+  it("persists an in-flight (running) result as cancelled", () => {
+    const inFlight: NotebookCell[] = [
+      cell("a", "INSERT INTO t SELECT * FROM big", {
+        results: [
+          { type: "running", query: "INSERT INTO t SELECT * FROM big" },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ]
+    expect(stripCellResults(inFlight)[0].lastRunStatus).toBe("cancelled")
+  })
+
   it("returns an empty array for empty input", () => {
     expect(stripCellResults([])).toEqual([])
   })
@@ -167,7 +233,7 @@ describe("buildPersistPayload", () => {
       layoutMode: "list",
     })
     expect(payload).toEqual({
-      cells: [{ ...cells[0], result: undefined }],
+      cells: [{ ...cells[0], result: undefined, lastRunStatus: "cancelled" }],
       focusedCellId: "a",
       maximizedCellId: undefined,
       settings: { layoutMode: "list" },
@@ -359,16 +425,17 @@ describe("duplicateCellAt", () => {
     expect(out.map((c) => c.position)).toEqual([0, 1, 2])
   })
 
-  it("drops the `result` blob on the copy", () => {
-    const original = cell("a", "SELECT 1", {
-      results: [{ type: "running", query: "SELECT 1" }],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
+  it("drops the `result` blob and persisted run status on the copy", () => {
+    const original: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      lastRunStatus: "success",
+    }
     const out = duplicateCellAt([original], "a", "new-id")
     const copy = out[1]
     expect(copy.id).toBe("new-id")
     expect(copy.result).toBe(null)
+    // never-run copy must not inherit the source's run status
+    expect(copy.lastRunStatus).toBeUndefined()
   })
 
   it("returns the original when the id is unknown", () => {
@@ -1176,7 +1243,13 @@ describe("cloneNotebookViewState", () => {
 
   const source = (): NotebookViewState => ({
     cells: [
-      { id: "a", position: 0, value: "SELECT 1", topHeight: 120 },
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT 1",
+        topHeight: 120,
+        lastRunStatus: "success",
+      },
       {
         id: "b",
         position: 1,
@@ -1227,6 +1300,8 @@ describe("cloneNotebookViewState", () => {
   it("strips results but preserves structural fields", () => {
     const out = cloneNotebookViewState(source(), seqIds())
     expect(out.cells[1].result).toBeUndefined()
+    // never-run clone must not inherit the source's persisted run status
+    expect(out.cells[0].lastRunStatus).toBeUndefined()
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)

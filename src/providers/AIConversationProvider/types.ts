@@ -1,6 +1,7 @@
 import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
+import type { RanStatus } from "../../utils/ai/runStatus"
 import type { TokenUsage } from "../../utils/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
@@ -67,7 +68,7 @@ export type UserActionDigest = {
   added: Set<string>
   deleted: Set<string>
   edited: Set<string>
-  ran: Map<string, "success" | "error">
+  ran: Map<string, RanStatus>
   layoutModeTo?: "list" | "grid"
   notebookStatusChange?: "archived" | "deleted"
 }

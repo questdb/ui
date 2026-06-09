@@ -17,6 +17,8 @@ export type StateFreshness = "unfetched" | "fresh" | "stale"
 export type FreshnessGate = {
   get: () => StateFreshness
   set: (next: StateFreshness) => void
+  getReadBuffer: () => number | null
+  setReadBuffer: (bufferId: number | null) => void
 }
 
 export type PermissionsRefs = {
@@ -35,11 +37,7 @@ export type DispatchContext = {
   signal?: AbortSignal
 }
 
-const READ_TOOL_NAMES = new Set<string>([
-  "list_cells",
-  "get_cell",
-  "get_notebook_state",
-])
+const FULL_STATE_READ_TOOLS = new Set<string>(["get_notebook_state"])
 
 const STATE_NOT_FETCHED_MESSAGE =
   "STATE_NOT_FETCHED: Call get_workspace_state first to see the current " +
@@ -48,6 +46,16 @@ const STATE_NOT_FETCHED_MESSAGE =
 const STATE_STALE_MESSAGE =
   "STATE_STALE: The user changed the notebook since your last fetch. Call " +
   "get_workspace_state to re-sync, then retry this tool."
+
+const STATE_WRONG_BUFFER_MESSAGE =
+  "STATE_NOT_FETCHED: Your last full read was of a different notebook. Call " +
+  "get_notebook_state for this buffer_id to see its current cells and any " +
+  "user edits, then retry this tool."
+
+const bufferIdOf = (args: unknown): number | null => {
+  const id = (args as { buffer_id?: unknown } | null | undefined)?.buffer_id
+  return typeof id === "number" ? id : null
+}
 
 const errorPayload = (text: string): ToolResultPayload => ({
   content: [{ type: "text", text }],
@@ -167,22 +175,38 @@ const dispatchInner = async (
   ctx: DispatchContext,
 ): Promise<ToolResultPayload> => {
   if (isMcpMetaToolName(call.name)) {
-    const content =
-      call.name === "get_workspace_state"
-        ? resolveGetWorkspaceState(
-            call.arguments as { include_user_events?: boolean } | undefined,
-            ctx.metaToolContext,
-          )
-        : resolveGetRecentUserActions(ctx.metaToolContext)
-    ctx.freshness.set("fresh")
-    return { content, isError: false }
+    if (call.name === "get_workspace_state") {
+      const content = resolveGetWorkspaceState(
+        call.arguments as { include_user_events?: boolean } | undefined,
+        ctx.metaToolContext,
+      )
+      const activeId = ctx.metaToolContext.getActiveBufferId()
+      if (activeId !== null) {
+        ctx.freshness.set("fresh")
+        ctx.freshness.setReadBuffer(activeId)
+      }
+      return { content, isError: false }
+    }
+    // get_recent_user_actions returns only a digest of action IDs (no cell
+    // values), so it is NOT a full re-sync and must not clear "stale" — else a
+    // later apply_notebook_state could overwrite the unseen edit it just named.
+    return {
+      content: resolveGetRecentUserActions(ctx.metaToolContext),
+      isError: false,
+    }
   }
 
   // Mutations gate on freshness; the deny text is the recovery instruction.
-  if (mutatesNotebook(call.name)) {
+  // create_notebook is exempt: it makes a NEW notebook, so there is no existing
+  // buffer whose unseen user edit it could overwrite
+  if (mutatesNotebook(call.name) && call.name !== "create_notebook") {
     const flag = ctx.freshness.get()
     if (flag === "unfetched") return errorPayload(STATE_NOT_FETCHED_MESSAGE)
     if (flag === "stale") return errorPayload(STATE_STALE_MESSAGE)
+    const target = bufferIdOf(call.arguments)
+    if (target !== null && ctx.freshness.getReadBuffer() !== target) {
+      return errorPayload(STATE_WRONG_BUFFER_MESSAGE)
+    }
   }
 
   const perms = ctx.permissions
@@ -197,9 +221,9 @@ const dispatchInner = async (
     ctx.validateSql,
     ctx.signal,
   )
-  // Reads flip freshness; mutations don't — only USER edits do.
-  if (READ_TOOL_NAMES.has(call.name)) {
+  if (FULL_STATE_READ_TOOLS.has(call.name) && !out.is_error) {
     ctx.freshness.set("fresh")
+    ctx.freshness.setReadBuffer(bufferIdOf(call.arguments))
   }
   return wrapDispatchToolOutput(out)
 }

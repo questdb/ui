@@ -26,6 +26,7 @@ import {
 } from "./ai"
 import type { AIProvider } from "./ai"
 import type { ToolExecutionContext } from "./ai/shared"
+import { getCellRunStatus, type RunStatus } from "./ai/runStatus"
 import {
   getController,
   getUserActionSeq,
@@ -79,7 +80,7 @@ export type NotebookCellSummary = {
   preview: string
   position: number
   mode?: "run" | "draw"
-  last_run_status?: "success" | "error" | "none" | "running"
+  last_run_status?: RunStatus
 }
 
 export type NotebookCellDetails = {
@@ -90,7 +91,7 @@ export type NotebookCellDetails = {
   auto_refresh?: boolean
   is_chart_maximized?: boolean
   chart_config?: ChartConfigWire
-  last_run_status?: "success" | "error" | "none" | "running"
+  last_run_status?: RunStatus
   last_run_error?: string
 }
 
@@ -143,6 +144,8 @@ export interface ModelToolsClient {
     success: boolean
     queryCount: number
     results: string[]
+    unverified?: boolean
+    note?: string
   }>
   setLayoutMode: (bufferId: number, mode: "list" | "grid") => Promise<void>
   setCellLayout: (
@@ -248,28 +251,15 @@ const lastRunStatusForCell = (
   cell:
     | {
         result?: { results: Array<{ type: string; error?: string }> } | null
+        lastRunStatus?: RunStatus
       }
     | undefined,
 ): {
-  status: "success" | "error" | "none" | "running"
+  status: RunStatus
   error?: string
 } => {
-  if (!cell || !cell.result) {
-    return { status: "none" }
-  }
-  const results = cell.result.results
-  const last = results[results.length - 1]
-  if (!last) return { status: "none" }
-  if (last.type === "error") {
-    return { status: "error", error: trimError(last.error) }
-  }
-  if (last.type === "dql" || last.type === "ddl" || last.type === "dml") {
-    return { status: "success" }
-  }
-  if (last.type === "running" || last.type === "queued") {
-    return { status: "running" }
-  }
-  return { status: "none" }
+  const { status, error } = getCellRunStatus(cell)
+  return status === "error" ? { status, error: trimError(error) } : { status }
 }
 
 const requireCell = (controller: NotebookController, cellId: string) => {

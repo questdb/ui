@@ -9,6 +9,7 @@ import type {
   SingleQueryResult,
 } from "../../../store/notebook"
 import { createCell } from "../../../store/notebook"
+import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import { getQueriesFromText } from "../Monaco/utils"
 
@@ -33,8 +34,37 @@ export const singleResultFromExec = (
   }
 }
 
+const UNVERIFIABLE_ERROR_MARKERS = [
+  "Cancelled by user",
+  "An error occurred, please try again",
+  "Failed to read response",
+  "Invalid JSON response from the server",
+  "QuestDB is not reachable",
+]
+
+export const isUnverifiableExecError = (exec: {
+  type: string
+  error?: string
+}): boolean =>
+  exec.type === "error" &&
+  exec.error !== undefined &&
+  UNVERIFIABLE_ERROR_MARKERS.some((m) => exec.error?.includes(m) ?? false)
+
+export const UNVERIFIED_RUN_NOTE =
+  "Run outcome unverified: the request did not return a confirmation, so the " +
+  "query may have committed server-side. Verify (e.g. with a SELECT, or " +
+  "get_notebook_state) before re-running to avoid duplicate writes."
+
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
-  cells.map((cell) => ({ ...cell, result: undefined }))
+  cells.map((cell) => {
+    if (!cell.result) return { ...cell, result: undefined }
+    const status = deriveRunStatusFromResults(cell.result.results).status
+    return {
+      ...cell,
+      result: undefined,
+      lastRunStatus: status === "running" ? "cancelled" : status,
+    }
+  })
 
 export const buildPersistPayload = (
   cells: NotebookCell[],
@@ -166,6 +196,7 @@ export const duplicateCellAt = (
     id: newId,
     position: idx + 1,
     result: null,
+    lastRunStatus: undefined,
   }
   const next = [...cells]
   next.splice(idx + 1, 0, copy)
@@ -283,7 +314,7 @@ export const cloneNotebookViewState = (
   const cells: NotebookCell[] = source.cells.map((cell) => {
     const id = newId()
     idMap.set(cell.id, id)
-    return { ...cell, id, result: undefined }
+    return { ...cell, id, result: undefined, lastRunStatus: undefined }
   })
 
   const next: NotebookViewState = { cells }

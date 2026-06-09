@@ -93,7 +93,9 @@ const pruneQuery = (
   const names = new Set(columns.map((c) => c.name))
   const next: QueryChart = {
     ...qc,
-    yColumns: (qc.yColumns ?? []).filter((n) => names.has(n)),
+    yColumns: (Array.isArray(qc.yColumns) ? qc.yColumns : []).filter((n) =>
+      names.has(n),
+    ),
   }
   if (next.partitionByColumn && !names.has(next.partitionByColumn))
     delete next.partitionByColumn

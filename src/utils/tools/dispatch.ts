@@ -30,6 +30,10 @@ import {
 } from "./permissions"
 import { categoryFor, editsCells, mutatesNotebook } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
+import {
+  isUnverifiableExecError,
+  UNVERIFIED_RUN_NOTE,
+} from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ValidateQueryResult } from "../questdb/types"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import {
@@ -402,6 +406,9 @@ export const dispatchTool = async (
               ran: r.success,
               queryCount: r.queryCount,
               results: r.results,
+              ...(r.unverified
+                ? { unverified: r.unverified, note: r.note }
+                : {}),
             }
           }
           return { cellId }
@@ -888,6 +895,8 @@ export const dispatchTool = async (
             queryCount?: number
             results?: string[]
             error?: string
+            unverified?: boolean
+            note?: string
           }
           const settled = await Promise.all(
             resolved.map(async (r): Promise<RunEntry | null> => {
@@ -918,6 +927,9 @@ export const dispatchTool = async (
                   success: result.success,
                   queryCount: result.queryCount,
                   results: result.results,
+                  ...(result.unverified
+                    ? { unverified: result.unverified, note: result.note }
+                    : {}),
                 }
               } catch (runErr) {
                 const message =
@@ -1015,14 +1027,29 @@ export const dispatchTool = async (
             eventBus.publish(EventType.MSG_QUERY_SCHEMA)
           }
           const payload = buildRunQueryPayload(raw, requestedLimit)
+          const unverified =
+            raw.type === "error" && isUnverifiableExecError(raw)
           return {
-            content: JSON.stringify(payload),
+            content: JSON.stringify(
+              unverified
+                ? { ...payload, unverified: true, note: UNVERIFIED_RUN_NOTE }
+                : payload,
+            ),
             is_error: raw.type === "error" ? true : undefined,
           }
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e)
+          const unverified = isUnverifiableExecError({
+            type: "error",
+            error: message,
+          })
           return {
-            content: JSON.stringify({ error: `run_query failed: ${message}` }),
+            content: JSON.stringify({
+              error: `run_query failed: ${message}`,
+              ...(unverified
+                ? { unverified: true, note: UNVERIFIED_RUN_NOTE }
+                : {}),
+            }),
             is_error: true,
           }
         }

@@ -172,6 +172,56 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(res.content).not.toMatch(/columns|dataset|count|rows/)
   })
 
+  // A superseded/backgrounded run yields unverified+note; the agent must see it
+  // on ALL run-bearing tools (not just run_cell) or it re-runs a committed write.
+  it("propagates unverified/note from runCell to run_cell, add_cell{run}, and apply runs", async () => {
+    const unverifiedRunCell = () =>
+      vi.fn(() =>
+        Promise.resolve({
+          success: false,
+          queryCount: 1,
+          results: ["pending"],
+          unverified: true,
+          note: "Run outcome unverified.",
+        }),
+      )
+
+    const runCellRes = await dispatchTool(
+      "run_cell",
+      { buffer_id: 1, cell_id: "c" },
+      makeClient({ runCell: unverifiedRunCell() }),
+      noopStatus,
+    )
+    const p1 = JSON.parse(runCellRes.content) as Record<string, unknown>
+    expect(p1.unverified).toBe(true)
+    expect(typeof p1.note).toBe("string")
+
+    const addRes = await dispatchTool(
+      "add_cell",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES(1)", run: true },
+      makeClient({ runCell: unverifiedRunCell() }),
+      noopStatus,
+    )
+    const p2 = JSON.parse(addRes.content) as Record<string, unknown>
+    expect(p2.unverified).toBe(true)
+    expect(typeof p2.note).toBe("string")
+
+    const applyRes = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [{ id: "x", value: "INSERT INTO t VALUES(1)", mode: "run" }],
+      },
+      makeClient({ runCell: unverifiedRunCell() }),
+      noopStatus,
+    )
+    const p3 = JSON.parse(applyRes.content) as {
+      runs: Array<Record<string, unknown>>
+    }
+    expect(p3.runs[0].unverified).toBe(true)
+    expect(typeof p3.runs[0].note).toBe("string")
+  })
+
   it("set_cell_chart_config forwards only fields the AI supplied (patch semantics)", async () => {
     const client = makeClient()
     await dispatchTool(
@@ -203,6 +253,44 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         },
       ],
     })
+  })
+
+  it("run_query flags a transport-dropped error as unverified, a server error as not", async () => {
+    const transport = makeClient({
+      runQueryRaw: vi.fn(() =>
+        Promise.resolve({
+          type: "error" as const,
+          error: "QuestDB is not reachable [504]",
+        }),
+      ),
+    })
+    const t = await dispatchTool(
+      "run_query",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES(1)" },
+      transport,
+      noopStatus,
+    )
+    expect((JSON.parse(t.content) as { unverified?: boolean }).unverified).toBe(
+      true,
+    )
+
+    const serverErr = makeClient({
+      runQueryRaw: vi.fn(() =>
+        Promise.resolve({
+          type: "error" as const,
+          error: "table does not exist [table=t]",
+        }),
+      ),
+    })
+    const s = await dispatchTool(
+      "run_query",
+      { buffer_id: 1, sql: "SELECT * FROM t" },
+      serverErr,
+      noopStatus,
+    )
+    expect(
+      (JSON.parse(s.content) as { unverified?: boolean }).unverified,
+    ).toBeUndefined()
   })
 
   it("set_cell_chart_config with only `queries` does NOT send x/name defaults (no clobber)", async () => {
@@ -1538,6 +1626,8 @@ describe("dispatchMCPTool — data-leak invariant", () => {
     freshness: {
       get: () => "fresh" as const,
       set: () => undefined,
+      getReadBuffer: () => 1,
+      setReadBuffer: () => undefined,
     },
     metaToolContext: {
       getActiveBufferId: () => 1,

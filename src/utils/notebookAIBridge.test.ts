@@ -287,31 +287,73 @@ describe("summarizeCellResults", () => {
     ).toEqual({ success: true, queryCount: 2, results: ["success", "success"] })
   })
 
-  it("does NOT report success for a non-terminal running/queued entry", () => {
-    // Reachable via a superseded agent run: user re-runs the same cell
-    // (Ctrl+Enter) while the agent's run_cell is in flight. The agent must
-    // not be told success for a query that never completed.
+  it("reports a non-terminal running/queued entry as pending, without success", () => {
+    // Reachable via a superseded agent run, or the notebook backgrounded mid-run.
+    // The agent isn't told success and sees `pending` verbatim; it is NOT flagged
+    // unverified — only an unverifiable-error marker does that.
+    const running = summarizeCellResults(
+      cellWith([{ type: "running" } as never]),
+    )
+    expect(running.success).toBe(false)
+    expect(running.results).toEqual(["pending"])
+    expect(running.unverified).toBeUndefined()
     expect(
-      summarizeCellResults(cellWith([{ type: "running" } as never])),
-    ).toEqual({ success: false, queryCount: 1, results: ["pending"] })
-    expect(
-      summarizeCellResults(cellWith([{ type: "queued" } as never])),
-    ).toEqual({ success: false, queryCount: 1, results: ["pending"] })
+      summarizeCellResults(cellWith([{ type: "queued" } as never])).unverified,
+    ).toBeUndefined()
   })
 
-  it("surfaces cancelled and error entries without success", () => {
+  it("does NOT mark a success/error-only result unverified", () => {
+    expect(
+      summarizeCellResults(
+        cellWith([{ type: "dml" } as never, { type: "dml" } as never]),
+      ).unverified,
+    ).toBeUndefined()
     expect(
       summarizeCellResults(
         cellWith([
-          { type: "cancelled" } as never,
-          { type: "error", error: "boom" } as never,
-        ]),
-      ),
-    ).toEqual({
-      success: false,
-      queryCount: 2,
-      results: ["cancelled", "ERROR: boom"],
-    })
+          { type: "dml" } as never,
+          { type: "error", error: "x" },
+        ] as never),
+      ).unverified,
+    ).toBeUndefined()
+  })
+
+  // An unverifiable-error entry (the write may have committed server-side) is
+  // flagged unverified so the agent verifies instead of re-running a duplicate.
+  // A user cancel surfaces verbatim as `error: "Cancelled by user"`, a marker.
+  it("marks an unverifiable-error entry (Cancelled by user) unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "dml" } as never,
+        { type: "error", error: "Cancelled by user" } as never,
+      ]),
+    )
+    expect(r.success).toBe(false)
+    expect(r.unverified).toBe(true)
+    expect(typeof r.note).toBe("string")
+  })
+
+  it("flags a transport-dropped error (QuestDB is not reachable) unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "error", error: "QuestDB is not reachable [504]" } as never,
+      ]),
+    )
+    expect(r.unverified).toBe(true)
+    expect(typeof r.note).toBe("string")
+  })
+
+  it("surfaces cancelled (skipped) and plain-error entries verbatim, not unverified", () => {
+    const r = summarizeCellResults(
+      cellWith([
+        { type: "cancelled" } as never,
+        { type: "error", error: "boom" } as never,
+      ]),
+    )
+    expect(r.success).toBe(false)
+    expect(r.queryCount).toBe(2)
+    expect(r.results).toEqual(["cancelled", "ERROR: boom"])
+    expect(r.unverified).toBeUndefined()
   })
 
   it("reports failure for a cell with no result", () => {

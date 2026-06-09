@@ -1,5 +1,6 @@
 import type { editor } from "monaco-editor"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
+import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 
 export type CellMode = "run" | "draw"
@@ -21,6 +22,7 @@ export type NotebookCell = {
   autoRefresh?: boolean
   isChartMaximized?: boolean
   columnSizing?: Record<string, Record<string, number>>
+  lastRunStatus?: RunStatus
 }
 
 export type DqlQueryResult = {

@@ -10,6 +10,7 @@ import type {
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "../executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
 type ChartQueryWire = {
@@ -37,7 +38,7 @@ export type NotebookContextCell = {
   auto_refresh?: boolean
   is_chart_maximized?: boolean
   chart_config?: ChartConfigWire
-  last_run_status?: "success" | "error" | "none" | "running"
+  last_run_status?: RunStatus
   last_run_error_summary?: string
   grid?: { x: number; y: number; w: number; h: number }
 }
@@ -99,30 +100,16 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
 const lastRunSummary = (
   cell: NotebookCell,
 ): Pick<NotebookContextCell, "last_run_status" | "last_run_error_summary"> => {
-  if (!cell.result || cell.result.results.length === 0) {
-    return { last_run_status: "none" }
+  const { status, error } = getCellRunStatus(cell)
+  if (status === "error") {
+    return {
+      last_run_status: "error",
+      last_run_error_summary: sanitizeForPromptContext(
+        truncate(error ?? "", ERROR_MAX),
+      ),
+    }
   }
-  const latest = cell.result.results[cell.result.results.length - 1]
-  switch (latest.type) {
-    case "dql":
-    case "ddl":
-    case "dml":
-      return { last_run_status: "success" }
-    case "error":
-      return {
-        last_run_status: "error",
-        last_run_error_summary: sanitizeForPromptContext(
-          truncate(latest.error, ERROR_MAX),
-        ),
-      }
-    case "running":
-    case "queued":
-      return { last_run_status: "running" }
-    case "cancelled":
-      return { last_run_status: "none" }
-    default:
-      return { last_run_status: "none" }
-  }
+  return { last_run_status: status }
 }
 
 const buildCell = (

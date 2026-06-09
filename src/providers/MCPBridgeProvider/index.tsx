@@ -114,11 +114,16 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [connectAttempt, setConnectAttempt] = useState(0)
 
   const freshnessRef = useRef<StateFreshness>("unfetched")
+  const freshBufferRef = useRef<number | null>(null)
   const freshnessGate: FreshnessGate = useMemo(
     () => ({
       get: () => freshnessRef.current,
       set: (next) => {
         freshnessRef.current = next
+      },
+      getReadBuffer: () => freshBufferRef.current,
+      setReadBuffer: (bufferId) => {
+        freshBufferRef.current = bufferId
       },
     }),
     [],

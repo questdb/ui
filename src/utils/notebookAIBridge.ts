@@ -9,7 +9,10 @@ import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes
 import {
   buildAppliedCells,
   buildAppliedLayout,
+  isUnverifiableExecError,
+  UNVERIFIED_RUN_NOTE,
 } from "../scenes/Editor/Notebook/notebookUtils"
+import type { RanStatus } from "./ai/runStatus"
 
 // Bridges the AI tool-execution layer (plain async code, no React context)
 // to notebook React state. Two controllers live here:
@@ -43,6 +46,8 @@ export type NotebookController = {
     success: boolean
     queryCount: number
     results: string[]
+    unverified?: boolean
+    note?: string
   }>
   setLayoutMode: (mode: "list" | "grid") => void
   setVariables: (variables: NotebookVariable[]) => void
@@ -131,10 +136,17 @@ export const summarizeCellResults = (cell: NotebookCell | undefined) => {
     return "success"
   })
 
+  const unverified = freshResult.results.some((r) => isUnverifiableExecError(r))
   return {
     success: results.length > 0 && results.every((r) => r === "success"),
     queryCount: results.length,
     results,
+    ...(unverified
+      ? {
+          unverified: true,
+          note: UNVERIFIED_RUN_NOTE,
+        }
+      : {}),
   }
 }
 
@@ -278,7 +290,7 @@ export type UserActionEvent =
       kind: "user_ran_cell"
       bufferId: number
       cellId: string
-      status: "success" | "error"
+      status: RanStatus
     }
   | { kind: "user_moved_cell"; bufferId: number; cellId: string }
   | {

@@ -74,6 +74,7 @@ export type NotebookActions = {
   ) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
+  getCellsSnapshot: () => NotebookCell[]
 }
 
 export type NotebookContextType = NotebookState & NotebookActions
@@ -102,11 +103,11 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellLayout: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
+  getCellsSnapshot: () => [],
 }
 
 const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   ...NOOP_ACTIONS,
-  getCellsSnapshot: () => [],
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
   updateCells: () => undefined,
