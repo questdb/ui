@@ -232,7 +232,10 @@ export const createNotebookController = (
     }
 
     if (request.maximizedCellId !== undefined) {
-      liveActionsRef.current.setMaximizedCellId(request.maximizedCellId ?? null)
+      const id = request.maximizedCellId
+      liveActionsRef.current.setMaximizedCellId(
+        id && nextCells.some((c) => c.id === id) ? id : null,
+      )
     } else {
       const maximizedCellId = liveActionsRef.current.getMaximizedCellId()
       if (maximizedCellId && !nextCells.some((c) => c.id === maximizedCellId)) {

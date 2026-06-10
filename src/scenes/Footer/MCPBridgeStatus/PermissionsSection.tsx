@@ -31,12 +31,12 @@ const OPTIONS: Option[] = [
   {
     level: "none",
     label: "None",
-    hint: "AI cannot read schema or data, and cannot execute SQL.",
+    hint: "AI cannot read schema or data. Read-only queries it runs show results only in your console.",
   },
   {
     level: "schema",
     label: "Schema access",
-    hint: "Read table list, columns, and details.",
+    hint: "Read table list, columns, and details. Can run read-only queries whose results stay in your console.",
   },
   {
     level: "read",

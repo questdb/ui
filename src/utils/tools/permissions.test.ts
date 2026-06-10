@@ -299,11 +299,13 @@ describe("classifyAndCheckSqlForRunQuery", () => {
 })
 
 describe("classifyAndCheckSqlForExecution", () => {
-  it("DQL without read or write → granted (no data leaves the browser)", async () => {
+  it("DQL is granted at every level — no rows return to the agent, results stay in the console", async () => {
     const validate = vi.fn().mockResolvedValue(dqlValidate("SELECT 1"))
-    expect(
-      await classifyAndCheckSqlForExecution("SELECT 1", ALL_OFF, validate),
-    ).toEqual({ granted: true })
+    for (const perms of [ALL_OFF, SCHEMA_ONLY, READ_ONLY, ALL_ON]) {
+      expect(
+        await classifyAndCheckSqlForExecution("SELECT 1", perms, validate),
+      ).toEqual({ granted: true })
+    }
   })
 
   it("DDL without write → denied", async () => {
@@ -408,6 +410,15 @@ describe("classifyAndCheckSqlForAutoRun (apply_notebook_state)", () => {
       true,
     )
     expect(decision.action).toBe("skip")
+  })
+
+  it("DQL auto-runs at every level — no rows return to the agent", async () => {
+    const validate = vi.fn().mockResolvedValue(dqlValidate("SELECT 1"))
+    for (const perms of [ALL_OFF, SCHEMA_ONLY, READ_ONLY, ALL_ON]) {
+      expect(
+        await classifyAndCheckSqlForAutoRun("SELECT 1", perms, validate, false),
+      ).toEqual({ action: "run" })
+    }
   })
 
   it("DML without write → deny regardless of run history", async () => {

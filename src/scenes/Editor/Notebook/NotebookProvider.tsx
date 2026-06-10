@@ -178,7 +178,11 @@ export const NotebookProvider: React.FC<{
     initialState.focusedCellId ?? null,
   )
   const [maximizedCellId, setMaximizedCellIdState] = useState<string | null>(
-    initialState.maximizedCellId ?? null,
+    () =>
+      initialState.maximizedCellId &&
+      initialState.cells.some((c) => c.id === initialState.maximizedCellId)
+        ? initialState.maximizedCellId
+        : null,
   )
   const [settings, setSettingsState] = useState<NotebookSettings>(
     initialState.settings ?? {},

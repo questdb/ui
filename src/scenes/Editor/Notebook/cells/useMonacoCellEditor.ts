@@ -143,12 +143,6 @@ export const useMonacoCellEditor = ({
       })
       decorateCursorQuery()
 
-      // Clear built-in Ctrl+Shift+Enter handler (same pattern as editor-addons.ts)
-      ed.addCommand(
-        monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter,
-        () => {},
-      )
-
       ed.addAction({
         id: "notebook-run",
         label: "Run Query",

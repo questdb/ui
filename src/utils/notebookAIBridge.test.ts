@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import {
   __resetNotebookAIBridgeForTests,
+  createNotebookController,
   emitUserAction,
   getController,
   getWorkspace,
@@ -362,5 +363,65 @@ describe("summarizeCellResults", () => {
       queryCount: 0,
       results: [],
     })
+  })
+})
+
+describe("createNotebookController — applyNotebookState maximized cell id", () => {
+  const cellA: NotebookCell = { id: "a", position: 0, value: "SELECT 1" }
+  const cellB: NotebookCell = { id: "b", position: 1, value: "SELECT 2" }
+
+  const makeLiveActions = (
+    prevCells: NotebookCell[],
+    currentMaximizedId: string | null = null,
+  ) => ({
+    addCell: () => "new",
+    updateCell: () => undefined,
+    deleteCell: () => undefined,
+    moveCellUp: () => undefined,
+    moveCellDown: () => undefined,
+    duplicateCell: () => "dup",
+    runCell: () => Promise.resolve(true),
+    updateSettings: () => undefined,
+    setCellLayout: () => undefined,
+    setCellMode: () => undefined,
+    setCellChartConfig: () => undefined,
+    setCellAutoRefresh: () => undefined,
+    setCellChartMaximized: () => undefined,
+    setMaximizedCellId: vi.fn(),
+    updateCells: () => undefined,
+    getCellsSnapshot: () => prevCells,
+    getSettings: () => ({}),
+    getMaximizedCellId: () => currentMaximizedId,
+  })
+
+  it("clears a provided maximized id that does not survive the apply", () => {
+    const live = makeLiveActions([cellA, cellB])
+    const controller = createNotebookController(1, { current: live })
+    // Stale echo: cell "a" is dropped while the request still spotlights it.
+    controller.applyNotebookState({
+      cells: [{ id: "b", value: "SELECT 2" }],
+      maximizedCellId: "a",
+    })
+    expect(live.setMaximizedCellId).toHaveBeenCalledWith(null)
+  })
+
+  it("keeps a provided maximized id that exists in the applied cells", () => {
+    const live = makeLiveActions([cellA, cellB])
+    const controller = createNotebookController(1, { current: live })
+    controller.applyNotebookState({
+      cells: [
+        { id: "a", value: "SELECT 1" },
+        { id: "b", value: "SELECT 2" },
+      ],
+      maximizedCellId: "b",
+    })
+    expect(live.setMaximizedCellId).toHaveBeenCalledWith("b")
+  })
+
+  it("clears the current maximized id when the field is omitted and its cell is deleted", () => {
+    const live = makeLiveActions([cellA, cellB], "a")
+    const controller = createNotebookController(1, { current: live })
+    controller.applyNotebookState({ cells: [{ id: "b", value: "SELECT 2" }] })
+    expect(live.setMaximizedCellId).toHaveBeenCalledWith(null)
   })
 })

@@ -81,20 +81,33 @@ export const useNotebookPersistence = ({
   const bufferIdRef = useRef(bufferId)
   bufferIdRef.current = bufferId
 
-  useEffect(() => {
-    return () => {
-      if (persistTimeoutRef.current !== null) {
-        window.clearTimeout(persistTimeoutRef.current)
-        persistTimeoutRef.current = null
-        const cells = pendingCellsRef.current
-        pendingCellsRef.current = null
-        if (cells === null) return
-        void updateBufferRef.current(bufferIdRef.current, {
-          notebookViewState: buildPayload(cells),
-        })
-      }
-    }
+  const flushPending = useCallback(() => {
+    if (persistTimeoutRef.current === null) return
+    window.clearTimeout(persistTimeoutRef.current)
+    persistTimeoutRef.current = null
+    const cells = pendingCellsRef.current
+    pendingCellsRef.current = null
+    if (cells === null) return
+    void updateBufferRef.current(bufferIdRef.current, {
+      notebookViewState: buildPayload(cells),
+    })
   }, [buildPayload])
+
+  useEffect(() => {
+    return flushPending
+  }, [flushPending])
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPending()
+    }
+    window.addEventListener("pagehide", flushPending)
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.removeEventListener("pagehide", flushPending)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
+  }, [flushPending])
 
   return { persistCells, persistImmediately }
 }

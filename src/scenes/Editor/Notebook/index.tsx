@@ -559,10 +559,11 @@ const NotebookContent: React.FC = () => {
     )
   }
 
-  if (maximizedCellId) {
-    const cell = cells.find((c) => c.id === maximizedCellId)
-    if (!cell) return null
-
+  const maximizedCell = maximizedCellId
+    ? cells.find((c) => c.id === maximizedCellId)
+    : undefined
+  if (maximizedCell) {
+    const cell = maximizedCell
     return (
       <NotebookWrapper>
         <CellListContainer $maximized>

@@ -161,8 +161,6 @@ export const classifyAndCheckSqlForRunQuery = async (
   return { granted: true }
 }
 
-// DQL is allowed without `read` because no rows return to the agent — only
-// `run_query` (classifyAndCheckSqlForRunQuery) emits row data.
 export const classifyAndCheckSqlForExecution = async (
   sql: string,
   perms: Permissions,
@@ -218,13 +216,13 @@ export const classifyAndCheckSqlForAutoRun = async (
     }
   }
   const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
-  if (!writeStmt) return { action: "run" }
-  if (!perms.write) {
+  if (writeStmt && !perms.write) {
     return {
       action: "deny",
       reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
     }
   }
+  if (!writeStmt) return { action: "run" }
   if (ranBefore) {
     return {
       action: "skip",
