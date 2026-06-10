@@ -684,6 +684,27 @@ describe("buildAppliedCells", () => {
     expect(diff.deleted).toEqual([])
   })
 
+  it("preserves run history as lastRunStatus when a value change drops the result", () => {
+    // A run cell carries its outcome only in the live `result` during a
+    // session; dropping it on a value change must collapse to lastRunStatus so
+    // a later apply still sees the cell ran and skips re-running the write.
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "INSERT INTO t VALUES (1)",
+        result: {
+          results: [{ type: "dml", query: "INSERT INTO t VALUES (1)" }],
+        },
+      },
+    ]
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "INSERT INTO t  VALUES (1)" }],
+    })
+    expect(nextCells[0].result).toBeNull()
+    expect(nextCells[0].lastRunStatus).toBe("success")
+  })
+
   it("deletes cells whose ids are missing from the request", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "" },

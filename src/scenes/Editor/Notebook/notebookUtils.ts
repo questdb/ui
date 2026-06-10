@@ -10,6 +10,7 @@ import type {
 } from "../../../store/notebook"
 import { createCell } from "../../../store/notebook"
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
+import type { RunStatus } from "../../../utils/ai/runStatus"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import { getQueriesFromText } from "../Monaco/utils"
 
@@ -88,14 +89,18 @@ export const UNVERIFIED_RUN_NOTE =
   "query may have committed server-side. Verify (e.g. with a SELECT, or " +
   "get_notebook_state) before re-running to avoid duplicate writes."
 
+export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
+  const status = deriveRunStatusFromResults(result.results).status
+  return status === "running" ? "cancelled" : status
+}
+
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
   cells.map((cell) => {
     if (!cell.result) return { ...cell, result: undefined }
-    const status = deriveRunStatusFromResults(cell.result.results).status
     return {
       ...cell,
       result: undefined,
-      lastRunStatus: status === "running" ? "cancelled" : status,
+      lastRunStatus: collapseResultToRunStatus(cell.result),
     }
   })
 
@@ -489,6 +494,9 @@ export const buildAppliedCells = (
         position: index,
         value: req.value,
         result: valueChanged ? null : existing.result,
+      }
+      if (valueChanged && existing.result) {
+        next.lastRunStatus = collapseResultToRunStatus(existing.result)
       }
       if (resolvedMode !== undefined) next.mode = resolvedMode
       else delete next.mode
