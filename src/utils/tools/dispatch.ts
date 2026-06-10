@@ -27,6 +27,7 @@ import {
   denyReasonUnresolvedSql,
   requireAllDQL,
   runPermissionGate,
+  type PermissionDecision,
   type Permissions,
 } from "./permissions"
 import { categoryFor, editsCells, mutatesNotebook } from "./tools"
@@ -137,12 +138,18 @@ const reSyncTool = (toolContext?: ToolExecutionContext): string =>
     ? "get_notebook_state"
     : "get_workspace_state"
 
+export const STALE_RETRY_GUIDANCE =
+  "When retrying apply_notebook_state, set preserve_value:true for every cell " +
+  "you are not changing; re-read cells you will rewrite with " +
+  "get_cell (get_full_content: true) first so the user's edits survive."
+
 const staleNotebookResult = (toolContext?: ToolExecutionContext) => ({
   content: JSON.stringify({
     error_code: "stale",
     message:
       "STATE_STALE: The user changed the notebook. " +
-      `Call ${reSyncTool(toolContext)} to re-sync, then retry.`,
+      `Call ${reSyncTool(toolContext)} to re-sync, then retry. ` +
+      STALE_RETRY_GUIDANCE,
   }),
   is_error: true,
 })
@@ -349,11 +356,19 @@ export const dispatchTool = async (
         }))
       }
       case "get_cell": {
-        const { buffer_id, cell_id } =
-          (input as { buffer_id: number; cell_id: string }) || {}
+        const { buffer_id, cell_id, get_full_content } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            get_full_content?: boolean | null
+          }) || {}
         setStatus(AIOperationStatus.InspectingNotebook, { cellId: cell_id })
         return routeNotebookTool(() =>
-          modelToolsClient.getCell(buffer_id, cell_id),
+          modelToolsClient.getCell(
+            buffer_id,
+            cell_id,
+            get_full_content === true,
+          ),
         )
       }
       case "get_notebook_state": {
@@ -649,7 +664,8 @@ export const dispatchTool = async (
             variables?: NotebookVariable[] | null
             cells: Array<{
               id?: string | null
-              value: string
+              value?: string | null
+              preserve_value?: boolean | null
               mode?: CellMode | null
               auto_refresh?: boolean | null
               is_chart_maximized?: boolean | null
@@ -691,6 +707,38 @@ export const dispatchTool = async (
             is_error: true,
           }
         }
+        for (const [idx, c] of cells.entries()) {
+          const hasValue = typeof c.value === "string"
+          const preserves = c.preserve_value === true
+          if (preserves === hasValue) {
+            return {
+              content: JSON.stringify({
+                error_code: "validation",
+                message: preserves
+                  ? `VALIDATION_ERROR: cells[${idx}] provides both value and preserve_value:true. Send exactly one per cell.`
+                  : `VALIDATION_ERROR: cells[${idx}] has no value. Send the full SQL text, or preserve_value:true to keep an existing cell's value unchanged.`,
+              }),
+              is_error: true,
+            }
+          }
+          if (preserves && !(typeof c.id === "string" && c.id.length > 0)) {
+            return {
+              content: JSON.stringify({
+                error_code: "validation",
+                message: `VALIDATION_ERROR: cells[${idx}] sets preserve_value:true without an existing cell id. New cells must send value.`,
+              }),
+              is_error: true,
+            }
+          }
+        }
+        // preserve_value cells defer to the live notebook for their SQL; the
+        // gate input must be that same full text, never a truncated read.
+        const resolveCellSql = (c: (typeof cells)[number]): string | null =>
+          typeof c.value === "string"
+            ? c.value
+            : typeof c.id === "string" && modelToolsClient.getCellSql
+              ? modelToolsClient.getCellSql(buffer_id, c.id)
+              : null
         if (
           variables !== undefined &&
           variables !== null &&
@@ -805,7 +853,16 @@ export const dispatchTool = async (
             return resolved === "draw"
           })
           const decisions = await Promise.all(
-            drawCells.map((c) => requireAllDQL(c.value, validateSql)),
+            drawCells.map(async (c): Promise<PermissionDecision> => {
+              const sql = resolveCellSql(c)
+              if (sql === null) {
+                return {
+                  granted: false,
+                  reason: denyReasonUnresolvedSql("apply_notebook_state"),
+                }
+              }
+              return requireAllDQL(sql, validateSql)
+            }),
           )
           const denied = decisions.find((d) => !d.granted)
           if (denied && !denied.granted) {
@@ -821,7 +878,10 @@ export const dispatchTool = async (
               ? undefined
               : variables,
           cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
-            const cell: ApplyNotebookStateCellRequest = { value: c.value }
+            const cell: ApplyNotebookStateCellRequest =
+              c.preserve_value === true
+                ? { preserveValue: true }
+                : { value: c.value }
             if (c.id !== undefined && c.id !== null) cell.id = c.id
             if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
             if (c.auto_refresh !== undefined && c.auto_refresh !== null)
@@ -865,7 +925,8 @@ export const dispatchTool = async (
               error_code: "stale",
               message:
                 "STATE_STALE: The user changed the notebook while applying. " +
-                `Call ${reSyncTool(toolContext)} to re-sync, then retry.`,
+                `Call ${reSyncTool(toolContext)} to re-sync, then retry. ` +
+                STALE_RETRY_GUIDANCE,
             }),
             is_error: true,
           }
@@ -896,12 +957,18 @@ export const dispatchTool = async (
                   ? (existingModes.get(requestedId) ?? "run")
                   : "run"
                 : c.mode
-            const runnable = resolvedMode === "run" && c.value.trim().length > 0
+            // Post-apply, getCellSql sees the committed notebook, so preserved
+            // cells resolve to their kept full value here.
+            const value = resolveCellSql(c)
+            const runnable =
+              resolvedMode === "run" &&
+              value !== null &&
+              value.trim().length > 0
             const ranBefore =
               requestedId !== undefined
                 ? (existingRanBefore.get(requestedId) ?? false)
                 : false
-            resolved.push({ cellId, value: c.value, runnable, ranBefore })
+            resolved.push({ cellId, value: value ?? "", runnable, ranBefore })
           }
           type RunEntry = {
             cellId: string

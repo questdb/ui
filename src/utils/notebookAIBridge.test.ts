@@ -467,3 +467,49 @@ describe("createModelToolsClient — deleteCell last-cell guard", () => {
     })
   })
 })
+
+describe("createModelToolsClient — getCell value caps", () => {
+  const stubQuestClient = {} as unknown as Parameters<
+    typeof createModelToolsClient
+  >[0]
+
+  const registerWithCell = (cell: NotebookCell) => {
+    registerWorkspace(makeWorkspace())
+    registerController(makeController(7, { getCellsSnapshot: () => [cell] }))
+  }
+
+  it("returns short values verbatim with no truncation fields", async () => {
+    registerWithCell({ id: "a", position: 0, value: "SELECT 1" })
+    const client = createModelToolsClient(stubQuestClient)
+    const out = await client.getCell(7, "a")
+    expect(out.value).toBe("SELECT 1")
+    expect(out.truncated).toBeUndefined()
+    expect(out.full_length).toBeUndefined()
+  })
+
+  it("caps long values with a clean slice plus truncated and full_length", async () => {
+    registerWithCell({ id: "a", position: 0, value: "x".repeat(5000) })
+    const client = createModelToolsClient(stubQuestClient)
+    const out = await client.getCell(7, "a")
+    expect(out.value).toBe("x".repeat(4096))
+    expect(out.truncated).toBe(true)
+    expect(out.full_length).toBe(5000)
+  })
+
+  it("returns the verbatim full value when getFullContent is set", async () => {
+    registerWithCell({ id: "a", position: 0, value: "x".repeat(5000) })
+    const client = createModelToolsClient(stubQuestClient)
+    const out = await client.getCell(7, "a", true)
+    expect(out.value).toBe("x".repeat(5000))
+    expect(out.truncated).toBeUndefined()
+    expect(out.full_length).toBeUndefined()
+  })
+
+  it("refuses getFullContent above the 1 MB ceiling with cell_too_large", async () => {
+    registerWithCell({ id: "a", position: 0, value: "x".repeat(1_000_001) })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.getCell(7, "a", true)).rejects.toMatchObject({
+      code: "cell_too_large",
+    })
+  })
+})

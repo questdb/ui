@@ -98,10 +98,11 @@ export type NotebookControllerActions = {
 
 // Wire shape accepted by `applyNotebookState`. The fields are camelCase here
 // (controller-level); the snake_case JSON-schema shape is translated at the
-// dispatchTool boundary.
+// dispatchTool boundary. Exactly one of value / preserveValue:true per cell.
 export type ApplyNotebookStateCellRequest = {
   id?: string | null
-  value: string
+  value?: string | null
+  preserveValue?: boolean | null
   mode?: "run" | "draw" | null
   autoRefresh?: boolean | null
   isChartMaximized?: boolean | null
@@ -327,6 +328,7 @@ export type NotebookToolErrorCode =
   | "workspace_unavailable"
   | "last_tab"
   | "last_cell"
+  | "cell_too_large"
 
 export class NotebookToolError extends Error {
   readonly code: NotebookToolErrorCode

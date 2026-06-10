@@ -185,7 +185,7 @@
   {
     "name": "get_cell",
     "category": "free",
-    "description": "Get full details of a cell (value up to 4 KB, UI flags, chart config, last-run status + trimmed error). Never includes query result data.",
+    "description": "Get full details of a cell (value, UI flags, chart config, last-run status + trimmed error). Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -195,15 +195,19 @@
         },
         "cell_id": {
           "type": "string"
+        },
+        "get_full_content": {
+          "type": ["boolean", "null"],
+          "description": "True returns the verbatim full value with no cap (errors above 1 MB). Required before rewriting any cell whose read came back truncated. Null/omitted applies the 4 KB cap."
         }
       },
-      "required": ["buffer_id", "cell_id"]
+      "required": ["buffer_id", "cell_id", "get_full_content"]
     }
   },
   {
     "name": "get_notebook_state",
     "category": "free",
-    "description": "Full structural snapshot of a notebook (layout, cells with previews, last-run statuses). No cell data values; no columns/rows/count.",
+    "description": "Full structural snapshot of a notebook (layout, cells with previews, last-run statuses). No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -248,7 +252,7 @@
     "category": "free",
     "mutatesNotebook": true,
     "editsCells": true,
-    "description": "Replace a cell's value. Overwrites preemptively — cells are auto-saved. Use to fix a broken SQL cell.",
+    "description": "Replace a cell's value. Overwrites preemptively — cells are auto-saved. Use to fix a broken SQL cell. When editing part of a long cell, base the new value on a non-truncated read (get_cell with get_full_content: true) — never on a preview or a `truncated: true` read.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -610,7 +614,7 @@
     "name": "apply_notebook_state",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...) and that have run before: those are NOT executed (their `runs` entry gets `skipped: true`) so a restructure never repeats a write's side effects; call run_cell explicitly if re-execution is intended. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed (e.g. missing 'write' permission). Always call get_workspace_state first; the state-freshness gate applies.",
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...) and that have run before: those are NOT executed (their `runs` entry gets `skipped: true`) so a restructure never repeats a write's side effects; call run_cell explicitly if re-execution is intended. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed (e.g. missing 'write' permission). Always call get_workspace_state first; the state-freshness gate applies.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -656,8 +660,12 @@
                 "description": "Existing cell id to update, or null/omitted for a new cell."
               },
               "value": {
-                "type": "string",
-                "description": "SQL text of the cell. May contain multiple statements separated by `;`. In draw mode, this overlays series on one chart: the first query's timestamp is the x-axis anchor; subsequent queries contribute extra numeric series merged on time. Use this to combine metrics from different tables or different aggregations into a single chart."
+                "type": ["string", "null"],
+                "description": "SQL text of the cell, VERBATIM and COMPLETE (from a non-truncated get_cell read; never from a preview or a `truncated: true` read). May contain multiple statements separated by `;`. In draw mode, this overlays series on one chart: the first query's timestamp is the x-axis anchor; subsequent queries contribute extra numeric series merged on time. Use this to combine metrics from different tables or different aggregations into a single chart. Null/omitted REQUIRES preserve_value: true."
+              },
+              "preserve_value": {
+                "type": ["boolean", "null"],
+                "description": "True keeps the existing cell's current SQL unchanged (and with it the cell's results and run history) instead of echoing it — exactly one of value / preserve_value:true per cell. PREFER this for every cell whose SQL you are not changing; it is the only safe option when your copy may be stale (STATE_STALE retry) or came from a truncated read. Existing-id cells only."
               },
               "mode": {
                 "type": ["string", "null"],
@@ -781,6 +789,7 @@
             "required": [
               "id",
               "value",
+              "preserve_value",
               "mode",
               "auto_refresh",
               "is_chart_maximized",

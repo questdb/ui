@@ -6,6 +6,7 @@ import {
   emitUserAction,
   getUserActionSeq,
   signalUserEdit,
+  type ApplyNotebookStateRequest,
 } from "../notebookAIBridge"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
@@ -1835,5 +1836,206 @@ describe("dispatchMCPTool — data-leak invariant", () => {
       ctxFor(client),
     )
     expect(JSON.stringify(result)).not.toMatch(/columns|dataset|count|rows/)
+  })
+})
+
+describe("dispatchTool — get_cell content cap switch", () => {
+  it("forwards get_full_content: true to the client", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "get_cell",
+      { buffer_id: 1, cell_id: "c", get_full_content: true },
+      client,
+      noopStatus,
+    )
+    expect(client.getCell).toHaveBeenCalledWith(1, "c", true)
+  })
+
+  it("applies the cap when get_full_content is omitted or null", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "get_cell",
+      { buffer_id: 1, cell_id: "c" },
+      client,
+      noopStatus,
+    )
+    await dispatchTool(
+      "get_cell",
+      { buffer_id: 1, cell_id: "c", get_full_content: null },
+      client,
+      noopStatus,
+    )
+    expect(client.getCell).toHaveBeenNthCalledWith(1, 1, "c", false)
+    expect(client.getCell).toHaveBeenNthCalledWith(2, 1, "c", false)
+  })
+})
+
+describe("dispatchTool — apply_notebook_state preserve_value", () => {
+  const applyOk = (updated: string[]) =>
+    vi.fn((_bufferId: number, _request: ApplyNotebookStateRequest) =>
+      Promise.resolve({ applied: { added: [], updated, deleted: [] } }),
+    )
+
+  it("rejects a cell providing both value and preserve_value", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "a", value: "SELECT 1", preserve_value: true }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(res.content).toMatch(/exactly one/)
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("rejects a cell providing neither value nor preserve_value", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "a" }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(res.content).toMatch(/has no value/)
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("rejects preserve_value without an existing cell id", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ preserve_value: true }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(res.content).toMatch(/without an existing cell id/)
+    expect(client.applyNotebookState).not.toHaveBeenCalled()
+  })
+
+  it("forwards preserve_value cells as preserveValue with no value", async () => {
+    const applyNotebookState = applyOk(["a"])
+    const client = makeClient({ applyNotebookState })
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "a", preserve_value: true }],
+      },
+      client,
+      noopStatus,
+    )
+    expect(applyNotebookState).toHaveBeenCalledTimes(1)
+    const sent = applyNotebookState.mock.calls[0][1]
+    expect(sent.cells[0]).toMatchObject({ id: "a", preserveValue: true })
+    expect(sent.cells[0]).not.toHaveProperty("value")
+  })
+
+  it("auto-run skips a preserved write cell that ran before, gating on its live SQL", async () => {
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const getCell = vi.fn(() =>
+      Promise.resolve({
+        id: "ins-1",
+        value: "INSERT INTO t VALUES (1)",
+        position: 0,
+        mode: "run" as const,
+        last_run_status: "success" as const,
+      }),
+    )
+    const getCellSql = vi.fn(() => "INSERT INTO t VALUES (1)")
+    const client = makeClient({
+      runCell,
+      getCell,
+      getCellSql,
+      applyNotebookState: applyOk(["ins-1"]),
+    })
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "ins-1", preserve_value: true }],
+      },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+    )
+    expect(res.is_error).toBeFalsy()
+    expect(runCell).not.toHaveBeenCalled()
+    const parsed = JSON.parse(res.content) as {
+      runs: Array<{ cellId: string; skipped?: boolean }>
+    }
+    expect(parsed.runs[0]).toMatchObject({ cellId: "ins-1", skipped: true })
+  })
+
+  it("auto-run executes a preserved DQL cell with its live SQL", async () => {
+    const runCell = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const getCell = vi.fn(() =>
+      Promise.resolve({
+        id: "sel-1",
+        value: "SELECT 1",
+        position: 0,
+        mode: "run" as const,
+        last_run_status: "success" as const,
+      }),
+    )
+    const getCellSql = vi.fn(() => "SELECT 1")
+    const client = makeClient({
+      runCell,
+      getCell,
+      getCellSql,
+      applyNotebookState: applyOk(["sel-1"]),
+    })
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "sel-1", preserve_value: true }],
+      },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({
+        query: "SELECT 1",
+        columns: [{ name: "1", type: "INT" }],
+        timestamp: -1,
+      }),
+    )
+    expect(runCell).toHaveBeenCalledWith(1, "sel-1", undefined, "SELECT 1")
   })
 })

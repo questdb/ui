@@ -86,6 +86,8 @@ export type NotebookCellSummary = {
 export type NotebookCellDetails = {
   id: string
   value: string
+  truncated?: true
+  full_length?: number
   position: number
   mode?: "run" | "draw"
   auto_refresh?: boolean
@@ -116,7 +118,11 @@ export interface ModelToolsClient {
   ) => Promise<{ bufferId: number; label: string }>
   deleteNotebook: (bufferId: number) => Promise<void>
   listCells: (bufferId: number) => Promise<NotebookCellSummary[]>
-  getCell: (bufferId: number, cellId: string) => Promise<NotebookCellDetails>
+  getCell: (
+    bufferId: number,
+    cellId: string,
+    getFullContent?: boolean,
+  ) => Promise<NotebookCellDetails>
   getNotebookState: (bufferId: number) => Promise<NotebookContextSnapshot>
   addCell: (
     bufferId: number,
@@ -235,6 +241,7 @@ export function isAiAssistantError(
 }
 
 const CELL_VALUE_MAX = 4096
+const FULL_CELL_VALUE_MAX = 1_000_000
 const LAST_ERROR_MAX = 200
 
 // Sanitize `<`/`>` so a server-echoed error can't smuggle closing tags into the tool response.
@@ -445,7 +452,7 @@ export function createModelToolsClient(
       )
     },
 
-    getCell(bufferId, cellId) {
+    getCell(bufferId, cellId, getFullContent) {
       return withBoundNotebookReadOnly(
         bufferId,
         (view, ctrl) => {
@@ -457,10 +464,17 @@ export function createModelToolsClient(
               `Cell ${cellId} not found in notebook ${bufferId}.`,
             )
           }
-          const value =
-            cell.value.length <= CELL_VALUE_MAX
-              ? cell.value
-              : `${cell.value.slice(0, CELL_VALUE_MAX - 3)}...`
+          if (getFullContent && cell.value.length > FULL_CELL_VALUE_MAX) {
+            throw new NotebookToolError(
+              "cell_too_large",
+              `Cell ${cellId} is ${cell.value.length} chars — over the ${FULL_CELL_VALUE_MAX}-char get_full_content limit, so it cannot be read or edited via agent tools. In apply_notebook_state, keep it with preserve_value:true.`,
+            )
+          }
+          const truncated =
+            !getFullContent && cell.value.length > CELL_VALUE_MAX
+          const value = truncated
+            ? cell.value.slice(0, CELL_VALUE_MAX)
+            : cell.value
           const runInfo = lastRunStatusForCell(cell)
           const out: NotebookCellDetails = {
             id: cell.id,
@@ -468,6 +482,10 @@ export function createModelToolsClient(
             position: cell.position,
             last_run_status: runInfo.status,
             last_run_error: runInfo.error,
+          }
+          if (truncated) {
+            out.truncated = true
+            out.full_length = cell.value.length
           }
           if (cell.mode) out.mode = cell.mode
           if (typeof cell.autoRefresh === "boolean")

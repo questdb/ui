@@ -432,17 +432,36 @@ describe("duplicateCellAt", () => {
     expect(out.map((c) => c.position)).toEqual([0, 1, 2])
   })
 
-  it("drops the `result` blob and persisted run status on the copy", () => {
+  it("drops the `result` blob but carries the persisted run status onto the copy", () => {
     const original: NotebookCell = {
-      ...cell("a", "SELECT 1"),
+      ...cell("a", "INSERT INTO t VALUES (1)"),
       lastRunStatus: "success",
     }
     const out = duplicateCellAt([original], "a", "new-id")
     const copy = out[1]
     expect(copy.id).toBe("new-id")
     expect(copy.result).toBe(null)
-    // never-run copy must not inherit the source's run status
-    expect(copy.lastRunStatus).toBeUndefined()
+    // the copy's write already ran via the original; auto-run must see ranBefore
+    expect(copy.lastRunStatus).toBe("success")
+  })
+
+  it("collapses a live result into the copy's run status", () => {
+    const original: NotebookCell = {
+      ...cell("a", "INSERT INTO t VALUES (1)"),
+      result: {
+        results: [{ type: "dml", query: "INSERT INTO t VALUES (1)" }],
+        activeResultIndex: 0,
+        timestamp: 0,
+      },
+    }
+    const out = duplicateCellAt([original], "a", "new-id")
+    expect(out[1].result).toBe(null)
+    expect(out[1].lastRunStatus).toBe("success")
+  })
+
+  it("keeps the copy of a never-run cell eligible for auto-run", () => {
+    const out = duplicateCellAt([cell("a", "SELECT 1")], "a", "new-id")
+    expect(out[1].lastRunStatus).toBeUndefined()
   })
 
   it("returns the original when the id is unknown", () => {
@@ -695,6 +714,8 @@ describe("buildAppliedCells", () => {
         value: "INSERT INTO t VALUES (1)",
         result: {
           results: [{ type: "dml", query: "INSERT INTO t VALUES (1)" }],
+          activeResultIndex: 0,
+          timestamp: 0,
         },
       },
     ]
@@ -703,6 +724,51 @@ describe("buildAppliedCells", () => {
     })
     expect(nextCells[0].result).toBeNull()
     expect(nextCells[0].lastRunStatus).toBe("success")
+  })
+
+  it("preserveValue keeps the existing cell's value, result, and run history", () => {
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "INSERT INTO t VALUES (1)",
+        result: {
+          results: [{ type: "dml", query: "INSERT INTO t VALUES (1)" }],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      },
+    ]
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    expect(nextCells[0].value).toBe("INSERT INTO t VALUES (1)")
+    expect(nextCells[0].result).toBe(prev[0].result)
+  })
+
+  it("rejects a cell providing both value and preserveValue", () => {
+    const prev: NotebookCell[] = [{ id: "a", position: 0, value: "SELECT 1" }]
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", value: "SELECT 2", preserveValue: true }],
+      }),
+    ).toThrow(/exactly one/)
+  })
+
+  it("rejects a cell providing neither value nor preserveValue", () => {
+    const prev: NotebookCell[] = [{ id: "a", position: 0, value: "SELECT 1" }]
+    expect(() => buildAppliedCells(prev, { cells: [{ id: "a" }] })).toThrow(
+      /has no value/,
+    )
+  })
+
+  it("rejects preserveValue on a new cell", () => {
+    const prev: NotebookCell[] = [{ id: "a", position: 0, value: "SELECT 1" }]
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", value: "SELECT 1" }, { preserveValue: true }],
+      }),
+    ).toThrow(/without an existing cell id/)
   })
 
   it("deletes cells whose ids are missing from the request", () => {
@@ -1407,11 +1473,12 @@ describe("cloneNotebookViewState", () => {
     expect(out.cells.every((c) => !srcIds.has(c.id))).toBe(true)
   })
 
-  it("strips results but preserves structural fields", () => {
+  it("strips results but preserves structural fields and run history", () => {
     const out = cloneNotebookViewState(source(), seqIds())
     expect(out.cells[1].result).toBeUndefined()
-    // never-run clone must not inherit the source's persisted run status
-    expect(out.cells[0].lastRunStatus).toBeUndefined()
+    // cloned cells keep run history so auto-run never re-fires their writes
+    expect(out.cells[0].lastRunStatus).toBe("success")
+    expect(out.cells[1].lastRunStatus).toBe("success")
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)

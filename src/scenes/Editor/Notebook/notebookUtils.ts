@@ -94,15 +94,17 @@ export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
   return status === "running" ? "cancelled" : status
 }
 
+// Run history must survive every path that drops the result blob (persist,
+// duplicate, clone) — auto-run relies on it to never re-execute a write.
+const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
+  cell.result ? collapseResultToRunStatus(cell.result) : cell.lastRunStatus
+
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
-  cells.map((cell) => {
-    if (!cell.result) return { ...cell, result: undefined }
-    return {
-      ...cell,
-      result: undefined,
-      lastRunStatus: collapseResultToRunStatus(cell.result),
-    }
-  })
+  cells.map((cell) => ({
+    ...cell,
+    result: undefined,
+    lastRunStatus: carriedRunStatus(cell),
+  }))
 
 export const buildPersistPayload = (
   cells: NotebookCell[],
@@ -234,7 +236,7 @@ export const duplicateCellAt = (
     id: newId,
     position: idx + 1,
     result: null,
-    lastRunStatus: undefined,
+    lastRunStatus: carriedRunStatus(original),
   }
   const next = [...cells]
   next.splice(idx + 1, 0, copy)
@@ -303,7 +305,8 @@ export const buildInitialScriptResults = (
 
 type ApplyCellRequest = {
   id?: string | null
-  value: string
+  value?: string | null
+  preserveValue?: boolean | null
   mode?: CellMode | null
   autoRefresh?: boolean | null
   isChartMaximized?: boolean | null
@@ -352,7 +355,12 @@ export const cloneNotebookViewState = (
   const cells: NotebookCell[] = source.cells.map((cell) => {
     const id = newId()
     idMap.set(cell.id, id)
-    return { ...cell, id, result: undefined, lastRunStatus: undefined }
+    return {
+      ...cell,
+      id,
+      result: undefined,
+      lastRunStatus: carriedRunStatus(cell),
+    }
   })
 
   const next: NotebookViewState = { cells }
@@ -434,7 +442,29 @@ export const buildAppliedCells = (
     if (existing) seenIds.add(existing.id)
     else seenIds.add(id)
 
-    // apply_notebook_state is a PUT: each requested cell fully describes itself.
+    // apply_notebook_state is a PUT: each requested cell fully describes
+    // itself — the value either verbatim or as an explicit preserve.
+    const preserve = req.preserveValue === true
+    if (preserve && typeof req.value === "string") {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} provides both value and preserve_value:true. Send exactly one per cell.`,
+        "cells",
+      )
+    }
+    if (!preserve && typeof req.value !== "string") {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has no value. Send the full SQL text, or preserve_value:true to keep an existing cell's value unchanged.`,
+        "cells",
+      )
+    }
+    const value = preserve ? existing?.value : (req.value ?? undefined)
+    if (value === undefined) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} sets preserve_value:true without an existing cell id. New cells must send value.`,
+        "cells",
+      )
+    }
+
     const resolvedMode: CellMode | undefined =
       req.mode === undefined || req.mode === null ? undefined : req.mode
 
@@ -453,7 +483,7 @@ export const buildAppliedCells = (
       )
     }
     if (req.chartConfig && req.chartConfig.queries.length > 0) {
-      const statementCount = getQueriesFromText(req.value).length
+      const statementCount = getQueriesFromText(value).length
       if (
         statementCount > 0 &&
         req.chartConfig.queries.length !== statementCount
@@ -487,12 +517,12 @@ export const buildAppliedCells = (
 
     if (existing) {
       updated.push(existing.id)
-      const valueChanged = existing.value !== req.value
+      const valueChanged = existing.value !== value
       const next: NotebookCell = {
         ...existing,
         id: existing.id,
         position: index,
-        value: req.value,
+        value,
         result: valueChanged ? null : existing.result,
       }
       if (valueChanged && existing.result) {
@@ -514,7 +544,7 @@ export const buildAppliedCells = (
     const created: NotebookCell = {
       id,
       position: index,
-      value: req.value,
+      value,
     }
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig

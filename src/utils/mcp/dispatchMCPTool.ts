@@ -1,5 +1,5 @@
 import type { ModelToolsClient } from "../aiAssistant"
-import { dispatchTool } from "../tools/dispatch"
+import { dispatchTool, STALE_RETRY_GUIDANCE } from "../tools/dispatch"
 import { formatDigest, sanitizeForPromptContext } from "../ai/notebookSnapshot"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import {
@@ -45,7 +45,8 @@ const STATE_NOT_FETCHED_MESSAGE =
 
 const STATE_STALE_MESSAGE =
   "STATE_STALE: The user changed the notebook since your last fetch. Call " +
-  "get_workspace_state to re-sync, then retry this tool."
+  "get_workspace_state to re-sync, then retry this tool. " +
+  STALE_RETRY_GUIDANCE
 
 const STATE_WRONG_BUFFER_MESSAGE =
   "STATE_NOT_FETCHED: Your last full read was of a different notebook. Call " +

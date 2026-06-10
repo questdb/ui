@@ -34,6 +34,10 @@ export type ChartConfigWire = {
 export type NotebookContextCell = {
   id: string
   preview: string
+  // Set only when the value exceeds PREVIEW_MAX. A preview is never the full
+  // value to echo back — read the cell with get_cell when rewriting it.
+  preview_truncated?: true
+  full_length?: number
   mode?: "run" | "draw"
   auto_refresh?: boolean
   is_chart_maximized?: boolean
@@ -121,6 +125,10 @@ const buildCell = (
     id: cell.id,
     preview: preview(cell.value),
     ...lastRunSummary(cell),
+  }
+  if (cell.value.length > PREVIEW_MAX) {
+    out.preview_truncated = true
+    out.full_length = cell.value.length
   }
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (typeof cell.autoRefresh === "boolean") out.auto_refresh = cell.autoRefresh
@@ -224,6 +232,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   for (const c of snap.cells) {
     lines.push(`    - id: ${c.id}`)
     lines.push(`      preview: ${JSON.stringify(c.preview)}`)
+    if (c.preview_truncated) {
+      lines.push(`      preview_truncated: true`)
+      lines.push(`      full_length: ${c.full_length}`)
+    }
     if (c.mode) lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
