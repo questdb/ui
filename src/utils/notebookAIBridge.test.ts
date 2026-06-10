@@ -23,6 +23,7 @@ import type {
   NotebookCell,
   NotebookViewState,
 } from "../store/notebook"
+import { createModelToolsClient } from "./aiAssistant"
 
 const emptyState: NotebookViewState = { cells: [] }
 
@@ -423,5 +424,46 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
     const controller = createNotebookController(1, { current: live })
     controller.applyNotebookState({ cells: [{ id: "b", value: "SELECT 2" }] })
     expect(live.setMaximizedCellId).toHaveBeenCalledWith(null)
+  })
+})
+
+describe("createModelToolsClient — deleteCell last-cell guard", () => {
+  const stubQuestClient = {} as unknown as Parameters<
+    typeof createModelToolsClient
+  >[0]
+  const cellA: NotebookCell = { id: "a", position: 0, value: "SELECT 1" }
+  const cellB: NotebookCell = { id: "b", position: 1, value: "SELECT 2" }
+
+  it("refuses to delete the only cell with a last_cell error", async () => {
+    const deleteCell = vi.fn()
+    registerWorkspace(makeWorkspace())
+    registerController(
+      makeController(7, { getCellsSnapshot: () => [cellA], deleteCell }),
+    )
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.deleteCell(7, "a")).rejects.toMatchObject({
+      code: "last_cell",
+    })
+    expect(deleteCell).not.toHaveBeenCalled()
+  })
+
+  it("deletes a cell when more than one remains", async () => {
+    const deleteCell = vi.fn()
+    registerWorkspace(makeWorkspace())
+    registerController(
+      makeController(7, { getCellsSnapshot: () => [cellA, cellB], deleteCell }),
+    )
+    const client = createModelToolsClient(stubQuestClient)
+    await client.deleteCell(7, "a")
+    expect(deleteCell).toHaveBeenCalledWith("a")
+  })
+
+  it("rejects an unknown cell id before the last-cell check", async () => {
+    registerWorkspace(makeWorkspace())
+    registerController(makeController(7, { getCellsSnapshot: () => [cellA] }))
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.deleteCell(7, "nope")).rejects.toMatchObject({
+      code: "unknown_cell",
+    })
   })
 })

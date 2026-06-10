@@ -326,6 +326,7 @@ export type NotebookToolErrorCode =
   | "unknown_cell"
   | "workspace_unavailable"
   | "last_tab"
+  | "last_cell"
 
 export class NotebookToolError extends Error {
   readonly code: NotebookToolErrorCode

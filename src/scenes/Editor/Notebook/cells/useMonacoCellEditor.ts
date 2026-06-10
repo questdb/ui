@@ -52,31 +52,38 @@ export const useMonacoCellEditor = ({
   const validationTimeoutRef = useRef<number | null>(null)
   const contextMenuCleanupRef = useRef<(() => void) | null>(null)
   const cursorQueryDecorationIdsRef = useRef<string[]>([])
+  const decoratingRef = useRef(false)
 
   const decorateCursorQuery = useCallback(() => {
     const ed = editorRef.current
     const mon = monacoRef.current
     if (!ed || !mon) return
-    const query = getQueryFromCursor(ed)
-    cursorQueryDecorationIdsRef.current = ed.deltaDecorations(
-      cursorQueryDecorationIdsRef.current,
-      query
-        ? [
-            {
-              range: new mon.Range(
-                query.row + 1,
-                query.column,
-                query.endRow + 1,
-                query.endColumn,
-              ),
-              options: {
-                isWholeLine: true,
-                linesDecorationsClassName: "cursorQueryDecoration",
+    if (decoratingRef.current) return
+    decoratingRef.current = true
+    try {
+      const query = getQueryFromCursor(ed)
+      cursorQueryDecorationIdsRef.current = ed.deltaDecorations(
+        cursorQueryDecorationIdsRef.current,
+        query
+          ? [
+              {
+                range: new mon.Range(
+                  query.row + 1,
+                  query.column,
+                  query.endRow + 1,
+                  query.endColumn,
+                ),
+                options: {
+                  isWholeLine: true,
+                  linesDecorationsClassName: "cursorQueryDecoration",
+                },
               },
-            },
-          ]
-        : [],
-    )
+            ]
+          : [],
+      )
+    } finally {
+      decoratingRef.current = false
+    }
   }, [])
 
   // Refs for handlers so the once-mounted Monaco listeners always read

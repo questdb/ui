@@ -9,6 +9,7 @@ import { emitUserAction } from "../../../../utils/notebookAIBridge"
 const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   display: flex;
   justify-content: center;
+  align-items: center;
   height: ${({ $alignCenter }) => ($alignCenter ? "100%" : "auto")};
   padding: 0.8rem 0;
   margin-top: 1rem;

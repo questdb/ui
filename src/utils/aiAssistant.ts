@@ -517,6 +517,12 @@ export function createModelToolsClient(
     deleteCell(bufferId, cellId) {
       return bound(bufferId, (ctrl) => {
         requireCell(ctrl, cellId)
+        if (ctrl.getCellsSnapshot().length <= 1) {
+          throw new NotebookToolError(
+            "last_cell",
+            `Cell ${cellId} is the only cell in notebook ${bufferId}; a notebook must keep at least one cell.`,
+          )
+        }
         ctrl.deleteCell(cellId)
         return Promise.resolve()
       })

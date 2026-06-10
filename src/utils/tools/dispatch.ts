@@ -100,6 +100,8 @@ const notebookErrorHint = (code: NotebookToolErrorCode): string => {
       return "The notebook workspace is not ready yet. Retry in a moment."
     case "last_tab":
       return "This is the only open tab. Call create_notebook first, then delete this one."
+    case "last_cell":
+      return "A notebook must keep at least one cell. Use update_cell to clear or replace it instead of deleting the last cell."
     default:
       return "Notebook tool failed."
   }
