@@ -428,6 +428,11 @@ export const Tabs = () => {
     }
   }
 
+  const handleNewTab = () => {
+    if (tabsDisabled) return
+    void addBuffer()
+  }
+
   useLayoutEffect(() => {
     setTabsVisible(true)
   }, [])
@@ -450,7 +455,7 @@ export const Tabs = () => {
         onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
-        onNewTab={addBuffer}
+        onNewTab={handleNewTab}
         tabs={buffers
           .filter(
             (buffer) =>

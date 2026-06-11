@@ -202,12 +202,16 @@ const ButtonBar = ({
   >(null)
 
   const handleClickQueryButton = useCallback(() => {
+    if (running !== RunningType.NONE) {
+      dispatch(actions.query.toggleRunning())
+      return
+    }
     if (queriesToRun.length > 1) {
       onTriggerRunScript()
     } else {
       dispatch(actions.query.toggleRunning())
     }
-  }, [dispatch, queriesToRun, onTriggerRunScript])
+  }, [dispatch, running, queriesToRun, onTriggerRunScript])
 
   const handleClickScriptButton = useCallback(() => {
     onTriggerRunScript(true)
