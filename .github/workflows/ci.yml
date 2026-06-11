@@ -21,7 +21,7 @@ jobs:
 
       - name: Build QuestDB
         run:
-          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
+          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries,local-client
 
       - name: Extract QuestDB
         run:
