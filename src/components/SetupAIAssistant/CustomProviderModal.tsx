@@ -326,7 +326,9 @@ export const CustomProviderModal = ({
       apiKey: apiKey || undefined,
       contextWindow: values.contextWindow,
       models: values.models,
-      grantSchemaAccess: values.grantSchemaAccess,
+      grantSchemaAccess: values.permissions.grantSchemaAccess,
+      read: values.permissions.read,
+      write: values.permissions.write,
     }
 
     onSave(providerId, definition)
@@ -373,7 +375,6 @@ export const CustomProviderModal = ({
                 baseURL,
               }}
               renderSchemaAccess
-              providerName={name || "this provider"}
             />
           </ModalContent>
         ),

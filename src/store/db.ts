@@ -29,6 +29,7 @@ import { makeBuffer, fallbackBuffer } from "./buffers"
 import { StoreKey } from "../utils/localStorage/types"
 import { getValue } from "../utils/localStorage"
 import type { AIConversation } from "../providers/AIConversationProvider/types"
+import type { NotebookResultSnapshot } from "./notebookResults"
 
 type EditorSettings = {
   key: string
@@ -54,6 +55,7 @@ export class Storage extends Dexie {
     { id?: number; created: number; name: string; props?: string },
     number
   >
+  notebook_results!: Table<NotebookResultSnapshot, [number, string]>
   ready: boolean = false
 
   constructor() {
@@ -106,6 +108,16 @@ export class Storage extends Dexie {
         .modify((meta) => {
           meta.hasMessages = conversationIdsWithMessages.has(meta.id)
         })
+    })
+    this.version(8).stores({
+      ai_conversations:
+        "id, bufferId, tableId, updatedAt, queryKey, notebookBufferId",
+    })
+    // Persisted, bounded per-cell result snapshots (compound key bufferId+cellId).
+    // Separate from `buffers` so the hot persist path stays light and the
+    // import/export buffer compatibility below is unaffected.
+    this.version(9).stores({
+      notebook_results: "[bufferId+cellId], bufferId, savedAt",
     })
     // ──────────────────────────────────────────────────────────────────
     // ⚠️ IMPORTANT — Import/Export compatibility (https://github.com/dexie/Dexie.js/issues/1337)

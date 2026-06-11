@@ -9,6 +9,9 @@ import type {
 export const aiConversationStore = {
   getAllMetas: () => db.ai_conversations.toArray(),
 
+  getMeta: (conversationId: ConversationId) =>
+    db.ai_conversations.get(conversationId),
+
   async getMessages(
     conversationId: ConversationId,
   ): Promise<ConversationMessage[]> {

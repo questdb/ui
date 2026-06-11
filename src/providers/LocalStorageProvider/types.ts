@@ -2,6 +2,9 @@ export type ProviderSettings = {
   apiKey: string
   enabledModels: string[]
   grantSchemaAccess: boolean
+  // Optional for back-compat; missing fields default to denied.
+  read?: boolean
+  write?: boolean
 }
 
 export type CustomProviderDefinition = {
@@ -12,6 +15,8 @@ export type CustomProviderDefinition = {
   contextWindow: number
   models: string[]
   grantSchemaAccess?: boolean
+  read?: boolean
+  write?: boolean
 }
 
 export type AiAssistantSettings = {

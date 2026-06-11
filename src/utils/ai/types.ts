@@ -5,7 +5,12 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "../aiAssistant"
+import type { Permissions, ToolCategory } from "../tools/permissions"
+import type { ValidateQueryResult } from "../questdb/types"
 import type { ProviderId } from "./settings"
+import type { ToolExecutionContext } from "./shared"
+
+export type ToolSurface = "ai" | "mcp"
 
 export interface ToolDefinition {
   name: string
@@ -14,7 +19,14 @@ export interface ToolDefinition {
     type: "object"
     properties: Record<string, unknown>
     required?: string[]
+    // Required by OpenAI strict mode on every object schema.
+    additionalProperties?: boolean
   }
+  category: ToolCategory
+  surfaces?: ToolSurface[]
+  mutatesNotebook?: boolean
+  // Modifies existing cell content/arrangement in place
+  editsCells?: boolean
 }
 
 export type ToolCall = {
@@ -50,21 +62,28 @@ export interface FlowResult {
   tokenUsage: TokenUsage
 }
 
+export type ExecuteFlowParams = {
+  model: string
+  config: FlowConfig
+  modelToolsClient: ModelToolsClient
+  tools: ToolDefinition[]
+  setStatus: StatusCallback
+  abortSignal?: AbortSignal
+  streaming?: StreamingCallback
+  perms?: Permissions | (() => Permissions)
+  validateSql?: (sql: string) => Promise<ValidateQueryResult>
+  toolContext?: ToolExecutionContext
+}
+
 export interface AIProvider {
   readonly id: ProviderId
   readonly contextWindow: number
 
   toNativeMessages(messages: Message[]): unknown
 
-  executeFlow(params: {
-    model: string
-    config: FlowConfig
-    modelToolsClient: ModelToolsClient
-    tools: ToolDefinition[]
-    setStatus: StatusCallback
-    abortSignal?: AbortSignal
-    streaming?: StreamingCallback
-  }): Promise<FlowResult | AiAssistantAPIError>
+  executeFlow(
+    params: ExecuteFlowParams,
+  ): Promise<FlowResult | AiAssistantAPIError>
 
   generateTitle(params: {
     model: string

@@ -7,7 +7,7 @@ export type {
   Message,
 } from "./types"
 export { createProvider } from "./registry"
-export { SCHEMA_TOOLS, DEFAULT_TOOLS, ALL_TOOLS } from "./tools"
+export { toolsForPermission } from "../tools/tools"
 export {
   RefusalError,
   MaxTokensError,
@@ -15,6 +15,7 @@ export {
   safeJsonParse,
   executeTool,
 } from "./shared"
+export { dispatchTool } from "../tools/dispatch"
 export {
   DOCS_INSTRUCTION,
   getUnifiedPrompt,
@@ -41,6 +42,8 @@ export {
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,
+  getAiPermissions,
+  readLiveAiPermissions,
 } from "./settings"
 export type {
   ProviderId,

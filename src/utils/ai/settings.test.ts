@@ -1,5 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest"
-import { reconcileSettings, getSelectedModel, MODEL_OPTIONS } from "./settings"
+import { describe, it, expect, afterEach, beforeAll } from "vitest"
+import {
+  reconcileSettings,
+  getSelectedModel,
+  getAiPermissions,
+  MODEL_OPTIONS,
+} from "./settings"
 import type { ModelOption } from "./settings"
 
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
@@ -206,10 +211,13 @@ describe("getSelectedModel", () => {
  * when the app is updated with a different model list.
  */
 describe("version compatibility scenarios", () => {
+  // Snapshot once before any mutation — re-snapshotting per call leaks an empty baseline on throw.
   let originalOptions: ModelOption[]
+  beforeAll(() => {
+    originalOptions = [...MODEL_OPTIONS]
+  })
 
   function setModelOptions(options: ModelOption[]) {
-    originalOptions = [...MODEL_OPTIONS]
     MODEL_OPTIONS.length = 0
     MODEL_OPTIONS.push(...options)
   }
@@ -371,5 +379,118 @@ describe("version compatibility scenarios", () => {
     const reconciled = reconcileSettings(futureSettings)
     expect(reconciled.providers.openai!.enabledModels).toEqual(["model-a"])
     expect(reconciled.selectedModel).toBe("model-a")
+  })
+})
+
+describe("getAiPermissions", () => {
+  it("returns all-false when no model is selected", () => {
+    const settings = makeSettings()
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: false,
+      read: false,
+      write: false,
+    })
+  })
+
+  it("returns all-false when the selected model's provider has no settings", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5-mini",
+      providers: {},
+    })
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: false,
+      read: false,
+      write: false,
+    })
+  })
+
+  it("defaults read/write to false when only the legacy grantSchemaAccess is persisted", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5-mini",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5-mini"],
+          grantSchemaAccess: true,
+        },
+      },
+    })
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: true,
+      read: false,
+      write: false,
+    })
+  })
+
+  it("returns the three booleans verbatim when all are persisted on a built-in provider", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5-mini",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5-mini"],
+          grantSchemaAccess: true,
+          read: true,
+          write: true,
+        },
+      },
+    })
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: true,
+      read: true,
+      write: true,
+    })
+  })
+
+  it("reads permissions from a custom provider definition", () => {
+    const settings = makeSettings({
+      selectedModel: "custom-1:llm-a",
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: ["llm-a"],
+          grantSchemaAccess: true,
+          read: true,
+          write: false,
+        },
+      },
+      providers: {
+        "custom-1": {
+          apiKey: "",
+          enabledModels: ["custom-1:llm-a"],
+          grantSchemaAccess: true,
+          read: true,
+          write: false,
+        },
+      },
+    })
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: true,
+      read: true,
+      write: false,
+    })
+  })
+
+  it("returns false for read when grantSchemaAccess is true but read is explicitly false", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5-mini",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5-mini"],
+          grantSchemaAccess: true,
+          read: false,
+          write: false,
+        },
+      },
+    })
+    expect(getAiPermissions(settings)).toEqual({
+      grantSchemaAccess: true,
+      read: false,
+      write: false,
+    })
   })
 })

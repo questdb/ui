@@ -27,6 +27,12 @@ import "./js/console"
 import "./utils/monacoInit"
 import "./js/console/cryptoPolyfill"
 
+import { consumePendingPairFromUrl } from "./utils/mcp/consumePendingPair"
+
+// Stash MCP-pair URL params to sessionStorage before any provider mounts;
+// AuthProvider can trigger an OIDC redirect that drops them otherwise.
+consumePendingPairFromUrl()
+
 import React from "react"
 import ReactDOM from "react-dom"
 import { Provider } from "react-redux"

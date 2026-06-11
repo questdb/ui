@@ -41,7 +41,7 @@ import {
 import { QueryExecutionConfirmDialog } from "../../components/QueryExecutionConfirmDialog"
 
 const questClient = new QuestDB.Client()
-const questExecution = new QuestDB.QueryExecutionManager(questClient)
+const questExecution = new QuestDB.QueryExecutionManager()
 
 type ContextProps = {
   quest: QuestDB.Client

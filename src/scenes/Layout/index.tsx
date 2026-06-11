@@ -47,6 +47,7 @@ import "allotment/dist/style.css"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
+import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
 
 const Page = styled.div`
   display: flex;
@@ -101,28 +102,30 @@ const Layout = () => {
       <EditorProvider>
         <AIConversationProvider>
           <AIStatusProvider>
-            <TopBar />
-            <Warnings />
-            <Root>
-              <Main>
-                <Page>
-                  <Console />
-                </Page>
-              </Main>
+            <MCPBridgeProvider>
+              <TopBar />
+              <Warnings />
+              <Root>
+                <Main>
+                  <Page>
+                    <Console />
+                  </Page>
+                </Main>
 
-              <Sidebar align="top">
-                <AIChatButton />
-                <TableDetailsButton />
-                <News />
-                <Help />
-              </Sidebar>
-              <TableDetailsDrawer />
-              <AIChatWindowLazy />
-            </Root>
+                <Sidebar align="top">
+                  <AIChatButton />
+                  <TableDetailsButton />
+                  <News />
+                  <Help />
+                </Sidebar>
+                <TableDetailsDrawer />
+                <AIChatWindowLazy />
+              </Root>
 
-            <SideMenu />
+              <SideMenu />
 
-            <Footer />
+              <Footer />
+            </MCPBridgeProvider>
           </AIStatusProvider>
         </AIConversationProvider>
       </EditorProvider>

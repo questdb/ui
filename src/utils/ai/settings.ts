@@ -2,6 +2,9 @@ import type {
   AiAssistantSettings,
   CustomProviderDefinition,
 } from "../../providers/LocalStorageProvider/types"
+import type { Permissions } from "../tools/permissions"
+import { getValue } from "../localStorage"
+import { StoreKey } from "../localStorage/types"
 
 export type ProviderType = "anthropic" | "openai" | "openai-chat-completions"
 
@@ -43,8 +46,8 @@ export type ModelOption = {
 
 export const MODEL_OPTIONS: ModelOption[] = [
   {
-    label: "Claude Opus 4.6",
-    value: "claude-opus-4-6",
+    label: "Claude Opus 4.7",
+    value: "claude-opus-4-7",
     provider: "anthropic",
     isSlow: true,
     defaultEnabled: true,
@@ -368,4 +371,47 @@ export const hasSchemaAccess = (settings: AiAssistantSettings): boolean => {
     settings.providers?.[provider]?.grantSchemaAccess === true ||
     settings.customProviders?.[provider]?.grantSchemaAccess === true
   )
+}
+
+export const getAiPermissions = (
+  settings: AiAssistantSettings,
+): Permissions => {
+  const selectedModel = getSelectedModel(settings)
+  if (!selectedModel) {
+    return { grantSchemaAccess: false, read: false, write: false }
+  }
+  const provider = providerForModel(selectedModel, settings)
+  if (!provider) {
+    return { grantSchemaAccess: false, read: false, write: false }
+  }
+  const ps = settings.providers?.[provider]
+  const cs = settings.customProviders?.[provider]
+  return {
+    grantSchemaAccess:
+      ps?.grantSchemaAccess === true || cs?.grantSchemaAccess === true,
+    read: ps?.read === true || cs?.read === true,
+    write: ps?.write === true || cs?.write === true,
+  }
+}
+
+export const readLiveAiAssistantSettings = (): AiAssistantSettings | null => {
+  const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+  if (!stored) return null
+  try {
+    const parsed = JSON.parse(stored) as AiAssistantSettings
+    return reconcileSettings({
+      selectedModel: parsed.selectedModel,
+      providers: parsed.providers || {},
+      ...(parsed.customProviders && {
+        customProviders: parsed.customProviders,
+      }),
+    })
+  } catch {
+    return null
+  }
+}
+
+export const readLiveAiPermissions = (fallback: Permissions): Permissions => {
+  const live = readLiveAiAssistantSettings()
+  return live ? getAiPermissions(live) : fallback
 }

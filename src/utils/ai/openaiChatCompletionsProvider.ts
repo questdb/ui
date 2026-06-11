@@ -5,7 +5,6 @@ import type {
 } from "openai/resources/chat/completions"
 import type {
   AiAssistantAPIError,
-  ModelToolsClient,
   StatusCallback,
   StreamingCallback,
   TokenUsage,
@@ -14,7 +13,7 @@ import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
-  type FlowConfig,
+  type ExecuteFlowParams,
   type FlowResult,
   type ToolDefinition,
   type Message,
@@ -24,13 +23,13 @@ import {
   RefusalError,
   MaxTokensError,
   safeJsonParse,
-  executeTool,
   CRITICAL_TOKEN_USAGE_MESSAGE,
   MAX_TOOL_CALL_ROUNDS,
   TOOL_CALL_LIMIT_MESSAGE,
   getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
+import { dispatchTool } from "../tools/dispatch"
 import {
   classifyOpenAIError,
   countTokensFromNativePayload,
@@ -397,15 +396,10 @@ export function createOpenAIChatCompletionsProvider(
       setStatus,
       abortSignal,
       streaming,
-    }: {
-      model: string
-      config: FlowConfig
-      modelToolsClient: ModelToolsClient
-      tools: ToolDefinition[]
-      setStatus: StatusCallback
-      abortSignal?: AbortSignal
-      streaming?: StreamingCallback
-    }): Promise<FlowResult | AiAssistantAPIError> {
+      perms,
+      validateSql,
+      toolContext: incomingToolContext,
+    }: ExecuteFlowParams): Promise<FlowResult | AiAssistantAPIError> {
       const systemContent = config.systemInstructions
 
       const chatMessages: ChatCompletionMessageParam[] = [
@@ -422,7 +416,7 @@ export function createOpenAIChatCompletionsProvider(
       let totalInputTokens = 0
       let totalOutputTokens = 0
       let lastPromptTokens = 0
-      const toolContext: ToolExecutionContext = {}
+      const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const baseParams = {
         ...toChatCompletionsAPIProps(model),
@@ -464,11 +458,14 @@ export function createOpenAIChatCompletionsProvider(
         toolCallRound++
 
         for (const tc of result.toolCalls) {
-          const exec = await executeTool(
+          const exec = await dispatchTool(
             tc.name,
             safeJsonParse(tc.arguments),
             modelToolsClient,
             setStatus,
+            perms,
+            validateSql,
+            abortSignal,
             toolContext,
           )
 

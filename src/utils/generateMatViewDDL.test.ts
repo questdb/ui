@@ -661,7 +661,9 @@ describe("generateMatViewDDL", () => {
     })
 
     it("partition MONTH floors sub-month source TTL: 2 HOURS → 1 YEARS", () => {
-      expect(generateMatViewDDL(mvMonth("2 HOURS"))).toMatch(/TTL\s+1\s+YEAR\b/i)
+      expect(generateMatViewDDL(mvMonth("2 HOURS"))).toMatch(
+        /TTL\s+1\s+YEAR\b/i,
+      )
     })
 
     it("partition MONTH floors sub-month source TTL: 7 DAYS → 1 YEARS", () => {

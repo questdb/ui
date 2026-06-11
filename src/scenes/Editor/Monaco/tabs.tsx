@@ -2,12 +2,19 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor, MAX_TABS } from "../../../providers"
-import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
+import {
+  File,
+  History,
+  LineChart,
+  Trash,
+  Notepad,
+} from "@styled-icons/boxicons-regular"
 import {
   DotsThreeVerticalIcon,
   DownloadSimpleIcon,
   UploadSimpleIcon,
 } from "@phosphor-icons/react"
+import { createDefaultNotebookViewState } from "../../../store/notebook"
 import { toast } from "../../../components/Toast"
 import { db } from "../../../store/db"
 import {
@@ -63,8 +70,7 @@ const HistoryButton = styled(Button)`
 
 const DropdownMenuContent = styled(DropdownMenu.Content)`
   margin-top: 0.5rem;
-  z-index: 100;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  width: 20rem;
 `
 
 const ArchivedBuffersList = styled.div`
@@ -72,7 +78,21 @@ const ArchivedBuffersList = styled.div`
   overflow-y: auto;
 `
 
+// Invisible trigger we reposition to anchor Radix's menu at the chrome-tabs "+".
+const NewTabAnchor = styled(DropdownMenu.Trigger)`
+  position: fixed;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+`
+
 const mapTabIconToType = (buffer: Buffer) => {
+  if (buffer.notebookViewState) {
+    return "assets/icon-notebook.svg"
+  }
   if (buffer.metricsViewState) {
     return "assets/icon-chart.svg"
   }
@@ -98,6 +118,11 @@ export const Tabs = () => {
   const userLocale = useMemo(fetchUserLocale, [])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [newTabMenuOpen, setNewTabMenuOpen] = useState(false)
+  const [newTabMenuPos, setNewTabMenuPos] = useState<{
+    x: number
+    y: number
+  } | null>(null)
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
@@ -376,7 +401,9 @@ export const Tabs = () => {
     if (
       buffer?.value !== "" ||
       (buffer.metricsViewState?.metrics &&
-        buffer.metricsViewState.metrics.length > 0)
+        buffer.metricsViewState.metrics.length > 0) ||
+      (buffer.notebookViewState?.cells &&
+        buffer.notebookViewState.cells.some((c) => c.value.trim() !== ""))
     ) {
       await archiveBuffer(parseInt(id))
     } else {
@@ -450,7 +477,16 @@ export const Tabs = () => {
         onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
-        onNewTab={addBuffer}
+        onNewTab={() => {
+          const btn = document.querySelector(
+            ".chrome-tabs .new-tab-button-wrapper",
+          )
+          if (btn) {
+            const rect = btn.getBoundingClientRect()
+            setNewTabMenuPos({ x: rect.left, y: rect.top })
+          }
+          setNewTabMenuOpen(true)
+        }}
         tabs={buffers
           .filter(
             (buffer) =>
@@ -468,6 +504,9 @@ export const Tabs = () => {
           })
           .map((buffer) => {
             const classNames = []
+            if (buffer.notebookViewState) {
+              classNames.push("notebook-tab")
+            }
             if (buffer.metricsViewState) {
               classNames.push("metrics-tab")
             }
@@ -513,7 +552,7 @@ export const Tabs = () => {
         <DropdownMenu.Portal>
           <DropdownMenuContent data-hook="editor-tabs-history">
             {archivedBuffers.length === 0 ? (
-              <div style={{ padding: "0 1rem" }}>
+              <div style={{ padding: "0.5rem 1.4rem" }}>
                 <Text color="gray2">History is empty</Text>
               </div>
             ) : (
@@ -638,6 +677,37 @@ export const Tabs = () => {
         importedCount={importedCount}
         skippedTabs={skippedTabs}
       />
+      <DropdownMenu.Root open={newTabMenuOpen} onOpenChange={setNewTabMenuOpen}>
+        <NewTabAnchor
+          aria-label="Open new tab menu"
+          style={{
+            left: newTabMenuPos?.x ?? 0,
+            top: newTabMenuPos?.y ?? 0,
+          }}
+        />
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content side="bottom" align="start" sideOffset={4}>
+            <DropdownMenu.Item
+              onSelect={() => {
+                void addBuffer()
+              }}
+            >
+              <File size={16} />
+              Editor tab
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => {
+                void addBuffer({
+                  notebookViewState: createDefaultNotebookViewState(),
+                })
+              }}
+            >
+              <Notepad size={16} />
+              Notebook tab
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
     </Root>
   )
 }

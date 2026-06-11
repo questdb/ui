@@ -11,13 +11,12 @@ export const DropdownMenu = {
   Portal: styled(RadixDropdownMenu.Portal)``,
 
   Content: styled(RadixDropdownMenu.Content)`
-    display: grid;
-    gap: 0.2rem;
-    min-width: 22rem;
-    background: ${({ theme }) => theme.color.backgroundLighter};
-    border-radius: ${({ theme }) => theme.borderRadius};
-    box-shadow: 0 5px 5px 0 ${({ theme }) => theme.color.black40};
-    padding: 0.5rem 0;
+    background-color: ${({ theme }) => theme.color.backgroundDarker};
+    border-radius: 0.5rem;
+    padding: 0.4rem;
+    box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
+    z-index: 9999;
+    min-width: 16rem;
   `,
 
   Arrow: styled(RadixDropdownMenu.Arrow)`
@@ -25,29 +24,31 @@ export const DropdownMenu = {
   `,
 
   Item: styled(RadixDropdownMenu.Item)`
-    border-radius: 3px;
+    font-size: 1.4rem;
+    cursor: pointer;
+    color: ${({ theme }) => theme.color.foreground};
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
+    min-height: 3rem;
     align-items: center;
     padding: 0.5rem 1rem;
-    margin: 0 0.5rem;
+    border-radius: 0.4rem;
     user-select: none;
     outline: none;
 
-    &[data-disabled] {
-      pointer-events: none;
-      opacity: 0.8;
+    &[data-highlighted] {
+      background: ${({ theme }) => theme.color.tableSelection};
     }
 
-    &:focus {
-      background: ${({ theme }) => theme.color.comment};
-      cursor: pointer;
+    &[data-disabled] {
+      opacity: 0.5;
+      pointer-events: none;
     }
   `,
 
   Divider: styled.div`
     height: 1px;
     background: ${({ theme }) => theme.color.selection};
-    margin: 0.5rem 0;
+    margin: 0.3rem 0;
   `,
 }

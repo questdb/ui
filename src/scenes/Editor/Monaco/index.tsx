@@ -2,14 +2,8 @@ import Editor from "@monaco-editor/react"
 import type { Monaco } from "@monaco-editor/react"
 import { Stop } from "@styled-icons/remix-line"
 import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import type { editor, IDisposable } from "monaco-editor"
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react"
+import type { editor } from "monaco-editor"
+import React, { useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
@@ -48,7 +42,6 @@ import QueryResult from "../QueryResult"
 import { registerEditorActions } from "./editor-addons"
 import { registerLegacyEventBusEvents } from "./legacy-event-bus"
 import { QueryInNotification } from "./query-in-notification"
-import { createSchemaCompletionProvider } from "./questdb-sql"
 import { Request } from "./utils"
 import {
   applyValidationMarkers,
@@ -77,6 +70,7 @@ import {
   readShareLinkParams,
   clearShareLinkParams,
   buildShareLinkUrl,
+  pinMonacoContextMenu,
 } from "./utils"
 import { toast } from "../../../components/Toast"
 import { LiteEditor } from "../../../components/LiteEditor"
@@ -289,9 +283,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     findQueryByConversationId,
   } = useAIConversation()
   const [request, setRequest] = useState<Request | undefined>()
-  const [editorReady, setEditorReady] = useState<boolean>(false)
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
-  const [refreshingTables, setRefreshingTables] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const scriptConfirmationOpenRef = useRef(false)
@@ -307,13 +299,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const dispatch = useDispatch()
   const running = useSelector(selectors.query.getRunning)
   const tables = useSelector(selectors.query.getTables)
-  const columns = useSelector(selectors.query.getColumns)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
   const queryNotifications = useSelector(
     selectors.query.getQueryNotificationsForBuffer(activeBuffer.id as number),
   )
-  const [schemaCompletionHandle, setSchemaCompletionHandle] =
-    useState<IDisposable>()
   const isRunningScriptRef = useRef(false)
   const queryOffsetsRef = useRef<
     { startOffset: number; endOffset: number }[] | null
@@ -596,9 +585,19 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const targetBufferId = activeBufferRef.current.id as number
     const queryKey = createQueryKeyFromRequest(editor, query)
 
-    questExecution.requestExecution(targetBufferId, queryKey, () => {
-      setCursorBeforeRunning(query)
-      toggleRunning(type)
+    questExecution.requestExecution({
+      abort: () => {
+        if (editorQueryIdRef.current !== null) {
+          quest.abort(editorQueryIdRef.current)
+          editorQueryIdRef.current = null
+        }
+      },
+      bufferId: targetBufferId,
+      execute: () => {
+        setCursorBeforeRunning(query)
+        toggleRunning(type)
+      },
+      queryKey,
     })
   }
 
@@ -934,7 +933,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editor.setModel(
       monaco.editor.createModel(activeBuffer.value, QuestDBLanguageName),
     )
-    setEditorReady(true)
     editorReadyTrigger(editor)
     isNavigatingFromSearchRef.current = false
 
@@ -971,41 +969,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }),
     )
 
-    // Prevent context menu from being clipped
-    const containerDomNode = editor.getContainerDomNode()
-    const contextMenuObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of Array.from(mutation.addedNodes)) {
-          if (
-            node instanceof HTMLElement &&
-            node.classList.contains("context-view") &&
-            node.classList.contains("monaco-menu-container")
-          ) {
-            const rect = node.getBoundingClientRect()
-            node.style.position = "fixed"
-            node.style.left = `${rect.left}px`
-            node.style.top = `${rect.top}px`
-
-            // Monaco reuses the node on subsequent opens, resetting styles.
-            const styleObserver = new MutationObserver(() => {
-              if (node.style.position !== "fixed") {
-                const rect = node.getBoundingClientRect()
-                node.style.position = "fixed"
-                node.style.left = `${rect.left}px`
-                node.style.top = `${rect.top}px`
-              }
-            })
-            styleObserver.observe(node, {
-              attributes: true,
-              attributeFilter: ["style"],
-            })
-            cleanupActionsRef.current.push(() => styleObserver.disconnect())
-          }
-        }
-      }
-    })
-    contextMenuObserver.observe(containerDomNode, { childList: true })
-    cleanupActionsRef.current.push(() => contextMenuObserver.disconnect())
+    cleanupActionsRef.current.push(pinMonacoContextMenu(editor))
 
     editor.onDidChangeCursorPosition((e) => {
       // To ensure the fixed position of the "run query" glyph we adjust the width of the line count element.
@@ -1862,7 +1826,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
         const parentQueryKey = createQueryKeyFromRequest(editor, request)
-        questExecution.markActive(targetBufferId, parentQueryKey)
+        questExecution.markActive(targetBufferId, parentQueryKey, () => {
+          if (editorQueryIdRef.current !== null) {
+            quest.abort(editorQueryIdRef.current)
+            editorQueryIdRef.current = null
+          }
+        })
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -2151,26 +2120,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     editorRef.current?.updateOptions({ readOnly: !!request })
   }, [request])
 
-  const setCompletionProvider = useCallback(() => {
-    if (editorReady && monacoRef?.current && editorRef?.current) {
-      schemaCompletionHandle?.dispose()
-      setRefreshingTables(true)
-      setSchemaCompletionHandle(
-        monacoRef.current.languages.registerCompletionItemProvider(
-          QuestDBLanguageName,
-          createSchemaCompletionProvider(tables, columns),
-        ),
-      )
-      setRefreshingTables(false)
-    }
-  }, [editorReady, schemaCompletionHandle, tables, columns])
-
-  useEffect(() => {
-    if (!refreshingTables) {
-      setCompletionProvider()
-    }
-  }, [tables, columns, monacoRef, editorReady])
-
   useEffect(() => {
     activeBufferRef.current = activeBuffer
     currentBufferValueRef.current = activeBuffer.value
@@ -2212,13 +2161,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
   }, [aiStatus])
-
-  useEffect(() => {
-    window.addEventListener("focus", setCompletionProvider)
-    return () => {
-      window.removeEventListener("focus", setCompletionProvider)
-    }
-  }, [setCompletionProvider])
 
   useEffect(() => {
     const handler = (conversationId: unknown) => {

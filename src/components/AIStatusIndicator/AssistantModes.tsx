@@ -82,6 +82,7 @@ export const getIsExpandableSection = (section: OperationSection) => {
     AIOperationStatus.InvestigatingTable,
     AIOperationStatus.InvestigatingDocs,
     AIOperationStatus.Thinking,
+    AIOperationStatus.RunningQuery,
   ].includes(section.type)
 }
 

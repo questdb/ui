@@ -2,7 +2,6 @@ import OpenAI from "openai"
 import type { ResponseOutputItem } from "openai/resources/responses/responses"
 import type {
   AiAssistantAPIError,
-  ModelToolsClient,
   StatusCallback,
   StreamingCallback,
 } from "../aiAssistant"
@@ -10,7 +9,7 @@ import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
-  type FlowConfig,
+  type ExecuteFlowParams,
   type FlowResult,
   type ToolDefinition,
   type Message,
@@ -18,13 +17,13 @@ import {
 import {
   StreamingError,
   safeJsonParse,
-  executeTool,
   CRITICAL_TOKEN_USAGE_MESSAGE,
   MAX_TOOL_CALL_ROUNDS,
   TOOL_CALL_LIMIT_MESSAGE,
   getMessageTextLength,
   type ToolExecutionContext,
 } from "./shared"
+import { dispatchTool } from "../tools/dispatch"
 import {
   classifyOpenAIError,
   countTokensFromNativePayload,
@@ -307,15 +306,10 @@ export function createOpenAIProvider(
       setStatus,
       abortSignal,
       streaming,
-    }: {
-      model: string
-      config: FlowConfig
-      modelToolsClient: ModelToolsClient
-      tools: ToolDefinition[]
-      setStatus: StatusCallback
-      abortSignal?: AbortSignal
-      streaming?: StreamingCallback
-    }): Promise<FlowResult | AiAssistantAPIError> {
+      perms,
+      validateSql,
+      toolContext: incomingToolContext,
+    }: ExecuteFlowParams): Promise<FlowResult | AiAssistantAPIError> {
       let input: OpenAI.Responses.ResponseInput = []
       if (config.conversationHistory && config.conversationHistory.length > 0) {
         input.push(...toNativeMessages(config.conversationHistory))
@@ -330,7 +324,7 @@ export function createOpenAIProvider(
 
       let totalInputTokens = 0
       let totalOutputTokens = 0
-      const toolContext: ToolExecutionContext = {}
+      const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const requestParams = {
         ...toResponsesAPIProps(model),
@@ -382,11 +376,14 @@ export function createOpenAIProvider(
         const tool_outputs: OpenAI.Responses.ResponseFunctionToolCallOutputItem[] =
           []
         for (const tc of toolCalls) {
-          const exec = await executeTool(
+          const exec = await dispatchTool(
             tc.name,
             safeJsonParse(tc.arguments),
             modelToolsClient,
             setStatus,
+            perms,
+            validateSql,
+            abortSignal,
             toolContext,
           )
 

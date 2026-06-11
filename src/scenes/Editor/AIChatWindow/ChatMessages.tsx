@@ -823,7 +823,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             )
           }
 
-          // Default: plain text message
+          // Prefer `displayUserMessage` so wire-protocol prefixes don't show in the chat bubble.
           return (
             <MessageBubble
               key={key}
@@ -832,7 +832,9 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                 if (el) messageRefs.current.set(message.id, el)
               }}
             >
-              <MessageContent>{message.content}</MessageContent>
+              <MessageContent>
+                {message.displayUserMessage || message.content}
+              </MessageContent>
             </MessageBubble>
           )
         }

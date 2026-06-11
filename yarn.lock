@@ -2540,15 +2540,17 @@ __metadata:
     "@styled-icons/remix-fill": "npm:10.46.0"
     "@styled-icons/remix-line": "npm:10.46.0"
     "@styled-icons/styled-icon": "npm:^10.7.0"
+    "@tanstack/react-table": "npm:^8.21.3"
+    "@tanstack/react-virtual": "npm:^3.13.23"
     "@types/babel__core": "npm:^7"
     "@types/draggabilly": "npm:^2.1.6"
-    "@types/echarts": "npm:^4.9.22"
     "@types/jquery": "npm:3.5.1"
     "@types/lodash.merge": "npm:^4.6.9"
     "@types/node": "npm:^18.0.0"
     "@types/ramda": "npm:0.27.40"
     "@types/react": "npm:17.0.2"
     "@types/react-dom": "npm:17.0.2"
+    "@types/react-grid-layout": "npm:^2.1.0"
     "@types/react-highlight-words": "npm:^0.16.7"
     "@types/react-redux": "npm:7.1.9"
     "@types/react-transition-group": "npm:4.4.0"
@@ -2571,7 +2573,8 @@ __metadata:
     dexie-react-hooks: "npm:^4.2.0"
     dotenv: "npm:^10.0.0"
     draggabilly: "npm:^3.0.0"
-    echarts: "npm:^5.2.2"
+    echarts: "npm:^5.6.0"
+    echarts-for-react: "npm:^3.0.6"
     eslint: "npm:^9.13.0"
     eslint-config-prettier: "npm:^10.1.8"
     eslint-plugin-jsx-a11y: "npm:^6.10.2"
@@ -2602,6 +2605,7 @@ __metadata:
     react: "npm:17.0.2"
     react-calendar: "npm:^4.0.0"
     react-dom: "npm:17.0.2"
+    react-grid-layout: "npm:^2.2.3"
     react-highlight-words: "npm:^0.20.0"
     react-hook-form: "npm:^7.56.0"
     react-is: "npm:^18.1.0"
@@ -3853,6 +3857,44 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/react-table@npm:^8.21.3":
+  version: 8.21.3
+  resolution: "@tanstack/react-table@npm:8.21.3"
+  dependencies:
+    "@tanstack/table-core": "npm:8.21.3"
+  peerDependencies:
+    react: ">=16.8"
+    react-dom: ">=16.8"
+  checksum: 10/a32217ebe64d24e71dea6a6742bc288dcabf389657b16805a1ab3f347d3dca8262759c45c604a1f65bd97925d5cbdfb66d1be7637100a12eb5b279bdd420962d
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-virtual@npm:^3.13.23":
+  version: 3.13.23
+  resolution: "@tanstack/react-virtual@npm:3.13.23"
+  dependencies:
+    "@tanstack/virtual-core": "npm:3.13.23"
+  peerDependencies:
+    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10/fb60d65b61f299648325d8d69d00e5d9434ec20e075496c2e451426087d6216d617558565f05d7a503393a482db29112140b19082f709785f4a469800ddc4e31
+  languageName: node
+  linkType: hard
+
+"@tanstack/table-core@npm:8.21.3":
+  version: 8.21.3
+  resolution: "@tanstack/table-core@npm:8.21.3"
+  checksum: 10/aa05e5f80110f0f56d66161e950668ea6ef3e2ea4f3a2ccd5d5980b39b4feea987245b20531aee2c6743e6edd12c0361503413b63090c807f88a61b19bfd04f3
+  languageName: node
+  linkType: hard
+
+"@tanstack/virtual-core@npm:3.13.23":
+  version: 3.13.23
+  resolution: "@tanstack/virtual-core@npm:3.13.23"
+  checksum: 10/17f6e3c3f56d2d91d5818981416a628db2e1038f6a13f39f60e5b2bdcff04b99fba0e79640a6667ea9ef70756a2a086fb468f8b5f065faea9f1a47f8aa3722a5
+  languageName: node
+  linkType: hard
+
 "@types/babel__core@npm:^7, @types/babel__core@npm:^7.20.5":
   version: 7.20.5
   resolution: "@types/babel__core@npm:7.20.5"
@@ -3907,15 +3949,6 @@ __metadata:
   version: 2.1.6
   resolution: "@types/draggabilly@npm:2.1.6"
   checksum: 10/eef9933b80d6c90c86649d1a437a608a66b889bc87e7f65c076625168458fa7fba5d15f475f1c841522bf7b48d793025b3e74fd82948e40060d759e0c80b7561
-  languageName: node
-  linkType: hard
-
-"@types/echarts@npm:^4.9.22":
-  version: 4.9.22
-  resolution: "@types/echarts@npm:4.9.22"
-  dependencies:
-    "@types/zrender": "npm:*"
-  checksum: 10/abc05f45b29afb019c33c2e5c96e553a43ca9bfa13b188d10e097a9005469aff10149c4ab7f8b8abeabdb95035817966446a97b78362a8c7f28fc910c080d135
   languageName: node
   linkType: hard
 
@@ -4065,6 +4098,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/react-grid-layout@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "@types/react-grid-layout@npm:2.1.0"
+  dependencies:
+    react-grid-layout: "npm:*"
+  checksum: 10/aee72c50b1fbcc9efd8cfd72cc1f61e461adaebca9ca48d16e94990cebc503d7b10663f33440e0fbd9b27069383f2e0b3d283ca9fc1d8e56e35c46ac423b74fe
+  languageName: node
+  linkType: hard
+
 "@types/react-highlight-words@npm:^0.16.7":
   version: 0.16.7
   resolution: "@types/react-highlight-words@npm:0.16.7"
@@ -4150,13 +4192,6 @@ __metadata:
   dependencies:
     "@types/node": "npm:*"
   checksum: 10/5ee966ea7bd6b2802f31ad4281c92c4c0b6dfa593c378a2582c58541fa113bec3d70eb0696b34ad95e8e6861a884cba6c3e351285816693ed176222f840a8c08
-  languageName: node
-  linkType: hard
-
-"@types/zrender@npm:*":
-  version: 4.0.6
-  resolution: "@types/zrender@npm:4.0.6"
-  checksum: 10/07115466bf90d3f4fa86ad47bc5013b7c68371d2cb37e9411af0d8c4511025b56163d29efc36c19b9918e4672ee63c8a175eb50d299d9bcab193b879517d7ac7
   languageName: node
   linkType: hard
 
@@ -5416,7 +5451,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"clsx@npm:^2.0.0":
+"clsx@npm:^2.0.0, clsx@npm:^2.1.1":
   version: 2.1.1
   resolution: "clsx@npm:2.1.1"
   checksum: 10/cdfb57fa6c7649bbff98d9028c2f0de2f91c86f551179541cf784b1cfdc1562dcb951955f46d54d930a3879931a980e32a46b598acaea274728dbe068deca919
@@ -6014,7 +6049,20 @@ __metadata:
   languageName: node
   linkType: hard
 
-"echarts@npm:^5.2.2":
+"echarts-for-react@npm:^3.0.6":
+  version: 3.0.6
+  resolution: "echarts-for-react@npm:3.0.6"
+  dependencies:
+    fast-deep-equal: "npm:^3.1.3"
+    size-sensor: "npm:^1.0.1"
+  peerDependencies:
+    echarts: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0
+    react: ^15.0.0 || >=16.0.0
+  checksum: 10/e7c084f516ee6f4c32a1f9eff3ff4372616878aeb6bacaa495fc8d60d2114b54b4b255a31a81fee3e05bfb278f9d27d9a320bb33b8ff37c92e43ac9fd1e4b539
+  languageName: node
+  linkType: hard
+
+"echarts@npm:^5.6.0":
   version: 5.6.0
   resolution: "echarts@npm:5.6.0"
   dependencies:
@@ -6816,6 +6864,13 @@ __metadata:
   version: 1.3.0
   resolution: "fast-diff@npm:1.3.0"
   checksum: 10/9e57415bc69cd6efcc720b3b8fe9fdaf42dcfc06f86f0f45378b1fa512598a8aac48aa3928c8751d58e2f01bb4ba4f07e4f3d9bc0d57586d45f1bd1e872c6cde
+  languageName: node
+  linkType: hard
+
+"fast-equals@npm:^4.0.3":
+  version: 4.0.3
+  resolution: "fast-equals@npm:4.0.3"
+  checksum: 10/04c1ff47b79923314e9b63ec6c81beeaa5e3b9588ec230ee6aff7ece725ff834a72abf627055055127bd0f53ae8a92cc04c3a6e187783fd932dbef743f9b13bf
   languageName: node
   linkType: hard
 
@@ -10335,7 +10390,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"prop-types@npm:^15.0.0, prop-types@npm:^15.5.8, prop-types@npm:^15.6.0, prop-types@npm:^15.6.2, prop-types@npm:^15.7.2, prop-types@npm:^15.8.1":
+"prop-types@npm:15.x, prop-types@npm:^15.0.0, prop-types@npm:^15.5.8, prop-types@npm:^15.6.0, prop-types@npm:^15.6.2, prop-types@npm:^15.7.2, prop-types@npm:^15.8.1":
   version: 15.8.1
   resolution: "prop-types@npm:15.8.1"
   dependencies:
@@ -10456,10 +10511,40 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-draggable@npm:^4.4.6, react-draggable@npm:^4.5.0":
+  version: 4.5.0
+  resolution: "react-draggable@npm:4.5.0"
+  dependencies:
+    clsx: "npm:^2.1.1"
+    prop-types: "npm:^15.8.1"
+  peerDependencies:
+    react: ">= 16.3.0"
+    react-dom: ">= 16.3.0"
+  checksum: 10/fd4080a082fad199103c6978c8a78c80154a0205dbd14ca2c7bb75634132a6afd83a3e4669f2d8fe54efe68569ef24a992439183289d83e71030b0a1791d3476
+  languageName: node
+  linkType: hard
+
 "react-fast-compare@npm:^3.0.1":
   version: 3.2.2
   resolution: "react-fast-compare@npm:3.2.2"
   checksum: 10/a6826180ba75cefba1c8d3ac539735f9b627ca05d3d307fe155487f5d0228d376dac6c9708d04a283a7b9f9aee599b637446635b79c8c8753d0b4eece56c125c
+  languageName: node
+  linkType: hard
+
+"react-grid-layout@npm:*, react-grid-layout@npm:^2.2.3":
+  version: 2.2.3
+  resolution: "react-grid-layout@npm:2.2.3"
+  dependencies:
+    clsx: "npm:^2.1.1"
+    fast-equals: "npm:^4.0.3"
+    prop-types: "npm:^15.8.1"
+    react-draggable: "npm:^4.4.6"
+    react-resizable: "npm:^3.1.3"
+    resize-observer-polyfill: "npm:^1.5.1"
+  peerDependencies:
+    react: ">= 16.3.0"
+    react-dom: ">= 16.3.0"
+  checksum: 10/90b66db889fc5889e038dd1b6198eb94cb093a9669335b0f617cee3999b6d0f37bf4683aba418235c8469967fba113461d6858e8c1f6165cf58af483236cb8d4
   languageName: node
   linkType: hard
 
@@ -10598,6 +10683,19 @@ __metadata:
     "@types/react":
       optional: true
   checksum: 10/5e571ba35ba527047c54c9c4a271363167770556fb85ee45ead8310673197719425cc8f7a2b7f672abf530294c41c8c34bdae325a571994cc1e694b664b52734
+  languageName: node
+  linkType: hard
+
+"react-resizable@npm:^3.1.3":
+  version: 3.1.3
+  resolution: "react-resizable@npm:3.1.3"
+  dependencies:
+    prop-types: "npm:15.x"
+    react-draggable: "npm:^4.5.0"
+  peerDependencies:
+    react: ">= 16.3"
+    react-dom: ">= 16.3"
+  checksum: 10/bc7126fabbd2f0ba422fa0da77fcfcebf2b4f28141d3faf02067632d258e345bc5f63891f9d5eca0e9ea31dc461b74ec69073a18f905b25bdd392ca6283577f9
   languageName: node
   linkType: hard
 
@@ -10928,7 +11026,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"resize-observer-polyfill@npm:1.5.1":
+"resize-observer-polyfill@npm:1.5.1, resize-observer-polyfill@npm:^1.5.1":
   version: 1.5.1
   resolution: "resize-observer-polyfill@npm:1.5.1"
   checksum: 10/e10ee50cd6cf558001de5c6fb03fee15debd011c2f694564b71f81742eef03fb30d6c2596d1d5bf946d9991cb692fcef529b7bd2e4057041377ecc9636c753ce
@@ -11416,6 +11514,13 @@ __metadata:
   version: 4.1.0
   resolution: "signal-exit@npm:4.1.0"
   checksum: 10/c9fa63bbbd7431066174a48ba2dd9986dfd930c3a8b59de9c29d7b6854ec1c12a80d15310869ea5166d413b99f041bfa3dd80a7947bcd44ea8e6eb3ffeabfa1f
+  languageName: node
+  linkType: hard
+
+"size-sensor@npm:^1.0.1":
+  version: 1.0.3
+  resolution: "size-sensor@npm:1.0.3"
+  checksum: 10/77a2a022b2b2030bec78405a0f0b5a2ed5f03a9d2373710d4f9333a77321b2f18d41f43db63a6c8202fb13dc68bb10d02925e23e5a9e249ca377b4b664fde995
   languageName: node
   linkType: hard
 

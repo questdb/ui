@@ -12,7 +12,9 @@ const StyledButton = styled(Button)`
 
 const StyledCheckboxCircle = styled(CheckboxCircle)`
   position: absolute;
-  transform: translate(75%, -75%);
+  top: 0;
+  right: 0;
+  transform: translate(50%, -50%);
   color: ${({ theme }) => theme.color.green};
 `
 
@@ -44,6 +46,7 @@ export const CopyButton = ({
       skin="secondary"
       size={size}
       data-hook="copy-value"
+      data-copied={copied || undefined}
       title="Copy to clipboard"
       onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
         void copyToClipboard(text)
@@ -57,9 +60,7 @@ export const CopyButton = ({
       })}
       {...props}
     >
-      {copied && (
-        <StyledCheckboxCircle size={size === "sm" ? "10px" : "14px"} />
-      )}
+      {copied && <StyledCheckboxCircle size={size === "sm" ? "8px" : "14px"} />}
       {iconOnly ? <FileCopy size={size === "sm" ? "12px" : "16px"} /> : "Copy"}
     </StyledButton>
   )

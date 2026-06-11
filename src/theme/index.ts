@@ -70,6 +70,7 @@ const color: ColorShape = {
   graphLegend: "#6e7078",
   offWhite: "#bdbdbd",
   offWhite2: "#d1d5db",
+  editorBackground: "#2c2e3d",
   aiStopButtonBg: "#da152832",
   aiStopButtonFg: "#da1e28",
   aiBadgeIconBg: "#290a13",

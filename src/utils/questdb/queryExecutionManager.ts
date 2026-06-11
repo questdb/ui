@@ -1,17 +1,29 @@
-import type { Client, QueryId } from "./client"
 import type { QueryKey } from "../../store/Query/types"
 
 type NotificationNamespaceKey = string | number
+type ScopeKey = string
+
+export const DEFAULT_QUERY_EXECUTION_SCOPE: ScopeKey = "query-execution"
 
 export type ActiveExecution = {
+  scopeKey: ScopeKey
   bufferId: NotificationNamespaceKey
   queryKey: QueryKey
-  queryId?: QueryId
-  onStop?: () => void
+  abort: () => void
 }
 
 type PendingExecution = ActiveExecution & {
   execute: () => void
+  onDismiss?: () => void
+}
+
+export type QueryExecutionRequest = {
+  abort: () => void
+  bufferId: NotificationNamespaceKey
+  execute: () => void
+  onDismiss?: () => void
+  queryKey: QueryKey
+  scopeKey?: ScopeKey
 }
 
 export type QueryExecutionSnapshot = {
@@ -21,9 +33,9 @@ export type QueryExecutionSnapshot = {
 }
 
 export class QueryExecutionManager {
-  private _active: ActiveExecution | null = null
-  private _pending: PendingExecution | null = null
-  private _dialogOpen = false
+  private _activeByScope = new Map<ScopeKey, ActiveExecution>()
+  private _pendingByScope = new Map<ScopeKey, PendingExecution>()
+  private _dialogScopeKey: ScopeKey | null = null
   private _listeners = new Set<() => void>()
   private _snapshot: QueryExecutionSnapshot = {
     active: null,
@@ -31,140 +43,182 @@ export class QueryExecutionManager {
     dialogOpen: false,
   }
 
-  private _idleWaiters: Array<() => void> = []
+  private _idleWaiters = new Map<ScopeKey, Array<() => void>>()
 
-  constructor(private client: Client) {
-    client.onCancellableQueryStarted = (queryId) => {
-      this.setActiveQueryId(queryId)
-    }
-  }
-
-  private waitForIdle(): Promise<void> {
-    if (this._active === null) return Promise.resolve()
+  private waitForIdle(scopeKey: ScopeKey): Promise<void> {
+    if (!this._activeByScope.has(scopeKey)) return Promise.resolve()
     return new Promise((resolve) => {
-      this._idleWaiters.push(resolve)
+      const waiters = this._idleWaiters.get(scopeKey) ?? []
+      waiters.push(resolve)
+      this._idleWaiters.set(scopeKey, waiters)
     })
   }
 
-  private flushIdleWaiters() {
-    if (this._idleWaiters.length === 0) return
-    const waiters = this._idleWaiters
-    this._idleWaiters = []
+  private flushIdleWaiters(scopeKey: ScopeKey) {
+    const waiters = this._idleWaiters.get(scopeKey)
+    if (!waiters || waiters.length === 0) return
+    this._idleWaiters.delete(scopeKey)
     waiters.forEach((resolve) => resolve())
   }
 
-  requestExecution = (
-    bufferId: NotificationNamespaceKey,
-    queryKey: QueryKey,
-    execute: () => void,
-  ): void => {
-    if (this._active === null) {
-      this._active = { bufferId, queryKey }
+  requestExecution = (request: QueryExecutionRequest): void => {
+    const scopeKey = request.scopeKey ?? DEFAULT_QUERY_EXECUTION_SCOPE
+    if (!this._activeByScope.has(scopeKey)) {
+      this._activeByScope.set(scopeKey, {
+        scopeKey,
+        bufferId: request.bufferId,
+        queryKey: request.queryKey,
+        abort: request.abort,
+      })
       this.refreshSnapshot()
-      execute()
+      request.execute()
       return
     }
 
-    this._pending = { bufferId, queryKey, execute }
-    this._dialogOpen = true
+    if (this._dialogScopeKey && this._dialogScopeKey !== scopeKey) {
+      this._pendingByScope.get(this._dialogScopeKey)?.onDismiss?.()
+      this._pendingByScope.delete(this._dialogScopeKey)
+    }
+
+    this._pendingByScope.get(scopeKey)?.onDismiss?.()
+    this._pendingByScope.set(scopeKey, {
+      scopeKey,
+      bufferId: request.bufferId,
+      queryKey: request.queryKey,
+      execute: request.execute,
+      abort: request.abort,
+      onDismiss: request.onDismiss,
+    })
+    this._dialogScopeKey = scopeKey
     this.refreshSnapshot()
   }
 
-  releaseExecution = (queryKey: QueryKey): void => {
-    if (this._active?.queryKey !== queryKey) return
-    this._active = null
+  releaseExecution = (
+    queryKey: QueryKey,
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): void => {
+    if (this._activeByScope.get(scopeKey)?.queryKey !== queryKey) return
+    this._activeByScope.delete(scopeKey)
     this.refreshSnapshot()
-    this.flushIdleWaiters()
+    this.flushIdleWaiters(scopeKey)
   }
 
   // Mark a query as active without going through the confirmation dialog.
-  // Idempotent for the same key. Used by code paths that start queries
+  // Idempotent for the same key. Used by legacy code paths that start queries
   // outside of requestExecution (e.g. the Run button which dispatches
   // toggleRunning directly), so that subsequent requestExecution calls can
   // still detect the conflict.
   markActive = (
     bufferId: NotificationNamespaceKey,
     queryKey: QueryKey,
-    onStop?: () => void,
+    abort: () => void,
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
   ): void => {
-    if (
-      this._active?.queryKey === queryKey &&
-      this._active?.bufferId === bufferId
-    ) {
+    const active = this._activeByScope.get(scopeKey)
+    if (active?.queryKey === queryKey && active?.bufferId === bufferId) {
+      if (abort && active.abort !== abort) {
+        this._activeByScope.set(scopeKey, { ...active, abort })
+        this.refreshSnapshot()
+      }
       return
     }
-    this._active = { bufferId, queryKey, onStop }
+    this._activeByScope.set(scopeKey, {
+      scopeKey,
+      bufferId,
+      queryKey,
+      abort,
+    })
     this.refreshSnapshot()
   }
 
-  private setActiveQueryId(queryId: QueryId): void {
-    if (this._active === null) return
-    this._active = { ...this._active, queryId }
+  private abortActive(scopeKey: ScopeKey): void {
+    const active = this._activeByScope.get(scopeKey)
+    if (!active) return
+    active.abort()
   }
 
-  private abortActive(): void {
-    if (this._active?.onStop) {
-      this._active.onStop()
-      return
-    }
-    if (this._active?.queryId !== undefined) {
-      this.client.abort(this._active.queryId)
-    } else {
-      this.client.abortActive()
-    }
-  }
-
-  cancelActive = (): void => {
-    if (this._active === null) return
-    this.abortActive()
-    this._active = null
+  abortActiveByScope = (
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): void => {
+    if (!this._activeByScope.has(scopeKey)) return
+    this.abortActive(scopeKey)
+    this._activeByScope.delete(scopeKey)
     this.refreshSnapshot()
-    this.flushIdleWaiters()
+    this.flushIdleWaiters(scopeKey)
   }
+
+  cancelActive = (): void => this.abortActiveByScope()
 
   confirmPending = async (): Promise<void> => {
-    const pending = this._pending
-    if (pending === null) {
-      this._dialogOpen = false
+    const scopeKey = this._dialogScopeKey
+    const pending = scopeKey ? this._pendingByScope.get(scopeKey) : null
+    if (!scopeKey || !pending) {
+      this._dialogScopeKey = null
       this.refreshSnapshot()
       return
     }
 
-    this._pending = null
-    this._dialogOpen = false
+    this._pendingByScope.delete(scopeKey)
+    this._dialogScopeKey = null
     this.refreshSnapshot()
 
     // Wait for the aborted query's .catch/.finally to call releaseExecution
     // (which also dispatches stopRunning in its handler) before starting the
     // pending query. Otherwise execute() can fire toggleRunning(QUERY) while
     // running is still QUERY, producing a no-op useEffect.
-    const idle = this.waitForIdle()
-    this.abortActive()
+    const idle = this.waitForIdle(scopeKey)
+    this.abortActive(scopeKey)
     await idle
 
-    this._active = { bufferId: pending.bufferId, queryKey: pending.queryKey }
+    this._activeByScope.set(scopeKey, {
+      scopeKey,
+      bufferId: pending.bufferId,
+      queryKey: pending.queryKey,
+      abort: pending.abort,
+    })
     this.refreshSnapshot()
     pending.execute()
   }
 
-  dismissPending = (): void => {
-    this._pending = null
-    this._dialogOpen = false
+  dismissPending = (scopeKey?: ScopeKey): void => {
+    const targetScopeKey = scopeKey ?? this._dialogScopeKey
+    if (!targetScopeKey) return
+    this._pendingByScope.get(targetScopeKey)?.onDismiss?.()
+    this._pendingByScope.delete(targetScopeKey)
+    if (this._dialogScopeKey === targetScopeKey) {
+      this._dialogScopeKey = null
+    }
     this.refreshSnapshot()
   }
 
-  getActive = (): ActiveExecution | null => this._active
+  getActive = (
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): ActiveExecution | null => this._activeByScope.get(scopeKey) ?? null
 
-  getPending = (): ActiveExecution | null =>
-    this._pending === null
+  getPending = (scopeKey?: ScopeKey): ActiveExecution | null => {
+    const targetScopeKey = scopeKey ?? this._dialogScopeKey
+    const pending = targetScopeKey
+      ? this._pendingByScope.get(targetScopeKey)
+      : null
+    return pending === undefined || pending === null
       ? null
-      : { bufferId: this._pending.bufferId, queryKey: this._pending.queryKey }
+      : {
+          scopeKey: pending.scopeKey,
+          bufferId: pending.bufferId,
+          queryKey: pending.queryKey,
+          abort: pending.abort,
+        }
+  }
 
-  isDialogOpen = (): boolean => this._dialogOpen
+  isDialogOpen = (): boolean => this._dialogScopeKey !== null
 
-  isAnyRunning = (): boolean => this._active !== null
+  isAnyRunning = (
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): boolean => this._activeByScope.has(scopeKey)
 
-  runningQueryKey = (): QueryKey | null => this._active?.queryKey ?? null
+  runningQueryKey = (
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): QueryKey | null => this.getActive(scopeKey)?.queryKey ?? null
 
   subscribe = (listener: () => void): (() => void) => {
     this._listeners.add(listener)
@@ -177,9 +231,9 @@ export class QueryExecutionManager {
 
   private refreshSnapshot() {
     this._snapshot = {
-      active: this._active,
+      active: this.getActive(),
       pending: this.getPending(),
-      dialogOpen: this._dialogOpen,
+      dialogOpen: this.isDialogOpen(),
     }
     this._listeners.forEach((listener) => listener())
   }

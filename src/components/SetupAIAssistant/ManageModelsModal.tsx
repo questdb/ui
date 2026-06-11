@@ -138,9 +138,12 @@ export const ManageModelsModal = ({
                   initialValues={{
                     models: definition.models,
                     contextWindow: definition.contextWindow,
-                    grantSchemaAccess: definition.grantSchemaAccess,
+                    permissions: {
+                      grantSchemaAccess: definition.grantSchemaAccess,
+                      read: definition.read,
+                      write: definition.write,
+                    },
                   }}
-                  providerName={definition.name}
                   onLoadingChange={setModelsLoading}
                 />
               )}

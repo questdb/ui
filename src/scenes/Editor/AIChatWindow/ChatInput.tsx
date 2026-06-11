@@ -11,7 +11,7 @@ import styled from "styled-components"
 import { Box } from "../../../components"
 import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
-import { ArrowUpIcon, CodeBlockIcon } from "@phosphor-icons/react"
+import { ArrowUpIcon, CodeBlockIcon, NotebookIcon } from "@phosphor-icons/react"
 import {
   useAIStatus,
   isBlockingAIStatus,
@@ -98,35 +98,37 @@ const ContextBadgeContainer = styled.div`
   background: ${color("backgroundDarker")};
 `
 
-const ContextBadge = styled.button`
+const ContextBadge = styled.button<{ $warn?: boolean }>`
   display: flex;
   padding: 0.3rem 0.6rem;
   align-items: center;
   gap: 0.4rem;
   line-height: 1.4;
   border-radius: 0.6rem;
-  border: 1px solid ${color("selection")};
+  border: 1px solid
+    ${({ $warn, theme }) => ($warn ? theme.color.red : theme.color.selection)};
   background: ${color("chatBackground")};
-  color: ${color("gray2")};
+  color: ${({ theme }) => theme.color.gray2};
   font-size: 1.3rem;
   user-select: none;
-  cursor: pointer;
+  cursor: ${({ $warn }) => ($warn ? "default" : "pointer")};
   font-family: inherit;
 
   &:hover {
-    border: 1px solid ${color("offWhite")};
-    color: ${color("offWhite")};
+    border: 1px solid
+      ${({ $warn, theme }) => ($warn ? theme.color.red : theme.color.offWhite)};
+    color: ${({ theme }) => theme.color.offWhite};
   }
 `
 
-const ContextBadgeIcon = styled.div`
+const ContextBadgeIcon = styled.div<{ $warn?: boolean }>`
   display: flex;
   align-items: center;
   color: ${color("gray2")};
   flex-shrink: 0;
 
   svg {
-    color: ${color("gray2")};
+    color: ${({ $warn, theme }) => ($warn ? theme.color.red : color("gray2"))};
   }
 `
 
@@ -184,12 +186,19 @@ const StopButtonWrapper = styled.div`
   transform: translateY(-50%);
 `
 
+export type NotebookContext = {
+  label: string
+  warn?: "archived" | "deleted" | null
+  onClick: () => void | Promise<void>
+}
+
 type ChatInputProps = {
   onSend: (message: string) => void
   disabled?: boolean
   placeholder?: string
   contextSQL?: string
   contextTableId?: number
+  contextNotebook?: NotebookContext
   onContextClick: () => void
 }
 
@@ -212,6 +221,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       placeholder = "Ask a question or request a refinement...",
       contextSQL,
       contextTableId,
+      contextNotebook,
       onContextClick,
     },
     ref,
@@ -225,13 +235,23 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       return tables.find((t) => t.id === contextTableId) ?? null
     }, [contextTableId, tables])
 
-    // Determine what to show in context badge
-    const contextText = tableData?.table_name
-      ? truncateText(tableData.table_name)
-      : contextSQL
-        ? truncateText(contextSQL)
-        : null
+    // Notebook context wins over table/SQL when the chat is bound; bound chats never carry SQL context.
+    const contextText = contextNotebook
+      ? truncateText(contextNotebook.label)
+      : tableData?.table_name
+        ? truncateText(tableData.table_name)
+        : contextSQL
+          ? truncateText(contextSQL)
+          : null
     const hasContext = Boolean(contextText)
+    const notebookWarn = contextNotebook?.warn
+    const notebookBadgeTitle = contextNotebook
+      ? notebookWarn === "archived"
+        ? `Notebook archived`
+        : notebookWarn === "deleted"
+          ? `Notebook deleted`
+          : `Attached: ${contextNotebook.label} — click to switch`
+      : undefined
 
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -304,12 +324,20 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <ContextBadgeContainer>
                 <ContextBadge
                   type="button"
-                  onClick={onContextClick}
-                  aria-label={`Change context: ${contextText}`}
+                  $warn={Boolean(notebookWarn)}
+                  onClick={
+                    contextNotebook
+                      ? () => void contextNotebook.onClick()
+                      : onContextClick
+                  }
+                  title={notebookBadgeTitle}
+                  aria-label={`Chat context: ${contextText}`}
                   data-hook="chat-context-badge"
                 >
-                  <ContextBadgeIcon>
-                    {tableData ? (
+                  <ContextBadgeIcon $warn={Boolean(notebookWarn)}>
+                    {contextNotebook ? (
+                      <NotebookIcon size={14} weight="regular" />
+                    ) : tableData ? (
                       <TableIcon
                         kind={getTableKind(tableData)}
                         partitionBy={tableData.partitionBy}
@@ -320,7 +348,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                       <CodeBlockIcon size={14} weight="regular" />
                     )}
                   </ContextBadgeIcon>
-                  {contextText}
+                  {notebookWarn === "archived"
+                    ? `Archived: ${contextText}`
+                    : notebookWarn === "deleted"
+                      ? `Deleted: ${contextText}`
+                      : contextText}
                 </ContextBadge>
               </ContextBadgeContainer>
             )}

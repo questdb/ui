@@ -5,7 +5,6 @@ import { Dialog } from "../Dialog"
 import { Box } from "../Box"
 import { Input } from "../Input"
 import { Switch } from "../Switch"
-import { Checkbox } from "../Checkbox"
 import { Text } from "../Text"
 import { Button } from "../Button"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -34,6 +33,8 @@ import type {
   AiAssistantSettings,
   CustomProviderDefinition,
 } from "../../providers/LocalStorageProvider/types"
+import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
+import type { Permissions } from "../../utils/tools/permissions"
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
 import { CheckboxCircle } from "@styled-icons/remix-fill"
@@ -417,77 +418,6 @@ const ManageModelsButton = styled.button`
   }
 `
 
-const SchemaAccessSection = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "1.6rem",
-})`
-  width: 100%;
-`
-
-const SchemaAccessHeader = styled(Box).attrs({
-  justifyContent: "space-between",
-  align: "center",
-  gap: "1rem",
-})`
-  width: 100%;
-`
-
-const SchemaAccessTitle = styled(Text)`
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
-  flex: 1;
-`
-
-const SchemaCheckboxContainer = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "flex-start",
-})`
-  background: rgba(68, 71, 90, 0.56);
-  padding: 0.75rem;
-  border-radius: 0.4rem;
-  width: 100%;
-`
-
-const SchemaCheckboxInner = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "center",
-})`
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-`
-
-const SchemaCheckboxWrapper = styled.div`
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-`
-
-const SchemaCheckboxContent = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.6rem",
-})`
-  flex: 1;
-`
-
-const SchemaCheckboxLabel = styled(Text)`
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const SchemaCheckboxDescription = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
-const SchemaCheckboxDescriptionBold = styled.span`
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
 const RemoveProviderButton = styled(Button)`
   border: 0.1rem solid ${({ theme }) => theme.color.red};
   background: ${({ theme }) => theme.color.backgroundDarker};
@@ -621,16 +551,25 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       [],
     ),
   )
-  const [grantSchemaAccess, setGrantSchemaAccess] = useState<
-    Record<ProviderId, boolean>
+  const [permissions, setPermissions] = useState<
+    Record<ProviderId, Permissions>
   >(() =>
-    initializeProviderState((provider) => {
-      const providerSettings = aiAssistantSettings.providers?.[provider]
-      if (providerSettings) return providerSettings.grantSchemaAccess !== false
-      const custom = aiAssistantSettings.customProviders?.[provider]
-      if (custom) return custom.grantSchemaAccess !== false
-      return true
-    }, true),
+    initializeProviderState<Permissions>(
+      (provider) => {
+        const providerSettings = aiAssistantSettings.providers?.[provider]
+        const custom = aiAssistantSettings.customProviders?.[provider]
+        const source = providerSettings ?? custom
+        if (!source) {
+          return { grantSchemaAccess: true, read: false, write: false }
+        }
+        return {
+          grantSchemaAccess: source.grantSchemaAccess !== false,
+          read: source.read === true,
+          write: source.write === true,
+        }
+      },
+      { grantSchemaAccess: true, read: false, write: false },
+    ),
   )
   const [validatedApiKeys, setValidatedApiKeys] = useState<
     Record<ProviderId, boolean>
@@ -766,12 +705,17 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [],
   )
 
-  const handleSchemaAccessChange = useCallback(
-    (provider: ProviderId, checked: boolean) => {
-      if (!checked) {
-        void trackEvent(ConsoleEvent.AI_SETTINGS_SCHEMA_ACCESS_REMOVE)
-      }
-      setGrantSchemaAccess((prev) => ({ ...prev, [provider]: checked }))
+  // Emit the legacy schema-access-removed event on grantSchemaAccess → false
+  // so existing dashboards keep working.
+  const handlePermissionsChange = useCallback(
+    (provider: ProviderId, next: Permissions) => {
+      setPermissions((prev) => {
+        const prior = prev[provider]
+        if (prior?.grantSchemaAccess && !next.grantSchemaAccess) {
+          void trackEvent(ConsoleEvent.AI_SETTINGS_SCHEMA_ACCESS_REMOVE)
+        }
+        return { ...prev, [provider]: next }
+      })
     },
     [],
   )
@@ -783,10 +727,13 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     for (const provider of allProviderIds) {
       const isCustom = !BUILTIN_PROVIDERS[provider]
       if (validatedApiKeys[provider] || isCustom) {
+        const perms = permissions[provider]
         updatedProviders[provider] = {
           apiKey: apiKeys[provider] ?? "",
           enabledModels: enabledModels[provider],
-          grantSchemaAccess: grantSchemaAccess[provider],
+          grantSchemaAccess: perms.grantSchemaAccess,
+          read: perms.read,
+          write: perms.write,
         }
       } else {
         delete updatedProviders[provider]
@@ -800,17 +747,19 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       }
     }
 
-    // Sync API keys and schema access into custom provider definitions
     const updatedCustomProviders =
       Object.keys(localCustomProviders).length > 0
         ? { ...localCustomProviders }
         : undefined
     if (updatedCustomProviders) {
       for (const provider of Object.keys(updatedCustomProviders)) {
+        const perms = permissions[provider]
         updatedCustomProviders[provider] = {
           ...updatedCustomProviders[provider],
           apiKey: apiKeys[provider] || undefined,
-          grantSchemaAccess: grantSchemaAccess[provider],
+          grantSchemaAccess: perms.grantSchemaAccess,
+          read: perms.read,
+          write: perms.write,
         }
       }
     }
@@ -837,7 +786,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     localCustomProviders,
     apiKeys,
     enabledModels,
-    grantSchemaAccess,
+    permissions,
     validatedApiKeys,
     updateSettings,
     onOpenChange,
@@ -862,7 +811,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       }
 
       setApiKeys((prev) => ({ ...prev, [providerId]: "" }))
-      setGrantSchemaAccess((prev) => ({ ...prev, [providerId]: false }))
+      setPermissions((prev) => ({
+        ...prev,
+        [providerId]: { grantSchemaAccess: false, read: false, write: false },
+      }))
       setValidatedApiKeys((prev) => ({ ...prev, [providerId]: false }))
       setValidationState((prev) => ({ ...prev, [providerId]: "idle" }))
       setValidationErrors((prev) => ({ ...prev, [providerId]: null }))
@@ -899,9 +851,13 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         ...prev,
         [providerId]: definition.apiKey ?? "",
       }))
-      setGrantSchemaAccess((prev) => ({
+      setPermissions((prev) => ({
         ...prev,
-        [providerId]: definition.grantSchemaAccess ?? false,
+        [providerId]: {
+          grantSchemaAccess: definition.grantSchemaAccess ?? false,
+          read: definition.read ?? false,
+          write: definition.write ?? false,
+        },
       }))
       setValidatedApiKeys((prev) => ({
         ...prev,
@@ -922,6 +878,8 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           apiKey: definition.apiKey ?? "",
           enabledModels: newEnabledModels,
           grantSchemaAccess: definition.grantSchemaAccess ?? false,
+          read: definition.read ?? false,
+          write: definition.write ?? false,
         },
       }
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
@@ -1341,53 +1299,23 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     </Box>
                   </ContentSection>
                   <ContentSection>
-                    <SchemaAccessSection>
-                      <SchemaAccessHeader>
-                        <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
-                      </SchemaAccessHeader>
-                      <SchemaCheckboxContainer>
-                        <SchemaCheckboxInner>
-                          <SchemaCheckboxWrapper>
-                            <Checkbox
-                              id={`schema-access-${selectedProvider}`}
-                              checked={
-                                grantSchemaAccess[selectedProvider] ?? false
-                              }
-                              onChange={(e) =>
-                                handleSchemaAccessChange(
-                                  selectedProvider,
-                                  e.target.checked,
-                                )
-                              }
-                              disabled={
-                                !currentProviderValidated &&
-                                !(
-                                  isCustomProvider &&
-                                  modelsForProvider.length > 0
-                                )
-                              }
-                              data-hook="ai-settings-schema-access"
-                            />
-                          </SchemaCheckboxWrapper>
-                          <SchemaCheckboxContent align="flex-start">
-                            <SchemaCheckboxLabel>
-                              Grant schema access to{" "}
-                              {getProviderName(selectedProvider, localSettings)}
-                            </SchemaCheckboxLabel>
-                            <SchemaCheckboxDescription>
-                              When enabled, the AI assistant can access your
-                              database schema information to provide more
-                              accurate suggestions and explanations. Schema
-                              information helps the AI understand your table
-                              structures, column names, and relationships.{" "}
-                              <SchemaCheckboxDescriptionBold>
-                                The AI model will not have access to your data.
-                              </SchemaCheckboxDescriptionBold>
-                            </SchemaCheckboxDescription>
-                          </SchemaCheckboxContent>
-                        </SchemaCheckboxInner>
-                      </SchemaCheckboxContainer>
-                    </SchemaAccessSection>
+                    <PermissionsSection
+                      value={
+                        permissions[selectedProvider] ?? {
+                          grantSchemaAccess: false,
+                          read: false,
+                          write: false,
+                        }
+                      }
+                      onChange={(next) =>
+                        handlePermissionsChange(selectedProvider, next)
+                      }
+                      disabled={
+                        !currentProviderValidated &&
+                        !(isCustomProvider && modelsForProvider.length > 0)
+                      }
+                      variant="rich"
+                    />
                   </ContentSection>
                   <ContentSection style={{ alignItems: "flex-start" }}>
                     <RemoveProviderButton
