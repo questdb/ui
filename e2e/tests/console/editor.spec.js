@@ -246,6 +246,75 @@ describe("run query with selection", () => {
       `EXPLAIN ${subQuery}`,
     )
   })
+
+  it("should cancel the running query without opening the run-all modal when all queries are selected", () => {
+    // Given a long-running single query
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(3000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    // When the user runs a single query
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    // Then it is running and the Cancel button is shown
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user selects all queries (e.g. to share the console window)
+    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 3, column: 10 })
+    cy.wait(150) // let the selection propagate to queriesToRun (> 1)
+
+    // Then the Cancel button still cancels the running query instead of triggering a run
+    cy.getByDataHook("button-cancel-query").should("be.visible").click()
+
+    // Then no run cancellation modal is shown and the query is cancelled
+    cy.getByRole("dialog").should("not.exist")
+    cy.getByDataHook("run-all-queries-confirm").should("not.exist")
+    cy.getByDataHook("button-run-query").should("be.visible")
+
+    // When the user runs a single query again
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user selects all queries and triggers a run with the keyboard
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      editor.setSelection({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 3,
+        endColumn: 10,
+      })
+      editor.focus()
+    })
+    cy.wait(150) // let the selection propagate to queriesToRun (> 1)
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+
+    // Then the run cancellation modal appears for the selected queries
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run selected queries")
+    cy.getByDataHook("run-all-queries-warning").should(
+      "contain",
+      "Current query execution will be aborted",
+    )
+
+    // When the user confirms
+    cy.getByDataHook("run-all-queries-confirm").click()
+
+    // Then the previously running query is cancelled
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "Cancelled by user")
+
+    // And all the selected queries run one by one
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+3 successful\s+queries/)
+  })
 })
 
 describe("run all queries in tab", () => {
@@ -407,6 +476,36 @@ describe("run all queries in tab", () => {
     // Then
     cy.typeQuery("should not be visible")
     cy.getEditorContent().should("not.contain", "should not be visible")
+  })
+
+  it("should not allow adding a new tab while running script", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    cy.getEditorTabs().then(($tabs) => {
+      const initialTabCount = $tabs.length
+
+      // When
+      cy.clickRunScript()
+
+      // Then the new tab button is not interactive
+      cy.get(".new-tab-button-wrapper").should(
+        "have.css",
+        "pointer-events",
+        "none",
+      )
+
+      // When forcing a click past the disabled styling
+      cy.getByDataHook("new-tab-button").click({ force: true })
+
+      // Then no new tab is added
+      cy.getEditorTabs().should("have.length", initialTabCount)
+    })
   })
 
   it("should move cursor to the failed query after running script", () => {

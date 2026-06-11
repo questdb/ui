@@ -1026,31 +1026,6 @@ export const shiftOffset = (
   return offset >= changeOffset ? offset + delta : offset
 }
 
-export const validateQueryAtOffset = (
-  editor: IStandaloneCodeEditor,
-  queryText: string,
-  offset: number,
-): boolean => {
-  const model = editor.getModel()
-  if (!model) return false
-
-  const totalLength = model.getValueLength()
-  if (offset < 0 || offset >= totalLength) return false
-
-  const offsetPosition = model.getPositionAt(offset)
-
-  const queryInEditor = getQueriesInRange(
-    editor,
-    offsetPosition,
-    offsetPosition,
-  )[0]
-  if (!queryInEditor) return false
-
-  return (
-    normalizeQueryText(queryInEditor.query) === normalizeQueryText(queryText)
-  )
-}
-
 export const createQueryKeyFromRequest = (
   editor: IStandaloneCodeEditor,
   request: Request,

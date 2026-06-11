@@ -22,9 +22,19 @@ jobs:
           distribution: "temurin"
           cache: maven
 
+      - name: Resolve build profiles
+        id: profiles
+        run: |
+          v=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' e2e/questdb/core/pom.xml | sed 's/.*>//')
+          if [[ "$v" == *-SNAPSHOT ]]; then
+            echo "list=build-binaries,local-client" >> "$GITHUB_OUTPUT"
+          else
+            echo "list=build-binaries" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build QuestDB
         run:
-          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P build-binaries
+          mvn clean package -f e2e/questdb/pom.xml -DskipTests -P ${{ steps.profiles.outputs.list }}
 
       - name: Extract QuestDB
         run:
