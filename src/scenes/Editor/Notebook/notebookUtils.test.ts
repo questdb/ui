@@ -441,7 +441,8 @@ describe("duplicateCellAt", () => {
     const copy = out[1]
     expect(copy.id).toBe("new-id")
     expect(copy.result).toBe(null)
-    // the copy's write already ran via the original; auto-run must see ranBefore
+    // the copy's write already ran via the original; agents read this from
+    // last_run_status before deciding on an explicit run_cell
     expect(copy.lastRunStatus).toBe("success")
   })
 
@@ -706,7 +707,7 @@ describe("buildAppliedCells", () => {
   it("preserves run history as lastRunStatus when a value change drops the result", () => {
     // A run cell carries its outcome only in the live `result` during a
     // session; dropping it on a value change must collapse to lastRunStatus so
-    // a later apply still sees the cell ran and skips re-running the write.
+    // agents still see that the cell ran.
     const prev: NotebookCell[] = [
       {
         id: "a",

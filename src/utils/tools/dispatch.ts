@@ -399,16 +399,23 @@ export const dispatchTool = async (
           )
           if (run) {
             if (perms && validateSql) {
-              const decision = await classifyAndCheckSqlForExecution(
+              const decision = await classifyAndCheckSqlForAutoRun(
                 sql,
-                perms,
                 validateSql,
               )
-              if (!decision.granted) {
+              if (decision.action === "deny") {
                 return {
                   cellId,
                   ran: false,
                   error: decision.reason,
+                }
+              }
+              if (decision.action === "skip") {
+                return {
+                  cellId,
+                  ran: false,
+                  skipped: true,
+                  note: decision.reason,
                 }
               }
             }
@@ -821,10 +828,8 @@ export const dispatchTool = async (
           }
         }
         // Shared by the draw-invariant gate (below) and the post-apply
-        // auto-run loop (after applyNotebookState). Run history is captured
-        // pre-apply so the auto-run gate can tell re-sent cells from new ones.
+        // auto-run loop's mode resolution.
         const existingModes = new Map<string, CellMode | undefined>()
-        const existingRanBefore = new Map<string, boolean>()
         if (validateSql) {
           await Promise.all(
             cells.map(async (c) => {
@@ -832,11 +837,6 @@ export const dispatchTool = async (
               try {
                 const existing = await modelToolsClient.getCell(buffer_id, c.id)
                 existingModes.set(c.id, existing.mode)
-                existingRanBefore.set(
-                  c.id,
-                  existing.last_run_status !== undefined &&
-                    existing.last_run_status !== "none",
-                )
               } catch {
                 // Let applyNotebookState's all-or-nothing validation surface
                 // the precise unknown-cell error.
@@ -941,7 +941,6 @@ export const dispatchTool = async (
             cellId: string
             value: string
             runnable: boolean
-            ranBefore: boolean
           }
           const resolved: ResolvedRun[] = []
           let newCellIdx = 0
@@ -964,11 +963,7 @@ export const dispatchTool = async (
               resolvedMode === "run" &&
               value !== null &&
               value.trim().length > 0
-            const ranBefore =
-              requestedId !== undefined
-                ? (existingRanBefore.get(requestedId) ?? false)
-                : false
-            resolved.push({ cellId, value: value ?? "", runnable, ranBefore })
+            resolved.push({ cellId, value: value ?? "", runnable })
           }
           type RunEntry = {
             cellId: string
@@ -986,9 +981,7 @@ export const dispatchTool = async (
               if (perms && validateSql) {
                 const decision = await classifyAndCheckSqlForAutoRun(
                   r.value,
-                  perms,
                   validateSql,
-                  r.ranBefore,
                 )
                 if (decision.action === "deny") {
                   return {

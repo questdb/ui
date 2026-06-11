@@ -194,16 +194,14 @@ export type AutoRunDecision =
   | { action: "deny"; reason: string }
   | { action: "skip"; reason: string }
 
-const skipReasonForRanWrite = (queryType: string): string =>
-  `AUTO_RUN_SKIPPED: this cell contains a '${queryType}' (write) statement and has run before, ` +
-  "so it was NOT executed — auto-run never re-executes DDL/DML side effects. " +
-  "If re-execution is intended, call run_cell explicitly."
+const skipReasonForWrite = (queryType: string): string =>
+  `AUTO_RUN_SKIPPED: this cell contains a '${queryType}' (write) statement, ` +
+  "so it was NOT executed — agent flows never auto-run DDL/DML. " +
+  "Confirm with the user, then call run_cell explicitly."
 
 export const classifyAndCheckSqlForAutoRun = async (
   sql: string,
-  perms: Permissions,
   validate: (sql: string) => Promise<ValidateQueryResult>,
-  ranBefore: boolean,
 ): Promise<AutoRunDecision> => {
   let stmts: ClassifiedStatement[]
   try {
@@ -216,20 +214,11 @@ export const classifyAndCheckSqlForAutoRun = async (
     }
   }
   const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
-  if (writeStmt && !perms.write) {
-    return {
-      action: "deny",
-      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
-    }
-  }
   if (!writeStmt) return { action: "run" }
-  if (ranBefore) {
-    return {
-      action: "skip",
-      reason: skipReasonForRanWrite(writeStmt.queryType ?? "write"),
-    }
+  return {
+    action: "skip",
+    reason: skipReasonForWrite(writeStmt.queryType ?? "write"),
   }
-  return { action: "run" }
 }
 
 // Permission-independent: drawing a write query is semantically incoherent,

@@ -1130,6 +1130,38 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const parsed = JSON.parse(res.content) as { ran?: boolean }
     expect(parsed.ran).toBe(true)
   })
+
+  it("skips add_cell run when the cell contains DDL/DML — the cell is still added", async () => {
+    const runCell = vi.fn()
+    const client = makeClient({ runCell })
+    const res = await dispatchTool(
+      "add_cell",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
+      client,
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+    )
+    expect(res.is_error).toBeFalsy()
+    expect(client.addCell).toHaveBeenCalledWith(
+      1,
+      "INSERT INTO t VALUES (1)",
+      undefined,
+    )
+    expect(runCell).not.toHaveBeenCalled()
+    const parsed = JSON.parse(res.content) as {
+      cellId: string
+      ran: boolean
+      skipped?: boolean
+      note?: string
+    }
+    expect(parsed).toMatchObject({
+      cellId: "new-cell",
+      ran: false,
+      skipped: true,
+    })
+    expect(parsed.note).toMatch(/run_cell/)
+  })
 })
 
 describe("dispatchTool — apply_notebook_state auto-run", () => {
@@ -1278,7 +1310,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(runCell).not.toHaveBeenCalled()
   })
 
-  it("denies execution of DDL/DML run cells when write permission is absent", async () => {
+  it("skips DDL/DML run cells regardless of the write permission", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({
         success: true,
@@ -1310,14 +1342,19 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(res.is_error).toBeFalsy()
     expect(runCell).not.toHaveBeenCalled()
     const parsed = JSON.parse(res.content) as {
-      runs: Array<{ cellId: string; success: boolean; error?: string }>
+      runs: Array<{
+        cellId: string
+        success: boolean
+        skipped?: boolean
+        note?: string
+      }>
     }
     expect(parsed.runs).toHaveLength(1)
-    expect(parsed.runs[0].success).toBe(false)
-    expect(parsed.runs[0].error).toMatch(/'write' permission/)
+    expect(parsed.runs[0]).toMatchObject({ success: true, skipped: true })
+    expect(parsed.runs[0].note).toMatch(/run_cell/)
   })
 
-  it("skips re-sent DDL/DML cells that ran before (no implicit re-execution)", async () => {
+  it("skips DDL/DML cells regardless of run history (writes never auto-run)", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({
         success: true,
@@ -1375,7 +1412,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(parsed.runs[0].note).toMatch(/run_cell/)
   })
 
-  it("runs DDL/DML cells that never ran before (new or unrun existing)", async () => {
+  it("skips DDL/DML cells that never ran before (only run_cell executes writes)", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({
         success: true,
@@ -1401,7 +1438,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
         }),
       ),
     })
-    await dispatchTool(
+    const res = await dispatchTool(
       "apply_notebook_state",
       {
         buffer_id: 1,
@@ -1417,7 +1454,20 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       vi.fn().mockResolvedValue({ queryType: "INSERT" }),
     )
-    expect(runCell).toHaveBeenCalledTimes(2)
+    expect(runCell).not.toHaveBeenCalled()
+    const parsed = JSON.parse(res.content) as {
+      runs: Array<{
+        cellId: string
+        success: boolean
+        skipped?: boolean
+        note?: string
+      }>
+    }
+    expect(parsed.runs).toHaveLength(2)
+    for (const run of parsed.runs) {
+      expect(run).toMatchObject({ success: true, skipped: true })
+      expect(run.note).toMatch(/run_cell/)
+    }
   })
 
   it("re-runs DQL cells that ran before (only writes are history-gated)", async () => {
@@ -1950,7 +2000,7 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
     expect(sent.cells[0]).not.toHaveProperty("value")
   })
 
-  it("auto-run skips a preserved write cell that ran before, gating on its live SQL", async () => {
+  it("auto-run skips a preserved write cell, gating on its live SQL", async () => {
     const runCell = vi.fn(() =>
       Promise.resolve({
         success: true,

@@ -95,7 +95,8 @@ export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
 }
 
 // Run history must survive every path that drops the result blob (persist,
-// duplicate, clone) — auto-run relies on it to never re-execute a write.
+// duplicate, clone) — agents read last_run_status to decide whether a cell
+// still needs an explicit run_cell.
 const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
   cell.result ? collapseResultToRunStatus(cell.result) : cell.lastRunStatus
 

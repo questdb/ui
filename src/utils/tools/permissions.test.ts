@@ -365,88 +365,40 @@ describe("classifyAndCheckSqlForExecution", () => {
   })
 })
 
-describe("classifyAndCheckSqlForAutoRun (apply_notebook_state)", () => {
-  it("DQL that ran before → run (history only gates writes)", async () => {
+describe("classifyAndCheckSqlForAutoRun (apply_notebook_state / add_cell)", () => {
+  it("DQL → run", async () => {
     const validate = vi.fn().mockResolvedValue(dqlValidate("SELECT 1"))
-    expect(
-      await classifyAndCheckSqlForAutoRun("SELECT 1", ALL_ON, validate, true),
-    ).toEqual({ action: "run" })
+    expect(await classifyAndCheckSqlForAutoRun("SELECT 1", validate)).toEqual({
+      action: "run",
+    })
   })
 
-  it("DML with write that never ran → run", async () => {
-    const validate = vi.fn().mockResolvedValue(dmlValidate)
-    expect(
-      await classifyAndCheckSqlForAutoRun(
-        "INSERT INTO t VALUES (1)",
-        ALL_ON,
-        validate,
-        false,
-      ),
-    ).toEqual({ action: "run" })
-  })
-
-  it("DML with write that ran before → skip, points at run_cell", async () => {
+  it("DML → skip, points at run_cell (writes never auto-run)", async () => {
     const validate = vi.fn().mockResolvedValue(dmlValidate)
     const decision = await classifyAndCheckSqlForAutoRun(
       "INSERT INTO t VALUES (1)",
-      ALL_ON,
       validate,
-      true,
     )
     if (decision.action !== "skip") throw new Error("expected skip")
     expect(decision.reason).toMatch(/AUTO_RUN_SKIPPED/)
     expect(decision.reason).toMatch(/run_cell/)
   })
 
-  it("mixed DQL + DML cell that ran before → skip (statement-level, not cell typing)", async () => {
+  it("mixed DQL + DML cell → skip (statement-level, not cell typing)", async () => {
     const validate = validatorFor({
       "SELECT 1": dqlValidate("SELECT 1"),
       "INSERT INTO t VALUES (1)": dmlValidate,
     })
     const decision = await classifyAndCheckSqlForAutoRun(
       "SELECT 1; INSERT INTO t VALUES (1)",
-      ALL_ON,
       validate,
-      true,
     )
     expect(decision.action).toBe("skip")
   })
 
-  it("DQL auto-runs at every level — no rows return to the agent", async () => {
-    const validate = vi.fn().mockResolvedValue(dqlValidate("SELECT 1"))
-    for (const perms of [ALL_OFF, SCHEMA_ONLY, READ_ONLY, ALL_ON]) {
-      expect(
-        await classifyAndCheckSqlForAutoRun("SELECT 1", perms, validate, false),
-      ).toEqual({ action: "run" })
-    }
-  })
-
-  it("DML without write → deny regardless of run history", async () => {
-    const validate = vi.fn().mockResolvedValue(dmlValidate)
-    const fresh = await classifyAndCheckSqlForAutoRun(
-      "INSERT INTO t VALUES (1)",
-      READ_ONLY,
-      validate,
-      false,
-    )
-    const ran = await classifyAndCheckSqlForAutoRun(
-      "INSERT INTO t VALUES (1)",
-      READ_ONLY,
-      validate,
-      true,
-    )
-    expect(fresh.action).toBe("deny")
-    expect(ran.action).toBe("deny")
-  })
-
   it("validate failure → fail-closed deny", async () => {
     const validate = vi.fn().mockRejectedValue(new Error("network down"))
-    const decision = await classifyAndCheckSqlForAutoRun(
-      "SELECT 1",
-      ALL_ON,
-      validate,
-      false,
-    )
+    const decision = await classifyAndCheckSqlForAutoRun("SELECT 1", validate)
     if (decision.action !== "deny") throw new Error("expected deny")
     expect(decision.reason).toMatch(/network down/)
   })
