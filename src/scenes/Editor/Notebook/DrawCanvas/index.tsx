@@ -146,22 +146,37 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const inFlightRef = useRef<AbortController | null>(null)
   const lastSnapshotAtRef = useRef(0)
+  const lastSavedRef = useRef<{
+    sqlHash: string
+    results: QueryExecResult[]
+  } | null>(null)
 
   // Persist a bounded, throttled copy of the chart's rows — shared with run
   // mode (one snapshot per cell) so the chart survives reload without re-fetch.
+  // Frames identical to the last saved one are skipped; a changed frame blocked
+  // by the throttle retries on the next poll tick, so the final frame persists.
   const saveDrawSnapshot = useCallback(
     (execResults: QueryExecResult[]) => {
       if (bufferId === undefined) return
+      const currentSqlHash = sqlHash(debouncedSql)
+      const last = lastSavedRef.current
+      if (
+        last &&
+        last.sqlHash === currentSqlHash &&
+        resultsEquivalent(last.results, execResults)
+      )
+        return
       const now = Date.now()
       if (now - lastSnapshotAtRef.current < SNAPSHOT_THROTTLE_MS) return
       lastSnapshotAtRef.current = now
+      lastSavedRef.current = { sqlHash: currentSqlHash, results: execResults }
       const results = execResults.map((r) =>
         capResultBytes(singleResultFromExec(r, r.query), NOTEBOOK_BYTE_CAP),
       )
       void saveCellSnapshot({
         bufferId,
         cellId: cell.id,
-        sqlHash: sqlHash(debouncedSql),
+        sqlHash: currentSqlHash,
         results,
         savedAt: now,
       }).then(() => pruneToRecentNotebooks())

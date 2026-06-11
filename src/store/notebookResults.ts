@@ -50,16 +50,19 @@ export const deleteNotebookSnapshots = async (
 }
 
 // Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
-// recency is the latest `savedAt` among its cells. No-op until the budget is
-// exceeded.
+// recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
+// keys only — snapshot payloads are never deserialized.
 export const pruneToRecentNotebooks = async (
   keep: number = MAX_PERSISTED_NOTEBOOKS,
 ): Promise<void> => {
   const latestByBuffer = new Map<number, number>()
-  await db.notebook_results.each((row) => {
-    const prev = latestByBuffer.get(row.bufferId) ?? 0
-    if (row.savedAt > prev) latestByBuffer.set(row.bufferId, row.savedAt)
-  })
+  await db.notebook_results
+    .orderBy("savedAt")
+    .eachKey((savedAt, { primaryKey }) => {
+      // Ascending key order: the last write per buffer is its latest savedAt.
+      const [bufferId] = primaryKey
+      latestByBuffer.set(bufferId, savedAt as number)
+    })
   if (latestByBuffer.size <= keep) return
   const staleBuffers = Array.from(latestByBuffer.entries())
     .sort((a, b) => b[1] - a[1]) // newest first
