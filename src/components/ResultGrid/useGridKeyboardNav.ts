@@ -10,6 +10,8 @@ type ScrollContext = {
   scrollElement: HTMLElement
   rowHeight: number
   headerHeight: number
+  frozenWidth: number
+  frozenColCount: number
   getColumnOffset: (col: number) => number
   getColumnWidth: (col: number) => number
 }
@@ -19,6 +21,8 @@ const scrollCellIntoView = (cell: CellCoord, ctx: ScrollContext) => {
     scrollElement,
     rowHeight,
     headerHeight,
+    frozenWidth,
+    frozenColCount,
     getColumnOffset,
     getColumnWidth,
   } = ctx
@@ -34,13 +38,15 @@ const scrollCellIntoView = (cell: CellCoord, ctx: ScrollContext) => {
     scrollElement.scrollTop = cellBottom - scrollElement.clientHeight
   }
 
+  if (cell.col < frozenColCount) return
+
   const cellLeft = getColumnOffset(cell.col)
   const cellRight = cellLeft + getColumnWidth(cell.col)
-  const viewLeft = scrollElement.scrollLeft
+  const viewLeft = scrollElement.scrollLeft + frozenWidth
   const viewRight = scrollElement.scrollLeft + scrollElement.clientWidth
 
   if (cellLeft < viewLeft) {
-    scrollElement.scrollLeft = cellLeft
+    scrollElement.scrollLeft = cellLeft - frozenWidth
   } else if (cellRight > viewRight) {
     scrollElement.scrollLeft = cellRight - scrollElement.clientWidth
   }

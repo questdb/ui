@@ -284,17 +284,38 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     )
 
     const moveColumnToFront = useCallback(
-      (visualCol: number) => {
+      (visualCol: number): number | null => {
         const id = visualLeafIds[visualCol]
-        if (!id) return
+        if (!id) return null
+        const frontIndex = visualCol < frozenCount ? 0 : frozenCount
+        if (visualCol === frontIndex) return frontIndex
+        // A frozen column reorders within the frozen band — its columnOrder is
+        // ignored while pinned, so reorder the pin list instead, landing it at
+        // visual index 0. This matches the legacy grid.
+        if (visualCol < frozenCount) {
+          const left = columnPinning.left ?? []
+          const nextLeft = [id, ...left.filter((other) => other !== id)]
+          setColumnPinning({ left: nextLeft, right: [] })
+          onPinnedColumnsCommit?.(nextLeft)
+          return frontIndex
+        }
         const ids = columnOrder.length
           ? columnOrder
           : columnDefs.map((d) => d.id as string)
         const next = [id, ...ids.filter((other) => other !== id)]
         setColumnOrder(next)
         onColumnOrderCommit?.(next)
+        return frontIndex
       },
-      [visualLeafIds, columnOrder, columnDefs, onColumnOrderCommit],
+      [
+        visualLeafIds,
+        frozenCount,
+        columnPinning,
+        columnOrder,
+        columnDefs,
+        onColumnOrderCommit,
+        onPinnedColumnsCommit,
+      ],
     )
 
     const toggleFreeze = useCallback(() => {
@@ -382,6 +403,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       scrollElement: HTMLElement
       rowHeight: number
       headerHeight: number
+      frozenWidth: number
+      frozenColCount: number
       getColumnOffset: (col: number) => number
       getColumnWidth: (col: number) => number
     } | null>(null)
@@ -392,6 +415,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           scrollElement: scrollRef.current,
           rowHeight: ROW_HEIGHT,
           headerHeight: HEADER_HEIGHT,
+          frozenWidth,
+          frozenColCount: frozenCount,
           getColumnOffset: (col: number) => {
             let offset = 0
             for (let i = 0; i < col; i++) {
@@ -402,7 +427,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           getColumnWidth: (col: number) => headers[col]?.getSize() ?? 0,
         }
       }
-    }, [headers])
+    }, [headers, frozenWidth, frozenCount])
 
     const {
       focusedCell,
@@ -444,8 +469,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         if (e.key === "/" && !e.metaKey && !e.ctrlKey && focusedCell) {
           e.preventDefault()
           e.stopPropagation()
-          moveColumnToFront(focusedCell.col)
-          setFocusedCell({ row: focusedCell.row, col: frozenCount })
+          const targetCol = moveColumnToFront(focusedCell.col)
+          if (targetCol !== null) {
+            setFocusedCell({ row: focusedCell.row, col: targetCol })
+          }
           return
         }
         // preventDefault stops the browser's bookmark shortcut.
@@ -464,7 +491,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         onYieldFocus,
         setFocusedCell,
         resetLayout,
-        frozenCount,
       ],
     )
 
@@ -475,8 +501,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         toggleFreezeLeft: toggleFreeze,
         shuffleFocusedColumnToFront: () => {
           if (!focusedCell) return
-          moveColumnToFront(focusedCell.col)
-          setFocusedCell({ row: focusedCell.row, col: frozenCount })
+          const targetCol = moveColumnToFront(focusedCell.col)
+          if (targetCol !== null) {
+            setFocusedCell({ row: focusedCell.row, col: targetCol })
+          }
         },
       }),
       [
@@ -485,7 +513,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         focusedCell,
         moveColumnToFront,
         setFocusedCell,
-        frozenCount,
       ],
     )
 

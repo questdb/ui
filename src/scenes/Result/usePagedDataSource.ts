@@ -52,6 +52,7 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
   const cacheRef = useRef<Map<number, ResultGridRow[]>>(new Map())
   const loPageRef = useRef(0)
   const hiPageRef = useRef(0)
+  const currentPageRef = useRef(0)
   const sqlRef = useRef("")
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const resultGenerationRef = useRef(0)
@@ -153,6 +154,7 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
     cacheRef.current.set(0, result.dataset)
     loPageRef.current = 0
     hiPageRef.current = 0
+    currentPageRef.current = 0
     sqlRef.current = result.query
     resultGenerationRef.current += 1
     setMeta({
@@ -184,6 +186,7 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
       lastIndex: number
       direction: number
     }) => {
+      currentPageRef.current = Math.floor(firstIndex / PAGE_SIZE)
       computeDataPages(direction, firstIndex, lastIndex)
     },
     [],
@@ -203,21 +206,16 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
 
   const getSQL = useCallback(() => sqlRef.current, [])
 
-  const getLoadedRows = useCallback((): ResultGridRow[] => {
-    const pages = Array.from(cacheRef.current.keys()).sort((a, b) => a - b)
-    const rows: ResultGridRow[] = []
-    for (const page of pages) {
-      const data = cacheRef.current.get(page)
-      if (data) rows.push(...data)
-    }
-    return rows
-  }, [])
+  const getCurrentPageRows = useCallback(
+    (): ResultGridRow[] => cacheRef.current.get(currentPageRef.current) ?? [],
+    [],
+  )
 
   return {
     dataSource,
     setResult,
     getSQL,
-    getLoadedRows,
+    getCurrentPageRows,
     hasData: meta.columns.length > 0,
   }
 }

@@ -338,8 +338,8 @@ export const FrozenShadow = styled.div`
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.25), transparent);
+  width: 16px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
   pointer-events: none;
   z-index: 3;
 `

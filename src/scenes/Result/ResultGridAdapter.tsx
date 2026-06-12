@@ -51,7 +51,7 @@ export const ResultGridAdapter = forwardRef<
   IQuestDBGrid,
   ResultGridAdapterProps
 >(({ isFocused = true, paginationFn }, ref) => {
-  const { dataSource, setResult, getSQL, getLoadedRows, hasData } =
+  const { dataSource, setResult, getSQL, getCurrentPageRows, hasData } =
     usePagedDataSource(paginationFn)
 
   const [visible, setVisible] = useState(true)
@@ -147,9 +147,9 @@ export const ResultGridAdapter = forwardRef<
       toggleFreezeLeft: () => gridImperativeRef.current?.toggleFreezeLeft(),
 
       getResultAsMarkdown: () =>
-        buildResultPageMarkdown(columnsRef.current, getLoadedRows()),
+        buildResultPageMarkdown(columnsRef.current, getCurrentPageRows()),
     }),
-    [setResult, getSQL, getLoadedRows, emit],
+    [setResult, getSQL, getCurrentPageRows, emit],
   )
 
   return (
