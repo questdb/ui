@@ -3,6 +3,7 @@ import {
   LEAP_TAIL_ROWS,
   MAX_VIRTUAL_ROWS,
   toAbsoluteIndex,
+  toVisibleAbsoluteRange,
 } from "./virtualRowMapping"
 
 describe("toAbsoluteIndex", () => {
@@ -29,5 +30,92 @@ describe("toAbsoluteIndex", () => {
     expect(toAbsoluteIndex(headCount, rowCount)).toBe(rowCount - LEAP_TAIL_ROWS)
     // The very last virtual row resolves to the very last real row.
     expect(toAbsoluteIndex(MAX_VIRTUAL_ROWS - 1, rowCount)).toBe(rowCount - 1)
+  })
+})
+
+describe("toVisibleAbsoluteRange", () => {
+  const headCount = MAX_VIRTUAL_ROWS - LEAP_TAIL_ROWS
+
+  it("maps both ends directly when the result fits within the height cap", () => {
+    // Given a result below the cap
+    const rowCount = 5000
+
+    // When the visible window is anywhere in it
+    const range = toVisibleAbsoluteRange(100, 130, rowCount)
+
+    // Then the range is the identity mapping
+    expect(range).toEqual({ firstIndex: 100, lastIndex: 130 })
+  })
+
+  it("maps a window fully inside the head 1:1", () => {
+    // Given a result past the cap
+    const rowCount = MAX_VIRTUAL_ROWS * 3
+
+    // When the window ends before the leap
+    const range = toVisibleAbsoluteRange(
+      headCount - 50,
+      headCount - 20,
+      rowCount,
+    )
+
+    // Then both ends stay 1:1
+    expect(range).toEqual({
+      firstIndex: headCount - 50,
+      lastIndex: headCount - 20,
+    })
+  })
+
+  it("maps a window fully inside the tail onto the end of the result", () => {
+    // Given a result past the cap
+    const rowCount = MAX_VIRTUAL_ROWS * 3
+
+    // When the window sits entirely in the leap tail
+    const range = toVisibleAbsoluteRange(
+      headCount + 10,
+      headCount + 40,
+      rowCount,
+    )
+
+    // Then both ends resolve into the result's last LEAP_TAIL_ROWS window
+    expect(range).toEqual({
+      firstIndex: rowCount - LEAP_TAIL_ROWS + 10,
+      lastIndex: rowCount - LEAP_TAIL_ROWS + 40,
+    })
+  })
+
+  it("resolves a leap-straddling window to the head when it holds more rows", () => {
+    // Given a result past the cap
+    const rowCount = MAX_VIRTUAL_ROWS * 3
+
+    // When most of the window is above the leap
+    const range = toVisibleAbsoluteRange(
+      headCount - 20,
+      headCount + 5,
+      rowCount,
+    )
+
+    // Then the range is the contiguous head segment, never spanning the gap
+    expect(range).toEqual({
+      firstIndex: headCount - 20,
+      lastIndex: headCount - 1,
+    })
+  })
+
+  it("resolves a leap-straddling window to the tail when it holds more rows", () => {
+    // Given a result past the cap
+    const rowCount = MAX_VIRTUAL_ROWS * 3
+
+    // When most of the window is below the leap
+    const range = toVisibleAbsoluteRange(
+      headCount - 5,
+      headCount + 20,
+      rowCount,
+    )
+
+    // Then the range is the contiguous tail segment, never spanning the gap
+    expect(range).toEqual({
+      firstIndex: rowCount - LEAP_TAIL_ROWS,
+      lastIndex: rowCount - LEAP_TAIL_ROWS + 20,
+    })
   })
 })

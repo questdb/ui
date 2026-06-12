@@ -55,7 +55,10 @@ const scrollCellIntoView = (cell: CellCoord, ctx: ScrollContext) => {
 export const useGridKeyboardNav = (
   rowCount: number,
   colCount: number,
-  getData: (row: number, col: number) => boolean | string | number | null,
+  getData: (
+    row: number,
+    col: number,
+  ) => boolean | string | number | null | undefined,
   getColumn: (col: number) => ColumnDefinition | undefined,
   scrollContextRef: React.RefObject<ScrollContext | null>,
   onCopy?: () => void,
@@ -87,6 +90,8 @@ export const useGridKeyboardNav = (
   const copyCell = useCallback(
     (row: number, col: number) => {
       const value = getData(row, col)
+      // The cell's page hasn't loaded yet
+      if (value === undefined) return
       const text = formatCellValueForCopy(value, getColumn(col))
       onCopy?.()
       void copyToClipboard(text).then(() => {

@@ -21,7 +21,8 @@ import type { ColumnDefinition } from "../../utils/questdb/types"
 import { unescapeHtml } from "../../utils/escapeHtml"
 import type { ResultGridDataSource } from "./types"
 import {
-  computeColumnWidths,
+  clampColumnWidths,
+  sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
   formatColumnType,
@@ -48,7 +49,11 @@ import {
   ScrollContainer,
   StyledCopyButton,
 } from "./styles"
-import { MAX_VIRTUAL_ROWS, toAbsoluteIndex } from "./virtualRowMapping"
+import {
+  MAX_VIRTUAL_ROWS,
+  toAbsoluteIndex,
+  toVisibleAbsoluteRange,
+} from "./virtualRowMapping"
 import { useContainerWidth } from "./useContainerWidth"
 import { useScrollShadows } from "./useScrollShadows"
 
@@ -195,12 +200,15 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const virtualRowCount = Math.min(rowCount, MAX_VIRTUAL_ROWS)
 
+    // Sampling text lengths over 1000 rows is the expensive part, so it runs
+    // once per result; the per-resize work is only the container clamp.
+    const sampledWidths = useMemo(
+      () => sampleColumnWidths(columns, sampleRows.slice(0, WIDTH_SAMPLE_ROWS)),
+      [columns, sampleRows],
+    )
+
     const columnDefs = useMemo<ColumnDef<DatasetRow, unknown>[]>(() => {
-      const widths = computeColumnWidths(
-        columns,
-        sampleRows.slice(0, WIDTH_SAMPLE_ROWS),
-        containerWidth,
-      )
+      const widths = clampColumnWidths(sampledWidths, containerWidth)
       return columns.map((col, i) => ({
         id: columnId(i),
         accessorFn: (row: DatasetRow) => row[i],
@@ -209,7 +217,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         minSize: 60,
         meta: { col },
       }))
-    }, [columns, sampleRows, containerWidth])
+    }, [columns, sampledWidths, containerWidth])
 
     const [columnOrder, setColumnOrder] = useState<string[]>([])
     const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
@@ -264,9 +272,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [visualLeafIds],
     )
 
+    // undefined means the row's page hasn't loaded yet, unlike a SQL null.
     const getData = useCallback(
       (row: number, col: number) =>
-        getRow(toAbsoluteIndex(row, rowCount))?.[dataIndexAt(col)] ?? null,
+        getRow(toAbsoluteIndex(row, rowCount))?.[dataIndexAt(col)],
       [getRow, rowCount, dataIndexAt],
     )
 
@@ -566,13 +575,14 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const prevFirstAbsRef = useRef(0)
     useEffect(() => {
       if (!onVisibleRowsChange || virtualRowCount === 0) return
-      const firstAbs = toAbsoluteIndex(firstVirtual, rowCount)
-      const lastAbs = toAbsoluteIndex(lastVirtual, rowCount)
-      const lo = Math.min(firstAbs, lastAbs)
-      const hi = Math.max(firstAbs, lastAbs)
-      const direction = lo >= prevFirstAbsRef.current ? 1 : -1
-      prevFirstAbsRef.current = lo
-      onVisibleRowsChange({ firstIndex: lo, lastIndex: hi, direction })
+      const { firstIndex, lastIndex } = toVisibleAbsoluteRange(
+        firstVirtual,
+        lastVirtual,
+        rowCount,
+      )
+      const direction = firstIndex >= prevFirstAbsRef.current ? 1 : -1
+      prevFirstAbsRef.current = firstIndex
+      onVisibleRowsChange({ firstIndex, lastIndex, direction })
     }, [
       firstVirtual,
       lastVirtual,

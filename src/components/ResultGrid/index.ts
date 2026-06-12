@@ -9,7 +9,8 @@ export type {
 export { inMemoryDataSource } from "./types"
 
 export {
-  computeColumnWidths,
+  clampColumnWidths,
+  sampleColumnWidths,
   formatCellValue,
   formatCellValueForCopy,
   formatColumnType,

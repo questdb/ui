@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
-  computeColumnWidths,
+  clampColumnWidths,
+  sampleColumnWidths,
   formatCellValue,
   formatCellValueForCopy,
   formatColumnType,
@@ -205,55 +206,63 @@ describe("formatCellValueForCopy", () => {
   })
 })
 
-describe("computeColumnWidths", () => {
+describe("sampleColumnWidths", () => {
   it("returns one entry per column", () => {
     const columns = [col("a", "INT"), col("b", "STRING"), col("c", "DOUBLE")]
-    const widths = computeColumnWidths(columns, [], 1000)
+    const widths = sampleColumnWidths(columns, [])
     expect(widths).toHaveLength(3)
   })
 
   it("respects the MIN_COLUMN_WIDTH floor", () => {
-    const widths = computeColumnWidths([col("a", "INT")], [], 1000)
+    const widths = sampleColumnWidths([col("a", "INT")], [])
     expect(widths[0]).toBeGreaterThanOrEqual(60)
   })
 
-  it("clamps at maxWidth (containerWidth * 0.8)", () => {
-    const longValue = "x".repeat(1000)
-    const widths = computeColumnWidths(
-      [col("long", "STRING")],
-      [[longValue]],
-      1000,
-    )
-    expect(widths[0]).toBeLessThanOrEqual(800)
-  })
-
   it("widens for longer data values", () => {
-    const widthShort = computeColumnWidths(
-      [col("a", "STRING")],
-      [["hi"]],
-      1000,
-    )[0]
-    const widthLong = computeColumnWidths(
+    const widthShort = sampleColumnWidths([col("a", "STRING")], [["hi"]])[0]
+    const widthLong = sampleColumnWidths(
       [col("a", "STRING")],
       [["hello world this is longer"]],
-      1000,
     )[0]
     expect(widthLong).toBeGreaterThan(widthShort)
   })
 
   it("includes header + type length when sizing", () => {
-    const narrow = computeColumnWidths([col("x", "INT")], [[1]], 1000)[0]
-    const wide = computeColumnWidths(
+    const narrow = sampleColumnWidths([col("x", "INT")], [[1]])[0]
+    const wide = sampleColumnWidths(
       [col("extremely_long_column_name", "INT")],
       [[1]],
-      1000,
     )[0]
     expect(wide).toBeGreaterThan(narrow)
   })
 
   it("handles empty dataset", () => {
-    const widths = computeColumnWidths([col("a", "INT")], [], 1000)
+    const widths = sampleColumnWidths([col("a", "INT")], [])
     expect(widths).toHaveLength(1)
     expect(widths[0]).toBeGreaterThanOrEqual(60)
+  })
+})
+
+describe("clampColumnWidths", () => {
+  it("caps each width at containerWidth * 0.8", () => {
+    expect(clampColumnWidths([1000, 100], 1000)).toEqual([800, 100])
+  })
+
+  it("keeps widths below the cap untouched", () => {
+    expect(clampColumnWidths([200, 300], 1000)).toEqual([200, 300])
+  })
+
+  it("caps a long sampled value at the container limit", () => {
+    // Given a column whose sampled value is far wider than the container
+    const sampled = sampleColumnWidths(
+      [col("long", "STRING")],
+      [["x".repeat(1000)]],
+    )
+
+    // When the container clamp is applied
+    const widths = clampColumnWidths(sampled, 1000)
+
+    // Then the column never exceeds 80% of the container
+    expect(widths[0]).toBeLessThanOrEqual(800)
   })
 })
