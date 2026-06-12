@@ -156,7 +156,15 @@ Single-row vertical stepping is one frame on both grids — identical.
   ~75 ms load debounce + 10 ms mock latency, not paint.
 - **Small viewport** (~10–14 visible rows); a taller pane renders more cells per
   frame and would widen the deltas further.
-- **Virtual-row mapping differs.** For 1,000,000 rows, `ResultGrid` caps the
-  scroll canvas (`MAX_VIRTUAL_ROWS` ≈ 333k) and maps head 1:1 with a tail leap;
-  legacy scales proportionally. The harness asserts the focused cell against each
-  grid's own coordinate space, so corner jumps are verified on both.
+- **Virtual-row mapping — same idea on both grids.** For 1,000,000 rows neither
+  grid maps the full height proportionally: both cap the scroll canvas at
+  10,000,000 px (~333k rows at 30 px) and reach the head 1:1, then **leap to the
+  tail** when the scrollbar bottoms out, so the middle isn't addressable by
+  dragging on either. Legacy does it imperatively — `y += ΔscrollTop` with an
+  explicit "final leap to bottom" in `grid.js` (its `M = yMax/h` ratio is
+  computed but unused); `ResultGrid` does it with a pure `toAbsoluteIndex` map
+  (head 1:1 + a fixed 1,000-row tail) in `virtualRowMapping.ts`. The one thing
+  that genuinely differs is the **focus coordinate space**: the new grid's
+  keyboard focus row is the *virtual* row (≤ ~333k), the legacy grid's is the
+  *absolute* row (up to 999,999). The harness tracks the expected focus cell in
+  each grid's own space, so the corner-jump assertions are correct on both.
