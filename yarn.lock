@@ -2540,6 +2540,8 @@ __metadata:
     "@styled-icons/remix-fill": "npm:10.46.0"
     "@styled-icons/remix-line": "npm:10.46.0"
     "@styled-icons/styled-icon": "npm:^10.7.0"
+    "@tanstack/react-table": "npm:^8.21.3"
+    "@tanstack/react-virtual": "npm:^3.14.2"
     "@types/babel__core": "npm:^7"
     "@types/draggabilly": "npm:^2.1.6"
     "@types/echarts": "npm:^4.9.22"
@@ -3850,6 +3852,44 @@ __metadata:
   version: 1.15.7
   resolution: "@swc/wasm@npm:1.15.7"
   checksum: 10/6a8ddb6c905bcfb1fe69a9ffe8452bb6d11bbff8d23aea9a323ecc7873d72cf8211a8c58270d5b528b1b77167ac840b204345ed90bd67cd318e3e749410a12ef
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-table@npm:^8.21.3":
+  version: 8.21.3
+  resolution: "@tanstack/react-table@npm:8.21.3"
+  dependencies:
+    "@tanstack/table-core": "npm:8.21.3"
+  peerDependencies:
+    react: ">=16.8"
+    react-dom: ">=16.8"
+  checksum: 10/a32217ebe64d24e71dea6a6742bc288dcabf389657b16805a1ab3f347d3dca8262759c45c604a1f65bd97925d5cbdfb66d1be7637100a12eb5b279bdd420962d
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-virtual@npm:^3.14.2":
+  version: 3.14.2
+  resolution: "@tanstack/react-virtual@npm:3.14.2"
+  dependencies:
+    "@tanstack/virtual-core": "npm:3.17.0"
+  peerDependencies:
+    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+  checksum: 10/01816d6cb1d8e20b3b253764856c686126c753f4341aaee959457b517f5de75d51fb156ee2a8df74ac6a7bb1f068e18da260f7b33e1c2be797ca209cc5f7762b
+  languageName: node
+  linkType: hard
+
+"@tanstack/table-core@npm:8.21.3":
+  version: 8.21.3
+  resolution: "@tanstack/table-core@npm:8.21.3"
+  checksum: 10/aa05e5f80110f0f56d66161e950668ea6ef3e2ea4f3a2ccd5d5980b39b4feea987245b20531aee2c6743e6edd12c0361503413b63090c807f88a61b19bfd04f3
+  languageName: node
+  linkType: hard
+
+"@tanstack/virtual-core@npm:3.17.0":
+  version: 3.17.0
+  resolution: "@tanstack/virtual-core@npm:3.17.0"
+  checksum: 10/0f6bdd491ef49fe50fca17857ceee2f0c482cf5d5b3df4a4fa0164ed5194ea486a44b12acc10eae3863cfda7c9e8bb563059e5061211ef22c4970f67f4dec020
   languageName: node
   linkType: hard
 

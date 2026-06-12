@@ -43,6 +43,7 @@ type BaseButtonProps = {
   fontSize?: FontSize
   onClick?: (event: MouseEvent) => void
   onDoubleClick?: (event: MouseEvent) => void
+  onMouseDown?: (event: MouseEvent) => void
   size?: Size
   fullWidth?: boolean
   type?: Type

@@ -39,6 +39,7 @@ export type LocalConfig = {
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  useNewGrid: boolean
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
   aiChatPanelWidth: number
