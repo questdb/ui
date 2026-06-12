@@ -11,10 +11,22 @@ it (and how to strip it if we ever want to).
 
 ## What it measures and why
 
-The thing we care about is **input → fully repainted**: the wall-clock time from
-an action (a scroll, a key) landing to the frame where every visible cell shows
-real data and the rendered cells cover the viewport. Raw FPS hides this — a grid
-can paint empty cells instantly and fill them late.
+The thing we care about is **input → fully repainted *and correct***: the
+wall-clock time from an action (a scroll, a key) landing to the frame where the
+grid has actually settled into the right state. A step's timer stops only once
+**all** of these hold (else it waits, up to a timeout, and the step is counted as
+a failure):
+
+1. every visible cell shows the value for its own `(row, col)` — cells are seeded
+   self-describing (`r{row}c{col}`), so this catches blank, stale, *and*
+   column-misaligned cells;
+2. the rendered cells cover the viewport's content area (no half-painted scroll);
+3. for a keyboard move, the focused cell is at the exact expected `(row, col)`
+   with the value for that position.
+
+Raw FPS hides this — a grid can paint empty cells instantly and fill them late,
+or a synthetic key can silently do nothing. Asserting the end state is what makes
+the per-keystroke numbers trustworthy.
 
 Network/API latency dominates and varies run-to-run, so it would drown out the
 render cost we're comparing. The harness removes that variable by serving a
@@ -29,7 +41,8 @@ Two pieces, both already in the tree:
 1. [`src/scenes/Result/benchmarkMock.ts`](src/scenes/Result/benchmarkMock.ts) —
    synthesises a result of any `rows × cols` from one canned page (built once,
    served for every fetch) and exposes `isMockPagination`, `seedMock`,
-   `mockPaginate`.
+   `mockPaginate`. Cell values are **self-describing** (`r{row}c{col}`) so the
+   runner can assert each rendered cell holds the value for its own position.
 2. Three small hooks in
    [`src/scenes/Result/index.tsx`](src/scenes/Result/index.tsx), all guarded by
    `isMockPagination()`:
@@ -58,18 +71,23 @@ transport:
 |---|---|---|
 | viewport | `[data-hook="grid-viewport"]` | `.qg-viewport` |
 | cell | `[data-hook="grid-cell"]` | `.qg-c` |
+| active cell | `[aria-selected="true"]` + `cell-{row}-{col}` id | `.qg-c-active` + `.columnIndex` / parent `.rowIndex` |
 | key target | `[role="grid"]` (React synthetic key) | `.qg-canvas` (`keyCode`) |
 
 Paste the file's contents into the console (or inject via `page.evaluate`) to
 define `window.__gridBench`, then:
 
 ```js
-await window.__gridBench.run("vscroll_1m")   // → { median, p95, min, max, total, ... }
+await window.__gridBench.run("vscroll_1m")   // → { median, p95, min, max, total, failures, ... }
 window.__gridBench.cases                       // all case keys
 ```
 
 Each `run(key)` seeds the matching `rows × cols`, waits for the grid to fill,
-then drives the case and returns median / p95 / min / max / total settle times.
+drives the case asserting the end state of every step (focused cell index +
+value, and all visible cells correct), and returns median / p95 / min / max /
+total settle times plus a **`failures`** count (a step whose assertion never held
+within the timeout). `failures` should be `0`; a non-zero count with `sampleFail`
+means the run is not trustworthy.
 
 ### The seven cases
 

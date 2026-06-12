@@ -28,26 +28,14 @@ export type MockSeed = {
 let cannedPage: ResultGridRow[] = []
 
 const buildColumns = (cols: number): ColumnDefinition[] =>
-  Array.from({ length: cols }, (_, i) => {
-    if (i === 0) return { name: "ts", type: "TIMESTAMP" }
-    if (i % 3 === 1) return { name: `sym_${i}`, type: "SYMBOL" }
-    if (i % 3 === 2) return { name: `val_${i}`, type: "DOUBLE" }
-    return { name: `num_${i}`, type: "LONG" }
-  })
+  Array.from({ length: cols }, (_, i) => ({ name: `c${i}`, type: "SYMBOL" }))
 
+// Self-describing cell values: a cell shows "r{row}c{col}" so a benchmark can
+// assert each rendered cell holds the value for its own position (no stale or
+// column-misaligned data). The canned page repeats every PAGE_SIZE rows, so an
+// absolute row R shows the value for row R % PAGE_SIZE.
 const buildRow = (row: number, columns: ColumnDefinition[]): ResultGridRow =>
-  columns.map((col, c) => {
-    switch (col.type) {
-      case "TIMESTAMP":
-        return `2024-01-01T00:00:${String(row % 60).padStart(2, "0")}.000000Z`
-      case "SYMBOL":
-        return `sym_${row % 97}_${c}`
-      case "DOUBLE":
-        return (row + c) * 1.5
-      default:
-        return row * 1000 + c
-    }
-  })
+  columns.map((_, c) => `r${row}c${c}`)
 
 const buildCannedPage = (columns: ColumnDefinition[]): ResultGridRow[] =>
   Array.from({ length: PAGE_SIZE }, (_, row) => buildRow(row, columns))
@@ -60,7 +48,7 @@ export const seedMock = (rows: number, cols: number): MockSeed => {
     dataset: cannedPage.slice(),
     count: rows,
     query: `mock://${rows}x${cols}`,
-    timestamp: 0,
+    timestamp: -1,
   }
 }
 
