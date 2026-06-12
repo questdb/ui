@@ -175,14 +175,12 @@
     return samples
   }
 
-  const pageThrough = async (rows) => {
+  // Runs each [key, count] block in sequence (e.g. 100 PageDown then 100 PageUp).
+  const keyBlocks = async (blocks) => {
     await clickTopLeftCell()
-    const vp = viewport()
-    const rowsPerPage = Math.max(1, Math.floor((vp.clientHeight - 44) / 30))
-    const pages = Math.ceil(rows / rowsPerPage)
     const samples = []
-    for (let i = 0; i < pages; i++) samples.push(await settleAfter(KEY.pageDown))
-    for (let i = 0; i < pages; i++) samples.push(await settleAfter(KEY.pageUp))
+    for (const [key, count] of blocks)
+      for (let i = 0; i < count; i++) samples.push(await settleAfter(key))
     return samples
   }
 
@@ -200,22 +198,22 @@
       run: () => randomScroll("horizontal", 100),
     },
     homeend_cols: {
-      title: "Home / End across 10,000 columns",
+      title: "Home / End across 10,000 columns — 100 End/Home combinations",
       rows: 2_000,
       cols: 10_000,
-      run: () => keyAlternate([KEY.end, KEY.home], 60),
+      run: () => keyAlternate([KEY.end, KEY.home], 200),
     },
     pagedn_10k: {
-      title: "PageDown / PageUp through 10,000 rows",
+      title: "PageDown ×100 then PageUp ×100 — 10,000 rows",
       rows: 10_000,
       cols: 20,
-      run: () => pageThrough(10_000),
+      run: () => keyBlocks([[KEY.pageDown, 100], [KEY.pageUp, 100]]),
     },
     corners_1m_10k: {
-      title: "Corner jumps — leftmost-upper / rightmost-lower (1,000,000 × 10,000)",
+      title: "Corner jumps — bottom-right → top-left ×100 (1,000,000 × 10,000)",
       rows: 1_000_000,
       cols: 10_000,
-      run: () => keyAlternate([KEY.bottomRight, KEY.topLeft], 40),
+      run: () => keyAlternate([KEY.bottomRight, KEY.topLeft], 200),
     },
     arrow_right_1k: {
       title: "Right arrow through 1,000 columns",

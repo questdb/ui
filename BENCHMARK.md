@@ -77,9 +77,9 @@ then drives the case and returns median / p95 / min / max / total settle times.
 |---|---|---|
 | `vscroll_1m` | 100 randomized vertical scrolls | 1,000,000 × 20 |
 | `hscroll_10k` | 100 randomized horizontal scrolls | 2,000 × 10,000 |
-| `homeend_cols` | Home/End to first/last column, ×60 | 2,000 × 10,000 |
-| `pagedn_10k` | PageDown to the bottom then PageUp to the top | 10,000 × 20 |
-| `corners_1m_10k` | jump top-left / bottom-right via shortcuts, ×40 | 1,000,000 × 10,000 |
+| `homeend_cols` | 100 End→Home combinations (200 presses) | 2,000 × 10,000 |
+| `pagedn_10k` | PageDown ×100 then PageUp ×100 | 10,000 × 20 |
+| `corners_1m_10k` | bottom-right → top-left corner jumps via shortcuts, ×100 | 1,000,000 × 10,000 |
 | `arrow_right_1k` | 999 ArrowRight presses through the columns | 2,000 × 1,000 |
 | `arrow_down_1k` | 999 ArrowDown presses through the rows | 1,000 × 20 |
 

@@ -22,8 +22,8 @@ comparable.
 
 - **median / p95 / min / max** are per-step settle latencies (lower is better).
   Median and p95 are the comparable figures; max captures the worst stall.
-- **total** is the summed settle time over all steps — comparable only when the
-  step count matches (it differs for PageDown/PageUp, see below).
+- **total** is the summed settle time over all steps. Step counts now match
+  between the two grids for every case, so `total` is directly comparable.
 - Two effects are baked into the absolute numbers equally for both grids and are
   **not** pure render cost:
   - **Paging debounce + latency.** A scroll/jump into an unloaded region waits a
@@ -36,13 +36,13 @@ comparable.
 
 | Case | Legacy | ResultGrid | Winner |
 |---|---:|---:|:--|
-| Randomized vertical scroll — 1,000,000 rows | 96.9 | 105.0 | ≈ even (legacy +8%) |
-| Randomized horizontal scroll — 10,000 columns | 28.9 | **16.4** | **ResultGrid 1.8×** |
-| Home / End across 10,000 columns | 47.6 | **24.8** | **ResultGrid 1.9×** |
-| PageDown / PageUp through 10,000 rows | 8.3 | 8.3 | ≈ even |
-| Corner jumps — top-left / bottom-right (1,000,000 × 10,000) | 152.8 | **121.3** | **ResultGrid 1.3×** |
-| Right arrow through 1,000 columns | 8.3 | 8.3 | ≈ even (lower tail on ResultGrid) |
-| Down arrow through 1,000 rows | 8.3 | 8.3 | ≈ even |
+| Randomized vertical scroll — 1,000,000 rows (×100) | 96.9 | 105.0 | ≈ even (legacy +8%) |
+| Randomized horizontal scroll — 10,000 columns (×100) | 28.9 | **16.4** | **ResultGrid 1.8×** |
+| Home / End across 10,000 columns (100 combinations) | 49.4 | **29.7** | **ResultGrid 1.7×** |
+| PageDown ×100 then PageUp ×100 — 10,000 rows | 8.3 | 8.2 | ≈ even (legacy tighter tail) |
+| Corner jumps — bottom-right → top-left (×100, 1,000,000 × 10,000) | 149.5 | **118.1** | **ResultGrid 1.3×** |
+| Right arrow through 1,000 columns (×999) | 8.3 | 8.3 | ≈ even (lower tail on ResultGrid) |
+| Down arrow through 1,000 rows (×999) | 8.3 | 8.3 | ≈ even |
 
 **Takeaway:** vertical paging is debounce-bound and effectively tied. Everything
 that touches a **wide** result — horizontal scroll, Home/End, corner jumps —
@@ -74,38 +74,38 @@ No fetch is involved (every row already holds all columns), so this is pure
 horizontal render cost. `ResultGrid` virtualizes columns; legacy re-lays-out a
 wider band, ~1.8× slower at the median.
 
-### 3. Home / End across 10,000 columns (2,000 rows, 60 alternations)
+### 3. Home / End across 10,000 columns — 100 End→Home combinations (2,000 rows, 200 presses)
 
 | Grid | steps | median | p95 | min | max | total |
 |---|---:|---:|---:|---:|---:|---:|
-| legacy `grid.js` | 60 | 47.6 | 58.6 | 45.6 | 79.4 | 2980.6 |
-| `ResultGrid` | 60 | **24.8** | **30.5** | 19.9 | 34.5 | **1525.5** |
+| legacy `grid.js` | 200 | 49.4 | 58.6 | 47.1 | 89.2 | 10175.9 |
+| `ResultGrid` | 200 | **29.7** | **38.3** | 23.3 | 48.7 | **6082.8** |
 
 Each press jumps the focused cell from column 0 to column 9,999 (and back).
-`ResultGrid` is ~1.9× faster and has a much tighter p95/max.
+`ResultGrid` is ~1.7× faster and has a tighter p95/max.
 
-### 4. PageDown / PageUp through 10,000 rows (20 columns)
-
-| Grid | steps | median | p95 | min | max | total |
-|---|---:|---:|---:|---:|---:|---:|
-| legacy `grid.js` | 2000 | 8.3 | 9.4 | 3.0 | 90.5 | 16779.5 |
-| `ResultGrid` | 1668 | 8.3 | 10.9 | 5.7 | 281.3 | 14647.1 |
-
-Median is identical (most PageDowns stay inside a loaded page → one frame). Step
-counts differ because the two grids' result panes have slightly different
-heights, so rows-per-page differs; compare median/p95, not total. The `max` is a
-page-boundary fetch on each grid.
-
-### 5. Corner jumps — top-left / bottom-right (1,000,000 rows × 10,000 columns, 40 alternations)
+### 4. PageDown ×100 then PageUp ×100 — 10,000 rows (20 columns, 200 presses)
 
 | Grid | steps | median | p95 | min | max | total |
 |---|---:|---:|---:|---:|---:|---:|
-| legacy `grid.js` | 40 | 152.8 | 164.1 | 149.6 | 170.2 | 6157.7 |
-| `ResultGrid` | 40 | **121.3** | **125.9** | 118.5 | 126.6 | **4877.4** |
+| legacy `grid.js` | 200 | 8.3 | 9.2 | 4.8 | 11.7 | **1668.2** |
+| `ResultGrid` | 200 | 8.2 | 15.1 | 4.1 | 35.5 | 1822.8 |
+
+100 PageDowns (~1,200 rows) then 100 PageUps, all inside a loaded region apart
+from the occasional page-boundary fetch. Medians are tied; legacy has the
+tighter tail (p95 9.2 / max 11.7 vs 15.1 / 35.5) — `ResultGrid` takes an extra
+frame on the page that crosses a fetch boundary.
+
+### 5. Corner jumps — bottom-right → top-left ×100 (1,000,000 rows × 10,000 columns, 200 presses)
+
+| Grid | steps | median | p95 | min | max | total |
+|---|---:|---:|---:|---:|---:|---:|
+| legacy `grid.js` | 200 | 149.5 | 162.0 | 145.4 | 168.3 | 30192.6 |
+| `ResultGrid` | 200 | **118.1** | **125.8** | 114.4 | 139.5 | **23879.2** |
 
 The heaviest case: every jump moves both axes at once (tail-row fetch + render
-of a 10,000-column-wide region). `ResultGrid` is ~1.3× faster and far more
-consistent (p95/max within a few ms of the median, vs a wider spread on legacy).
+of a 10,000-column-wide region). `ResultGrid` is ~1.3× faster and a touch more
+consistent (tighter p95/max).
 
 > Shortcuts used: `ResultGrid` reaches each corner with a single chord
 > (`Ctrl+Home` / `Ctrl+End`). The legacy grid has no single-chord corner jump, so
