@@ -74,6 +74,42 @@ describe("questdb grid", () => {
         "simulated cairo exception",
       )
     })
+
+    it("deep pages lazily load the correct value into the correct cell", () => {
+      // Given a result several pages deep (the seed page holds 1000 rows)
+      cy.typeQuery("select x a, x * 10 b from long_sequence(5000)")
+      cy.runLine()
+      cy.wait(100)
+
+      // When scrolling far past the seed page so a later page lazily loads
+      cy.getGridViewport().scrollTo(0, 2500 * rowHeight)
+
+      // Then row 2500 shows its true values in both columns, proving the page
+      // landed at the right rows and the right columns
+      cy.getGridCellAt(2500, 0).should("have.text", "2501")
+      cy.getGridCellAt(2500, 1).should("have.text", "25010")
+
+      // And the last row of the final page is correct too
+      cy.getGridViewport().scrollTo("bottom")
+      cy.getGridCellAt(4999, 0).should("have.text", "5000")
+      cy.getGridCellAt(4999, 1).should("have.text", "50000")
+    })
+
+    it("loads two adjacent pages correctly across a page boundary", () => {
+      // Given a multi-page result
+      cy.typeQuery("select x from long_sequence(5000)")
+      cy.runLine()
+      cy.wait(100)
+
+      // When the viewport straddles the 2000/3000 page boundary, forcing both
+      // pages to load together in a single fetch that is split between them
+      cy.getGridViewport().scrollTo(0, 2999 * rowHeight)
+
+      // Then the rows on each side of the boundary show their true values —
+      // a mis-split would land the wrong page's data here
+      cy.getGridCellAt(2999, 0).should("have.text", "3000")
+      cy.getGridCellAt(3000, 0).should("have.text", "3001")
+    })
   })
 
   describe("keyboard navigation", () => {

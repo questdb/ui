@@ -42,6 +42,7 @@ import {
   FreezeHandle,
   FrozenShadow,
   ResizeGhost,
+  ResizerOverlay,
   Row,
   ROW_HEIGHT,
   ScrollContainer,
@@ -75,6 +76,7 @@ type GridCellProps = {
   isPulsing: boolean
   isDesignatedTimestamp: boolean
   frozen?: boolean
+  rowActive: boolean
   onCellClick: (row: number, col: number) => void
 }
 
@@ -91,6 +93,7 @@ const GridCell = React.memo(function GridCell({
   isPulsing,
   isDesignatedTimestamp,
   frozen,
+  rowActive,
   onCellClick,
 }: GridCellProps) {
   const colType = col?.type ?? ""
@@ -116,6 +119,7 @@ const GridCell = React.memo(function GridCell({
       $isActive={isActive}
       $isPulsing={isPulsing}
       $frozen={frozen}
+      $rowActive={rowActive}
       onClick={() => onCellClick(rowIndex, colIndex)}
       role="gridcell"
       aria-colindex={colIndex + 1}
@@ -151,17 +155,6 @@ export type ResultGridHandle = {
 
 const EMPTY_TABLE_DATA: DatasetRow[] = []
 
-const NAV_KEYS = new Set([
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "PageUp",
-  "PageDown",
-  "Home",
-  "End",
-])
-
 export const ResultGrid = forwardRef<ResultGridHandle, Props>(
   (
     {
@@ -193,7 +186,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
-    const [hoverRow, setHoverRow] = useState<number | null>(null)
     const [freezeDragX, setFreezeDragX] = useState<number | null>(null)
     const freezeTargetRef = useRef(0)
 
@@ -450,14 +442,20 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onSelectionChange?.(hasSelection)
     }, [hasSelection, onSelectionChange])
 
-    const hoverSuppressedRef = useRef(false)
+    const shuffleFocusedColumnToFront = useCallback(() => {
+      if (!focusedCell) return
+      const targetCol = moveColumnToFront(focusedCell.col)
+      if (targetCol === null) return
+      setFocusedCell({ row: focusedCell.row, col: targetCol })
+      // The column lands at the left edge of the scrollable area, so scroll
+      // there to keep it in view. A frozen target is sticky and already shown.
+      if (targetCol >= frozenCount && scrollRef.current) {
+        scrollRef.current.scrollLeft = 0
+      }
+    }, [focusedCell, moveColumnToFront, setFocusedCell, frozenCount])
 
     const handleGridKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
-        if (NAV_KEYS.has(e.key)) {
-          hoverSuppressedRef.current = true
-          setHoverRow(null)
-        }
         if (e.key === "F2") {
           e.preventDefault()
           setFocusedCell(null)
@@ -469,10 +467,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         if (e.key === "/" && !e.metaKey && !e.ctrlKey && focusedCell) {
           e.preventDefault()
           e.stopPropagation()
-          const targetCol = moveColumnToFront(focusedCell.col)
-          if (targetCol !== null) {
-            setFocusedCell({ row: focusedCell.row, col: targetCol })
-          }
+          shuffleFocusedColumnToFront()
           return
         }
         // preventDefault stops the browser's bookmark shortcut.
@@ -487,7 +482,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [
         onKeyDown,
         focusedCell,
-        moveColumnToFront,
+        shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,
         resetLayout,
@@ -499,21 +494,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       () => ({
         resetLayout,
         toggleFreezeLeft: toggleFreeze,
-        shuffleFocusedColumnToFront: () => {
-          if (!focusedCell) return
-          const targetCol = moveColumnToFront(focusedCell.col)
-          if (targetCol !== null) {
-            setFocusedCell({ row: focusedCell.row, col: targetCol })
-          }
-        },
+        shuffleFocusedColumnToFront,
       }),
-      [
-        resetLayout,
-        toggleFreeze,
-        focusedCell,
-        moveColumnToFront,
-        setFocusedCell,
-      ],
+      [resetLayout, toggleFreeze, shuffleFocusedColumnToFront],
     )
 
     const prevRunTokenRef = useRef(runToken)
@@ -598,6 +581,38 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onVisibleRowsChange,
     ])
 
+    // Shared by the in-header (center columns) and overlay (frozen columns)
+    // resizers. style positions the overlay ones; header ones use the default.
+    const renderResizer = useCallback(
+      (header: (typeof headers)[number], style?: React.CSSProperties) => (
+        <ColResizer
+          key={header.id}
+          data-hook="grid-col-resizer"
+          style={style}
+          onMouseDown={header.getResizeHandler()}
+          onTouchStart={header.getResizeHandler()}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+            e.preventDefault()
+            const step = e.shiftKey ? 40 : 10
+            const delta = e.key === "ArrowRight" ? step : -step
+            const next = Math.max(60, header.getSize() + delta)
+            const nextSizing = {
+              ...table.getState().columnSizing,
+              [header.column.id]: next,
+            }
+            table.setColumnSizing(nextSizing)
+            onColumnSizingCommit(nextSizing)
+          }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize column ${header.column.columnDef.meta?.col?.name ?? ""}`}
+          tabIndex={0}
+        />
+      ),
+      [table, onColumnSizingCommit],
+    )
+
     const headerSignature = virtualColumns
       .map((c) => `${c.index}:${c.start}:${c.size}`)
       .join("|")
@@ -620,6 +635,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               position: pos.frozen ? "sticky" : "absolute",
               left: pos.left,
               width: pos.width,
+              // Above the scrolling center headers (which have no z-index).
               ...(pos.frozen && { zIndex: 2 }),
             }}
             role="columnheader"
@@ -646,36 +662,15 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               />
             </HeaderNameRow>
             <HeaderType>{col ? formatColumnType(col) : colType}</HeaderType>
-            <ColResizer
-              data-hook="grid-col-resizer"
-              onMouseDown={header.getResizeHandler()}
-              onTouchStart={header.getResizeHandler()}
-              onKeyDown={(e) => {
-                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
-                e.preventDefault()
-                const step = e.shiftKey ? 40 : 10
-                const delta = e.key === "ArrowRight" ? step : -step
-                const current = header.getSize()
-                const next = Math.max(60, current + delta)
-                const nextSizing = {
-                  ...table.getState().columnSizing,
-                  [header.column.id]: next,
-                }
-                table.setColumnSizing(nextSizing)
-                onColumnSizingCommit(nextSizing)
-              }}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={`Resize column ${col?.name ?? ""}`}
-              tabIndex={0}
-            />
+            {!pos.frozen && renderResizer(header)}
           </HeaderCell>
         )
       }
       return (
         <HeaderRow
           $shadowBottom={scrolledDown}
-          // z-index 3 keeps the sticky header above frozen cells (z-index 2).
+          // z-index 3 keeps the sticky header above the frozen body cells (2);
+          // it stays below the freeze handle (5), which covers the columns.
           style={{ width: totalWidth, position: "sticky", top: 0, zIndex: 3 }}
           role="row"
           aria-rowindex={1}
@@ -710,7 +705,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       columnOrder,
       columnPinning,
       onColumnCopy,
-      onColumnSizingCommit,
+      renderResizer,
     ])
 
     const sizingInfo = table.getState().columnSizingInfo
@@ -737,9 +732,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         tabIndex={0}
         onKeyDown={handleGridKeyDown}
         onBlur={onBlur}
-        onMouseMove={() => {
-          hoverSuppressedRef.current = false
-        }}
         role="grid"
         aria-rowcount={rowCount + 1}
         aria-colcount={columns.length}
@@ -785,6 +777,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     left={pos.left}
                     width={pos.width}
                     frozen={pos.frozen}
+                    rowActive={pos.frozen && focusedCell?.row === virtualIndex}
                     isActive={isCellFocused(virtualIndex, colIdx)}
                     isPulsing={isCellPulsing(virtualIndex, colIdx)}
                     isDesignatedTimestamp={dataIndex === designatedTimestamp}
@@ -796,12 +789,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 <Row
                   key={virtualIndex}
                   data-hook="grid-row"
-                  $hover={hoverRow === virtualIndex}
                   $active={focusedCell?.row === virtualIndex}
-                  onMouseEnter={() => {
-                    if (!hoverSuppressedRef.current) setHoverRow(virtualIndex)
-                  }}
-                  onMouseLeave={() => setHoverRow(null)}
                   style={{
                     position: "absolute",
                     top: virtualRow.start,
@@ -851,6 +839,16 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 : "Drag to freeze columns"
             }
           />
+        )}
+        {frozenCount > 0 && (
+          <ResizerOverlay>
+            {headers.slice(0, frozenCount).map((header) =>
+              renderResizer(header, {
+                left: header.column.getStart("left") + header.getSize() - 10,
+                right: "auto",
+              }),
+            )}
+          </ResizerOverlay>
         )}
         {freezeDragX !== null && <ResizeGhost style={{ left: freezeDragX }} />}
         {resizeGhostLeft !== null && (

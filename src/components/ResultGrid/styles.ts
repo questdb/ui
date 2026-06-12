@@ -230,6 +230,7 @@ export const ColResizer = styled.div`
   cursor: col-resize;
   touch-action: none;
   user-select: none;
+  pointer-events: auto;
   z-index: 2;
 
   &::after {
@@ -250,6 +251,16 @@ export const ColResizer = styled.div`
   }
 `
 
+export const ResizerOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: ${HEADER_HEIGHT}px;
+  pointer-events: none;
+  z-index: 6;
+`
+
 export const ResizeGhost = styled.div`
   position: absolute;
   top: 0;
@@ -257,24 +268,30 @@ export const ResizeGhost = styled.div`
   width: 2px;
   background: ${color("cyan")};
   pointer-events: none;
-  z-index: 4;
+  /* Above the resizer overlay (z-index 6) so the drag line isn't clipped. */
+  z-index: 7;
 `
 
-export const Row = styled.div<{ $hover: boolean; $active: boolean }>`
+export const Row = styled.div<{ $active: boolean }>`
   display: flex;
   height: ${ROW_HEIGHT}px;
 
   ${({ $active }) =>
     $active &&
     css`
-      background: ${color("selection")};
+      background: ${color("selectionDarker")};
     `}
 
-  ${({ $hover, $active }) =>
-    $hover &&
+  ${({ $active }) =>
     !$active &&
     css`
-      background: ${color("selectionDarker")};
+      &:hover {
+        background: ${color("selectionDarker")};
+
+        [data-frozen="true"] {
+          background: ${color("selectionDarker")};
+        }
+      }
     `}
 `
 
@@ -289,6 +306,7 @@ export const Cell = styled.div<{
   $isActive: boolean
   $isPulsing: boolean
   $frozen?: boolean
+  $rowActive?: boolean
 }>`
   flex-shrink: 0;
   height: ${ROW_HEIGHT}px;
@@ -305,11 +323,12 @@ export const Cell = styled.div<{
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
   contain: layout;
 
-  /* Sticky-left: opaque background hides scrolled-under cells. */
-  ${({ $frozen }) =>
+  ${({ $frozen, $rowActive }) =>
     $frozen &&
     css`
-      background: ${color("background")};
+      background: ${$rowActive
+        ? color("selectionDarker")
+        : color("background")};
     `}
 
   ${({ $isActive }) =>

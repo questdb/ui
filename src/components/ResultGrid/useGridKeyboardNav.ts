@@ -78,7 +78,9 @@ export const useGridKeyboardNav = (
     setFocusedCell({ row, col })
   }, [])
 
-  const onBlur = useCallback(() => {
+  const onBlur = useCallback((e: React.FocusEvent<HTMLElement>) => {
+    const next = e.relatedTarget as Node | null
+    if (next === null || e.currentTarget.contains(next)) return
     setFocusedCell(null)
   }, [])
 
