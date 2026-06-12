@@ -23,7 +23,13 @@
  ******************************************************************************/
 
 import $ from "jquery"
-import React, { useContext, useEffect, useRef, useState } from "react"
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
 import { Download2, Refresh } from "@styled-icons/remix-line"
@@ -46,7 +52,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { color, ErrorResult, QueryRawResult, RawErrorResult } from "../../utils"
+import { color, ErrorResult, RawErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
@@ -62,6 +68,9 @@ import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
 import { API_VERSION } from "../../consts"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import { ResultGridAdapter } from "./ResultGridAdapter"
+import { type PaginationFn } from "./usePagedDataSource"
 
 const Root = styled.div`
   display: flex;
@@ -150,40 +159,47 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const result = useSelector(selectors.query.getResult)
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
-  const gridRef = useRef<IQuestDBGrid | undefined>()
+  const gridRef = useRef<IQuestDBGrid | null>(null)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
+  const { useNewGrid } = useLocalStorage()
   const dispatch = useDispatch()
 
-  useEffect(() => {
-    const _grid = grid(
-      document.getElementById("grid"),
-      async function (sql, lo, hi, rendererFn: (data: QueryRawResult) => void) {
-        try {
-          const result = await quest.queryRaw(sql, {
-            limit: `${lo},${hi}`,
-            nm: true,
-          })
-          if (result.type === QuestDB.Type.DQL) {
-            rendererFn(result)
-          }
-        } catch (err) {
-          // Order of actions is important
-          dispatch(
-            actions.query.addNotification({
-              query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
-              content: <Text color="red">{(err as ErrorResult).error}</Text>,
-              sideContent: <QueryInNotification query={sql} />,
-              type: NotificationType.ERROR,
-              updateActiveNotification: true,
-            }),
-          )
-          dispatch(actions.query.stopRunning())
+  // Shared by both grids. On a failed fetch it surfaces a notification and never
+  // calls the renderer, leaving the failing page unloaded.
+  const paginationFn = useCallback<PaginationFn>(
+    async (sql, lo, hi, rendererFn) => {
+      try {
+        const result = await quest.queryRaw(sql, {
+          limit: `${lo},${hi}`,
+          nm: true,
+        })
+        if (result.type === QuestDB.Type.DQL) {
+          rendererFn(result)
         }
-      },
-    )
-    gridRef.current = _grid
+      } catch (err) {
+        // Order of actions is important
+        dispatch(
+          actions.query.addNotification({
+            query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
+            content: <Text color="red">{(err as ErrorResult).error}</Text>,
+            sideContent: <QueryInNotification query={sql} />,
+            type: NotificationType.ERROR,
+            updateActiveNotification: true,
+          }),
+        )
+        dispatch(actions.query.stopRunning())
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!useNewGrid) {
+      gridRef.current = grid(document.getElementById("grid"), paginationFn)
+    }
+
     quickVis(
       $("#quick-vis"),
       window.bus as unknown as ReturnType<typeof $>,
@@ -191,23 +207,26 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       questExecution,
     )
 
-    _grid.addEventListener(
-      "selection.change",
-      function (event: CustomEvent<{ hasSelection: boolean }>) {
-        setGridHasSelection(event.detail.hasSelection)
-      },
-    )
+    const _grid = gridRef.current
+    if (_grid) {
+      _grid.addEventListener(
+        "selection.change",
+        function (event: CustomEvent<{ hasSelection: boolean }>) {
+          setGridHasSelection(event.detail.hasSelection)
+        },
+      )
 
-    _grid.addEventListener("yield.focus", function () {
-      eventBus.publish(EventType.MSG_EDITOR_FOCUS)
-    })
+      _grid.addEventListener("yield.focus", function () {
+        eventBus.publish(EventType.MSG_EDITOR_FOCUS)
+      })
 
-    _grid.addEventListener(
-      "freeze.state",
-      function (event: CustomEvent<{ freezeLeft: number }>) {
-        setGridFreezeLeftState(event.detail.freezeLeft)
-      },
-    )
+      _grid.addEventListener(
+        "freeze.state",
+        function (event: CustomEvent<{ freezeLeft: number }>) {
+          setGridFreezeLeftState(event.detail.freezeLeft)
+        },
+      )
+    }
   }, [])
 
   useEffect(() => {
@@ -218,10 +237,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   }, [result])
 
   useEffect(() => {
-    const grid = document.getElementById("grid")
     const chart = document.getElementById("quick-vis")
 
-    if (!grid || !chart) {
+    if (!chart) {
       return
     }
 
@@ -242,9 +260,10 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
 
   const gridActions = [
     {
-      tooltipText: "Copy result to Markdown",
+      tooltipText: "Copy current page to Markdown",
       trigger: (
         <Button
+          data-hook="grid-toolbar-markdown"
           skin="transparent"
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_MARKDOWN_COPY)
@@ -264,6 +283,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Freeze left column",
       trigger: (
         <StyledPrimaryToggleButton
+          data-hook="grid-toolbar-freeze"
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_FREEZE)
             gridRef?.current?.toggleFreezeLeft()
@@ -279,8 +299,11 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Move selected column to the front",
       trigger: (
         <Button
+          data-hook="grid-toolbar-move-front"
           skin="transparent"
           disabled={!gridHasSelection}
+          // Do not lose focus of the grid
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_MOVE_TO_FRONT)
             gridRef?.current?.shuffleFocusedColumnToFront()
@@ -294,6 +317,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Reset grid layout",
       trigger: (
         <Button
+          data-hook="grid-toolbar-reset"
           skin="transparent"
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_LAYOUT_RESET)
@@ -308,6 +332,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       tooltipText: "Refresh",
       trigger: (
         <Button
+          data-hook="grid-toolbar-refresh"
           skin="transparent"
           disabled={activeQueryExecution !== null}
           onClick={() => {
@@ -446,7 +471,11 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         </Actions>
 
         <Content>
-          <div id="grid" />
+          {useNewGrid ? (
+            <ResultGridAdapter ref={gridRef} paginationFn={paginationFn} />
+          ) : (
+            <div id="grid" />
+          )}
 
           <div id="quick-vis">
             <div className="quick-vis-controls">
