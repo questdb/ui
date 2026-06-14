@@ -731,8 +731,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           60,
           headers[idx].getSize() + (sizingInfo.deltaOffset ?? 0),
         )
-        resizeGhostLeft =
-          left + futureWidth - (scrollRef.current?.scrollLeft ?? 0)
+        const scrollLeft =
+          idx < frozenCount ? 0 : (scrollRef.current?.scrollLeft ?? 0)
+        resizeGhostLeft = left + futureWidth - scrollLeft
       }
     }
 
