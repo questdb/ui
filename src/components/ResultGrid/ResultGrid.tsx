@@ -562,8 +562,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       gridRef.current?.blur()
       if (scrollRef.current) {
         scrollRef.current.scrollTop = 0
+        scrollRef.current.scrollLeft = 0
       }
-    }, [runToken, setFocusedCell])
+    }, [runToken])
 
     const totalWidth = columnVirtualizer.getTotalSize()
     const totalHeight = rowVirtualizer.getTotalSize()
