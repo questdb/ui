@@ -15,7 +15,6 @@ export {
   formatCellValueForCopy,
   formatColumnType,
   isLeftAligned,
-  isTimestampColumn,
 } from "./inlineGridUtils"
 export { buildResultPageMarkdown } from "./resultPageMarkdown"
 export { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"

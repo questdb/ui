@@ -8,6 +8,7 @@ import type {
   ResultGridRow,
 } from "../../components/ResultGrid"
 import { PAGE_SIZE, nextPageWindow } from "./nextPageWindow"
+import { planPageFetch, splitPagePair } from "./pageFetchPlan"
 
 const LOAD_DEBOUNCE_MS = 75
 
@@ -77,49 +78,30 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
   const loadPages = useCallback((p1: number, p2: number) => {
     purgeOutlierPages()
     const generation = resultGenerationRef.current
+    const plan = planPageFetch(p1, p2, isEmptyPage)
 
-    let lo: number
-    let hi: number
-    let renderFunc: (response: QueryRawResult) => void
-
-    if (p1 !== p2 && isEmptyPage(p1) && isEmptyPage(p2)) {
-      lo = p1 * PAGE_SIZE
-      hi = lo + PAGE_SIZE * (p2 - p1 + 1)
-      renderFunc = (response) => {
-        if (generation !== resultGenerationRef.current) return
-        if (!("dataset" in response)) return
-        const dataset: ResultGridRow[] = response.dataset
-        cacheRef.current.set(p1, dataset.splice(0, PAGE_SIZE))
-        cacheRef.current.set(p2, dataset)
-        bumpVersion()
-      }
-    } else if (isEmptyPage(p1) && (!isEmptyPage(p2) || p1 === p2)) {
-      lo = p1 * PAGE_SIZE
-      hi = lo + PAGE_SIZE
-      renderFunc = (response) => {
-        if (generation !== resultGenerationRef.current) return
-        if (!("dataset" in response)) return
-        cacheRef.current.set(p1, response.dataset)
-        bumpVersion()
-      }
-    } else if ((!isEmptyPage(p1) || p1 === p2) && isEmptyPage(p2)) {
-      lo = p2 * PAGE_SIZE
-      hi = lo + PAGE_SIZE
-      renderFunc = (response) => {
-        if (generation !== resultGenerationRef.current) return
-        if (!("dataset" in response)) return
-        cacheRef.current.set(p2, response.dataset)
-        bumpVersion()
-      }
-    } else {
+    if (plan.kind === "none") {
       bumpVersion()
       return
     }
 
+    const renderFunc = (response: QueryRawResult) => {
+      if (generation !== resultGenerationRef.current) return
+      if (!("dataset" in response)) return
+      if (plan.kind === "pair") {
+        const { first, second } = splitPagePair(response.dataset)
+        cacheRef.current.set(plan.firstPage, first)
+        cacheRef.current.set(plan.secondPage, second)
+      } else {
+        cacheRef.current.set(plan.page, response.dataset)
+      }
+      bumpVersion()
+    }
+
     if (paginationFn) {
       // QuestDB's limit is 1-based inclusive, so the start row is lo + 1.
-      paginationFn(sqlRef.current, lo + 1, hi, renderFunc)
-      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: hi })
+      paginationFn(sqlRef.current, plan.lo + 1, plan.hi, renderFunc)
+      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: plan.hi })
     }
   }, [])
 

@@ -65,6 +65,7 @@ declare module "@tanstack/react-table" {
 }
 
 const WIDTH_SAMPLE_ROWS = 1000
+const KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS = 200
 const COLUMN_ID_PREFIX = "col_"
 const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
@@ -592,6 +593,29 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onVisibleRowsChange,
     ])
 
+    const sizingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    )
+    const commitSizingDebounced = useCallback(
+      (sizing: Record<string, number>) => {
+        if (sizingCommitTimerRef.current) {
+          clearTimeout(sizingCommitTimerRef.current)
+        }
+        sizingCommitTimerRef.current = setTimeout(() => {
+          onColumnSizingCommit(sizing)
+        }, KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS)
+      },
+      [onColumnSizingCommit],
+    )
+    useEffect(
+      () => () => {
+        if (sizingCommitTimerRef.current) {
+          clearTimeout(sizingCommitTimerRef.current)
+        }
+      },
+      [],
+    )
+
     // Shared by the in-header (center columns) and overlay (frozen columns)
     // resizers. style positions the overlay ones; header ones use the default.
     const renderResizer = useCallback(
@@ -613,7 +637,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               [header.column.id]: next,
             }
             table.setColumnSizing(nextSizing)
-            onColumnSizingCommit(nextSizing)
+            commitSizingDebounced(nextSizing)
           }}
           role="separator"
           aria-orientation="vertical"
@@ -621,7 +645,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           tabIndex={0}
         />
       ),
-      [table, onColumnSizingCommit],
+      [table, commitSizingDebounced],
     )
 
     const headerSignature = virtualColumns
@@ -756,11 +780,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           data-hook="grid-viewport"
           onScroll={handleScroll}
           $scrollable={isFocused}
+          role="presentation"
         >
           {headerRow}
 
           <div
             data-hook="grid-canvas"
+            role="rowgroup"
             style={{
               height: totalHeight,
               width: totalWidth,

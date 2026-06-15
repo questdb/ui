@@ -61,7 +61,7 @@ import { EventType } from "../../modules/EventBus/types"
 import { QuestContext } from "../../providers"
 import { LINE_NUMBER_HARD_LIMIT } from "../Editor/Monaco"
 import { QueryInNotification } from "../Editor/Monaco/query-in-notification"
-import { NotificationType } from "../../store/Query/types"
+import { NotificationType, RunningType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../../components"
 import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
@@ -157,9 +157,11 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { quest, questExecution } = useContext(QuestContext)
   const [count, setCount] = useState<number | undefined>()
   const result = useSelector(selectors.query.getResult)
+  const running = useSelector(selectors.query.getRunning)
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
+  const runningRef = useRef(running)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
@@ -189,11 +191,17 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             updateActiveNotification: true,
           }),
         )
-        dispatch(actions.query.stopRunning())
+        if (runningRef.current === RunningType.NONE) {
+          dispatch(actions.query.stopRunning())
+        }
       }
     },
     [],
   )
+
+  useEffect(() => {
+    runningRef.current = running
+  }, [running])
 
   useEffect(() => {
     if (!useNewGrid) {
@@ -423,7 +431,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
                 placement="bottom"
                 content={action.tooltipText}
               >
-                {action.trigger}
+                {React.cloneElement(action.trigger, {
+                  "aria-label": action.tooltipText,
+                })}
               </Tooltip>
             ))}
 

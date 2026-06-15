@@ -126,9 +126,6 @@ export const clampColumnWidths = (
 export const isLeftAligned = (type: string): boolean =>
   LEFT_ALIGNED_TYPES.has(type.toUpperCase())
 
-export const isTimestampColumn = (type: string): boolean =>
-  type.toUpperCase() === "TIMESTAMP"
-
 export const formatColumnType = (col: ColumnDefinition): string => {
   if (col.type !== "ARRAY") {
     return col.type.toLowerCase()
