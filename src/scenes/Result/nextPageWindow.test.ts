@@ -43,4 +43,24 @@ describe("nextPageWindow", () => {
       load: [target, target],
     })
   })
+
+  it("clamps a window spanning many pages to two adjacent pages scrolling down", () => {
+    // A contiguous viewport never spans more than two pages; a wider range
+    // must not turn into one giant fetch.
+    const decision = nextPageWindow(DOWN, 332_000, 9_999_000, {
+      loPage: 330,
+      hiPage: 331,
+    })
+
+    expect(decision).toEqual({ loPage: 332, hiPage: 333, load: [332, 333] })
+  })
+
+  it("clamps a window spanning many pages to two adjacent pages scrolling up", () => {
+    const decision = nextPageWindow(UP, 332_000, 9_999_000, {
+      loPage: 9999,
+      hiPage: 9999,
+    })
+
+    expect(decision).toEqual({ loPage: 332, hiPage: 333, load: [332, 333] })
+  })
 })

@@ -21,7 +21,8 @@ import type { ColumnDefinition } from "../../utils/questdb/types"
 import { unescapeHtml } from "../../utils/escapeHtml"
 import type { ResultGridDataSource } from "./types"
 import {
-  computeColumnWidths,
+  clampColumnWidths,
+  sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
   formatColumnType,
@@ -42,12 +43,17 @@ import {
   FreezeHandle,
   FrozenShadow,
   ResizeGhost,
+  ResizerOverlay,
   Row,
   ROW_HEIGHT,
   ScrollContainer,
   StyledCopyButton,
 } from "./styles"
-import { MAX_VIRTUAL_ROWS, toAbsoluteIndex } from "./virtualRowMapping"
+import {
+  MAX_VIRTUAL_ROWS,
+  toAbsoluteIndex,
+  toVisibleAbsoluteRange,
+} from "./virtualRowMapping"
 import { useContainerWidth } from "./useContainerWidth"
 import { useScrollShadows } from "./useScrollShadows"
 
@@ -59,6 +65,7 @@ declare module "@tanstack/react-table" {
 }
 
 const WIDTH_SAMPLE_ROWS = 1000
+const KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS = 200
 const COLUMN_ID_PREFIX = "col_"
 const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
@@ -75,6 +82,7 @@ type GridCellProps = {
   isPulsing: boolean
   isDesignatedTimestamp: boolean
   frozen?: boolean
+  rowActive: boolean
   onCellClick: (row: number, col: number) => void
 }
 
@@ -91,6 +99,7 @@ const GridCell = React.memo(function GridCell({
   isPulsing,
   isDesignatedTimestamp,
   frozen,
+  rowActive,
   onCellClick,
 }: GridCellProps) {
   const colType = col?.type ?? ""
@@ -116,6 +125,7 @@ const GridCell = React.memo(function GridCell({
       $isActive={isActive}
       $isPulsing={isPulsing}
       $frozen={frozen}
+      $rowActive={rowActive}
       onClick={() => onCellClick(rowIndex, colIndex)}
       role="gridcell"
       aria-colindex={colIndex + 1}
@@ -151,17 +161,6 @@ export type ResultGridHandle = {
 
 const EMPTY_TABLE_DATA: DatasetRow[] = []
 
-const NAV_KEYS = new Set([
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "PageUp",
-  "PageDown",
-  "Home",
-  "End",
-])
-
 export const ResultGrid = forwardRef<ResultGridHandle, Props>(
   (
     {
@@ -193,7 +192,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
-    const [hoverRow, setHoverRow] = useState<number | null>(null)
     const [freezeDragX, setFreezeDragX] = useState<number | null>(null)
     const freezeTargetRef = useRef(0)
 
@@ -203,12 +201,15 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const virtualRowCount = Math.min(rowCount, MAX_VIRTUAL_ROWS)
 
+    // Sampling text lengths over 1000 rows is the expensive part, so it runs
+    // once per result; the per-resize work is only the container clamp.
+    const sampledWidths = useMemo(
+      () => sampleColumnWidths(columns, sampleRows.slice(0, WIDTH_SAMPLE_ROWS)),
+      [columns, sampleRows],
+    )
+
     const columnDefs = useMemo<ColumnDef<DatasetRow, unknown>[]>(() => {
-      const widths = computeColumnWidths(
-        columns,
-        sampleRows.slice(0, WIDTH_SAMPLE_ROWS),
-        containerWidth,
-      )
+      const widths = clampColumnWidths(sampledWidths, containerWidth)
       return columns.map((col, i) => ({
         id: columnId(i),
         accessorFn: (row: DatasetRow) => row[i],
@@ -217,7 +218,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         minSize: 60,
         meta: { col },
       }))
-    }, [columns, sampleRows, containerWidth])
+    }, [columns, sampledWidths, containerWidth])
 
     const [columnOrder, setColumnOrder] = useState<string[]>([])
     const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
@@ -272,9 +273,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [visualLeafIds],
     )
 
+    // undefined means the row's page hasn't loaded yet, unlike a SQL null.
     const getData = useCallback(
       (row: number, col: number) =>
-        getRow(toAbsoluteIndex(row, rowCount))?.[dataIndexAt(col)] ?? null,
+        getRow(toAbsoluteIndex(row, rowCount))?.[dataIndexAt(col)],
       [getRow, rowCount, dataIndexAt],
     )
 
@@ -284,17 +286,38 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     )
 
     const moveColumnToFront = useCallback(
-      (visualCol: number) => {
+      (visualCol: number): number | null => {
         const id = visualLeafIds[visualCol]
-        if (!id) return
+        if (!id) return null
+        const frontIndex = visualCol < frozenCount ? 0 : frozenCount
+        if (visualCol === frontIndex) return frontIndex
+        // A frozen column reorders within the frozen band — its columnOrder is
+        // ignored while pinned, so reorder the pin list instead, landing it at
+        // visual index 0. This matches the legacy grid.
+        if (visualCol < frozenCount) {
+          const left = columnPinning.left ?? []
+          const nextLeft = [id, ...left.filter((other) => other !== id)]
+          setColumnPinning({ left: nextLeft, right: [] })
+          onPinnedColumnsCommit?.(nextLeft)
+          return frontIndex
+        }
         const ids = columnOrder.length
           ? columnOrder
           : columnDefs.map((d) => d.id as string)
         const next = [id, ...ids.filter((other) => other !== id)]
         setColumnOrder(next)
         onColumnOrderCommit?.(next)
+        return frontIndex
       },
-      [visualLeafIds, columnOrder, columnDefs, onColumnOrderCommit],
+      [
+        visualLeafIds,
+        frozenCount,
+        columnPinning,
+        columnOrder,
+        columnDefs,
+        onColumnOrderCommit,
+        onPinnedColumnsCommit,
+      ],
     )
 
     const toggleFreeze = useCallback(() => {
@@ -382,6 +405,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       scrollElement: HTMLElement
       rowHeight: number
       headerHeight: number
+      frozenWidth: number
+      frozenColCount: number
       getColumnOffset: (col: number) => number
       getColumnWidth: (col: number) => number
     } | null>(null)
@@ -392,6 +417,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           scrollElement: scrollRef.current,
           rowHeight: ROW_HEIGHT,
           headerHeight: HEADER_HEIGHT,
+          frozenWidth,
+          frozenColCount: frozenCount,
           getColumnOffset: (col: number) => {
             let offset = 0
             for (let i = 0; i < col; i++) {
@@ -402,7 +429,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           getColumnWidth: (col: number) => headers[col]?.getSize() ?? 0,
         }
       }
-    }, [headers])
+    }, [headers, frozenWidth, frozenCount])
 
     const {
       focusedCell,
@@ -425,14 +452,20 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onSelectionChange?.(hasSelection)
     }, [hasSelection, onSelectionChange])
 
-    const hoverSuppressedRef = useRef(false)
+    const shuffleFocusedColumnToFront = useCallback(() => {
+      if (!focusedCell) return
+      const targetCol = moveColumnToFront(focusedCell.col)
+      if (targetCol === null) return
+      setFocusedCell({ row: focusedCell.row, col: targetCol })
+      // The column lands at the left edge of the scrollable area, so scroll
+      // there to keep it in view. A frozen target is sticky and already shown.
+      if (targetCol >= frozenCount && scrollRef.current) {
+        scrollRef.current.scrollLeft = 0
+      }
+    }, [focusedCell, moveColumnToFront, setFocusedCell, frozenCount])
 
     const handleGridKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
-        if (NAV_KEYS.has(e.key)) {
-          hoverSuppressedRef.current = true
-          setHoverRow(null)
-        }
         if (e.key === "F2") {
           e.preventDefault()
           setFocusedCell(null)
@@ -444,8 +477,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         if (e.key === "/" && !e.metaKey && !e.ctrlKey && focusedCell) {
           e.preventDefault()
           e.stopPropagation()
-          moveColumnToFront(focusedCell.col)
-          setFocusedCell({ row: focusedCell.row, col: frozenCount })
+          shuffleFocusedColumnToFront()
           return
         }
         // preventDefault stops the browser's bookmark shortcut.
@@ -460,11 +492,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [
         onKeyDown,
         focusedCell,
-        moveColumnToFront,
+        shuffleFocusedColumnToFront,
         onYieldFocus,
         setFocusedCell,
         resetLayout,
-        frozenCount,
       ],
     )
 
@@ -473,20 +504,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       () => ({
         resetLayout,
         toggleFreezeLeft: toggleFreeze,
-        shuffleFocusedColumnToFront: () => {
-          if (!focusedCell) return
-          moveColumnToFront(focusedCell.col)
-          setFocusedCell({ row: focusedCell.row, col: frozenCount })
-        },
+        shuffleFocusedColumnToFront,
       }),
-      [
-        resetLayout,
-        toggleFreeze,
-        focusedCell,
-        moveColumnToFront,
-        setFocusedCell,
-        frozenCount,
-      ],
+      [resetLayout, toggleFreeze, shuffleFocusedColumnToFront],
     )
 
     const prevRunTokenRef = useRef(runToken)
@@ -543,8 +563,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       gridRef.current?.blur()
       if (scrollRef.current) {
         scrollRef.current.scrollTop = 0
+        scrollRef.current.scrollLeft = 0
       }
-    }, [runToken, setFocusedCell])
+    }, [runToken])
 
     const totalWidth = columnVirtualizer.getTotalSize()
     const totalHeight = rowVirtualizer.getTotalSize()
@@ -556,13 +577,14 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const prevFirstAbsRef = useRef(0)
     useEffect(() => {
       if (!onVisibleRowsChange || virtualRowCount === 0) return
-      const firstAbs = toAbsoluteIndex(firstVirtual, rowCount)
-      const lastAbs = toAbsoluteIndex(lastVirtual, rowCount)
-      const lo = Math.min(firstAbs, lastAbs)
-      const hi = Math.max(firstAbs, lastAbs)
-      const direction = lo >= prevFirstAbsRef.current ? 1 : -1
-      prevFirstAbsRef.current = lo
-      onVisibleRowsChange({ firstIndex: lo, lastIndex: hi, direction })
+      const { firstIndex, lastIndex } = toVisibleAbsoluteRange(
+        firstVirtual,
+        lastVirtual,
+        rowCount,
+      )
+      const direction = firstIndex >= prevFirstAbsRef.current ? 1 : -1
+      prevFirstAbsRef.current = firstIndex
+      onVisibleRowsChange({ firstIndex, lastIndex, direction })
     }, [
       firstVirtual,
       lastVirtual,
@@ -570,6 +592,61 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       virtualRowCount,
       onVisibleRowsChange,
     ])
+
+    const sizingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    )
+    const commitSizingDebounced = useCallback(
+      (sizing: Record<string, number>) => {
+        if (sizingCommitTimerRef.current) {
+          clearTimeout(sizingCommitTimerRef.current)
+        }
+        sizingCommitTimerRef.current = setTimeout(() => {
+          onColumnSizingCommit(sizing)
+        }, KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS)
+      },
+      [onColumnSizingCommit],
+    )
+    useEffect(
+      () => () => {
+        if (sizingCommitTimerRef.current) {
+          clearTimeout(sizingCommitTimerRef.current)
+        }
+      },
+      [],
+    )
+
+    // Shared by the in-header (center columns) and overlay (frozen columns)
+    // resizers. style positions the overlay ones; header ones use the default.
+    const renderResizer = useCallback(
+      (header: (typeof headers)[number], style?: React.CSSProperties) => (
+        <ColResizer
+          key={header.id}
+          data-hook="grid-col-resizer"
+          style={style}
+          onMouseDown={header.getResizeHandler()}
+          onTouchStart={header.getResizeHandler()}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+            e.preventDefault()
+            const step = e.shiftKey ? 40 : 10
+            const delta = e.key === "ArrowRight" ? step : -step
+            const next = Math.max(60, header.getSize() + delta)
+            const nextSizing = {
+              ...table.getState().columnSizing,
+              [header.column.id]: next,
+            }
+            table.setColumnSizing(nextSizing)
+            commitSizingDebounced(nextSizing)
+          }}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={`Resize column ${header.column.columnDef.meta?.col?.name ?? ""}`}
+          tabIndex={0}
+        />
+      ),
+      [table, commitSizingDebounced],
+    )
 
     const headerSignature = virtualColumns
       .map((c) => `${c.index}:${c.start}:${c.size}`)
@@ -593,6 +670,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               position: pos.frozen ? "sticky" : "absolute",
               left: pos.left,
               width: pos.width,
+              // Above the scrolling center headers (which have no z-index).
               ...(pos.frozen && { zIndex: 2 }),
             }}
             role="columnheader"
@@ -619,36 +697,15 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               />
             </HeaderNameRow>
             <HeaderType>{col ? formatColumnType(col) : colType}</HeaderType>
-            <ColResizer
-              data-hook="grid-col-resizer"
-              onMouseDown={header.getResizeHandler()}
-              onTouchStart={header.getResizeHandler()}
-              onKeyDown={(e) => {
-                if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
-                e.preventDefault()
-                const step = e.shiftKey ? 40 : 10
-                const delta = e.key === "ArrowRight" ? step : -step
-                const current = header.getSize()
-                const next = Math.max(60, current + delta)
-                const nextSizing = {
-                  ...table.getState().columnSizing,
-                  [header.column.id]: next,
-                }
-                table.setColumnSizing(nextSizing)
-                onColumnSizingCommit(nextSizing)
-              }}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={`Resize column ${col?.name ?? ""}`}
-              tabIndex={0}
-            />
+            {!pos.frozen && renderResizer(header)}
           </HeaderCell>
         )
       }
       return (
         <HeaderRow
           $shadowBottom={scrolledDown}
-          // z-index 3 keeps the sticky header above frozen cells (z-index 2).
+          // z-index 3 keeps the sticky header above the frozen body cells (2);
+          // it stays below the freeze handle (5), which covers the columns.
           style={{ width: totalWidth, position: "sticky", top: 0, zIndex: 3 }}
           role="row"
           aria-rowindex={1}
@@ -683,7 +740,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       columnOrder,
       columnPinning,
       onColumnCopy,
-      onColumnSizingCommit,
+      renderResizer,
     ])
 
     const sizingInfo = table.getState().columnSizingInfo
@@ -699,8 +756,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           60,
           headers[idx].getSize() + (sizingInfo.deltaOffset ?? 0),
         )
-        resizeGhostLeft =
-          left + futureWidth - (scrollRef.current?.scrollLeft ?? 0)
+        const scrollLeft =
+          idx < frozenCount ? 0 : (scrollRef.current?.scrollLeft ?? 0)
+        resizeGhostLeft = left + futureWidth - scrollLeft
       }
     }
 
@@ -710,9 +768,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         tabIndex={0}
         onKeyDown={handleGridKeyDown}
         onBlur={onBlur}
-        onMouseMove={() => {
-          hoverSuppressedRef.current = false
-        }}
         role="grid"
         aria-rowcount={rowCount + 1}
         aria-colcount={columns.length}
@@ -725,11 +780,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           data-hook="grid-viewport"
           onScroll={handleScroll}
           $scrollable={isFocused}
+          role="presentation"
         >
           {headerRow}
 
           <div
             data-hook="grid-canvas"
+            role="rowgroup"
             style={{
               height: totalHeight,
               width: totalWidth,
@@ -758,6 +815,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     left={pos.left}
                     width={pos.width}
                     frozen={pos.frozen}
+                    rowActive={pos.frozen && focusedCell?.row === virtualIndex}
                     isActive={isCellFocused(virtualIndex, colIdx)}
                     isPulsing={isCellPulsing(virtualIndex, colIdx)}
                     isDesignatedTimestamp={dataIndex === designatedTimestamp}
@@ -769,12 +827,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 <Row
                   key={virtualIndex}
                   data-hook="grid-row"
-                  $hover={hoverRow === virtualIndex}
                   $active={focusedCell?.row === virtualIndex}
-                  onMouseEnter={() => {
-                    if (!hoverSuppressedRef.current) setHoverRow(virtualIndex)
-                  }}
-                  onMouseLeave={() => setHoverRow(null)}
                   style={{
                     position: "absolute",
                     top: virtualRow.start,
@@ -824,6 +877,16 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 : "Drag to freeze columns"
             }
           />
+        )}
+        {frozenCount > 0 && (
+          <ResizerOverlay>
+            {headers.slice(0, frozenCount).map((header) =>
+              renderResizer(header, {
+                left: header.column.getStart("left") + header.getSize() - 10,
+                right: "auto",
+              }),
+            )}
+          </ResizerOverlay>
         )}
         {freezeDragX !== null && <ResizeGhost style={{ left: freezeDragX }} />}
         {resizeGhostLeft !== null && (

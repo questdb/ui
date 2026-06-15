@@ -1,140 +1,11 @@
 import styled, { css, keyframes } from "styled-components"
 import { color } from "../../utils"
-import { Button } from ".."
 import { CopyButton } from "../CopyButton"
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
 
 export type DatasetRow = (boolean | string | number | null)[]
 
 export { HEADER_HEIGHT, ROW_HEIGHT }
-
-export const ResultWrapper = styled.div`
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-`
-
-export const SuccessMessage = styled.div`
-  padding: 0.6rem 0.8rem;
-  color: ${color("green")};
-  font-size: ${({ theme }) => theme.fontSize.sm};
-  background: ${color("backgroundDarker")};
-`
-
-export const TabBarWrapper = styled.div`
-  display: flex;
-  flex-shrink: 0;
-  overflow-x: auto;
-  gap: 0;
-  height: 4rem;
-  border-top: 1px solid ${color("backgroundDarker")};
-
-  &::-webkit-scrollbar {
-    height: 0;
-  }
-`
-
-export const TabLabel = styled.span`
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
-export const Tab = styled.button<{ $active: boolean }>`
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  color: ${color("gray2")};
-  cursor: pointer;
-  max-width: 20rem;
-  min-width: 15rem;
-  border-bottom: 2px solid transparent;
-
-  border-right: 1px solid ${color("selection")};
-  flex-shrink: 0;
-  gap: 0.8rem;
-  overflow: hidden;
-  position: relative;
-  transition: all 0.2s ease;
-
-  ${({ $active }) =>
-    $active &&
-    css`
-      color: ${color("foreground")};
-      background: ${color("selection")};
-      border-bottom: 2px solid ${color("pinkPrimary")};
-    `}
-
-  ${({ $active }) =>
-    !$active &&
-    css`
-      &:hover {
-        background: ${color("selectionDarker")};
-        border-bottom: 2px solid ${color("selection")};
-      }
-    `}
-`
-
-export const TabStatusIcon = styled.span<{ $success: boolean }>`
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  color: ${({ $success }) => ($success ? color("green") : color("red"))};
-`
-
-export const TabSpinner = styled.span`
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  animation: tab-spin 3s linear infinite;
-
-  @keyframes tab-spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-`
-
-export const CancelledIcon = styled.span`
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  color: ${color("gray2")};
-`
-
-export const CancelButton = styled(Button)`
-  padding: 1.2rem 0.6rem;
-`
-
-export const NotificationContainer = styled.div`
-  border-top: 1px solid ${color("backgroundDarker")};
-  border-bottom: 1px solid ${color("backgroundDarker")};
-`
-
-export const LiveRegion = styled.div`
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-`
 
 export const GridContainer = styled.div`
   flex: 1;
@@ -230,6 +101,7 @@ export const ColResizer = styled.div`
   cursor: col-resize;
   touch-action: none;
   user-select: none;
+  pointer-events: auto;
   z-index: 2;
 
   &::after {
@@ -250,6 +122,16 @@ export const ColResizer = styled.div`
   }
 `
 
+export const ResizerOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: ${HEADER_HEIGHT}px;
+  pointer-events: none;
+  z-index: 6;
+`
+
 export const ResizeGhost = styled.div`
   position: absolute;
   top: 0;
@@ -257,24 +139,30 @@ export const ResizeGhost = styled.div`
   width: 2px;
   background: ${color("cyan")};
   pointer-events: none;
-  z-index: 4;
+  /* Above the resizer overlay (z-index 6) so the drag line isn't clipped. */
+  z-index: 7;
 `
 
-export const Row = styled.div<{ $hover: boolean; $active: boolean }>`
+export const Row = styled.div<{ $active: boolean }>`
   display: flex;
   height: ${ROW_HEIGHT}px;
 
   ${({ $active }) =>
     $active &&
     css`
-      background: ${color("selection")};
+      background: ${color("selectionDarker")};
     `}
 
-  ${({ $hover, $active }) =>
-    $hover &&
+  ${({ $active }) =>
     !$active &&
     css`
-      background: ${color("selectionDarker")};
+      &:hover {
+        background: ${color("selectionDarker")};
+
+        [data-frozen="true"] {
+          background: ${color("selectionDarker")};
+        }
+      }
     `}
 `
 
@@ -289,6 +177,7 @@ export const Cell = styled.div<{
   $isActive: boolean
   $isPulsing: boolean
   $frozen?: boolean
+  $rowActive?: boolean
 }>`
   flex-shrink: 0;
   height: ${ROW_HEIGHT}px;
@@ -305,11 +194,12 @@ export const Cell = styled.div<{
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
   contain: layout;
 
-  /* Sticky-left: opaque background hides scrolled-under cells. */
-  ${({ $frozen }) =>
+  ${({ $frozen, $rowActive }) =>
     $frozen &&
     css`
-      background: ${color("background")};
+      background: ${$rowActive
+        ? color("selectionDarker")
+        : color("background")};
     `}
 
   ${({ $isActive }) =>
@@ -338,8 +228,8 @@ export const FrozenShadow = styled.div`
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 6px;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.25), transparent);
+  width: 16px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
   pointer-events: none;
   z-index: 3;
 `

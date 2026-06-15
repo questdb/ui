@@ -793,16 +793,13 @@ export function grid(rootElement, _paginationFn, id) {
     }
   }
 
-  // Copies the loaded page window (data[loPage..hiPage] — what was fetched from
-  // the server and is being viewed), not just the rows currently in the DOM.
+  // Copies the single page currently in view
   function getResultAsMarkdown() {
-    const loadedRows = []
-    for (let page = loPage; page <= hiPage; page++) {
-      if (data[page] && data[page].length) {
-        loadedRows.push(...data[page])
-      }
-    }
-    return buildResultPageMarkdown(columns, loadedRows)
+    const currentPage = Math.floor(
+      Math.floor(viewport.scrollTop / rh) / pageSize,
+    )
+    const pageRows = data[currentPage] ?? []
+    return buildResultPageMarkdown(columns, pageRows)
   }
 
   function colFreezeToggle() {

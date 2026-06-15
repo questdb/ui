@@ -73,14 +73,21 @@ const formatArrayValue = (
   return full
 }
 
-export const computeColumnWidths = (
+// Sampling is container-independent so it runs once per result; the
+// container-driven cap is applied separately by clampColumnWidths. The
+// constant ceiling keeps the sampling loop bounded for very long values.
+const MAX_SAMPLED_WIDTH_PX = 4000
+
+export const sampleColumnWidths = (
   columns: ColumnDefinition[],
   dataset: (boolean | string | number | null)[][],
-  containerWidth: number,
 ): number[] => {
-  const maxWidth = containerWidth * MAX_WIDTH_RATIO
-  const maxTextLenRegular = Math.ceil(maxWidth / CELL_WIDTH_MULTIPLIER)
-  const maxTextLenArray = Math.ceil(maxWidth / ARRAY_CELL_WIDTH_MULTIPLIER)
+  const maxTextLenRegular = Math.ceil(
+    MAX_SAMPLED_WIDTH_PX / CELL_WIDTH_MULTIPLIER,
+  )
+  const maxTextLenArray = Math.ceil(
+    MAX_SAMPLED_WIDTH_PX / ARRAY_CELL_WIDTH_MULTIPLIER,
+  )
 
   return columns.map((col, colIdx) => {
     const isArray = isArrayColumn(col)
@@ -94,29 +101,30 @@ export const computeColumnWidths = (
 
     for (const row of dataset) {
       const val = row[colIdx]
-      let displayLen: number
-      if (isArray) {
-        const formatted = formatArrayValue(val, col)
-        displayLen = Math.min(formatted.length, maxTextLen)
-      } else {
-        const formatted = formatCellValue(val, col)
-        displayLen = Math.min(formatted.length, maxTextLen)
-      }
+      const formatted = isArray
+        ? formatArrayValue(val, col)
+        : formatCellValue(val, col)
+      const displayLen = Math.min(formatted.length, maxTextLen)
       width = Math.max(width, getCellWidth(displayLen, isArray))
-      if (width >= maxWidth) {
-        width = maxWidth
+      if (width >= MAX_SAMPLED_WIDTH_PX) {
+        width = MAX_SAMPLED_WIDTH_PX
         break
       }
     }
-    return Math.min(width, maxWidth)
+    return Math.min(width, MAX_SAMPLED_WIDTH_PX)
   })
+}
+
+export const clampColumnWidths = (
+  widths: number[],
+  containerWidth: number,
+): number[] => {
+  const maxWidth = containerWidth * MAX_WIDTH_RATIO
+  return widths.map((width) => Math.min(width, maxWidth))
 }
 
 export const isLeftAligned = (type: string): boolean =>
   LEFT_ALIGNED_TYPES.has(type.toUpperCase())
-
-export const isTimestampColumn = (type: string): boolean =>
-  type.toUpperCase() === "TIMESTAMP"
 
 export const formatColumnType = (col: ColumnDefinition): string => {
   if (col.type !== "ARRAY") {

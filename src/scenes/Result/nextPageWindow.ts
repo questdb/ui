@@ -37,10 +37,13 @@ export const nextPageWindow = (
     }
 
     if (topPage < bottomPage) {
+      // A contiguous viewport never spans more than two pages; clamping keeps
+      // a malformed range from turning into one giant fetch.
+      const cappedBottom = Math.min(bottomPage, topPage + 1)
       return {
         loPage: topPage,
-        hiPage: bottomPage,
-        load: [topPage, bottomPage],
+        hiPage: cappedBottom,
+        load: [topPage, cappedBottom],
       }
     }
     if (bottomInPage > TWO_THIRDS_PAGE) {
@@ -68,7 +71,12 @@ export const nextPageWindow = (
   }
 
   if (topPage < bottomPage) {
-    return { loPage: topPage, hiPage: bottomPage, load: [topPage, bottomPage] }
+    const cappedBottom = Math.min(bottomPage, topPage + 1)
+    return {
+      loPage: topPage,
+      hiPage: cappedBottom,
+      load: [topPage, cappedBottom],
+    }
   }
   if (topInPage < ONE_THIRD_PAGE && topPage > 0) {
     return {
