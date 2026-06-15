@@ -216,7 +216,7 @@ export const NotebookProvider: React.FC<{
   // had a result (`lastRunStatus` set — known synchronously) reserve their
   // result area + show a spinner while `isHydrating`, so the grid lands in
   // place rather than elongating the cell once this async load resolves.
-  const { hydrateCells } = store
+  const { hydrateCells, cellsRef } = store
   const [hydrationSettled, setHydrationSettled] = useState(false)
   useEffect(() => {
     let cancelled = false
@@ -239,6 +239,10 @@ export const NotebookProvider: React.FC<{
             }
           }),
         )
+        const liveCellIds = new Set(cellsRef.current.map((c) => c.id))
+        snapshots
+          .filter((s) => !liveCellIds.has(s.cellId))
+          .forEach((s) => void deleteCellSnapshot(bufferId, s.cellId))
       })
       .catch(() => undefined)
       .finally(() => {
@@ -251,7 +255,7 @@ export const NotebookProvider: React.FC<{
 
   const execution = useCellExecution({
     bufferId,
-    cellsRef: store.cellsRef,
+    cellsRef,
     executeSingle,
     updateCellResult: store.updateCellResult,
     updateCell: store.updateCell,

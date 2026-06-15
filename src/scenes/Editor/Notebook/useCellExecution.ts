@@ -17,10 +17,7 @@ import {
   singleResultFromExec,
   sqlHash,
 } from "./notebookUtils"
-import {
-  pruneToRecentNotebooks,
-  saveCellSnapshot,
-} from "../../../store/notebookResults"
+import { persistCellSnapshot } from "./persistCellSnapshot"
 
 // Schema panel + completions listen for MSG_QUERY_SCHEMA to refresh.
 const publishSchemaIfMutating = (type: QueryExecResult["type"]): void => {
@@ -117,13 +114,13 @@ export const useCellExecution = ({
       if (!cell) return
       const result = explicitResult ?? cell.result
       if (!result) return
-      void saveCellSnapshot({
+      persistCellSnapshot({
         bufferId,
         cellId,
         sqlHash: sqlHash(executedSql),
         results: result.results,
         savedAt: Date.now(),
-      }).then(() => pruneToRecentNotebooks())
+      })
     },
     [bufferId, cellsRef],
   )

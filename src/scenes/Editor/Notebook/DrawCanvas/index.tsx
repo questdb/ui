@@ -30,11 +30,8 @@ import {
   singleResultFromExec,
   sqlHash,
 } from "../notebookUtils"
-import {
-  loadCellSnapshot,
-  pruneToRecentNotebooks,
-  saveCellSnapshot,
-} from "../../../../store/notebookResults"
+import { loadCellSnapshot } from "../../../../store/notebookResults"
+import { persistCellSnapshot } from "../persistCellSnapshot"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -173,13 +170,13 @@ export const DrawCanvas: React.FC<Props> = ({
       const results = execResults.map((r) =>
         capResultBytes(singleResultFromExec(r, r.query), NOTEBOOK_BYTE_CAP),
       )
-      void saveCellSnapshot({
+      persistCellSnapshot({
         bufferId,
         cellId: cell.id,
         sqlHash: currentSqlHash,
         results,
         savedAt: now,
-      }).then(() => pruneToRecentNotebooks())
+      })
     },
     [bufferId, cell.id, debouncedSql],
   )
