@@ -47,17 +47,6 @@ const Wrapper = styled.div`
   min-height: 0;
   position: relative;
   background: ${({ theme }) => theme.color.backgroundLighter};
-
-  & [data-hook="chart-actions"] {
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s ease;
-  }
-  &:hover [data-hook="chart-actions"],
-  & [data-hook="chart-actions"]:focus-within {
-    opacity: 1;
-    pointer-events: auto;
-  }
 `
 
 const Canvas = styled.div`
@@ -358,6 +347,7 @@ export const DrawCanvas: React.FC<Props> = ({
   return (
     <Wrapper>
       <ChartActions
+        name={resolution.chart.name}
         autoRefresh={autoRefresh}
         onAutoRefreshChange={onAutoRefreshChange}
         onManualRefresh={() => void fetchAll()}

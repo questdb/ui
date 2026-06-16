@@ -276,7 +276,6 @@ const buildCandlestickSeries = (
 
 const buildPieChartOption = (
   q: ResolvedQuery,
-  title: EChartsOption["title"] | undefined,
   chartText: { fontSize: number },
   legend: object,
 ): EChartsOption => {
@@ -284,13 +283,12 @@ const buildPieChartOption = (
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
   const yIdx = q.yColumns[0] != null ? idx.get(q.yColumns[0]) : undefined
   if (xIdx === undefined || yIdx === undefined)
-    return { title, tooltip: { trigger: "item", textStyle: chartText } }
+    return { tooltip: { trigger: "item", textStyle: chartText } }
   const data = q.dataset.map((row) => ({
     name: toCategoryLabel(row[xIdx]),
     value: toNumberOrNull(row[yIdx]) ?? 0,
   }))
   return {
-    title,
     tooltip: { trigger: "item", textStyle: chartText },
     legend,
     series: [
@@ -312,7 +310,6 @@ const buildPieChartOption = (
 
 const buildScatterChartOption = (
   q: ResolvedQuery,
-  title: EChartsOption["title"] | undefined,
   chartText: { fontSize: number },
   legend: object,
   axisLabel: { fontSize: number },
@@ -321,7 +318,7 @@ const buildScatterChartOption = (
   const idx = buildColumnIndexMap(q.columns)
   const xIdx = q.xColumn != null ? idx.get(q.xColumn) : undefined
   if (xIdx === undefined)
-    return { title, tooltip: { trigger: "item", textStyle: chartText } }
+    return { tooltip: { trigger: "item", textStyle: chartText } }
   const series = q.yColumns
     .map((name) => {
       const yIdx = idx.get(name)
@@ -338,13 +335,12 @@ const buildScatterChartOption = (
     })
     .filter((s): s is NonNullable<typeof s> => s !== null)
   return {
-    title,
     tooltip: { trigger: "item", textStyle: chartText },
     legend,
     grid: {
       left: 24,
       right: 24,
-      top: title ? 72 : 24,
+      top: 40,
       bottom: 48,
       containLabel: true,
     },
@@ -373,30 +369,18 @@ export const buildEchartsOption = (
     textStyle: chartText,
   }
 
-  const trimmedName = chart.name?.trim() ?? ""
-  const hasName = trimmedName.length > 0
-  const baseTitle: EChartsOption["title"] | undefined = hasName
-    ? {
-        text: trimmedName,
-        left: "center",
-        top: 8,
-        textStyle: { color: "#f8f8f2", fontSize: 18, fontWeight: "bold" },
-      }
-    : undefined
-
   const anchor = queries[0]
-  if (!anchor) return { title: baseTitle, tooltip: { textStyle: chartText } }
+  if (!anchor) return { tooltip: { textStyle: chartText } }
 
   const single = queries.length === 1
   const anchorCol = anchor.columns.find((c) => c.name === anchor.xColumn)
   const anchorRole = anchorCol ? classifyColumn(anchorCol) : "other"
 
   if (single && anchor.type === "pie")
-    return buildPieChartOption(anchor, baseTitle, chartText, baseLegend)
+    return buildPieChartOption(anchor, chartText, baseLegend)
   if (single && anchor.type === "scatter" && anchorRole === "numeric")
     return buildScatterChartOption(
       anchor,
-      baseTitle,
       chartText,
       baseLegend,
       axisLabel,
@@ -493,7 +477,7 @@ export const buildEchartsOption = (
   const grid: EChartsOption["grid"] = {
     left: 24,
     right: rightPadding,
-    top: hasName ? 72 : 24,
+    top: 40,
     bottom: hasZoom ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
     containLabel: true,
   }
@@ -560,7 +544,6 @@ export const buildEchartsOption = (
   }
 
   return {
-    title: baseTitle,
     tooltip,
     legend: baseLegend,
     grid,

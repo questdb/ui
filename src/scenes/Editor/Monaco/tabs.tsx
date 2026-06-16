@@ -23,7 +23,8 @@ import {
   createBufferContentKey,
 } from "./importTabs"
 import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
-import { exportDB, importInto, peakImportFile } from "dexie-export-import"
+import { importInto, peakImportFile } from "dexie-export-import"
+import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import {
   Box,
@@ -130,23 +131,7 @@ export const Tabs = () => {
   const handleExportTabs = async () => {
     void trackEvent(ConsoleEvent.TAB_EXPORT)
     try {
-      const skipTables = db.tables
-        .map((t) => t.name)
-        .filter((name) => name !== "buffers")
-      const blob = await exportDB(db, {
-        skipTables,
-        filter: (table, value) => {
-          const buffer = value as Buffer
-          return !buffer.isTemporary && !buffer.isPreviewBuffer
-        },
-      })
-
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `questdb-tabs-${new Date().toISOString().replace(/[:.]/g, "-")}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      await exportBuffers()
     } catch (err) {
       console.error("Export error:", err)
       toast.error(

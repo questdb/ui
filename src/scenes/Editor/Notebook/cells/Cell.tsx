@@ -153,6 +153,12 @@ const BottomSlot = styled.div<{ $spotlight: boolean }>`
         `}
 `
 
+// Wraps the (overflow-clipped) cell card in list mode so the bottom-edge resize
+// handle can straddle the cell border with its chip showing outside the card.
+const CellShell = styled.div`
+  position: relative;
+`
+
 const HydrationLoader = styled.div`
   flex: 1;
   display: flex;
@@ -639,6 +645,39 @@ const CellInner: React.FC<Props> = ({
     [topHeight, bottomHeight, topResize, bottomResize],
   )
 
+  // When a chart is maximized the BottomSlot fills the whole cell, so its
+  // measured height IS the cell total — scale top/bottom to that new total
+  // (preserving the split so it's intact when the chart is restored).
+  const maximizedChartResizeLive = useCallback(
+    (newTotalHeight: number) => {
+      const { top, bottom } = scaleCellHeights(
+        topHeight,
+        bottomHeight,
+        newTotalHeight,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      topResize.resizeLive(top)
+      bottomResize.resizeLive(bottom)
+    },
+    [topHeight, bottomHeight, topResize, bottomResize],
+  )
+
+  const maximizedChartResizeEnd = useCallback(
+    (newTotalHeight: number) => {
+      const { top, bottom } = scaleCellHeights(
+        topHeight,
+        bottomHeight,
+        newTotalHeight,
+        MIN_EDITOR_HEIGHT,
+        MIN_BOTTOM_HEIGHT_PX,
+      )
+      topResize.resizeEnd(top)
+      bottomResize.resizeEnd(bottom)
+    },
+    [topHeight, bottomHeight, topResize, bottomResize],
+  )
+
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
@@ -675,7 +714,7 @@ const CellInner: React.FC<Props> = ({
     [canArrowMove, cell.id, moveCellUp, moveCellDown, bufferIdForEvents],
   )
 
-  return (
+  const cellEl = (
     <CellWrapper
       ref={wrapperRef}
       data-cell-id={cell.id}
@@ -870,18 +909,57 @@ const CellInner: React.FC<Props> = ({
           ) : null}
         </BottomSlot>
       )}
-      {!isChartMaximized && !isMaximized && layoutMode !== "grid" && (
-        <ResizeHandle
-          background={theme.color.editorBackground}
-          targetRef={doubleView ? resultRef : editorContainerRef}
-          onResize={doubleView ? bottomEdgeResizeLive : topResize.resizeLive}
-          onResizeEnd={doubleView ? bottomEdgeResizeEnd : topResize.resizeEnd}
-          onDoubleClick={doubleView ? resetToDefaults : topResize.resetHeight}
-          minHeight={doubleView ? MIN_BOTTOM_HEIGHT_PX : undefined}
-        />
-      )}
     </CellWrapper>
   )
+
+  // The bottom-edge handle lives outside CellWrapper (which clips its content)
+  // so its chip can straddle the cell border, mirroring grid's `s` handle.
+  const bottomHandle =
+    !isMaximized && layoutMode !== "grid" ? (
+      <ResizeHandle
+        overlay
+        targetRef={
+          isChartMaximized || doubleView ? resultRef : editorContainerRef
+        }
+        onResize={
+          isChartMaximized
+            ? maximizedChartResizeLive
+            : doubleView
+              ? bottomEdgeResizeLive
+              : topResize.resizeLive
+        }
+        onResizeEnd={
+          isChartMaximized
+            ? maximizedChartResizeEnd
+            : doubleView
+              ? bottomEdgeResizeEnd
+              : topResize.resizeEnd
+        }
+        onDoubleClick={
+          isChartMaximized || doubleView
+            ? resetToDefaults
+            : topResize.resetHeight
+        }
+        minHeight={
+          isChartMaximized
+            ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX
+            : doubleView
+              ? MIN_BOTTOM_HEIGHT_PX
+              : undefined
+        }
+      />
+    ) : null
+
+  if (bottomHandle) {
+    return (
+      <CellShell>
+        {cellEl}
+        {bottomHandle}
+      </CellShell>
+    )
+  }
+
+  return cellEl
 }
 
 export const Cell = React.memo(CellInner)

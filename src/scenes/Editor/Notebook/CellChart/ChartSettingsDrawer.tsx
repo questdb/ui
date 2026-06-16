@@ -68,6 +68,22 @@ const Body = styled.form`
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
+
+  /* [aria-haspopup="menu"] covers the MultiSelect trigger (a styled menu
+     button) so it matches the native inputs/selects in this form. */
+  input,
+  select,
+  textarea,
+  [aria-haspopup="menu"] {
+    font-size: 1.4rem;
+    font-weight: 400;
+    background: ${({ theme }) => theme.color.inputBackground};
+    border-color: ${({ theme }) => theme.color.selection};
+
+    &:focus {
+      background: ${({ theme }) => theme.color.inputBackground};
+    }
+  }
 `
 
 const Row = styled.div`

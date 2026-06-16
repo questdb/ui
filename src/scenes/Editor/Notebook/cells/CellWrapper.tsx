@@ -10,7 +10,7 @@ export const CellWrapper = styled.div.attrs({
   $gridMode?: boolean
 }>`
   position: relative;
-  border: 1px solid ${color("selection")};
+  border: 1px solid ${color("baseGrey")};
   background: ${color("backgroundLighter")};
   border-radius: 0.6rem;
   overflow: hidden;
@@ -21,7 +21,8 @@ export const CellWrapper = styled.div.attrs({
     $focused &&
     css`
       border-color: ${color("pinkDarker")};
-      box-shadow: 0px 0px 10px 1px ${color("backgroundDarker")};
+      /* pinkPrimary @ 30% — selected-cell glow ring */
+      box-shadow: 0 0 0 3px rgba(201, 50, 97, 0.3);
     `}
 
   ${({ $focused }) =>

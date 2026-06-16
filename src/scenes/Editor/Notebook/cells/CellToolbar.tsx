@@ -11,7 +11,7 @@ import {
   CornersOutIcon,
   CornersInIcon,
 } from "@phosphor-icons/react"
-import { DropdownMenu, Button } from "../../../../components"
+import { DropdownMenu, Button, Tooltip } from "../../../../components"
 import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import {
@@ -117,27 +117,31 @@ export const CellToolbar: React.FC<Props> = ({ cellId, inline }) => {
       $inline={inline}
       $forceVisible={menuOpen}
     >
-      <Button
-        skin="transparent"
-        onClick={() => {
-          signalUserEdit()
-          setMaximizedCellId(isMaximized ? null : cellId)
-        }}
-        title={isMaximized ? "Restore" : "Maximize"}
-      >
-        {isMaximized ? (
-          <CornersInIcon size={20} />
-        ) : (
-          <CornersOutIcon size={20} />
-        )}
-      </Button>
+      <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
+        <Button
+          skin="transparent"
+          onClick={() => {
+            signalUserEdit()
+            setMaximizedCellId(isMaximized ? null : cellId)
+          }}
+          aria-label={isMaximized ? "Restore" : "Maximize"}
+        >
+          {isMaximized ? (
+            <CornersInIcon size={20} />
+          ) : (
+            <CornersOutIcon size={20} />
+          )}
+        </Button>
+      </Tooltip>
       {!isMaximized && (
         <DropdownMenu.Root onOpenChange={setMenuOpen}>
-          <DropdownMenu.Trigger asChild>
-            <Button skin="transparent">
-              <DotsThreeVerticalIcon size={20} weight="bold" />
-            </Button>
-          </DropdownMenu.Trigger>
+          <Tooltip content="More actions">
+            <DropdownMenu.Trigger asChild>
+              <Button skin="transparent" aria-label="More actions">
+                <DotsThreeVerticalIcon size={20} weight="bold" />
+              </Button>
+            </DropdownMenu.Trigger>
+          </Tooltip>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" sideOffset={4}>
               {!isGridMode && (

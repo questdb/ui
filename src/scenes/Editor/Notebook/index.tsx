@@ -64,7 +64,7 @@ const CellListContainer = styled.div<{ $maximized?: boolean }>`
   overflow-y: ${({ $maximized }) => ($maximized ? "hidden" : "auto")};
   padding: ${({ $maximized }) => ($maximized ? "0" : "2rem")};
   gap: 2rem;
-  background: ${color("editorBackground")};
+  background: ${color("midnight")};
   /* Scroll anchoring fights arrow-key reordering: on a move-up React keeps the
      focused cell's DOM node in place, the browser anchors to it and adjusts
      scrollTop so the cell looks frozen while the cells above shuffle. Disabled
@@ -81,17 +81,22 @@ const CellItem = styled.div<{ $maximized?: boolean }>`
 
 type GridCellWrapperProps = React.HTMLAttributes<HTMLDivElement> & {
   cellId: string
+  focused?: boolean
 }
 const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
-  ({ children, style, className, cellId, ...rest }, ref) => (
+  ({ children, style, className, cellId, focused, ...rest }, ref) => (
     <div
       ref={ref}
       data-cell-id={cellId}
+      data-cell-focused={focused ? "true" : undefined}
       style={{
         ...style,
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden",
+        // visible (not hidden) so the resize handle chips, which render as
+        // children here and sit on/outside the cell edge, aren't clipped. The
+        // inner CellWrapper still clips the cell's own content.
+        overflow: "visible",
       }}
       className={className}
       {...rest}
@@ -105,7 +110,7 @@ const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
   flex: 1;
   overflow-y: auto;
   padding: 2rem;
-  background: ${color("editorBackground")};
+  background: ${color("midnight")};
 
   .react-grid-item.react-grid-placeholder {
     background: ${color("selection")};
@@ -114,6 +119,11 @@ const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
 
   .react-grid-item {
     border-radius: 0.4rem;
+  }
+
+  /* A selected cell keeps its corner resize handles visible without hover. */
+  [data-cell-focused="true"] .edge-handle--corner {
+    opacity: 1;
   }
 
   /* On first mount, react-grid-layout's items would otherwise animate from
@@ -154,7 +164,7 @@ const DRAG_CONFIG = {
 }
 const RESIZE_CONFIG = {
   enabled: true,
-  handles: ["se", "s", "e", "w"] as const,
+  handles: ["se", "sw", "s", "e", "w"] as const,
   handleComponent: renderResizeHandle,
 }
 
@@ -183,6 +193,24 @@ const useScrollAddedCellIntoView = (cells: { id: string }[]) => {
         ?.scrollIntoView({ block: "nearest", behavior: "smooth" })
     })
   }, [cells])
+}
+
+// Restoring a maximized cell re-renders the full list at scrollTop 0; scroll the
+// just-restored cell back into view so the user lands where they left off.
+const useScrollRestoredCellIntoView = (maximizedCellId: string | null) => {
+  const prev = React.useRef<string | null>(maximizedCellId)
+  useEffect(() => {
+    const restoredId = prev.current
+    prev.current = maximizedCellId
+    if (!restoredId || maximizedCellId) return
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(
+          `[data-notebook-cell][data-cell-id="${CSS.escape(restoredId)}"]`,
+        )
+        ?.scrollIntoView({ block: "nearest" })
+    })
+  }, [maximizedCellId])
 }
 
 const readClientY = (event: Event): number | null => {
@@ -517,7 +545,11 @@ const GridLayout: React.FC = () => {
           positionStrategy={absoluteStrategy}
         >
           {cells.map((cell) => (
-            <GridCellWrapper key={cell.id} cellId={cell.id}>
+            <GridCellWrapper
+              key={cell.id}
+              cellId={cell.id}
+              focused={focusedCellId === cell.id}
+            >
               <Cell
                 cell={cell}
                 layoutMode="grid"
@@ -547,6 +579,7 @@ const NotebookContent: React.FC = () => {
     isHydrating,
   } = useNotebookState()
   const layoutMode = settings.layoutMode ?? "list"
+  useScrollRestoredCellIntoView(maximizedCellId)
 
   if (cells.length === 0) {
     return (
