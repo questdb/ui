@@ -40,7 +40,9 @@ import {
   OPENAI_ALLOWED_HEADERS,
 } from "./fetchWithFilteredHeaders"
 
-function toNativeMessages(messages: Message[]): ChatCompletionMessageParam[] {
+export function toNativeMessages(
+  messages: Message[],
+): ChatCompletionMessageParam[] {
   const result: ChatCompletionMessageParam[] = []
   // Buffer user messages that appear between assistant(tool_calls) and tool results
   // so tool messages stay adjacent to their parent assistant

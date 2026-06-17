@@ -36,7 +36,7 @@ import {
   ANTHROPIC_ALLOWED_HEADERS,
 } from "./fetchWithFilteredHeaders"
 
-function toNativeMessages(messages: Message[]): MessageParam[] {
+export function toNativeMessages(messages: Message[]): MessageParam[] {
   const result: MessageParam[] = []
 
   type UserBlock =

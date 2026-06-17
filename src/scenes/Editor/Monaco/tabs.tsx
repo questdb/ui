@@ -382,8 +382,7 @@ export const Tabs = () => {
       buffer?.value !== "" ||
       (buffer.metricsViewState?.metrics &&
         buffer.metricsViewState.metrics.length > 0) ||
-      (buffer.notebookViewState?.cells &&
-        buffer.notebookViewState.cells.some((c) => c.value.trim() !== ""))
+      buffer.notebookViewState != null
     ) {
       await archiveBuffer(parseInt(id))
     } else {

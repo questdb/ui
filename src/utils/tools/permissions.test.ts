@@ -7,9 +7,9 @@ import {
   classifyAndCheckSqlForExecution,
   classifyAndCheckSqlForRunQuery,
   classifyStatements,
+  normalizePermissions,
   requireAllDQL,
   runPermissionGate,
-  togglePermission,
   type Permissions,
   type ToolCategory,
 } from "./permissions"
@@ -47,48 +47,63 @@ const TEST_CATEGORY_MAP: Record<string, ToolCategory> = {
 const testCategoryFor = (name: string): ToolCategory =>
   TEST_CATEGORY_MAP[name] ?? "free"
 
-describe("togglePermission cascade (write ⇒ read ⇒ grantSchemaAccess)", () => {
-  it("enabling write also enables read AND grantSchemaAccess", () => {
-    expect(togglePermission(ALL_OFF, "write", true)).toEqual(ALL_ON)
-    expect(togglePermission(SCHEMA_ONLY, "write", true)).toEqual(ALL_ON)
-    expect(togglePermission(READ_ONLY, "write", true)).toEqual(ALL_ON)
+describe("normalizePermissions cascade (write ⇒ read ⇒ grantSchemaAccess)", () => {
+  it("write:true cascades to all true", () => {
+    // Given a permissions object with write enabled
+    // When normalized
+    // Then read and grantSchemaAccess are forced on
+    expect(normalizePermissions(ALL_ON)).toEqual(ALL_ON)
   })
 
-  it("enabling read also enables grantSchemaAccess (leaves write alone)", () => {
-    expect(togglePermission(ALL_OFF, "read", true)).toEqual(READ_ONLY)
-    expect(togglePermission(SCHEMA_ONLY, "read", true)).toEqual(READ_ONLY)
-    expect(togglePermission(ALL_ON, "read", true)).toEqual(ALL_ON)
+  it("read:true (write:false) keeps write off but forces schema on", () => {
+    // Given read enabled without write
+    // When normalized
+    // Then grantSchemaAccess is forced on and write stays off
+    expect(normalizePermissions(READ_ONLY)).toEqual(READ_ONLY)
   })
 
-  it("enabling grantSchemaAccess leaves read/write alone", () => {
-    expect(togglePermission(ALL_OFF, "grantSchemaAccess", true)).toEqual(
-      SCHEMA_ONLY,
-    )
-    expect(togglePermission(READ_ONLY, "grantSchemaAccess", true)).toEqual(
-      READ_ONLY,
-    )
+  it("only grantSchemaAccess:true is left unchanged (read/write stay false)", () => {
+    // Given schema access alone
+    // When normalized
+    // Then nothing cascades up; read and write stay off
+    expect(normalizePermissions(SCHEMA_ONLY)).toEqual(SCHEMA_ONLY)
   })
 
-  it("disabling grantSchemaAccess also disables read AND write", () => {
-    expect(togglePermission(ALL_ON, "grantSchemaAccess", false)).toEqual(
-      ALL_OFF,
-    )
-    expect(togglePermission(READ_ONLY, "grantSchemaAccess", false)).toEqual(
-      ALL_OFF,
-    )
+  it("all false stays all false", () => {
+    // Given every scope denied
+    // When normalized
+    // Then the object is unchanged
+    expect(normalizePermissions(ALL_OFF)).toEqual(ALL_OFF)
   })
 
-  it("disabling read also disables write", () => {
-    expect(togglePermission(ALL_ON, "read", false)).toEqual(SCHEMA_ONLY)
-    expect(togglePermission(READ_ONLY, "read", false)).toEqual(SCHEMA_ONLY)
+  it("impossible triple read:true with schema:false cascades up", () => {
+    // Given a hand-edited triple where read is on but schema was left off
+    const handEdited: Permissions = {
+      grantSchemaAccess: false,
+      read: true,
+      write: false,
+    }
+    // When normalized
+    // Then schema is forced on and write stays off
+    expect(normalizePermissions(handEdited)).toEqual(READ_ONLY)
   })
 
-  it("disabling write leaves read and grantSchemaAccess alone", () => {
-    expect(togglePermission(ALL_ON, "write", false)).toEqual(READ_ONLY)
-    expect(togglePermission(READ_ONLY, "write", false)).toEqual(READ_ONLY)
+  it("impossible triple write:true with read/schema:false cascades to all true", () => {
+    // Given a hand-edited triple where write is on but read/schema were left off
+    const handEdited: Permissions = {
+      grantSchemaAccess: false,
+      read: false,
+      write: true,
+    }
+    // When normalized
+    // Then every scope is forced on
+    expect(normalizePermissions(handEdited)).toEqual(ALL_ON)
   })
 
-  it("default constants", () => {
+  it("default constants match the cascade invariant", () => {
+    // Given the exported defaults
+    // When compared against the canonical fixtures
+    // Then they hold the cascade invariant
     expect(DEFAULT_GRANTED).toEqual(READ_ONLY)
     expect(DEFAULT_DENIED).toEqual(ALL_OFF)
   })

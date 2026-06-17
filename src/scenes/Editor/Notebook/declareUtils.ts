@@ -182,10 +182,30 @@ export const validateVariableShape = (
   return null
 }
 
+export type InsertedRange = { start: number; end: number; delta: number }
+
 export type PreparedSql = {
   sql: string
   // Information about the rewrite, or null if no rewrite happened.
-  insertedRange: { start: number; end: number; delta: number } | null
+  insertedRange: InsertedRange | null
+}
+
+export type WireErrorPosition =
+  | { kind: "passthrough"; position: number }
+  | { kind: "inDeclareBlock"; position: number }
+  | { kind: "shifted"; position: number }
+
+export const mapWireErrorPosition = (
+  range: InsertedRange,
+  wirePosition: number,
+): WireErrorPosition => {
+  if (wirePosition < range.start) {
+    return { kind: "passthrough", position: wirePosition }
+  }
+  if (wirePosition < range.end) {
+    return { kind: "inDeclareBlock", position: range.start }
+  }
+  return { kind: "shifted", position: wirePosition - range.delta }
 }
 
 const NO_OP = (sql: string): PreparedSql => ({ sql, insertedRange: null })

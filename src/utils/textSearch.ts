@@ -331,6 +331,7 @@ async function findMatchesWithWorker(
 
     timeoutId = setTimeout(() => {
       cleanupHandlers()
+      terminateSearchWorker()
       reject(
         new SearchTimeoutError(
           "Search took too long and was interrupted. Try using simpler search patterns.",
@@ -347,6 +348,8 @@ async function findMatchesWithWorker(
         return
       }
 
+      clearTimeoutIfExists()
+      cleanupHandlers()
       if (e.data.success) {
         resolve(e.data.matches)
       } else {

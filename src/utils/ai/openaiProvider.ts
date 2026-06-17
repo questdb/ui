@@ -41,7 +41,9 @@ import {
  * - assistant tool_calls → { type: "function_call", call_id, name, arguments } per call
  * - tool messages → { type: "function_call_output", call_id, output }
  */
-function toNativeMessages(messages: Message[]): OpenAI.Responses.ResponseInput {
+export function toNativeMessages(
+  messages: Message[],
+): OpenAI.Responses.ResponseInput {
   const input: OpenAI.Responses.ResponseInput = []
   // Buffer user messages that appear between function_call and function_call_output
   // so tool outputs stay adjacent to their parent function calls

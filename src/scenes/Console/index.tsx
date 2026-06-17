@@ -8,7 +8,6 @@ import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
 import { useScreenSize } from "../../hooks"
-import { ZeroState } from "./zero-state"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
@@ -121,7 +120,6 @@ const Console = () => {
 
   const [resultViewMode, setResultViewMode] = useState<ResultViewMode>("grid")
   const resultRef = React.useRef<HTMLDivElement>(null)
-  const zeroStateRef = React.useRef<HTMLDivElement>(null)
   const importRef = React.useRef<HTMLDivElement>(null)
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
 
@@ -129,21 +127,17 @@ const Console = () => {
     if (resultRef.current) {
       resultRef.current.style.display = panel === "result" ? "flex" : "none"
     }
-    if (zeroStateRef.current) {
-      zeroStateRef.current.style.display =
-        panel === "zeroState" ? "flex" : "none"
-    }
     if (importRef.current) {
       importRef.current.style.display = panel === "import" ? "flex" : "none"
     }
   }
 
   useEffect(() => {
-    if (resultRef.current && result) {
-      dispatch(actions.console.setActiveBottomPanel("result"))
-    } else if (zeroStateRef.current) {
-      dispatch(actions.console.setActiveBottomPanel("zeroState"))
-    }
+    dispatch(
+      actions.console.setActiveBottomPanel(
+        resultRef.current && result ? "result" : "zeroState",
+      ),
+    )
   }, [result])
 
   useEffect(() => {
@@ -324,9 +318,6 @@ const Console = () => {
                   <Bottom>
                     <Tab ref={resultRef}>
                       {result && <Result viewMode={resultViewMode} />}
-                    </Tab>
-                    <Tab ref={zeroStateRef}>
-                      <ZeroState />
                     </Tab>
                     <Tab ref={importRef}>
                       <Import />

@@ -18,6 +18,7 @@ import {
   sqlHash,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
+import { deleteCellSnapshot } from "../../../store/notebookResults"
 
 // Schema panel + completions listen for MSG_QUERY_SCHEMA to refresh.
 const publishSchemaIfMutating = (type: QueryExecResult["type"]): void => {
@@ -342,8 +343,11 @@ export const useCellExecution = ({
         cellId,
       )
       markCancelledAll(cellId)
+      // The prior snapshot holds rows for a now-cancelled run; drop it so a
+      // reload shows the cancelled status, not stale success rows.
+      void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
     },
-    [markCancelledAll],
+    [bufferId, markCancelledAll],
   )
 
   const cancelQuery = useCallback(

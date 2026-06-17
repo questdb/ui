@@ -2,7 +2,11 @@
 // survive tab close or browser sync. Permissions (booleans, not creds)
 // live in localStorage under "mcp:permissions".
 
-import { DEFAULT_GRANTED, type Permissions } from "../tools/permissions"
+import {
+  DEFAULT_GRANTED,
+  normalizePermissions,
+  type Permissions,
+} from "../tools/permissions"
 
 const KEY = "mcpBridgePendingPair"
 const PERMISSIONS_KEY = "mcp:permissions"
@@ -77,12 +81,8 @@ const safeParsePermissions = (raw: string | null): Permissions | null => {
       typeof (parsed as Record<string, unknown>).read === "boolean" &&
       typeof (parsed as Record<string, unknown>).write === "boolean"
     ) {
-      const p = parsed as Permissions
-      // Re-apply cascade in case the stored value was hand-edited:
-      // write ⇒ read ⇒ grantSchemaAccess.
-      if (p.write) return { grantSchemaAccess: true, read: true, write: true }
-      if (p.read) return { grantSchemaAccess: true, read: true, write: false }
-      return p
+      // Re-apply the cascade in case the stored value was hand-edited.
+      return normalizePermissions(parsed as Permissions)
     }
   } catch {
     // Stale / corrupt — fall through to null.

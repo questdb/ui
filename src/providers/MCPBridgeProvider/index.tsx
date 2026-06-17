@@ -28,6 +28,7 @@ import {
 } from "../../utils/mcp/mcpBridgeStorage"
 import {
   DEFAULT_GRANTED,
+  normalizePermissions,
   type Permissions,
 } from "../../utils/tools/permissions"
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
@@ -319,12 +320,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [])
 
   const setPermissions = useCallback((nextRaw: Permissions) => {
-    // Defensive cascade — UI's togglePermission already enforces this,
-    // but a direct API caller could write an impossible triple.
-    let next: Permissions = nextRaw
-    if (next.write) next = { grantSchemaAccess: true, read: true, write: true }
-    else if (next.read)
-      next = { grantSchemaAccess: true, read: true, write: false }
+    const next = normalizePermissions(nextRaw)
     const prev = permissionsRef.current
     const isDowngrade =
       (prev.grantSchemaAccess && !next.grantSchemaAccess) ||

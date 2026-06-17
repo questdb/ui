@@ -24,24 +24,10 @@ export const DEFAULT_DENIED: Permissions = {
   write: false,
 }
 
-export const togglePermission = (
-  prev: Permissions,
-  key: keyof Permissions,
-  next: boolean,
-): Permissions => {
-  if (key === "write" && next) {
-    return { grantSchemaAccess: true, read: true, write: true }
-  }
-  if (key === "read" && next) {
-    return { grantSchemaAccess: true, read: true, write: prev.write }
-  }
-  if (key === "grantSchemaAccess" && !next) {
-    return { grantSchemaAccess: false, read: false, write: false }
-  }
-  if (key === "read" && !next) {
-    return { ...prev, read: false, write: false }
-  }
-  return { ...prev, [key]: next }
+export const normalizePermissions = (raw: Permissions): Permissions => {
+  if (raw.write) return { grantSchemaAccess: true, read: true, write: true }
+  if (raw.read) return { grantSchemaAccess: true, read: true, write: false }
+  return { grantSchemaAccess: raw.grantSchemaAccess, read: false, write: false }
 }
 
 export type PermissionDecision =

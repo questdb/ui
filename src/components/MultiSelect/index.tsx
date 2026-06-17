@@ -170,6 +170,7 @@ export const MultiSelect: React.FC<Props> = ({
         data-name={name}
         disabled={disabled}
         title={summary}
+        aria-label={[name, summary].filter(Boolean).join(": ")}
       >
         <TriggerLabel>{summary}</TriggerLabel>
         <Caret size="24" />

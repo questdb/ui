@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   isValidVariableName,
+  mapWireErrorPosition,
   normalizeVariables,
   parseDeclareBlock,
   prependGlobalsDeclare,
@@ -596,5 +597,69 @@ describe("validateVariableShape", () => {
   it("rejects an invalid variable name", () => {
     const err = validateVariableShape({ name: "bad-name", value: "1" })
     expect(err).toEqual({ kind: "parse" })
+  })
+})
+
+describe("mapWireErrorPosition", () => {
+  const range = { start: 10, end: 30, delta: 20 }
+
+  it("passes a position before the insertion point straight through", () => {
+    // Given a wire error positioned before the injected DECLARE block
+    // When mapped
+    // Then the original position is returned unchanged
+    expect(mapWireErrorPosition(range, 4)).toEqual({
+      kind: "passthrough",
+      position: 4,
+    })
+  })
+
+  it("clamps a position inside the DECLARE block to the block start", () => {
+    // Given a wire error landing within the injected block
+    // When mapped
+    // Then it is clamped to the block start and flagged as in-block
+    expect(mapWireErrorPosition(range, 20)).toEqual({
+      kind: "inDeclareBlock",
+      position: 10,
+    })
+  })
+
+  it("shifts a position after the DECLARE block back by delta", () => {
+    // Given a wire error positioned after the injected block
+    // When mapped
+    // Then it is shifted back into user-SQL coordinates by delta
+    expect(mapWireErrorPosition(range, 35)).toEqual({
+      kind: "shifted",
+      position: 15,
+    })
+  })
+
+  it("treats position === start as inside the block (lower boundary)", () => {
+    // Given a wire error exactly at the block start
+    // When mapped
+    // Then it is treated as inside the block, not as passthrough
+    expect(mapWireErrorPosition(range, 10)).toEqual({
+      kind: "inDeclareBlock",
+      position: 10,
+    })
+  })
+
+  it("treats position === end as after the block (upper boundary)", () => {
+    // Given a wire error exactly at the block end
+    // When mapped
+    // Then it is shifted, since end is exclusive for the in-block range
+    expect(mapWireErrorPosition(range, 30)).toEqual({
+      kind: "shifted",
+      position: 10,
+    })
+  })
+
+  it("treats position === end-1 as inside the block (last in-block offset)", () => {
+    // Given a wire error one position before the block end
+    // When mapped
+    // Then it is still inside the block
+    expect(mapWireErrorPosition(range, 29)).toEqual({
+      kind: "inDeclareBlock",
+      position: 10,
+    })
   })
 })
