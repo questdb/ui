@@ -859,7 +859,7 @@ describe("TableDetailsDrawer", () => {
     })
   })
 
-  describe.only("AI interactions disabled - schema access not granted", () => {
+  describe("AI interactions disabled - schema access not granted", () => {
     before(() => {
       cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
