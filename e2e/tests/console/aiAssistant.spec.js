@@ -1232,7 +1232,7 @@ describe("ai assistant", () => {
 
       // When - Close chat and create a new tab
       cy.getByDataHook("chat-window-close").click()
-      cy.get(".new-tab-button").click()
+      cy.addEditorTab()
 
       // Then - New tab should be created (2 tabs total now)
       cy.getEditorTabs().should("have.length", 2)
@@ -3024,7 +3024,7 @@ Syntax: \`avg(column)\`
 
       // Close the tab that the suggestion was applied to (archive the buffer)
       // First, create another tab so we can close the current one
-      cy.get(".new-tab-button").click()
+      cy.addEditorTab()
       cy.getEditorTabs().should("have.length", 2)
 
       // Close the first tab (the one with the accepted query)
@@ -3334,7 +3334,8 @@ describe("custom providers", () => {
     cy.getByDataHook("custom-provider-remove-model").click()
     cy.getByDataHook("custom-provider-model-chip").should("not.exist")
 
-    cy.getByDataHook("custom-provider-schema-access").check()
+    cy.getByDataHook("permissions-trigger").click()
+    cy.getByDataHook("permission-level-schema").click()
     cy.getByDataHook("multi-step-modal-next-button").click()
 
     cy.contains("AI Assistant activated successfully").should("be.visible")
@@ -3909,7 +3910,7 @@ describe("custom providers", () => {
       "have.value",
       "200000",
     )
-    cy.getByDataHook("custom-provider-schema-access").should("be.checked")
+    cy.getByDataHook("permissions-trigger").should("contain", "Schema access")
     cy.getByDataHook("custom-provider-add-model-button").should("be.disabled")
 
     cy.getByDataHook("custom-provider-manual-model-input").type(

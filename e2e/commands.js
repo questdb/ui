@@ -611,8 +611,13 @@ Cypress.Commands.add("getSearchResultGroups", () => {
   return cy.getByDataHook("search-result-buffer-group")
 })
 
-Cypress.Commands.add("createTabWithContent", (content, title) => {
+Cypress.Commands.add("addEditorTab", () => {
   cy.getByDataHook("new-tab-button").click()
+  cy.getByDataHook("new-tab-editor").click()
+})
+
+Cypress.Commands.add("createTabWithContent", (content, title) => {
+  cy.addEditorTab()
   cy.get(".chrome-tab-was-just-added").should("be.visible")
   cy.get(".chrome-tab-was-just-added").should("not.exist")
   cy.typeQueryDirectly(content)

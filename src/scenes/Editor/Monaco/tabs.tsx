@@ -666,11 +666,17 @@ export const Tabs = () => {
           }}
         />
         <DropdownMenu.Portal>
-          <DropdownMenu.Content side="bottom" align="start" sideOffset={4}>
+          <DropdownMenu.Content
+            side="bottom"
+            align="start"
+            sideOffset={4}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+          >
             <DropdownMenu.Item
               onSelect={() => {
                 void addBuffer()
               }}
+              data-hook="new-tab-editor"
             >
               <File size={16} />
               New editor
@@ -681,6 +687,7 @@ export const Tabs = () => {
                   notebookViewState: createDefaultNotebookViewState(),
                 })
               }}
+              data-hook="new-tab-notebook"
             >
               <NotebookIcon size={16} />
               New notebook
