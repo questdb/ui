@@ -264,7 +264,11 @@ describe("run query with selection", () => {
 
     // When the user selects all queries (e.g. to share the console window)
     cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 3, column: 10 })
-    cy.wait(150) // let the selection propagate to queriesToRun (> 1)
+    // Then the multi-statement selection has propagated to the run state.
+    // This gate is mandatory: the regression (Cancel opening the run-all modal)
+    // only manifests when queriesToRun > 1, so without it the test would pass
+    // trivially even on the buggy code.
+    cy.waitForSelectedQueries(3)
 
     // Then the Cancel button still cancels the running query instead of triggering a run
     cy.getByDataHook("button-cancel-query").should("be.visible").click()
@@ -273,29 +277,91 @@ describe("run query with selection", () => {
     cy.getByRole("dialog").should("not.exist")
     cy.getByDataHook("run-all-queries-confirm").should("not.exist")
     cy.getByDataHook("button-run-query").should("be.visible")
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "Cancelled by user")
+  })
 
-    // When the user runs a single query again
+  it("should run only the selected queries (not all) when starting a run while a query is busy", () => {
+    // Given a long-running single query
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(3000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    // When the user runs a single query
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
 
-    // When the user selects all queries and triggers a run with the keyboard
+    // When the user selects a STRICT SUBSET (queries 1 and 2 only, not 3) and
+    // triggers a run with the keyboard while the first query is still running
     cy.window().then((win) => {
       const editor = win.monaco.editor.getEditors()[0]
       editor.setSelection({
         startLineNumber: 1,
         startColumn: 1,
-        endLineNumber: 3,
+        endLineNumber: 2,
         endColumn: 10,
       })
       editor.focus()
     })
-    cy.wait(150) // let the selection propagate to queriesToRun (> 1)
+    // Then the selection has propagated as exactly 2 queries (not all 3)
+    cy.waitForSelectedQueries(2)
     cy.focused().type(`${ctrlOrCmd}{enter}`)
 
-    // Then the run cancellation modal appears for the selected queries
+    // Then the confirmation modal is for the selected queries, not "run all"
     cy.getByRole("dialog").should("be.visible")
     cy.getByRole("dialog").should("contain", "Run selected queries")
+    cy.getByRole("dialog").should("contain", "2 selected queries")
+    cy.getByDataHook("run-all-queries-warning").should(
+      "contain",
+      "Current query execution will be aborted",
+    )
+    // And the stop-after-failure option is not offered for selection runs
+    cy.getByDataHook("stop-after-failure-checkbox").should("not.exist")
+
+    // When the user confirms
+    cy.getByDataHook("run-all-queries-confirm").click()
+
+    // Then the previously running query is cancelled
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "Cancelled by user")
+
+    // And EXACTLY the 2 selected queries run -- this distinguishes the fixed
+    // behaviour (selection preserved -> 2) from the regression (selection
+    // dropped -> all 3 run).
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
+  })
+
+  it("should run all queries when starting a run-all while a query is busy", () => {
+    // Given a long-running single query
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(3000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    // When the user runs a single query
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user triggers "run all queries" (Ctrl/Cmd+Shift+Enter) while busy
+    cy.window().then((win) => {
+      win.monaco.editor.getEditors()[0].focus()
+    })
+    cy.focused().type(`${ctrlOrCmd}{shift}{enter}`)
+
+    // Then the confirmation modal is for running ALL queries
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run all queries")
     cy.getByDataHook("run-all-queries-warning").should(
       "contain",
       "Current query execution will be aborted",
@@ -308,7 +374,7 @@ describe("run query with selection", () => {
     cy.expandNotifications()
     cy.getExpandedNotifications().should("contain", "Cancelled by user")
 
-    // And all the selected queries run one by one
+    // And ALL 3 queries in the tab run (run-all clears the selection)
     cy.contains('[data-hook="success-notification"]', "Running completed", {
       timeout: 20000,
     })
@@ -484,14 +550,15 @@ describe("run all queries in tab", () => {
       req.on("response", (res) => {
         res.setDelay(1000)
       })
-    })
+    }).as("exec")
     cy.typeQuery("select 1;\nselect 2;\nselect 3;")
 
     cy.getEditorTabs().then(($tabs) => {
       const initialTabCount = $tabs.length
 
-      // When
+      // When the script is actually running (first query in flight)
       cy.clickRunScript()
+      cy.wait("@exec")
 
       // Then the new tab button is not interactive
       cy.get(".new-tab-button-wrapper").should(
@@ -503,7 +570,40 @@ describe("run all queries in tab", () => {
       // When forcing a click past the disabled styling
       cy.getByDataHook("new-tab-button").click({ force: true })
 
-      // Then no new tab is added
+      // Then no new tab is added. addBuffer inserts asynchronously (IndexedDB ->
+      // useLiveQuery), so settle before the negative assertion to give a
+      // regression time to surface instead of asserting on the instantaneous
+      // (still-equal) count.
+      cy.wait(500)
+      cy.getEditorTabs().should("have.length", initialTabCount)
+    })
+  })
+
+  it("should ignore the add-new-tab command (Alt+T) while running script", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    }).as("exec")
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    cy.getEditorTabs().then(($tabs) => {
+      const initialTabCount = $tabs.length
+
+      // When the script is running and the user invokes the add-tab command
+      // (the Alt+T keybinding maps to the "add_new_tab" editor action). This
+      // path is guarded by tabsDisabledRef, separate from the button/CSS path.
+      cy.clickRunScript()
+      cy.wait("@exec")
+      cy.window().then((win) => {
+        const editor = win.monaco.editor.getEditors()[0]
+        editor.focus()
+        editor.trigger("test", "add_new_tab")
+      })
+
+      // Then no new tab is added (settle to let any async tab insert surface)
+      cy.wait(500)
       cy.getEditorTabs().should("have.length", initialTabCount)
     })
   })

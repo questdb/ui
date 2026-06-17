@@ -355,6 +355,19 @@ Cypress.Commands.add("getExpandedNotifications", () =>
   cy.get('[data-hook="notifications-expanded"]'),
 )
 
+// Deterministically wait until the redux `queriesToRun` selection has the
+// expected length. The store is exposed on `window.__store__` only under
+// Cypress (see src/index.tsx). Use this instead of a fixed `cy.wait()` to gate
+// on selection propagation (the editor debounces selection -> queriesToRun).
+Cypress.Commands.add("waitForSelectedQueries", (count) =>
+  cy
+    .window()
+    .its("__store__")
+    .invoke("getState")
+    .its("query.queriesToRun")
+    .should("have.length", count),
+)
+
 Cypress.Commands.add("execQuery", (query) => {
   const authHeader = localStorage.getItem("basic.auth.header")
   cy.request({
