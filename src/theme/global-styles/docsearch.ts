@@ -54,6 +54,15 @@ export const DocSearchStyles = css`
     }
   }
 
+  // Allotment clips its absolutely-positioned panes with overflow:hidden, which also
+  // makes the split view a scroll container; a collapsed-pane sash then pokes a few px
+  // past the edge and lets scrollIntoView/focus drag the whole shell. clip keeps the
+  // clipping but is not scrollable.
+  .split-view.split-view-vertical,
+  .split-view.split-view-horizontal {
+    overflow: clip;
+  }
+
   .DocSearch-Button {
     height: 3rem;
     border-radius: 0.4rem;

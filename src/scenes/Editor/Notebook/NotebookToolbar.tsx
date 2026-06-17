@@ -101,6 +101,11 @@ const BuildWithAIButton = styled(Button).attrs({ skin: "gradient" })`
   &:hover:not([disabled]) {
     border: 1px solid ${({ theme }) => theme.color.pinkDarker};
   }
+  &:disabled {
+    svg {
+      filter: grayscale(100%);
+    }
+  }
 `
 
 const TooltipButton: React.FC<{

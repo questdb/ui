@@ -3,12 +3,20 @@ import styled from "styled-components"
 import type { SearchMatch } from "../../utils/textSearch"
 import { useEditor } from "../../providers"
 import { ChevronRight, ChevronDown } from "@styled-icons/boxicons-solid"
-import { FileTextIcon, ChartLineIcon } from "@phosphor-icons/react"
+import {
+  FileTextIcon,
+  ChartLineIcon,
+  NotebookIcon,
+} from "@phosphor-icons/react"
 import { Text } from "../../components"
 import {
   VirtualizedTree,
   VirtualizedTreeHandle,
 } from "../../components/VirtualizedTree"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
+import { requestCellReveal } from "../Editor/Notebook/cellReveal"
+import { waitForController } from "../../utils/notebookAIBridge"
 
 const ResultsContainer = styled.div`
   padding: 0;
@@ -116,6 +124,15 @@ const LineNumber = styled.span`
   min-width: 3.4rem;
 `
 
+const MatchType = styled.span`
+  color: ${({ theme }) => theme.color.comment};
+  margin-right: 0.8rem;
+  text-align: left;
+  font-size: 1.1rem;
+  min-width: 3.4rem;
+  flex-shrink: 0;
+`
+
 const MatchText = styled.span`
   color: ${({ theme }) => theme.color.foreground};
   font-family:
@@ -139,7 +156,7 @@ const NoResults = styled.div`
   text-align: center;
 `
 
-type FlattenedItem = { isMetricsMatch: boolean } & (
+type FlattenedItem = { isMetricsMatch: boolean; isNotebookMatch: boolean } & (
   | {
       type: "header"
       bufferId: number
@@ -154,6 +171,22 @@ type FlattenedItem = { isMetricsMatch: boolean } & (
   | { type: "match"; match: SearchMatch; id: string; parentId: string }
   | { type: "title-match"; match: SearchMatch; id: string }
 )
+
+const renderResultIcon = (item: FlattenedItem) =>
+  item.isNotebookMatch ? (
+    <NotebookIcon />
+  ) : item.isMetricsMatch ? (
+    <ChartLineIcon />
+  ) : (
+    <FileTextIcon />
+  )
+
+const notebookMatchTypeLabel = (match: SearchMatch): string =>
+  match.notebookField === "chartName"
+    ? "Chart"
+    : match.cellType === "markdown"
+      ? "Text"
+      : "SQL"
 
 type SearchResultsProps = {
   groupedMatches: Map<number, SearchMatch[]>
@@ -204,6 +237,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             match,
             id: `title-match-${bufferId}-${index}`,
             isMetricsMatch: !!firstMatch.isMetricsMatch,
+            isNotebookMatch: !!firstMatch.isNotebookMatch,
           })
         })
       } else {
@@ -218,6 +252,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
           id: headerId,
           titleMatch,
           isMetricsMatch: !!firstMatch.isMetricsMatch,
+          isNotebookMatch: !!firstMatch.isNotebookMatch,
           isStale: staleBuffers.includes(bufferId),
         })
 
@@ -230,6 +265,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
                 id: `match-${bufferId}-${match.range.startLineNumber}-${match.range.startColumn}-${index}`,
                 parentId: headerId,
                 isMetricsMatch: !!match.isMetricsMatch,
+                isNotebookMatch: !!match.isNotebookMatch,
               })
             }
           })
@@ -331,9 +367,36 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     ],
   )
 
+  const revealNotebookCell = useCallback(async (item: FlattenedItem) => {
+    if (item.type !== "match") return
+    const { match } = item
+    if (!match.cellId || !match.notebookField || !match.cellType) return
+    requestCellReveal({
+      bufferId: match.bufferId,
+      cellId: match.cellId,
+      range: match.range,
+      notebookField: match.notebookField,
+      cellType: match.cellType,
+    })
+    try {
+      await waitForController(match.bufferId)
+    } catch {
+      // Controller may never register (notebook closed/unmounted); the
+      // mount-drain still delivers the parked request when it does mount.
+    }
+    eventBus.publish(EventType.NOTEBOOK_REVEAL_CELL)
+  }, [])
+
   const positionEditorForItem = useCallback(
     (item: FlattenedItem) => {
       if (item.isMetricsMatch) {
+        return
+      }
+
+      if (item.isNotebookMatch) {
+        if (item.type === "match") {
+          void revealNotebookCell(item)
+        }
         return
       }
 
@@ -368,7 +431,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             ]) ?? []
       }
     },
-    [editorRef],
+    [editorRef, revealNotebookCell],
   )
 
   const handleClick = async (focusedIndex: number | null) => {
@@ -396,10 +459,10 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
     await openBufferFromItem(item, true)
     positionEditorForItem(item)
 
-    if (!item.isMetricsMatch) {
-      editorRef.current?.focus()
-    } else {
+    if (item.isMetricsMatch || item.isNotebookMatch) {
       setFocusedIndex(null)
+    } else {
+      editorRef.current?.focus()
     }
   }
 
@@ -495,9 +558,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             >
               {isExpanded ? <ChevronDown /> : <ChevronRight />}
             </ChevronIcon>
-            <FileIcon aria-hidden="true">
-              {item.isMetricsMatch ? <ChartLineIcon /> : <FileTextIcon />}
-            </FileIcon>
+            <FileIcon aria-hidden="true">{renderResultIcon(item)}</FileIcon>
             <ItemText $isArchived={item.isArchived}>
               {item.titleMatch
                 ? renderHighlightedTextAtPosition(
@@ -525,14 +586,17 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             data-active={isFocused}
             role="treeitem"
             aria-level={1}
-            aria-label={`${item.match.bufferLabel} ${item.match.isArchived ? "closed" : ""}`}
+            aria-label={`${item.isNotebookMatch ? "Notebook title: " : ""}${item.match.bufferLabel}${item.match.isArchived ? " closed" : ""}`}
           >
             <FileIcon
               data-hook="search-result-title-match-icon"
               aria-hidden="true"
             >
-              {item.isMetricsMatch ? <ChartLineIcon /> : <FileTextIcon />}
+              {renderResultIcon(item)}
             </FileIcon>
+            {item.isNotebookMatch && (
+              <MatchType aria-hidden="true">Title</MatchType>
+            )}
             <ItemText
               $isArchived={item.match.isArchived}
               data-hook="search-result-title-match-text"
@@ -559,14 +623,27 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             data-active={isFocused}
             role="treeitem"
             aria-level={2}
-            aria-label={`Line ${item.match.range.startLineNumber}: ${item.match.previewText}`}
+            aria-label={
+              item.isNotebookMatch
+                ? `${notebookMatchTypeLabel(item.match)}: ${item.match.previewText}`
+                : `Line ${item.match.range.startLineNumber}: ${item.match.previewText}`
+            }
           >
-            <LineNumber
-              data-hook="search-result-line-number"
-              aria-hidden="true"
-            >
-              {item.match.range.startLineNumber}
-            </LineNumber>
+            {item.isNotebookMatch ? (
+              <MatchType
+                data-hook="search-result-match-type"
+                aria-hidden="true"
+              >
+                {notebookMatchTypeLabel(item.match)}
+              </MatchType>
+            ) : (
+              <LineNumber
+                data-hook="search-result-line-number"
+                aria-hidden="true"
+              >
+                {item.match.range.startLineNumber}
+              </LineNumber>
+            )}
             <MatchText>
               {renderHighlightedTextAtPosition(
                 item.match.previewText,
@@ -615,7 +692,8 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
           const target = event.target as HTMLElement | null
           if (
             target?.closest(".monaco-editor") ||
-            target?.closest(".metrics-root")
+            target?.closest(".metrics-root") ||
+            target?.closest("[data-notebook-root]")
           ) {
             await convertTemporaryToPermanent()
           } else {

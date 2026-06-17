@@ -24,4 +24,5 @@ export enum EventType {
   AI_QUERY_HIGHLIGHT = "ai.query.highlight",
   NOTEBOOK_CELL_RESET_SIZE = "notebook.cell.reset.size",
   NOTEBOOK_CELL_EXPAND_WIDTH = "notebook.cell.expand.width",
+  NOTEBOOK_REVEAL_CELL = "notebook.cell.reveal",
 }

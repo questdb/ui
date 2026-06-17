@@ -527,12 +527,15 @@ export const EditorProvider: React.FC = ({ children }) => {
       window.clearTimeout(searchUpdateTimeoutRef.current)
     }
 
-    const searchUpdateKeys = ["value", "label", "archived"]
+    const searchUpdateKeys = ["value", "label", "archived", "notebookViewState"]
     const keys = Object.keys(payload || {})
     if (searchUpdateKeys.some((key) => keys.includes(key))) {
       searchUpdateTimeoutRef.current = window.setTimeout(() => {
-        const metaUpdate = !(keys.length === 1 && keys[0] === "value")
-        const contentUpdate = keys.includes("value")
+        const contentOnlyKeys = ["value", "notebookViewState"]
+        const metaUpdate = !(
+          keys.length === 1 && contentOnlyKeys.includes(keys[0])
+        )
+        const contentUpdate = keys.some((key) => contentOnlyKeys.includes(key))
         eventBus.publish(EventType.BUFFERS_UPDATED, {
           type: "update",
           metaUpdate,

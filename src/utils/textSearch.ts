@@ -19,6 +19,10 @@ export type SearchMatch = {
   archivedAt?: number
   isTitleMatch?: boolean
   isMetricsMatch?: boolean
+  isNotebookMatch?: boolean
+  cellId?: string
+  cellType?: "sql" | "markdown"
+  notebookField?: "cell" | "chartName"
   isStale?: boolean
 }
 

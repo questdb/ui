@@ -2,12 +2,13 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor, MAX_TABS } from "../../../providers"
-import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
+import { History, LineChart, Trash } from "@styled-icons/boxicons-regular"
 import {
   DotsThreeVerticalIcon,
   DownloadSimpleIcon,
   UploadSimpleIcon,
   NotebookIcon,
+  FileTextIcon,
 } from "@phosphor-icons/react"
 import { createDefaultNotebookViewState } from "../../../store/notebook"
 import { toast } from "../../../components/Toast"
@@ -66,7 +67,6 @@ const HistoryButton = styled(Button)`
 
 const DropdownMenuContent = styled(DropdownMenu.Content)`
   margin-top: 0.5rem;
-  width: 20rem;
 `
 
 const ArchivedBuffersList = styled.div`
@@ -561,8 +561,10 @@ export const Tabs = () => {
                     >
                       {buffer.metricsViewState ? (
                         <LineChart size="18px" />
+                      ) : buffer.notebookViewState ? (
+                        <NotebookIcon size="18px" />
                       ) : (
-                        <File size="18px" />
+                        <FileTextIcon size="18px" />
                       )}
                       <Box
                         flexDirection="column"
@@ -678,7 +680,7 @@ export const Tabs = () => {
               }}
               data-hook="new-tab-editor"
             >
-              <File size={16} />
+              <FileTextIcon size={16} />
               New editor
             </DropdownMenu.Item>
             <DropdownMenu.Item

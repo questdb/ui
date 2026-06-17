@@ -30,7 +30,10 @@ import {
   singleResultFromExec,
   sqlHash,
 } from "../notebookUtils"
-import { loadCellSnapshot } from "../../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  loadCellSnapshot,
+} from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 
 const REFRESH_MIN_MS = 2000
@@ -170,6 +173,16 @@ export const DrawCanvas: React.FC<Props> = ({
     [bufferId, cell.id, debouncedSql],
   )
 
+  const clearDrawSnapshot = useCallback(() => {
+    if (bufferId === undefined) return
+    const currentSqlHash = sqlHash(debouncedSql)
+    const last = lastSavedRef.current
+    if (last && last.sqlHash === currentSqlHash && last.results.length === 0)
+      return
+    lastSavedRef.current = { sqlHash: currentSqlHash, results: [] }
+    void deleteCellSnapshot(bufferId, cell.id)
+  }, [bufferId, cell.id, debouncedSql])
+
   const fetchAll = useCallback(async () => {
     if (queries.length === 0) {
       setResults((prev) => (prev.length === 0 ? prev : []))
@@ -233,6 +246,7 @@ export const DrawCanvas: React.FC<Props> = ({
       setLastFetchHadError(out.some((r) => r === null))
       setSettledKey(queriesKey)
       if (next.length > 0) saveDrawSnapshot(next)
+      else clearDrawSnapshot()
     } finally {
       if (inFlightRef.current === ac) inFlightRef.current = null
     }
@@ -243,6 +257,7 @@ export const DrawCanvas: React.FC<Props> = ({
     queries,
     queriesKey,
     saveDrawSnapshot,
+    clearDrawSnapshot,
   ])
 
   // On mount, render instantly from the persisted snapshot (shared with run

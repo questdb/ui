@@ -1,10 +1,64 @@
-import type { SearchOptions, SearchMatch } from "../../utils/textSearch"
+import type {
+  SearchOptions,
+  SearchMatch,
+  TextMatch,
+} from "../../utils/textSearch"
 import type { Buffer } from "../../store/buffers"
+import type { NotebookCell } from "../../store/notebook"
 import {
   findMatches,
   SearchTimeoutError,
   SearchCancelledError,
 } from "../../utils/textSearch"
+
+type NotebookSearchTarget = {
+  text: string
+  notebookField: "cell" | "chartName"
+  cellType: "sql" | "markdown"
+}
+
+// The searchable strings of a single cell, in display order: its SQL/markdown
+// source, then the chart name when present. Chart config only exists on SQL cells.
+export const getNotebookCellSearchTargets = (
+  cell: NotebookCell,
+): NotebookSearchTarget[] => {
+  const cellType = cell.type === "markdown" ? "markdown" : "sql"
+  const targets: NotebookSearchTarget[] = []
+  if (cell.value) {
+    targets.push({ text: cell.value, notebookField: "cell", cellType })
+  }
+  const chartName = cell.chartConfig?.name
+  if (cellType === "sql" && chartName) {
+    targets.push({ text: chartName, notebookField: "chartName", cellType })
+  }
+  return targets
+}
+
+export const toNotebookSearchMatch = (
+  buffer: Buffer,
+  cell: NotebookCell,
+  target: Pick<NotebookSearchTarget, "notebookField" | "cellType">,
+  match: TextMatch,
+): SearchMatch => ({
+  bufferId: buffer.id!,
+  bufferLabel: buffer.label,
+  range: {
+    startLineNumber: match.lineNumber,
+    startColumn: match.column,
+    endLineNumber: match.endLineNumber,
+    endColumn: match.endColumn,
+  },
+  text: match.text,
+  previewText: match.previewText,
+  matchStartInPreview: match.matchStartInPreview,
+  matchEndInPreview: match.matchEndInPreview,
+  isArchived: buffer.archived || false,
+  archivedAt: buffer.archivedAt,
+  isNotebookMatch: true,
+  cellId: cell.id,
+  cellType: target.cellType,
+  notebookField: target.notebookField,
+})
 
 export type SearchResult = {
   query: string
@@ -63,15 +117,26 @@ export class SearchService {
         )
       }
 
-      if (matches.length < maxMatches && buffer.value) {
+      if (matches.length < maxMatches) {
         const remainingCapacity = maxMatches - matches.length
-        const contentMatches = await this.searchInBuffer(
-          buffer,
-          query,
-          { caseSensitive, wholeWord, useRegex },
-          remainingCapacity,
-          searchId,
-        )
+        const contentMatches = buffer.notebookViewState
+          ? await this.searchInNotebookCells(
+              buffer,
+              query,
+              { caseSensitive, wholeWord, useRegex },
+              remainingCapacity,
+              searchId,
+              signal,
+            )
+          : buffer.value
+            ? await this.searchInBuffer(
+                buffer,
+                query,
+                { caseSensitive, wholeWord, useRegex },
+                remainingCapacity,
+                searchId,
+              )
+            : []
 
         if (signal?.aborted) {
           throw new SearchCancelledError()
@@ -320,6 +385,53 @@ export class SearchService {
     }
   }
 
+  private static async searchInNotebookCells(
+    buffer: Buffer,
+    query: string,
+    options: Pick<SearchOptions, "caseSensitive" | "wholeWord" | "useRegex">,
+    limit: number,
+    searchId: string,
+    signal: AbortSignal,
+  ): Promise<SearchMatch[]> {
+    const cells = buffer.notebookViewState?.cells
+    if (!cells || cells.length === 0) return []
+
+    const matches: SearchMatch[] = []
+
+    for (const cell of cells) {
+      if (matches.length >= limit) break
+      if (signal.aborted) throw new SearchCancelledError()
+      for (const target of getNotebookCellSearchTargets(cell)) {
+        if (matches.length >= limit) break
+        const remaining = limit - matches.length
+        try {
+          const textMatches = await findMatches(
+            target.text,
+            query,
+            options,
+            remaining,
+            searchId,
+          )
+          for (const textMatch of textMatches) {
+            matches.push(toNotebookSearchMatch(buffer, cell, target, textMatch))
+          }
+        } catch (e) {
+          if (e instanceof SearchTimeoutError) {
+            for (const textMatch of e.partialMatches ?? []) {
+              matches.push(
+                toNotebookSearchMatch(buffer, cell, target, textMatch),
+              )
+            }
+            throw new SearchTimeoutError(e.message, matches)
+          }
+          throw e
+        }
+      }
+    }
+
+    return matches
+  }
+
   static groupMatchesByBuffer(
     matches: SearchMatch[],
   ): Map<number, SearchMatch[]> {
@@ -357,6 +469,7 @@ export class SearchService {
       archivedAt: buffer.archivedAt,
       isTitleMatch: true,
       isMetricsMatch: !!buffer.metricsViewState,
+      isNotebookMatch: !!buffer.notebookViewState,
     }
   }
 

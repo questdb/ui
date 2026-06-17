@@ -41,6 +41,7 @@ import {
 import { emitUserAction } from "../../../utils/notebookAIBridge"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { consumeReveal, getPendingReveal } from "./cellReveal"
 
 const GRID_COLS = 12
 // 10 px row increments — fine enough that `computeCellGridH`'s `Math.ceil`
@@ -51,7 +52,7 @@ const GRID_COLS = 12
 const ROW_HEIGHT = 10
 const DEFAULT_CELL_H = 30 // 30 × 10 = 300 px (was 6 × 50 = 300 px)
 
-const NotebookWrapper = styled.div`
+const NotebookWrapper = styled.div.attrs({ "data-notebook-root": "true" })`
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -589,6 +590,71 @@ const GridLayout: React.FC = () => {
   )
 }
 
+const REVEAL_SCROLL_RETRIES = 8
+
+// Scroll + glow the cell a search result points at, drained on mount and on the nudge.
+const useNotebookSearchReveal = () => {
+  const { activeBuffer, isNavigatingFromSearchRef } = useEditor()
+  const { setFocusedCell, setMaximizedCellId, getCellsSnapshot } =
+    useNotebookActions()
+  const { maximizedCellId } = useNotebookState()
+
+  const bufferId = activeBuffer.id
+  const maximizedCellIdRef = useRef(maximizedCellId)
+  useEffect(() => {
+    maximizedCellIdRef.current = maximizedCellId
+  }, [maximizedCellId])
+
+  useEffect(() => {
+    // Monaco/Metrics reset isNavigatingFromSearchRef on mount; notebooks must too.
+    isNavigatingFromSearchRef.current = false
+
+    const scrollToCell = (cellId: string, attempt = 0) => {
+      const node = document.querySelector<HTMLElement>(
+        `[data-notebook-cell][data-cell-id="${CSS.escape(cellId)}"]`,
+      )
+      if (node) {
+        node.scrollIntoView({ block: "center" })
+      } else if (attempt < REVEAL_SCROLL_RETRIES) {
+        requestAnimationFrame(() => scrollToCell(cellId, attempt + 1))
+      }
+    }
+
+    const applyReveal = () => {
+      const request = getPendingReveal()
+      if (!request || request.bufferId !== bufferId) return
+      if (!getCellsSnapshot().some((cell) => cell.id === request.cellId)) return
+      if (
+        maximizedCellIdRef.current &&
+        maximizedCellIdRef.current !== request.cellId
+      ) {
+        setMaximizedCellId(null)
+      }
+      setFocusedCell(request.cellId)
+      scrollToCell(request.cellId)
+      // SQL cell matches flash in their own editor (which consumes the request);
+      // markdown/chart matches have no in-editor consumer, so clear here.
+      if (
+        request.notebookField === "chartName" ||
+        request.cellType === "markdown"
+      ) {
+        consumeReveal(request.token)
+      }
+    }
+
+    applyReveal()
+    eventBus.subscribe(EventType.NOTEBOOK_REVEAL_CELL, applyReveal)
+    return () =>
+      eventBus.unsubscribe(EventType.NOTEBOOK_REVEAL_CELL, applyReveal)
+  }, [
+    bufferId,
+    getCellsSnapshot,
+    setFocusedCell,
+    setMaximizedCellId,
+    isNavigatingFromSearchRef,
+  ])
+}
+
 const NotebookContent: React.FC = () => {
   const {
     cells,
@@ -600,6 +666,7 @@ const NotebookContent: React.FC = () => {
   } = useNotebookState()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
+  useNotebookSearchReveal()
 
   if (cells.length === 0) {
     return (

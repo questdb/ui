@@ -23,6 +23,7 @@ import type { NotebookCell } from "../../../../store/notebook"
 import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
+import { useCellReveal } from "./useCellReveal"
 import { useEditor } from "../../../../providers/EditorProvider"
 import {
   emitUserAction,
@@ -109,6 +110,11 @@ const EditorContainer = styled.div<{ $spotlight: boolean }>`
     width: 0.2rem !important;
     background: ${color("green")};
     margin-left: 0.5rem;
+  }
+
+  .notebookSearchHighlight {
+    background-color: rgba(255, 184, 108, 0.5);
+    border-radius: 2px;
   }
 
   ${({ $spotlight }) =>
@@ -385,6 +391,21 @@ const CellInner: React.FC<Props> = ({
   const { applyHighlight, clearHighlight } = useCellSelectionDecoration(
     editorRef,
     monacoRef,
+  )
+
+  const { applyReveal } = useCellReveal(
+    editorRef,
+    monacoRef,
+    cell.id,
+    activeBuffer.id,
+  )
+
+  const handleRevealMount = useCallback<typeof handleEditorMount>(
+    (ed, monaco) => {
+      handleEditorMount(ed, monaco)
+      applyReveal()
+    },
+    [handleEditorMount, applyReveal],
   )
 
   // Install the content-height getter that `topResize.resetHeight`
@@ -740,7 +761,7 @@ const CellInner: React.FC<Props> = ({
             // shows the editor background, so render nothing until Monaco mounts
             // instead of a flashing placeholder.
             loading={null}
-            onMount={handleEditorMount}
+            onMount={handleRevealMount}
             onChange={handleEditorChange}
             options={{
               useShadowDOM: false,
