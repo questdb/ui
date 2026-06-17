@@ -99,7 +99,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       client,
       noopStatus,
     )
-    expect(client.addCell).toHaveBeenCalledWith(1, "SELECT 1", undefined)
+    expect(client.addCell).toHaveBeenCalledWith(
+      1,
+      "SELECT 1",
+      undefined,
+      undefined,
+    )
     expect(JSON.parse(res.content)).toEqual({ cellId: "new-cell" })
   })
 
@@ -1146,6 +1151,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(client.addCell).toHaveBeenCalledWith(
       1,
       "INSERT INTO t VALUES (1)",
+      undefined,
       undefined,
     )
     expect(runCell).not.toHaveBeenCalled()

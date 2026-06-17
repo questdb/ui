@@ -12,7 +12,8 @@ import { PlayIcon, CancelIcon, CircleNotchSpinner } from "../../Monaco/icons"
 import { ChartLineUpIcon } from "@phosphor-icons/react"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions } from "../NotebookProvider"
-import { CellToolbar } from "./CellToolbar"
+import { CellDragHeader } from "./CellDragHeader"
+import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { InlineResultTable } from "../result-table"
 import { ResizeHandle } from "../resize"
 import { CellWrapper } from "./CellWrapper"
@@ -51,19 +52,6 @@ import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 // pasted content (user-confirmed: unbounded).
 const MIN_EDITOR_HEIGHT = 72
 
-const RunBar = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  cursor: grab;
-
-  &:active {
-    cursor: grabbing;
-  }
-`
-
 const RunButton = styled.button`
   display: flex;
   align-items: center;
@@ -88,12 +76,6 @@ const RunButton = styled.button`
     width: 2.4rem;
     height: 2.4rem;
   }
-`
-
-const RunButtonGroup = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
 `
 
 const DrawButton = styled.button<{ $active: boolean }>`
@@ -197,8 +179,6 @@ const CellInner: React.FC<Props> = ({
     updateCell,
     setFocusedCell,
     getCellsSnapshot,
-    moveCellUp,
-    moveCellDown,
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -208,7 +188,12 @@ const CellInner: React.FC<Props> = ({
   const isDrawMode = cell.mode === "draw"
   const isChartMaximized = isDrawMode && !!cell.isChartMaximized
 
-  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
+    cellId: cell.id,
+    layoutMode,
+    isMaximized,
+    isFocused,
+  })
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
 
@@ -544,20 +529,6 @@ const CellInner: React.FC<Props> = ({
     })
   }, [isFocused, editorRef])
 
-  // Esc blurs the cell. Respect defaultPrevented so a Radix popper close
-  // doesn't double up with cell blur on the same keystroke.
-  useEffect(() => {
-    if (!isFocused) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return
-      if (e.defaultPrevented) return
-      setFocusedCell(null)
-      ;(document.activeElement as HTMLElement | null)?.blur?.()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [isFocused, setFocusedCell])
-
   const middleSum = useCallback(() => {
     if (!isMaximized) return topHeight + bottomHeight
     const editorH =
@@ -688,32 +659,6 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
   }, [cell.id, resetToDefaults])
 
-  const canArrowMove = layoutMode !== "grid" && !isMaximized
-
-  const handleWrapperKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!canArrowMove || e.target !== e.currentTarget) return
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
-      e.preventDefault()
-      if (e.key === "ArrowUp") moveCellUp(cell.id)
-      else moveCellDown(cell.id)
-      if (bufferIdForEvents !== undefined) {
-        emitUserAction({
-          kind: "user_moved_cell",
-          bufferId: bufferIdForEvents,
-          cellId: cell.id,
-        })
-      }
-      requestAnimationFrame(() => {
-        const node = wrapperRef.current
-        if (!node) return
-        node.focus({ preventScroll: true })
-        node.scrollIntoView({ block: "nearest" })
-      })
-    },
-    [canArrowMove, cell.id, moveCellUp, moveCellDown, bufferIdForEvents],
-  )
-
   const cellEl = (
     <CellWrapper
       ref={wrapperRef}
@@ -722,89 +667,62 @@ const CellInner: React.FC<Props> = ({
       $focused={isFocused}
       $maximized={isMaximized}
       $gridMode={layoutMode === "grid"}
-      onKeyDown={handleWrapperKeyDown}
-      onMouseDown={(e) => {
-        const target = e.target as HTMLElement
-        if (!target.closest?.(".cell-drag-handle")) {
-          e.stopPropagation()
-        }
-        setFocusedCell(cell.id)
-        if (
-          canArrowMove &&
-          !target.closest(
-            "button, a, input, select, textarea, [contenteditable], .monaco-editor",
-          )
-        ) {
-          wrapperRef.current?.focus({ preventScroll: true })
-        }
-      }}
+      {...wrapperHandlers}
     >
       {!isChartMaximized && (
-        <RunBar
-          className="cell-drag-handle"
-          onDoubleClick={(e) => {
-            if (layoutMode !== "grid") return
-            if (
-              (e.target as HTMLElement).closest(
-                "button, a, input, select, textarea, .cell-toolbar",
-              )
-            )
-              return
-            eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
-              cellId: cell.id,
-              kind: "full",
-            })
-          }}
-        >
-          <RunButtonGroup>
-            {isRunning ? (
-              <RunButton
-                onClick={(e) => {
-                  e.stopPropagation()
-                  cancelCell(cell.id)
-                }}
-                title="Cancel"
-              >
-                <CancelIcon />
-              </RunButton>
-            ) : (
-              <RunButton
+        <CellDragHeader
+          cellId={cell.id}
+          layoutMode={layoutMode}
+          left={
+            <>
+              {isRunning ? (
+                <RunButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    cancelCell(cell.id)
+                  }}
+                  title="Cancel"
+                >
+                  <CancelIcon />
+                </RunButton>
+              ) : (
+                <RunButton
+                  disabled={!stripSQLComments(cell.value).trim()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    exitDrawIfNeeded()
+                    void handleRunAll()
+                  }}
+                  title="Run (Ctrl+Shift+Enter)"
+                >
+                  <PlayIcon />
+                </RunButton>
+              )}
+              <DrawButton
+                type="button"
+                $active={isDrawMode}
                 disabled={!stripSQLComments(cell.value).trim()}
                 onClick={(e) => {
                   e.stopPropagation()
-                  exitDrawIfNeeded()
-                  void handleRunAll()
+                  void handleDrawClick()
                 }}
-                title="Run (Ctrl+Shift+Enter)"
+                title={
+                  isDrawMode
+                    ? (cell.autoRefresh ?? true)
+                      ? "Drawing — auto-refresh on"
+                      : "Refresh chart"
+                    : "Draw (auto-refresh chart)"
+                }
+                aria-label="Draw"
               >
-                <PlayIcon />
-              </RunButton>
-            )}
-            <DrawButton
-              type="button"
-              $active={isDrawMode}
-              disabled={!stripSQLComments(cell.value).trim()}
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleDrawClick()
-              }}
-              title={
-                isDrawMode
-                  ? (cell.autoRefresh ?? true)
-                    ? "Drawing — auto-refresh on"
-                    : "Refresh chart"
-                  : "Draw (auto-refresh chart)"
-              }
-              aria-label="Draw"
-            >
-              <ChartLineUpIcon
-                size={isDrawMode ? 26 : 24}
-                weight={isDrawMode ? "fill" : "regular"}
-              />
-            </DrawButton>
-          </RunButtonGroup>
-          <CellToolbar cellId={cell.id} inline />
-        </RunBar>
+                <ChartLineUpIcon
+                  size={isDrawMode ? 26 : 24}
+                  weight={isDrawMode ? "fill" : "regular"}
+                />
+              </DrawButton>
+            </>
+          }
+        />
       )}
       {!isChartMaximized && (
         <EditorContainer

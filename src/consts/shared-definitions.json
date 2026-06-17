@@ -185,7 +185,7 @@
   {
     "name": "get_cell",
     "category": "free",
-    "description": "Get full details of a cell (value, UI flags, chart config, last-run status + trimmed error). Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
+    "description": "Get full details of a cell (value, kind via `type`, UI flags, chart config, last-run status + trimmed error). `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -207,7 +207,7 @@
   {
     "name": "get_notebook_state",
     "category": "free",
-    "description": "Full structural snapshot of a notebook (layout, cells with previews, last-run statuses). No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
+    "description": "Full structural snapshot of a notebook (layout, cells with previews, kind via `type`, last-run statuses). `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -223,7 +223,7 @@
     "name": "add_cell",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Append a cell to the notebook. Returns the new cell id and, if run=true, a per-query status array. You never see query rows or column data.",
+    "description": "Append a cell to the notebook. Returns the new cell id and, if run=true, a per-query status array. You never see query rows or column data. Set type:\"markdown\" to add a prose cell instead of a SQL cell — its `sql` field then carries the markdown source, it is rendered (never executed), and `run` is ignored.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -233,7 +233,12 @@
         },
         "sql": {
           "type": "string",
-          "description": "SQL for the cell. May contain multiple statements separated by `;`. In draw mode, multi-statement cells overlay series on a single chart: the first query's timestamp column is the x-axis anchor, subsequent queries contribute additional numeric series merged on the time axis."
+          "description": "SQL for the cell. May contain multiple statements separated by `;`. In draw mode, multi-statement cells overlay series on a single chart: the first query's timestamp column is the x-axis anchor, subsequent queries contribute additional numeric series merged on the time axis. For a markdown cell (type:\"markdown\"), this is the markdown source text instead of SQL."
+        },
+        "type": {
+          "type": ["string", "null"],
+          "enum": ["sql", "markdown", null],
+          "description": "Cell kind. \"markdown\" creates a rendered prose cell that is never executed (`run` is ignored). null/omitted = \"sql\"."
         },
         "after_cell_id": {
           "type": ["string", "null"],
@@ -241,10 +246,10 @@
         },
         "run": {
           "type": ["boolean", "null"],
-          "description": "If true, run the cell immediately after inserting. Response then includes `ran` (true iff every statement succeeded), `queryCount`, and `results: string[]` — one entry per `;`-separated statement, each `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`. The order matches the cell's SQL. Still no row data. Pass null to skip. Running is DQL-only: a cell containing DDL/DML (INSERT/UPDATE/CREATE/DROP/...) is added but NEVER executed — the response gets `{ ran: false, skipped: true, note: <reason> }`. Take consent from the user, then call run_cell explicitly."
+          "description": "If true, run the cell immediately after inserting. Response then includes `ran` (true iff every statement succeeded), `queryCount`, and `results: string[]` — one entry per `;`-separated statement, each `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`. The order matches the cell's SQL. Still no row data. Pass null to skip. Running is DQL-only: a cell containing DDL/DML (INSERT/UPDATE/CREATE/DROP/...) is added but NEVER executed — the response gets `{ ran: false, skipped: true, note: <reason> }`. Markdown cells (type:\"markdown\") are likewise never executed. Take consent from the user, then call run_cell explicitly."
         }
       },
-      "required": ["buffer_id", "sql", "after_cell_id", "run"]
+      "required": ["buffer_id", "sql", "after_cell_id", "run", "type"]
     }
   },
   {
@@ -353,7 +358,7 @@
     "name": "run_cell",
     "category": "sql",
     "mutatesNotebook": true,
-    "description": "Execute a SQL cell. Each `;`-separated statement runs sequentially; if one fails, the remaining statements are NOT attempted. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent.",
+    "description": "Execute a SQL cell. Each `;`-separated statement runs sequentially; if one fails, the remaining statements are NOT attempted. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -614,7 +619,7 @@
     "name": "apply_notebook_state",
     "category": "free",
     "mutatesNotebook": true,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -666,6 +671,11 @@
               "preserve_value": {
                 "type": ["boolean", "null"],
                 "description": "True keeps the existing cell's current SQL unchanged (and with it the cell's results and run history) instead of echoing it — exactly one of value / preserve_value:true per cell. PREFER this for every cell whose SQL you are not changing; it is the only safe option when your copy may be stale (STATE_STALE retry) or came from a truncated read. Existing-id cells only."
+              },
+              "type": {
+                "type": ["string", "null"],
+                "enum": ["sql", "markdown", null],
+                "description": "Cell kind. \"markdown\" makes this a rendered prose cell — `value` is markdown source, and `mode`/`chart_config` MUST be null (rejected otherwise). It is never executed or auto-run. Cell kind is STICKY: null/omitted preserves an existing cell's kind (it does NOT reset markdown cells to SQL); new cells default to \"sql\"."
               },
               "mode": {
                 "type": ["string", "null"],
@@ -790,6 +800,7 @@
               "id",
               "value",
               "preserve_value",
+              "type",
               "mode",
               "auto_refresh",
               "is_chart_maximized",

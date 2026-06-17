@@ -1,5 +1,6 @@
 import type {
   CellMode,
+  CellType,
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
@@ -32,7 +33,7 @@ import type { RanStatus } from "./ai/runStatus"
 
 export type NotebookController = {
   bufferId: number
-  addCell: (value: string, afterCellId?: string) => string
+  addCell: (value: string, afterCellId?: string, type?: CellType) => string
   updateCell: (cellId: string, updates: { value?: string }) => void
   deleteCell: (cellId: string) => void
   moveCellUp: (cellId: string) => void
@@ -69,7 +70,7 @@ export type NotebookController = {
 }
 
 export type NotebookControllerActions = {
-  addCell: (afterCellId?: string, value?: string) => string
+  addCell: (afterCellId?: string, value?: string, type?: CellType) => string
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   deleteCell: (cellId: string) => void
   moveCellUp: (cellId: string) => void
@@ -103,6 +104,7 @@ export type ApplyNotebookStateCellRequest = {
   id?: string | null
   value?: string | null
   preserveValue?: boolean | null
+  type?: CellType | null
   mode?: "run" | "draw" | null
   autoRefresh?: boolean | null
   isChartMaximized?: boolean | null
@@ -156,8 +158,8 @@ export const createNotebookController = (
   liveActionsRef: { current: NotebookControllerActions },
 ): NotebookController => ({
   bufferId,
-  addCell: (valueArg, afterCellId) =>
-    liveActionsRef.current.addCell(afterCellId, valueArg),
+  addCell: (valueArg, afterCellId, type) =>
+    liveActionsRef.current.addCell(afterCellId, valueArg, type),
   updateCell: (cellId, updates) =>
     liveActionsRef.current.updateCell(cellId, updates),
   deleteCell: (cellId) => liveActionsRef.current.deleteCell(cellId),

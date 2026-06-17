@@ -3,6 +3,7 @@ import type {
   CellLayoutItem,
   CellMode,
   CellResult,
+  CellType,
   NotebookCell,
   NotebookSettings,
   NotebookViewState,
@@ -175,7 +176,7 @@ export const insertCell = (
   cells: NotebookCell[],
   afterCellId: string | undefined,
   factory: typeof createCell = createCell,
-  override?: { id?: string; value?: string },
+  override?: { id?: string; value?: string; type?: CellType },
 ): NotebookCell[] => {
   const insertIndex =
     afterCellId !== undefined
@@ -185,6 +186,7 @@ export const insertCell = (
   const patch: Partial<NotebookCell> = {}
   if (override?.id) patch.id = override.id
   if (override?.value !== undefined) patch.value = override.value
+  if (override?.type) patch.type = override.type
   const newCell: NotebookCell =
     Object.keys(patch).length > 0 ? { ...base, ...patch } : base
   const next = [...cells]
@@ -308,6 +310,7 @@ type ApplyCellRequest = {
   id?: string | null
   value?: string | null
   preserveValue?: boolean | null
+  type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: boolean | null
   isChartMaximized?: boolean | null
@@ -471,6 +474,27 @@ export const buildAppliedCells = (
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
 
+    // Cell kind is STICKY: omitting type preserves an existing cell's kind
+    // (unlike mode, which is PUT-reset). Converting a markdown cell to SQL by
+    // omission would silently turn prose into a runnable query — too surprising.
+    const resolvedType: CellType | undefined =
+      req.type === undefined || req.type === null ? existing?.type : req.type
+
+    if (resolvedType === "markdown") {
+      if (resolvedMode !== undefined) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} is a markdown cell and cannot have a mode. Omit mode and chart_config for markdown cells.`,
+          "cells",
+        )
+      }
+      if (req.chartConfig != null) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} is a markdown cell and cannot have a chart_config.`,
+          "cells",
+        )
+      }
+    }
+
     if (resolvedMode === "draw" && !chartConfig) {
       throw new ApplyNotebookStateError(
         `Cell at index ${index} has mode='draw' but no chart_config. apply replaces the cell wholesale — send the full chart_config (read the current one from <notebook_context> / get_notebook_state).`,
@@ -538,6 +562,19 @@ export const buildAppliedCells = (
       if (isChartMaximized !== undefined)
         next.isChartMaximized = isChartMaximized
       else delete next.isChartMaximized
+      if (resolvedType === "markdown") {
+        // Markdown cells carry none of the SQL/chart sub-state.
+        next.type = "markdown"
+        next.result = null
+        delete next.mode
+        delete next.chartConfig
+        delete next.autoRefresh
+        delete next.isChartMaximized
+        delete next.bottomHeight
+        delete next.lastRunStatus
+      } else {
+        delete next.type
+      }
       return next
     }
 
@@ -546,6 +583,10 @@ export const buildAppliedCells = (
       id,
       position: index,
       value,
+    }
+    if (resolvedType === "markdown") {
+      created.type = "markdown"
+      return created
     }
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig

@@ -99,6 +99,8 @@ const validateNotebookCell = (
     return `cells[${index}].id: must be a non-empty string`
   if (typeof obj.value !== "string")
     return `cells[${index}].value: must be a string`
+  if (obj.type !== undefined && obj.type !== "sql" && obj.type !== "markdown")
+    return `cells[${index}].type: invalid value ${JSON.stringify(obj.type)}`
   if (obj.mode !== undefined && obj.mode !== "run" && obj.mode !== "draw")
     return `cells[${index}].mode: invalid value ${JSON.stringify(obj.mode)}`
 
@@ -239,6 +241,9 @@ const sanitizeNotebookCell = (
     position: index,
     value: item.value as string,
   }
+  // Whitelist the kind so a hand-crafted import can't smuggle a bogus type
+  // (anything other than "markdown" collapses to the SQL default).
+  if (item.type === "markdown") cell.type = "markdown"
   if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig

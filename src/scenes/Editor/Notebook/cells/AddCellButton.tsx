@@ -1,7 +1,9 @@
 import React from "react"
 import styled from "styled-components"
 import { Plus } from "@styled-icons/boxicons-regular"
+import { MarkdownLogoIcon } from "@phosphor-icons/react"
 import { color } from "../../../../utils"
+import type { CellType } from "../../../../store/notebook"
 import { useNotebookActions } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import { emitUserAction } from "../../../../utils/notebookAIBridge"
@@ -10,6 +12,7 @@ const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 0.8rem;
   height: ${({ $alignCenter }) => ($alignCenter ? "100%" : "auto")};
   padding: 0.8rem 0;
   margin-top: 1rem;
@@ -61,33 +64,24 @@ const BetweenLine = styled.div`
   background: ${color("selection")};
 `
 
-const BetweenButton = styled.button`
+// Groups the two add buttons and masks the divider line behind them (matching
+// the notebook content background).
+const BetweenButtons = styled.div`
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  border: 1px solid ${color("selection")};
-  border-radius: 50%;
-  background: ${color("editorBackground")};
-  color: ${color("comment")};
-  cursor: pointer;
-  padding: 0;
-
-  &:hover {
-    border-color: ${color("comment")};
-    color: ${color("foreground")};
-  }
+  gap: 1rem;
+  padding: 0 0.8rem;
+  background: ${color("midnight")};
 `
 
 // User-origin only: tool-driven add_cell goes through NotebookController directly and doesn't emit here.
 const useUserAddCell = () => {
   const { addCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
-  return (afterCellId?: string) => {
-    const cellId = addCell(afterCellId)
+  return (afterCellId?: string, type?: CellType) => {
+    const cellId = addCell(afterCellId, undefined, type)
     if (typeof activeBuffer.id === "number" && cellId) {
       emitUserAction({
         kind: "user_added_cell",
@@ -115,6 +109,10 @@ export const AddCellBottom: React.FC<AddCellBottomProps> = ({
         <Plus />
         Add Cell
       </AddButton>
+      <AddButton onClick={() => addCell(afterCellId, "markdown")}>
+        <MarkdownLogoIcon />
+        Add Markdown
+      </AddButton>
     </BottomButton>
   )
 }
@@ -131,9 +129,16 @@ export const AddCellBetween: React.FC<AddCellBetweenProps> = ({
   return (
     <BetweenWrapper>
       <BetweenLine />
-      <BetweenButton onClick={() => addCell(afterCellId)} aria-label="Add cell">
-        <Plus size={16} />
-      </BetweenButton>
+      <BetweenButtons>
+        <AddButton onClick={() => addCell(afterCellId)}>
+          <Plus />
+          Add Cell
+        </AddButton>
+        <AddButton onClick={() => addCell(afterCellId, "markdown")}>
+          <MarkdownLogoIcon />
+          Add Markdown
+        </AddButton>
+      </BetweenButtons>
     </BetweenWrapper>
   )
 }

@@ -5,12 +5,16 @@ import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes
 
 export type CellMode = "run" | "draw"
 
-// Persisted JSON from the multi-kind era may still carry a `type` field;
-// it is tolerated at runtime.
+// Cell kind. `undefined` means "sql" everywhere — code only ever tests
+// `=== "markdown"`, so old notebooks (no `type`) behave as SQL cells with no
+// migration. Markdown cells hold their source in `value` and are never executed.
+export type CellType = "sql" | "markdown"
+
 export type NotebookCell = {
   id: string
   position: number
   value: string
+  type?: CellType
   editorViewState?: editor.ICodeEditorViewState
   result?: CellResult | null
   topHeight?: number

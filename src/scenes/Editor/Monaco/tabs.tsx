@@ -2,17 +2,12 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor, MAX_TABS } from "../../../providers"
-import {
-  File,
-  History,
-  LineChart,
-  Trash,
-  Notepad,
-} from "@styled-icons/boxicons-regular"
+import { File, History, LineChart, Trash } from "@styled-icons/boxicons-regular"
 import {
   DotsThreeVerticalIcon,
   DownloadSimpleIcon,
   UploadSimpleIcon,
+  NotebookIcon,
 } from "@phosphor-icons/react"
 import { createDefaultNotebookViewState } from "../../../store/notebook"
 import { toast } from "../../../components/Toast"
@@ -468,7 +463,7 @@ export const Tabs = () => {
           )
           if (btn) {
             const rect = btn.getBoundingClientRect()
-            setNewTabMenuPos({ x: rect.left, y: rect.top })
+            setNewTabMenuPos({ x: rect.left, y: rect.top + 40 })
           }
           setNewTabMenuOpen(true)
         }}
@@ -678,7 +673,7 @@ export const Tabs = () => {
               }}
             >
               <File size={16} />
-              Editor tab
+              New editor
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onSelect={() => {
@@ -687,8 +682,8 @@ export const Tabs = () => {
                 })
               }}
             >
-              <Notepad size={16} />
-              Notebook tab
+              <NotebookIcon size={16} />
+              New notebook
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

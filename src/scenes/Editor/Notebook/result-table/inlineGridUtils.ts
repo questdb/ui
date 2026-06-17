@@ -1,4 +1,5 @@
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import { unescapeHtml } from "../../../../utils/escapeHtml"
 
 const CELL_WIDTH_MULTIPLIER = 9.6
 const ARRAY_CELL_WIDTH_MULTIPLIER = 8.3
@@ -142,7 +143,7 @@ export const formatCellValue = (
     return value.toFixed(1)
   }
 
-  return String(value)
+  return unescapeHtml(String(value))
 }
 
 export const formatCellValueForCopy = (

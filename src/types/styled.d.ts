@@ -48,6 +48,9 @@ export type ColorShape = {
   red: string
   redDark: string
   redSecondary: string
+  dangerBackground: string
+  dangerBackgroundHover: string
+  dangerForeground: string
   loginBackground: string
   orange10: string
   orangeDark: string

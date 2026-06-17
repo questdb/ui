@@ -88,7 +88,13 @@ CORE_MAIN_DIR=tmp/questdb-enterprise/questdb/core/target/classes
 if [ "$CACHED" -eq 1 ] && [ -f "$ENT_MAIN_CLASS" ] && [ -d "$CORE_MAIN_DIR" ]; then
     echo "Reusing existing maven build output"
 else
-    mvn clean package -e -f tmp/questdb-enterprise/pom.xml -DskipTests -P build-ent-binaries 2>&1
+    CLIENT_VERSION=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' tmp/questdb-enterprise/questdb/core/pom.xml | sed 's/.*>//')
+    PROFILES=build-ent-binaries
+    if [[ "$CLIENT_VERSION" == *-SNAPSHOT ]]; then
+        git -C tmp/questdb-enterprise submodule update --init --recursive
+        PROFILES=$PROFILES,local-client
+    fi
+    mvn clean package -e -f tmp/questdb-enterprise/pom.xml -DskipTests -P "$PROFILES" 2>&1
 fi
 
 # Create dbroot

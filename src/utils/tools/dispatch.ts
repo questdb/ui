@@ -383,20 +383,34 @@ export const dispatchTool = async (
         return res
       }
       case "add_cell": {
-        const { buffer_id, sql, after_cell_id, run } =
+        const { buffer_id, sql, after_cell_id, run, type } =
           (input as {
             buffer_id: number
             sql: string
             after_cell_id?: string | null
             run?: boolean | null
+            type?: "sql" | "markdown" | null
           }) || {}
         setStatus(AIOperationStatus.AddingCell)
+        const cellType = type === "markdown" ? "markdown" : undefined
         return routeNotebookTool(async () => {
           const { cellId } = await modelToolsClient.addCell(
             buffer_id,
             sql,
             after_cell_id ?? undefined,
+            cellType,
           )
+          if (cellType === "markdown") {
+            // Markdown cells hold prose and are never executed — ignore `run`.
+            return run
+              ? {
+                  cellId,
+                  ran: false,
+                  skipped: true,
+                  note: "Markdown cells are not executable; `run` was ignored.",
+                }
+              : { cellId }
+          }
           if (run) {
             if (perms && validateSql) {
               const decision = await classifyAndCheckSqlForAutoRun(
@@ -501,6 +515,16 @@ export const dispatchTool = async (
         const { buffer_id, cell_id } =
           (input as { buffer_id: number; cell_id: string }) || {}
         setStatus(AIOperationStatus.RunningCell, { cellId: cell_id })
+        if (modelToolsClient.getCellType?.(buffer_id, cell_id) === "markdown") {
+          return routeNotebookTool(() =>
+            Promise.resolve({
+              cellId: cell_id,
+              ran: false,
+              skipped: true,
+              note: "Markdown cells are not executable.",
+            }),
+          )
+        }
         if (perms && validateSql) {
           const cellSql = modelToolsClient.getCellSql
             ? modelToolsClient.getCellSql(buffer_id, cell_id)
@@ -673,6 +697,7 @@ export const dispatchTool = async (
               id?: string | null
               value?: string | null
               preserve_value?: boolean | null
+              type?: "sql" | "markdown" | null
               mode?: CellMode | null
               auto_refresh?: boolean | null
               is_chart_maximized?: boolean | null
@@ -883,6 +908,7 @@ export const dispatchTool = async (
                 ? { preserveValue: true }
                 : { value: c.value }
             if (c.id !== undefined && c.id !== null) cell.id = c.id
+            if (c.type === "sql" || c.type === "markdown") cell.type = c.type
             if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
             if (c.auto_refresh !== undefined && c.auto_refresh !== null)
               cell.autoRefresh = c.auto_refresh
@@ -959,7 +985,13 @@ export const dispatchTool = async (
             // Post-apply, getCellSql sees the committed notebook, so preserved
             // cells resolve to their kept full value here.
             const value = resolveCellSql(c)
+            // Cell kind is sticky, so a preserved markdown cell (no type in the
+            // request) is still markdown post-apply — read it from the committed
+            // notebook and never auto-run prose as SQL.
+            const isMarkdown =
+              modelToolsClient.getCellType?.(buffer_id, cellId) === "markdown"
             const runnable =
+              !isMarkdown &&
               resolvedMode === "run" &&
               value !== null &&
               value.trim().length > 0

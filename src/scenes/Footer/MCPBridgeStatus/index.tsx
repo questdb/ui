@@ -4,7 +4,7 @@ import { PlugsConnectedIcon, PlugsIcon } from "@phosphor-icons/react"
 import { PopperToggle } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MCPBridgePairPopover } from "./PairPopover"
-import { Tone, accentColor, deriveTone } from "./tone"
+import { Tone, accentColor, deriveTone, hexToRgba } from "./tone"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -16,9 +16,13 @@ const Wrapper = styled.button<{ $tone: Tone }>`
   align-items: center;
   gap: 0.6rem;
   height: 3rem;
-  padding: 0 1rem;
-  border: 1px solid transparent;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  padding: 0 1.1rem;
+  border: 1px solid
+    ${({ theme, $tone }) => hexToRgba(theme.color[accentColor($tone)], 0.1)};
+  border-bottom-width: 2px;
+  border-radius: 0.25rem;
+  background: ${({ theme, $tone }) =>
+    hexToRgba(theme.color[accentColor($tone)], 0.05)};
   color: ${({ theme }) => theme.color.foreground};
   font: inherit;
   cursor: pointer;
@@ -27,7 +31,10 @@ const Wrapper = styled.button<{ $tone: Tone }>`
     border-color 0.15s ease;
 
   &:hover {
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ theme, $tone }) =>
+      hexToRgba(theme.color[accentColor($tone)], 0.1)};
+    border-color: ${({ theme, $tone }) =>
+      hexToRgba(theme.color[accentColor($tone)], 0.25)};
   }
 
   &:focus-visible {

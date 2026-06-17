@@ -13,6 +13,7 @@ export const DropdownMenu = {
   Content: styled(RadixDropdownMenu.Content)`
     background-color: ${({ theme }) => theme.color.backgroundDarker};
     border-radius: 0.5rem;
+    border: 1px solid ${({ theme }) => theme.color.baseGrey};
     padding: 0.4rem;
     box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
     z-index: 9999;

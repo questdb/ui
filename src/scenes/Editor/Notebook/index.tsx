@@ -21,6 +21,8 @@ import {
   useNotebookState,
 } from "./NotebookProvider"
 import { Cell } from "./cells/Cell"
+import { MarkdownCell } from "./cells/MarkdownCell"
+import type { NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
 import { NotebookToolbar } from "./NotebookToolbar"
 import { renderEdgeHandle } from "./resize"
@@ -273,6 +275,24 @@ const useGridDragAutoScroll = (containerRef: React.RefObject<HTMLElement>) => {
   return { onDragStart, onDrag, stop }
 }
 
+// Routes each cell to its kind. The single branch point keeps all three
+// render sites (list, grid, maximized) in sync.
+type CellViewProps = {
+  cell: NotebookCell
+  layoutMode: "list" | "grid"
+  isFocused: boolean
+  isMaximized: boolean
+  isRunning: boolean
+  isHydrating: boolean
+}
+
+const CellView: React.FC<CellViewProps> = (props) =>
+  props.cell.type === "markdown" ? (
+    <MarkdownCell {...props} />
+  ) : (
+    <Cell {...props} />
+  )
+
 const ListLayout: React.FC = () => {
   const { cells, focusedCellId, maximizedCellId, runningCellIds, isHydrating } =
     useNotebookState()
@@ -289,7 +309,7 @@ const ListLayout: React.FC = () => {
       {cells.map((cell, index) => (
         <React.Fragment key={cell.id}>
           <CellItem>
-            <Cell
+            <CellView
               cell={cell}
               layoutMode="list"
               isFocused={focusedCellId === cell.id}
@@ -550,7 +570,7 @@ const GridLayout: React.FC = () => {
               cellId={cell.id}
               focused={focusedCellId === cell.id}
             >
-              <Cell
+              <CellView
                 cell={cell}
                 layoutMode="grid"
                 isFocused={focusedCellId === cell.id}
@@ -601,7 +621,7 @@ const NotebookContent: React.FC = () => {
       <NotebookWrapper>
         <CellListContainer $maximized>
           <CellItem $maximized>
-            <Cell
+            <CellView
               cell={cell}
               layoutMode="list"
               isFocused={focusedCellId === cell.id}

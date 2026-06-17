@@ -14,11 +14,16 @@ const Wrapper = styled.div`
 
 const StatusIcon = styled.div<{ isConnected: boolean }>`
   display: block;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 0.2rem;
   background-color: ${(props) =>
     props.isConnected ? color("green") : color("red")};
+  box-shadow: 0 0 0 1.5px
+    ${(props) =>
+      props.isConnected
+        ? "rgba(80, 250, 123, 0.32)"
+        : "rgba(255, 85, 85, 0.32)"};
   margin-right: 0.6rem;
 `
 

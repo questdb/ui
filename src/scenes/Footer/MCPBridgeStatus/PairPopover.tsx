@@ -314,7 +314,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
     const lede = succeeded
       ? "You can track the connection status from the bottom bar."
-      : "Paste the WebSocket URL and token your coding agent gave you — or click the deep link from the agent."
+      : "Paste the WebSocket URL and token your coding agent gave you, or click the deep link from the agent."
 
     return (
       <Root ref={ref} {...rest} data-hook="mcp-pair-popover">
@@ -426,7 +426,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           <Footer>
             {canDisconnect && (
               <Button
-                skin="error"
+                skin="danger"
                 onClick={onDisconnect}
                 dataHook="mcp-pair-disconnect"
               >

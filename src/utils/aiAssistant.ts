@@ -37,7 +37,7 @@ import {
   type ApplyNotebookStateRequest,
   type NotebookController,
 } from "./notebookAIBridge"
-import type { CellMode } from "../store/notebook"
+import type { CellMode, CellType } from "../store/notebook"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   buildSnapshot,
@@ -79,6 +79,8 @@ export type NotebookCellSummary = {
   id: string
   preview: string
   position: number
+  // Omitted for SQL cells (the default); "markdown" for prose cells.
+  type?: "sql" | "markdown"
   mode?: "run" | "draw"
   last_run_status?: RunStatus
 }
@@ -89,6 +91,7 @@ export type NotebookCellDetails = {
   truncated?: true
   full_length?: number
   position: number
+  type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: boolean
   is_chart_maximized?: boolean
@@ -128,6 +131,7 @@ export interface ModelToolsClient {
     bufferId: number,
     value: string,
     afterCellId?: string,
+    type?: CellType,
   ) => Promise<{ cellId: string }>
   updateCell: (
     bufferId: number,
@@ -192,6 +196,9 @@ export interface ModelToolsClient {
   }>
   // null → gate falls through so the executor's not-found error wins.
   getCellSql?: (bufferId: number, cellId: string) => string | null
+  // Cell kind, for tools that must treat markdown cells differently (e.g.
+  // run_cell skips them). null → cell not found.
+  getCellType?: (bufferId: number, cellId: string) => CellType | null
 }
 
 export type NotebookClientExtras = {
@@ -443,6 +450,7 @@ export function createModelToolsClient(
               position: cell.position,
               last_run_status: runInfo.status,
             }
+            if (cell.type === "markdown") summary.type = "markdown"
             if (cell.mode) summary.mode = cell.mode
             return summary
           })
@@ -487,6 +495,7 @@ export function createModelToolsClient(
             out.truncated = true
             out.full_length = cell.value.length
           }
+          if (cell.type === "markdown") out.type = "markdown"
           if (cell.mode) out.mode = cell.mode
           if (typeof cell.autoRefresh === "boolean")
             out.auto_refresh = cell.autoRefresh
@@ -517,9 +526,9 @@ export function createModelToolsClient(
       )
     },
 
-    addCell(bufferId, value, afterCellId) {
+    addCell(bufferId, value, afterCellId, type) {
       return bound(bufferId, (ctrl) => {
-        const cellId = ctrl.addCell(value, afterCellId)
+        const cellId = ctrl.addCell(value, afterCellId, type)
         return Promise.resolve({ cellId })
       })
     },
@@ -659,6 +668,19 @@ export function createModelToolsClient(
           : undefined
       const cell = cells?.find((c) => c.id === cellId)
       return cell ? cell.value : null
+    },
+
+    getCellType(bufferId, cellId) {
+      const controller = getController(bufferId)
+      const meta = getWorkspace()?.getBufferMeta(bufferId)
+      const cells = controller
+        ? controller.getCellsSnapshot()
+        : meta && (meta.kind === "active" || meta.kind === "inactive")
+          ? meta.notebookViewState.cells
+          : undefined
+      const cell = cells?.find((c) => c.id === cellId)
+      if (!cell) return null
+      return cell.type ?? "sql"
     },
   }
 }

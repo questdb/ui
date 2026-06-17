@@ -255,6 +255,8 @@ export const useCellExecution = ({
     ): Promise<boolean> => {
       const cell = cellsRef.current.find((c) => c.id === cellId)
       if (!cell) return false
+      // Markdown cells hold prose, not SQL — never execute them.
+      if (cell.type === "markdown") return false
 
       const queryText = sql ?? cell.value
       if (!queryText.trim()) return false

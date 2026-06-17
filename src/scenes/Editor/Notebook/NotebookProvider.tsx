@@ -18,6 +18,7 @@ import type {
   NotebookViewState,
   NotebookSettings,
   CellMode,
+  CellType,
 } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
@@ -59,7 +60,7 @@ export type NotebookState = {
 export type NotebookActions = {
   getVariables: () => NotebookVariable[] | undefined
   updateSettings: (updates: Partial<NotebookSettings>) => void
-  addCell: (afterCellId?: string, value?: string) => string
+  addCell: (afterCellId?: string, value?: string, type?: CellType) => string
   deleteCell: (cellId: string) => void
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   moveCellUp: (cellId: string) => void
@@ -312,10 +313,10 @@ export const NotebookProvider: React.FC<{
   // at render time from cell.topHeight + cell.bottomHeight (see
   // computeCellGridH).
   const addCell = useCallback(
-    (afterCellId?: string, value?: string): string => {
+    (afterCellId?: string, value?: string, type?: CellType): string => {
       let newId = ""
       unstable_batchedUpdates(() => {
-        newId = store.addCell(afterCellId, value)
+        newId = store.addCell(afterCellId, value, type)
         if (settingsRef.current.layoutMode !== "grid") return
         const layout = settingsRef.current.layout ?? []
         const maxY =
@@ -386,7 +387,7 @@ export const NotebookProvider: React.FC<{
         // DQL/error results don't reserve 10 blank rows of space. Any prior user
         // drag of the bottom handle is discarded on re-run.
         const cell = store.cellsRef.current.find((c) => c.id === cellId)
-        if (cell && cell.mode !== "draw") {
+        if (cell && cell.mode !== "draw" && cell.type !== "markdown") {
           store.updateCell(cellId, {
             bottomHeight: computeResultBottomHeight(cell.result),
           })

@@ -1,7 +1,6 @@
 import React, { memo, useEffect, useMemo, useRef } from "react"
 import styled from "styled-components"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
+import { SafeMarkdown } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import type { OpenInEditorContent } from "./ChatMessages"
 import { color } from "../../../utils"
@@ -123,23 +122,11 @@ const MarkdownContent = styled.div`
   }
 `
 
+// Links are handled by SafeMarkdown's SafeLink. Chat keeps its own table/pre
+// wrappers and renders fenced code blocks through LiteEditor.
 const createComponents = (
   onOpenInEditor: React.RefObject<(content: OpenInEditorContent) => void>,
 ) => ({
-  a: ({ children, href, ...props }: React.ComponentProps<"a">) => (
-    <a
-      {...(typeof href === "string" && href.startsWith("http")
-        ? {
-            target: "_blank",
-            rel: "noopener noreferrer",
-          }
-        : {})}
-      href={href}
-      {...props}
-    >
-      {children}
-    </a>
-  ),
   table: ({ children, ...props }: React.ComponentProps<"table">) => (
     <div className="table-wrapper">
       <table {...props}>{children}</table>
@@ -197,9 +184,9 @@ export const AssistantMarkdown = memo(
 
     return (
       <MarkdownContent key={messageId}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <SafeMarkdown allowImages components={components}>
           {content}
-        </ReactMarkdown>
+        </SafeMarkdown>
       </MarkdownContent>
     )
   },

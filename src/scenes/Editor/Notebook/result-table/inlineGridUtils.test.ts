@@ -90,6 +90,13 @@ describe("formatCellValue", () => {
     expect(formatCellValue(5, col("x", "INT"))).toBe("5")
   })
 
+  it("decodes HTML entities in string values", () => {
+    expect(formatCellValue("a&nbsp;b", col("x", "VARCHAR"))).toBe("a\u00A0b")
+    expect(formatCellValue("a&amp;b &lt;c&gt;", col("x", "STRING"))).toBe(
+      "a&b <c>",
+    )
+  })
+
   it("formats 1-D array values", () => {
     expect(
       formatCellValue(

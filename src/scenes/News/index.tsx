@@ -4,6 +4,7 @@ import {
   IconWithTooltip,
   Loader,
   PrimaryToggleButton,
+  SafeMarkdown,
 } from "../../components"
 import styled from "styled-components"
 import React, { useEffect, useState, useContext } from "react"
@@ -11,7 +12,6 @@ import { QuestContext } from "../../providers"
 import { NewsItem } from "../../utils"
 import { useDispatch, useSelector } from "react-redux"
 import { selectors, actions } from "../../store"
-import ReactMarkdown from "react-markdown"
 import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
@@ -255,25 +255,11 @@ const News = () => {
                   )}
 
                 <NewsText>
-                  <ReactMarkdown
-                    components={{
-                      a: ({
-                        children,
-                        ...props
-                      }: React.ComponentProps<"a">) => (
-                        <a
-                          {...(props.href?.startsWith("http")
-                            ? { target: "_blank", rel: "noopener noreferrer" }
-                            : {})}
-                          {...props}
-                        >
-                          {children}
-                        </a>
-                      ),
-                    }}
-                  >
+                  {/* News bodies are non-GFM today; keep them so by passing an
+                      empty remark plugin set. Images preserved via allowImages. */}
+                  <SafeMarkdown allowImages remarkPlugins={[]}>
                     {newsItem.body}
-                  </ReactMarkdown>
+                  </SafeMarkdown>
                 </NewsText>
               </Item>
             ))}

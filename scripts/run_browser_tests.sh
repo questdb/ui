@@ -14,6 +14,19 @@ UI_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 # Change to UI directory
 cd "$UI_DIR"
 
+# QuestDB's maven enforcer needs the java25+ profile (JDK 25+) to activate; pin JDK 25 to match CI.
+if [ -z "$JAVA_HOME" ] || ! "$JAVA_HOME/bin/java" -version 2>&1 | grep -q '"25'; then
+  if [ -x /usr/libexec/java_home ]; then
+    JAVA_HOME=$(/usr/libexec/java_home -v 25 2>/dev/null)
+  fi
+fi
+if [ -z "$JAVA_HOME" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  echo "Error: could not locate JDK 25. Install one (e.g. 'brew install openjdk@25') or set JAVA_HOME." >&2
+  exit 1
+fi
+export JAVA_HOME
+export PATH="$JAVA_HOME/bin:$PATH"
+
 # Cleanup
 rm -rf tmp/dbroot
 rm -rf tmp/questdb-*
@@ -23,7 +36,13 @@ if [[ $1 = "-skipQuestDBBuild" ]]
 then
   echo "Skipping QuestDB build"
 else
-  mvn clean package -e -f e2e/questdb/pom.xml -DskipTests -P build-binaries 2>&1
+  CLIENT_VERSION=$(grep -m1 -oE '<questdb\.client\.version>[^<]+' e2e/questdb/core/pom.xml | sed 's/.*>//')
+  PROFILES=build-binaries
+  if [[ "$CLIENT_VERSION" == *-SNAPSHOT ]]; then
+    git submodule update --init --recursive e2e/questdb
+    PROFILES=$PROFILES,local-client
+  fi
+  mvn clean package -e -f e2e/questdb/pom.xml -DskipTests -P "$PROFILES" 2>&1
 fi
 
 # Unpack server

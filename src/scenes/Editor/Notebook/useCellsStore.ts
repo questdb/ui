@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import type {
   CellMode,
+  CellType,
   NotebookCell,
   SingleQueryResult,
 } from "../../../store/notebook"
@@ -52,10 +53,10 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
 
   // Id generated up-front so the synchronous return matches the deferred state update.
   const addCell = useCallback(
-    (afterCellId?: string, value?: string): string => {
+    (afterCellId?: string, value?: string, type?: CellType): string => {
       const id = crypto.randomUUID()
       updateCells((prev) =>
-        insertCell(prev, afterCellId, undefined, { id, value }),
+        insertCell(prev, afterCellId, undefined, { id, value, type }),
       )
       return id
     },

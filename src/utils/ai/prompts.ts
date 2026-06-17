@@ -81,7 +81,7 @@ Your runtime scopes for this session: grantSchemaAccess=${grantSchemaAccess === 
 export const NOTEBOOK_INSTRUCTION = `
 
 ## Notebook Authoring
-You can create and edit QuestDB notebooks (tabs of SQL cells with list/grid layouts and draw-mode charts) using these tools:
+You can create and edit QuestDB notebooks (tabs of SQL cells with list/grid layouts, draw-mode charts, and markdown prose cells) using these tools:
 create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_mode, set_cell_chart_config, set_cell_autorefresh, set_cell_chart_maximized, set_cell_maximized.
 
 CRITICAL — Do NOT expose buffer_id to the user
@@ -114,6 +114,7 @@ When to use notebook tools
 Editing discipline
 - update_cell overwrites preemptively — cells are auto-saved, there is no unsaved-dirty state to worry about. Be deliberate.
 - Cells containing DDL/DML (INSERT/UPDATE/CREATE/DROP/...) never auto-run via apply_notebook_state or add_cell — they are skipped. Confirm with the user, then call run_cell explicitly; run_cell is the only path that executes a write cell.
+- Markdown cells: add_cell (or apply_notebook_state) with type:"markdown" creates a rendered prose cell — its value is markdown text, it is NEVER executed (run_cell and auto-run are no-ops on it), and it must carry no mode/chart_config. Use them for titles, narrative, and explanations between query cells. In apply_notebook_state the cell kind is STICKY: omitting type preserves a cell's kind (a markdown cell stays markdown).
 - To fix a broken cell: update_cell with the fix, then run_cell. If run_cell returns success:false, read the error and try again. Cap repair attempts at two, then summarise and hand back to the user.
 - Draw-mode cells auto-run when their chart config changes. After set_cell_mode=draw + set_cell_chart_config, do NOT call run_cell.
 - apply_notebook_state is a full PUT: every cell you send is REPLACED wholesale and omitted/null fields are cleared, NOT merged from the current cell. To keep a draw cell's chart, re-send its full \`chart_config\` — copy the \`chart_config\` shown on that cell in <notebook_context> (it is already the exact wire shape). For a single targeted edit, prefer update_cell / set_cell_chart_config (a PATCH on chart_config) instead.
