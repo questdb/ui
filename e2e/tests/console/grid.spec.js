@@ -142,6 +142,22 @@ describe("questdb grid", () => {
         timeout: 10000,
       })
     })
+
+    it("updates the header names when a new query reuses the same column widths", () => {
+      // Given a result whose single column clamps to some width
+      cy.typeQuery("select x aa from long_sequence(20)")
+      cy.runLine()
+      cy.getColumnName(0).should("eq", "aa")
+
+      // When a new query returns a column of the same width but a different name
+      cy.clearEditor()
+      cy.typeQuery("select x bb from long_sequence(20)")
+      cy.runLine()
+
+      // Then the header reflects the new column, not the previous one
+      cy.getColumnName(0).should("eq", "bb")
+      cy.getGridCellAt(0, 0).should("have.text", "1")
+    })
   })
 
   describe("keyboard navigation", () => {

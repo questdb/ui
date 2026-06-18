@@ -694,10 +694,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       totalWidth,
       columnSizing,
       frozenCount,
-      // headerSignature omits order, so a same-width reorder needs this to
-      // avoid stale column names.
-      columnOrder,
-      columnPinning,
+      headers,
       onColumnCopy,
       renderResizer,
     ])
