@@ -64,16 +64,6 @@ const store = createStore(rootReducer, compose(applyMiddleware(epicMiddleware)))
 
 epicMiddleware.run(rootEpic)
 
-// Expose the redux store to e2e tests (Cypress only) so specs can
-// deterministically wait on derived state (e.g. `query.queriesToRun`) instead
-// of relying on fixed timeouts. No-op in production builds / real browsers.
-if (typeof window !== "undefined") {
-  const w = window as unknown as { Cypress?: unknown; __store__?: typeof store }
-  if (w.Cypress) {
-    w.__store__ = store
-  }
-}
-
 const FadeReg = createGlobalFadeTransition("fade-reg", TransitionDuration.REG)
 
 const FadeSlow = createGlobalFadeTransition(

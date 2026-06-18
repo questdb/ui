@@ -248,45 +248,27 @@ describe("run query with selection", () => {
   })
 
   it("should cancel the running query without opening the run-all modal when all queries are selected", () => {
-    // Given a long-running single query
+    // Given a single query is running
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
         res.setDelay(3000)
       })
     })
     cy.typeQuery("select 1;\nselect 2;\nselect 3;")
-
-    // When the user runs a single query
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
-    // Then it is running and the Cancel button is shown
     cy.getByDataHook("button-cancel-query").should("be.visible")
 
-    // When the user selects all queries (e.g. to share the console window).
-    // Focus the editor first: while a query is running it is read-only and was
-    // blurred by the Run button click, so a selection set on the blurred editor
-    // does not reliably stick in headless CI. Selecting on the focused editor
-    // makes the selection propagate to queriesToRun.
-    cy.window().then((win) => {
-      const editor = win.monaco.editor.getEditors()[0]
-      editor.focus()
-      editor.setSelection({
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 3,
-        endColumn: 10,
-      })
+    // When the user selects all queries while busy, then clicks Cancel
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 3,
+      endColumn: 10,
     })
-    // Then the multi-statement selection has propagated to the run state.
-    // This gate is mandatory: the regression (Cancel opening the run-all modal)
-    // only manifests when queriesToRun > 1, so without it the test would pass
-    // trivially even on the buggy code.
-    cy.waitForSelectedQueries(3)
-
-    // Then the Cancel button still cancels the running query instead of triggering a run
     cy.getByDataHook("button-cancel-query").should("be.visible").click()
 
-    // Then no run cancellation modal is shown and the query is cancelled
+    // Then the query is cancelled, with no run-all modal
     cy.getByRole("dialog").should("not.exist")
     cy.getByDataHook("run-all-queries-confirm").should("not.exist")
     cy.getByDataHook("button-run-query").should("be.visible")
@@ -295,40 +277,29 @@ describe("run query with selection", () => {
   })
 
   it("should run only the selected queries (not all) when starting a run while a query is busy", () => {
-    // Given a long-running single query
+    // Given a single query is running
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
-        res.setDelay(3000)
+        res.setDelay(1000)
       })
     })
     cy.typeQuery("select 1;\nselect 2;\nselect 3;")
-
-    // When the user runs a single query
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
 
-    // When the user selects a STRICT SUBSET (queries 1 and 2 only, not 3) and
-    // triggers a run with the keyboard while the first query is still running
-    cy.window().then((win) => {
-      const editor = win.monaco.editor.getEditors()[0]
-      // Focus before selecting: the editor is read-only while a query runs and
-      // was blurred by the Run button click. Focusing first makes the selection
-      // stick (and prevents a later focus from restoring the pre-blur, collapsed
-      // selection), so it propagates to queriesToRun.
-      editor.focus()
-      editor.setSelection({
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 2,
-        endColumn: 10,
-      })
+    // When the user selects a strict subset (queries 1-2, not 3) while busy,
+    // then triggers a run
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
     })
-    // Then the selection has propagated as exactly 2 queries (not all 3)
-    cy.waitForSelectedQueries(2)
+    cy.wait(150)
     cy.focused().type(`${ctrlOrCmd}{enter}`)
 
-    // Then the confirmation modal is for the selected queries, not "run all"
+    // Then the modal is for the selection (2 queries), not "run all"
     cy.getByRole("dialog").should("be.visible")
     cy.getByRole("dialog").should("contain", "Run selected queries")
     cy.getByRole("dialog").should("contain", "2 selected queries")
@@ -342,13 +313,9 @@ describe("run query with selection", () => {
     // When the user confirms
     cy.getByDataHook("run-all-queries-confirm").click()
 
-    // Then the previously running query is cancelled
+    // Then the running query is cancelled and exactly the 2 selected queries run
     cy.expandNotifications()
     cy.getExpandedNotifications().should("contain", "Cancelled by user")
-
-    // And EXACTLY the 2 selected queries run -- this distinguishes the fixed
-    // behaviour (selection preserved -> 2) from the regression (selection
-    // dropped -> all 3 run).
     cy.contains('[data-hook="success-notification"]', "Running completed", {
       timeout: 20000,
     })
@@ -357,26 +324,24 @@ describe("run query with selection", () => {
   })
 
   it("should run all queries when starting a run-all while a query is busy", () => {
-    // Given a long-running single query
+    // Given a single query is running
     cy.intercept("/exec*", (req) => {
       req.on("response", (res) => {
-        res.setDelay(3000)
+        res.setDelay(1000)
       })
     })
     cy.typeQuery("select 1;\nselect 2;\nselect 3;")
-
-    // When the user runs a single query
     cy.clickLine(1)
     cy.getByDataHook("button-run-query").should("contain", "Run query").click()
     cy.getByDataHook("button-cancel-query").should("be.visible")
 
-    // When the user triggers "run all queries" (Ctrl/Cmd+Shift+Enter) while busy
+    // When the user triggers "run all" (Ctrl/Cmd+Shift+Enter) while busy
     cy.window().then((win) => {
       win.monaco.editor.getEditors()[0].focus()
     })
     cy.focused().type(`${ctrlOrCmd}{shift}{enter}`)
 
-    // Then the confirmation modal is for running ALL queries
+    // Then the modal is for running all queries
     cy.getByRole("dialog").should("be.visible")
     cy.getByRole("dialog").should("contain", "Run all queries")
     cy.getByDataHook("run-all-queries-warning").should(
@@ -387,12 +352,9 @@ describe("run query with selection", () => {
     // When the user confirms
     cy.getByDataHook("run-all-queries-confirm").click()
 
-    // The previously running query is aborted, then "run all" runs. Run-all
-    // clears this buffer's notifications (cleanupBufferNotifications), so the
-    // transient "Cancelled by user" notice is intentionally NOT asserted here
-    // (unlike the selection run, which preserves notifications). The run
-    // completing with all 3 queries is the proof the abort-then-run-all
-    // flow executed.
+    // Then the running query is aborted and all 3 queries run.
+    // (Run-all clears this buffer's notifications, so "Cancelled by user" is
+    // intentionally not asserted here -- unlike the selection run above.)
     cy.contains('[data-hook="success-notification"]', "Running completed", {
       timeout: 20000,
     })
