@@ -71,6 +71,8 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
+import { isMockPagination, mockPaginate, seedMock } from "./benchmarkMock"
+import type { ResultGridRow } from "../../components/ResultGrid"
 
 const Root = styled.div`
   display: flex;
@@ -172,6 +174,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   // calls the renderer, leaving the failing page unloaded.
   const paginationFn = useCallback<PaginationFn>(
     async (sql, lo, hi, rendererFn) => {
+      if (isMockPagination()) {
+        mockPaginate(
+          lo,
+          hi,
+          rendererFn as unknown as (d: { dataset: ResultGridRow[] }) => void,
+        )
+        return
+      }
       try {
         const result = await quest.queryRaw(sql, {
           limit: `${lo},${hi}`,
@@ -241,6 +251,22 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       gridRef?.current?.setData(result)
     }
   }, [result])
+
+  // Benchmarking only: lets the harness seed either grid with a synthetic
+  // rows x cols result without a real query. Inert unless mock.pagination is on.
+  useEffect(() => {
+    if (!isMockPagination()) return
+    const benchSeed = (rows: number, cols: number) => {
+      const seed = seedMock(rows, cols)
+      setCount(seed.count)
+      gridRef.current?.setData(seed)
+    }
+    const target = window as unknown as { __benchSeed?: typeof benchSeed }
+    target.__benchSeed = benchSeed
+    return () => {
+      delete target.__benchSeed
+    }
+  }, [])
 
   useEffect(() => {
     const chart = document.getElementById("quick-vis")
