@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type Dispatch,
@@ -23,6 +24,7 @@ export const useFreezeDrag = (
 ) => {
   const [freezeDragX, setFreezeDragX] = useState<number | null>(null)
   const freezeTargetRef = useRef(0)
+  const stopDraggingRef = useRef<(() => void) | null>(null)
 
   const applyFreeze = useCallback(
     (count: number) => {
@@ -71,18 +73,25 @@ export const useFreezeDrag = (
         setFreezeDragX(best.x)
         freezeTargetRef.current = best.k
       }
-      const onUp = () => {
+      const stopDragging = () => {
         window.removeEventListener("mousemove", onMove)
         window.removeEventListener("mouseup", onUp)
         document.body.style.cursor = ""
+        stopDraggingRef.current = null
+      }
+      const onUp = () => {
+        stopDragging()
         setFreezeDragX(null)
         applyFreeze(freezeTargetRef.current)
       }
+      stopDraggingRef.current = stopDragging
       window.addEventListener("mousemove", onMove)
       window.addEventListener("mouseup", onUp)
     },
     [gridRef, scrollRef, headers, frozenCount, applyFreeze],
   )
+
+  useEffect(() => () => stopDraggingRef.current?.(), [])
 
   return { freezeDragX, onFreezeMouseDown }
 }

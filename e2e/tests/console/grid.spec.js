@@ -110,6 +110,38 @@ describe("questdb grid", () => {
       cy.getGridCellAt(2999, 0).should("have.text", "3000")
       cy.getGridCellAt(3000, 0).should("have.text", "3001")
     })
+
+    it("a slow page from a superseded query never lands in the new result", () => {
+      // Given every page fetch past the seed is stalled, so a deep-page request
+      // can still be in flight when a new query supersedes it on the shared grid
+      cy.intercept("/exec*", (req) => {
+        const lo = parseInt(String(req.query.limit).split(",")[0], 10)
+        if (lo > 1000) {
+          req.on("response", (res) => res.setDelay(2500))
+        }
+      })
+
+      // And query A is run, then scrolled deep enough to dispatch a stalled page
+      cy.typeQuery("select x a from long_sequence(5000)")
+      cy.runLine()
+      cy.wait(100)
+      cy.getGridViewport().scrollTo(0, 2500 * rowHeight)
+      cy.wait(300)
+
+      // When query B supersedes A before A's page-2 response lands
+      cy.clearEditor()
+      cy.typeQuery("select x * 1000 a from long_sequence(5000)")
+      cy.runLine()
+      cy.wait(100)
+
+      // Then B owns the grid: its seed row is B's value, and the same deep row
+      // shows B's value, never A's stale page-2 value (which is 2501)
+      cy.getGridCellAt(0, 0).should("have.text", "1000")
+      cy.getGridViewport().scrollTo(0, 2500 * rowHeight)
+      cy.getGridCellAt(2500, 0).should("have.text", "2501000", {
+        timeout: 10000,
+      })
+    })
   })
 
   describe("keyboard navigation", () => {
