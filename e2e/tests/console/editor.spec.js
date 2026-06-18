@@ -246,6 +246,121 @@ describe("run query with selection", () => {
       `EXPLAIN ${subQuery}`,
     )
   })
+
+  it("should cancel the running query without opening the run-all modal when all queries are selected", () => {
+    // Given a single query is running
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(3000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user selects all queries while busy, then clicks Cancel
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 3,
+      endColumn: 10,
+    })
+    cy.getByDataHook("button-cancel-query").should("be.visible").click()
+
+    // Then the query is cancelled, with no run-all modal
+    cy.getByRole("dialog").should("not.exist")
+    cy.getByDataHook("run-all-queries-confirm").should("not.exist")
+    cy.getByDataHook("button-run-query").should("be.visible")
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "Cancelled by user")
+  })
+
+  it("should run only the selected queries (not all) when starting a run while a query is busy", () => {
+    // Given a single query is running
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user selects a strict subset (queries 1-2, not 3) while busy,
+    // then triggers a run
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
+    })
+    cy.wait(150)
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+
+    // Then the modal is for the selection (2 queries), not "run all"
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run selected queries")
+    cy.getByRole("dialog").should("contain", "2 selected queries")
+    cy.getByDataHook("run-all-queries-warning").should(
+      "contain",
+      "Current query execution will be aborted",
+    )
+    // And the stop-after-failure option is not offered for selection runs
+    cy.getByDataHook("stop-after-failure-checkbox").should("not.exist")
+
+    // When the user confirms
+    cy.getByDataHook("run-all-queries-confirm").click()
+
+    // Then the running query is cancelled and exactly the 2 selected queries run
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "Cancelled by user")
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
+  })
+
+  it("should run all queries when starting a run-all while a query is busy", () => {
+    // Given a single query is running
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("contain", "Run query").click()
+    cy.getByDataHook("button-cancel-query").should("be.visible")
+
+    // When the user triggers "run all" (Ctrl/Cmd+Shift+Enter) while busy
+    cy.window().then((win) => {
+      win.monaco.editor.getEditors()[0].focus()
+    })
+    cy.focused().type(`${ctrlOrCmd}{shift}{enter}`)
+
+    // Then the modal is for running all queries
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run all queries")
+    cy.getByDataHook("run-all-queries-warning").should(
+      "contain",
+      "Current query execution will be aborted",
+    )
+
+    // When the user confirms
+    cy.getByDataHook("run-all-queries-confirm").click()
+
+    // Then the running query is aborted and all 3 queries run.
+    // (Run-all clears this buffer's notifications, so "Cancelled by user" is
+    // intentionally not asserted here -- unlike the selection run above.)
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+3 successful\s+queries/)
+  })
 })
 
 describe("run all queries in tab", () => {
@@ -407,6 +522,70 @@ describe("run all queries in tab", () => {
     // Then
     cy.typeQuery("should not be visible")
     cy.getEditorContent().should("not.contain", "should not be visible")
+  })
+
+  it("should not allow adding a new tab while running script", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    }).as("exec")
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    cy.getEditorTabs().then(($tabs) => {
+      const initialTabCount = $tabs.length
+
+      // When the script is actually running (first query in flight)
+      cy.clickRunScript()
+      cy.wait("@exec")
+
+      // Then the new tab button is not interactive
+      cy.get(".new-tab-button-wrapper").should(
+        "have.css",
+        "pointer-events",
+        "none",
+      )
+
+      // When forcing a click past the disabled styling
+      cy.getByDataHook("new-tab-button").click({ force: true })
+
+      // Then no new tab is added. addBuffer inserts asynchronously (IndexedDB ->
+      // useLiveQuery), so settle before the negative assertion to give a
+      // regression time to surface instead of asserting on the instantaneous
+      // (still-equal) count.
+      cy.wait(500)
+      cy.getEditorTabs().should("have.length", initialTabCount)
+    })
+  })
+
+  it("should ignore the add-new-tab command (Alt+T) while running script", () => {
+    // Given
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    }).as("exec")
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+
+    cy.getEditorTabs().then(($tabs) => {
+      const initialTabCount = $tabs.length
+
+      // When the script is running and the user invokes the add-tab command
+      // (the Alt+T keybinding maps to the "add_new_tab" editor action). This
+      // path is guarded by tabsDisabledRef, separate from the button/CSS path.
+      cy.clickRunScript()
+      cy.wait("@exec")
+      cy.window().then((win) => {
+        const editor = win.monaco.editor.getEditors()[0]
+        editor.focus()
+        editor.trigger("test", "add_new_tab")
+      })
+
+      // Then no new tab is added (settle to let any async tab insert surface)
+      cy.wait(500)
+      cy.getEditorTabs().should("have.length", initialTabCount)
+    })
   })
 
   it("should move cursor to the failed query after running script", () => {

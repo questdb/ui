@@ -62,7 +62,6 @@ import {
   createQueryKey,
   parseQueryKey,
   createQueryKeyFromRequest,
-  validateQueryAtOffset,
   validateQueryJIT,
   setErrorMarkerForQuery,
   getQueryStartOffset,
@@ -266,6 +265,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const editorContext = useEditor()
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
+    tabsDisabled,
     setTabsDisabled,
     editorRef,
     monacoRef,
@@ -288,6 +288,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [scriptConfirmationOpen, setScriptConfirmationOpen] = useState(false)
   const scriptConfirmationOpenRef = useRef(false)
+  const tabsDisabledRef = useRef(false)
   const [shareLinkConfirmation, setShareLinkConfirmation] = useState<{
     sql: string
     statementCount: number
@@ -308,15 +309,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const queryOffsetsRef = useRef<
     { startOffset: number; endOffset: number }[] | null
   >([])
-  const pendingActionRef = useRef<
-    | { type: RunningType.SCRIPT }
-    | {
-        type: RunningType.QUERY | RunningType.EXPLAIN
-        queryText: string
-        startOffset: number
-      }
-    | undefined
-  >(undefined)
+  const pendingScriptRunRef = useRef<{ runAll: boolean } | undefined>(undefined)
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const stopAfterFailureRef = useRef(true)
@@ -602,42 +595,16 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     })
   }
 
-  const executePendingAction = () => {
-    const pending = pendingActionRef.current
-    const editor = editorRef.current
-    const model = editor?.getModel()
-    if (!pending || !editor || !model) return
+  const executePendingScriptRun = () => {
+    const pending = pendingScriptRunRef.current
+    if (!pending || !editorRef.current) return
 
-    pendingActionRef.current = undefined
+    pendingScriptRunRef.current = undefined
 
-    if (pending.type === RunningType.SCRIPT) {
+    if (pending.runAll) {
       queriesToRunRef.current = []
-      dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
-      return
     }
-
-    if (
-      !validateQueryAtOffset(editor, pending.queryText, pending.startOffset)
-    ) {
-      return
-    }
-
-    if (validationTimeoutRef.current) {
-      window.clearTimeout(validationTimeoutRef.current)
-      validationTimeoutRef.current = null
-    }
-    if (monacoRef.current) {
-      clearValidationMarkers(
-        monacoRef.current,
-        editor,
-        activeBufferRef.current.id as number,
-      )
-    }
-
-    const position = model.getPositionAt(pending.startOffset)
-    editor.setPosition(position)
-
-    toggleRunning(pending.type)
+    dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
   }
 
   const handleAskAI = async (query?: Request) => {
@@ -966,7 +933,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           handleCopyLinkAllQueries(true)
         },
         deleteBuffer: (id: number) => editorContext.deleteBuffer(id),
-        addBuffer: () => editorContext.addBuffer(),
+        addBuffer: () => {
+          if (tabsDisabledRef.current) return
+          void editorContext.addBuffer()
+        },
       }),
     )
 
@@ -1495,6 +1465,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
   }
 
+  const setScriptConfirmation = (open: boolean) => {
+    scriptConfirmationOpenRef.current = open
+    setScriptConfirmationOpen(open)
+  }
+
   const handleTriggerRunScript = (runAll?: boolean) => {
     if (running === RunningType.SCRIPT) {
       dispatch(actions.query.toggleRunning())
@@ -1506,44 +1481,33 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       runAll,
     })
 
-    const triggerScript = () => {
-      if (runAll) {
-        setScriptConfirmationOpen(true)
-        return
-      }
-
-      const hasMultipleSelection =
-        queriesToRunRef.current && queriesToRunRef.current.length > 1
-      if (!hasMultipleSelection) {
-        // Run all queries in the buffer
-        setScriptConfirmationOpen(true)
-      } else {
-        // Run selected portion of each query one by one
-        dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
-      }
-    }
+    const hasMultipleSelection = queriesToRunRef.current.length > 1
+    const runsAllQueries = Boolean(runAll) || !hasMultipleSelection
 
     if (
       runningValueRef.current === RunningType.NONE &&
       !questExecution.isAnyRunning()
     ) {
-      triggerScript()
+      if (runsAllQueries) {
+        setScriptConfirmation(true)
+      } else {
+        dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
+      }
       return
     }
 
-    // Store script action for later execution
-    pendingActionRef.current = { type: RunningType.SCRIPT }
-    setScriptConfirmationOpen(true)
+    pendingScriptRunRef.current = { runAll: runsAllQueries }
+    setScriptConfirmation(true)
   }
 
   const handleConfirmRunScript = () => {
-    setScriptConfirmationOpen(false)
+    setScriptConfirmation(false)
 
     questExecution.cancelActive()
 
-    if (pendingActionRef.current) {
+    if (pendingScriptRunRef.current) {
       if (runningValueRef.current === RunningType.NONE) {
-        executePendingAction()
+        executePendingScriptRun()
       } else {
         toggleRunning(RunningType.NONE)
       }
@@ -1555,7 +1519,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   const handleToggleDialog = (open: boolean) => {
-    setScriptConfirmationOpen(open)
+    setScriptConfirmation(open)
     if (!open) {
       setTimeout(() => editorRef.current?.focus())
     }
@@ -1563,7 +1527,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const handleCloseDialog = () => {
     if (!scriptConfirmationOpen) return
-    pendingActionRef.current = undefined
+    pendingScriptRunRef.current = undefined
     handleToggleDialog(false)
   }
 
@@ -1737,7 +1701,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (scriptStopRef.current) {
       scriptStopRef.current = false
       if (!scriptConfirmationOpenRef.current) {
-        executePendingAction()
+        executePendingScriptRun()
       }
     }
   }
@@ -1761,8 +1725,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [activeNotification])
 
   useEffect(() => {
-    scriptConfirmationOpenRef.current = scriptConfirmationOpen
-  }, [scriptConfirmationOpen])
+    tabsDisabledRef.current = tabsDisabled
+  }, [tabsDisabled])
 
   useEffect(() => {
     const gridNotificationKeySuffix = `@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`
@@ -2072,7 +2036,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
           .finally(() => {
             if (!scriptConfirmationOpenRef.current) {
-              executePendingAction()
+              executePendingScriptRun()
             }
           })
         setRequest(request)
@@ -2228,6 +2192,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
   }, [])
 
+  const isPendingSelectionRun = pendingScriptRunRef.current?.runAll === false
+
   return (
     <>
       <Content $hidden={hidden}>
@@ -2310,10 +2276,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             onEscapeKeyDown={handleCloseDialog}
             onInteractOutside={handleCloseDialog}
           >
-            <Dialog.Title>Run all queries</Dialog.Title>
+            <Dialog.Title>
+              {isPendingSelectionRun
+                ? "Run selected queries"
+                : "Run all queries"}
+            </Dialog.Title>
 
             <DialogDescription>
-              {pendingActionRef.current && (
+              {pendingScriptRunRef.current && (
                 <Box
                   margin="0 0 1rem 0"
                   gap="0.8rem"
@@ -2326,32 +2296,35 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                 </Box>
               )}
               <Text color="foreground">
-                You are about to run all queries in this tab. This action may
-                modify or delete your data permanently.
+                {isPendingSelectionRun
+                  ? `You are about to run ${queriesToRunRef.current.length} selected queries. This action may modify or delete your data permanently.`
+                  : "You are about to run all queries in this tab. This action may modify or delete your data permanently."}
               </Text>
-              <Box gap="1rem" margin="1.6rem 0">
-                <label
-                  htmlFor="stop-after-failure"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.8rem",
-                    cursor: "pointer",
-                  }}
-                >
-                  <Checkbox
-                    defaultChecked={stopAfterFailureRef.current}
-                    onChange={(e) => {
-                      stopAfterFailureRef.current = e.target.checked
+              {!isPendingSelectionRun && (
+                <Box gap="1rem" margin="1.6rem 0">
+                  <label
+                    htmlFor="stop-after-failure"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.8rem",
+                      cursor: "pointer",
                     }}
-                    id="stop-after-failure"
-                    data-hook="stop-after-failure-checkbox"
-                  />
-                  <Text color="foreground">
-                    Stop running after a failed query
-                  </Text>
-                </label>
-              </Box>
+                  >
+                    <Checkbox
+                      defaultChecked={stopAfterFailureRef.current}
+                      onChange={(e) => {
+                        stopAfterFailureRef.current = e.target.checked
+                      }}
+                      id="stop-after-failure"
+                      data-hook="stop-after-failure-checkbox"
+                    />
+                    <Text color="foreground">
+                      Stop running after a failed query
+                    </Text>
+                  </label>
+                </Box>
+              )}
             </DialogDescription>
 
             <Dialog.ActionButtons>
@@ -2366,7 +2339,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                 data-hook="run-all-queries-confirm"
                 onClick={handleConfirmRunScript}
               >
-                Run all queries
+                {isPendingSelectionRun
+                  ? "Run selected queries"
+                  : "Run all queries"}
               </DialogButton>
             </Dialog.ActionButtons>
           </Dialog.Content>

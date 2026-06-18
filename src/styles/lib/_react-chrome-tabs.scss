@@ -46,6 +46,10 @@
   background: #6272a4;
 }
 
+[data-hook="editor-tabs-disabled"] .chrome-tabs .new-tab-button-wrapper {
+  pointer-events: none;
+}
+
 .chrome-tabs .chrome-tabs-content {
   position: relative;
   width: auto;

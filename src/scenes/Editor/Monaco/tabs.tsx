@@ -445,6 +445,16 @@ export const Tabs = () => {
     }
   }
 
+  const handleNewTab = () => {
+    if (tabsDisabled) return
+    const btn = document.querySelector(".chrome-tabs .new-tab-button-wrapper")
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      setNewTabMenuPos({ x: rect.left, y: rect.top + 40 })
+    }
+    setNewTabMenuOpen(true)
+  }
+
   useLayoutEffect(() => {
     setTabsVisible(true)
   }, [])
@@ -467,16 +477,7 @@ export const Tabs = () => {
         onTabReorder={reorder}
         onTabActive={active}
         onTabRename={rename}
-        onNewTab={() => {
-          const btn = document.querySelector(
-            ".chrome-tabs .new-tab-button-wrapper",
-          )
-          if (btn) {
-            const rect = btn.getBoundingClientRect()
-            setNewTabMenuPos({ x: rect.left, y: rect.top + 40 })
-          }
-          setNewTabMenuOpen(true)
-        }}
+        onNewTab={handleNewTab}
         tabs={buffers
           .filter(
             (buffer) =>
