@@ -8,18 +8,19 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual"
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
   type ColumnDef,
   type ColumnPinningState,
+  type Header,
 } from "@tanstack/react-table"
 
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { unescapeHtml } from "../../utils/escapeHtml"
-import type { ResultGridDataSource } from "./types"
+import type { CellValue, ResultGridDataSource, ResultGridRow } from "./types"
 import {
   clampColumnWidths,
   sampleColumnWidths,
@@ -32,7 +33,6 @@ import {
   Cell,
   CellText,
   ColResizer,
-  DatasetRow,
   GridContainer,
   HeaderCell,
   HeaderName,
@@ -74,7 +74,7 @@ const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 type GridCellProps = {
   rowIndex: number
   colIndex: number
-  rawValue: boolean | string | number | null
+  rawValue: CellValue
   loaded: boolean
   col: ColumnDefinition | undefined
   colWidth: number
@@ -161,7 +161,42 @@ export type ResultGridHandle = {
   toggleFreezeLeft: () => void
 }
 
-const EMPTY_TABLE_DATA: DatasetRow[] = []
+const EMPTY_TABLE_DATA: ResultGridRow[] = []
+
+const EMPTY_HEADERS: Header<ResultGridRow, unknown>[] = []
+
+type CellPosition = { frozen: boolean; left: number; width: number }
+
+const renderFrozenThenCenter = (
+  headers: Header<ResultGridRow, unknown>[],
+  frozenCount: number,
+  virtualColumns: VirtualItem[],
+  renderColumn: (
+    header: Header<ResultGridRow, unknown>,
+    visualIndex: number,
+    pos: CellPosition,
+  ) => React.ReactNode,
+) => (
+  <>
+    {headers.slice(0, frozenCount).map((header, i) =>
+      renderColumn(header, i, {
+        frozen: true,
+        left: header.column.getStart("left"),
+        width: header.getSize(),
+      }),
+    )}
+    {virtualColumns.map((virtualCol) => {
+      if (virtualCol.index < frozenCount) return null
+      const header = headers[virtualCol.index]
+      if (!header) return null
+      return renderColumn(header, virtualCol.index, {
+        frozen: false,
+        left: virtualCol.start,
+        width: virtualCol.size,
+      })
+    })}
+  </>
+)
 
 export const ResultGrid = forwardRef<ResultGridHandle, Props>(
   (
@@ -208,11 +243,11 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       [columns, sampleRows],
     )
 
-    const columnDefs = useMemo<ColumnDef<DatasetRow, unknown>[]>(() => {
+    const columnDefs = useMemo<ColumnDef<ResultGridRow, unknown>[]>(() => {
       const widths = clampColumnWidths(sampledWidths, containerWidth)
       return columns.map((col, i) => ({
         id: columnId(i),
-        accessorFn: (row: DatasetRow) => row[i],
+        accessorFn: (row: ResultGridRow) => row[i],
         header: col.name,
         size: widths[i],
         minSize: 60,
@@ -252,9 +287,16 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       setColumnPinning({ left: initialPinnedColumns ?? [], right: [] })
     }, [initialPinnedColumns])
 
-    const leftHeaders = table.getLeftHeaderGroups()[0]?.headers ?? []
-    const centerHeaders = table.getCenterHeaderGroups()[0]?.headers ?? []
-    const headers = [...leftHeaders, ...centerHeaders]
+    const leftHeaders = table.getLeftHeaderGroups()[0]?.headers ?? EMPTY_HEADERS
+    const centerHeaders =
+      table.getCenterHeaderGroups()[0]?.headers ?? EMPTY_HEADERS
+    // Memoized so consumers that take `headers` as a dependency (the
+    // scroll-context effect, the freeze-drag callback) don't re-run on every
+    // render — including every scroll frame, where a fresh array would.
+    const headers = useMemo(
+      () => [...leftHeaders, ...centerHeaders],
+      [leftHeaders, centerHeaders],
+    )
     const frozenCount = leftHeaders.length
     const frozenWidth = table.getLeftTotalSize()
     const { columnSizing, commitSizingDebounced } = useColumnSizing(
@@ -638,23 +680,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           role="row"
           aria-rowindex={1}
         >
-          {headers.slice(0, frozenCount).map((header, i) =>
-            renderHeaderCell(header, i, {
-              frozen: true,
-              left: header.column.getStart("left"),
-              width: header.getSize(),
-            }),
+          {renderFrozenThenCenter(
+            headers,
+            frozenCount,
+            virtualColumns,
+            renderHeaderCell,
           )}
-          {virtualColumns.map((virtualCol) => {
-            if (virtualCol.index < frozenCount) return null
-            const header = headers[virtualCol.index]
-            if (!header) return null
-            return renderHeaderCell(header, virtualCol.index, {
-              frozen: false,
-              left: virtualCol.start,
-              width: virtualCol.size,
-            })
-          })}
         </HeaderRow>
       )
     }, [
@@ -778,23 +809,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                   role="row"
                   aria-rowindex={absoluteIndex + 2}
                 >
-                  {headers.slice(0, frozenCount).map((header, i) =>
-                    renderBodyCell(header, i, {
-                      frozen: true,
-                      left: header.column.getStart("left"),
-                      width: header.getSize(),
-                    }),
+                  {renderFrozenThenCenter(
+                    headers,
+                    frozenCount,
+                    virtualColumns,
+                    renderBodyCell,
                   )}
-                  {virtualColumns.map((virtualCol) => {
-                    if (virtualCol.index < frozenCount) return null
-                    const header = headers[virtualCol.index]
-                    if (!header) return null
-                    return renderBodyCell(header, virtualCol.index, {
-                      frozen: false,
-                      left: virtualCol.start,
-                      width: virtualCol.size,
-                    })
-                  })}
                 </Row>
               )
             })}

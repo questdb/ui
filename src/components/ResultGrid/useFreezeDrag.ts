@@ -6,9 +6,9 @@ import {
   type SetStateAction,
 } from "react"
 import type { ColumnPinningState, Header } from "@tanstack/react-table"
-import type { DatasetRow } from "./styles"
+import type { ResultGridRow } from "./types"
 
-type GridHeader = Header<DatasetRow, unknown>
+type GridHeader = Header<ResultGridRow, unknown>
 
 // Drives the freeze-handle drag: it snaps to the nearest column boundary and,
 // on release, pins every column up to that boundary.

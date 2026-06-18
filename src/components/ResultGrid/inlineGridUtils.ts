@@ -1,5 +1,6 @@
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { unescapeHtml } from "../../utils/escapeHtml"
+import type { CellValue, ResultGridRow } from "./types"
 
 const CELL_WIDTH_MULTIPLIER = 9.6
 const ARRAY_CELL_WIDTH_MULTIPLIER = 8.3
@@ -80,7 +81,7 @@ const MAX_SAMPLED_WIDTH_PX = 4000
 
 export const sampleColumnWidths = (
   columns: ColumnDefinition[],
-  dataset: (boolean | string | number | null)[][],
+  dataset: ResultGridRow[],
 ): number[] => {
   const maxTextLenRegular = Math.ceil(
     MAX_SAMPLED_WIDTH_PX / CELL_WIDTH_MULTIPLIER,
@@ -139,7 +140,7 @@ export const formatColumnType = (col: ColumnDefinition): string => {
 }
 
 export const formatCellValue = (
-  value: boolean | string | number | null,
+  value: CellValue,
   col?: ColumnDefinition,
   columnWidth?: number,
 ): string => {
@@ -163,7 +164,7 @@ export const formatCellValue = (
 }
 
 export const formatCellValueForCopy = (
-  value: boolean | string | number | null,
+  value: CellValue,
   col?: ColumnDefinition,
 ): string => {
   if (value === null) return "null"

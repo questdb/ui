@@ -4,8 +4,6 @@ import { theme } from "../../theme"
 import { CopyButton } from "../CopyButton"
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
 
-export type DatasetRow = (boolean | string | number | null)[]
-
 export { HEADER_HEIGHT, ROW_HEIGHT }
 
 export const GridContainer = styled.div`

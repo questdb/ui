@@ -40,6 +40,11 @@ export const planPageFetch = (
   return { kind: "none" }
 }
 
+export const fetchRangeForPlan = (
+  plan: PageFetchPlan,
+): { lo: number; hi: number } | null =>
+  plan.kind === "none" ? null : { lo: plan.lo + 1, hi: plan.hi }
+
 export const splitPagePair = (
   dataset: ResultGridRow[],
 ): { first: ResultGridRow[]; second: ResultGridRow[] } => {

@@ -8,7 +8,7 @@ import type {
   ResultGridRow,
 } from "../../components/ResultGrid"
 import { PAGE_SIZE, nextPageWindow } from "./nextPageWindow"
-import { planPageFetch } from "./pageFetchPlan"
+import { planPageFetch, fetchRangeForPlan } from "./pageFetchPlan"
 import {
   applyPageResponse,
   getRowFromCache,
@@ -83,8 +83,9 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
     purgeOutlierPages()
     const requestedGeneration = resultGenerationRef.current
     const plan = planPageFetch(p1, p2, isEmptyPage)
+    const range = fetchRangeForPlan(plan)
 
-    if (plan.kind === "none") return
+    if (!range) return
 
     const onPageResponse = (response: QueryRawResult) => {
       const applied = applyPageResponse(
@@ -98,9 +99,8 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
     }
 
     if (paginationFn) {
-      // QuestDB's limit is 1-based inclusive, so the start row is lo + 1.
-      paginationFn(sqlRef.current, plan.lo + 1, plan.hi, onPageResponse)
-      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: plan.hi })
+      paginationFn(sqlRef.current, range.lo, range.hi, onPageResponse)
+      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: range.hi })
     }
   }, [])
 

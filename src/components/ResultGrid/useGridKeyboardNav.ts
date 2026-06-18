@@ -3,6 +3,7 @@ import type { ColumnDefinition } from "../../utils/questdb/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../Toast"
 import { formatCellValueForCopy } from "./inlineGridUtils"
+import type { CellValue } from "./types"
 
 export type CellCoord = { row: number; col: number }
 
@@ -55,10 +56,7 @@ const scrollCellIntoView = (cell: CellCoord, ctx: ScrollContext) => {
 export const useGridKeyboardNav = (
   rowCount: number,
   colCount: number,
-  getData: (
-    row: number,
-    col: number,
-  ) => boolean | string | number | null | undefined,
+  getData: (row: number, col: number) => CellValue | undefined,
   getColumn: (col: number) => ColumnDefinition | undefined,
   scrollContextRef: React.RefObject<ScrollContext | null>,
   onCopy?: () => void,

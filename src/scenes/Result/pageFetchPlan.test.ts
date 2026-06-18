@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest"
-import { planPageFetch, splitPagePair } from "./pageFetchPlan"
+import {
+  planPageFetch,
+  splitPagePair,
+  fetchRangeForPlan,
+} from "./pageFetchPlan"
 import { PAGE_SIZE } from "./nextPageWindow"
 
 // isEmptyPage returns true for any page that is NOT loaded.
@@ -97,6 +101,39 @@ describe("planPageFetch", () => {
 
     // Then nothing is fetched
     expect(plan).toEqual({ kind: "none" })
+  })
+})
+
+describe("fetchRangeForPlan", () => {
+  it("shifts a pair plan's lower bound by one for QuestDB's 1-based limit", () => {
+    // Given a pair plan covering pages 0 and 1
+    const plan = planPageFetch(0, 1, loadedExcept())
+
+    // When translating it to a fetch range
+    const range = fetchRangeForPlan(plan)
+
+    // Then the start row is lo + 1 and the end row is unchanged
+    expect(range).toEqual({ lo: 1, hi: 2 * PAGE_SIZE })
+  })
+
+  it("shifts a single plan's lower bound by one", () => {
+    // Given a single-page plan for page 2 (page 3 already cached)
+    const plan = planPageFetch(2, 3, loadedExcept(3))
+
+    // When translating it to a fetch range
+    const range = fetchRangeForPlan(plan)
+
+    // Then the start row is the page's first row + 1
+    expect(range).toEqual({ lo: 2 * PAGE_SIZE + 1, hi: 3 * PAGE_SIZE })
+  })
+
+  it("returns null when there is nothing to fetch", () => {
+    // Given a no-op plan (both pages already cached)
+    const plan = planPageFetch(0, 1, loadedExcept(0, 1))
+
+    // When translating it to a fetch range
+    // Then there is no range to request
+    expect(fetchRangeForPlan(plan)).toBeNull()
   })
 })
 

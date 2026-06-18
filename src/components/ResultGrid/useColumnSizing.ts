@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef } from "react"
 import type { Table } from "@tanstack/react-table"
-import type { DatasetRow } from "./styles"
+import type { ResultGridRow } from "./types"
 
 const KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS = 200
 
 export const useColumnSizing = (
-  table: Table<DatasetRow>,
+  table: Table<ResultGridRow>,
   onColumnSizingCommit?: (sizing: Record<string, number>) => void,
 ) => {
   const columnSizing = table.getState().columnSizing
