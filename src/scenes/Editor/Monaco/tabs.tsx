@@ -248,6 +248,10 @@ export const Tabs = () => {
               return {
                 value: {
                   ...migratedValue,
+                  // Drop the source id; keeping it risks a primary-key
+                  // collision that aborts the whole import transaction. This
+                  // row is deleted post-import anyway.
+                  id: undefined,
                   position: -1,
                   _markedForDeletion: true,
                 },

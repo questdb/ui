@@ -24,7 +24,20 @@ const structuralKey = (option: EChartsOption): string => {
     : rawSeries
       ? [rawSeries]
       : []
-  const seriesTypes = series.map((s) => (s as { type?: string }).type ?? "")
+  const seriesTypes = series.map((s) => {
+    const spec = s as {
+      type?: string
+      areaStyle?: unknown
+      step?: unknown
+      stack?: unknown
+    }
+    return [
+      spec.type ?? "",
+      spec.areaStyle ? "a" : "",
+      spec.step ? "s" : "",
+      spec.stack ? "k" : "",
+    ].join("")
+  })
   const xAxis = Array.isArray(option.xAxis) ? option.xAxis[0] : option.xAxis
   const yAxis = Array.isArray(option.yAxis) ? option.yAxis[0] : option.yAxis
   const hasZoom = Array.isArray(option.dataZoom) && option.dataZoom.length > 0
