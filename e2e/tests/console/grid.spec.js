@@ -73,6 +73,8 @@ describe("questdb grid", () => {
         "contain",
         "simulated cairo exception",
       )
+
+      cy.get("[data-hook='grid-cell']").should("not.contain", "undefined")
     })
 
     it("deep pages lazily load the correct value into the correct cell", () => {
@@ -557,6 +559,7 @@ describe("questdb grid", () => {
       // Then
       cy.getColumnName(0).should("eq", "c")
       cy.getFrozenCells().should("have.length.greaterThan", 0)
+      cy.gridToolbar("freeze").should("have.attr", "data-selected", "true")
     })
 
     it("reset clears the persisted layout for the next run", () => {

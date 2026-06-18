@@ -1,174 +1,55 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { QueryRawResult } from "../../utils"
-import type { ColumnDefinition } from "../../utils/questdb/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import type {
-  ResultGridDataSource,
-  ResultGridRow,
-} from "../../components/ResultGrid"
-import { PAGE_SIZE, nextPageWindow } from "./nextPageWindow"
-import { planPageFetch, fetchRangeForPlan } from "./pageFetchPlan"
+import type { ResultGridDataSource } from "../../components/ResultGrid"
 import {
-  applyPageResponse,
-  getRowFromCache,
-  isPageEmpty,
-  purgeOutlierPages as purgeOutlierPagesFromCache,
-} from "./pageCache"
+  createPagedSource,
+  EMPTY_META,
+  type PaginationFn,
+  type PagedMeta,
+  type PagedSource,
+  type SeedResult,
+  type VisibleRange,
+} from "./pagedSource"
 
-const LOAD_DEBOUNCE_MS = 75
-
-export type PaginationFn = (
-  sql: string,
-  lo: number,
-  hi: number,
-  rendererFn: (data: QueryRawResult) => void,
-) => void
-
-type SeedResult = {
-  columns: ColumnDefinition[]
-  dataset: ResultGridRow[]
-  count: number
-  query: string
-  timestamp?: number
-}
-
-type Meta = {
-  columns: ColumnDefinition[]
-  rowCount: number
-  query: string
-  sampleRows: ResultGridRow[]
-  designatedTimestamp: number
-}
-
-const EMPTY_META: Meta = {
-  columns: [],
-  rowCount: 0,
-  query: "",
-  sampleRows: [],
-  designatedTimestamp: -1,
-}
+export type { PaginationFn } from "./pagedSource"
 
 // Server-paged data source: a sparse page cache extended as the window scrolls.
 // Errors are owned by `paginationFn` — it surfaces a notification and never
 // calls the renderer, so a failed page stays unloaded and renders blank.
+// The scroll/fetch orchestration lives in the framework-free `createPagedSource`
+// (unit-tested in pagedSource.test.ts); this hook only bridges it to React.
 export const usePagedDataSource = (paginationFn?: PaginationFn) => {
   const [version, setVersion] = useState(0)
-  const [meta, setMeta] = useState<Meta>(EMPTY_META)
+  const [meta, setMeta] = useState<PagedMeta>(EMPTY_META)
 
-  const cacheRef = useRef<Map<number, ResultGridRow[]>>(new Map())
-  const loPageRef = useRef(0)
-  const hiPageRef = useRef(0)
-  const currentPageRef = useRef(0)
-  const sqlRef = useRef("")
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const resultGenerationRef = useRef(0)
-
-  const bumpVersion = useCallback(() => setVersion((v) => v + 1), [])
-
-  const isEmptyPage = useCallback(
-    (page: number): boolean => isPageEmpty(cacheRef.current, page),
-    [],
-  )
-
-  const purgeOutlierPages = useCallback(() => {
-    purgeOutlierPagesFromCache(
-      cacheRef.current,
-      loPageRef.current,
-      hiPageRef.current,
+  const sourceRef = useRef<PagedSource | null>(null)
+  if (sourceRef.current === null) {
+    sourceRef.current = createPagedSource(
+      paginationFn,
+      () => {
+        setVersion((v) => v + 1)
+        setMeta(sourceRef.current!.getMeta())
+      },
+      (offset) => void trackEvent(ConsoleEvent.GRID_SCROLL, { offset }),
     )
-  }, [])
+  }
+  const source = sourceRef.current
 
-  const loadPages = useCallback((p1: number, p2: number) => {
-    purgeOutlierPages()
-    const requestedGeneration = resultGenerationRef.current
-    const plan = planPageFetch(p1, p2, isEmptyPage)
-    const range = fetchRangeForPlan(plan)
-
-    if (!range) return
-
-    const onPageResponse = (response: QueryRawResult) => {
-      const applied = applyPageResponse(
-        cacheRef.current,
-        plan,
-        response,
-        requestedGeneration,
-        resultGenerationRef.current,
-      )
-      if (applied) bumpVersion()
-    }
-
-    if (paginationFn) {
-      paginationFn(sqlRef.current, range.lo, range.hi, onPageResponse)
-      void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: range.hi })
-    }
-  }, [])
-
-  const loadPagesDelayed = useCallback((p1: number, p2: number) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-    }
-    timerRef.current = setTimeout(() => loadPages(p1, p2), LOAD_DEBOUNCE_MS)
-  }, [])
-
-  const computeDataPages = useCallback(
-    (direction: number, t: number, b: number) => {
-      const decision = nextPageWindow(direction, t, b, {
-        loPage: loPageRef.current,
-        hiPage: hiPageRef.current,
-      })
-      loPageRef.current = decision.loPage
-      hiPageRef.current = decision.hiPage
-      if (decision.load) {
-        loadPagesDelayed(decision.load[0], decision.load[1])
-      }
-    },
-    [],
-  )
-
-  const setResult = useCallback((result: SeedResult) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    cacheRef.current = new Map()
-    cacheRef.current.set(0, result.dataset)
-    loPageRef.current = 0
-    hiPageRef.current = 0
-    currentPageRef.current = 0
-    sqlRef.current = result.query
-    resultGenerationRef.current += 1
-    setMeta({
-      columns: result.columns,
-      rowCount: result.count,
-      query: result.query,
-      sampleRows: result.dataset,
-      designatedTimestamp: result.timestamp ?? -1,
-    })
-    bumpVersion()
-  }, [])
-
-  const getRow = useCallback(
-    (index: number): ResultGridRow | undefined =>
-      getRowFromCache(cacheRef.current, index),
-    // version dep is intentional: a fresh getRow identity re-renders new pages.
-    [version],
+  const setResult = useCallback(
+    (result: SeedResult) => source.setResult(result),
+    [source],
   )
 
   const onVisibleRowsChange = useCallback(
-    ({
-      firstIndex,
-      lastIndex,
-      direction,
-    }: {
-      firstIndex: number
-      lastIndex: number
-      direction: number
-    }) => {
-      currentPageRef.current = Math.floor(firstIndex / PAGE_SIZE)
-      computeDataPages(direction, firstIndex, lastIndex)
-    },
-    [],
+    (range: VisibleRange) => source.onVisibleRowsChange(range),
+    [source],
+  )
+
+  const getRow = useCallback(
+    (index: number) => source.getRow(index),
+    // version dep is intentional: a fresh getRow identity re-renders new pages.
+    [version, source],
   )
 
   const dataSource = useMemo<ResultGridDataSource>(
@@ -180,22 +61,17 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
       getRow,
       onVisibleRowsChange,
     }),
-    [meta, getRow],
+    [meta, getRow, onVisibleRowsChange],
   )
 
-  const getSQL = useCallback(() => sqlRef.current, [])
+  const getSQL = useCallback(() => source.getSQL(), [source])
 
   const getCurrentPageRows = useCallback(
-    (): ResultGridRow[] => cacheRef.current.get(currentPageRef.current) ?? [],
-    [],
+    () => source.getCurrentPageRows(),
+    [source],
   )
 
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    },
-    [],
-  )
+  useEffect(() => () => source.dispose(), [source])
 
   return {
     dataSource,
