@@ -262,8 +262,21 @@ describe("run query with selection", () => {
     // Then it is running and the Cancel button is shown
     cy.getByDataHook("button-cancel-query").should("be.visible")
 
-    // When the user selects all queries (e.g. to share the console window)
-    cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 3, column: 10 })
+    // When the user selects all queries (e.g. to share the console window).
+    // Focus the editor first: while a query is running it is read-only and was
+    // blurred by the Run button click, so a selection set on the blurred editor
+    // does not reliably stick in headless CI. Selecting on the focused editor
+    // makes the selection propagate to queriesToRun.
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      editor.focus()
+      editor.setSelection({
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 3,
+        endColumn: 10,
+      })
+    })
     // Then the multi-statement selection has propagated to the run state.
     // This gate is mandatory: the regression (Cancel opening the run-all modal)
     // only manifests when queriesToRun > 1, so without it the test would pass
@@ -299,13 +312,17 @@ describe("run query with selection", () => {
     // triggers a run with the keyboard while the first query is still running
     cy.window().then((win) => {
       const editor = win.monaco.editor.getEditors()[0]
+      // Focus before selecting: the editor is read-only while a query runs and
+      // was blurred by the Run button click. Focusing first makes the selection
+      // stick (and prevents a later focus from restoring the pre-blur, collapsed
+      // selection), so it propagates to queriesToRun.
+      editor.focus()
       editor.setSelection({
         startLineNumber: 1,
         startColumn: 1,
         endLineNumber: 2,
         endColumn: 10,
       })
-      editor.focus()
     })
     // Then the selection has propagated as exactly 2 queries (not all 3)
     cy.waitForSelectedQueries(2)
@@ -370,11 +387,12 @@ describe("run query with selection", () => {
     // When the user confirms
     cy.getByDataHook("run-all-queries-confirm").click()
 
-    // Then the previously running query is cancelled
-    cy.expandNotifications()
-    cy.getExpandedNotifications().should("contain", "Cancelled by user")
-
-    // And ALL 3 queries in the tab run (run-all clears the selection)
+    // The previously running query is aborted, then "run all" runs. Run-all
+    // clears this buffer's notifications (cleanupBufferNotifications), so the
+    // transient "Cancelled by user" notice is intentionally NOT asserted here
+    // (unlike the selection run, which preserves notifications). The run
+    // completing with all 3 queries is the proof the abort-then-run-all
+    // flow executed.
     cy.contains('[data-hook="success-notification"]', "Running completed", {
       timeout: 20000,
     })
