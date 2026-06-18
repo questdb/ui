@@ -54,7 +54,7 @@ const Title = styled(AlertDialog.Title)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const Lede = styled.p`
+const Lede = styled(AlertDialog.Description)`
   margin: 0;
   color: ${({ theme }) => theme.color.gray2};
   line-height: 1.5;

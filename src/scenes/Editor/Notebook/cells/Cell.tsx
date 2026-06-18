@@ -710,6 +710,7 @@ const CellInner: React.FC<Props> = ({
                     cancelCell(cell.id)
                   }}
                   title="Cancel"
+                  aria-label="Cancel"
                 >
                   <CancelIcon />
                 </RunButton>
@@ -722,6 +723,7 @@ const CellInner: React.FC<Props> = ({
                     void handleRunAll()
                   }}
                   title="Run (Ctrl+Shift+Enter)"
+                  aria-label="Run"
                 >
                   <PlayIcon />
                 </RunButton>

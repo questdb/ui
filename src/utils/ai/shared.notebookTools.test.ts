@@ -299,6 +299,52 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     ).toBeUndefined()
   })
 
+  it("run_query that throws flags a transport-dropped rejection as unverified, a server rejection as not", async () => {
+    // Given runQueryRaw rejects with a transport-dropped error
+    const transport = makeClient({
+      runQueryRaw: vi.fn(() =>
+        Promise.reject(new Error("QuestDB is not reachable [504]")),
+      ),
+    })
+    // When run_query is dispatched
+    const t = await dispatchTool(
+      "run_query",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES(1)" },
+      transport,
+      noopStatus,
+    )
+    // Then the failure envelope is marked unverified
+    const transportPayload = JSON.parse(t.content) as {
+      error?: string
+      unverified?: boolean
+    }
+    expect(t.is_error).toBe(true)
+    expect(transportPayload.error).toContain("run_query failed:")
+    expect(transportPayload.unverified).toBe(true)
+
+    // Given runQueryRaw rejects with a deterministic server error
+    const serverErr = makeClient({
+      runQueryRaw: vi.fn(() =>
+        Promise.reject(new Error("table does not exist [table=t]")),
+      ),
+    })
+    // When run_query is dispatched
+    const s = await dispatchTool(
+      "run_query",
+      { buffer_id: 1, sql: "SELECT * FROM t" },
+      serverErr,
+      noopStatus,
+    )
+    // Then the failure envelope is NOT marked unverified
+    const serverPayload = JSON.parse(s.content) as {
+      error?: string
+      unverified?: boolean
+    }
+    expect(s.is_error).toBe(true)
+    expect(serverPayload.error).toContain("run_query failed:")
+    expect(serverPayload.unverified).toBeUndefined()
+  })
+
   it("set_cell_chart_config with only `queries` does NOT send x/name defaults (no clobber)", async () => {
     const client = makeClient()
     await dispatchTool(

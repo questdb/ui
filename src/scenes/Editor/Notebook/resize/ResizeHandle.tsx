@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from "react"
+import React, { useCallback, useEffect, useRef } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
 import { SideChip } from "./chips"
@@ -100,6 +100,7 @@ export const ResizeHandle: React.FC<Props> = ({
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
+  const endDragRef = useRef<(() => void) | null>(null)
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -117,11 +118,16 @@ export const ResizeHandle: React.FC<Props> = ({
         onResize(newHeight)
       }
 
-      const handleMouseUp = () => {
+      const endDrag = () => {
         document.removeEventListener("mousemove", handleMouseMove)
         document.removeEventListener("mouseup", handleMouseUp)
         document.body.style.cursor = ""
         document.body.style.userSelect = ""
+        endDragRef.current = null
+      }
+
+      const handleMouseUp = () => {
+        endDrag()
         onResizeEnd(lastHeightRef.current)
       }
 
@@ -129,6 +135,7 @@ export const ResizeHandle: React.FC<Props> = ({
       document.body.style.userSelect = "none"
       document.addEventListener("mousemove", handleMouseMove)
       document.addEventListener("mouseup", handleMouseUp)
+      endDragRef.current = endDrag
     },
     [targetRef, onResize, onResizeEnd, minHeight],
   )
@@ -146,6 +153,8 @@ export const ResizeHandle: React.FC<Props> = ({
     },
     [onDoubleClick],
   )
+
+  useEffect(() => () => endDragRef.current?.(), [])
 
   return (
     <Handle

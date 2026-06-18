@@ -74,7 +74,7 @@ const RichTitle = styled.span`
 const TriggerButton = styled(Button).attrs({ skin: "secondary" })`
   justify-content: space-between;
   width: 100%;
-  height: 4.4rem;
+  height: 5.5rem;
   padding: 0.6rem 1.2rem;
   gap: 1.2rem;
   font-weight: 400;

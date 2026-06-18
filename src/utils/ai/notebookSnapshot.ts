@@ -2,6 +2,7 @@ import {
   getController,
   type NotebookWorkspaceController,
 } from "../notebookAIBridge"
+import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
 import type {
   CellLayoutItem,
   NotebookCell,
@@ -74,10 +75,7 @@ const truncate = (s: string, max: number): string =>
 
 const escapeNewlines = (s: string): string => s.replace(/\n/g, "\\n")
 
-// Prompt-injection guard: `<`→`‹` (U+2039), `>`→`›` (U+203A) so user-controlled
-// strings can't forge closing tags. Applied AFTER truncation to keep length bounds.
-export const sanitizeForPromptContext = (s: string): string =>
-  s.replace(/</g, "\u2039").replace(/>/g, "\u203A")
+export { sanitizeForPromptContext }
 
 const preview = (value: string): string =>
   sanitizeForPromptContext(escapeNewlines(truncate(value, PREVIEW_MAX)))

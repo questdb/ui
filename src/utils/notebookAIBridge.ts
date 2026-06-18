@@ -14,6 +14,7 @@ import {
   UNVERIFIED_RUN_NOTE,
 } from "../scenes/Editor/Notebook/notebookUtils"
 import type { RanStatus } from "./ai/runStatus"
+import { sanitizeForPromptContext } from "./ai/sanitizeForPromptContext"
 
 // Bridges the AI tool-execution layer (plain async code, no React context)
 // to notebook React state. Two controllers live here:
@@ -118,9 +119,6 @@ export type ApplyNotebookStateRequest = {
   variables?: NotebookVariable[] | null
   cells: ApplyNotebookStateCellRequest[]
 }
-
-const sanitizeForPromptContext = (s: string): string =>
-  s.replace(/</g, "\u2039").replace(/>/g, "\u203A")
 
 export const summarizeCellResults = (cell: NotebookCell | undefined) => {
   const freshResult = cell?.result
