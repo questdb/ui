@@ -154,4 +154,27 @@ describe("columnLayoutStore", () => {
     })
     expect(loadColumnLayout(columnSet(1))).toBeNull()
   })
+
+  it("bumps recency for a column set whose raw hash is all-digits", () => {
+    // Given a column set whose unprefixed hash is an integer-like string
+    // (c267 -> "303520"), saved first so it is the oldest entry
+    const numericHashSet = columnSet(267)
+    saveColumnLayout(numericHashSet, { columnSizing: { col_0: 1 } })
+
+    // And the cap filled with other distinct sets
+    for (let i = 0; i < LRU_MAX - 1; i++) {
+      saveColumnLayout(columnSet(i), { columnSizing: { col_0: i } })
+    }
+
+    // And the numeric-hash entry re-saved (becoming most recent)
+    saveColumnLayout(numericHashSet, { columnSizing: { col_0: 999 } })
+
+    // When one more new set pushes past the cap
+    saveColumnLayout(columnSet(LRU_MAX), { columnSizing: { col_0: LRU_MAX } })
+
+    // Then the re-saved numeric-hash entry survives eviction
+    expect(loadColumnLayout(numericHashSet)).toEqual({
+      columnSizing: { col_0: 999 },
+    })
+  })
 })

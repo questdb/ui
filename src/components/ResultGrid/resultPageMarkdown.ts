@@ -17,6 +17,9 @@ const buildQueryPlanMarkdown = (rows: ResultGridRow[]): string => {
   return lines.join("\n")
 }
 
+const escapeTableCell = (text: string): string =>
+  text.replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, " ")
+
 const renderRow = (cells: string[], widths: number[]): string =>
   `| ${cells.map((cell, i) => cell.padEnd(widths[i])).join(" | ")} |`
 
@@ -24,12 +27,14 @@ const buildTableMarkdown = (
   columns: ColumnDefinition[],
   rows: ResultGridRow[],
 ): string => {
-  const headers = columns.map((column) => column.name)
+  const headers = columns.map((column) => escapeTableCell(column.name))
   const widths = headers.map((header) => header.length)
 
   const formattedRows = rows.map((row) =>
     columns.map((column, i) => {
-      const text = formatCellValueForCopy(row[i] ?? null, column)
+      const text = escapeTableCell(
+        formatCellValueForCopy(row[i] ?? null, column),
+      )
       widths[i] = Math.max(widths[i], text.length)
       return text
     }),

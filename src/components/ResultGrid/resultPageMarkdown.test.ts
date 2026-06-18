@@ -83,6 +83,18 @@ describe("buildResultPageMarkdown", () => {
     )
   })
 
+  it("escapes pipes and newlines so a cell can't break the table", () => {
+    // Given a string column whose value contains a pipe and a newline
+    const columns = [col("note", "VARCHAR")]
+    const rows = [["a|b\nc"]]
+
+    // When building the markdown
+    const md = buildResultPageMarkdown(columns, rows)
+
+    // Then the pipe is escaped and the newline collapsed to keep one row
+    expect(md).toBe(["| note   |", "| ------ |", "| a\\|b c |"].join("\n"))
+  })
+
   it("returns an empty string when there are no columns", () => {
     // Given an empty result
     // When building the markdown

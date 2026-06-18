@@ -11,6 +11,9 @@ export type ColumnLayout = {
 
 type LayoutStore = Record<string, ColumnLayout>
 
+// Prefixed with a non-digit so the key is never an integer-like string: those
+// are enumerated first in numeric order by Object.keys, which would break the
+// insertion-order LRU in saveColumnLayout.
 const hashColumnSet = (columns: ColumnDefinition[]): string => {
   const str = JSON.stringify(
     columns.map((c) => ({ name: c.name, type: c.type })),
@@ -20,7 +23,7 @@ const hashColumnSet = (columns: ColumnDefinition[]): string => {
     const char = str.charCodeAt(i)
     hash = ((hash << 5) - hash + char) | 0
   }
-  return (hash >>> 0).toString(36)
+  return `k${(hash >>> 0).toString(36)}`
 }
 
 const readStore = (): LayoutStore => {

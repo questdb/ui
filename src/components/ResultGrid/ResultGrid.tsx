@@ -66,6 +66,7 @@ declare module "@tanstack/react-table" {
 
 const WIDTH_SAMPLE_ROWS = 1000
 const KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS = 200
+const FREEZE_HANDLE_EDGE_INSET = 4
 const COLUMN_ID_PREFIX = "col_"
 const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
@@ -762,6 +763,12 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       }
     }
 
+    const viewportWidth = scrollRef.current?.clientWidth ?? containerWidth
+    const freezeHandleLeft = Math.min(
+      frozenWidth,
+      Math.max(0, viewportWidth - FREEZE_HANDLE_EDGE_INSET),
+    )
+
     return (
       <GridContainer
         ref={gridRef}
@@ -869,7 +876,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
             data-hook="grid-freeze-handle"
             $dragging={freezeDragX !== null}
             $flush={frozenCount === 0}
-            style={{ left: frozenWidth }}
+            style={{ left: freezeHandleLeft }}
             onMouseDown={onFreezeMouseDown}
             aria-label={
               frozenCount > 0
