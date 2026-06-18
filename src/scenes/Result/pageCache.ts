@@ -1,4 +1,5 @@
 import type { ResultGridRow } from "../../components/ResultGrid"
+import type { QueryRawResult } from "../../utils"
 import { PAGE_SIZE } from "./nextPageWindow"
 import { splitPagePair, type PageFetchPlan } from "./pageFetchPlan"
 
@@ -41,4 +42,17 @@ export const applyFetchedPages = (
   } else if (plan.kind === "single") {
     cache.set(plan.page, dataset)
   }
+}
+
+export const applyPageResponse = (
+  cache: PageCache,
+  plan: PageFetchPlan,
+  response: QueryRawResult,
+  requestedGeneration: number,
+  currentGeneration: number,
+): boolean => {
+  if (requestedGeneration !== currentGeneration) return false
+  if (!("dataset" in response)) return false
+  applyFetchedPages(cache, plan, response.dataset)
+  return true
 }

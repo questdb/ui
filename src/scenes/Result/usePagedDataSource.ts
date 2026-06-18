@@ -10,7 +10,7 @@ import type {
 import { PAGE_SIZE, nextPageWindow } from "./nextPageWindow"
 import { planPageFetch } from "./pageFetchPlan"
 import {
-  applyFetchedPages,
+  applyPageResponse,
   getRowFromCache,
   isPageEmpty,
   purgeOutlierPages as purgeOutlierPagesFromCache,
@@ -81,24 +81,25 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
 
   const loadPages = useCallback((p1: number, p2: number) => {
     purgeOutlierPages()
-    const generation = resultGenerationRef.current
+    const requestedGeneration = resultGenerationRef.current
     const plan = planPageFetch(p1, p2, isEmptyPage)
 
-    if (plan.kind === "none") {
-      bumpVersion()
-      return
-    }
+    if (plan.kind === "none") return
 
-    const renderFunc = (response: QueryRawResult) => {
-      if (generation !== resultGenerationRef.current) return
-      if (!("dataset" in response)) return
-      applyFetchedPages(cacheRef.current, plan, response.dataset)
-      bumpVersion()
+    const onPageResponse = (response: QueryRawResult) => {
+      const applied = applyPageResponse(
+        cacheRef.current,
+        plan,
+        response,
+        requestedGeneration,
+        resultGenerationRef.current,
+      )
+      if (applied) bumpVersion()
     }
 
     if (paginationFn) {
       // QuestDB's limit is 1-based inclusive, so the start row is lo + 1.
-      paginationFn(sqlRef.current, plan.lo + 1, plan.hi, renderFunc)
+      paginationFn(sqlRef.current, plan.lo + 1, plan.hi, onPageResponse)
       void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: plan.hi })
     }
   }, [])

@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest"
 import type { ResultGridRow } from "../../components/ResultGrid"
+import type { QueryRawResult } from "../../utils"
 import { PAGE_SIZE } from "./nextPageWindow"
 import type { PageFetchPlan } from "./pageFetchPlan"
 import {
   applyFetchedPages,
+  applyPageResponse,
   getRowFromCache,
   isPageEmpty,
   purgeOutlierPages,
@@ -148,6 +150,71 @@ describe("applyFetchedPages", () => {
     applyFetchedPages(cache, { kind: "none" }, makeRows(PAGE_SIZE))
 
     // Then the cache is untouched
+    expect(cache.size).toBe(0)
+  })
+})
+
+describe("applyPageResponse", () => {
+  const singlePlan: PageFetchPlan = {
+    kind: "single",
+    lo: 0,
+    hi: PAGE_SIZE,
+    page: 0,
+  }
+  const dqlResponse = (rows: ResultGridRow[]): QueryRawResult =>
+    ({ dataset: rows }) as unknown as QueryRawResult
+
+  it("applies a page when its generation still matches the current one", () => {
+    // Given a fetch issued and resolved within the same generation
+    const cache: PageCache = new Map()
+
+    // When the response arrives
+    const applied = applyPageResponse(
+      cache,
+      singlePlan,
+      dqlResponse(makeRows(PAGE_SIZE)),
+      3,
+      3,
+    )
+
+    // Then it lands in the cache and signals a re-render
+    expect(applied).toBe(true)
+    expect(cache.get(0)).toHaveLength(PAGE_SIZE)
+  })
+
+  it("drops a stale response from a query the user has since superseded", () => {
+    // Given a page fetched under generation 1 but the grid has moved to gen 2
+    const cache: PageCache = new Map()
+
+    // When the slow gen-1 response finally arrives
+    const applied = applyPageResponse(
+      cache,
+      singlePlan,
+      dqlResponse(makeRows(PAGE_SIZE)),
+      1,
+      2,
+    )
+
+    // Then it never touches the current result's cache
+    expect(applied).toBe(false)
+    expect(cache.size).toBe(0)
+  })
+
+  it("ignores a non-DQL response that carries no dataset", () => {
+    // Given a current-generation response with no rows (e.g. a DDL/DML reply)
+    const cache: PageCache = new Map()
+
+    // When applying it
+    const applied = applyPageResponse(
+      cache,
+      singlePlan,
+      { ddl: true } as unknown as QueryRawResult,
+      0,
+      0,
+    )
+
+    // Then nothing is cached
+    expect(applied).toBe(false)
     expect(cache.size).toBe(0)
   })
 })

@@ -129,13 +129,16 @@ export const LocalStorageProvider = ({
       : defaultConfig.autoRefreshTables,
   )
 
-  const getInitialNewGrid = (): boolean => {
+  const readNewGridOverride = (): boolean | null => {
     const param = new URLSearchParams(window.location.search).get("useNewGrid")
-    if (param === "1" || param === "0") {
-      const value = param === "1"
-      setValue(StoreKey.USE_NEW_GRID, String(value))
-      return value
-    }
+    if (param === "1" || param === "true") return true
+    if (param === "0" || param === "false") return false
+    return null
+  }
+
+  const getInitialNewGrid = (): boolean => {
+    const override = readNewGridOverride()
+    if (override !== null) return override
     return parseBoolean(
       getValue(StoreKey.USE_NEW_GRID),
       defaultConfig.useNewGrid,
@@ -145,8 +148,10 @@ export const LocalStorageProvider = ({
   const [useNewGrid, setUseNewGrid] = useState<boolean>(getInitialNewGrid)
 
   useEffect(() => {
+    const override = readNewGridOverride()
+    if (override === null) return
+    setValue(StoreKey.USE_NEW_GRID, String(override))
     const params = new URLSearchParams(window.location.search)
-    if (!params.has("useNewGrid")) return
     params.delete("useNewGrid")
     const query = params.toString()
     window.history.replaceState(
