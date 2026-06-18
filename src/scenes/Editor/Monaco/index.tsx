@@ -28,9 +28,10 @@ import {
   useAIStatus,
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
+import { MAX_CELL_LINES } from "../../../store/notebook"
 import type { NotificationShape } from "../../../store/Query/types"
 import { theme } from "../../../theme"
 import { NotificationType } from "../../../types"
@@ -95,7 +96,7 @@ type IndividualQueryResult = {
     | null
 }
 
-export const LINE_NUMBER_HARD_LIMIT = 99999
+export const LINE_NUMBER_HARD_LIMIT = MAX_CELL_LINES
 
 const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   position: relative;
@@ -281,7 +282,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     hasConversationForQuery,
     shiftQueryKeysForBuffer,
     findQueryByConversationId,
-  } = useAIConversation()
+  } = useAIConversationActions()
   const [request, setRequest] = useState<Request | undefined>()
   const [lastExecutedQuery, setLastExecutedQuery] = useState("")
   const [dropdownOpen, setDropdownOpen] = useState(false)

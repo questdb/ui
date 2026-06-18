@@ -9,7 +9,12 @@ import type {
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
-import { createCell } from "../../../store/notebook"
+import {
+  createCell,
+  MAX_NOTEBOOK_CELLS,
+  MAX_CELL_LINES,
+  exceedsCellLineLimit,
+} from "../../../store/notebook"
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
@@ -468,7 +473,6 @@ export const buildAppliedCells = (
         "cells",
       )
     }
-
     const resolvedMode: CellMode | undefined =
       req.mode === undefined || req.mode === null ? undefined : req.mode
 
@@ -479,6 +483,19 @@ export const buildAppliedCells = (
     // omission would silently turn prose into a runnable query — too surprising.
     const resolvedType: CellType | undefined =
       req.type === undefined || req.type === null ? existing?.type : req.type
+
+    // Markdown cells hold prose, not editor SQL, so they're exempt from the cap.
+    const preservesStoredSql = preserve && existing?.type !== "markdown"
+    if (
+      !preservesStoredSql &&
+      resolvedType !== "markdown" &&
+      exceedsCellLineLimit(value)
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has ${value.split("\n").length} lines, over the ${MAX_CELL_LINES}-line limit. Split it into multiple cells.`,
+        "cells",
+      )
+    }
 
     if (resolvedType === "markdown") {
       if (resolvedMode !== undefined) {
@@ -605,6 +622,13 @@ export const buildAppliedCells = (
   if (nextCells.length === 0) {
     throw new ApplyNotebookStateError(
       "Request cells array is empty; a notebook must have at least one cell.",
+      "cells",
+    )
+  }
+
+  if (nextCells.length > MAX_NOTEBOOK_CELLS) {
+    throw new ApplyNotebookStateError(
+      `Request would result in ${nextCells.length} cells; a notebook can have at most ${MAX_NOTEBOOK_CELLS}.`,
       "cells",
     )
   }

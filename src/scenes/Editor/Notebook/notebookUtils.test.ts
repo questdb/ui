@@ -772,6 +772,61 @@ describe("buildAppliedCells", () => {
     ).toThrow(/without an existing cell id/)
   })
 
+  it("rejects a request that would exceed the 50-cell limit", () => {
+    const prev: NotebookCell[] = []
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: Array.from({ length: 51 }, () => ({ value: "SELECT 1" })),
+      }),
+    ).toThrow(/at most 50/)
+  })
+
+  it("accepts a request of exactly 50 cells", () => {
+    const prev: NotebookCell[] = []
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: Array.from({ length: 50 }, () => ({ value: "SELECT 1" })),
+    })
+    expect(nextCells).toHaveLength(50)
+  })
+
+  it("rejects a cell whose value exceeds the line limit", () => {
+    const prev: NotebookCell[] = []
+    const hugeValue = Array(100_000).fill("x").join("\n")
+    expect(() =>
+      buildAppliedCells(prev, { cells: [{ value: hugeValue }] }),
+    ).toThrow(/line limit/)
+  })
+
+  it("allows preserving an existing over-limit cell unchanged", () => {
+    const hugeValue = Array(100_000).fill("x").join("\n")
+    const prev: NotebookCell[] = [{ id: "a", position: 0, value: hugeValue }]
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    expect(nextCells[0].value).toBe(hugeValue)
+  })
+
+  it("exempts markdown cells from the line limit", () => {
+    const prev: NotebookCell[] = []
+    const hugeValue = Array(100_000).fill("x").join("\n")
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ value: hugeValue, type: "markdown" }],
+    })
+    expect(nextCells[0].value).toBe(hugeValue)
+  })
+
+  it("rejects preserving an over-limit markdown cell flipped to sql", () => {
+    const hugeValue = Array(100_000).fill("x").join("\n")
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: hugeValue, type: "markdown" },
+    ]
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", preserveValue: true, type: "sql" }],
+      }),
+    ).toThrow(/line limit/)
+  })
+
   it("deletes cells whose ids are missing from the request", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "" },

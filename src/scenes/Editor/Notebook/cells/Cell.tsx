@@ -20,6 +20,7 @@ import { CellWrapper } from "./CellWrapper"
 import { DrawCanvas } from "../DrawCanvas"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { NotebookCell } from "../../../../store/notebook"
+import { exceedsCellLineLimit } from "../../../../store/notebook"
 import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
@@ -511,12 +512,18 @@ const CellInner: React.FC<Props> = ({
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
       if (isExternalSyncRef.current) return
-      if (value !== undefined) {
-        const viewState = editorRef.current?.saveViewState() ?? undefined
-        updateCell(cell.id, { value, editorViewState: viewState })
-        signalUserEdit()
-        scheduleUpdateEvent()
+      if (value === undefined) return
+      if (exceedsCellLineLimit(value)) {
+        // Reject the edit (e.g. an oversized paste) by undoing it, mirroring
+        // the SQL editor's hard line cap.
+        editorRef.current?.trigger("line-limit", "undo", null)
+        toast.error("Maximum line limit reached")
+        return
       }
+      const viewState = editorRef.current?.saveViewState() ?? undefined
+      updateCell(cell.id, { value, editorViewState: viewState })
+      signalUserEdit()
+      scheduleUpdateEvent()
     },
     [cell.id, updateCell, editorRef, scheduleUpdateEvent],
   )

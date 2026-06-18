@@ -3,6 +3,13 @@ import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 
+export const MAX_NOTEBOOK_CELLS = 50
+
+export const MAX_CELL_LINES = 99_999
+
+export const exceedsCellLineLimit = (value: string): boolean =>
+  value.split("\n").length > MAX_CELL_LINES
+
 export type CellMode = "run" | "draw"
 
 // Cell kind. `undefined` means "sql" everywhere — code only ever tests

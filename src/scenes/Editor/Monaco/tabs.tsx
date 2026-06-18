@@ -237,10 +237,21 @@ export const Tabs = () => {
               migratedValue as Record<string, unknown>,
             )
             if (validationResult !== true) {
-              const tabId = buffer.id !== undefined ? ` (id: ${buffer.id})` : ""
-              throw new Error(
-                `Validation failed for tab "${migratedValue.label}"${tabId}: ${validationResult}`,
-              )
+              skipped.push({
+                label:
+                  typeof migratedValue.label === "string"
+                    ? migratedValue.label
+                    : "Untitled",
+                reason: validationResult,
+                isMetricsTab: !!migratedValue.metricsViewState,
+              })
+              return {
+                value: {
+                  ...migratedValue,
+                  position: -1,
+                  _markedForDeletion: true,
+                },
+              }
             }
 
             const sanitized = sanitizeBuffer(

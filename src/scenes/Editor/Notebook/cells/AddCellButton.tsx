@@ -3,8 +3,10 @@ import styled from "styled-components"
 import { Plus } from "@styled-icons/boxicons-regular"
 import { MarkdownLogoIcon } from "@phosphor-icons/react"
 import { color } from "../../../../utils"
+import { Tooltip } from "../../../../components"
 import type { CellType } from "../../../../store/notebook"
-import { useNotebookActions } from "../NotebookProvider"
+import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
+import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import { emitUserAction } from "../../../../utils/notebookAIBridge"
 
@@ -33,6 +35,16 @@ const AddButton = styled.button`
   &:hover {
     color: ${color("foreground")};
     background: ${color("selection")};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+
+    &:hover {
+      color: ${color("comment")};
+      background: transparent;
+    }
   }
 
   svg {
@@ -79,8 +91,10 @@ const BetweenButtons = styled.div`
 // User-origin only: tool-driven add_cell goes through NotebookController directly and doesn't emit here.
 const useUserAddCell = () => {
   const { addCell } = useNotebookActions()
+  const { cells } = useNotebookState()
   const { activeBuffer } = useEditor()
-  return (afterCellId?: string, type?: CellType) => {
+  const atLimit = cells.length >= MAX_NOTEBOOK_CELLS
+  const add = (afterCellId?: string, type?: CellType) => {
     const cellId = addCell(afterCellId, undefined, type)
     if (typeof activeBuffer.id === "number" && cellId) {
       emitUserAction({
@@ -90,6 +104,37 @@ const useUserAddCell = () => {
       })
     }
   }
+  return { add, atLimit }
+}
+
+const CELL_LIMIT_TITLE = `Notebook limit of ${MAX_NOTEBOOK_CELLS} cells reached`
+
+type AddActionProps = {
+  icon: React.ReactNode
+  label: string
+  atLimit: boolean
+  onClick: () => void
+}
+
+const AddAction: React.FC<AddActionProps> = ({
+  icon,
+  label,
+  atLimit,
+  onClick,
+}) => {
+  const button = (
+    <AddButton onClick={onClick} disabled={atLimit}>
+      {icon}
+      {label}
+    </AddButton>
+  )
+  if (!atLimit) return button
+  // The span lets the tooltip fire on a disabled button, which gets no pointer events.
+  return (
+    <Tooltip content={CELL_LIMIT_TITLE}>
+      <span style={{ display: "inline-flex" }}>{button}</span>
+    </Tooltip>
+  )
 }
 
 type AddCellBottomProps = {
@@ -101,18 +146,22 @@ export const AddCellBottom: React.FC<AddCellBottomProps> = ({
   afterCellId,
   alignCenter = false,
 }) => {
-  const addCell = useUserAddCell()
+  const { add, atLimit } = useUserAddCell()
 
   return (
     <BottomButton $alignCenter={alignCenter}>
-      <AddButton onClick={() => addCell(afterCellId)}>
-        <Plus />
-        Add Cell
-      </AddButton>
-      <AddButton onClick={() => addCell(afterCellId, "markdown")}>
-        <MarkdownLogoIcon />
-        Add Markdown
-      </AddButton>
+      <AddAction
+        icon={<Plus />}
+        label="Add Cell"
+        atLimit={atLimit}
+        onClick={() => add(afterCellId)}
+      />
+      <AddAction
+        icon={<MarkdownLogoIcon />}
+        label="Add Markdown"
+        atLimit={atLimit}
+        onClick={() => add(afterCellId, "markdown")}
+      />
     </BottomButton>
   )
 }
@@ -124,20 +173,24 @@ type AddCellBetweenProps = {
 export const AddCellBetween: React.FC<AddCellBetweenProps> = ({
   afterCellId,
 }) => {
-  const addCell = useUserAddCell()
+  const { add, atLimit } = useUserAddCell()
 
   return (
     <BetweenWrapper>
       <BetweenLine />
       <BetweenButtons>
-        <AddButton onClick={() => addCell(afterCellId)}>
-          <Plus />
-          Add Cell
-        </AddButton>
-        <AddButton onClick={() => addCell(afterCellId, "markdown")}>
-          <MarkdownLogoIcon />
-          Add Markdown
-        </AddButton>
+        <AddAction
+          icon={<Plus />}
+          label="Add Cell"
+          atLimit={atLimit}
+          onClick={() => add(afterCellId)}
+        />
+        <AddAction
+          icon={<MarkdownLogoIcon />}
+          label="Add Markdown"
+          atLimit={atLimit}
+          onClick={() => add(afterCellId, "markdown")}
+        />
       </BetweenButtons>
     </BetweenWrapper>
   )

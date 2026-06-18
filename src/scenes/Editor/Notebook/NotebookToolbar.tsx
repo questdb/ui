@@ -18,7 +18,7 @@ import { exportBuffers } from "../Monaco/exportTabs"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
 import { useEditor } from "../../../providers/EditorProvider"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
+import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import {
   isBlockingAIStatus,
   useAIStatus,
@@ -163,7 +163,7 @@ export const NotebookToolbar: React.FC = () => {
   const { settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
   const { activeBuffer, buffers, duplicateNotebook, updateBuffer } = useEditor()
-  const { openNotebookChat } = useAIConversation()
+  const { openNotebookChat } = useAIConversationActions()
   const { canUse, status: aiStatus } = useAIStatus()
   const isOperationInProgress = isBlockingAIStatus(aiStatus)
   const mode: NotebookLayoutMode = settings.layoutMode ?? "list"

@@ -19,6 +19,11 @@ import type {
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
+import {
+  MAX_NOTEBOOK_CELLS,
+  MAX_CELL_LINES,
+  exceedsCellLineLimit,
+} from "../../../store/notebook"
 
 type ValidationResult = true | string
 
@@ -99,6 +104,8 @@ const validateNotebookCell = (
     return `cells[${index}].id: must be a non-empty string`
   if (typeof obj.value !== "string")
     return `cells[${index}].value: must be a string`
+  if (obj.type !== "markdown" && exceedsCellLineLimit(obj.value))
+    return `cells[${index}].value: exceeds line limit (line count > ${MAX_CELL_LINES})`
   if (obj.type !== undefined && obj.type !== "sql" && obj.type !== "markdown")
     return `cells[${index}].type: invalid value ${JSON.stringify(obj.type)}`
   if (obj.mode !== undefined && obj.mode !== "run" && obj.mode !== "draw")
@@ -114,6 +121,8 @@ const validateNotebookViewState = (item: unknown): ValidationResult => {
 
   if (!Array.isArray(obj.cells))
     return "notebookViewState.cells: must be an array"
+  if (obj.cells.length > MAX_NOTEBOOK_CELLS)
+    return `notebookViewState.cells: exceeds cell limit (${obj.cells.length} > ${MAX_NOTEBOOK_CELLS})`
   const ids = new Set<string>()
   for (let i = 0; i < obj.cells.length; i++) {
     const result = validateNotebookCell(obj.cells[i], i)

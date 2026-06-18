@@ -12,6 +12,7 @@ import {
   CornersInIcon,
 } from "@phosphor-icons/react"
 import { DropdownMenu, Button, Tooltip } from "../../../../components"
+import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import {
@@ -166,7 +167,10 @@ export const CellToolbar: React.FC<Props> = ({ cellId, inline }) => {
                   </DropdownMenu.Item>
                 </>
               )}
-              <DropdownMenu.Item onSelect={handleDuplicate}>
+              <DropdownMenu.Item
+                disabled={totalCells >= MAX_NOTEBOOK_CELLS}
+                onSelect={handleDuplicate}
+              >
                 <IconWrapper>
                   <CopyAlt size={16} />
                 </IconWrapper>

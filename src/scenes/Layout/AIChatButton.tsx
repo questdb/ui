@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { PrimaryToggleButton, IconWithTooltip, Box } from "../../components"
 import { AISparkle } from "../../components/AISparkle"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import { useAIConversationActions } from "../../providers/AIConversationProvider"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
@@ -17,7 +17,8 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 `
 
 export const AIChatButton = () => {
-  const { openOrCreateBlankChatWindow, closeChatWindow } = useAIConversation()
+  const { openOrCreateBlankChatWindow, closeChatWindow } =
+    useAIConversationActions()
   const { canUse } = useAIStatus()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
 

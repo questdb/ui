@@ -330,6 +330,7 @@ export type NotebookToolErrorCode =
   | "workspace_unavailable"
   | "last_tab"
   | "last_cell"
+  | "cell_limit"
   | "cell_too_large"
 
 export class NotebookToolError extends Error {

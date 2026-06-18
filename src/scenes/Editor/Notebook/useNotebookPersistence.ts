@@ -39,22 +39,35 @@ export const useNotebookPersistence = ({
     [focusedCellIdRef, maximizedCellIdRef, settingsRef],
   )
 
+  const scheduleFlush = useCallback(() => {
+    if (persistTimeoutRef.current) {
+      window.clearTimeout(persistTimeoutRef.current)
+    }
+    persistTimeoutRef.current = window.setTimeout(() => {
+      const cells = pendingCellsRef.current
+      pendingCellsRef.current = null
+      persistTimeoutRef.current = null
+      if (cells === null) return
+      void updateBuffer(bufferId, {
+        notebookViewState: buildPayload(cells),
+      })
+    }, PERSIST_DEBOUNCE_MS)
+  }, [bufferId, updateBuffer, buildPayload])
+
   const persistCells = useCallback(
     (newCells: NotebookCell[]) => {
       pendingCellsRef.current = newCells
-      if (persistTimeoutRef.current) {
-        window.clearTimeout(persistTimeoutRef.current)
-      }
-      persistTimeoutRef.current = window.setTimeout(() => {
-        const cells = pendingCellsRef.current ?? newCells
-        void updateBuffer(bufferId, {
-          notebookViewState: buildPayload(cells),
-        })
-        pendingCellsRef.current = null
-        persistTimeoutRef.current = null
-      }, PERSIST_DEBOUNCE_MS)
+      scheduleFlush()
     },
-    [bufferId, updateBuffer, buildPayload],
+    [scheduleFlush],
+  )
+
+  const persistDebounced = useCallback(
+    (cells: NotebookCell[]) => {
+      pendingCellsRef.current = pendingCellsRef.current ?? cells
+      scheduleFlush()
+    },
+    [scheduleFlush],
   )
 
   const persistImmediately = useCallback(
@@ -109,5 +122,5 @@ export const useNotebookPersistence = ({
     }
   }, [flushPending])
 
-  return { persistCells, persistImmediately }
+  return { persistCells, persistImmediately, persistDebounced }
 }

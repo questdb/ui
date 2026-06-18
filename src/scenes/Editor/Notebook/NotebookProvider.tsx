@@ -11,6 +11,7 @@ import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
+import { MAX_NOTEBOOK_CELLS } from "../../../store/notebook"
 import type {
   CellLayoutItem,
   NotebookCell,
@@ -198,13 +199,14 @@ export const NotebookProvider: React.FC<{
 
   const { executeSingle } = useQueryExecution(settings.variables)
 
-  const { persistCells, persistImmediately } = useNotebookPersistence({
-    bufferId,
-    updateBuffer,
-    focusedCellIdRef,
-    maximizedCellIdRef,
-    settingsRef,
-  })
+  const { persistCells, persistImmediately, persistDebounced } =
+    useNotebookPersistence({
+      bufferId,
+      updateBuffer,
+      focusedCellIdRef,
+      maximizedCellIdRef,
+      settingsRef,
+    })
 
   const store = useCellsStore({
     initialCells: initialState.cells,
@@ -266,10 +268,15 @@ export const NotebookProvider: React.FC<{
     setScriptSummary: store.setScriptSummary,
   })
 
-  const setFocusedCell = useCallback((cellId: string | null) => {
-    focusedCellIdRef.current = cellId
-    setFocusedCellState(cellId)
-  }, [])
+  const setFocusedCell = useCallback(
+    (cellId: string | null) => {
+      if (focusedCellIdRef.current === cellId) return
+      focusedCellIdRef.current = cellId
+      setFocusedCellState(cellId)
+      persistDebounced(store.cellsRef.current)
+    },
+    [persistDebounced, store.cellsRef],
+  )
 
   const updateSettings = useCallback(
     (updates: Partial<NotebookSettings>) => {
@@ -314,6 +321,7 @@ export const NotebookProvider: React.FC<{
   // computeCellGridH).
   const addCell = useCallback(
     (afterCellId?: string, value?: string, type?: CellType): string => {
+      if (store.cellsRef.current.length >= MAX_NOTEBOOK_CELLS) return ""
       let newId = ""
       unstable_batchedUpdates(() => {
         newId = store.addCell(afterCellId, value, type)
@@ -454,6 +462,7 @@ export const NotebookProvider: React.FC<{
 
   const duplicateCell = useCallback(
     (cellId: string): string => {
+      if (store.cellsRef.current.length >= MAX_NOTEBOOK_CELLS) return ""
       // batchedUpdates ensures the cells append and the layout entry land
       // in a single render. React 17 doesn't auto-batch outside event
       // handlers (Radix DropdownMenu defers onSelect via setTimeout), so

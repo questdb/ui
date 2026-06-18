@@ -18,10 +18,12 @@ import {
   type NotebookWorkspaceController,
   type UserActionEvent,
 } from "./notebookAIBridge"
-import type {
-  CellResult,
-  NotebookCell,
-  NotebookViewState,
+import {
+  MAX_NOTEBOOK_CELLS,
+  MAX_CELL_LINES,
+  type CellResult,
+  type NotebookCell,
+  type NotebookViewState,
 } from "../store/notebook"
 import { createModelToolsClient } from "./aiAssistant"
 
@@ -510,6 +512,117 @@ describe("createModelToolsClient — getCell value caps", () => {
     const client = createModelToolsClient(stubQuestClient)
     await expect(client.getCell(7, "a", true)).rejects.toMatchObject({
       code: "cell_too_large",
+    })
+  })
+})
+
+describe("createModelToolsClient — cell & line limits", () => {
+  const stubQuestClient = {} as unknown as Parameters<
+    typeof createModelToolsClient
+  >[0]
+  const overLimitValue = Array(MAX_CELL_LINES + 1)
+    .fill("x")
+    .join("\n")
+
+  const makeCells = (count: number): NotebookCell[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `c${i}`,
+      position: i,
+      value: "SELECT 1",
+    }))
+
+  const register = (overrides: Partial<NotebookController>) => {
+    registerWorkspace(makeWorkspace())
+    registerController(makeController(7, overrides))
+  }
+
+  it("addCell rejects with cell_limit when the notebook is already full", async () => {
+    const addCell = vi.fn(() => "new")
+    register({ getCellsSnapshot: () => makeCells(MAX_NOTEBOOK_CELLS), addCell })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.addCell(7, "SELECT 1")).rejects.toMatchObject({
+      code: "cell_limit",
+    })
+    expect(addCell).not.toHaveBeenCalled()
+  })
+
+  it("addCell adds a cell when one slot remains", async () => {
+    const addCell = vi.fn(() => "new")
+    register({
+      getCellsSnapshot: () => makeCells(MAX_NOTEBOOK_CELLS - 1),
+      addCell,
+    })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.addCell(7, "SELECT 1")).resolves.toEqual({
+      cellId: "new",
+    })
+    expect(addCell).toHaveBeenCalled()
+  })
+
+  it("addCell rejects an oversized SQL value with cell_too_large", async () => {
+    const addCell = vi.fn(() => "new")
+    register({ getCellsSnapshot: () => [], addCell })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.addCell(7, overLimitValue)).rejects.toMatchObject({
+      code: "cell_too_large",
+    })
+    expect(addCell).not.toHaveBeenCalled()
+  })
+
+  it("addCell exempts markdown from the line limit", async () => {
+    const addCell = vi.fn(() => "new")
+    register({ getCellsSnapshot: () => [], addCell })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(
+      client.addCell(7, overLimitValue, undefined, "markdown"),
+    ).resolves.toEqual({ cellId: "new" })
+    expect(addCell).toHaveBeenCalled()
+  })
+
+  it("updateCell rejects an oversized value for a SQL cell", async () => {
+    const updateCell = vi.fn()
+    register({
+      getCellsSnapshot: () => [{ id: "a", position: 0, value: "SELECT 1" }],
+      updateCell,
+    })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(
+      client.updateCell(7, "a", { value: overLimitValue }),
+    ).rejects.toMatchObject({ code: "cell_too_large" })
+    expect(updateCell).not.toHaveBeenCalled()
+  })
+
+  it("updateCell exempts a markdown cell from the line limit", async () => {
+    const updateCell = vi.fn()
+    register({
+      getCellsSnapshot: () => [
+        { id: "a", position: 0, value: "# md", type: "markdown" },
+      ],
+      updateCell,
+    })
+    const client = createModelToolsClient(stubQuestClient)
+    await client.updateCell(7, "a", { value: overLimitValue })
+    expect(updateCell).toHaveBeenCalledWith("a", { value: overLimitValue })
+  })
+
+  it("duplicateCell rejects with cell_limit when the notebook is already full", async () => {
+    const duplicateCell = vi.fn(() => "dup")
+    register({
+      getCellsSnapshot: () => makeCells(MAX_NOTEBOOK_CELLS),
+      duplicateCell,
+    })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.duplicateCell(7, "c0")).rejects.toMatchObject({
+      code: "cell_limit",
+    })
+    expect(duplicateCell).not.toHaveBeenCalled()
+  })
+
+  it("duplicateCell rejects an unknown cell before the limit check", async () => {
+    register({ getCellsSnapshot: () => makeCells(MAX_NOTEBOOK_CELLS) })
+    const client = createModelToolsClient(stubQuestClient)
+    await expect(client.duplicateCell(7, "nope")).rejects.toMatchObject({
+      code: "unknown_cell",
     })
   })
 })

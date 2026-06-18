@@ -592,6 +592,29 @@ const GridLayout: React.FC = () => {
 
 const REVEAL_SCROLL_RETRIES = 8
 
+// The cell may not be in the DOM yet on a cold (grid) mount; retry across frames
+// until it appears. A cell that no longer exists (deleted while away) never
+// resolves and is silently skipped once the retries are exhausted.
+const scrollNotebookCellIntoView = (cellId: string, attempt = 0): void => {
+  const node = document.querySelector<HTMLElement>(
+    `[data-notebook-cell][data-cell-id="${CSS.escape(cellId)}"]`,
+  )
+  if (node) {
+    node.scrollIntoView({ block: "center" })
+  } else if (attempt < REVEAL_SCROLL_RETRIES) {
+    requestAnimationFrame(() => scrollNotebookCellIntoView(cellId, attempt + 1))
+  }
+}
+
+const useScrollFocusedCellIntoViewOnOpen = (focusedCellId: string | null) => {
+  const focusedOnOpenRef = useRef(focusedCellId)
+  useEffect(() => {
+    const cellId = focusedOnOpenRef.current
+    if (!cellId || getPendingReveal()) return
+    scrollNotebookCellIntoView(cellId)
+  }, [])
+}
+
 // Scroll + glow the cell a search result points at, drained on mount and on the nudge.
 const useNotebookSearchReveal = () => {
   const { activeBuffer, isNavigatingFromSearchRef } = useEditor()
@@ -609,17 +632,6 @@ const useNotebookSearchReveal = () => {
     // Monaco/Metrics reset isNavigatingFromSearchRef on mount; notebooks must too.
     isNavigatingFromSearchRef.current = false
 
-    const scrollToCell = (cellId: string, attempt = 0) => {
-      const node = document.querySelector<HTMLElement>(
-        `[data-notebook-cell][data-cell-id="${CSS.escape(cellId)}"]`,
-      )
-      if (node) {
-        node.scrollIntoView({ block: "center" })
-      } else if (attempt < REVEAL_SCROLL_RETRIES) {
-        requestAnimationFrame(() => scrollToCell(cellId, attempt + 1))
-      }
-    }
-
     const applyReveal = () => {
       const request = getPendingReveal()
       if (!request || request.bufferId !== bufferId) return
@@ -631,7 +643,7 @@ const useNotebookSearchReveal = () => {
         setMaximizedCellId(null)
       }
       setFocusedCell(request.cellId)
-      scrollToCell(request.cellId)
+      scrollNotebookCellIntoView(request.cellId)
       // SQL cell matches flash in their own editor (which consumes the request);
       // markdown/chart matches have no in-editor consumer, so clear here.
       if (
@@ -666,6 +678,7 @@ const NotebookContent: React.FC = () => {
   } = useNotebookState()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
+  useScrollFocusedCellIntoViewOnOpen(focusedCellId)
   useNotebookSearchReveal()
 
   if (cells.length === 0) {

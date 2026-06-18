@@ -90,7 +90,6 @@ const resolveSeriesRenderSpec = (type: ChartType) => {
     lineExtras.areaStyle = {}
     lineExtras.symbol = "none"
   }
-  if (type === "area") lineExtras.smooth = true
   if (isStep) lineExtras.step = "end"
   // Scatter/bar use `large` for big point/bar sets; lines downsample with LTTB.
   const perfExtras: { sampling?: "lttb"; large?: boolean } = isLineFamily

@@ -209,6 +209,44 @@ describe("validateBufferSchema", () => {
         ),
       ).toContain('cells[1].id: duplicate "a"')
     })
+
+    it("rejects a notebook with more than 50 cells", () => {
+      const cells = Array.from({ length: 51 }, (_, i) => ({
+        id: `c${i}`,
+        value: "SELECT 1",
+      }))
+      expect(validateBufferSchema(notebookTab({ cells }))).toContain(
+        "notebookViewState.cells: exceeds cell limit (51 > 50)",
+      )
+    })
+
+    it("accepts a notebook with exactly 50 cells", () => {
+      const cells = Array.from({ length: 50 }, (_, i) => ({
+        id: `c${i}`,
+        value: "SELECT 1",
+      }))
+      expect(validateBufferSchema(notebookTab({ cells }))).toBe(true)
+    })
+
+    it("rejects a cell value exceeding the line limit", () => {
+      const hugeValue = Array(100001).fill("line").join("\n")
+      expect(
+        validateBufferSchema(
+          notebookTab({ cells: [{ id: "a", value: hugeValue }] }),
+        ),
+      ).toContain("cells[0].value: exceeds line limit")
+    })
+
+    it("exempts markdown cells from the line limit", () => {
+      const hugeValue = Array(100001).fill("line").join("\n")
+      expect(
+        validateBufferSchema(
+          notebookTab({
+            cells: [{ id: "a", value: hugeValue, type: "markdown" }],
+          }),
+        ),
+      ).toBe(true)
+    })
   })
 
   describe("line count limit", () => {

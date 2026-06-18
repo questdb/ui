@@ -2,7 +2,7 @@ import { useContext } from "react"
 import { useSelector } from "react-redux"
 import { toast } from "../components"
 import { QuestContext } from "../providers"
-import { useAIConversation } from "../providers/AIConversationProvider"
+import { useAIConversationActions } from "../providers/AIConversationProvider"
 import { isBlockingAIStatus, useAIStatus } from "../providers/AIStatusProvider"
 import {
   executeAIFlow,
@@ -66,7 +66,7 @@ export const useAIQuickActions = () => {
     setIsStreaming,
     getLastRoundMessages,
     setScrollToMessageId,
-  } = useAIConversation()
+  } = useAIConversationActions()
 
   const getTableSchema = async (
     tableName: string,

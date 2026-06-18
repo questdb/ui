@@ -37,6 +37,11 @@ import {
   type ApplyNotebookStateRequest,
   type NotebookController,
 } from "./notebookAIBridge"
+import {
+  MAX_NOTEBOOK_CELLS,
+  MAX_CELL_LINES,
+  exceedsCellLineLimit,
+} from "../store/notebook"
 import type { CellMode, CellType } from "../store/notebook"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
@@ -287,6 +292,15 @@ const requireCell = (controller: NotebookController, cellId: string) => {
   return cell
 }
 
+const requireCellWithinLineLimit = (value: string) => {
+  if (exceedsCellLineLimit(value)) {
+    throw new NotebookToolError(
+      "cell_too_large",
+      `Cell content has ${value.split("\n").length} lines, over the ${MAX_CELL_LINES}-line limit. Split it into multiple cells.`,
+    )
+  }
+}
+
 export function createModelToolsClient(
   questClient: Client,
   tables?: Array<Table>,
@@ -528,6 +542,13 @@ export function createModelToolsClient(
 
     addCell(bufferId, value, afterCellId, type) {
       return bound(bufferId, (ctrl) => {
+        if (ctrl.getCellsSnapshot().length >= MAX_NOTEBOOK_CELLS) {
+          throw new NotebookToolError(
+            "cell_limit",
+            `Notebook ${bufferId} already has the maximum of ${MAX_NOTEBOOK_CELLS} cells. Delete a cell before adding another.`,
+          )
+        }
+        if (type !== "markdown") requireCellWithinLineLimit(value)
         const cellId = ctrl.addCell(value, afterCellId, type)
         return Promise.resolve({ cellId })
       })
@@ -535,7 +556,10 @@ export function createModelToolsClient(
 
     updateCell(bufferId, cellId, updates) {
       return bound(bufferId, (ctrl) => {
-        requireCell(ctrl, cellId)
+        const cell = requireCell(ctrl, cellId)
+        if (cell.type !== "markdown" && updates.value !== undefined) {
+          requireCellWithinLineLimit(updates.value)
+        }
         ctrl.updateCell(cellId, updates)
         return Promise.resolve()
       })
@@ -574,6 +598,12 @@ export function createModelToolsClient(
     duplicateCell(bufferId, cellId) {
       return bound(bufferId, (ctrl) => {
         requireCell(ctrl, cellId)
+        if (ctrl.getCellsSnapshot().length >= MAX_NOTEBOOK_CELLS) {
+          throw new NotebookToolError(
+            "cell_limit",
+            `Notebook ${bufferId} already has the maximum of ${MAX_NOTEBOOK_CELLS} cells. Delete a cell before duplicating another.`,
+          )
+        }
         const newId = ctrl.duplicateCell(cellId)
         return Promise.resolve({ cellId: newId })
       })
