@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../Toast"
@@ -65,6 +65,7 @@ export const useGridKeyboardNav = (
 ) => {
   const [focusedCell, setFocusedCell] = useState<CellCoord | null>(null)
   const [copyPulse, setCopyPulse] = useState<CellCoord | null>(null)
+  const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const moveTo = useCallback(
     (row: number, col: number) => {
@@ -97,10 +98,19 @@ export const useGridKeyboardNav = (
       void copyToClipboard(text).then(() => {
         toast.success("Copied to clipboard")
         setCopyPulse({ row, col })
-        setTimeout(() => setCopyPulse(null), 1000)
+        if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
+        pulseTimerRef.current = setTimeout(() => setCopyPulse(null), 1000)
       })
     },
     [getData, getColumn, onCopy],
+  )
+
+  // The pulse timer would otherwise fire setCopyPulse after unmount.
+  useEffect(
+    () => () => {
+      if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
+    },
+    [],
   )
 
   const onKeyDown = useCallback(

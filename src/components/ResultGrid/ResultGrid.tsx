@@ -56,6 +56,8 @@ import {
 } from "./virtualRowMapping"
 import { useContainerWidth } from "./useContainerWidth"
 import { useScrollShadows } from "./useScrollShadows"
+import { useColumnSizing } from "./useColumnSizing"
+import { useFreezeDrag } from "./useFreezeDrag"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -65,7 +67,6 @@ declare module "@tanstack/react-table" {
 }
 
 const WIDTH_SAMPLE_ROWS = 1000
-const KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS = 200
 const FREEZE_HANDLE_EDGE_INSET = 4
 const COLUMN_ID_PREFIX = "col_"
 const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
@@ -142,7 +143,7 @@ type Props = {
   runToken?: number // changes per run to reset focus/selection on the grid
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
-  onColumnSizingCommit: (sizing: Record<string, number>) => void
+  onColumnSizingCommit?: (sizing: Record<string, number>) => void
   initialColumnOrder?: string[]
   onColumnOrderCommit?: (order: string[]) => void
   initialPinnedColumns?: string[]
@@ -193,8 +194,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
-    const [freezeDragX, setFreezeDragX] = useState<number | null>(null)
-    const freezeTargetRef = useRef(0)
 
     const containerWidth = useContainerWidth(gridRef)
     const { scrolledDown, shadowLeft, handleScroll } =
@@ -258,6 +257,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const headers = [...leftHeaders, ...centerHeaders]
     const frozenCount = leftHeaders.length
     const frozenWidth = table.getLeftTotalSize()
+    const { columnSizing, commitSizingDebounced } = useColumnSizing(
+      table,
+      onColumnSizingCommit,
+    )
 
     // Must follow the visual layout (pinned columns first), the same order as
     // `headers`. getVisibleLeafColumns() ignores pinning, so deriving the data
@@ -266,13 +269,28 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       () => headers.map((header) => header.column.id),
       [columnOrder, columnPinning, columnDefs],
     )
-    const dataIndexAt = useCallback(
-      (visualCol: number): number => {
-        const id = visualLeafIds[visualCol]
-        return id ? parseInt(id.slice(COLUMN_ID_PREFIX.length), 10) : visualCol
-      },
+    // Parsed once per layout change, not per cell on every render.
+    const visualDataIndices = useMemo(
+      () =>
+        visualLeafIds.map((id) =>
+          parseInt(id.slice(COLUMN_ID_PREFIX.length), 10),
+        ),
       [visualLeafIds],
     )
+    const dataIndexAt = useCallback(
+      (visualCol: number): number => visualDataIndices[visualCol] ?? visualCol,
+      [visualDataIndices],
+    )
+
+    // Prefix sums of column widths, so a column's left offset is an O(1) lookup
+    // instead of an O(col) re-sum on every keyboard move and resize render.
+    const columnOffsets = useMemo(() => {
+      const offsets = [0]
+      for (let i = 0; i < headers.length; i++) {
+        offsets.push(offsets[i] + headers[i].getSize())
+      }
+      return offsets
+    }, [columnOrder, columnPinning, columnDefs, columnSizing])
 
     // undefined means the row's page hasn't loaded yet, unlike a SQL null.
     const getData = useCallback(
@@ -333,64 +351,14 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onPinnedColumnsCommit?.(next.left ?? [])
     }, [columnPinning, table, onPinnedColumnsCommit])
 
-    const applyFreeze = useCallback(
-      (count: number) => {
-        const pinned = visualLeafIds.slice(0, count)
-        setColumnPinning({ left: pinned, right: [] })
-        onPinnedColumnsCommit?.(pinned)
-      },
-      [visualLeafIds, onPinnedColumnsCommit],
-    )
-
-    const onFreezeMouseDown = useCallback(
-      (e: React.MouseEvent) => {
-        e.preventDefault()
-        const gridEl = gridRef.current
-        const scrollEl = scrollRef.current
-        if (!gridEl || !scrollEl) return
-        const gridLeft = gridEl.getBoundingClientRect().left
-        const viewportWidth = scrollEl.clientWidth
-        const scrollLeft = scrollEl.scrollLeft
-
-        // Hold the resize cursor for the whole drag — it inherits to the cells,
-        // which would otherwise reset it to default as the pointer leaves the
-        // handle.
-        document.body.style.cursor = "col-resize"
-
-        // Candidate k = "freeze k columns"; its boundary is fixed in the frozen
-        // region but scrolls with content past it. Keep one column scrollable.
-        let cumulativeWidth = 0
-        const candidates: { k: number; x: number }[] = [{ k: 0, x: 0 }]
-        for (let i = 0; i < headers.length - 1; i++) {
-          cumulativeWidth += headers[i].getSize()
-          const k = i + 1
-          const x =
-            k <= frozenCount ? cumulativeWidth : cumulativeWidth - scrollLeft
-          if (x >= 0 && x <= viewportWidth) candidates.push({ k, x })
-        }
-
-        freezeTargetRef.current = frozenCount
-
-        const onMove = (ev: MouseEvent) => {
-          const cursorX = ev.clientX - gridLeft
-          let best = candidates[0]
-          for (const c of candidates) {
-            if (Math.abs(c.x - cursorX) < Math.abs(best.x - cursorX)) best = c
-          }
-          setFreezeDragX(best.x)
-          freezeTargetRef.current = best.k
-        }
-        const onUp = () => {
-          window.removeEventListener("mousemove", onMove)
-          window.removeEventListener("mouseup", onUp)
-          document.body.style.cursor = ""
-          setFreezeDragX(null)
-          applyFreeze(freezeTargetRef.current)
-        }
-        window.addEventListener("mousemove", onMove)
-        window.addEventListener("mouseup", onUp)
-      },
-      [headers, frozenCount, applyFreeze],
+    const { freezeDragX, onFreezeMouseDown } = useFreezeDrag(
+      gridRef,
+      scrollRef,
+      headers,
+      frozenCount,
+      visualLeafIds,
+      setColumnPinning,
+      onPinnedColumnsCommit,
     )
 
     const resetLayout = useCallback(() => {
@@ -420,17 +388,11 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
           headerHeight: HEADER_HEIGHT,
           frozenWidth,
           frozenColCount: frozenCount,
-          getColumnOffset: (col: number) => {
-            let offset = 0
-            for (let i = 0; i < col; i++) {
-              offset += headers[i]?.getSize() ?? 0
-            }
-            return offset
-          },
+          getColumnOffset: (col: number) => columnOffsets[col] ?? 0,
           getColumnWidth: (col: number) => headers[col]?.getSize() ?? 0,
         }
       }
-    }, [headers, frozenWidth, frozenCount])
+    }, [headers, frozenWidth, frozenCount, columnOffsets])
 
     const {
       focusedCell,
@@ -525,18 +487,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       overscan: 3,
     })
 
-    const columnSizing = table.getState().columnSizing
-    const isResizingColumn =
-      !!table.getState().columnSizingInfo.isResizingColumn
-
-    const wasResizingRef = useRef(isResizingColumn)
-    useEffect(() => {
-      if (wasResizingRef.current && !isResizingColumn) {
-        onColumnSizingCommit(columnSizing)
-      }
-      wasResizingRef.current = isResizingColumn
-    }, [isResizingColumn, columnSizing, onColumnSizingCommit])
-
     const columnVirtualizer = useVirtualizer({
       horizontal: true,
       count: headers.length,
@@ -593,29 +543,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       virtualRowCount,
       onVisibleRowsChange,
     ])
-
-    const sizingCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null,
-    )
-    const commitSizingDebounced = useCallback(
-      (sizing: Record<string, number>) => {
-        if (sizingCommitTimerRef.current) {
-          clearTimeout(sizingCommitTimerRef.current)
-        }
-        sizingCommitTimerRef.current = setTimeout(() => {
-          onColumnSizingCommit(sizing)
-        }, KEYBOARD_RESIZE_COMMIT_DEBOUNCE_MS)
-      },
-      [onColumnSizingCommit],
-    )
-    useEffect(
-      () => () => {
-        if (sizingCommitTimerRef.current) {
-          clearTimeout(sizingCommitTimerRef.current)
-        }
-      },
-      [],
-    )
 
     // Shared by the in-header (center columns) and overlay (frozen columns)
     // resizers. style positions the overlay ones; header ones use the default.
@@ -751,8 +678,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         (h) => h.column.id === sizingInfo.isResizingColumn,
       )
       if (idx >= 0) {
-        let left = 0
-        for (let i = 0; i < idx; i++) left += headers[i].getSize()
+        const left = columnOffsets[idx] ?? 0
         const futureWidth = Math.max(
           60,
           headers[idx].getSize() + (sizingInfo.deltaOffset ?? 0),
@@ -769,6 +695,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       Math.max(0, viewportWidth - FREEZE_HANDLE_EDGE_INSET),
     )
 
+    const focusedCellRendered =
+      focusedCell != null &&
+      focusedCell.row >= firstVirtual &&
+      focusedCell.row <= lastVirtual &&
+      (focusedCell.col < frozenCount ||
+        virtualColumns.some((vc) => vc.index === focusedCell.col))
+
     return (
       <GridContainer
         ref={gridRef}
@@ -779,7 +712,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         aria-rowcount={rowCount + 1}
         aria-colcount={columns.length}
         aria-activedescendant={
-          focusedCell ? `cell-${focusedCell.row}-${focusedCell.col}` : undefined
+          focusedCell && focusedCellRendered
+            ? `cell-${focusedCell.row}-${focusedCell.col}`
+            : undefined
         }
       >
         <ScrollContainer

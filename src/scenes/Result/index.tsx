@@ -216,24 +216,22 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     )
 
     const _grid = gridRef.current
-    if (_grid) {
-      _grid.addEventListener(
-        "selection.change",
-        function (event: CustomEvent<{ hasSelection: boolean }>) {
-          setGridHasSelection(event.detail.hasSelection)
-        },
-      )
+    if (!_grid) return
 
-      _grid.addEventListener("yield.focus", function () {
-        eventBus.publish(EventType.MSG_EDITOR_FOCUS)
-      })
+    const onSelectionChange = (event: CustomEvent<{ hasSelection: boolean }>) =>
+      setGridHasSelection(event.detail.hasSelection)
+    const onYieldFocus = () => eventBus.publish(EventType.MSG_EDITOR_FOCUS)
+    const onFreezeState = (event: CustomEvent<{ freezeLeft: number }>) =>
+      setGridFreezeLeftState(event.detail.freezeLeft)
 
-      _grid.addEventListener(
-        "freeze.state",
-        function (event: CustomEvent<{ freezeLeft: number }>) {
-          setGridFreezeLeftState(event.detail.freezeLeft)
-        },
-      )
+    _grid.addEventListener("selection.change", onSelectionChange)
+    _grid.addEventListener("yield.focus", onYieldFocus)
+    _grid.addEventListener("freeze.state", onFreezeState)
+
+    return () => {
+      _grid.removeEventListener?.("selection.change", onSelectionChange)
+      _grid.removeEventListener?.("yield.focus", onYieldFocus)
+      _grid.removeEventListener?.("freeze.state", onFreezeState)
     }
   }, [])
 
@@ -292,6 +290,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <StyledPrimaryToggleButton
           data-hook="grid-toolbar-freeze"
+          // Keep the grid's keyboard focus and cell selection on the action.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_COLUMN_FREEZE)
             gridRef?.current?.toggleFreezeLeft()
@@ -327,6 +327,8 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         <Button
           data-hook="grid-toolbar-reset"
           skin="transparent"
+          // Keep the grid's keyboard focus and cell selection on the action.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_LAYOUT_RESET)
             gridRef?.current?.clearCustomLayout()

@@ -11,6 +11,11 @@ export type IQuestDBGrid = {
 
   addEventListener(eventName: string, fn: (event: CustomEvent) => void)
 
+  removeEventListener?(
+    eventName: string,
+    fn: (event: CustomEvent) => void,
+  ): void
+
   setData(data: any): void
 
   getSQL(): string

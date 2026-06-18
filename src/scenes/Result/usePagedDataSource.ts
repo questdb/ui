@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { QueryRawResult } from "../../utils"
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -8,7 +8,13 @@ import type {
   ResultGridRow,
 } from "../../components/ResultGrid"
 import { PAGE_SIZE, nextPageWindow } from "./nextPageWindow"
-import { planPageFetch, splitPagePair } from "./pageFetchPlan"
+import { planPageFetch } from "./pageFetchPlan"
+import {
+  applyFetchedPages,
+  getRowFromCache,
+  isPageEmpty,
+  purgeOutlierPages as purgeOutlierPagesFromCache,
+} from "./pageCache"
 
 const LOAD_DEBOUNCE_MS = 75
 
@@ -60,19 +66,17 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
 
   const bumpVersion = useCallback(() => setVersion((v) => v + 1), [])
 
-  const isEmptyPage = useCallback((page: number): boolean => {
-    const data = cacheRef.current.get(page)
-    return !data || data.length === 0
-  }, [])
+  const isEmptyPage = useCallback(
+    (page: number): boolean => isPageEmpty(cacheRef.current, page),
+    [],
+  )
 
   const purgeOutlierPages = useCallback(() => {
-    const lo = loPageRef.current
-    const hi = hiPageRef.current
-    for (const page of Array.from(cacheRef.current.keys())) {
-      if (page < lo || page > hi) {
-        cacheRef.current.delete(page)
-      }
-    }
+    purgeOutlierPagesFromCache(
+      cacheRef.current,
+      loPageRef.current,
+      hiPageRef.current,
+    )
   }, [])
 
   const loadPages = useCallback((p1: number, p2: number) => {
@@ -88,13 +92,7 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
     const renderFunc = (response: QueryRawResult) => {
       if (generation !== resultGenerationRef.current) return
       if (!("dataset" in response)) return
-      if (plan.kind === "pair") {
-        const { first, second } = splitPagePair(response.dataset)
-        cacheRef.current.set(plan.firstPage, first)
-        cacheRef.current.set(plan.secondPage, second)
-      } else {
-        cacheRef.current.set(plan.page, response.dataset)
-      }
+      applyFetchedPages(cacheRef.current, plan, response.dataset)
       bumpVersion()
     }
 
@@ -150,10 +148,8 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
   }, [])
 
   const getRow = useCallback(
-    (index: number): ResultGridRow | undefined => {
-      const page = cacheRef.current.get(Math.floor(index / PAGE_SIZE))
-      return page ? page[index % PAGE_SIZE] : undefined
-    },
+    (index: number): ResultGridRow | undefined =>
+      getRowFromCache(cacheRef.current, index),
     // version dep is intentional: a fresh getRow identity re-renders new pages.
     [version],
   )
@@ -190,6 +186,13 @@ export const usePagedDataSource = (paginationFn?: PaginationFn) => {
 
   const getCurrentPageRows = useCallback(
     (): ResultGridRow[] => cacheRef.current.get(currentPageRef.current) ?? [],
+    [],
+  )
+
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    },
     [],
   )
 

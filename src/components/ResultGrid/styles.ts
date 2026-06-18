@@ -1,5 +1,6 @@
 import styled, { css, keyframes } from "styled-components"
 import { color } from "../../utils"
+import { theme } from "../../theme"
 import { CopyButton } from "../CopyButton"
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
 
@@ -52,7 +53,7 @@ export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
     `}
 
   &:hover .header-copy-btn,
-  .header-copy-btn[data-copied="true"] {
+  &:focus-within .header-copy-btn {
     visibility: visible;
   }
 `
@@ -72,12 +73,12 @@ export const HeaderName = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  font-size: 1.4rem;
+  font-size: ${({ theme }) => theme.fontSize.md};
 `
 
 export const HeaderType = styled.span`
   color: ${color("gray2")};
-  font-size: 1rem;
+  font-size: ${({ theme }) => theme.fontSize.ms};
   white-space: nowrap;
   text-transform: lowercase;
 `
@@ -167,8 +168,8 @@ export const Row = styled.div<{ $active: boolean }>`
 `
 
 const pulseAnim = keyframes`
-  0% { box-shadow: #8be9fd 0 0 0 1px; }
-  75% { box-shadow: rgba(241, 250, 140, 0) 0 0 0 16px; }
+  0% { box-shadow: ${theme.color.cyan} 0 0 0 1px; }
+  75% { box-shadow: ${theme.color.yellow}00 0 0 0 16px; }
 `
 
 export const Cell = styled.div<{
@@ -185,9 +186,13 @@ export const Cell = styled.div<{
   align-items: center;
   padding: 0 0.6rem;
   overflow: hidden;
-  font-size: 1.3rem;
+  font-size: ${({ theme }) => theme.fontSize.sm};
   color: ${({ $isNull, $isTimestamp }) =>
-    $isNull ? "#939393" : $isTimestamp ? color("green") : color("foreground")};
+    $isNull
+      ? color("mutedLabel")
+      : $isTimestamp
+        ? color("green")
+        : color("foreground")};
   border-right: 1px solid ${color("selection")};
   border-bottom: 1px solid ${color("selection")};
   box-sizing: border-box;

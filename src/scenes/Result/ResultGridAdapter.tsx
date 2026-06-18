@@ -141,6 +141,13 @@ export const ResultGridAdapter = forwardRef<
         listenersRef.current.set(eventName, set)
       },
 
+      removeEventListener: (
+        eventName: string,
+        fn: (event: CustomEvent) => void,
+      ) => {
+        listenersRef.current.get(eventName)?.delete(fn)
+      },
+
       clearCustomLayout: () => gridImperativeRef.current?.resetLayout(),
       shuffleFocusedColumnToFront: () =>
         gridImperativeRef.current?.shuffleFocusedColumnToFront(),
