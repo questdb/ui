@@ -458,6 +458,14 @@ Cypress.Commands.add("getExpandedNotifications", () =>
   cy.get('[data-hook="notifications-expanded"]'),
 )
 
+Cypress.Commands.add("selectQueries", (selection) => {
+  cy.window().then((win) => {
+    const editor = win.monaco.editor.getEditors()[0]
+    editor.focus()
+    editor.setSelection(selection)
+  })
+})
+
 Cypress.Commands.add("execQuery", (query) => {
   const authHeader = localStorage.getItem("basic.auth.header")
   cy.request({

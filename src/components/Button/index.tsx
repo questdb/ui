@@ -81,6 +81,7 @@ const Prefix = styled.div<{ disabled?: boolean }>`
 export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
   ({ as, children, prefixIcon, disabled, disabledTooltip, ...props }, ref) => {
     const type = as === "button" ? { type: "button" } : {}
+    const { style } = props as { style?: React.CSSProperties }
     const button = (
       <StyledButton
         ref={ref}
@@ -98,7 +99,18 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
     if (disabled && disabledTooltip) {
       return (
         <Tooltip content={disabledTooltip}>
-          <span style={{ display: "inline-flex" }}>{button}</span>
+          {/*
+            Browsers suppress pointer events on disabled buttons, so hovering
+            the button would not reach the Radix tooltip trigger (this span) and
+            the tooltip would not open. Make the disabled button transparent to
+            pointer events so the hover falls through to the span and the
+            tooltip shows reliably.
+          */}
+          <span style={{ display: "inline-flex" }}>
+            {React.cloneElement(button, {
+              style: { ...style, pointerEvents: "none" },
+            })}
+          </span>
         </Tooltip>
       )
     }
