@@ -61,7 +61,7 @@
     "@styled-icons/remix-fill": "10.46.0",
     "@styled-icons/remix-line": "10.46.0",
     "@tanstack/react-table": "^8.21.3",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@tanstack/react-virtual": "^3.14.2",
     "allotment": "^1.19.3",
     "bowser": "^2.14.1",
     "compare-versions": "^5.0.1",

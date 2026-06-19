@@ -4,6 +4,12 @@ export type ColumnDefinition = Readonly<{
   dim?: number
   elemType?: string
 }>
+export type ColumnDefinition = Readonly<{
+  name: string
+  type: string
+  dim?: number
+  elemType?: string
+}>
 
 export type Value = string | number | boolean
 export type RawData = Record<string, Value>
@@ -55,7 +61,7 @@ export type RawDqlResult = {
   notice: undefined
   error: undefined
   query: string
-  timestamp: number
+  timestamp?: number
   timings: Timings
   explain?: Explain
 }

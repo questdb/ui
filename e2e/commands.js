@@ -127,24 +127,127 @@ Cypress.Commands.add("getByDataHook", (name) => cy.get(`[data-hook="${name}"]`))
 Cypress.Commands.add("getByRole", (name) => cy.get(`[role="${name}"]`))
 
 Cypress.Commands.add("getGrid", () =>
-  cy.get(".qg-viewport .qg-canvas").should("be.visible"),
+  cy
+    .get("[data-hook='grid-viewport'] [data-hook='grid-canvas']")
+    .should("be.visible"),
 )
 
-Cypress.Commands.add("getGridViewport", () => cy.get(".qg-viewport"))
+Cypress.Commands.add("getGridViewport", () =>
+  cy.get("[data-hook='grid-viewport']"),
+)
 
 Cypress.Commands.add("getGridRow", (n) =>
-  cy.get(".qg-r").filter(":visible").eq(n),
+  cy.get("[data-hook='grid-row']").filter(":visible").eq(n),
 )
 
 Cypress.Commands.add("getColumnName", (n) =>
-  cy.get(".qg-header-name").eq(n).invoke("text"),
+  cy.get("[data-hook='grid-header-name']").eq(n).invoke("text"),
 )
 
 Cypress.Commands.add("getGridCol", (n) =>
-  cy.get(".qg-c").filter(":visible").eq(n),
+  cy.get("[data-hook='grid-cell']").filter(":visible").eq(n),
 )
 
-Cypress.Commands.add("getGridRows", () => cy.get(".qg-r").filter(":visible"))
+Cypress.Commands.add("getGridRows", () =>
+  cy.get("[data-hook='grid-row']").filter(":visible"),
+)
+
+Cypress.Commands.add("getGridCellAt", (row, col) =>
+  cy.get(`#cell-${row}-${col}`),
+)
+
+Cypress.Commands.add("getActiveCell", () =>
+  cy.get("[data-hook='grid-cell'][aria-selected='true']"),
+)
+
+Cypress.Commands.add("getFrozenCells", () =>
+  cy.get("[data-hook='grid-cell'][data-frozen='true']"),
+)
+
+Cypress.Commands.add("getGridHeaderCopy", (n) =>
+  cy.get("[role='columnheader']").eq(n).find(".header-copy-btn"),
+)
+
+Cypress.Commands.add("gridToolbar", (name) =>
+  cy.get(`[data-hook='grid-toolbar-${name}']`),
+)
+
+Cypress.Commands.add("selectGridCell", (row, col) => {
+  const selector = `#cell-${row}-${col}`
+  cy.get(selector).click()
+  cy.get(selector).should("have.attr", "aria-selected", "true")
+})
+
+Cypress.Commands.add("gridKey", (keyOptions) =>
+  cy.get("[role='grid']").trigger("keydown", { force: true, ...keyOptions }),
+)
+
+Cypress.Commands.add("resizeColumn", (n, dx) => {
+  cy.get("[data-hook='grid-col-resizer']")
+    .filter(":visible")
+    .eq(n)
+    .then(($resizer) => {
+      const rect = $resizer[0].getBoundingClientRect()
+      const startX = rect.x + rect.width / 2
+      const y = rect.y + rect.height / 2
+      cy.wrap($resizer).trigger("mousedown", {
+        button: 0,
+        clientX: startX,
+        clientY: y,
+        force: true,
+      })
+      cy.get("body").trigger("mousemove", {
+        clientX: startX + dx,
+        clientY: y,
+        force: true,
+      })
+      cy.get("body").trigger("mouseup", {
+        clientX: startX + dx,
+        clientY: y,
+        force: true,
+      })
+    })
+})
+
+Cypress.Commands.add("freezeColumnViaHandle", (dx) => {
+  cy.get("[data-hook='grid-freeze-handle']").then(($handle) => {
+    const rect = $handle[0].getBoundingClientRect()
+    const startX = rect.x + rect.width / 2
+    const y = rect.y + rect.height / 2
+    cy.wrap($handle).trigger("mousedown", {
+      button: 0,
+      clientX: startX,
+      clientY: y,
+      force: true,
+    })
+    cy.get("body").trigger("mousemove", {
+      clientX: startX + dx,
+      clientY: y,
+      force: true,
+    })
+    cy.get("body").trigger("mouseup", {
+      clientX: startX + dx,
+      clientY: y,
+      force: true,
+    })
+  })
+})
+
+Cypress.Commands.add("dragFreezeHandleTo", (clientX) => {
+  cy.get("[data-hook='grid-freeze-handle']").then(($handle) => {
+    const rect = $handle[0].getBoundingClientRect()
+    const startX = rect.x + rect.width / 2
+    const y = rect.y + rect.height / 2
+    cy.wrap($handle).trigger("mousedown", {
+      button: 0,
+      clientX: startX,
+      clientY: y,
+      force: true,
+    })
+    cy.get("body").trigger("mousemove", { clientX, clientY: y, force: true })
+    cy.get("body").trigger("mouseup", { clientX, clientY: y, force: true })
+  })
+})
 
 Cypress.Commands.add("typeQuery", (query) =>
   cy.getEditor().realClick().type(query),

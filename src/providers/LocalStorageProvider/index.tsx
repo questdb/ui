@@ -22,10 +22,16 @@
  *
  ******************************************************************************/
 
-import React, { createContext, useState, useContext, useCallback } from "react"
+import React, {
+  createContext,
+  useState,
+  useContext,
+  useCallback,
+  useEffect,
+} from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { parseInteger } from "./utils"
+import { parseInteger, parseBoolean } from "./utils"
 import {
   AiAssistantSettings,
   LocalConfig,
@@ -46,6 +52,7 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  useNewGrid: true,
   aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
@@ -62,6 +69,7 @@ type ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => void
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  useNewGrid: boolean
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
   aiAssistantSettings: AiAssistantSettings
@@ -77,6 +85,7 @@ const defaultValues: ContextProps = {
   updateSettings: (_key: StoreKey, _value: SettingsType) => undefined,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  useNewGrid: true,
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
   aiAssistantSettings: defaultConfig.aiAssistantSettings,
@@ -119,6 +128,40 @@ export const LocalStorageProvider = ({
       ? getValue(StoreKey.AUTO_REFRESH_TABLES) === "true"
       : defaultConfig.autoRefreshTables,
   )
+
+  const readNewGridOverride = (): boolean | null => {
+    const param = new URLSearchParams(window.location.search).get("useNewGrid")
+    if (param === "1" || param === "true") return true
+    if (param === "0" || param === "false") return false
+    return null
+  }
+
+  const getInitialNewGrid = (): boolean => {
+    const override = readNewGridOverride()
+    if (override !== null) return override
+    return parseBoolean(
+      getValue(StoreKey.USE_NEW_GRID),
+      defaultConfig.useNewGrid,
+    )
+  }
+
+  const [useNewGrid, setUseNewGrid] = useState<boolean>(getInitialNewGrid)
+
+  useEffect(() => {
+    const override = readNewGridOverride()
+    if (override === null) return
+    setValue(StoreKey.USE_NEW_GRID, String(override))
+    const params = new URLSearchParams(window.location.search)
+    params.delete("useNewGrid")
+    const query = params.toString()
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname +
+        (query ? `?${query}` : "") +
+        window.location.hash,
+    )
+  }, [])
 
   const getLeftPanelState = (): LeftPanelState => {
     const stored = getValue(StoreKey.LEFT_PANEL_STATE)
@@ -213,6 +256,9 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
+      case StoreKey.USE_NEW_GRID:
+        setUseNewGrid(value === "true")
+        break
       case StoreKey.AI_ASSISTANT_SETTINGS:
         setAiAssistantSettings(getAiAssistantSettings())
         break
@@ -229,6 +275,7 @@ export const LocalStorageProvider = ({
         updateSettings,
         exampleQueriesVisited,
         autoRefreshTables,
+        useNewGrid,
         leftPanelState,
         updateLeftPanelState,
         aiAssistantSettings,

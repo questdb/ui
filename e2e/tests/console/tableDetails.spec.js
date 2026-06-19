@@ -894,6 +894,7 @@ describe("TableDetailsDrawer", () => {
       )
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
+      cy.getByDataHook("table-details-copy-ddl").should("be.visible").click()
       cy.getByDataHook("table-details-explain-ai").realHover()
       cy.wait(200)
       cy.getByDataHook("tooltip").should(

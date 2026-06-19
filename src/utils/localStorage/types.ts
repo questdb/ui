@@ -44,4 +44,5 @@ export enum StoreKey {
   AI_ASSISTANT_SETTINGS = "ai.assistant.settings",
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
   CLIENT_ID = "client.id",
+  USE_NEW_GRID = "feature.new.grid",
 }

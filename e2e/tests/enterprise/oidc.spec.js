@@ -221,7 +221,7 @@ describe("OIDC", () => {
       cy.logout()
       cy.loginWithUserAndPassword()
       cy.getEditor().should("be.visible")
-      cy.get(".qg-r").should("not.exist")
+      cy.get("[data-hook='grid-row']").should("not.exist")
     })
 
     it("should preserve query and executeQuery params across OIDC redirect and show share-link confirmation dialog", () => {
