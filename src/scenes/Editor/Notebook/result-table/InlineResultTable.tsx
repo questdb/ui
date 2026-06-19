@@ -1,6 +1,6 @@
 import React from "react"
 import type { CellResult } from "../../../../store/notebook"
-import { ResultGrid } from "./ResultGrid"
+import { ResultGridPanel } from "./ResultGridPanel"
 import { StatusNotification } from "./StatusNotification"
 import { TabBar } from "./TabBar"
 import { ResultWrapper, SuccessMessage } from "./styles"
@@ -10,8 +10,11 @@ type Props = {
   isFocused?: boolean
   onTabChange?: (index: number) => void
   onCancelQuery?: (index: number) => void
-  columnSizing: Record<string, Record<string, number>> | undefined
-  onColumnSizingCommit: (sizing: Record<string, number>, query: string) => void
+  bufferId?: number
+  cellId: string
+  isRunning?: boolean
+  onReRun?: (index: number) => void
+  onYieldFocus?: () => void
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -19,8 +22,11 @@ export const InlineResultTable: React.FC<Props> = ({
   isFocused,
   onTabChange,
   onCancelQuery,
-  columnSizing,
-  onColumnSizingCommit,
+  bufferId,
+  cellId,
+  isRunning,
+  onReRun,
+  onYieldFocus,
 }) => {
   if (result.results.length === 0) {
     return (
@@ -33,7 +39,6 @@ export const InlineResultTable: React.FC<Props> = ({
   const activeResult =
     result.results[result.activeResultIndex] ?? result.results[0]
   const isMultiQuery = result.results.length > 1
-  const isActiveDql = activeResult?.type === "dql"
 
   return (
     <ResultWrapper>
@@ -48,16 +53,17 @@ export const InlineResultTable: React.FC<Props> = ({
         />
       )}
 
-      {isActiveDql && activeResult && (
-        <ResultGrid
+      {activeResult?.type === "dql" && activeResult.dataset.length > 0 && (
+        <ResultGridPanel
           key={`${result.activeResultIndex}-${activeResult.query}`}
           data={activeResult}
           runToken={result.timestamp}
           isFocused={isFocused}
-          initialColumnSizing={columnSizing?.[activeResult.query]}
-          onColumnSizingCommit={(sizing) =>
-            onColumnSizingCommit(sizing, activeResult.query)
-          }
+          bufferId={bufferId}
+          cellId={cellId}
+          isRunning={isRunning}
+          onReRun={() => onReRun?.(result.activeResultIndex)}
+          onYieldFocus={onYieldFocus}
         />
       )}
     </ResultWrapper>

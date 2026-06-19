@@ -32,7 +32,6 @@ export type NotebookCell = {
   chartConfig?: ChartConfig
   autoRefresh?: boolean
   isChartMaximized?: boolean
-  columnSizing?: Record<string, Record<string, number>>
   lastRunStatus?: RunStatus
 }
 

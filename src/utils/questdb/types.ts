@@ -4,12 +4,6 @@ export type ColumnDefinition = Readonly<{
   dim?: number
   elemType?: string
 }>
-export type ColumnDefinition = Readonly<{
-  name: string
-  type: string
-  dim?: number
-  elemType?: string
-}>
 
 export type Value = string | number | boolean
 export type RawData = Record<string, Value>

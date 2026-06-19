@@ -19,6 +19,10 @@ import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import { getQueriesFromText } from "../Monaco/utils"
+import {
+  HEADER_HEIGHT,
+  ROW_HEIGHT,
+} from "../../../components/ResultGrid/dimensions"
 
 export const singleResultFromExec = (
   exec: QueryExecResult,
@@ -679,8 +683,7 @@ export const MIN_BOTTOM_HEIGHT_PX = 88
 // here.
 const TAB_BAR_PX = 40 // TabBarWrapper height = 4rem
 const NOTIFICATION_PX = 44 // StatusNotification (compact=true → 4rem + 1-2 px borders)
-const GRID_HEADER_PX = 44 // result-table HEADER_HEIGHT
-const GRID_ROW_PX = 28 // result-table ROW_HEIGHT
+const RESULT_ACTIONS_BAR_PX = 36 // ResultActionsBar height = 3.6rem (shown with the grid)
 const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
 
 // Height to reserve for a run cell's result area while its snapshot hydrates —
@@ -688,7 +691,10 @@ const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
 // to for a ≥10-row result, so the grid drops in without a height jump. Mirrors
 // how draw reserves a fixed DEFAULT_CHART_BOTTOM_HEIGHT before its data lands.
 export const RESERVED_RESULT_BOTTOM_HEIGHT =
-  NOTIFICATION_PX + GRID_HEADER_PX + MAX_RESERVED_ROWS * GRID_ROW_PX
+  NOTIFICATION_PX +
+  RESULT_ACTIONS_BAR_PX +
+  HEADER_HEIGHT +
+  MAX_RESERVED_ROWS * ROW_HEIGHT
 
 export const isExpectingResult = (
   cell: NotebookCell,
@@ -738,8 +744,9 @@ export const computeResultBottomHeight = (
     return (
       tabBar +
       NOTIFICATION_PX +
-      GRID_HEADER_PX +
-      MAX_RESERVED_ROWS * GRID_ROW_PX
+      RESULT_ACTIONS_BAR_PX +
+      HEADER_HEIGHT +
+      MAX_RESERVED_ROWS * ROW_HEIGHT
     )
   }
 
@@ -749,7 +756,9 @@ export const computeResultBottomHeight = (
     return NOTIFICATION_PX
   }
   const rows = Math.min(MAX_RESERVED_ROWS, dqlRowCount(only))
-  return NOTIFICATION_PX + GRID_HEADER_PX + rows * GRID_ROW_PX
+  return (
+    NOTIFICATION_PX + RESULT_ACTIONS_BAR_PX + HEADER_HEIGHT + rows * ROW_HEIGHT
+  )
 }
 
 // Returns the appropriate default bottom-slot height for a cell, based on
@@ -878,25 +887,3 @@ export const attachScriptSummary = (
     if (c.id !== cellId || !c.result) return c
     return { ...c, result: { ...c.result, script: summary } }
   })
-
-export const COLUMN_SIZING_LRU_MAX = 20
-
-export const upsertColumnSizing = (
-  prev: NotebookCell["columnSizing"] | undefined,
-  key: string,
-  next: Record<string, number>,
-  max: number = COLUMN_SIZING_LRU_MAX,
-): NotebookCell["columnSizing"] => {
-  const { [key]: _evicted, ...rest } = prev ?? {}
-  const merged: Record<string, Record<string, number>> = {
-    ...rest,
-    [key]: next,
-  }
-  const keys = Object.keys(merged)
-  if (keys.length <= max) return merged
-  const dropCount = keys.length - max
-  for (let i = 0; i < dropCount; i++) {
-    delete merged[keys[i]]
-  }
-  return merged
-}

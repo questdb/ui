@@ -39,7 +39,7 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
 import { ChatHistoryView } from "./ChatHistoryView"
-import { normalizeSql } from "../../../utils/aiAssistant"
+import { normalizeSql } from "../../../utils/formatSql"
 import {
   executeAIFlow,
   createChatFlowConfig,

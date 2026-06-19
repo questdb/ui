@@ -789,7 +789,6 @@ describe("sanitizeBuffer", () => {
               autoRefresh: true,
               result: { results: "garbage" },
               editorViewState: { broken: true },
-              columnSizing: "garbage",
               extraField: "should not be copied",
             },
             { id: "c2", position: 2, value: "SELECT 2" },
@@ -822,7 +821,6 @@ describe("sanitizeBuffer", () => {
       const cell = state?.cells[0] as unknown as Record<string, unknown>
       expect(cell.result).toBeUndefined()
       expect(cell.editorViewState).toBeUndefined()
-      expect(cell.columnSizing).toBeUndefined()
       expect(cell.extraField).toBeUndefined()
       // maximizedCellId referencing a non-existent cell is dropped
       expect(state?.maximizedCellId).toBeUndefined()

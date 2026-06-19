@@ -26,7 +26,7 @@ import {
   nextCopyLabel,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ConversationId } from "../AIConversationProvider/types"
-import { normalizeSql } from "../../utils/aiAssistant"
+import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
 import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
@@ -39,6 +39,7 @@ import {
 import { toast } from "../../components/Toast"
 import { db } from "../../store/db"
 import { deleteNotebookSnapshots } from "../../store/notebookResults"
+import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { emitUserAction } from "../../utils/notebookAIBridge"
@@ -614,6 +615,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     })
     if (wasNotebook) {
       void deleteNotebookSnapshots(id)
+      removeNotebookBufferLayouts(id)
       emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
   }

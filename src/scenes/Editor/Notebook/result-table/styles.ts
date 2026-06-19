@@ -1,12 +1,6 @@
-import styled, { css, keyframes } from "styled-components"
+import styled, { css } from "styled-components"
 import { color } from "../../../../utils"
-import { Button } from "../../../../components"
-import { CopyButton } from "../../../../components/CopyButton"
-
-export type DatasetRow = (boolean | string | number | null)[]
-
-export const ROW_HEIGHT = 28
-export const HEADER_HEIGHT = 44
+import { Button, PrimaryToggleButton } from "../../../../components"
 
 export const ResultWrapper = styled.div`
   overflow: hidden;
@@ -136,183 +130,37 @@ export const LiveRegion = styled.div`
   border: 0;
 `
 
-export const GridContainer = styled.div<{
-  $shadowLeft: boolean
-}>`
-  flex: 1;
-  overflow: hidden;
+export const ActionsBar = styled.div`
   display: flex;
-  flex-direction: column;
-  outline: none;
-  font-size: ${({ theme }) => theme.fontSize.xs};
-  position: relative;
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 6px;
-    background: linear-gradient(to right, rgba(0, 0, 0, 0.25), transparent);
-    z-index: 3;
-    pointer-events: none;
-    opacity: ${({ $shadowLeft }) => ($shadowLeft ? 1 : 0)};
-    transition: opacity 0.15s;
-  }
-`
-
-export const ScrollContainer = styled.div<{ $scrollable: boolean }>`
-  flex: 1;
-  overflow: ${({ $scrollable }) => ($scrollable ? "auto" : "hidden")};
-`
-
-export const HeaderRow = styled.div<{ $shadowBottom: boolean }>`
-  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+  height: 3.6rem;
+  padding: 0 0.8rem;
+  overflow-x: auto;
   background: ${color("backgroundDarker")};
   border-bottom: 1px solid ${color("selection")};
-  flex-shrink: 0;
-  height: ${HEADER_HEIGHT}px;
-  box-shadow: ${({ $shadowBottom }) =>
-    $shadowBottom ? "0 2px 4px rgba(0, 0, 0, 0.3)" : "none"};
-  transition: box-shadow 0.15s;
-`
 
-export const HeaderCell = styled.div<{ $align: string }>`
-  position: relative;
-  flex-shrink: 0;
-  padding: 0.5rem 1rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  user-select: none;
-  text-align: ${({ $align }) => $align};
-  border-right: 1px solid ${color("selection")};
+  &::-webkit-scrollbar {
+    height: 0;
+  }
 
-  &:hover .header-copy-btn,
-  .header-copy-btn[data-copied="true"] {
-    visibility: visible;
+  > *:first-child {
+    margin-left: auto;
   }
 `
 
-export const HeaderNameRow = styled.div<{ $align: string }>`
-  display: flex;
-  align-items: center;
-  flex-direction: ${({ $align }) =>
-    $align === "right" ? "row-reverse" : "row"};
-  justify-content: flex-start;
-  gap: 4px;
-`
-
-export const HeaderName = styled.span`
-  color: ${color("cyan")};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  font-size: 1.4rem;
-`
-
-export const HeaderType = styled.span`
-  color: ${color("gray2")};
-  font-size: 1rem;
-  white-space: nowrap;
-  text-transform: lowercase;
-`
-
-export const StyledCopyButton = styled(CopyButton)`
-  visibility: hidden;
+export const ActionButton = styled(Button)`
   flex-shrink: 0;
-  padding: 0;
-
-  &:hover {
-    background: transparent !important;
-  }
-`
-
-export const ColResizer = styled.div`
-  position: absolute;
-  right: -10px;
-  top: 0;
-  bottom: 0;
-  width: 20px;
-  cursor: col-resize;
-  touch-action: none;
-  user-select: none;
-  z-index: 2;
-
-  &::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 25%;
-    transform: translateX(-50%);
-    width: 5px;
-    height: 50%;
-    border-radius: 2px;
-    background: transparent;
-    transition: background 0.1s;
-  }
-
-  &:hover::after {
-    background: ${color("comment")};
-  }
-`
-
-export const Row = styled.div<{ $hover: boolean; $active: boolean }>`
-  display: flex;
-  height: ${ROW_HEIGHT}px;
-
-  ${({ $active }) =>
-    $active &&
-    css`
-      background: ${color("selection")};
-    `}
-
-  ${({ $hover, $active }) =>
-    $hover &&
-    !$active &&
-    css`
-      background: ${color("selectionDarker")};
-    `}
-`
-
-const pulseAnim = keyframes`
-  0% { box-shadow: #8be9fd 0 0 0 1px; }
-  75% { box-shadow: rgba(241, 250, 140, 0) 0 0 0 16px; }
-`
-
-export const Cell = styled.div<{
-  $isNull: boolean
-  $isTimestamp: boolean
-  $isActive: boolean
-  $isPulsing: boolean
-}>`
-  flex-shrink: 0;
-  height: ${ROW_HEIGHT}px;
-  line-height: ${ROW_HEIGHT}px;
+  height: 2.8rem;
+  min-width: 2.8rem;
   padding: 0 0.6rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 1.3rem;
-  color: ${({ $isNull, $isTimestamp }) =>
-    $isNull ? "#939393" : $isTimestamp ? color("green") : color("foreground")};
-  border-right: 1px solid ${color("selectionDarker")};
-  border-bottom: 1px solid ${color("selectionDarker")};
-  box-sizing: border-box;
+  gap: 0.3rem;
+`
 
-  ${({ $isActive }) =>
-    $isActive &&
-    css`
-      background: ${color("tableSelection")};
-      box-shadow: inset 0 0 0 1px ${color("cyan")};
-      border-radius: 0.4rem;
-    `}
-
-  ${({ $isPulsing }) =>
-    $isPulsing &&
-    css`
-      animation: ${pulseAnim} 1s ease-out;
-    `}
+export const FreezeToggle = styled(PrimaryToggleButton)`
+  flex-shrink: 0;
+  height: 2.8rem;
+  width: 3.2rem;
+  padding: 0;
 `

@@ -9,7 +9,7 @@ import {
 import { mapQueryRawToResult, type RunQueryRawResult } from "./tools/runQuery"
 import type { ProviderId } from "./ai"
 import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
-import { formatSql } from "./formatSql"
+import { normalizeSql } from "./formatSql"
 import { AIOperationStatus, StatusArgs } from "../providers/AIStatusProvider"
 import type {
   ConversationId,
@@ -232,15 +232,6 @@ export type StreamingCallback = {
   }) => void
   onResponseStart?: () => void
   onBeforeStream?: () => void
-}
-
-export const normalizeSql = (sql: string, insertSemicolon: boolean = true) => {
-  if (!sql) return ""
-  let result = sql.trim()
-  if (result.endsWith(";")) {
-    result = result.slice(0, -1)
-  }
-  return formatSql(result) + (insertSemicolon ? ";" : "")
 }
 
 export function isAiAssistantError(

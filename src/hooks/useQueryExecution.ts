@@ -2,10 +2,7 @@ import { useCallback, useContext } from "react"
 import { QuestContext } from "../providers/QuestProvider"
 import * as QuestDB from "../utils/questdb"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
-import {
-  normalizeVariables,
-  prependGlobalsDeclare,
-} from "../scenes/Editor/Notebook/declareUtils"
+import { expandGlobals } from "../scenes/Editor/Notebook/declareUtils"
 import type { NotebookVariable } from "../store/notebook"
 
 export const RESULT_DISPLAY_LIMIT = 50_000
@@ -30,9 +27,6 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
       signal?: AbortSignal,
       limit: number = RESULT_DISPLAY_LIMIT,
     ): Promise<QueryExecResult> => {
-      const normalized = normalizeVariables(globals)
-      const expanded =
-        normalized.length > 0 ? prependGlobalsDeclare(sql, normalized).sql : sql
       try {
         if (signal?.aborted) {
           return {
@@ -44,6 +38,7 @@ export const useQueryExecution = (globals?: NotebookVariable[]) => {
             error: "Query aborted before execution.",
           }
         }
+        const expanded = expandGlobals(sql, globals)
         const { promise, queryId } = quest.queryRaw(expanded, {
           limit: `0,${limit}`,
           cancellable: true,

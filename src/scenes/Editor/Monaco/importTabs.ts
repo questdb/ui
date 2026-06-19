@@ -239,8 +239,8 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
 }
 
 // Whitelists notebook content fields; session/display state (results,
-// editorViewState, columnSizing) is intentionally dropped so an imported
-// notebook starts fresh and malformed payloads can't crash the renderers.
+// editorViewState) is intentionally dropped so an imported notebook starts
+// fresh and malformed payloads can't crash the renderers.
 const sanitizeNotebookCell = (
   item: Record<string, unknown>,
   index: number,

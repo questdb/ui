@@ -329,6 +329,42 @@ export const useCellExecution = ({
     [cellsRef, executeSingle, updateCell, runScript, persistSnapshot],
   )
 
+  const reRunResultAt = useCallback(
+    async (cellId: string, index: number): Promise<boolean> => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell?.result) return false
+      const target = cell.result.results[index]
+      if (!target || !target.query.trim()) return false
+      const sql = target.query
+      const executedSql = cell.value
+
+      const controllers = abortControllersRef.current.get(cellId) ?? []
+      controllers[index]?.abort()
+      const ac = new AbortController()
+      controllers[index] = ac
+      abortControllersRef.current.set(cellId, controllers)
+
+      updateCellResult(cellId, index, { type: "running", query: sql })
+
+      const execResult = await executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP)
+      if (ac.signal.aborted) return execResult.type !== "error"
+      publishSchemaIfMutating(execResult.type)
+      const liveCell = cellsRef.current.find((c) => c.id === cellId)
+      if (!liveCell?.result) return execResult.type !== "error"
+      updateCellResult(
+        cellId,
+        index,
+        capResultBytes(
+          singleResultFromExec(execResult, sql),
+          NOTEBOOK_BYTE_CAP,
+        ),
+      )
+      persistSnapshot(cellId, executedSql)
+      return execResult.type !== "error"
+    },
+    [cellsRef, executeSingle, updateCellResult, persistSnapshot],
+  )
+
   const cancelCell = useCallback(
     (cellId: string) => {
       const controllers = abortControllersRef.current.get(cellId)
@@ -390,6 +426,7 @@ export const useCellExecution = ({
   return {
     runningCellIds,
     runCell,
+    reRunResultAt,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,

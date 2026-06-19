@@ -41,6 +41,7 @@ import {
   deleteCellSnapshot,
   loadNotebookSnapshots,
 } from "../../../store/notebookResults"
+import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import type { QueryKey } from "../../../store/Query/types"
 
 // State and actions live in SEPARATE contexts: action-only consumers never
@@ -72,6 +73,7 @@ export type NotebookActions = {
     sql?: string,
     signal?: AbortSignal,
   ) => Promise<boolean>
+  reRunResultAt: (cellId: string, index: number) => Promise<boolean>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
   setActiveResultIndex: (cellId: string, index: number) => void
@@ -104,6 +106,7 @@ const NOOP_ACTIONS: NotebookActions = {
   moveCellDown: () => undefined,
   duplicateCell: () => "",
   runCell: () => Promise.resolve(false),
+  reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
   setActiveResultIndex: () => undefined,
@@ -450,6 +453,7 @@ export const NotebookProvider: React.FC<{
       cancelCell(cellId)
       store.removeCellById(cellId)
       void deleteCellSnapshot(bufferId, cellId)
+      removeNotebookCellLayouts(bufferId, cellId)
       if (focusedCellIdRef.current === cellId) {
         setFocusedCell(null)
       }
@@ -497,6 +501,7 @@ export const NotebookProvider: React.FC<{
     moveCellDown: store.moveCellDown,
     duplicateCell,
     runCell,
+    reRunResultAt: execution.reRunResultAt,
     cancelCell,
     cancelQuery: execution.cancelQuery,
     setActiveResultIndex: execution.setActiveResultIndex,

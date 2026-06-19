@@ -32,7 +32,7 @@ import {
   shiftQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
-import { normalizeSql } from "../../utils/aiAssistant"
+import { normalizeSql } from "../../utils/formatSql"
 import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"

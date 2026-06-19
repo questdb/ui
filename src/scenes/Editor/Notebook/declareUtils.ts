@@ -28,6 +28,13 @@ export const normalizeVariables = (raw: unknown): NotebookVariable[] => {
   return []
 }
 
+export const expandGlobals = (sql: string, globals: unknown): string => {
+  const normalized = normalizeVariables(globals)
+  return normalized.length > 0
+    ? prependGlobalsDeclare(sql, normalized).sql
+    : sql
+}
+
 export const stripLeadingAt = (raw: string): string =>
   raw.startsWith("@") ? raw.slice(1) : raw
 

@@ -27,7 +27,6 @@ import {
   stripCellResults,
   swapCellDown,
   swapCellUp,
-  upsertColumnSizing,
 } from "./notebookUtils"
 import type {
   NotebookCell,
@@ -1071,11 +1070,12 @@ describe("isDoubleView", () => {
 
 describe("computeResultBottomHeight", () => {
   // Layout constants (kept in sync with notebookUtils.ts):
-  //   TAB_BAR_PX        = 40
-  //   NOTIFICATION_PX   = 44
-  //   GRID_HEADER_PX    = 44
-  //   GRID_ROW_PX       = 28
-  //   MAX_RESERVED_ROWS = 10
+  //   TAB_BAR_PX            = 40
+  //   NOTIFICATION_PX       = 44
+  //   RESULT_ACTIONS_BAR_PX = 36
+  //   HEADER_HEIGHT         = 44
+  //   ROW_HEIGHT            = 30
+  //   MAX_RESERVED_ROWS     = 10
 
   it("null/undefined/empty result → notification-only", () => {
     expect(computeResultBottomHeight(null)).toBe(44)
@@ -1143,18 +1143,18 @@ describe("computeResultBottomHeight", () => {
       activeResultIndex: 0,
       timestamp: 0,
     })
-    // 1 row: 44 + 44 + 1*28 = 116
-    expect(computeResultBottomHeight(make(1))).toBe(116)
-    // 5 rows: 44 + 44 + 5*28 = 228
-    expect(computeResultBottomHeight(make(5))).toBe(228)
-    // 10 rows: 44 + 44 + 10*28 = 368
-    expect(computeResultBottomHeight(make(10))).toBe(368)
-    // 50 rows: cap at 10 → still 368
-    expect(computeResultBottomHeight(make(50))).toBe(368)
+    // 1 row: 44 + 36 + 44 + 1*30 = 154
+    expect(computeResultBottomHeight(make(1))).toBe(154)
+    // 5 rows: 44 + 36 + 44 + 5*30 = 274
+    expect(computeResultBottomHeight(make(5))).toBe(274)
+    // 10 rows: 44 + 36 + 44 + 10*30 = 424
+    expect(computeResultBottomHeight(make(10))).toBe(424)
+    // 50 rows: cap at 10 → still 424
+    expect(computeResultBottomHeight(make(50))).toBe(424)
   })
 
   it("multi-statement, first DQL with rows → tab + notification + header + 10 rows", () => {
-    // 40 + 44 + 44 + 10*28 = 408
+    // 40 + 44 + 36 + 44 + 10*30 = 464
     expect(
       computeResultBottomHeight({
         results: [
@@ -1170,7 +1170,7 @@ describe("computeResultBottomHeight", () => {
         activeResultIndex: 0,
         timestamp: 0,
       }),
-    ).toBe(408)
+    ).toBe(464)
   })
 
   it("multi-statement, first is error → tab + notification only (we never saw rows)", () => {
@@ -1274,8 +1274,8 @@ describe("computeCellGridH", () => {
     ).toBe(20)
   })
   it("expectingResult reserves the result area when bottomHeight is unset", () => {
-    // RESERVED_RESULT_BOTTOM_HEIGHT = 44 + 44 + 10*28 = 368.
-    // 72 + 56 + 368 = 496 → ceil(496/50) = 10
+    // RESERVED_RESULT_BOTTOM_HEIGHT = 44 + 36 + 44 + 10*30 = 424.
+    // 72 + 56 + 424 = 552 → ceil(552/50) = 12
     expect(
       computeCellGridH(
         { id: "x", position: 0, value: "", lastRunStatus: "success" },
@@ -1283,7 +1283,7 @@ describe("computeCellGridH", () => {
         0,
         true,
       ),
-    ).toBe(10)
+    ).toBe(12)
   })
   it("expectingResult uses the cell's own bottomHeight when set", () => {
     // 72 + 56 + 300 = 428 → ceil(428/50) = 9
@@ -1421,49 +1421,6 @@ describe("buildAppliedLayout", () => {
     // draw: 72 + 350 + 40 = 462 → 10 rows
     expect(layout[1].h).toBe(10)
     expect(layout[1].y).toBe(3) // stacked below the run cell
-  })
-})
-
-describe("upsertColumnSizing", () => {
-  it("creates the map when no prior sizing exists", () => {
-    const out = upsertColumnSizing(undefined, "select 1", { col_0: 200 })
-    expect(out).toEqual({ "select 1": { col_0: 200 } })
-  })
-
-  it("overwrites an existing entry under the same key", () => {
-    const prev = { "select 1": { col_0: 100 } }
-    const out = upsertColumnSizing(prev, "select 1", { col_0: 300, col_1: 150 })
-    expect(out).toEqual({ "select 1": { col_0: 300, col_1: 150 } })
-  })
-
-  it("moves an updated key to the tail (most-recent)", () => {
-    // Iteration order = insertion order. Re-inserting "a" should put it last.
-    const prev = {
-      a: { col_0: 1 },
-      b: { col_0: 2 },
-      c: { col_0: 3 },
-    }
-    const out = upsertColumnSizing(prev, "a", { col_0: 99 })
-    expect(Object.keys(out ?? {})).toEqual(["b", "c", "a"])
-  })
-
-  it("evicts oldest entries when exceeding the LRU cap", () => {
-    let acc: ReturnType<typeof upsertColumnSizing> = undefined
-    for (let i = 0; i < 25; i++) {
-      acc = upsertColumnSizing(acc, `q${i}`, { col_0: i }, 20)
-    }
-    const keys = Object.keys(acc ?? {})
-    // Earliest 5 (q0..q4) dropped; newest 20 (q5..q24) retained, q24 last.
-    expect(keys).toHaveLength(20)
-    expect(keys[0]).toBe("q5")
-    expect(keys[19]).toBe("q24")
-  })
-
-  it("never mutates the input", () => {
-    const prev = { a: { col_0: 1 } }
-    const frozen = Object.freeze(prev)
-    expect(() => upsertColumnSizing(frozen, "b", { col_0: 2 })).not.toThrow()
-    expect(prev).toEqual({ a: { col_0: 1 } })
   })
 })
 

@@ -52,7 +52,7 @@ import {
   Tooltip,
 } from "../../components"
 import { actions, selectors } from "../../store"
-import { color, ErrorResult, RawErrorResult } from "../../utils"
+import { color, ErrorResult } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 import { ResultViewMode } from "scenes/Console/types"
 import type { IQuestDBGrid } from "../../js/console/grid.js"
@@ -65,7 +65,7 @@ import { NotificationType, RunningType } from "../../store/Query/types"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { toast } from "../../components"
 import { useQueryExecutionState } from "../../hooks/useQueryExecutionState"
-import { API_VERSION } from "../../consts"
+import { downloadQueryResult } from "../../utils/downloadQueryResult"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
@@ -378,42 +378,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       return
     }
 
-    const url = `exp?${QuestDB.Client.encodeParams({
-      query: sql,
-      version: API_VERSION,
-      fmt: format,
-      filename: `questdb-query-${Date.now().toString()}`,
-      ...(format === "parquet" ? { rmode: "nodelay" } : {}),
-    })}`
-
-    const iframe = document.createElement("iframe")
-    iframe.style.display = "none"
-    document.body.appendChild(iframe)
-
-    iframe.onerror = (e) => {
-      if (typeof e === "object") {
-        toast.error(`An error occurred while downloading the file`)
-      }
-      const error = e as string
-      toast.error(`An error occurred while downloading the file: ${error}`)
-    }
-
-    iframe.onload = () => {
-      const content = iframe.contentDocument?.body?.textContent
-      if (content) {
-        let error = "An error occurred while downloading the file"
-        try {
-          const contentJson = JSON.parse(content) as RawErrorResult
-          error += `: ${contentJson.error ?? content}`
-        } catch (_) {
-          error += `: ${content}`
-        }
-        toast.error(error)
-      }
-      document.body.removeChild(iframe)
-    }
-
-    iframe.src = url
+    downloadQueryResult(sql, format)
   }
 
   return (

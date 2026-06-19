@@ -44,7 +44,6 @@ import {
   partitionCellHeights,
   RESERVED_RESULT_BOTTOM_HEIGHT,
   scaleCellHeights,
-  upsertColumnSizing,
 } from "../notebookUtils"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 
@@ -176,6 +175,7 @@ const CellInner: React.FC<Props> = ({
 }) => {
   const {
     runCell,
+    reRunResultAt,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,
@@ -239,15 +239,6 @@ const CellInner: React.FC<Props> = ({
       () => updateCell(cell.id, { bottomHeight: undefined }),
       [cell.id, updateCell],
     ),
-  )
-
-  const handleColumnSizingCommit = useCallback(
-    (sizing: Record<string, number>, query: string) => {
-      updateCell(cell.id, {
-        columnSizing: upsertColumnSizing(cell.columnSizing, query, sizing),
-      })
-    },
-    [cell.id, cell.columnSizing, updateCell],
   )
 
   const handleChartConfigChange = useCallback(
@@ -847,8 +838,11 @@ const CellInner: React.FC<Props> = ({
               onCancelQuery={(index) => {
                 cancelQuery(cell.id, index)
               }}
-              columnSizing={cell.columnSizing}
-              onColumnSizingCommit={handleColumnSizingCommit}
+              bufferId={bufferIdForEvents}
+              cellId={cell.id}
+              isRunning={isRunning}
+              onReRun={(index) => void reRunResultAt(cell.id, index)}
+              onYieldFocus={() => editorRef.current?.focus()}
             />
           ) : expectingResult ? (
             <HydrationLoader>

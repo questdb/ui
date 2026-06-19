@@ -36,7 +36,7 @@ export const useNotebookPersistence = ({
         maximizedCellIdRef.current,
         settingsRef.current,
       ),
-    [focusedCellIdRef, maximizedCellIdRef, settingsRef],
+    [],
   )
 
   const scheduleFlush = useCallback(() => {
