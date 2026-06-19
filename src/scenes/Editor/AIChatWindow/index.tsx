@@ -17,7 +17,10 @@ import {
   ClockCounterClockwiseIcon,
 } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
+import {
+  useAIConversation,
+  useActiveConversationMessages,
+} from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
 import {
   createDetachedQueryKey,
@@ -207,9 +210,9 @@ const AIChatWindow: React.FC = () => {
     activeBuffer,
     setActiveBuffer,
   } = useEditor()
+  const activeConversationMessages = useActiveConversationMessages()
   const {
     conversationMetas,
-    activeConversationMessages,
     chatWindowState,
     isLoadingMessages,
     isStreaming,

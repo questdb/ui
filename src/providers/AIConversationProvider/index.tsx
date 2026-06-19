@@ -47,7 +47,6 @@ export type AcceptSuggestionParams = {
 
 type AIConversationContextType = {
   conversationMetas: Map<ConversationId, ConversationMeta>
-  activeConversationMessages: ConversationMessage[]
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
   isStreaming: boolean
@@ -153,10 +152,23 @@ export const useAIConversation = () => {
   return context
 }
 
+const ActiveConversationMessagesContext = createContext<
+  ConversationMessage[] | undefined
+>(undefined)
+
+export const useActiveConversationMessages = () => {
+  const context = useContext(ActiveConversationMessagesContext)
+  if (context === undefined) {
+    throw new Error(
+      "useActiveConversationMessages must be used within AIConversationProvider",
+    )
+  }
+  return context
+}
+
 type AIConversationActionsContextType = Omit<
   AIConversationContextType,
   | "conversationMetas"
-  | "activeConversationMessages"
   | "chatWindowState"
   | "isLoadingMessages"
   | "isStreaming"
@@ -1208,51 +1220,95 @@ export const AIConversationProvider: React.FC<{
     ],
   )
 
+  const value = useMemo<AIConversationContextType>(
+    () => ({
+      conversationMetas,
+      chatWindowState,
+      isLoadingMessages,
+      isStreaming,
+      setIsStreaming,
+      scrollToMessageId,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      hasConversationForQuery,
+      findQueryByConversationId,
+      createConversation,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      openNotebookChat,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    }),
+    [
+      conversationMetas,
+      chatWindowState,
+      isLoadingMessages,
+      isStreaming,
+      setIsStreaming,
+      scrollToMessageId,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      hasConversationForQuery,
+      findQueryByConversationId,
+      createConversation,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      openNotebookChat,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    ],
+  )
+
   return (
     <AIConversationActionsContext.Provider value={actionsValue}>
-      <AIConversationContext.Provider
-        value={{
-          conversationMetas,
-          activeConversationMessages,
-          chatWindowState,
-          isLoadingMessages,
-          isStreaming,
-          setIsStreaming,
-          scrollToMessageId,
-          setScrollToMessageId,
-          getConversationMeta,
-          findConversationByQuery,
-          findConversationByTableId,
-          hasConversationForQuery,
-          findQueryByConversationId,
-          createConversation,
-          handleGlyphClick,
-          shiftQueryKeysForBuffer,
-          openChatWindow,
-          openOrCreateBlankChatWindow,
-          openBlankChatWindow,
-          openNotebookChat,
-          findNotebookChat,
-          findOrCreateNotebookChat,
-          bindConversationToNotebook,
-          readUserActionDigest,
-          rotateUserActionDigest,
-          closeChatWindow,
-          openHistoryView,
-          closeHistoryView,
-          deleteConversation,
-          addMessage,
-          removeMessages,
-          updateMessage,
-          updateMessagesWithCompaction,
-          updateConversationName,
-          acceptSuggestion,
-          rejectSuggestion,
-          persistMessages,
-          getLastRoundMessages,
-        }}
-      >
-        {children}
+      <AIConversationContext.Provider value={value}>
+        <ActiveConversationMessagesContext.Provider
+          value={activeConversationMessages}
+        >
+          {children}
+        </ActiveConversationMessagesContext.Provider>
       </AIConversationContext.Provider>
     </AIConversationActionsContext.Provider>
   )

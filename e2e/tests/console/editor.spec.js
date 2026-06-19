@@ -1902,7 +1902,7 @@ describe("import/export tabs", () => {
     cy.getEditorTabs().should("be.visible")
   })
 
-  it("should show error toast when importing invalid file", () => {
+  it("should show validation reason in import summary when importing invalid file", () => {
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
 
@@ -1912,11 +1912,19 @@ describe("import/export tabs", () => {
       { force: true },
     )
 
-    cy.get(".toast-error-container")
-      .should("be.visible")
-      .should("contain", "Failed to import tabs")
-      .should("contain", "(id: 1)")
-      .should("contain", "label must be a string")
+    // An invalid tab is skipped rather than aborting the whole import; its
+    // validation reason is surfaced in the summary dialog.
+    cy.getByDataHook("import-summary-dialog").should("be.visible")
+    cy.getByDataHook("import-summary-dialog").should("contain", "0 tab")
+    cy.getByDataHook("import-summary-dialog").should("contain", "1 tab skipped")
+    cy.getByDataHook("import-summary-skipped-item").should("have.length", 1)
+    cy.getByDataHook("import-summary-skipped-item").should(
+      "contain",
+      "label must be a string",
+    )
+
+    cy.getByDataHook("import-summary-close").click()
+    cy.getByDataHook("import-summary-dialog").should("not.exist")
   })
 
   it("should import tabs successfully with active and archived tabs", () => {

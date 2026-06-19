@@ -39,7 +39,10 @@ import { useKeyPress } from "../../hooks"
 import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import {
+  useAIConversation,
+  useActiveConversationMessages,
+} from "../../providers/AIConversationProvider"
 import { Metrics } from "./Metrics"
 import { Notebook } from "./Notebook"
 import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
@@ -190,10 +193,10 @@ const Editor = ({
   const {
     chatWindowState,
     getConversationMeta,
-    activeConversationMessages,
     acceptSuggestion,
     rejectSuggestion,
   } = useAIConversation()
+  const activeConversationMessages = useActiveConversationMessages()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const activeNotification = useSelector(selectors.query.getActiveNotification)

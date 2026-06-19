@@ -289,7 +289,7 @@ describe("buildEchartsOption — partitioned categorical x aligns to the shared 
     col("grp", "SYMBOL"),
     col("qty", "LONG"),
   ]
-  // Partition "A" has both regions (north twice → first-write-wins);
+  // Partition "A" has both regions (north twice → last-write-wins);
   // partition "B" only has north → south must align to null, not shift.
   const dataset: (string | number)[][] = [
     ["north", "A", 10],
@@ -298,7 +298,7 @@ describe("buildEchartsOption — partitioned categorical x aligns to the shared 
     ["north", "A", 99],
   ]
 
-  it("pivots partitions to series and aligns each to the category union (first row wins, missing → null)", () => {
+  it("pivots partitions to series and aligns each to the category union (last row wins, missing → null)", () => {
     const opt = buildEchartsOption({ xColumn: "region" }, [
       resolved({
         columns,
@@ -315,8 +315,8 @@ describe("buildEchartsOption — partitioned categorical x aligns to the shared 
     const series = seriesList(opt.series)
     const a = series.find((s) => s.name === "A")
     const b = series.find((s) => s.name === "B")
-    // A: north keeps the first row (10, not 99); south present (20).
-    expect(a?.data).toEqual([10, 20])
+    // A: north keeps the last row (99, not 10); south present (20).
+    expect(a?.data).toEqual([99, 20])
     // B: north present (30); south absent → aligned to null, not collapsed.
     expect(b?.data).toEqual([30, null])
   })

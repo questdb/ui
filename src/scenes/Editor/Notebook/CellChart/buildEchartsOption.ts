@@ -117,10 +117,8 @@ const alignRowsToCategoryUnion = (
   union: string[],
 ): (number | null)[] => {
   const m = new Map<string, number | null>()
-  for (const row of rows) {
-    const lbl = toCategoryLabel(row[xIdx])
-    if (!m.has(lbl)) m.set(lbl, toNumberOrNull(row[yIdx]))
-  }
+  for (const row of rows)
+    m.set(toCategoryLabel(row[xIdx]), toNumberOrNull(row[yIdx]))
   return union.map((lbl) => (m.has(lbl) ? (m.get(lbl) ?? null) : null))
 }
 

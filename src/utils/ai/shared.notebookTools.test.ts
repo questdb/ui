@@ -1214,6 +1214,45 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
     expect(parsed.note).toMatch(/run_cell/)
   })
+
+  // SAFETY PRECONDITION — "agent flows never auto-run DDL/DML". The guard lives
+  // inside `if (perms && validateSql)`, so it protects the flow ONLY because
+  // every production call site threads BOTH args (anthropicProvider,
+  // openaiProvider, openaiChatCompletionsProvider, dispatchMCPTool). This pins
+  // both halves so a caller that drops the gate args — or a refactor of that
+  // condition — fails loudly here instead of silently auto-running a write.
+  it("auto-run write protection depends entirely on the gate args", async () => {
+    const ranWithGate = vi.fn()
+    const gated = await dispatchTool(
+      "add_cell",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
+      makeClient({ runCell: ranWithGate }),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+    )
+    expect(ranWithGate).not.toHaveBeenCalled()
+    expect(JSON.parse(gated.content)).toMatchObject({
+      ran: false,
+      skipped: true,
+    })
+
+    const ranWithoutGate = vi.fn(() =>
+      Promise.resolve({
+        success: true,
+        queryCount: 1,
+        results: ["success"] as Array<"success">,
+      }),
+    )
+    const ungated = await dispatchTool(
+      "add_cell",
+      { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
+      makeClient({ runCell: ranWithoutGate }),
+      noopStatus,
+    )
+    expect(ranWithoutGate).toHaveBeenCalled()
+    expect(JSON.parse(ungated.content)).toMatchObject({ ran: true })
+  })
 })
 
 describe("dispatchTool — apply_notebook_state auto-run", () => {
