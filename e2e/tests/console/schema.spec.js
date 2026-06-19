@@ -287,7 +287,7 @@ describe("keyboard navigation", () => {
     cy.getEditorContent().should("be.visible")
     cy.typeQuery("SELECT 123123;")
     cy.runLine()
-    cy.contains(".qg-c", "123123").click()
+    cy.contains("[data-hook='grid-cell']", "123123").click()
     cy.focused().should("contain", "123123")
 
     cy.expandMatViews()
@@ -295,9 +295,12 @@ describe("keyboard navigation", () => {
       "contain",
       `Materialized views (${materializedViews.length})`,
     )
-    cy.contains(".qg-c-active", "123123").should("not.exist")
+    cy.contains(
+      "[data-hook='grid-cell'][aria-selected='true']",
+      "123123",
+    ).should("not.exist")
 
-    cy.contains(".qg-c", "123123").click()
+    cy.contains("[data-hook='grid-cell']", "123123").click()
     cy.focused().should("contain", "123123")
     cy.getByDataHook("collapse-materialized-views").should(
       "not.have.class",
