@@ -167,7 +167,7 @@ describe("ai assistant", () => {
     }).as("unhandledAnthropic")
   })
 
-  describe.only("onboarding and settings", () => {
+  describe("onboarding and settings", () => {
     beforeEach(() => {
       cy.loadConsoleWithAuth()
     })
