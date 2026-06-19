@@ -100,6 +100,7 @@ export type MCPBridgeClientOptions = {
 export class MCPBridgeClient {
   private readonly opts: MCPBridgeClientOptions
   private permissions: Permissions
+  private sessionId: string | null
   private ws: WebSocket | null = null
   private _status: MCPBridgeClientStatus = "disconnected"
   private _latencyMs: number | null = null
@@ -128,6 +129,7 @@ export class MCPBridgeClient {
   constructor(opts: MCPBridgeClientOptions) {
     this.opts = opts
     this.permissions = opts.permissions
+    this.sessionId = opts.lastSessionId ?? null
   }
 
   // No push over the open WS — bridge sees changes on the next hello frame;
@@ -207,11 +209,16 @@ export class MCPBridgeClient {
   }
 
   private buildSocketUrl(): string {
-    // The bridge validates ?token=… on the WS upgrade BEFORE hello,
-    // so the URL must carry it even though hello also echoes the value.
+    // The bridge reads both params at the WS upgrade, before any hello: the
+    // token to authorize, and lastSessionId to take over the stale socket of a
+    // reconnect instead of rejecting it as a second console.
     const base = this.opts.url
+    const params = new URLSearchParams({ token: this.opts.token })
+    if (this.sessionId !== null) {
+      params.set("lastSessionId", this.sessionId)
+    }
     const sep = base.includes("?") ? "&" : "?"
-    return `${base}${sep}token=${encodeURIComponent(this.opts.token)}`
+    return `${base}${sep}${params.toString()}`
   }
 
   private openSocket(): void {
@@ -335,6 +342,7 @@ export class MCPBridgeClient {
   }
 
   private handleHelloAck(msg: HelloAckMessage): void {
+    this.sessionId = msg.sessionId
     this.consecutiveFailedAttempts = 0
     this.setStatus("connected")
     this.emit("helloAck", msg)

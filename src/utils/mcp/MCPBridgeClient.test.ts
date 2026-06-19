@@ -223,6 +223,22 @@ describe("MCPBridgeClient", () => {
     expect(sentTypes).toContain("tool_result")
   })
 
+  it("carries lastSessionId on reconnect so the bridge takes over rather than rejecting", () => {
+    vi.useFakeTimers()
+    const { client, socket } = makeClient()
+    client.connect()
+    handshake(client, socket(), "session-A")
+    const firstConnectUrl = socket().url
+
+    socket().dropFromServer()
+    vi.advanceTimersByTime(5000)
+    // `socket()` is now the reconnect's fresh socket; its URL is fixed at construction.
+    const reconnectUrl = socket().url
+
+    expect(firstConnectUrl).not.toContain("lastSessionId")
+    expect(reconnectUrl).toContain("lastSessionId=session-A")
+  })
+
   it("disconnect() closes the WS without sending a close frame", () => {
     const { client, socket } = makeClient()
     client.connect()

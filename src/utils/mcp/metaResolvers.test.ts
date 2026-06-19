@@ -64,6 +64,31 @@ describe("resolveGetWorkspaceState", () => {
     expect(out[0].text).toMatch(/create_notebook/)
   })
 
+  it("lists openable notebooks when active tab is not a notebook", () => {
+    // Given the active tab is a SQL buffer but notebooks exist in the workspace
+    const ctx: MetaToolContext = {
+      getActiveBufferId: () => null,
+      getWorkspace: () => ({
+        notebooks: [
+          { buffer_id: 2, label: "Trades", archived: false },
+          { buffer_id: 5, label: "Latency", archived: false },
+        ],
+        active: { buffer_id: 9, label: "Query 1", kind: "sql" },
+      }),
+      getDigest: () => null,
+    }
+
+    // When workspace state is resolved
+    const out = resolveGetWorkspaceState(undefined, ctx)
+
+    // Then it surfaces the openable notebooks and how to target them by buffer_id
+    expect(out[0].text).toMatch(/no_notebook_open/)
+    expect(out[0].text).toContain("<workspace>")
+    expect(out[0].text).toContain("Trades")
+    expect(out[0].text).toContain("Latency")
+    expect(out[0].text).toMatch(/buffer_id/)
+  })
+
   it("returns workspace + notebook_context when buffer is active", () => {
     registerWorkspace(minimalWorkspace())
     const ctx: MetaToolContext = {

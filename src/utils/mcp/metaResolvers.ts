@@ -18,17 +18,20 @@ export type MetaToolContext = {
   consumeDigest?: () => UserActionDigest | null
 }
 
-const noNotebookOpenPayload = (): ToolContent[] => [
-  {
-    type: "text",
-    text: JSON.stringify({
-      status: "no_notebook_open",
-      hint:
-        "Call create_notebook to start a new notebook, or ask the user to " +
+const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
+  const hasNotebooks = !!ws && ws.notebooks.length > 0
+  const status = JSON.stringify({
+    status: "no_notebook_open",
+    hint: hasNotebooks
+      ? "The active tab is not a notebook. Target any notebook listed in " +
+        "<workspace> by its buffer_id (e.g. call get_notebook_state with that " +
+        "buffer_id), or call create_notebook to start a new one."
+      : "Call create_notebook to start a new notebook, or ask the user to " +
         "open an existing one.",
-    }),
-  },
-]
+  })
+  const parts = hasNotebooks ? [formatWorkspace(ws), status] : [status]
+  return [{ type: "text", text: parts.join("\n") }]
+}
 
 const emptyDigestText =
   '<user_events since_last_turn="true">\n  (no recent actions)\n</user_events>'
@@ -37,12 +40,12 @@ export const resolveGetWorkspaceState = (
   args: { include_user_events?: boolean } | undefined,
   ctx: MetaToolContext,
 ): ToolContent[] => {
+  const ws = ctx.getWorkspace()
   const bufferId = ctx.getActiveBufferId()
-  if (bufferId === null) return noNotebookOpenPayload()
+  if (bufferId === null) return noNotebookOpenPayload(ws)
 
   const workspaceController = getWorkspace()
   const snapshot = buildSnapshot(workspaceController, bufferId)
-  const ws = ctx.getWorkspace()
 
   const parts: string[] = []
   if (ws) parts.push(formatWorkspace(ws))
@@ -53,7 +56,7 @@ export const resolveGetWorkspaceState = (
     parts.push(digestText || emptyDigestText)
   }
 
-  if (parts.length === 0) return noNotebookOpenPayload()
+  if (parts.length === 0) return noNotebookOpenPayload(ws)
   return [{ type: "text", text: parts.join("\n") }]
 }
 
