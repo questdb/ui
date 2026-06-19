@@ -308,22 +308,26 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-chat-button").should("be.visible")
       cy.getByDataHook("ai-settings-model-dropdown").should("be.visible")
 
-      // When
-      cy.getByDataHook("ai-settings-model-dropdown").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-model-item").should("be.visible")
+      // When / Then — selecting a model closes the dropdown (handleModelSelect
+      // calls setDropdownActive(false)), so re-open it for each model and
+      // re-query the item just before clicking; otherwise the list detaches the
+      // node as it settles/closes and cy.click() hits a stale element.
       ;[0, 1].forEach((index) => {
-        let label = ""
-        cy.getByDataHook(`ai-settings-model-item`)
+        cy.getByDataHook("ai-settings-model-dropdown").click()
+        cy.getByDataHook("ai-settings-model-item").should("be.visible")
+
+        cy.getByDataHook("ai-settings-model-item")
           .eq(index)
-          .getByDataHook(`ai-settings-model-item-label`)
+          .find("[data-hook='ai-settings-model-item-label']")
           .invoke("text")
           .then((text) => {
-            label = text
+            const label = text.trim()
+            cy.getByDataHook("ai-settings-model-item").eq(index).click()
+            cy.getByDataHook("ai-settings-model-dropdown").should(
+              "contain",
+              label,
+            )
           })
-        cy.getByDataHook(`ai-settings-model-item`).eq(index).click()
-        cy.getByDataHook("ai-settings-model-dropdown").should("contain", label)
       })
 
       // When
