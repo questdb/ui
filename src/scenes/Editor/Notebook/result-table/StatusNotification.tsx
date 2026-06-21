@@ -6,6 +6,7 @@ import Notification from "../../../Notifications/Notification"
 import { NotificationType } from "../../../../store/Query/types"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import QueryResult from "../../QueryResult"
+import { QueryInNotification } from "../../Monaco/query-in-notification"
 import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
 
 const liveRegionMessage = (result: SingleQueryResult): string => {
@@ -47,6 +48,7 @@ export const StatusNotification: React.FC<Props> = ({
     createdAt: new Date(timestamp),
     compact: true,
     isMinimized: true,
+    sideContent: <QueryInNotification query={activeResult.query} />,
   }
 
   let body: React.ReactElement

@@ -165,7 +165,6 @@ export const DrawCanvas: React.FC<Props> = ({
       persistCellSnapshot({
         bufferId,
         cellId: cell.id,
-        sqlHash: currentSqlHash,
         results,
         savedAt: now,
       })
@@ -260,11 +259,10 @@ export const DrawCanvas: React.FC<Props> = ({
     clearDrawSnapshot,
   ])
 
-  // On mount, render instantly from the persisted snapshot (shared with run
-  // mode) when it still matches this cell's SQL. autoRefresh-off cells then stay
-  // on the cached frame (no DB hit on load); autoRefresh-on cells let the poll
-  // refresh in the background. Falls back to a live fetch when there's no
-  // matching snapshot.
+  // On mount, render instantly from the cell's persisted snapshot (shared with
+  // run mode). autoRefresh-off cells then stay on the cached frame (no DB hit on
+  // load); autoRefresh-on cells let the poll refresh in the background. Falls
+  // back to a live fetch when there's no snapshot.
   useEffect(() => {
     let cancelled = false
     void (async () => {
@@ -275,7 +273,7 @@ export const DrawCanvas: React.FC<Props> = ({
           () => undefined,
         )
         if (cancelled) return
-        if (snap && snap.sqlHash === sqlHash(debouncedSql)) {
+        if (snap) {
           const hydrated = successResults(snap.results.map(toExecResult))
           if (hydrated.length > 0) {
             // Don't clobber live data that may already have landed.
@@ -290,7 +288,7 @@ export const DrawCanvas: React.FC<Props> = ({
     return () => {
       cancelled = true
     }
-  }, [fetchAll, bufferId, cell.id, debouncedSql, queriesKey])
+  }, [fetchAll, bufferId, cell.id, queriesKey])
 
   useEffect(
     () => () => {

@@ -606,13 +606,40 @@ const scrollNotebookCellIntoView = (cellId: string, attempt = 0): void => {
   }
 }
 
-const useScrollFocusedCellIntoViewOnOpen = (focusedCellId: string | null) => {
+let isFirstNotebookMountSinceLoad = true
+
+const RELOAD_SCROLL_SETTLE_MS = 120
+
+const useScrollFocusedCellIntoViewOnOpen = (
+  focusedCellId: string | null,
+  isHydrating: boolean,
+) => {
   const focusedOnOpenRef = useRef(focusedCellId)
+  const isReloadRef = useRef(isFirstNotebookMountSinceLoad)
+  const didScrollRef = useRef(false)
+
+  useEffect(() => {
+    isFirstNotebookMountSinceLoad = false
+  }, [])
+
   useEffect(() => {
     const cellId = focusedOnOpenRef.current
-    if (!cellId || getPendingReveal()) return
-    scrollNotebookCellIntoView(cellId)
-  }, [])
+    if (!cellId || didScrollRef.current || getPendingReveal()) return
+
+    if (!isReloadRef.current) {
+      didScrollRef.current = true
+      scrollNotebookCellIntoView(cellId)
+      return
+    }
+
+    if (isHydrating) return
+    didScrollRef.current = true
+    const timer = setTimeout(
+      () => scrollNotebookCellIntoView(cellId),
+      RELOAD_SCROLL_SETTLE_MS,
+    )
+    return () => clearTimeout(timer)
+  }, [isHydrating])
 }
 
 // Scroll + glow the cell a search result points at, drained on mount and on the nudge.
@@ -678,7 +705,7 @@ const NotebookContent: React.FC = () => {
   } = useNotebookState()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
-  useScrollFocusedCellIntoViewOnOpen(focusedCellId)
+  useScrollFocusedCellIntoViewOnOpen(focusedCellId, isHydrating)
   useNotebookSearchReveal()
 
   if (cells.length === 0) {

@@ -56,7 +56,6 @@ const snap = (
 ): NotebookResultSnapshot => ({
   bufferId,
   cellId,
-  sqlHash: "h",
   results,
   savedAt,
 })

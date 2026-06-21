@@ -8,9 +8,6 @@ import type { SingleQueryResult } from "./notebook"
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
-  // Hash of the cell's SQL at save time; on restore we only reuse the snapshot
-  // when the cell's current SQL still matches.
-  sqlHash: string
   results: SingleQueryResult[]
   savedAt: number
 }

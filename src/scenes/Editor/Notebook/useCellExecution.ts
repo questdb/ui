@@ -15,7 +15,6 @@ import {
   NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ROW_CAP,
   singleResultFromExec,
-  sqlHash,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { deleteCellSnapshot } from "../../../store/notebookResults"
@@ -106,11 +105,9 @@ export const useCellExecution = ({
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
   // Persist a faithful, already-capped copy of the cell's result so it survives
-  // tab-switch / reload. One record per cell (mode-agnostic). Keyed to the
-  // executed SQL — not the cell's live value, which the user may have edited
-  // mid-run — so restore never attributes these rows to a different query.
+  // tab-switch / reload. One record per cell, restored by cell id alone.
   const persistSnapshot = useCallback(
-    (cellId: string, executedSql: string, explicitResult?: CellResult) => {
+    (cellId: string, explicitResult?: CellResult) => {
       const cell = cellsRef.current.find((c) => c.id === cellId)
       if (!cell) return
       const result = explicitResult ?? cell.result
@@ -118,7 +115,6 @@ export const useCellExecution = ({
       persistCellSnapshot({
         bufferId,
         cellId,
-        sqlHash: sqlHash(executedSql),
         results: result.results,
         savedAt: Date.now(),
       })
@@ -129,7 +125,6 @@ export const useCellExecution = ({
   const runScript = useCallback(
     async (
       cellId: string,
-      queryText: string,
       queries: string[],
       externalSignal?: AbortSignal,
     ): Promise<boolean> => {
@@ -224,7 +219,7 @@ export const useCellExecution = ({
           failedCount,
           durationMs: Date.now() - startTime,
         })
-        persistSnapshot(cellId, queryText)
+        persistSnapshot(cellId)
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -265,7 +260,7 @@ export const useCellExecution = ({
 
       const queries = getQueriesFromText(queryText)
       if (queries.length > 1) {
-        return runScript(cellId, queryText, queries, externalSignal)
+        return runScript(cellId, queries, externalSignal)
       }
 
       const prior = abortControllersRef.current.get(cellId)
@@ -312,7 +307,7 @@ export const useCellExecution = ({
           timestamp: Date.now(),
         }
         updateCell(cellId, { result: cellResult })
-        persistSnapshot(cellId, queryText, cellResult)
+        persistSnapshot(cellId, cellResult)
         return execResult.type !== "error"
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
@@ -336,7 +331,6 @@ export const useCellExecution = ({
       const target = cell.result.results[index]
       if (!target || !target.query.trim()) return false
       const sql = target.query
-      const executedSql = cell.value
 
       const controllers = abortControllersRef.current.get(cellId) ?? []
       controllers[index]?.abort()
@@ -359,7 +353,7 @@ export const useCellExecution = ({
           NOTEBOOK_BYTE_CAP,
         ),
       )
-      persistSnapshot(cellId, executedSql)
+      persistSnapshot(cellId)
       return execResult.type !== "error"
     },
     [cellsRef, executeSingle, updateCellResult, persistSnapshot],

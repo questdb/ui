@@ -35,7 +35,6 @@ import {
 import {
   computeResultBottomHeight,
   DEFAULT_CHART_BOTTOM_HEIGHT,
-  sqlHash,
 } from "./notebookUtils"
 import {
   deleteCellSnapshot,
@@ -234,7 +233,7 @@ export const NotebookProvider: React.FC<{
           prev.map((cell) => {
             if (cell.result) return cell
             const snap = byCell.get(cell.id)
-            if (!snap || snap.sqlHash !== sqlHash(cell.value)) return cell
+            if (!snap) return cell
             return {
               ...cell,
               result: {
