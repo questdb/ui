@@ -1,5 +1,5 @@
 8f797d824d664ccecaf1ce356509db5a3e3b739d:e2e/tests/enterprise/oidc.spec.js:generic-api-key:174
 8f797d824d664ccecaf1ce356509db5a3e3b739d:e2e/tests/enterprise/oidc.spec.js:generic-api-key:175
 8f797d824d664ccecaf1ce356509db5a3e3b739d:e2e/tests/enterprise/oidc.spec.js:generic-api-key:176
-b45446d25724585fee8379601c351e0bb1960373:e2e/tests/console/mcpBridgePermissions.spec.js:generic-api-key:9
-b45446d25724585fee8379601c351e0bb1960373:src/utils/mcp/consumePendingPair.test.ts:generic-api-key:27
+c506a468bcc77f790cfbb2d412fb9674a47db7cb:e2e/tests/console/mcpBridgePermissions.spec.js:generic-api-key:9
+c506a468bcc77f790cfbb2d412fb9674a47db7cb:src/utils/mcp/consumePendingPair.test.ts:generic-api-key:27
