@@ -80,26 +80,47 @@ const Body = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
+
+  input,
+  select,
+  textarea,
+  [aria-haspopup="menu"] {
+    font-size: 1.4rem;
+    font-weight: 400;
+    background: ${({ theme }) => theme.color.inputBackground};
+    border-color: ${({ theme }) => theme.color.selection};
+
+    &:focus {
+      background: ${({ theme }) => theme.color.inputBackground};
+    }
+  }
+
+  input,
+  select,
+  textarea {
+    height: auto;
+    line-height: normal;
+    padding: 0.6rem 0.75rem;
+  }
 `
 
 const Field = styled.label`
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  font-size: 1.1rem;
+`
 
-  > .label {
-    color: ${({ theme }) => theme.color.gray2};
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-  }
+const FieldLabel = styled.span`
+  font-size: 1.1rem;
+  color: ${({ theme }) => theme.color.gray2};
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
 `
 
 const FullWidthInput = styled(Input)`
   width: 100%;
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
 `
 
 const StatusRow = styled.div<{ $tone: "info" | "danger" }>`
@@ -334,7 +355,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
         {!succeeded && (
           <Body>
             <Field>
-              <span className="label">WebSocket URL</span>
+              <FieldLabel>WebSocket URL</FieldLabel>
               <FullWidthInput
                 name="mcp-pair-url"
                 value={draftUrl}
@@ -350,7 +371,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
             </Field>
 
             <Field>
-              <span className="label">Token</span>
+              <FieldLabel>Token</FieldLabel>
               <FullWidthInput
                 name="mcp-pair-token"
                 value={draftToken}

@@ -66,17 +66,26 @@ const Body = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.6rem;
+
+  [aria-haspopup="menu"] {
+    font-size: 1.4rem;
+    font-weight: 400;
+    background: ${({ theme }) => theme.color.inputBackground};
+    border-color: ${({ theme }) => theme.color.selection};
+
+    &:focus {
+      background: ${({ theme }) => theme.color.inputBackground};
+    }
+  }
 `
 
 const Fields = styled.dl`
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.2rem;
+  gap: 1.5rem;
   margin: 0;
-  padding: 1.6rem;
+  padding: 1.6rem 0;
   background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.6rem;
 
   @media (min-width: 32em) {
     grid-template-columns: max-content 1fr;
