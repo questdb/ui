@@ -19,6 +19,12 @@ import {
 import { CellWrapper } from "./CellWrapper"
 import { CellDragHeader } from "./CellDragHeader"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
+import { useCellResize } from "./useCellResize"
+import { ResizeHandle } from "../resize"
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
+
+const MIN_MARKDOWN_HEIGHT = 48
 
 // The whole cell body shares the editor canvas color so edit and rendered
 // modes are one uniform surface (no card-colored gap at the bottom).
@@ -190,6 +196,10 @@ const EmptyHint = styled.div`
   cursor: default;
 `
 
+const CellShell = styled.div`
+  position: relative;
+`
+
 const PLACEHOLDER = "Write markdown… (⌘/Ctrl + Enter to apply)"
 
 type Props = {
@@ -227,8 +237,30 @@ const MarkdownCellInner: React.FC<Props> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const measureRef = useRef<HTMLDivElement | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
   const topHeightRef = useRef(cell.topHeight)
   topHeightRef.current = cell.topHeight
+
+  const resetToContentHeight = useCallback(() => {
+    const el = measureRef.current
+    const next = el
+      ? Math.max(
+          MIN_MARKDOWN_HEIGHT,
+          Math.round(el.getBoundingClientRect().height),
+        )
+      : MIN_MARKDOWN_HEIGHT
+    updateCell(cell.id, { topHeight: next, topResized: false })
+  }, [cell.id, updateCell])
+
+  const heightResize = useCellResize(
+    MIN_MARKDOWN_HEIGHT,
+    useCallback(
+      (height: number) =>
+        updateCell(cell.id, { topHeight: height, topResized: true }),
+      [cell.id, updateCell],
+    ),
+    resetToContentHeight,
+  )
 
   // The cell value is persisted live as the user types (no separate draft), so
   // nothing is lost if the user navigates away before applying. signalUserEdit
@@ -274,6 +306,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   // observe → write → re-render → observe feedback loop.
   useEffect(() => {
     if (layoutMode !== "grid") return
+    if (cell.topResized) return
     const el = measureRef.current
     if (!el) return
     const observer = new ResizeObserver(() => {
@@ -284,11 +317,28 @@ const MarkdownCellInner: React.FC<Props> = ({
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [cell.id, layoutMode, isMaximized, updateCell])
+  }, [cell.id, layoutMode, isMaximized, cell.topResized, updateCell])
+
+  useEffect(() => {
+    const handler = (payload?: { cellId?: string }) => {
+      if (payload?.cellId !== cell.id) return
+      heightResize.resetHeight()
+    }
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
+    return () =>
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
+  }, [cell.id, heightResize])
 
   const isEmpty = cell.value.trim() === ""
 
-  return (
+  const isGrid = layoutMode === "grid"
+  const listHeight =
+    !isGrid && !isMaximized
+      ? (heightResize.liveHeight ??
+        (cell.topResized ? cell.topHeight : undefined))
+      : undefined
+
+  const cellEl = (
     <CellWrapper
       ref={wrapperRef}
       data-cell-id={cell.id}
@@ -317,7 +367,10 @@ const MarkdownCellInner: React.FC<Props> = ({
           )
         }
       />
-      <Body>
+      <Body
+        ref={bodyRef}
+        style={listHeight != null ? { height: listHeight } : undefined}
+      >
         <Measure ref={measureRef}>
           {editing ? (
             <TextArea
@@ -347,6 +400,24 @@ const MarkdownCellInner: React.FC<Props> = ({
       </Body>
     </CellWrapper>
   )
+
+  if (!isGrid && !isMaximized) {
+    return (
+      <CellShell>
+        {cellEl}
+        <ResizeHandle
+          overlay
+          targetRef={bodyRef}
+          onResize={heightResize.resizeLive}
+          onResizeEnd={heightResize.resizeEnd}
+          onDoubleClick={heightResize.resetHeight}
+          minHeight={MIN_MARKDOWN_HEIGHT}
+        />
+      </CellShell>
+    )
+  }
+
+  return cellEl
 }
 
 export const MarkdownCell = React.memo(MarkdownCellInner)
