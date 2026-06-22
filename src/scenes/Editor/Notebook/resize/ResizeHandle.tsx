@@ -17,7 +17,7 @@ const Handle = styled.div<{
   $overlay?: boolean
 }>`
   cursor: ns-resize;
-  z-index: 2;
+  z-index: 10;
   flex-shrink: 0;
   outline: none;
   color: ${color("pinkPrimary")};

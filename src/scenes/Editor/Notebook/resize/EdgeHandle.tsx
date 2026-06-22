@@ -9,7 +9,7 @@ const isCorner = (axis: string): boolean => axis === "se" || axis === "sw"
 
 const Handle = styled.div<{ $axis: string }>`
   position: absolute;
-  z-index: 2;
+  z-index: 10;
   outline: none;
   color: ${color("pinkPrimary")};
   --chip-bg: ${color("backgroundDarker")};

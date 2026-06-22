@@ -10,6 +10,7 @@ import { Reset } from "@styled-icons/boxicons-regular"
 import { Button, Tooltip } from "../../../../components"
 import { Switch } from "../../../../components/Switch"
 import { CellToolbar } from "../cells/CellToolbar"
+import { useNotebookState } from "../NotebookProvider"
 
 // Chart maximize uses ArrowsOutLineVertical/ArrowsInLineVertical (maximize INTO the cell)
 // to stay visually distinct from the cell's CornersOut/CornersIn (maximize INTO the buffer).
@@ -49,14 +50,14 @@ const Name = styled.span`
 const ToggleGroup = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   flex-shrink: 0;
 `
 
 const Cluster = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.5rem;
   flex-shrink: 0;
 `
 
@@ -95,69 +96,91 @@ export const ChartActions: React.FC<Props> = ({
   canResetZoom,
   onResetZoom,
   cellId,
-}) => (
-  <Bar
-    data-hook="chart-actions"
-    $maximized={isMaximized}
-    className={isMaximized ? "cell-drag-handle" : undefined}
-  >
-    <Name title={name}>{name}</Name>
-    <Cluster>
-      <ToggleGroup>
-        <ToggleLabel>Auto-refresh</ToggleLabel>
-        <Switch checked={autoRefresh} onChange={onAutoRefreshChange} />
-      </ToggleGroup>
-      {canResetZoom && onResetZoom && (
-        <Tooltip content="Reset zoom">
+}) => {
+  const { maximizedCellId } = useNotebookState()
+  const cellFullScreen = cellId !== undefined && maximizedCellId === cellId
+  const showInline = !isMaximized || cellFullScreen
+  return (
+    <Bar
+      data-hook="chart-actions"
+      $maximized={isMaximized}
+      className={isMaximized ? "cell-drag-handle" : undefined}
+    >
+      <Name title={name}>{name}</Name>
+      <Cluster>
+        {showInline && (
+          <ToggleGroup>
+            <ToggleLabel>Auto-refresh</ToggleLabel>
+            <Switch checked={autoRefresh} onChange={onAutoRefreshChange} />
+          </ToggleGroup>
+        )}
+        {canResetZoom && onResetZoom && (
+          <Tooltip content="Reset zoom">
+            <Button
+              skin="transparent"
+              type="button"
+              onClick={onResetZoom}
+              aria-label="Reset zoom"
+            >
+              <ResetIcon />
+            </Button>
+          </Tooltip>
+        )}
+        {showInline && !autoRefresh && (
+          <Tooltip content="Refresh chart">
+            <Button
+              skin="transparent"
+              type="button"
+              onClick={onManualRefresh}
+              aria-label="Refresh chart"
+            >
+              <ArrowClockwiseIcon size={18} />
+            </Button>
+          </Tooltip>
+        )}
+        <Tooltip content={isMaximized ? "Restore chart" : "Maximize chart"}>
           <Button
             skin="transparent"
             type="button"
-            onClick={onResetZoom}
-            aria-label="Reset zoom"
+            onClick={() => onMaximizedChange(!isMaximized)}
+            aria-label={isMaximized ? "Restore chart" : "Maximize chart"}
           >
-            <ResetIcon />
+            {isMaximized ? (
+              <ArrowsInLineVerticalIcon size={18} />
+            ) : (
+              <ArrowsOutLineVerticalIcon size={18} />
+            )}
           </Button>
         </Tooltip>
-      )}
-      {!autoRefresh && (
-        <Tooltip content="Refresh chart">
-          <Button
-            skin="transparent"
-            type="button"
-            onClick={onManualRefresh}
-            aria-label="Refresh chart"
-          >
-            <ArrowClockwiseIcon size={18} />
-          </Button>
-        </Tooltip>
-      )}
-      <Tooltip content={isMaximized ? "Restore chart" : "Maximize chart"}>
-        <Button
-          skin="transparent"
-          type="button"
-          onClick={() => onMaximizedChange(!isMaximized)}
-          aria-label={isMaximized ? "Restore chart" : "Maximize chart"}
-        >
-          {isMaximized ? (
-            <ArrowsInLineVerticalIcon size={18} />
-          ) : (
-            <ArrowsOutLineVerticalIcon size={18} />
-          )}
-        </Button>
-      </Tooltip>
-      <Tooltip content="Chart settings">
-        <Button
-          skin="transparent"
-          type="button"
-          onClick={onOpenSettings}
-          aria-label="Chart settings"
-        >
-          <GearIcon size={18} />
-        </Button>
-      </Tooltip>
-      {isMaximized && cellId !== undefined && (
-        <CellToolbar inline cellId={cellId} />
-      )}
-    </Cluster>
-  </Bar>
-)
+        {showInline && (
+          <Tooltip content="Chart settings">
+            <Button
+              skin="transparent"
+              type="button"
+              onClick={onOpenSettings}
+              aria-label="Chart settings"
+            >
+              <GearIcon size={18} />
+            </Button>
+          </Tooltip>
+        )}
+        {isMaximized && cellId !== undefined && (
+          <CellToolbar
+            inline
+            cellId={cellId}
+            chartControls={
+              cellFullScreen
+                ? undefined
+                : {
+                    autoRefresh,
+                    onAutoRefreshChange,
+                    onManualRefresh,
+                    onOpenSettings,
+                  }
+            }
+          />
+        )}
+      </Cluster>
+    </Bar>
+  )
+}

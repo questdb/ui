@@ -10,8 +10,11 @@ import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
   CornersInIcon,
+  ArrowClockwiseIcon,
+  GearIcon,
 } from "@phosphor-icons/react"
 import { DropdownMenu, Button, Tooltip } from "../../../../components"
+import { Switch } from "../../../../components/Switch"
 import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
@@ -26,6 +29,7 @@ const ToolbarWrapper = styled.div<{
 }>`
   display: flex;
   align-items: center;
+  gap: 0.5rem;
 
   ${({ $inline, $forceVisible }) =>
     $inline
@@ -46,12 +50,35 @@ const IconWrapper = styled.span`
   justify-content: center;
 `
 
+const ChartControlRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  font-size: 1.4rem;
+  color: ${({ theme }) => theme.color.foreground};
+  user-select: none;
+`
+
+type ChartControls = {
+  autoRefresh: boolean
+  onAutoRefreshChange: (value: boolean) => void
+  onManualRefresh: () => void
+  onOpenSettings: () => void
+}
+
 type Props = {
   cellId: string
   inline?: boolean
+  chartControls?: ChartControls
 }
 
-export const CellToolbar: React.FC<Props> = ({ cellId, inline }) => {
+export const CellToolbar: React.FC<Props> = ({
+  cellId,
+  inline,
+  chartControls,
+}) => {
   const {
     moveCellUp,
     moveCellDown,
@@ -145,6 +172,33 @@ export const CellToolbar: React.FC<Props> = ({ cellId, inline }) => {
           </Tooltip>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" sideOffset={4}>
+              {chartControls && (
+                <>
+                  <ChartControlRow>
+                    Auto-refresh
+                    <Switch
+                      checked={chartControls.autoRefresh}
+                      onChange={chartControls.onAutoRefreshChange}
+                    />
+                  </ChartControlRow>
+                  <DropdownMenu.Item
+                    disabled={chartControls.autoRefresh}
+                    onSelect={chartControls.onManualRefresh}
+                  >
+                    <IconWrapper>
+                      <ArrowClockwiseIcon size={16} />
+                    </IconWrapper>
+                    Refresh
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={chartControls.onOpenSettings}>
+                    <IconWrapper>
+                      <GearIcon size={16} />
+                    </IconWrapper>
+                    Chart settings
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Divider />
+                </>
+              )}
               {!isGridMode && (
                 <>
                   <DropdownMenu.Item
