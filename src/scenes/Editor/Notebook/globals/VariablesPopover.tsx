@@ -161,12 +161,26 @@ const AssignSymbol = styled.span`
 
 const NameInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
+  font-size: 1.4rem;
+  font-weight: 400;
+  background: ${color("inputBackground")};
+  border-color: ${color("selection")};
+
+  &:focus {
+    background: ${color("inputBackground")};
+  }
 `
 
 const ValueInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.3rem;
+  font-size: 1.4rem;
+  font-weight: 400;
+  background: ${color("inputBackground")};
+  border-color: ${color("selection")};
+
+  &:focus {
+    background: ${color("inputBackground")};
+  }
 `
 
 const DeleteButton = styled(Button).attrs({ skin: "transparent" })`
