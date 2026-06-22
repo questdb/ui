@@ -1,3 +1,15 @@
+export const canReadFromClipboard = (): boolean =>
+  Boolean(navigator.clipboard) && window.isSecureContext
+
+export const readFromClipboard = (): Promise<string> => {
+  if (!canReadFromClipboard()) {
+    return Promise.reject(
+      new Error("Clipboard read requires HTTPS or a secure context."),
+    )
+  }
+  return navigator.clipboard.readText()
+}
+
 export const copyToClipboard = (textToCopy: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (navigator.clipboard && window.isSecureContext) {

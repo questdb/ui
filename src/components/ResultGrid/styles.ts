@@ -14,6 +14,7 @@ export const GridContainer = styled.div`
   outline: none;
   font-size: ${({ theme }) => theme.fontSize.xs};
   position: relative;
+  isolation: isolate;
 `
 
 export const ScrollContainer = styled.div<{ $scrollable: boolean }>`

@@ -1,6 +1,7 @@
 import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
+import type { RanStatus } from "../../utils/ai/runStatus"
 import type { TokenUsage } from "../../utils/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
@@ -58,6 +59,18 @@ export type AIConversation = {
   bufferId?: number
   queryKey?: QueryKey
   currentSQL?: string
+  // 1:1 notebook binding — persists via Dexie, never auto-cleared.
+  notebookBufferId?: number
+}
+
+// Coalesced user-action summary since the last assistant turn — see applyUserActionToDigest for fold rules.
+export type UserActionDigest = {
+  added: Set<string>
+  deleted: Set<string>
+  edited: Set<string>
+  ran: Map<string, RanStatus>
+  layoutModeTo?: "list" | "grid"
+  notebookStatusChange?: "archived" | "deleted"
 }
 
 export type ChatWindowState = {

@@ -39,8 +39,13 @@ import { useKeyPress } from "../../hooks"
 import Monaco from "./Monaco"
 import { Tabs } from "./Monaco/tabs"
 import { useEditor } from "../../providers/EditorProvider"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import {
+  useAIConversation,
+  useActiveConversationMessages,
+} from "../../providers/AIConversationProvider"
 import { Metrics } from "./Metrics"
+import { Notebook } from "./Notebook"
+import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
 import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
@@ -127,7 +132,7 @@ const DiffViewWrapper = styled(PaneContent)`
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #2c2e3d;
+  background: ${color("editorBackground")};
 `
 
 const DiffEditorContainer = styled.div`
@@ -188,10 +193,10 @@ const Editor = ({
   const {
     chatWindowState,
     getConversationMeta,
-    activeConversationMessages,
     acceptSuggestion,
     rejectSuggestion,
   } = useAIConversation()
+  const activeConversationMessages = useActiveConversationMessages()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const queryNotifications = useSelector(selectors.query.getQueryNotifications)
   const activeNotification = useSelector(selectors.query.getActiveNotification)
@@ -241,7 +246,9 @@ const Editor = ({
   }, [])
 
   const isMonacoHidden =
-    !!activeBuffer.isPreviewBuffer || !!activeBuffer.metricsViewState
+    !!activeBuffer.isPreviewBuffer ||
+    !!activeBuffer.metricsViewState ||
+    !!activeBuffer.notebookViewState
 
   const isDiffPreview =
     activeBuffer.isPreviewBuffer && activeBuffer.previewContent?.type === "diff"
@@ -346,6 +353,7 @@ const Editor = ({
 
   return (
     <EditorPaneWrapper ref={innerRef} {...rest}>
+      <NotebookWorkspaceBridge />
       <EditorLeftPane>
         <Tabs />
         <EditorContent>
@@ -481,6 +489,9 @@ const Editor = ({
             )}
             {/* Metrics view */}
             {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
+            {activeBuffer.notebookViewState && (
+              <Notebook key={activeBuffer.id} />
+            )}
             <Notifications
               onClearNotifications={handleClearNotifications}
               targetBufferId={targetNotificationsBufferId}

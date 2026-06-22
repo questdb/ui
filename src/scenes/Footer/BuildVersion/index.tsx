@@ -46,8 +46,22 @@ const Wrapper = styled.div`
 `
 const ReleaseNotesButton = styled(Button)<{ enterprise?: boolean }>`
   position: relative;
-  ${({ enterprise }) => (enterprise ? `background: #322733;` : ``)}
   gap: 0.5rem;
+  border-radius: 0.25rem;
+  border-color: rgba(255, 255, 255, 0.15);
+  border-bottom-width: 2px;
+  background: ${({ enterprise }) => (enterprise ? "#322733" : "transparent")};
+
+  &:hover:not([disabled]) {
+    background: ${({ enterprise }) =>
+      enterprise ? "#322733" : "rgba(255, 255, 255, 0.05)"};
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+`
+
+const QuestDBLogo = styled.img`
+  width: 1.5rem;
+  height: auto;
 `
 
 const ReleaseLink = styled.a`
@@ -67,9 +81,11 @@ const versionButtons: {
   [key in Versions["type"]]: { label: string; icon?: React.ReactNode }
 } = {
   dev: {
+    icon: <QuestDBLogo src="assets/questdb.svg" alt="" />,
     label: "QuestDB Dev",
   },
   oss: {
+    icon: <QuestDBLogo src="assets/questdb.svg" alt="" />,
     label: "QuestDB",
   },
   enterprise: {

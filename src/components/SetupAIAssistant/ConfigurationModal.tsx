@@ -5,7 +5,6 @@ import { MultiStepModal, Step } from "../MultiStepModal"
 import { Box } from "../Box"
 import { Input } from "../Input"
 import { Switch } from "../Switch"
-import { Checkbox } from "../Checkbox"
 import { Text } from "../Text"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/aiAssistant"
@@ -20,6 +19,8 @@ import {
   type ProviderId,
   getProviderName,
 } from "../../utils/ai"
+import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
+import type { Permissions } from "../../utils/tools/permissions"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
@@ -217,11 +218,6 @@ const ModelList = styled(Box).attrs({ flexDirection: "column", gap: "1.2rem" })`
   width: 100%;
 `
 
-const StyledCheckbox = styled(Checkbox)`
-  font-size: 1.4rem;
-  display: inline;
-`
-
 const FormGroup = styled(Box).attrs({
   flexDirection: "column",
   gap: "1.6rem",
@@ -303,77 +299,6 @@ const ModelNameText = styled(Text)`
   color: ${({ theme }) => theme.color.foreground};
 `
 
-const SchemaAccessSection = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "1.6rem",
-})`
-  width: 100%;
-`
-
-const SchemaAccessHeader = styled(Box).attrs({
-  justifyContent: "space-between",
-  align: "center",
-  gap: "1rem",
-})`
-  width: 100%;
-`
-
-const SchemaAccessTitle = styled(Text)`
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.gray2};
-  flex: 1;
-`
-
-const SchemaCheckboxContainer = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "flex-start",
-})`
-  background: rgba(68, 71, 90, 0.56);
-  padding: 0.75rem;
-  border-radius: 0.4rem;
-  width: 100%;
-`
-
-const SchemaCheckboxInner = styled(Box).attrs({
-  gap: "1.5rem",
-  align: "center",
-})`
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-`
-
-const SchemaCheckboxWrapper = styled.div`
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-`
-
-const SchemaCheckboxContent = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.6rem",
-})`
-  flex: 1;
-`
-
-const SchemaCheckboxLabel = styled(Text)`
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const SchemaCheckboxDescription = styled(Text)`
-  font-size: 1.3rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
-const SchemaCheckboxDescriptionBold = styled.span`
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
 const WarningText = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
@@ -427,10 +352,17 @@ type StepOneContentProps = {
 type StepTwoContentProps = {
   selectedProvider: ProviderId | null
   enabledModels: string[]
-  grantSchemaAccess: boolean
+  permissions: Permissions
   modelsByProvider: Record<string, ModelOption[]>
   onModelToggle: (modelValue: string) => void
-  onSchemaAccessChange: (checked: boolean) => void
+  onPermissionsChange: (next: Permissions) => void
+}
+
+// New scopes default to denied; schema access stays on for back-compat.
+const DEFAULT_PERMISSIONS: Permissions = {
+  grantSchemaAccess: true,
+  read: false,
+  write: false,
 }
 
 const CloseButton = ({ onClick }: { onClick: () => void }) => {
@@ -565,10 +497,10 @@ const StepOneContent = ({
 const StepTwoContent = ({
   selectedProvider,
   enabledModels,
-  grantSchemaAccess,
+  permissions,
   modelsByProvider,
   onModelToggle,
-  onSchemaAccessChange,
+  onPermissionsChange,
 }: StepTwoContentProps) => {
   const navigation = useModalNavigation()
   const handleClose: () => void = navigation.handleClose
@@ -656,37 +588,11 @@ const StepTwoContent = ({
       <Separator />
       <ContentSection>
         {currentProvider && (
-          <SchemaAccessSection>
-            <SchemaAccessHeader>
-              <SchemaAccessTitle>Schema Access</SchemaAccessTitle>
-            </SchemaAccessHeader>
-            <SchemaCheckboxContainer>
-              <SchemaCheckboxInner>
-                <SchemaCheckboxWrapper>
-                  <StyledCheckbox
-                    id={`schema-access-${currentProvider}`}
-                    checked={grantSchemaAccess}
-                    onChange={(e) => onSchemaAccessChange(e.target.checked)}
-                    data-hook="ai-settings-schema-access"
-                  />
-                </SchemaCheckboxWrapper>
-                <SchemaCheckboxContent align="flex-start">
-                  <SchemaCheckboxLabel>
-                    Grant schema access to {getProviderName(currentProvider)}
-                  </SchemaCheckboxLabel>
-                  <SchemaCheckboxDescription>
-                    When enabled, the AI assistant can access your database
-                    schema information to provide more accurate suggestions and
-                    explanations. Schema information helps the AI understand
-                    your table structures, column names, and relationships.{" "}
-                    <SchemaCheckboxDescriptionBold>
-                      The AI model will not have access to your database store.
-                    </SchemaCheckboxDescriptionBold>
-                  </SchemaCheckboxDescription>
-                </SchemaCheckboxContent>
-              </SchemaCheckboxInner>
-            </SchemaCheckboxContainer>
-          </SchemaAccessSection>
+          <PermissionsSection
+            value={permissions}
+            onChange={onPermissionsChange}
+            variant="rich"
+          />
         )}
       </ContentSection>
       <WarningText>
@@ -721,7 +627,8 @@ export const ConfigurationModal = ({
   }, [open])
 
   const [enabledModels, setEnabledModels] = useState<string[]>([])
-  const [grantSchemaAccess, setGrantSchemaAccess] = useState<boolean>(true)
+  const [permissions, setPermissions] =
+    useState<Permissions>(DEFAULT_PERMISSIONS)
 
   const modelsByProvider = useMemo(() => {
     const result: Record<string, ModelOption[]> = {}
@@ -754,8 +661,8 @@ export const ConfigurationModal = ({
     })
   }, [])
 
-  const handleSchemaAccessChange = useCallback((checked: boolean) => {
-    setGrantSchemaAccess(checked)
+  const handlePermissionsChange = useCallback((next: Permissions) => {
+    setPermissions(next)
   }, [])
 
   const handleComplete = () => {
@@ -763,7 +670,9 @@ export const ConfigurationModal = ({
 
     void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
       name: selectedProvider,
-      grantSchemaAccess,
+      grantSchemaAccess: permissions.grantSchemaAccess,
+      read: permissions.read,
+      write: permissions.write,
     })
 
     const selectedModel =
@@ -781,7 +690,9 @@ export const ConfigurationModal = ({
         [selectedProvider]: {
           apiKey,
           enabledModels,
-          grantSchemaAccess,
+          grantSchemaAccess: permissions.grantSchemaAccess,
+          read: permissions.read,
+          write: permissions.write,
         },
       },
     }
@@ -855,7 +766,7 @@ export const ConfigurationModal = ({
       // When going back from step 2 to step 1, reset step 2 state but keep API key
       if (newStepIndex === 0 && direction === "previous") {
         setEnabledModels([])
-        setGrantSchemaAccess(true)
+        setPermissions(DEFAULT_PERMISSIONS)
       }
     },
     [],
@@ -866,7 +777,7 @@ export const ConfigurationModal = ({
     setApiKey("")
     setError(null)
     setEnabledModels([])
-    setGrantSchemaAccess(true)
+    setPermissions(DEFAULT_PERMISSIONS)
   }, [])
 
   const handleCustomProviderSave = useCallback(
@@ -888,6 +799,8 @@ export const ConfigurationModal = ({
             apiKey: definition.apiKey ?? "",
             enabledModels: newEnabledModels,
             grantSchemaAccess: definition.grantSchemaAccess ?? false,
+            read: definition.read ?? false,
+            write: definition.write ?? false,
           },
         },
       }
@@ -895,6 +808,8 @@ export const ConfigurationModal = ({
       void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
         name: "custom",
         grantSchemaAccess: definition.grantSchemaAccess ?? false,
+        read: definition.read ?? false,
+        write: definition.write ?? false,
         type: definition.type,
         contextWindow: definition.contextWindow,
       })
@@ -934,10 +849,10 @@ export const ConfigurationModal = ({
           <StepTwoContent
             selectedProvider={selectedProvider}
             enabledModels={enabledModels}
-            grantSchemaAccess={grantSchemaAccess}
+            permissions={permissions}
             modelsByProvider={modelsByProvider}
             onModelToggle={handleModelToggle}
-            onSchemaAccessChange={handleSchemaAccessChange}
+            onPermissionsChange={handlePermissionsChange}
           />
         ),
         validate: validateStepTwo,
@@ -951,10 +866,10 @@ export const ConfigurationModal = ({
       handleProviderSelect,
       handleApiKeyChange,
       enabledModels,
-      grantSchemaAccess,
+      permissions,
       modelsByProvider,
       handleModelToggle,
-      handleSchemaAccessChange,
+      handlePermissionsChange,
       validateStepOne,
       validateStepTwo,
     ],

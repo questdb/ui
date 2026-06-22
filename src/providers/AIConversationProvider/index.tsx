@@ -16,7 +16,13 @@ import type {
   ChatWindowState,
   ConversationId,
   AIConversation,
+  UserActionDigest,
 } from "./types"
+import { applyUserActionToDigest, createEmptyDigest } from "./userActionDigest"
+import {
+  on as onUserAction,
+  type UserActionEvent,
+} from "../../utils/notebookAIBridge"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,
@@ -26,7 +32,7 @@ import {
   shiftQueryKey,
 } from "../../scenes/Editor/Monaco/utils"
 import { useEditor } from "../EditorProvider"
-import { normalizeSql } from "../../utils/aiAssistant"
+import { normalizeSql } from "../../utils/formatSql"
 import { useDispatch, useSelector } from "react-redux"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -41,7 +47,6 @@ export type AcceptSuggestionParams = {
 
 type AIConversationContextType = {
   conversationMetas: Map<ConversationId, ConversationMeta>
-  activeConversationMessages: ConversationMessage[]
   chatWindowState: ChatWindowState
   isLoadingMessages: boolean
   isStreaming: boolean
@@ -64,7 +69,23 @@ type AIConversationContextType = {
     bufferId?: number
     queryKey?: QueryKey
     tableId?: number
+    notebookBufferId?: number
   }) => Promise<AIConversation>
+  findNotebookChat: (notebookBufferId: number) => ConversationMeta | undefined
+  findOrCreateNotebookChat: (
+    notebookBufferId: number,
+  ) => Promise<AIConversation>
+  openNotebookChat: (notebookBufferId: number) => Promise<void>
+  bindConversationToNotebook: (
+    conversationId: ConversationId,
+    notebookBufferId: number,
+  ) => Promise<void>
+  readUserActionDigest: (
+    conversationId: ConversationId,
+  ) => UserActionDigest | undefined
+  rotateUserActionDigest: (
+    conversationId: ConversationId,
+  ) => UserActionDigest | undefined
   handleGlyphClick: (options: {
     bufferId: number
     queryKey: QueryKey
@@ -131,6 +152,43 @@ export const useAIConversation = () => {
   return context
 }
 
+const ActiveConversationMessagesContext = createContext<
+  ConversationMessage[] | undefined
+>(undefined)
+
+export const useActiveConversationMessages = () => {
+  const context = useContext(ActiveConversationMessagesContext)
+  if (context === undefined) {
+    throw new Error(
+      "useActiveConversationMessages must be used within AIConversationProvider",
+    )
+  }
+  return context
+}
+
+type AIConversationActionsContextType = Omit<
+  AIConversationContextType,
+  | "conversationMetas"
+  | "chatWindowState"
+  | "isLoadingMessages"
+  | "isStreaming"
+  | "scrollToMessageId"
+>
+
+const AIConversationActionsContext = createContext<
+  AIConversationActionsContextType | undefined
+>(undefined)
+
+export const useAIConversationActions = () => {
+  const context = useContext(AIConversationActionsContext)
+  if (!context) {
+    throw new Error(
+      "useAIConversationActions must be used within AIConversationProvider",
+    )
+  }
+  return context
+}
+
 export const AIConversationProvider: React.FC<{
   children: React.ReactNode
 }> = ({ children }) => {
@@ -146,6 +204,32 @@ export const AIConversationProvider: React.FC<{
     () => new Map(conversationMetasArray?.map((m) => [m.id, m]) ?? []),
     [conversationMetasArray],
   )
+
+  const userActionDigestsRef = useRef<Map<ConversationId, UserActionDigest>>(
+    new Map(),
+  )
+  const conversationMetasRef = useRef(conversationMetas)
+  useEffect(() => {
+    conversationMetasRef.current = conversationMetas
+  }, [conversationMetas])
+
+  useEffect(() => {
+    const cleanupUserActionListener = onUserAction(
+      "user-action",
+      (evt: UserActionEvent) => {
+        for (const meta of conversationMetasRef.current.values()) {
+          if (meta.notebookBufferId !== evt.bufferId) continue
+          let digest = userActionDigestsRef.current.get(meta.id)
+          if (!digest) {
+            digest = createEmptyDigest()
+            userActionDigestsRef.current.set(meta.id, digest)
+          }
+          applyUserActionToDigest(digest, evt)
+        }
+      },
+    )
+    return cleanupUserActionListener
+  }, [])
 
   const [activeConversationMessages, setActiveConversationMessages] = useState<
     ConversationMessage[]
@@ -294,6 +378,7 @@ export const AIConversationProvider: React.FC<{
       bufferId?: number
       queryKey?: QueryKey
       tableId?: number
+      notebookBufferId?: number
     }): Promise<AIConversation> => {
       const id = crypto.randomUUID()
       const { queryText } = getQueryInfoFromKey(options.queryKey)
@@ -302,6 +387,7 @@ export const AIConversationProvider: React.FC<{
         queryKey: options.queryKey,
         bufferId: options.bufferId,
         tableId: options.tableId,
+        notebookBufferId: options.notebookBufferId,
         currentSQL: queryText,
         conversationName: "AI Assistant",
         updatedAt: Date.now(),
@@ -311,6 +397,64 @@ export const AIConversationProvider: React.FC<{
       await aiConversationStore.saveMeta(meta)
 
       return { ...meta, messages: [] }
+    },
+    [],
+  )
+
+  const findNotebookChat = useCallback(
+    (notebookBufferId: number): ConversationMeta | undefined => {
+      let best: ConversationMeta | undefined
+      for (const meta of conversationMetas.values()) {
+        if (meta.notebookBufferId !== notebookBufferId) continue
+        if (!best || meta.updatedAt > best.updatedAt) best = meta
+      }
+      return best
+    },
+    [conversationMetas],
+  )
+
+  const findOrCreateNotebookChat = useCallback(
+    async (notebookBufferId: number): Promise<AIConversation> => {
+      const existing = findNotebookChat(notebookBufferId)
+      if (existing) {
+        const messages = await aiConversationStore.getMessages(existing.id)
+        return { ...existing, messages }
+      }
+      return createConversation({ notebookBufferId })
+    },
+    [findNotebookChat, createConversation],
+  )
+
+  const bindConversationToNotebook = useCallback(
+    async (
+      conversationId: ConversationId,
+      notebookBufferId: number,
+    ): Promise<void> => {
+      // Fall back to Dexie when ref hasn't picked up a freshly-created meta yet — otherwise bind silently no-ops.
+      const meta =
+        conversationMetasRef.current.get(conversationId) ??
+        (await aiConversationStore.getMeta(conversationId))
+      if (!meta) return
+      if (meta.notebookBufferId !== undefined) return
+      await aiConversationStore.updateMeta(conversationId, {
+        notebookBufferId,
+      })
+    },
+    [],
+  )
+
+  const readUserActionDigest = useCallback(
+    (conversationId: ConversationId): UserActionDigest | undefined =>
+      userActionDigestsRef.current.get(conversationId),
+    [],
+  )
+
+  const rotateUserActionDigest = useCallback(
+    (conversationId: ConversationId): UserActionDigest | undefined => {
+      const current = userActionDigestsRef.current.get(conversationId)
+      if (!current) return undefined
+      userActionDigestsRef.current.set(conversationId, createEmptyDigest())
+      return current
     },
     [],
   )
@@ -686,6 +830,15 @@ export const AIConversationProvider: React.FC<{
     await openChatWindow(blankConversation.id, { loadMessages: false })
   }, [createConversation, openChatWindow])
 
+  const openNotebookChat = useCallback(
+    async (notebookBufferId: number): Promise<void> => {
+      const conv = await findOrCreateNotebookChat(notebookBufferId)
+      const isExisting = conversationMetasRef.current.has(conv.id)
+      await openChatWindow(conv.id, { loadMessages: isExisting })
+    },
+    [findOrCreateNotebookChat, openChatWindow],
+  )
+
   const openHistoryView = useCallback(() => {
     void trackEvent(ConsoleEvent.AI_HISTORY_OPEN)
     setChatWindowState((prev) => ({
@@ -996,44 +1149,167 @@ export const AIConversationProvider: React.FC<{
     ],
   )
 
+  const actionsValue = useMemo<AIConversationActionsContextType>(
+    () => ({
+      setIsStreaming,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      findQueryByConversationId,
+      hasConversationForQuery,
+      createConversation,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      openNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    }),
+    [
+      setIsStreaming,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      findQueryByConversationId,
+      hasConversationForQuery,
+      createConversation,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      openNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    ],
+  )
+
+  const value = useMemo<AIConversationContextType>(
+    () => ({
+      conversationMetas,
+      chatWindowState,
+      isLoadingMessages,
+      isStreaming,
+      setIsStreaming,
+      scrollToMessageId,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      hasConversationForQuery,
+      findQueryByConversationId,
+      createConversation,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      openNotebookChat,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    }),
+    [
+      conversationMetas,
+      chatWindowState,
+      isLoadingMessages,
+      isStreaming,
+      setIsStreaming,
+      scrollToMessageId,
+      setScrollToMessageId,
+      getConversationMeta,
+      findConversationByQuery,
+      findConversationByTableId,
+      hasConversationForQuery,
+      findQueryByConversationId,
+      createConversation,
+      handleGlyphClick,
+      shiftQueryKeysForBuffer,
+      openChatWindow,
+      openOrCreateBlankChatWindow,
+      openBlankChatWindow,
+      openNotebookChat,
+      findNotebookChat,
+      findOrCreateNotebookChat,
+      bindConversationToNotebook,
+      readUserActionDigest,
+      rotateUserActionDigest,
+      closeChatWindow,
+      openHistoryView,
+      closeHistoryView,
+      deleteConversation,
+      addMessage,
+      removeMessages,
+      updateMessage,
+      updateMessagesWithCompaction,
+      updateConversationName,
+      acceptSuggestion,
+      rejectSuggestion,
+      persistMessages,
+      getLastRoundMessages,
+    ],
+  )
+
   return (
-    <AIConversationContext.Provider
-      value={{
-        conversationMetas,
-        activeConversationMessages,
-        chatWindowState,
-        isLoadingMessages,
-        isStreaming,
-        setIsStreaming,
-        scrollToMessageId,
-        setScrollToMessageId,
-        getConversationMeta,
-        findConversationByQuery,
-        findConversationByTableId,
-        hasConversationForQuery,
-        findQueryByConversationId,
-        createConversation,
-        handleGlyphClick,
-        shiftQueryKeysForBuffer,
-        openChatWindow,
-        openOrCreateBlankChatWindow,
-        openBlankChatWindow,
-        closeChatWindow,
-        openHistoryView,
-        closeHistoryView,
-        deleteConversation,
-        addMessage,
-        removeMessages,
-        updateMessage,
-        updateMessagesWithCompaction,
-        updateConversationName,
-        acceptSuggestion,
-        rejectSuggestion,
-        persistMessages,
-        getLastRoundMessages,
-      }}
-    >
-      {children}
-    </AIConversationContext.Provider>
+    <AIConversationActionsContext.Provider value={actionsValue}>
+      <AIConversationContext.Provider value={value}>
+        <ActiveConversationMessagesContext.Provider
+          value={activeConversationMessages}
+        >
+          {children}
+        </ActiveConversationMessagesContext.Provider>
+      </AIConversationContext.Provider>
+    </AIConversationActionsContext.Provider>
   )
 }

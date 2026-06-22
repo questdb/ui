@@ -8,6 +8,12 @@ export type CellValue = boolean | string | number | null
 
 export type ResultGridRow = CellValue[]
 
+export type ColumnLayout = {
+  columnSizing?: Record<string, number>
+  columnOrder?: string[]
+  pinnedColumns?: string[]
+}
+
 // Neutral DQL-result shape the grid reads from, free of feature-specific
 // coupling so it stays reusable.
 export type DqlQueryResult = {

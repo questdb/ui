@@ -39,6 +39,8 @@ export type NotificationShape = Readonly<{
   isMinimized?: boolean
   isExplain?: boolean
   updateActiveNotification?: boolean
+  compact?: boolean
+  hideTimestamp?: boolean
 }>
 
 export type QueryNotifications = Readonly<{

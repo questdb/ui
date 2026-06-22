@@ -32,6 +32,7 @@ import { Link, Text, TransitionDuration } from "../../components"
 import CtaBanner from "./CtaBanner"
 import BuildVersion from "./BuildVersion"
 import ConnectionStatus from "./ConnectionStatus"
+import MCPBridgeStatus from "./MCPBridgeStatus"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { useSettings } from "../../providers"
@@ -118,6 +119,7 @@ const Footer = () => {
         </Text>
       </LeftContainer>
       <RightContainer>
+        <MCPBridgeStatus />
         <ConnectionStatus />
         {showBuildVersion && <BuildVersion />}
         <Link

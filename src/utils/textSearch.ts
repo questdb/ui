@@ -19,6 +19,10 @@ export type SearchMatch = {
   archivedAt?: number
   isTitleMatch?: boolean
   isMetricsMatch?: boolean
+  isNotebookMatch?: boolean
+  cellId?: string
+  cellType?: "sql" | "markdown"
+  notebookField?: "cell" | "chartName"
   isStale?: boolean
 }
 
@@ -327,6 +331,7 @@ async function findMatchesWithWorker(
 
     timeoutId = setTimeout(() => {
       cleanupHandlers()
+      terminateSearchWorker()
       reject(
         new SearchTimeoutError(
           "Search took too long and was interrupted. Try using simpler search patterns.",
@@ -343,6 +348,8 @@ async function findMatchesWithWorker(
         return
       }
 
+      clearTimeoutIfExists()
+      cleanupHandlers()
       if (e.data.success) {
         resolve(e.data.matches)
       } else {

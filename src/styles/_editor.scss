@@ -293,17 +293,16 @@
 
 
 .monaco-menu {
-  background: #343746;
+  background: #21222c;
   color: #f8f8f2;
 }
 
 .monaco-menu .action-menu-item {
-  border: 1px solid transparent;
   height: 3rem !important;
 
-  &:hover {
+  &:hover, &.focused {
     background: #043c5c !important;
-    border: 1px solid #8be9fd;
+    box-shadow: none !important;
   }
 
   &:not(.disabled) {

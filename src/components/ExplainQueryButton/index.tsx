@@ -7,7 +7,7 @@ import { AISparkle } from "../AISparkle"
 import { QuestContext } from "../../providers"
 import { selectors } from "../../store"
 import { useAIStatus } from "../../providers/AIStatusProvider"
-import { useAIConversation } from "../../providers/AIConversationProvider"
+import { useAIConversationActions } from "../../providers/AIConversationProvider"
 import type { ConversationId } from "../../providers/AIConversationProvider/types"
 import {
   executeAIFlow,
@@ -54,7 +54,7 @@ export const ExplainQueryButton = ({
     updateConversationName,
     persistMessages,
     setIsStreaming,
-  } = useAIConversation()
+  } = useAIConversationActions()
 
   const handleExplainQuery = () => {
     void trackEvent(ConsoleEvent.AI_EXPLAIN_QUERY)

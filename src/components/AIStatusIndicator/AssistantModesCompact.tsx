@@ -361,10 +361,12 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
       nextSection,
       !nextSection ? endTimestamp : undefined,
     )
-    const thinkingSegmentText =
-      section.type === AIOperationStatus.Thinking
-        ? (section.operations[0]?.content ?? "")
-        : ""
+    const isContentSection =
+      section.type === AIOperationStatus.Thinking ||
+      section.type === AIOperationStatus.RunningQuery
+    const sectionContentText = isContentSection
+      ? (section.operations[0]?.content ?? "")
+      : ""
 
     return (
       <ModeHeader
@@ -414,16 +416,16 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
             )}
           </Box>
         </ModeHeaderTop>
-        {isExpandable && section.type === AIOperationStatus.Thinking && (
+        {isExpandable && isContentSection && (
           <ExpandableWrapper $expanded={isExpanded}>
             <ExpandableContent>
-              {thinkingSegmentText ? (
-                <ThinkingContent>{thinkingSegmentText}</ThinkingContent>
+              {sectionContentText ? (
+                <ThinkingContent>{sectionContentText}</ThinkingContent>
               ) : null}
             </ExpandableContent>
           </ExpandableWrapper>
         )}
-        {isExpandable && section.type !== AIOperationStatus.Thinking && (
+        {isExpandable && !isContentSection && (
           <ExpandableWrapper $expanded={isExpanded}>
             <ExpandableContent>
               <ReasoningThread>

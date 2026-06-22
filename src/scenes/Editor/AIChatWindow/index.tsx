@@ -17,7 +17,10 @@ import {
   ClockCounterClockwiseIcon,
 } from "@phosphor-icons/react"
 import { useEditor } from "../../../providers"
-import { useAIConversation } from "../../../providers/AIConversationProvider"
+import {
+  useAIConversation,
+  useActiveConversationMessages,
+} from "../../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../utils"
 import {
   createDetachedQueryKey,
@@ -36,7 +39,7 @@ import { LiteEditor } from "../../../components/LiteEditor"
 import { ChatMessages } from "./ChatMessages"
 import { ChatInput, type ChatInputHandle } from "./ChatInput"
 import { ChatHistoryView } from "./ChatHistoryView"
-import { normalizeSql } from "../../../utils/aiAssistant"
+import { normalizeSql } from "../../../utils/formatSql"
 import {
   executeAIFlow,
   createChatFlowConfig,
@@ -57,6 +60,12 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { Stop } from "@styled-icons/remix-line"
 import { CircleNotchSpinner } from "../Monaco/icons"
+import { getUserActionSeq, getWorkspace } from "../../../utils/notebookAIBridge"
+import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
+import type {
+  NotebookFlowContext,
+  WorkspaceInfo,
+} from "../../../utils/executeAIFlow"
 import { QueryInNotification } from "../Monaco/query-in-notification"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
@@ -197,10 +206,13 @@ const AIChatWindow: React.FC = () => {
     addBuffer,
     executionRefs,
     highlightQuery,
+    buffers,
+    activeBuffer,
+    setActiveBuffer,
   } = useEditor()
+  const activeConversationMessages = useActiveConversationMessages()
   const {
     conversationMetas,
-    activeConversationMessages,
     chatWindowState,
     isLoadingMessages,
     isStreaming,
@@ -220,6 +232,9 @@ const AIChatWindow: React.FC = () => {
     acceptSuggestion,
     rejectSuggestion,
     persistMessages,
+    bindConversationToNotebook,
+    readUserActionDigest,
+    rotateUserActionDigest,
   } = useAIConversation()
   const {
     status: aiStatus,
@@ -378,6 +393,48 @@ const AIChatWindow: React.FC = () => {
     return "Ask AI about your tables, or generate a query..."
   }
 
+  // <workspace> always emits when tabs exist so unbound chats can resolve user-said labels to buffer_ids.
+  const buildNotebookFlowContext = useCallback(
+    (conversationId: string): NotebookFlowContext | undefined => {
+      const meta = getConversationMeta(conversationId)
+      const bufferId = meta?.notebookBufferId
+      const readSeq = getUserActionSeq()
+      const snapshot = bufferId ? buildSnapshot(getWorkspace(), bufferId) : null
+      const digest = readUserActionDigest(conversationId)
+      const notebookBuffers = buffers.filter(
+        (b) => !!b.notebookViewState && typeof b.id === "number",
+      )
+      const workspace: WorkspaceInfo | undefined =
+        notebookBuffers.length > 0 || typeof activeBuffer.id === "number"
+          ? {
+              notebooks: notebookBuffers.map((b) => ({
+                buffer_id: b.id as number,
+                label: b.label,
+                archived: !!b.archived,
+                ...(b.id === bufferId ? { bound_to_this_chat: true } : {}),
+              })),
+              active:
+                typeof activeBuffer.id === "number"
+                  ? {
+                      buffer_id: activeBuffer.id,
+                      label: activeBuffer.label,
+                      kind: activeBuffer.notebookViewState
+                        ? "notebook"
+                        : activeBuffer.metricsViewState
+                          ? "metrics"
+                          : activeBuffer.editorViewState
+                            ? "sql"
+                            : "other",
+                    }
+                  : undefined,
+            }
+          : undefined
+      if (!snapshot && !digest && !workspace) return undefined
+      return { snapshot, digest, workspace, readSeq }
+    },
+    [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
+  )
+
   const handleSendMessage = (
     userMessage: string,
     hasUnactionedDiffParam: boolean = false,
@@ -411,6 +468,7 @@ const AIChatWindow: React.FC = () => {
         tables,
         hasSchemaAccess,
         abortSignal: abortController?.signal,
+        notebookContext: buildNotebookFlowContext(conversationId),
       }),
       {
         addMessage,
@@ -420,6 +478,8 @@ const AIChatWindow: React.FC = () => {
         setIsStreaming,
         persistMessages,
         updateConversationName,
+        bindConversationToNotebook,
+        rotateUserActionDigest,
         updateMessagesWithCompaction,
       },
     )
@@ -458,11 +518,17 @@ const AIChatWindow: React.FC = () => {
 
       const normalizedSQL = normalizeQueryText(sql)
       const queryKey = createDetachedQueryKey(normalizedSQL)
+      let queryId: QuestDB.QueryId | null = null
 
-      questExecution.requestExecution(
-        notificationNamespaceKey,
+      questExecution.requestExecution({
+        abort: () => {
+          if (queryId !== null) {
+            quest.abort(queryId)
+          }
+        },
+        bufferId: notificationNamespaceKey,
         queryKey,
-        () => {
+        execute: () => {
           const timeoutId = window.setTimeout(() => {
             dispatch(
               actions.query.addNotification(
@@ -499,6 +565,9 @@ const AIChatWindow: React.FC = () => {
             dispatch,
             executionRefs,
             releaseExecution: questExecution.releaseExecution,
+            onQueryStarted: (nextQueryId) => {
+              queryId = nextQueryId
+            },
             onSettled: () => {
               if (notificationTimeoutRef.current === timeoutId) {
                 window.clearTimeout(timeoutId)
@@ -507,7 +576,7 @@ const AIChatWindow: React.FC = () => {
             },
           })
         },
-      )
+      })
     },
     [
       conversation,
@@ -664,6 +733,7 @@ const AIChatWindow: React.FC = () => {
         tables,
         hasSchemaAccess,
         abortSignal: abortController?.signal,
+        notebookContext: buildNotebookFlowContext(conversationId),
       }
 
       const callbacks = {
@@ -675,6 +745,8 @@ const AIChatWindow: React.FC = () => {
         persistMessages,
         updateConversationName,
         updateMessagesWithCompaction,
+        bindConversationToNotebook,
+        rotateUserActionDigest,
       }
 
       switch (userMessage.displayType) {
@@ -798,6 +870,8 @@ const AIChatWindow: React.FC = () => {
       persistMessages,
       updateConversationName,
       updateMessagesWithCompaction,
+      bindConversationToNotebook,
+      buildNotebookFlowContext,
       currentSQL,
     ],
   )
@@ -861,6 +935,25 @@ const AIChatWindow: React.FC = () => {
   if (activeSidebar?.type !== "aiChat" || (!conversation && !isHistoryOpen)) {
     return null
   }
+
+  const notebookContext = (() => {
+    const boundId = conversation?.notebookBufferId
+    if (typeof boundId !== "number") return undefined
+    const buf = buffers.find((b) => b.id === boundId)
+    const isMissing = !buf
+    const isArchived = !!buf?.archived
+    const label = buf?.label ?? `#${boundId}`
+    const warn: "archived" | "deleted" | null = isMissing
+      ? "deleted"
+      : isArchived
+        ? "archived"
+        : null
+    const onClick = async () => {
+      if (warn) return
+      if (buf) await setActiveBuffer(buf)
+    }
+    return { label, warn, onClick }
+  })()
 
   return (
     <>
@@ -996,6 +1089,7 @@ const AIChatWindow: React.FC = () => {
                 placeholder={getPlaceholder()}
                 contextSQL={queryInfo.queryText}
                 contextTableId={conversation?.tableId}
+                contextNotebook={notebookContext}
                 onContextClick={handleContextClick}
               />
             </ChatPanel>

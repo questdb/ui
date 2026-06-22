@@ -36,10 +36,21 @@ const InfoOutlineIcon = styled(InfoOutline)`
 `
 
 export const NoticeNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, isMinimized } = props
+  const {
+    createdAt,
+    content,
+    sideContent,
+    isMinimized,
+    compact,
+    hideTimestamp,
+  } = props
   return (
-    <Wrapper isMinimized={isMinimized} data-hook="notice-notification">
-      <Timestamp createdAt={createdAt} />
+    <Wrapper
+      $isMinimized={isMinimized}
+      $compact={compact}
+      data-hook="notice-notification"
+    >
+      {!hideTimestamp && <Timestamp createdAt={createdAt} />}
       <InfoOutlineIcon size="18px" />
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>

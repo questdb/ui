@@ -2,6 +2,7 @@ export { ResultGrid } from "./ResultGrid"
 export type { ResultGridHandle } from "./ResultGrid"
 
 export type {
+  ColumnLayout,
   DqlQueryResult,
   ResultGridDataSource,
   ResultGridRow,

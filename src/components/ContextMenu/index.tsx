@@ -3,29 +3,28 @@ import styled from "styled-components"
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
 
 const StyledContent = styled(ContextMenuPrimitive.Content)`
-  background-color: #343846; /* vscode-menu-background */
+  background-color: ${({ theme }) => theme.color.backgroundDarker};
   border-radius: 0.5rem;
   padding: 0.4rem;
-  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36); /* vscode-widget-shadow */
+  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
   z-index: 9999;
-  min-width: 160px;
+  min-width: 16rem;
 `
 
 const StyledItem = styled(ContextMenuPrimitive.Item)`
-  font-size: 1.3rem;
-  height: 3rem;
+  font-size: 1.4rem;
   font-family: "system-ui", sans-serif;
   cursor: pointer;
-  color: rgb(248, 248, 242); /* vscode-menu-foreground */
+  color: ${({ theme }) => theme.color.foreground};
   display: flex;
+  gap: 1rem;
+  min-height: 3rem;
   align-items: center;
-  padding: 1rem 1.2rem;
+  padding: 0.5rem 1rem;
   border-radius: 0.4rem;
-  border: 1px solid transparent;
 
   &[data-highlighted] {
-    background: #043c5c;
-    border: 1px solid #8be9fd;
+    background: ${({ theme }) => theme.color.tableSelection};
   }
 
   &[data-disabled] {
@@ -35,7 +34,6 @@ const StyledItem = styled(ContextMenuPrimitive.Item)`
 `
 
 const IconWrapper = styled.span`
-  margin-right: 1.2rem;
   display: flex;
   align-items: center;
   justify-content: center;

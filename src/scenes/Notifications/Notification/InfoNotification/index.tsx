@@ -28,10 +28,21 @@ import { NotificationShape } from "types"
 import { Timestamp } from "../Timestamp"
 
 export const InfoNotification = (props: NotificationShape) => {
-  const { createdAt, content, sideContent, isMinimized } = props
+  const {
+    createdAt,
+    content,
+    sideContent,
+    isMinimized,
+    compact,
+    hideTimestamp,
+  } = props
   return (
-    <Wrapper isMinimized={isMinimized} data-hook="info-notification">
-      <Timestamp createdAt={createdAt} />
+    <Wrapper
+      $isMinimized={isMinimized}
+      $compact={compact}
+      data-hook="info-notification"
+    >
+      {!hideTimestamp && <Timestamp createdAt={createdAt} />}
       <Content>{content}</Content>
       <SideContent>{sideContent}</SideContent>
     </Wrapper>

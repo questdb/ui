@@ -10,6 +10,10 @@ type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
 const errorStyle = css`
   border-color: ${({ theme }) => theme.color.red};
   background-color: #ff555515;
+  &:focus {
+    border-color: ${({ theme }) => theme.color.red};
+    background: #ff555515;
+  }
 `
 
 export const Input = styled.input.attrs((props) => ({

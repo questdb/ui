@@ -34,6 +34,34 @@ function getOpenAIConfiguredSettings(schemaAccess = true) {
   }
 }
 
+/**
+ * OpenAI settings with the AI permission scopes (grantSchemaAccess/read/write)
+ * set explicitly. These are the per-provider scopes `getAiPermissions` reads —
+ * NOT the MCP `mcp:permissions` key — so the permission gate decides off them
+ * directly. `grantSchemaAccess` defaults to true; pass false for the "none"
+ * level where even schema tools are denied.
+ */
+function getOpenAIPermissionedSettings({
+  read,
+  write,
+  grantSchemaAccess = true,
+}) {
+  return {
+    "ai.assistant.settings": JSON.stringify({
+      selectedModel: "gpt-5-mini",
+      providers: {
+        openai: {
+          apiKey: "test-openai-key",
+          enabledModels: ["gpt-5-mini", "gpt-5"],
+          grantSchemaAccess,
+          read,
+          write,
+        },
+      },
+    }),
+  }
+}
+
 function getAnthropicConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
@@ -945,6 +973,9 @@ function createToolCallFlow(config) {
           for (const expected of step.expectToolResult.includes || []) {
             expect(toolOutputContent).to.include(expected)
           }
+          for (const forbidden of step.expectToolResult.excludes || []) {
+            expect(toolOutputContent).to.not.include(forbidden)
+          }
         }
 
         // Send response
@@ -1136,6 +1167,7 @@ module.exports = {
   PROVIDERS,
   CUSTOM_PROVIDER_DEFAULTS,
   getOpenAIConfiguredSettings,
+  getOpenAIPermissionedSettings,
   getAnthropicConfiguredSettings,
   getCustomProviderConfiguredSettings,
   getCustomProviderEndpoint,

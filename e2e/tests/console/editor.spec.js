@@ -1360,7 +1360,7 @@ describe("editor tabs", () => {
   })
 
   it("should open the second empty tab on plus icon click", () => {
-    cy.get(".new-tab-button").click()
+    cy.addEditorTab()
     cy.get(".chrome-tab-was-just-added").should("not.exist")
     cy.getEditorTabs().should("have.length", 2)
     ;["SQL", "SQL 1"].forEach((title) => {
@@ -1411,7 +1411,7 @@ describe("editor tabs", () => {
   })
 
   it("should drag tabs", () => {
-    cy.get(".new-tab-button").click()
+    cy.addEditorTab()
     cy.get(".chrome-tab-was-just-added").should("not.exist")
     cy.getEditorTabByTitle("SQL").should("be.visible")
     cy.getEditorTabByTitle("SQL 1").should("be.visible")
@@ -1451,7 +1451,7 @@ describe.skip("editor tabs history", () => {
   it("should close and archive tabs", () => {
     cy.typeQuery("--1")
     ;["SQL 1", "SQL 2"].forEach((title) => {
-      cy.get(".new-tab-button").click()
+      cy.addEditorTab()
       const dragHandle = getTabDragHandleByTitle(title)
       cy.get(dragHandle).should("be.visible")
     })
@@ -1487,9 +1487,7 @@ describe.skip("editor tabs history", () => {
 
 describe("handling comments", () => {
   beforeEach(() => {
-    cy.loadConsoleWithAuth(false, {
-      "splitter.results.basis": Number.MAX_SAFE_INTEGER.toString(),
-    })
+    cy.loadConsoleWithAuth(false)
   })
 
   beforeEach(() => {
@@ -1763,7 +1761,7 @@ describe("multiple run buttons with dynamic query log", () => {
     cy.getCursorQueryGlyph().should("have.length", 3)
 
     // When
-    cy.get(".new-tab-button").click()
+    cy.addEditorTab()
     // Then
     cy.getEditorTabByTitle("SQL 1")
       .should("be.visible")
@@ -1904,7 +1902,7 @@ describe("import/export tabs", () => {
     cy.getEditorTabs().should("be.visible")
   })
 
-  it("should show error toast when importing invalid file", () => {
+  it("should show validation reason in import summary when importing invalid file", () => {
     cy.getByDataHook("editor-tabs-menu-button").click()
     cy.getByDataHook("editor-tabs-menu").should("be.visible")
 
@@ -1914,11 +1912,19 @@ describe("import/export tabs", () => {
       { force: true },
     )
 
-    cy.get(".toast-error-container")
-      .should("be.visible")
-      .should("contain", "Failed to import tabs")
-      .should("contain", "(id: 1)")
-      .should("contain", "label must be a string")
+    // An invalid tab is skipped rather than aborting the whole import; its
+    // validation reason is surfaced in the summary dialog.
+    cy.getByDataHook("import-summary-dialog").should("be.visible")
+    cy.getByDataHook("import-summary-dialog").should("contain", "0 tab")
+    cy.getByDataHook("import-summary-dialog").should("contain", "1 tab skipped")
+    cy.getByDataHook("import-summary-skipped-item").should("have.length", 1)
+    cy.getByDataHook("import-summary-skipped-item").should(
+      "contain",
+      "label must be a string",
+    )
+
+    cy.getByDataHook("import-summary-close").click()
+    cy.getByDataHook("import-summary-dialog").should("not.exist")
   })
 
   it("should import tabs successfully with active and archived tabs", () => {

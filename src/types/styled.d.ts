@@ -42,11 +42,15 @@ export type ColorShape = {
   selection: string
   inputBorder: string
   selectionDarker: string
+  baseGrey: string
   comment: string
   midnight: string
   red: string
   redDark: string
   redSecondary: string
+  dangerBackground: string
+  dangerBackgroundHover: string
+  dangerForeground: string
   loginBackground: string
   orange10: string
   orangeDark: string
@@ -69,6 +73,7 @@ export type ColorShape = {
   graphLegend: string
   offWhite: string
   offWhite2: string
+  editorBackground: string
   aiStopButtonBg: string
   aiStopButtonFg: string
   aiBadgeIconBg: string

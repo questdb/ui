@@ -6,7 +6,12 @@ import type {
   UserMessageDisplayType,
   SchemaDisplayData,
   HealthIssueDisplayData,
+  UserActionDigest,
 } from "../providers/AIConversationProvider/types"
+import {
+  formatNotebookContextPrefix,
+  type NotebookContextSnapshot,
+} from "./ai/notebookSnapshot"
 import type {
   OperationHistory,
   StatusArgs,
@@ -31,6 +36,28 @@ import { EventType } from "../modules/EventBus/types"
 import { trackEvent } from "../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
 
+// Prepended onto every user turn. buffer_id is internal — the AI must never surface it to the user.
+export type NotebookFlowContext = {
+  snapshot: NotebookContextSnapshot | null
+  digest?: UserActionDigest
+  workspace?: WorkspaceInfo
+  readSeq?: number
+}
+
+export type WorkspaceInfo = {
+  notebooks: Array<{
+    buffer_id: number
+    label: string
+    archived: boolean
+    bound_to_this_chat?: boolean
+  }>
+  active?: {
+    buffer_id: number
+    label: string
+    kind: "notebook" | "sql" | "metrics" | "other"
+  }
+}
+
 type BaseFlowConfig = {
   conversationId: ConversationId
   settings: {
@@ -43,6 +70,8 @@ type BaseFlowConfig = {
   hasSchemaAccess: boolean
   abortSignal?: AbortSignal
   useLastMessage?: boolean
+  // Set only when the conversation has a notebookBufferId; absent keeps non-notebook flows unchanged.
+  notebookContext?: NotebookFlowContext
 }
 
 type ChatFlowConfig = BaseFlowConfig & {
@@ -131,6 +160,11 @@ export type AIFlowCallbacks = {
     lastUserMessage?: ConversationMessage
     lastAssistantMessage?: ConversationMessage
   }>
+  bindConversationToNotebook?: (
+    conversationId: ConversationId,
+    bufferId: number,
+  ) => Promise<void>
+  rotateUserActionDigest?: (conversationId: ConversationId) => void
 }
 
 export type AIFlowResult = {
@@ -182,7 +216,19 @@ function cleanupOrphanedToolCallsForTurn(params: {
   }
 }
 
-function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
+export function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
+  const prefix = formatNotebookContextPrefix(
+    config.notebookContext?.snapshot ?? null,
+    config.notebookContext?.digest,
+    config.notebookContext?.workspace,
+  )
+
+  const msg = buildFlowSpecificUserMessage(config)
+  if (!prefix) return msg
+  return { ...msg, content: `${prefix}${msg.content}` }
+}
+
+function buildFlowSpecificUserMessage(config: AIFlowConfig): AIFlowUserMessage {
   switch (config.type) {
     case "chat": {
       const { userMessage, currentSQL, isFirstMessage } = config
@@ -196,7 +242,8 @@ function buildUserMessage(config: AIFlowConfig): AIFlowUserMessage {
         }
       }
 
-      return { content: userMessage }
+      // displayUserMessage preserves the raw user input so prefix tags don't leak into chat bubbles.
+      return { content: userMessage, displayUserMessage: userMessage }
     }
 
     case "explain":
@@ -384,6 +431,8 @@ export async function executeAIFlow(
 
   const userMsg = buildUserMessage(config)
 
+  callbacks.rotateUserActionDigest?.(conversationId)
+
   if (useLastMessage && callbacks.getLastRoundMessages) {
     const { lastUserMessage, lastAssistantMessage } =
       await callbacks.getLastRoundMessages(conversationId)
@@ -455,9 +504,16 @@ export async function executeAIFlow(
     aiAssistantSettings: config.aiAssistantSettings,
   }
 
+  // Threads conversationId + bind callback so an AI-initiated notebook auto-binds an unbound chat.
+  // abortSignal lets a pending registration wait reject the moment the user presses Abort.
   const modelToolsClient = createModelToolsClient(
     questClient,
     hasSchemaAccess ? tables : undefined,
+    {
+      conversationId,
+      bindNotebook: callbacks.bindConversationToNotebook,
+      abortSignal,
+    },
   )
 
   let latestOperationHistory: OperationHistory = []
@@ -727,6 +783,7 @@ export async function executeAIFlow(
       setStatus: setStatusWithHistoryAndResetFlags,
       abortSignal,
       streaming: streamingCallback,
+      notebookReadSeq: config.notebookContext?.readSeq,
     })
 
     const flowResult = processResult({

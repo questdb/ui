@@ -13,6 +13,7 @@ export const skins = [
   "secondary",
   "success",
   "error",
+  "danger",
   "warning",
   "transparent",
   "gradient",
@@ -111,6 +112,23 @@ const themes: {
     disabled: {
       background: "transparent",
       border: "transparent",
+      color: "gray1",
+    },
+  },
+  danger: {
+    normal: {
+      background: "dangerBackground",
+      border: "transparent",
+      color: "dangerForeground",
+    },
+    hover: {
+      background: "dangerBackgroundHover",
+      border: "transparent",
+      color: "dangerForeground",
+    },
+    disabled: {
+      background: "selection",
+      border: "gray1",
       color: "gray1",
     },
   },

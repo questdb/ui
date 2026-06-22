@@ -396,8 +396,9 @@ describe("ai assistant", () => {
       // Then
       cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
 
-      // When
-      cy.getByDataHook("ai-settings-schema-access").click()
+      // When - drop permissions to None so schema tools are excluded.
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-none").click()
       cy.getByDataHook("multi-step-modal-next-button").click()
 
       // Then - AI chat should be available
@@ -420,9 +421,10 @@ describe("ai assistant", () => {
         })
       })
 
-      // When - Open settings modal and enable schema access
+      // When - Open settings modal and re-enable schema access
       cy.getByDataHook("ai-assistant-settings-button").click()
-      cy.getByDataHook("ai-settings-schema-access").click()
+      cy.getByDataHook("permissions-trigger").click()
+      cy.getByDataHook("permission-level-schema").click()
       cy.getByDataHook("ai-settings-save").click()
       cy.get(".toast-success-container").should("be.visible").click()
 
@@ -1234,7 +1236,7 @@ describe("ai assistant", () => {
 
       // When - Close chat and create a new tab
       cy.getByDataHook("chat-window-close").click()
-      cy.get(".new-tab-button").click()
+      cy.addEditorTab()
 
       // Then - New tab should be created (2 tabs total now)
       cy.getEditorTabs().should("have.length", 2)
@@ -3026,7 +3028,7 @@ Syntax: \`avg(column)\`
 
       // Close the tab that the suggestion was applied to (archive the buffer)
       // First, create another tab so we can close the current one
-      cy.get(".new-tab-button").click()
+      cy.addEditorTab()
       cy.getEditorTabs().should("have.length", 2)
 
       // Close the first tab (the one with the accepted query)
@@ -3336,7 +3338,8 @@ describe("custom providers", () => {
     cy.getByDataHook("custom-provider-remove-model").click()
     cy.getByDataHook("custom-provider-model-chip").should("not.exist")
 
-    cy.getByDataHook("custom-provider-schema-access").check()
+    cy.getByDataHook("permissions-trigger").click()
+    cy.getByDataHook("permission-level-schema").click()
     cy.getByDataHook("multi-step-modal-next-button").click()
 
     cy.contains("AI Assistant activated successfully").should("be.visible")
@@ -3911,7 +3914,7 @@ describe("custom providers", () => {
       "have.value",
       "200000",
     )
-    cy.getByDataHook("custom-provider-schema-access").should("be.checked")
+    cy.getByDataHook("permissions-trigger").should("contain", "Schema access")
     cy.getByDataHook("custom-provider-add-model-button").should("be.disabled")
 
     cy.getByDataHook("custom-provider-manual-model-input").type(
@@ -4266,8 +4269,8 @@ describe("custom providers", () => {
     cy.get("[data-model='llama3']").should("exist")
     cy.get("[data-model='mistral']").should("exist")
 
-    // Schema access toggle is not disabled
-    cy.getByDataHook("ai-settings-schema-access").should("not.be.disabled")
+    // Permissions select is not disabled
+    cy.getByDataHook("permissions-trigger").should("not.be.disabled")
 
     // Manage models button visible
     cy.getByDataHook("ai-settings-manage-models").should("be.visible")

@@ -47,10 +47,22 @@ export enum AIOperationStatus {
   RetrievingDocumentation = "Reviewing docs",
   InvestigatingDocs = "Investigating docs",
   ValidatingQuery = "Validating query",
+  RunningQuery = "Running query",
   GeneratingResponse = "Generating response",
   Aborted = "Operation has been cancelled",
   Compacting = "Compacting conversation",
   Thinking = "Thinking",
+  BuildingNotebook = "Building notebook",
+  DuplicatingNotebook = "Duplicating notebook",
+  DeletingNotebook = "Deleting notebook",
+  AddingCell = "Adding cell",
+  UpdatingCell = "Updating cell",
+  DeletingCell = "Deleting cell",
+  RunningCell = "Running cell",
+  // Layout = positional/structural; Chart = visualization settings.
+  ConfiguringLayout = "Configuring layout",
+  ConfiguringChart = "Configuring chart",
+  InspectingNotebook = "Inspecting notebook",
 }
 
 export type StatusArgs = {
@@ -58,6 +70,9 @@ export type StatusArgs = {
   section?: string
   tableOpType?: "schema" | "details"
   items?: Array<{ name: string; section?: string }>
+  label?: string
+  cellId?: string
+  content?: string
 }
 
 export type StatusEntry = {
@@ -174,6 +189,9 @@ export const AIStatusProvider: React.FC<AIStatusProviderProps> = ({
           type: newStatus,
           args: normalizedArgs ?? undefined,
           timestamp: Date.now(),
+          ...(normalizedArgs?.content !== undefined && {
+            content: normalizedArgs.content,
+          }),
         }
         if (
           statusRef.current === null ||

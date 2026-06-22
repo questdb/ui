@@ -1,13 +1,8 @@
 import type { ColumnDefinition } from "../../utils/questdb/types"
+import type { ColumnLayout } from "../../components/ResultGrid/types"
 
 const STORAGE_KEY = "result.grid.layout"
 const LRU_MAX = 50
-
-export type ColumnLayout = {
-  columnSizing?: Record<string, number>
-  columnOrder?: string[]
-  pinnedColumns?: string[]
-}
 
 type LayoutStore = Record<string, ColumnLayout>
 

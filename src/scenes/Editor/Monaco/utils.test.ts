@@ -1,5 +1,93 @@
 import { describe, it, expect } from "vitest"
-import { isCursorInComment, isCursorInQuotedIdentifier } from "./utils"
+import {
+  getQueriesFromText,
+  isCursorInComment,
+  isCursorInQuotedIdentifier,
+} from "./utils"
+
+describe("getQueriesFromText", () => {
+  it("splits two simple statements", () => {
+    expect(getQueriesFromText("SELECT 1; SELECT 2;")).toEqual([
+      "SELECT 1",
+      "SELECT 2",
+    ])
+  })
+
+  it("returns empty for empty input", () => {
+    expect(getQueriesFromText("")).toEqual([])
+    expect(getQueriesFromText("   \n  ")).toEqual([])
+  })
+
+  it("ignores semicolons inside strings", () => {
+    expect(getQueriesFromText("SELECT ';'; SELECT 'a;b'")).toEqual([
+      "SELECT ';'",
+      "SELECT 'a;b'",
+    ])
+  })
+
+  it("ignores semicolons in line comments", () => {
+    expect(
+      getQueriesFromText("SELECT 1 -- comment with ;\n; SELECT 2"),
+    ).toEqual(["SELECT 1 -- comment with ;", "SELECT 2"])
+  })
+
+  it("ignores semicolons in block comments", () => {
+    expect(getQueriesFromText("SELECT 1 /* a; b; */; SELECT 2")).toEqual([
+      "SELECT 1 /* a; b; */",
+      "SELECT 2",
+    ])
+  })
+
+  it("handles trailing statement with no semicolon", () => {
+    expect(getQueriesFromText("SELECT 1;\nSELECT 2")).toEqual([
+      "SELECT 1",
+      "SELECT 2",
+    ])
+  })
+
+  it("drops a trailing line-comment-only segment", () => {
+    expect(getQueriesFromText("select 1; -- note")).toEqual(["select 1"])
+  })
+
+  it("drops a trailing block-comment-only segment", () => {
+    expect(getQueriesFromText("select 1; /* note */")).toEqual(["select 1"])
+  })
+
+  it("drops standalone comment-only segments after the last statement", () => {
+    expect(
+      getQueriesFromText(
+        "--comment;\nselect 1;\n-- select /* comment */ 2;\n-- -- comment;",
+      ),
+    ).toEqual(["select 1"])
+  })
+
+  it("strips a leading comment but keeps a following statement", () => {
+    expect(
+      getQueriesFromText("--some comment;\nselect 1;\nselect /*comment*/ 2;\n"),
+    ).toEqual(["select 1", "select /*comment*/ 2"])
+  })
+
+  it("returns empty for comment-only input", () => {
+    expect(getQueriesFromText("-- just a comment")).toEqual([])
+    expect(getQueriesFromText("/* block only */")).toEqual([])
+  })
+
+  it("preserves WITH..SELECT and DECLARE prefixes (VWAP example)", () => {
+    const sql = `declare
+  @symbol := 'BTC-USDT'
+WITH sampled AS (SELECT 1 FROM trades)
+SELECT * FROM sampled;
+declare
+  @symbol := 'ETH-USDT'
+WITH sampled AS (SELECT 2 FROM trades)
+SELECT * FROM sampled;`
+    const out = getQueriesFromText(sql)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toContain("BTC-USDT")
+    expect(out[0]).toContain("WITH sampled")
+    expect(out[1]).toContain("ETH-USDT")
+  })
+})
 
 describe("isCursorInComment", () => {
   it("returns false when cursor is in normal SQL", () => {

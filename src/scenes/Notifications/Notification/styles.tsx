@@ -27,14 +27,16 @@ import { NotificationShape } from "types"
 import { bezierTransition } from "../../../components"
 
 export const Wrapper = styled.div<{
-  isMinimized: NotificationShape["isMinimized"]
+  $isMinimized: NotificationShape["isMinimized"]
+  $compact?: boolean
 }>`
   display: flex;
   align-items: center;
   border-right: none;
-  height: ${({ isMinimized }) => (isMinimized ? "auto" : "4.5rem")};
-  border-bottom: ${({ isMinimized, theme }) =>
-    isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
+  height: ${({ $isMinimized, $compact }) =>
+    $compact ? "4rem" : $isMinimized ? "auto" : "4.5rem"};
+  border-bottom: ${({ $isMinimized, theme }) =>
+    $isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
   padding: 0 1rem;
   flex-shrink: 0;
   width: 100%;
