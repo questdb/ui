@@ -17,6 +17,17 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.0 - 2026.06.23
+### Added
+- notebooks with coding agents integration [#561](https://github.com/questdb/ui/pull/561)
+
+### Changed
+- migrate the result grid into a new reusable ResultGrid component [#568](https://github.com/questdb/ui/pull/568)
+
+### Fixed
+- cancel running query reliably and preserve selection when running while busy [#567](https://github.com/questdb/ui/pull/567)
+
+
 ## 1.2.3 - 2026.06.03
 ### Added
 - share links to the queries using editor dropdown and shortcuts [#565](https://github.com/questdb/ui/pull/565)
