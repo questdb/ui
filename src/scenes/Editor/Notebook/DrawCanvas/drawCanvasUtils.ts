@@ -1,6 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
-import type { SingleQueryResult } from "../../../../store/notebook"
+import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import { normalizeQueryText } from "../../Monaco/utils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,
@@ -54,6 +55,21 @@ export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
   return { type: "error", query: r.query, columns: [], dataset: [], count: 0 }
 }
 
+// True when an existing cell result was produced by exactly the CURRENT queries
+// (same count, same per-statement query text). The run grid stores the raw cell
+// value verbatim (trailing `;`, surrounding whitespace) while the draw side
+// parses each statement, so both sides are normalized before comparing. A result
+// left over from edited-but-not-rerun SQL fails this, so the chart re-fetches.
+export const resultMatchesQueries = (
+  result: CellResult | null | undefined,
+  queries: string[],
+): result is CellResult =>
+  result != null &&
+  result.results.length === queries.length &&
+  result.results.every(
+    (r, i) => normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
+  )
+
 export const resultsEquivalent = (
   a: QueryExecResult[],
   b: QueryExecResult[],
@@ -62,11 +78,21 @@ export const resultsEquivalent = (
   for (let i = 0; i < a.length; i++) {
     const x = a[i]
     const y = b[i]
+    // Cheap O(1) reject before the O(rows×cols) walk: a live poll that moved
+    // almost always changes the row count or the first/last row's x value, so
+    // most ticks bail here without scanning every cell.
+    if (x.dataset.length !== y.dataset.length) return false
+    if (x.dataset.length > 0) {
+      const last = x.dataset.length - 1
+      if (x.dataset[0][0] !== y.dataset[0][0]) return false
+      if (x.dataset[last][0] !== y.dataset[last][0]) return false
+    }
+    if (x.type !== y.type) return false
+    if (x.error !== y.error) return false
     if (x.columns.length !== y.columns.length) return false
     for (let c = 0; c < x.columns.length; c++) {
       if (x.columns[c].name !== y.columns[c].name) return false
     }
-    if (x.dataset.length !== y.dataset.length) return false
     for (let r = 0; r < x.dataset.length; r++) {
       const rowA = x.dataset[r]
       const rowB = y.dataset[r]
@@ -222,13 +248,11 @@ export const resolveDraw = (
   return {
     chart: {
       xColumn: anchorX,
-      name: config?.name,
       rightAxis: config?.rightAxis,
     },
     renderQueries,
     effectiveConfig: {
       xColumn: anchorX,
-      name: config?.name,
       rightAxis: config?.rightAxis,
       queries: denseQueries,
     },

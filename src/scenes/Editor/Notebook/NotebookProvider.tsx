@@ -14,6 +14,7 @@ import { QuestContext } from "../../../providers/QuestProvider"
 import { MAX_NOTEBOOK_CELLS } from "../../../store/notebook"
 import type {
   CellLayoutItem,
+  CellResult,
   NotebookCell,
   NotebookVariable,
   NotebookViewState,
@@ -36,6 +37,7 @@ import {
   computeResultBottomHeight,
   DEFAULT_CHART_BOTTOM_HEIGHT,
 } from "./notebookUtils"
+import type { AutoRefresh } from "../../../store/notebook"
 import {
   deleteCellSnapshot,
   loadNotebookSnapshots,
@@ -77,8 +79,10 @@ export type NotebookActions = {
   cancelQuery: (cellId: string, index: number) => void
   setActiveResultIndex: (cellId: string, index: number) => void
   setCellMode: (cellId: string, mode: CellMode) => void
+  clearCellResult: (cellId: string) => void
+  mirrorCellResult: (cellId: string, result: CellResult | undefined) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
-  setCellAutoRefresh: (cellId: string, value: boolean) => void
+  setCellRefresh: (cellId: string, value: AutoRefresh) => void
   setCellChartMaximized: (cellId: string, value: boolean) => void
   setCellLayout: (
     cellId: string,
@@ -110,8 +114,10 @@ const NOOP_ACTIONS: NotebookActions = {
   cancelQuery: () => undefined,
   setActiveResultIndex: () => undefined,
   setCellMode: () => undefined,
+  clearCellResult: () => undefined,
+  mirrorCellResult: () => undefined,
   setCellChartConfig: () => undefined,
-  setCellAutoRefresh: () => undefined,
+  setCellRefresh: () => undefined,
   setCellChartMaximized: () => undefined,
   setCellLayout: () => undefined,
   setFocusedCell: () => undefined,
@@ -345,7 +351,9 @@ export const NotebookProvider: React.FC<{
   // for run.
   const setCellMode = useCallback(
     (cellId: string, mode: CellMode) => {
+      const cell = store.cellsRef.current.find((c) => c.id === cellId)
       store.setCellMode(cellId, mode)
+      if (cell?.bottomResized) return
       if (mode === "draw") {
         store.updateCell(cellId, { bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT })
       } else {
@@ -353,7 +361,6 @@ export const NotebookProvider: React.FC<{
         // existing result actually contains (DQL-with-rows → 10-row
         // height; DDL/DML/error/empty → notification-only). No result
         // yet → drop to single-view by clearing bottomHeight.
-        const cell = store.cellsRef.current.find((c) => c.id === cellId)
         store.updateCell(cellId, {
           bottomHeight: cell?.result
             ? computeResultBottomHeight(cell.result)
@@ -362,6 +369,31 @@ export const NotebookProvider: React.FC<{
       }
     },
     [store],
+  )
+
+  // Toggle the run grid off: drop the in-memory result and run-status so the
+  // cell collapses back to editor-only, and delete the persisted snapshot so it
+  // doesn't rehydrate on the next load.
+  const clearCellResult = useCallback(
+    (cellId: string) => {
+      const cell = store.cellsRef.current.find((c) => c.id === cellId)
+      store.updateCell(cellId, {
+        result: undefined,
+        lastRunStatus: undefined,
+        ...(cell?.bottomResized ? {} : { bottomHeight: undefined }),
+      })
+      void deleteCellSnapshot(bufferId, cellId)
+    },
+    [store, bufferId],
+  )
+
+  const mirrorCellResult = useCallback(
+    (cellId: string, result: CellResult | undefined) => {
+      hydrateCells((prev) =>
+        prev.map((c) => (c.id === cellId ? { ...c, result } : c)),
+      )
+    },
+    [hydrateCells],
   )
 
   const cancelCell = useCallback(
@@ -392,12 +424,15 @@ export const NotebookProvider: React.FC<{
 
       try {
         const ok = await execution.runCell(cellId, sql, signal)
-        // Every run (success OR error) puts the cell into result-double-view.
-        // Height is conditioned on the actual result shape so DDL/DML/empty-
-        // DQL/error results don't reserve 10 blank rows of space. Any prior user
-        // drag of the bottom handle is discarded on re-run.
+        // Size the result-double-view to the result shape, unless the user
+        // locked the bottom height (bottomResized).
         const cell = store.cellsRef.current.find((c) => c.id === cellId)
-        if (cell && cell.mode !== "draw" && cell.type !== "markdown") {
+        if (
+          cell &&
+          cell.mode !== "draw" &&
+          cell.type !== "markdown" &&
+          !cell.bottomResized
+        ) {
           store.updateCell(cellId, {
             bottomHeight: computeResultBottomHeight(cell.result),
           })
@@ -505,8 +540,10 @@ export const NotebookProvider: React.FC<{
     cancelQuery: execution.cancelQuery,
     setActiveResultIndex: execution.setActiveResultIndex,
     setCellMode,
+    clearCellResult,
+    mirrorCellResult,
     setCellChartConfig: store.setCellChartConfig,
-    setCellAutoRefresh: store.setCellAutoRefresh,
+    setCellRefresh: store.setCellRefresh,
     setCellChartMaximized: store.setCellChartMaximized,
     setCellLayout,
     setFocusedCell,

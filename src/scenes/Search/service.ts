@@ -18,7 +18,7 @@ type NotebookSearchTarget = {
 }
 
 // The searchable strings of a single cell, in display order: its SQL/markdown
-// source, then the chart name when present. Chart config only exists on SQL cells.
+// source, then the cell name when present.
 export const getNotebookCellSearchTargets = (
   cell: NotebookCell,
 ): NotebookSearchTarget[] => {
@@ -27,9 +27,8 @@ export const getNotebookCellSearchTargets = (
   if (cell.value) {
     targets.push({ text: cell.value, notebookField: "cell", cellType })
   }
-  const chartName = cell.chartConfig?.name
-  if (cellType === "sql" && chartName) {
-    targets.push({ text: chartName, notebookField: "chartName", cellType })
+  if (cell.name) {
+    targets.push({ text: cell.name, notebookField: "chartName", cellType })
   }
   return targets
 }

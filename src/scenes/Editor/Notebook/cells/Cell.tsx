@@ -8,11 +8,17 @@ import {
   normalizeQueryText,
   stripSQLComments,
 } from "../../Monaco/utils"
-import { PlayIcon, CancelIcon, CircleNotchSpinner } from "../../Monaco/icons"
-import { ChartLineUpIcon } from "@phosphor-icons/react"
+import { CircleNotchSpinner } from "../../Monaco/icons"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions } from "../NotebookProvider"
 import { CellDragHeader } from "./CellDragHeader"
+import { CellRunDrawToggles } from "./CellRunDrawToggles"
+import { CellWideActions } from "./CellWideActions"
+import { CellViewToggle } from "./CellViewToggle"
+import { CellNameLabel } from "./CellNameLabel"
+import { useChartLoading } from "./useChartLoading"
+import { useChartZoomed } from "./useChartZoomed"
+import { useCellToolbarTier } from "./useCellToolbarTier"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { InlineResultTable } from "../result-table"
 import { ResizeHandle } from "../resize"
@@ -36,13 +42,12 @@ import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import {
-  DEFAULT_TOP_HEIGHT,
-  defaultBottomHeightFor,
+  computeCellHeights,
   isDoubleView,
   isExpectingResult,
   MIN_BOTTOM_HEIGHT_PX,
   partitionCellHeights,
-  RESERVED_RESULT_BOTTOM_HEIGHT,
+  resolveCellView,
   scaleCellHeights,
 } from "../notebookUtils"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
@@ -52,55 +57,6 @@ import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 // `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
 // pasted content (user-confirmed: unbounded).
 const MIN_EDITOR_HEIGHT = 72
-
-const RunButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 0.3rem;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-
-  &:hover {
-    filter: brightness(1.3);
-  }
-
-  &:disabled {
-    opacity: 0.3;
-    cursor: default;
-    filter: none;
-  }
-
-  svg {
-    width: 2.4rem;
-    height: 2.4rem;
-  }
-`
-
-const DrawButton = styled.button<{ $active: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 0.3rem;
-  background: transparent;
-  color: ${({ $active, theme }) =>
-    $active ? theme.color.cyan : theme.color.cyan};
-  cursor: pointer;
-  padding: 0;
-
-  &:hover {
-    filter: brightness(1.3);
-  }
-
-  &:disabled {
-    opacity: 0.3;
-    cursor: default;
-    filter: none;
-  }
-`
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
   overflow: hidden;
@@ -158,6 +114,8 @@ const HydrationLoader = styled.div`
 
 type Props = {
   cell: NotebookCell
+  index: number
+  totalCells: number
   layoutMode?: "list" | "grid"
   isFocused: boolean
   isMaximized: boolean
@@ -167,6 +125,8 @@ type Props = {
 
 const CellInner: React.FC<Props> = ({
   cell,
+  index,
+  totalCells,
   layoutMode = "list",
   isFocused,
   isMaximized,
@@ -180,9 +140,8 @@ const CellInner: React.FC<Props> = ({
     cancelQuery,
     setActiveResultIndex,
     setCellMode,
+    clearCellResult,
     setCellChartConfig,
-    setCellAutoRefresh,
-    setCellChartMaximized,
     updateCell,
     setFocusedCell,
     getCellsSnapshot,
@@ -193,7 +152,6 @@ const CellInner: React.FC<Props> = ({
   const bufferIdForEvents =
     typeof activeBuffer.id === "number" ? activeBuffer.id : undefined
   const isDrawMode = cell.mode === "draw"
-  const isChartMaximized = isDrawMode && !!cell.isChartMaximized
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
     cellId: cell.id,
@@ -203,6 +161,16 @@ const CellInner: React.FC<Props> = ({
   })
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  // A run kicked off from the Run toggle (a neutral cell producing its first
+  // result) shows its spinner on the Run segment — like Draw spins the Chart
+  // segment. A run from the refresh button is a refresh and spins that instead.
+  const firstRunRef = useRef(false)
+
+  const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
+  const { loading: chartLoading, refreshing: chartRefreshing } =
+    useChartLoading(cell.id)
+  const chartZoomed = useChartZoomed(cell.id)
 
   const contentHeightGetterRef = useRef<() => number | null>(() => null)
 
@@ -232,11 +200,13 @@ const CellInner: React.FC<Props> = ({
   const bottomResize = useCellResize(
     MIN_BOTTOM_HEIGHT_PX,
     useCallback(
-      (height: number) => updateCell(cell.id, { bottomHeight: height }),
+      (height: number) =>
+        updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
       [cell.id, updateCell],
     ),
     useCallback(
-      () => updateCell(cell.id, { bottomHeight: undefined }),
+      () =>
+        updateCell(cell.id, { bottomHeight: undefined, bottomResized: false }),
       [cell.id, updateCell],
     ),
   )
@@ -248,26 +218,13 @@ const CellInner: React.FC<Props> = ({
     },
     [cell.id, setCellChartConfig],
   )
-  const handleAutoRefreshChange = useCallback(
-    (value: boolean) => {
-      signalUserEdit()
-      setCellAutoRefresh(cell.id, value)
-    },
-    [cell.id, setCellAutoRefresh],
-  )
-  const handleChartMaximizedChange = useCallback(
-    (value: boolean) => {
-      signalUserEdit()
-      setCellChartMaximized(cell.id, value)
-    },
-    [cell.id, setCellChartMaximized],
-  )
 
   const validatingDrawRef = useRef(false)
 
   const handleDrawClick = useCallback(async () => {
     if (isDrawMode) {
       setCellMode(cell.id, "run")
+      clearCellResult(cell.id)
       if (bufferIdForEvents !== undefined) {
         emitUserAction({
           kind: "user_changed_cell_mode",
@@ -289,7 +246,6 @@ const CellInner: React.FC<Props> = ({
         return
       }
       setCellMode(cell.id, "draw")
-      setCellChartMaximized(cell.id, false)
       if (bufferIdForEvents !== undefined) {
         emitUserAction({
           kind: "user_changed_cell_mode",
@@ -306,7 +262,7 @@ const CellInner: React.FC<Props> = ({
     cell.value,
     isDrawMode,
     setCellMode,
-    setCellChartMaximized,
+    clearCellResult,
     bufferIdForEvents,
     validateWithGlobals,
   ])
@@ -321,19 +277,38 @@ const CellInner: React.FC<Props> = ({
   const liveTopHeight = topResize.liveHeight
   const liveBottomHeight = bottomResize.liveHeight
 
-  const topHeight = liveTopHeight ?? cell.topHeight ?? DEFAULT_TOP_HEIGHT
   // A run cell that had a persisted result (lastRunStatus is set, known
   // synchronously from the view state) reserves its result area from the FIRST
-  // render while the snapshot hydrates
-  // computeCellGridH applies the same reservation to the grid item's height.
+  // render while the snapshot hydrates; computeCellGridH reserves the same space
+  // in the grid item's height (both go through computeCellHeights).
   const expectingResult = isExpectingResult(cell, isHydrating)
-  const bottomHeight =
-    liveBottomHeight ??
-    cell.bottomHeight ??
-    (expectingResult
-      ? RESERVED_RESULT_BOTTOM_HEIGHT
-      : defaultBottomHeightFor(cell))
+  const { topHeight, bottomHeight } = computeCellHeights(cell, {
+    liveTopHeight,
+    liveBottomHeight,
+    expectingResult,
+  })
   const doubleView = isDoubleView(cell) || expectingResult
+  // The compact tier can't split — it shows one full-height pane at a time. A
+  // chart/table fills the cell by default; "View SQL" (isChartMaximized ===
+  // false) shows the editor instead, keeping the data for an instant switch back
+  // (no re-run). It's the same maximize flag, just rendered editor-or-data
+  // rather than editor-and-data.
+  const isCompactTier = toolbarTier === "compact"
+  const isChartMaximized = isCompactTier
+    ? doubleView && cell.isChartMaximized !== false
+    : doubleView && !!cell.isChartMaximized
+  // The bottom slot (chart/table) shares the cell with the editor only outside
+  // compact; in compact it's the editor OR the bottom, never both.
+  const showBottomSlot = isChartMaximized || (doubleView && !isCompactTier)
+  const isSplit = doubleView && !isChartMaximized && !isCompactTier
+  // The run grid acts as a toggle: it's "selected" whenever its bottom slot is
+  // showing (a result, or the reserved space while one hydrates). Draw mode owns
+  // the bottom slot instead, so run is never active there — the two are mutually
+  // exclusive, and neither selected means editor-only.
+  const runActive = !isDrawMode && doubleView
+  const view = resolveCellView(cell)
+  const canRun = !!stripSQLComments(cell.value).trim()
+  const isGridLoading = isRunning && firstRunRef.current
 
   const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
     null,
@@ -441,10 +416,12 @@ const CellInner: React.FC<Props> = ({
   )
 
   const handleRunAll = useCallback(async () => {
-    if (await tryRunSelection()) return
-    if (!editorRef.current) return
-
-    clearHighlight()
+    // The editor is unmounted when the result/chart is maximized; run the
+    // cell's stored SQL directly in that case instead of bailing out.
+    if (editorRef.current) {
+      if (await tryRunSelection()) return
+      clearHighlight()
+    }
 
     const priorResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
@@ -605,35 +582,22 @@ const CellInner: React.FC<Props> = ({
     topResize.resetHeight()
   }, [isMaximized, bottomResize, topResize, cell.id, updateCell])
 
-  const bottomEdgeResizeLive = useCallback(
-    (newResultHeight: number) => {
-      const { top, bottom } = scaleCellHeights(
-        topHeight,
-        bottomHeight,
-        topHeight + newResultHeight,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      topResize.resizeLive(top)
-      bottomResize.resizeLive(bottom)
-    },
-    [topHeight, bottomHeight, topResize, bottomResize],
-  )
-
-  const bottomEdgeResizeEnd = useCallback(
-    (newResultHeight: number) => {
-      const { top, bottom } = scaleCellHeights(
-        topHeight,
-        bottomHeight,
-        topHeight + newResultHeight,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      topResize.resizeEnd(top)
-      bottomResize.resizeEnd(bottom)
-    },
-    [topHeight, bottomHeight, topResize, bottomResize],
-  )
+  const resetBottomArea = useCallback(() => {
+    if (isMaximized) {
+      setSpotlightLiveRatio(null)
+      updateCell(cell.id, { spotlightEditorRatio: undefined })
+      return
+    }
+    if (showBottomSlot) bottomResize.resetHeight()
+    else topResize.resetHeight()
+  }, [
+    isMaximized,
+    showBottomSlot,
+    bottomResize,
+    topResize,
+    cell.id,
+    updateCell,
+  ])
 
   // When a chart is maximized the BottomSlot fills the whole cell, so its
   // measured height IS the cell total — scale top/bottom to that new total
@@ -671,12 +635,76 @@ const CellInner: React.FC<Props> = ({
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      resetToDefaults()
+      resetBottomArea()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
     return () =>
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
-  }, [cell.id, resetToDefaults])
+  }, [cell.id, resetBottomArea])
+
+  useEffect(() => {
+    if (!isRunning) firstRunRef.current = false
+  }, [isRunning])
+
+  // The toolbar's "View table" / "Refresh now" (grid) drive a run, and
+  // "View chart" enters draw mode — both routed here so they reuse the same
+  // run / validated-draw logic as the Run / Draw toggle buttons.
+  useEffect(() => {
+    const runHandler = (payload?: { cellId?: string }) => {
+      if (payload?.cellId !== cell.id) return
+      firstRunRef.current = false
+      exitDrawIfNeeded()
+      void handleRunAll()
+    }
+    const drawHandler = (payload?: { cellId?: string }) => {
+      if (payload?.cellId !== cell.id) return
+      void handleDrawClick()
+    }
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
+    return () => {
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
+    }
+  }, [cell.id, exitDrawIfNeeded, handleRunAll, handleDrawClick])
+
+  const handleRunClick = useCallback(() => {
+    firstRunRef.current = true
+    exitDrawIfNeeded()
+    void handleRunAll()
+  }, [exitDrawIfNeeded, handleRunAll])
+  const handleHideResult = useCallback(
+    () => clearCellResult(cell.id),
+    [cell.id, clearCellResult],
+  )
+  const handleCancelClick = useCallback(
+    () => cancelCell(cell.id),
+    [cell.id, cancelCell],
+  )
+  const handleDraw = useCallback(
+    () => void handleDrawClick(),
+    [handleDrawClick],
+  )
+
+  useEffect(() => {
+    if (!isFocused && !isMaximized) return
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.key !== "Enter") return
+      if (editorContainerRef.current?.contains(document.activeElement)) return
+      e.preventDefault()
+      if (view === "chart") {
+        eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
+          cellId: cell.id,
+        })
+      } else if (view === "grid") {
+        eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId: cell.id })
+      } else {
+        handleRunClick()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [isFocused, isMaximized, view, cell.id, handleRunClick])
 
   const cellEl = (
     <CellWrapper
@@ -685,66 +713,69 @@ const CellInner: React.FC<Props> = ({
       tabIndex={-1}
       $focused={isFocused}
       $maximized={isMaximized}
-      $gridMode={layoutMode === "grid"}
+      $gridMode={layoutMode === "grid" && !isMaximized}
       {...wrapperHandlers}
     >
-      {!isChartMaximized && (
-        <CellDragHeader
-          cellId={cell.id}
-          layoutMode={layoutMode}
-          left={
-            <>
-              {isRunning ? (
-                <RunButton
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    cancelCell(cell.id)
-                  }}
-                  title="Cancel"
-                  aria-label="Cancel"
-                >
-                  <CancelIcon />
-                </RunButton>
-              ) : (
-                <RunButton
-                  disabled={!stripSQLComments(cell.value).trim()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    exitDrawIfNeeded()
-                    void handleRunAll()
-                  }}
-                  title="Run (Ctrl+Shift+Enter)"
-                  aria-label="Run"
-                >
-                  <PlayIcon />
-                </RunButton>
-              )}
-              <DrawButton
-                type="button"
-                $active={isDrawMode}
-                disabled={!stripSQLComments(cell.value).trim()}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  void handleDrawClick()
-                }}
-                title={
-                  isDrawMode
-                    ? (cell.autoRefresh ?? true)
-                      ? "Drawing — auto-refresh on"
-                      : "Refresh chart"
-                    : "Draw (auto-refresh chart)"
-                }
-                aria-label="Draw"
-              >
-                <ChartLineUpIcon
-                  size={isDrawMode ? 26 : 24}
-                  weight={isDrawMode ? "fill" : "regular"}
-                />
-              </DrawButton>
-            </>
-          }
-        />
-      )}
+      <CellDragHeader
+        cellId={cell.id}
+        cell={cell}
+        cellIndex={index}
+        totalCells={totalCells}
+        layoutMode={layoutMode}
+        isMaximized={isMaximized}
+        headerRef={headerRef}
+        toolbarTier={toolbarTier}
+        chartZoomed={chartZoomed}
+        left={
+          <CellNameLabel
+            name={cell.name}
+            onRename={(name) =>
+              updateCell(cell.id, { name: name || undefined })
+            }
+          />
+        }
+        right={
+          toolbarTier === "compact" ? null : view === "none" ? (
+            // Neutral: action verbs (Run / Draw) — labelled only when expanded.
+            <CellRunDrawToggles
+              isRunning={isRunning}
+              isChartLoading={chartLoading}
+              runActive={runActive}
+              isDrawMode={isDrawMode}
+              canRun={canRun}
+              autoRefreshOn={cell.autoRefresh !== false}
+              showLabels={toolbarTier === "expanded"}
+              onRun={handleRunClick}
+              onHideResult={handleHideResult}
+              onCancel={handleCancelClick}
+              onDraw={handleDraw}
+            />
+          ) : toolbarTier === "expanded" ? (
+            <CellWideActions
+              cellId={cell.id}
+              view={view}
+              autoRefresh={cell.autoRefresh ?? true}
+              isChartMaximized={isChartMaximized}
+              isRunning={isRunning}
+              isGridLoading={isGridLoading}
+              isChartLoading={chartLoading}
+              isChartRefreshing={chartRefreshing}
+              chartZoomed={chartZoomed}
+            />
+          ) : (
+            // Standard tier with a result: the compact (label-less) view toggle.
+            <CellViewToggle
+              cellId={cell.id}
+              view={view}
+              isChartMaximized={isChartMaximized}
+              isGridLoading={isGridLoading}
+              isChartLoading={chartLoading}
+              chartZoomed={chartZoomed}
+              showLabels={false}
+            />
+          )
+        }
+      />
       {!isChartMaximized && (
         <EditorContainer
           ref={editorContainerRef}
@@ -779,8 +810,9 @@ const CellInner: React.FC<Props> = ({
               },
               folding: false,
               renderLineHighlight: "gutter",
-              glyphMargin: true,
-              lineDecorationsWidth: 24,
+              glyphMargin: toolbarTier !== "compact",
+              lineDecorationsWidth: toolbarTier === "compact" ? 16 : 24,
+              lineNumbers: toolbarTier === "compact" ? "off" : "on",
               lineNumbersMinChars: 3,
               scrollBeyondLastLine: false,
               wordWrap: "off",
@@ -795,7 +827,7 @@ const CellInner: React.FC<Props> = ({
       {/* Inner-top resize handle (between editor and bottom slot). Only
           rendered in double-view, since there's nothing below in single-
           view. Renders in every layout mode (list / grid / spotlight). */}
-      {!isChartMaximized && doubleView && (
+      {isSplit && (
         <ResizeHandle
           background={theme.color.editorBackground}
           targetRef={editorContainerRef}
@@ -807,7 +839,7 @@ const CellInner: React.FC<Props> = ({
       )}
       {/* Bottom slot: result grid OR chart, OR chart filling the whole cell
           when expanded. */}
-      {(doubleView || isChartMaximized) && (
+      {showBottomSlot && (
         <BottomSlot
           ref={resultRef}
           $spotlight={isMaximized}
@@ -827,8 +859,6 @@ const CellInner: React.FC<Props> = ({
               bufferId={bufferIdForEvents}
               isFocused={isFocused}
               onConfigChange={handleChartConfigChange}
-              onAutoRefreshChange={handleAutoRefreshChange}
-              onMaximizedChange={handleChartMaximizedChange}
             />
           ) : cell.result ? (
             <InlineResultTable
@@ -861,31 +891,27 @@ const CellInner: React.FC<Props> = ({
       <ResizeHandle
         overlay
         targetRef={
-          isChartMaximized || doubleView ? resultRef : editorContainerRef
+          isChartMaximized || showBottomSlot ? resultRef : editorContainerRef
         }
         onResize={
           isChartMaximized
             ? maximizedChartResizeLive
-            : doubleView
-              ? bottomEdgeResizeLive
+            : showBottomSlot
+              ? bottomResize.resizeLive
               : topResize.resizeLive
         }
         onResizeEnd={
           isChartMaximized
             ? maximizedChartResizeEnd
-            : doubleView
-              ? bottomEdgeResizeEnd
+            : showBottomSlot
+              ? bottomResize.resizeEnd
               : topResize.resizeEnd
         }
-        onDoubleClick={
-          isChartMaximized || doubleView
-            ? resetToDefaults
-            : topResize.resetHeight
-        }
+        onDoubleClick={isChartMaximized ? resetToDefaults : resetBottomArea}
         minHeight={
           isChartMaximized
             ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX
-            : doubleView
+            : showBottomSlot
               ? MIN_BOTTOM_HEIGHT_PX
               : undefined
         }

@@ -50,7 +50,6 @@ const makeController = (
   setCellLayout: () => undefined,
   setCellMode: () => undefined,
   setCellChartConfig: () => undefined,
-  setCellAutoRefresh: () => undefined,
   setCellChartMaximized: () => undefined,
   setCellMaximized: () => undefined,
   applyNotebookState: () => ({
@@ -236,10 +235,10 @@ describe("buildSnapshot", () => {
   it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
-      autoRefresh: true,
+      autoRefresh: "5s",
       isChartMaximized: false,
+      name: "Trades",
       chartConfig: {
-        name: "Trades",
         xColumn: "ts",
         queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
@@ -250,11 +249,12 @@ describe("buildSnapshot", () => {
       // Snake-case wire shape the model can copy straight back into apply_notebook_state.
       expect(snap.cells[0].chart_config).toEqual({
         x_column: "ts",
-        name: "Trades",
         queries: [{ type: "line", y_columns: ["price", "volume"] }],
       })
+      expect(snap.cells[0].name).toBe("Trades")
       expect(snap.cells[0].mode).toBe("draw")
-      expect(snap.cells[0].auto_refresh).toBe(true)
+      // Stored verbatim as the wire value — no conversion.
+      expect(snap.cells[0].auto_refresh).toBe("5s")
     } else {
       throw new Error("expected ok snapshot")
     }

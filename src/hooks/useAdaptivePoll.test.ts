@@ -399,4 +399,52 @@ describe("useAdaptivePoll core logic", () => {
       expect(fetchCallCount).toBe(1)
     })
   })
+
+  describe("skip initial fetch", () => {
+    // Mirrors the polling loop's per-iteration decision: the first tick is
+    // skipped when getSkipInitialFetch() is true, every later tick fetches.
+    const runIterations = (
+      iterations: number,
+      getSkipInitialFetch?: () => boolean,
+    ): number => {
+      let fetchCount = 0
+      let skipFetch = getSkipInitialFetch?.() ?? false
+      for (let i = 0; i < iterations; i++) {
+        if (skipFetch) {
+          skipFetch = false
+        } else {
+          fetchCount++
+        }
+      }
+      return fetchCount
+    }
+
+    it("fetches on every tick when no skip getter is provided", () => {
+      // Given no getSkipInitialFetch
+      // When the loop runs 3 ticks
+      // Then it fetches on all of them
+      expect(runIterations(3)).toBe(3)
+    })
+
+    it("skips the first fetch when the getter returns true", () => {
+      // Given freshly transferred data (getter returns true once)
+      // When the loop runs 3 ticks
+      // Then the first tick is skipped and only the later 2 fetch
+      expect(runIterations(3, () => true)).toBe(2)
+    })
+
+    it("fetches the first tick when the getter returns false", () => {
+      // Given no transferred data (getter returns false)
+      // When the loop runs 3 ticks
+      // Then it fetches on all of them
+      expect(runIterations(3, () => false)).toBe(3)
+    })
+
+    it("only skips once, not on every tick", () => {
+      // Given the getter is read a single time at loop start
+      // When the loop runs 5 ticks
+      // Then exactly one fetch is skipped
+      expect(runIterations(5, () => true)).toBe(4)
+    })
+  })
 })

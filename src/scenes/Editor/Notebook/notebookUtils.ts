@@ -1,5 +1,7 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type {
+  AutoRefresh,
+  AutoRefreshInterval,
   CellLayoutItem,
   CellMode,
   CellResult,
@@ -10,10 +12,13 @@ import type {
   SingleQueryResult,
 } from "../../../store/notebook"
 import {
+  AUTO_REFRESH_INTERVALS,
   createCell,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   exceedsCellLineLimit,
+  MAX_CELL_NAME_LENGTH,
+  exceedsCellNameLimit,
 } from "../../../store/notebook"
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
@@ -23,6 +28,54 @@ import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
 } from "../../../components/ResultGrid/dimensions"
+
+// Auto-refresh (draw cells): true = adaptive poll, false = off, a token like
+// "5s" = fixed cadence. The cell stores this value verbatim (= the MCP wire
+// form), so there is no conversion layer.
+export const AUTO_REFRESH_OPTIONS: AutoRefresh[] = [
+  true,
+  false,
+  ...(Object.keys(AUTO_REFRESH_INTERVALS) as AutoRefreshInterval[]),
+]
+
+export const autoRefreshLabel = (value: AutoRefresh): string =>
+  value === true ? "Auto" : value === false ? "Off" : value
+
+export const autoRefreshIntervalMs = (
+  value: AutoRefresh,
+): number | undefined =>
+  typeof value === "string" ? AUTO_REFRESH_INTERVALS[value] : undefined
+
+export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
+  typeof value === "boolean" ||
+  (typeof value === "string" && value in AUTO_REFRESH_INTERVALS)
+
+// What a cell currently shows in its bottom slot — drives the toolbar's
+// view-switch / refresh / chart actions and their disabled states.
+export type CellView = "none" | "grid" | "chart"
+
+export const resolveCellView = (
+  cell: Pick<NotebookCell, "mode" | "result">,
+): CellView => {
+  if (cell.mode === "draw") return "chart"
+  if (cell.result != null) return "grid"
+  return "none"
+}
+
+export type CellToolbarTier = "compact" | "standard" | "expanded"
+
+export const CELL_TOOLBAR_STANDARD_MIN = 480
+export const CELL_TOOLBAR_EXPANDED_MIN = 720
+
+export const cellToolbarTier = (
+  width: number,
+  isMaximized: boolean,
+): CellToolbarTier =>
+  isMaximized || width >= CELL_TOOLBAR_EXPANDED_MIN
+    ? "expanded"
+    : width >= CELL_TOOLBAR_STANDARD_MIN
+      ? "standard"
+      : "compact"
 
 export const singleResultFromExec = (
   exec: QueryExecResult,
@@ -317,11 +370,12 @@ export const buildInitialScriptResults = (
 
 type ApplyCellRequest = {
   id?: string | null
+  name?: string | null
   value?: string | null
   preserveValue?: boolean | null
   type?: CellType | null
   mode?: CellMode | null
-  autoRefresh?: boolean | null
+  autoRefresh?: AutoRefresh | null
   isChartMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
@@ -419,7 +473,6 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
-  if (cfg.name) next.name = cfg.name
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
   if (cfg.autoRefresh !== undefined) next.autoRefresh = cfg.autoRefresh
   return next
@@ -479,6 +532,17 @@ export const buildAppliedCells = (
     }
     const resolvedMode: CellMode | undefined =
       req.mode === undefined || req.mode === null ? undefined : req.mode
+
+    // PUT semantics: a non-empty string sets the name, null/"" clears it.
+    const resolvedName =
+      typeof req.name === "string" && req.name.length > 0 ? req.name : undefined
+
+    if (resolvedName !== undefined && exceedsCellNameLimit(resolvedName)) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has a ${resolvedName.length}-character name, over the ${MAX_CELL_NAME_LENGTH}-character limit.`,
+        "cells",
+      )
+    }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
 
@@ -596,6 +660,8 @@ export const buildAppliedCells = (
       } else {
         delete next.type
       }
+      if (resolvedName !== undefined) next.name = resolvedName
+      else delete next.name
       return next
     }
 
@@ -605,6 +671,7 @@ export const buildAppliedCells = (
       position: index,
       value,
     }
+    if (resolvedName !== undefined) created.name = resolvedName
     if (resolvedType === "markdown") {
       created.type = "markdown"
       return created
@@ -779,6 +846,29 @@ export const isDoubleView = (cell: NotebookCell): boolean => {
   return cell.result != null
 }
 
+// Resolves a cell's editor (top) and bottom-slot heights — shared by the
+// rendered cell (Cell.tsx, with live drag overrides) and computeCellGridH.
+export const computeCellHeights = (
+  cell: NotebookCell,
+  opts: {
+    liveTopHeight?: number | null
+    liveBottomHeight?: number | null
+    expectingResult?: boolean
+  } = {},
+): { topHeight: number; bottomHeight: number } => {
+  const topHeight = opts.liveTopHeight ?? cell.topHeight ?? DEFAULT_TOP_HEIGHT
+  const bottomHeight = isDoubleView(cell)
+    ? (opts.liveBottomHeight ??
+      cell.bottomHeight ??
+      defaultBottomHeightFor(cell))
+    : opts.expectingResult === true
+      ? (opts.liveBottomHeight ??
+        cell.bottomHeight ??
+        RESERVED_RESULT_BOTTOM_HEIGHT)
+      : 0
+  return { topHeight, bottomHeight }
+}
+
 // Derives the react-grid-layout `h` (row count) for a cell from its
 // topHeight + bottomHeight + chrome. Recomputed at render time on every
 // state change.
@@ -797,13 +887,10 @@ export const computeCellGridH = (
   marginY: number = 0,
   expectingResult: boolean = false,
 ): number => {
-  const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
-  const bottom = isDoubleView(cell)
-    ? (cell.bottomHeight ?? defaultBottomHeightFor(cell))
-    : expectingResult
-      ? (cell.bottomHeight ?? RESERVED_RESULT_BOTTOM_HEIGHT)
-      : 0
-  const totalPx = CELL_CHROME_PX + top + bottom
+  const { topHeight, bottomHeight } = computeCellHeights(cell, {
+    expectingResult,
+  })
+  const totalPx = CELL_CHROME_PX + topHeight + bottomHeight
   return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
 }
 

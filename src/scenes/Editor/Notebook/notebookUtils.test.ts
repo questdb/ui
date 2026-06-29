@@ -2,6 +2,11 @@ import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
   attachScriptSummary,
+  autoRefreshIntervalMs,
+  autoRefreshLabel,
+  AUTO_REFRESH_OPTIONS,
+  isAutoRefresh,
+  resolveCellView,
   buildAppliedCells,
   buildAppliedLayout,
   buildInitialScriptResults,
@@ -9,8 +14,10 @@ import {
   capResultBytes,
   cancelAllInCell,
   cancelOneInCell,
+  cellToolbarTier,
   cloneNotebookViewState,
   computeCellGridH,
+  computeCellHeights,
   computeResultBottomHeight,
   duplicateCellAt,
   generateDefaultLayout,
@@ -20,7 +27,9 @@ import {
   isUnverifiableExecError,
   mergeCellLayout,
   nextCopyLabel,
+  partitionCellHeights,
   removeCell,
+  scaleCellHeights,
   setResultAt,
   singleResultFromExec,
   sqlHash,
@@ -685,6 +694,35 @@ describe("buildAppliedCells", () => {
     expect(diff.deleted).toEqual([])
   })
 
+  it("sets a cell name on create, then clears it on update with null (PUT)", () => {
+    // Given a fresh cell created with a name
+    const { nextCells: created } = buildAppliedCells([], {
+      cells: [{ value: "SELECT 1", name: "BTC price" }],
+    })
+    expect(created[0].name).toBe("BTC price")
+
+    // When the cell is re-applied with name: null
+    const { nextCells: cleared } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, value: "SELECT 1", name: null }],
+    })
+    // Then the name is dropped (apply is a full PUT, no preservation)
+    expect(cleared[0].name).toBeUndefined()
+  })
+
+  it("does not preserve an existing name when name is omitted (PUT reset)", () => {
+    // Given an existing named cell
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x", name: "Mine" },
+    ]
+
+    // When re-applied without a name field
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "x" }],
+    })
+    // Then the name is reset (apply describes the cell in full)
+    expect(nextCells[0].name).toBeUndefined()
+  })
+
   it("updates existing cells in place and preserves result when value unchanged", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "x", result: dql("x") },
@@ -1014,7 +1052,7 @@ describe("buildAppliedCells", () => {
         position: 0,
         value: "SELECT 1",
         mode: "draw",
-        autoRefresh: true,
+        autoRefresh: "5s",
         isChartMaximized: true,
         chartConfig: {
           xColumn: "ts",
@@ -1029,6 +1067,29 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
     expect(nextCells[0].isChartMaximized).toBeUndefined()
+  })
+
+  it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
+    // Given a draw cell created with a 5s fixed interval
+    const drawCell = {
+      value: "SELECT 1",
+      mode: "draw" as const,
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "line" as const, yColumns: ["v"] }],
+      },
+    }
+    const created = buildAppliedCells([], {
+      cells: [{ ...drawCell, autoRefresh: "5s" as const }],
+    }).nextCells
+    expect(created[0].autoRefresh).toBe("5s")
+
+    // When the cell is re-applied (PUT) without auto_refresh
+    const { nextCells } = buildAppliedCells(created, {
+      cells: [{ ...drawCell, id: created[0].id }],
+    })
+    // Then a draw cell defaults back to adaptive (true)
+    expect(nextCells[0].autoRefresh).toBe(true)
   })
 
   it("refuses an empty cells array", () => {
@@ -1200,6 +1261,120 @@ describe("computeResultBottomHeight", () => {
         timestamp: 0,
       }),
     ).toBe(84)
+  })
+})
+
+describe("computeCellHeights", () => {
+  const cell = (over = {}) => ({ id: "x", position: 0, value: "", ...over })
+
+  it("single-view (run, no result): default editor, zero bottom", () => {
+    expect(computeCellHeights(cell())).toEqual({
+      topHeight: 72,
+      bottomHeight: 0,
+    })
+  })
+  it("uses persisted topHeight / bottomHeight when present", () => {
+    expect(
+      computeCellHeights(
+        cell({
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        }),
+      ),
+    ).toEqual({ topHeight: 200, bottomHeight: 300 })
+  })
+  it("draw cell defaults the bottom to the chart height", () => {
+    expect(computeCellHeights(cell({ mode: "draw" }))).toEqual({
+      topHeight: 72,
+      bottomHeight: 350,
+    })
+  })
+  it("double-view (empty result) defaults to the notification-only height", () => {
+    expect(
+      computeCellHeights(
+        cell({ result: { results: [], activeResultIndex: 0, timestamp: 0 } }),
+      ),
+    ).toEqual({ topHeight: 72, bottomHeight: 44 })
+  })
+  it("expectingResult reserves the result area when bottomHeight is unset", () => {
+    expect(
+      computeCellHeights(cell({ lastRunStatus: "success" }), {
+        expectingResult: true,
+      }),
+    ).toEqual({ topHeight: 72, bottomHeight: 424 })
+  })
+  it("live drag overrides win over persisted values", () => {
+    expect(
+      computeCellHeights(
+        cell({
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        }),
+        { liveTopHeight: 111, liveBottomHeight: 222 },
+      ),
+    ).toEqual({ topHeight: 111, bottomHeight: 222 })
+  })
+  it("keeps the bottom at zero in single-view regardless of live value", () => {
+    expect(computeCellHeights(cell(), { liveBottomHeight: 999 })).toEqual({
+      topHeight: 72,
+      bottomHeight: 0,
+    })
+  })
+})
+
+describe("scaleCellHeights", () => {
+  it("scales both heights proportionally to the new content", () => {
+    expect(scaleCellHeights(200, 200, 200, 72, 88)).toEqual({
+      top: 100,
+      bottom: 100,
+    })
+  })
+  it("clamps the bottom to its minimum and gives the rest to the top", () => {
+    expect(scaleCellHeights(400, 100, 200, 72, 88)).toEqual({
+      top: 112,
+      bottom: 88,
+    })
+  })
+  it("clamps the top to its minimum and gives the rest to the bottom", () => {
+    expect(scaleCellHeights(100, 400, 200, 72, 88)).toEqual({
+      top: 72,
+      bottom: 128,
+    })
+  })
+  it("never shrinks below the combined minimum, even when asked smaller", () => {
+    expect(scaleCellHeights(400, 200, 50, 72, 88)).toEqual({
+      top: 72,
+      bottom: 88,
+    })
+  })
+  it("falls back to scale 1 when the old content is zero", () => {
+    expect(scaleCellHeights(0, 0, 300, 72, 88)).toEqual({
+      top: 72,
+      bottom: 228,
+    })
+  })
+})
+
+describe("partitionCellHeights", () => {
+  it("keeps the requested top and gives the remainder to the bottom", () => {
+    expect(partitionCellHeights(300, 200, 72, 88)).toEqual({
+      top: 200,
+      bottom: 100,
+    })
+  })
+  it("raises the top to its minimum when requested below it", () => {
+    expect(partitionCellHeights(300, 40, 72, 88)).toEqual({
+      top: 72,
+      bottom: 228,
+    })
+  })
+  it("shrinks the top once the bottom would drop below its minimum", () => {
+    expect(partitionCellHeights(300, 260, 72, 88)).toEqual({
+      top: 212,
+      bottom: 88,
+    })
   })
 })
 
@@ -1629,5 +1804,107 @@ describe("sqlHash", () => {
     expect(sqlHash("select 1")).toBe(sqlHash("select 1"))
     expect(sqlHash("select 1")).not.toBe(sqlHash("select 2"))
     expect(typeof sqlHash("anything")).toBe("string")
+  })
+})
+
+describe("isAutoRefresh", () => {
+  it("accepts booleans and the fixed-interval tokens", () => {
+    // Booleans are the 2.0.0-compatible auto/off values.
+    expect(isAutoRefresh(true)).toBe(true)
+    expect(isAutoRefresh(false)).toBe(true)
+    expect(isAutoRefresh("5s")).toBe(true)
+    expect(isAutoRefresh("1m")).toBe(true)
+  })
+
+  it("rejects unknown tokens and non-values", () => {
+    expect(isAutoRefresh("2s")).toBe(false)
+    expect(isAutoRefresh("")).toBe(false)
+    expect(isAutoRefresh(5000)).toBe(false)
+    expect(isAutoRefresh(null)).toBe(false)
+    expect(isAutoRefresh(undefined)).toBe(false)
+  })
+})
+
+describe("autoRefreshLabel", () => {
+  it("labels true/false and shows the token verbatim for intervals", () => {
+    expect(autoRefreshLabel(true)).toBe("Auto")
+    expect(autoRefreshLabel(false)).toBe("Off")
+    expect(autoRefreshLabel("5s")).toBe("5s")
+    expect(autoRefreshLabel("1m")).toBe("1m")
+  })
+})
+
+describe("autoRefreshIntervalMs", () => {
+  it("maps a fixed token to milliseconds; true/false have no fixed interval", () => {
+    expect(autoRefreshIntervalMs("1s")).toBe(1000)
+    expect(autoRefreshIntervalMs("5s")).toBe(5000)
+    expect(autoRefreshIntervalMs("1m")).toBe(60000)
+    expect(autoRefreshIntervalMs(true)).toBeUndefined()
+    expect(autoRefreshIntervalMs(false)).toBeUndefined()
+  })
+})
+
+describe("resolveCellView", () => {
+  const result = { results: [], activeResultIndex: 0, timestamp: 0 }
+  it("is chart whenever the cell is in draw mode", () => {
+    expect(resolveCellView({ mode: "draw" })).toBe("chart")
+    // Draw wins even if a stale result is hanging around.
+    expect(resolveCellView({ mode: "draw", result })).toBe("chart")
+  })
+  it("is grid for a run cell that has a result", () => {
+    expect(resolveCellView({ mode: "run", result })).toBe("grid")
+    expect(resolveCellView({ result })).toBe("grid")
+  })
+  it("is none for a run cell with no result", () => {
+    expect(resolveCellView({ mode: "run" })).toBe("none")
+    expect(resolveCellView({})).toBe("none")
+  })
+})
+
+describe("cellToolbarTier", () => {
+  it("is compact below the standard threshold", () => {
+    // Given a cell narrower than 480px
+    // When resolving the toolbar tier
+    // Then it hides the Run/Draw toggles (compact)
+    expect(cellToolbarTier(0, false)).toBe("compact")
+    expect(cellToolbarTier(479, false)).toBe("compact")
+  })
+
+  it("is standard from 480px up to the expanded threshold", () => {
+    // Given a cell at least 480px but under 720px wide
+    // When resolving the toolbar tier
+    // Then it shows the current Run/Draw toggles (standard)
+    expect(cellToolbarTier(480, false)).toBe("standard")
+    expect(cellToolbarTier(719, false)).toBe("standard")
+  })
+
+  it("is expanded from 720px up", () => {
+    // Given a cell at least 720px wide
+    // When resolving the toolbar tier
+    // Then it shows the rich toolbar (expanded)
+    expect(cellToolbarTier(720, false)).toBe("expanded")
+    expect(cellToolbarTier(1200, false)).toBe("expanded")
+  })
+
+  it("is expanded when the cell is maximized, regardless of width", () => {
+    // Given a maximized cell that is otherwise narrow
+    // When resolving the toolbar tier
+    // Then maximized forces the expanded toolbar
+    expect(cellToolbarTier(0, true)).toBe("expanded")
+    expect(cellToolbarTier(479, true)).toBe("expanded")
+  })
+})
+
+describe("AUTO_REFRESH_OPTIONS", () => {
+  it("lists the menu choices in order: auto, off, then intervals", () => {
+    expect(AUTO_REFRESH_OPTIONS).toEqual([
+      true,
+      false,
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+    ])
   })
 })

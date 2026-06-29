@@ -13,7 +13,10 @@ import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { useEditor } from "../../../providers/EditorProvider"
 import type { CellLayoutItem } from "../../../store/notebook"
-import { dropLegacyChartConfigs } from "../../../store/notebook"
+import {
+  dropLegacyChartConfigs,
+  migrateLegacyCellNames,
+} from "../../../store/notebook"
 import { color } from "../../../utils"
 import {
   NotebookProvider,
@@ -36,6 +39,7 @@ import {
   isExpectingResult,
   mergeCellLayout,
   MIN_BOTTOM_HEIGHT_PX,
+  partitionCellHeights,
   scaleCellHeights,
 } from "./notebookUtils"
 import { emitUserAction } from "../../../utils/notebookAIBridge"
@@ -280,6 +284,8 @@ const useGridDragAutoScroll = (containerRef: React.RefObject<HTMLElement>) => {
 // render sites (list, grid, maximized) in sync.
 type CellViewProps = {
   cell: NotebookCell
+  index: number
+  totalCells: number
   layoutMode: "list" | "grid"
   isFocused: boolean
   isMaximized: boolean
@@ -312,6 +318,8 @@ const ListLayout: React.FC = () => {
           <CellItem>
             <CellView
               cell={cell}
+              index={index}
+              totalCells={cells.length}
               layoutMode="list"
               isFocused={focusedCellId === cell.id}
               isMaximized={maximizedCellId === cell.id}
@@ -450,18 +458,46 @@ const GridLayout: React.FC = () => {
         const rowsToPx = (h: number) => h * ROW_HEIGHT + (h - 1) * GRID_MARGIN_Y
         const targetTotalPx = rowsToPx(item.h)
         if (isDoubleView(cell)) {
-          const { top: nextTop, bottom: nextBottom } = scaleCellHeights(
-            cell.topHeight ?? DEFAULT_TOP_HEIGHT,
-            cell.bottomHeight ?? defaultBottomHeightFor(cell),
-            targetTotalPx - CELL_CHROME_PX,
-            DEFAULT_TOP_HEIGHT,
-            MIN_BOTTOM_HEIGHT_PX,
-          )
-          updateCell(cell.id, {
-            topHeight: nextTop,
-            bottomHeight: nextBottom,
-            topResized: true,
-          })
+          // A maximized view (chart or table) hides the editor, folding
+          // topHeight into the slot's footprint — pinning it would strand that
+          // height and block shrinking. Scale both so the dragged total is
+          // always reachable and the derived grid h matches the drag (mirrors
+          // the list-mode handle).
+          if (cell.isChartMaximized === true) {
+            const { top, bottom } = scaleCellHeights(
+              cell.topHeight ?? DEFAULT_TOP_HEIGHT,
+              cell.bottomHeight ?? defaultBottomHeightFor(cell),
+              targetTotalPx - CELL_CHROME_PX,
+              DEFAULT_TOP_HEIGHT,
+              MIN_BOTTOM_HEIGHT_PX,
+            )
+            updateCell(cell.id, {
+              topHeight: top,
+              bottomHeight: bottom,
+              topResized: true,
+              bottomResized: true,
+            })
+          } else {
+            // Split view: resize the chart/result, keeping the editor — until
+            // the result reaches its minimum, then let the editor give way too
+            // so the dragged total stays reachable. Pinning the editor let the
+            // cell be dragged shorter than top + min-bottom, collapsing the
+            // result out of view and making rgl snap the cell back.
+            const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
+            const { top: nextTop, bottom: nextBottom } = partitionCellHeights(
+              targetTotalPx - CELL_CHROME_PX,
+              top,
+              DEFAULT_TOP_HEIGHT,
+              MIN_BOTTOM_HEIGHT_PX,
+            )
+            updateCell(cell.id, {
+              bottomHeight: nextBottom,
+              bottomResized: true,
+              ...(nextTop !== top
+                ? { topHeight: nextTop, topResized: true }
+                : {}),
+            })
+          }
         } else {
           // Single-view: no bottom slot — south drag grows the editor.
           // Mark topResized so Monaco's content-driven auto-grow stops
@@ -565,7 +601,7 @@ const GridLayout: React.FC = () => {
           onResizeStop={handleResizeStop}
           positionStrategy={absoluteStrategy}
         >
-          {cells.map((cell) => (
+          {cells.map((cell, index) => (
             <GridCellWrapper
               key={cell.id}
               cellId={cell.id}
@@ -573,6 +609,8 @@ const GridLayout: React.FC = () => {
             >
               <CellView
                 cell={cell}
+                index={index}
+                totalCells={cells.length}
                 layoutMode="grid"
                 isFocused={focusedCellId === cell.id}
                 isMaximized={maximizedCellId === cell.id}
@@ -730,7 +768,9 @@ const NotebookContent: React.FC = () => {
           <CellItem $maximized>
             <CellView
               cell={cell}
-              layoutMode="list"
+              index={cells.indexOf(maximizedCell)}
+              totalCells={cells.length}
+              layoutMode={layoutMode}
               isFocused={focusedCellId === cell.id}
               isMaximized
               isRunning={runningCellIds.has(cell.id)}
@@ -759,7 +799,9 @@ export const Notebook: React.FC = () => {
 
   return (
     <NotebookProvider
-      initialState={dropLegacyChartConfigs(activeBuffer.notebookViewState)}
+      initialState={dropLegacyChartConfigs(
+        migrateLegacyCellNames(activeBuffer.notebookViewState),
+      )}
       bufferId={activeBuffer.id}
     >
       <NotebookContent />

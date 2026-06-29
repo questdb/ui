@@ -44,6 +44,8 @@ const color: ColorShape = {
   inputBorder: "#6b7280",
   selectionDarker: "#333544",
   baseGrey: "#32343e",
+  dropdownBackground: "#1a1b23",
+  dropdownBorder: "rgba(255, 255, 255, 0.12)",
   midnight: "#141725",
   comment: "#6272a4",
   red: "#ff5555",

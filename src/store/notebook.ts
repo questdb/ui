@@ -10,7 +10,23 @@ export const MAX_CELL_LINES = 99_999
 export const exceedsCellLineLimit = (value: string): boolean =>
   value.split("\n").length > MAX_CELL_LINES
 
+export const MAX_CELL_NAME_LENGTH = 100
+
+export const exceedsCellNameLimit = (name: string): boolean =>
+  name.length > MAX_CELL_NAME_LENGTH
+
 export type CellMode = "run" | "draw"
+
+export const AUTO_REFRESH_INTERVALS = {
+  "1s": 1000,
+  "5s": 5000,
+  "10s": 10000,
+  "30s": 30000,
+  "1m": 60000,
+} as const
+
+export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+export type AutoRefresh = boolean | AutoRefreshInterval
 
 // Cell kind. `undefined` means "sql" everywhere — code only ever tests
 // `=== "markdown"`, so old notebooks (no `type`) behave as SQL cells with no
@@ -21,16 +37,18 @@ export type NotebookCell = {
   id: string
   position: number
   value: string
+  name?: string
   type?: CellType
   editorViewState?: editor.ICodeEditorViewState
   result?: CellResult | null
   topHeight?: number
   bottomHeight?: number
   topResized?: boolean
+  bottomResized?: boolean
   spotlightEditorRatio?: number
   mode?: CellMode
   chartConfig?: ChartConfig
-  autoRefresh?: boolean
+  autoRefresh?: AutoRefresh
   isChartMaximized?: boolean
   lastRunStatus?: RunStatus
 }
@@ -132,3 +150,25 @@ export const dropLegacyChartConfigs = (
   })
   return { ...state, cells }
 }
+
+// Pre-`name` notebooks stored the chart title on chartConfig.name. The name is
+// now a cell-level field (the single canonical name); promote the legacy value
+// and drop the old copy so the two can't diverge.
+const hasLegacyChartName = (cell: NotebookCell): boolean =>
+  cell.name == null &&
+  typeof (cell.chartConfig as { name?: unknown } | undefined)?.name === "string"
+
+export const migrateCellName = (cell: NotebookCell): NotebookCell => {
+  if (!hasLegacyChartName(cell)) return cell
+  const { name, ...chartConfig } = cell.chartConfig as ChartConfig & {
+    name?: string
+  }
+  return { ...cell, name, chartConfig }
+}
+
+export const migrateLegacyCellNames = (
+  state: NotebookViewState,
+): NotebookViewState =>
+  state.cells.some(hasLegacyChartName)
+    ? { ...state, cells: state.cells.map(migrateCellName) }
+    : state

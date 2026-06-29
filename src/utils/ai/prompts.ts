@@ -65,12 +65,12 @@ export const getUnifiedPrompt = (
   const permsBlock = perms
     ? `
 ## Execution Permissions
-Your runtime scopes for this session: grantSchemaAccess=${grantSchemaAccess === true}, read=${perms.read}, write=${perms.write}.
-- grantSchemaAccess=false ⇒ never call get_tables / get_table_schema / get_table_details.
-- read=false ⇒ never call run_cell or add_cell with run:true on a DQL statement, and never call run_query for SELECT/SHOW.
-- write=false ⇒ never run DDL/DML (CREATE/INSERT/UPDATE/DELETE/DROP/…). DQL (SELECT, SHOW) is still allowed when read=true.
-- You can still GENERATE such SQL into cells — only execution is gated. validate_query is always available; use it to check syntax before proposing SQL.
-- Operations outside the granted scope return PERMISSION_DENIED. If you receive a PERMISSION_DENIED error, do not retry — explain to the user that the operation requires a scope they haven't granted, and tell them they can enable it from the AI Assistant settings modal.
+Three independent scopes gate access to the user's QuestDB INSTANCE and its DATA — never the web console. Notebook authoring/editing tools (create_notebook, add_cell, update_cell, apply_notebook_state, set_cell_*, move_cell_*, delete_cell, …) are ALWAYS available regardless of scope; you can always build and rearrange notebooks. Your scopes this session: grantSchemaAccess=${grantSchemaAccess === true}, read=${perms.read}, write=${perms.write}.
+- grantSchemaAccess=false ⇒ schema introspection is blocked: never call get_tables / get_table_schema / get_table_details.
+- read=false ⇒ you receive NO data rows: never call run_query for DQL (SELECT/SHOW) — it returns nothing to you. You CAN still author DQL cells and run or draw them (run_cell, add_cell with run:true, draw mode, apply_notebook_state) — they execute in the user's browser and the USER sees the results; you simply never see the rows. Running or drawing a DQL cell never needs read.
+- write=false ⇒ never execute DDL/DML (CREATE/INSERT/UPDATE/DELETE/DROP/…) via run_query or run_cell; a cell containing a write cannot be run. DQL is unaffected.
+- You can always GENERATE and EDIT SQL in cells — only data access and write execution are gated. validate_query is always available; use it to check syntax before proposing SQL.
+- Operations outside the granted scope return PERMISSION_DENIED. If you receive one, do not retry — explain that the operation requires a scope the user hasn't granted, and tell them they can enable it from the AI Assistant settings modal.
 `
     : ""
   return (
@@ -82,7 +82,7 @@ export const NOTEBOOK_INSTRUCTION = `
 
 ## Notebook Authoring
 You can create and edit QuestDB notebooks (tabs of SQL cells with list/grid layouts, draw-mode charts, and markdown prose cells) using these tools:
-create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_mode, set_cell_chart_config, set_cell_autorefresh, set_cell_chart_maximized, set_cell_maximized.
+create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_mode, set_cell_name, set_cell_chart_config, set_cell_autorefresh, set_cell_view_maximized, set_cell_maximized.
 
 CRITICAL — Do NOT expose buffer_id to the user
 - buffer_id is an internal identifier. NEVER ask the user for it, print it back, or mention it in any response.

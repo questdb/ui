@@ -12,6 +12,8 @@ import { MAX_RECONNECT_ATTEMPTS } from "../../../utils/mcp/MCPBridgeClient"
 import { LOCALHOST_WS_RE, TOKEN_RE } from "../../../utils/mcp/pairValidation"
 import type { Permissions } from "../../../utils/tools/permissions"
 import { Tone, accentColor, deriveTone } from "./tone"
+import { BridgeUpgradeNotice } from "./BridgeUpgradeNotice"
+import { BridgeSetupNotice } from "./BridgeSetupNotice"
 import { PermissionsSection } from "./PermissionsSection"
 
 const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
@@ -123,21 +125,29 @@ const FullWidthInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
 `
 
-const StatusRow = styled.div<{ $tone: "info" | "danger" }>`
+const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   display: flex;
   align-items: flex-start;
   gap: 0.8rem;
   width: 100%;
   padding: 1.6rem;
   background: ${({ theme, $tone }) =>
-    $tone === "danger" ? `${theme.color.red}1f` : theme.color.backgroundDarker};
+    $tone === "danger"
+      ? `${theme.color.red}1f`
+      : $tone === "warning"
+        ? theme.color.orange10
+        : theme.color.backgroundDarker};
   color: ${({ theme, $tone }) =>
-    $tone === "danger" ? theme.color.foreground : theme.color.gray2};
+    $tone === "info" ? theme.color.gray2 : theme.color.foreground};
 
-  svg {
+  & > svg {
     flex-shrink: 0;
     color: ${({ theme, $tone }) =>
-      $tone === "danger" ? theme.color.red : theme.color.pinkPrimary};
+      $tone === "danger"
+        ? theme.color.red
+        : $tone === "warning"
+          ? theme.color.orange
+          : theme.color.pinkPrimary};
   }
 
   strong {
@@ -187,6 +197,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       status,
       lastError,
       retryAttempt,
+      versionMismatch,
       url,
       token,
       connect,
@@ -241,6 +252,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       submitted &&
       sawDisconnectAfterSubmitRef.current &&
       status === "connected" &&
+      versionMismatch !== "minor" &&
       !succeeded
     ) {
       setSucceeded(true)
@@ -255,8 +267,14 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     const isConnecting = status === "connecting" || status === "reconnecting"
 
     const showConnecting = !succeeded && isConnecting
+    const showVersionMismatch =
+      versionMismatch === "major" ||
+      (versionMismatch === "minor" && status === "connected")
     const showWsError =
-      !succeeded && !isConnecting && (lastError || retryAttempt > 0)
+      !succeeded &&
+      !isConnecting &&
+      versionMismatch !== "major" &&
+      (lastError || retryAttempt > 0)
 
     const credsDirty = draftUrl !== (url ?? "") || draftToken !== (token ?? "")
     const permsDirty = !permissionsEqual(draftPermissions, permissions)
@@ -326,8 +344,11 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       onClose()
     }
 
-    const tone = deriveTone(isPaired, status)
-    const HeaderIcon = tone === "connected" ? PlugsConnectedIcon : PlugsIcon
+    const tone = deriveTone(isPaired, status, versionMismatch)
+    const HeaderIcon =
+      tone === "connected" || tone === "warning"
+        ? PlugsConnectedIcon
+        : PlugsIcon
 
     const canDisconnect = isPaired && status === "connected"
 
@@ -442,6 +463,18 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
             </StatusText>
           </StatusRow>
         )}
+
+        {showVersionMismatch && versionMismatch && (
+          <StatusRow
+            $tone={versionMismatch === "major" ? "danger" : "warning"}
+            data-hook="mcp-pair-version-mismatch"
+            role="alert"
+          >
+            <BridgeUpgradeNotice severity={versionMismatch} />
+          </StatusRow>
+        )}
+
+        {tone === "idle" && !validationError && <BridgeSetupNotice />}
 
         {!succeeded && (
           <Footer>

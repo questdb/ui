@@ -10,7 +10,9 @@ import { AlertDialog } from "../../components/AlertDialog"
 import { Overlay } from "../../components/Overlay"
 import { Button, LoadingSpinner } from "../../components"
 import { MAX_RECONNECT_ATTEMPTS } from "../../utils/mcp/MCPBridgeClient"
+import type { BridgeVersionMismatch } from "../../utils/mcp/protocolVersion"
 import type { Permissions } from "../../utils/tools/permissions"
+import { BridgeUpgradeNotice } from "../../scenes/Footer/MCPBridgeStatus/BridgeUpgradeNotice"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 
 const CONNECT_HOOK = "mcp-pair-consent-connect"
@@ -130,23 +132,31 @@ const TrustNote = styled.div`
   }
 `
 
-const StatusRow = styled.div<{ $tone: "info" | "danger" }>`
+const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   display: flex;
   align-items: flex-start;
   margin-right: auto;
   gap: 0.8rem;
   width: 100%;
   background: ${({ theme, $tone }) =>
-    $tone === "danger" ? `${theme.color.red}1f` : theme.color.backgroundDarker};
+    $tone === "danger"
+      ? `${theme.color.red}1f`
+      : $tone === "warning"
+        ? theme.color.orange10
+        : theme.color.backgroundDarker};
   color: ${({ theme, $tone }) =>
-    $tone === "danger" ? theme.color.foreground : theme.color.gray2};
+    $tone === "info" ? theme.color.gray2 : theme.color.foreground};
 
   padding: 0.8rem 2.4rem;
 
-  svg {
+  & > svg {
     flex-shrink: 0;
     color: ${({ theme, $tone }) =>
-      $tone === "danger" ? theme.color.red : theme.color.pinkPrimary};
+      $tone === "danger"
+        ? theme.color.red
+        : $tone === "warning"
+          ? theme.color.orange
+          : theme.color.pinkPrimary};
     margin-top: 0.2rem;
   }
 
@@ -191,6 +201,7 @@ type Props = {
   succeeded: boolean
   retryAttempt: number
   error: string | null
+  versionMismatch: BridgeVersionMismatch | null
   permissions: Permissions
   onConnect: (committedPermissions: Permissions) => void
   onCancel: () => void
@@ -202,6 +213,7 @@ export const PairingConsentModal: React.FC<Props> = ({
   succeeded,
   retryAttempt,
   error,
+  versionMismatch,
   permissions,
   onConnect,
   onCancel,
@@ -308,20 +320,33 @@ export const PairingConsentModal: React.FC<Props> = ({
             </StatusRow>
           )}
 
-          {!succeeded && !isConnecting && (error || retryAttempt > 0) && (
+          {!succeeded &&
+            !isConnecting &&
+            versionMismatch !== "major" &&
+            (error || retryAttempt > 0) && (
+              <StatusRow
+                $tone="danger"
+                data-hook="mcp-pair-consent-error"
+                role="alert"
+              >
+                <WarningIcon size={16} weight="duotone" />
+                <StatusText>
+                  <strong>Could not connect to MCP bridge</strong>
+                  <StatusDetail>
+                    {error ??
+                      `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Click Try again, or ask your coding agent for a fresh deep link.`}
+                  </StatusDetail>
+                </StatusText>
+              </StatusRow>
+            )}
+
+          {!isConnecting && versionMismatch && (
             <StatusRow
-              $tone="danger"
-              data-hook="mcp-pair-consent-error"
+              $tone={versionMismatch === "major" ? "danger" : "warning"}
+              data-hook="mcp-pair-consent-version-mismatch"
               role="alert"
             >
-              <WarningIcon size={16} weight="duotone" />
-              <StatusText>
-                <strong>Could not connect to MCP bridge</strong>
-                <StatusDetail>
-                  {error ??
-                    `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Click Try again, or ask your coding agent for a fresh deep link.`}
-                </StatusDetail>
-              </StatusText>
+              <BridgeUpgradeNotice severity={versionMismatch} />
             </StatusRow>
           )}
 

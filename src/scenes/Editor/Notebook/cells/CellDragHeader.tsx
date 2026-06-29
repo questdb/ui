@@ -1,8 +1,10 @@
-import React from "react"
+import React, { type RefObject } from "react"
 import styled from "styled-components"
 import { CellToolbar } from "./CellToolbar"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import type { CellToolbarTier } from "../notebookUtils"
+import type { NotebookCell } from "../../../../store/notebook"
 
 // The cell's top bar: it is the grid drag handle (`cell-drag-handle`), the
 // double-click-to-expand-width target, and the mount point for CellToolbar.
@@ -27,30 +29,57 @@ const Side = styled.div`
   gap: 1rem;
 `
 
-// The right cluster holds the toolbar buttons (and a markdown cell's Apply/Edit
-// button), which already self-space via their own padding — no extra gap, so
-// every button in the cluster sits the same distance apart.
+// Takes the slack and is the only cluster allowed to shrink — min-width:0 lets
+// its CellNameLabel ellipsize so a long name never pushes the toolbar.
+const LeftSide = styled(Side)`
+  flex: 1;
+  min-width: 0;
+  padding-right: 1.5rem;
+`
+
+// The right cluster holds the Run/Draw toggles, the toolbar (maximize + more
+// options), and a markdown cell's Apply/Edit button. A small gap evenly spaces
+// them; flex-shrink:0 keeps the cluster intact within the cell width while the
+// name on the left shrinks first.
 const RightSide = styled(Side)`
-  gap: 0;
+  gap: 0.5rem;
+  flex-shrink: 0;
 `
 
 type Props = {
   cellId: string
+  cell: NotebookCell
+  cellIndex: number
+  totalCells: number
   layoutMode: "list" | "grid"
+  isMaximized: boolean
   left?: React.ReactNode
   right?: React.ReactNode
+  // SQL cells pass this so the toolbar can adapt to the header's width; markdown
+  // cells omit it (no width-driven tiering).
+  headerRef?: RefObject<HTMLDivElement>
+  toolbarTier?: CellToolbarTier
+  chartZoomed?: boolean
 }
 
 export const CellDragHeader: React.FC<Props> = ({
   cellId,
+  cell,
+  cellIndex,
+  totalCells,
   layoutMode,
+  isMaximized,
   left,
   right,
+  headerRef,
+  toolbarTier,
+  chartZoomed,
 }) => (
   <HeaderBar
+    ref={headerRef}
     className="cell-drag-handle"
     onDoubleClick={(e) => {
-      if (layoutMode !== "grid") return
+      if (isMaximized || layoutMode !== "grid") return
       if (
         (e.target as HTMLElement).closest(
           "button, a, input, select, textarea, .cell-toolbar",
@@ -63,10 +92,20 @@ export const CellDragHeader: React.FC<Props> = ({
       })
     }}
   >
-    <Side>{left}</Side>
+    <LeftSide>{left}</LeftSide>
     <RightSide>
       {right}
-      <CellToolbar cellId={cellId} inline />
+      <CellToolbar
+        cellId={cellId}
+        cell={cell}
+        cellIndex={cellIndex}
+        totalCells={totalCells}
+        layoutMode={layoutMode}
+        isMaximized={isMaximized}
+        inline
+        toolbarTier={toolbarTier}
+        chartZoomed={chartZoomed}
+      />
     </RightSide>
   </HeaderBar>
 )

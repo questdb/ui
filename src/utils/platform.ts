@@ -22,3 +22,6 @@ if (typeof navigator === "object") {
     !!navigator.maxTouchPoints &&
     navigator.maxTouchPoints > 0
 }
+
+export const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
+export const altOption = platform.isMacintosh || platform.isIOS ? "⌥" : "Alt"

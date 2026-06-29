@@ -5,23 +5,35 @@ import {
   ChevronDown,
   CopyAlt,
   Trash,
+  Reset,
 } from "@styled-icons/boxicons-regular"
 import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
   CornersInIcon,
   ArrowClockwiseIcon,
+  ArrowsOutLineVerticalIcon,
+  ArrowsInLineVerticalIcon,
   GearIcon,
+  TableIcon,
+  ChartLineIcon,
+  PlayIcon,
+  FileSqlIcon,
 } from "@phosphor-icons/react"
 import { DropdownMenu, Button, Tooltip } from "../../../../components"
-import { Switch } from "../../../../components/Switch"
 import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
-import { useNotebookActions, useNotebookState } from "../NotebookProvider"
+import { AutoRefreshOptions } from "./AutoRefreshOptions"
+import { autoRefreshLabel, resolveCellView } from "../notebookUtils"
+import type { CellToolbarTier } from "../notebookUtils"
+import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
+import { useNotebookActions } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import {
   emitUserAction,
   signalUserEdit,
 } from "../../../../utils/notebookAIBridge"
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -30,6 +42,7 @@ const ToolbarWrapper = styled.div<{
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 
   ${({ $inline, $forceVisible }) =>
     $inline
@@ -44,40 +57,44 @@ const ToolbarWrapper = styled.div<{
         `}
 `
 
-const IconWrapper = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
+// Maximize / more-actions match the Run/Draw toggles: a `selection` hover fill
+// instead of the transparent skin's default.
+const ToolbarButton = styled(Button)`
+  &&:hover:not([disabled]) {
+    background: ${({ theme }) => theme.color.selection};
+  }
 `
 
-const ChartControlRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 1rem;
-  font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.foreground};
-  user-select: none;
+// Delete adopts the Button "danger" skin on hover — destructive actions read red.
+const DangerItem = styled(DropdownMenu.Item)`
+  &[data-highlighted] {
+    background: ${({ theme }) => theme.color.dangerBackground};
+    color: ${({ theme }) => theme.color.dangerForeground};
+  }
 `
-
-type ChartControls = {
-  autoRefresh: boolean
-  onAutoRefreshChange: (value: boolean) => void
-  onManualRefresh: () => void
-  onOpenSettings: () => void
-}
 
 type Props = {
   cellId: string
+  cell: NotebookCell
+  cellIndex: number
+  totalCells: number
+  layoutMode: "list" | "grid"
+  isMaximized: boolean
   inline?: boolean
-  chartControls?: ChartControls
+  toolbarTier?: CellToolbarTier
+  chartZoomed?: boolean
 }
 
 export const CellToolbar: React.FC<Props> = ({
   cellId,
+  cell,
+  cellIndex,
+  totalCells,
+  layoutMode,
+  isMaximized,
   inline,
-  chartControls,
+  toolbarTier,
+  chartZoomed = false,
 }) => {
   const {
     moveCellUp,
@@ -85,17 +102,108 @@ export const CellToolbar: React.FC<Props> = ({
     duplicateCell,
     deleteCell,
     setMaximizedCellId,
+    setCellRefresh,
+    setCellChartMaximized,
+    setCellMode,
   } = useNotebookActions()
-  const { cells, maximizedCellId, settings } = useNotebookState()
-  const cellIndex = cells.findIndex((c) => c.id === cellId)
-  const totalCells = cells.length
-  // Grid mode positions cells via settings.layout[i].{x,y,w,h}, so swapping array
-  // order doesn't move them visually — hide move up/down in grid mode.
-  const isGridMode = settings.layoutMode === "grid"
   const { activeBuffer } = useEditor()
 
-  const isMaximized = maximizedCellId === cellId
+  // Grid positions cells via settings.layout, so swapping array order doesn't
+  // move them visually — hide move up/down there.
+  const isGridMode = layoutMode === "grid"
+  // Markdown cells have no run/draw views — keep their menu to move/dup/delete.
+  const isMarkdown = cell.type === "markdown"
+  const view = resolveCellView(cell)
+  const isChartView = view === "chart"
+  const isGridView = view === "grid"
+  const isNoneView = view === "none"
+  const isViewMaximized = !isNoneView && !!cell.isChartMaximized
+  const autoRefresh = cell.autoRefresh ?? true
   const [menuOpen, setMenuOpen] = useState(false)
+
+  // Which actions the visible toolbar already exposes for this tier/view — the
+  // menu drops them to avoid duplicates (undefined tier = markdown, treated as
+  // compact so its menu keeps everything).
+  const tier = toolbarTier ?? "compact"
+  const hasToolbarSplit = tier !== "compact" && !isNoneView
+  const hasToolbarRefresh = tier === "expanded" && !isNoneView
+  const hasToolbarInterval = tier === "expanded" && isChartView
+  const isCompact = tier === "compact"
+  // Compact shows one full-height pane at a time; "View SQL" minimizes the
+  // chart/table to the editor (isChartMaximized === false) without dropping the
+  // data. The menu offers the two panes you're not currently viewing.
+  const sqlShown = cell.isChartMaximized === false
+  // Each menu item is shown only when it's both applicable to the current state
+  // (never a disabled/greyed item) and not already a visible toolbar button.
+  const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
+  const showViewTable =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isChartView)
+  const showViewChart =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
+  const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
+  // Non-compact tiers expose Reset zoom inline (next to the view toggle), so
+  // the menu only carries it in the compact tier.
+  const showResetZoom = isCompact && isChartView && chartZoomed
+  const showAutoRefreshItem = !hasToolbarInterval && isChartView
+  const showRefreshItem = !hasToolbarRefresh && !isNoneView
+  const showChartSettings = isChartView
+  const showMoveUp = !isGridMode && cellIndex > 0
+  const showMoveDown = !isGridMode && cellIndex < totalCells - 1
+  const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
+  const showDelete = totalCells > 1
+  const groupAHasItems =
+    showViewSql || showViewTable || showViewChart || showSplitItem
+  const groupBHasItems =
+    showResetZoom || showAutoRefreshItem || showRefreshItem || showChartSettings
+
+  // Minimize the chart/table to the editor, keeping the data on the cell.
+  const handleViewSql = () => {
+    signalUserEdit()
+    setCellChartMaximized(cellId, false)
+  }
+  const handleViewTable = () => {
+    signalUserEdit()
+    if (isNoneView) {
+      eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
+      return
+    }
+    // A chart transfers its data to the grid (no re-query); restore the data
+    // pane in case the SQL was being shown.
+    if (isChartView) setCellMode(cellId, "run")
+    setCellChartMaximized(cellId, true)
+  }
+  const handleViewChart = () => {
+    signalUserEdit()
+    if (isNoneView || isGridView) {
+      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+    }
+    if (!isNoneView) setCellChartMaximized(cellId, true)
+  }
+  const handleToggleMaximizeView = () => {
+    signalUserEdit()
+    setCellChartMaximized(cellId, !cell.isChartMaximized)
+  }
+  const handleMaximizeCell = () => {
+    signalUserEdit()
+    setMaximizedCellId(isMaximized ? null : cellId)
+  }
+  const handleRefreshNow = () => {
+    signalUserEdit()
+    eventBus.publish(
+      isChartView
+        ? EventType.NOTEBOOK_CELL_REFRESH_CHART
+        : EventType.NOTEBOOK_CELL_RUN,
+      { cellId },
+    )
+  }
+  const handleResetZoom = () =>
+    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
+  const handleChartSettings = () =>
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
+  const handleRefreshSelect = (value: AutoRefresh) => {
+    signalUserEdit()
+    setCellRefresh(cellId, value)
+  }
 
   const handleMoveUp = () => {
     moveCellUp(cellId)
@@ -146,12 +254,9 @@ export const CellToolbar: React.FC<Props> = ({
       $forceVisible={menuOpen}
     >
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
-        <Button
+        <ToolbarButton
           skin="transparent"
-          onClick={() => {
-            signalUserEdit()
-            setMaximizedCellId(isMaximized ? null : cellId)
-          }}
+          onClick={handleMaximizeCell}
           aria-label={isMaximized ? "Restore" : "Maximize"}
         >
           {isMaximized ? (
@@ -159,86 +264,143 @@ export const CellToolbar: React.FC<Props> = ({
           ) : (
             <CornersOutIcon size={20} />
           )}
-        </Button>
+        </ToolbarButton>
       </Tooltip>
       {!isMaximized && (
         <DropdownMenu.Root onOpenChange={setMenuOpen}>
           <Tooltip content="More actions">
             <DropdownMenu.Trigger asChild>
-              <Button skin="transparent" aria-label="More actions">
+              <ToolbarButton skin="transparent" aria-label="More actions">
                 <DotsThreeVerticalIcon size={20} weight="bold" />
-              </Button>
+              </ToolbarButton>
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
-              {chartControls && (
-                <>
-                  <ChartControlRow>
-                    Auto-refresh
-                    <Switch
-                      checked={chartControls.autoRefresh}
-                      onChange={chartControls.onAutoRefreshChange}
-                    />
-                  </ChartControlRow>
-                  <DropdownMenu.Item
-                    disabled={chartControls.autoRefresh}
-                    onSelect={chartControls.onManualRefresh}
-                  >
-                    <IconWrapper>
-                      <ArrowClockwiseIcon size={16} />
-                    </IconWrapper>
-                    Refresh
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item onSelect={chartControls.onOpenSettings}>
-                    <IconWrapper>
-                      <GearIcon size={16} />
-                    </IconWrapper>
-                    Chart settings
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Divider />
-                </>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={4}
+              // Don't restore focus to the trigger on close — that refocus
+              // re-opens its Tooltip, which then stays stuck open.
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              {showViewSql && (
+                <DropdownMenu.Item
+                  onSelect={handleViewSql}
+                  icon={<FileSqlIcon size={16} />}
+                >
+                  View SQL
+                </DropdownMenu.Item>
               )}
-              {!isGridMode && (
-                <>
-                  <DropdownMenu.Item
-                    disabled={cellIndex === 0}
-                    onSelect={handleMoveUp}
-                  >
-                    <IconWrapper>
-                      <ChevronUp size={16} />
-                    </IconWrapper>
-                    Move up
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    disabled={cellIndex === totalCells - 1}
-                    onSelect={handleMoveDown}
-                  >
-                    <IconWrapper>
-                      <ChevronDown size={16} />
-                    </IconWrapper>
-                    Move down
-                  </DropdownMenu.Item>
-                </>
+              {showViewTable && (
+                <DropdownMenu.Item
+                  onSelect={handleViewTable}
+                  icon={
+                    isNoneView ? (
+                      <PlayIcon size={16} />
+                    ) : (
+                      <TableIcon size={16} />
+                    )
+                  }
+                >
+                  {isNoneView ? "Run" : "View table"}
+                </DropdownMenu.Item>
               )}
-              <DropdownMenu.Item
-                disabled={totalCells >= MAX_NOTEBOOK_CELLS}
-                onSelect={handleDuplicate}
-              >
-                <IconWrapper>
-                  <CopyAlt size={16} />
-                </IconWrapper>
-                Duplicate
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                disabled={totalCells <= 1}
-                onSelect={handleDelete}
-              >
-                <IconWrapper>
-                  <Trash size={16} />
-                </IconWrapper>
-                Delete
-              </DropdownMenu.Item>
+              {showViewChart && (
+                <DropdownMenu.Item
+                  onSelect={handleViewChart}
+                  icon={<ChartLineIcon size={16} />}
+                >
+                  {isNoneView ? "Draw" : "View chart"}
+                </DropdownMenu.Item>
+              )}
+              {showSplitItem && (
+                <DropdownMenu.Item
+                  onSelect={handleToggleMaximizeView}
+                  icon={
+                    isViewMaximized ? (
+                      <ArrowsInLineVerticalIcon size={16} />
+                    ) : (
+                      <ArrowsOutLineVerticalIcon size={16} />
+                    )
+                  }
+                >
+                  {isViewMaximized ? "Split view" : "Maximized view"}
+                </DropdownMenu.Item>
+              )}
+
+              {groupAHasItems && <DropdownMenu.Divider />}
+
+              {showResetZoom && (
+                <DropdownMenu.Item
+                  onSelect={handleResetZoom}
+                  icon={<Reset size={16} />}
+                >
+                  Reset zoom
+                </DropdownMenu.Item>
+              )}
+              {showAutoRefreshItem && (
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger>
+                    {`Auto-refresh (${autoRefreshLabel(autoRefresh)})`}
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.SubContent>
+                      <AutoRefreshOptions
+                        value={autoRefresh}
+                        onSelect={handleRefreshSelect}
+                      />
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Sub>
+              )}
+              {showRefreshItem && (
+                <DropdownMenu.Item
+                  onSelect={handleRefreshNow}
+                  icon={<ArrowClockwiseIcon size={16} />}
+                >
+                  Refresh now
+                </DropdownMenu.Item>
+              )}
+              {showChartSettings && (
+                <DropdownMenu.Item
+                  onSelect={handleChartSettings}
+                  icon={<GearIcon size={16} />}
+                >
+                  Chart settings
+                </DropdownMenu.Item>
+              )}
+
+              {groupBHasItems && <DropdownMenu.Divider />}
+
+              {showMoveUp && (
+                <DropdownMenu.Item
+                  onSelect={handleMoveUp}
+                  icon={<ChevronUp size={16} />}
+                >
+                  Move up
+                </DropdownMenu.Item>
+              )}
+              {showMoveDown && (
+                <DropdownMenu.Item
+                  onSelect={handleMoveDown}
+                  icon={<ChevronDown size={16} />}
+                >
+                  Move down
+                </DropdownMenu.Item>
+              )}
+              {showDuplicate && (
+                <DropdownMenu.Item
+                  onSelect={handleDuplicate}
+                  icon={<CopyAlt size={16} />}
+                >
+                  Duplicate
+                </DropdownMenu.Item>
+              )}
+              {showDelete && (
+                <DangerItem onSelect={handleDelete} icon={<Trash size={16} />}>
+                  Delete
+                </DangerItem>
+              )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

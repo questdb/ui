@@ -861,6 +861,37 @@ describe("sanitizeBuffer", () => {
         queries: [{ type: "line", yColumns: ["price"] }, null],
       })
     })
+
+    it("migrates a legacy chartConfig.name to the cell name and preserves an explicit cell name", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "legacy",
+              value: "SELECT 1",
+              chartConfig: {
+                xColumn: "ts",
+                name: "BTC price",
+                queries: [{ type: "line", yColumns: ["price"] }],
+              },
+            },
+            { id: "named", value: "SELECT 2", name: "My cell" },
+          ],
+        },
+      }
+      const result = sanitizeBuffer(input)
+      const cells = result.notebookViewState?.cells
+      // Legacy chart title becomes the cell name; chartConfig keeps no name.
+      expect(cells?.[0].name).toBe("BTC price")
+      expect(
+        (cells?.[0].chartConfig as Record<string, unknown> | undefined)?.name,
+      ).toBeUndefined()
+      // An explicit cell name survives the round-trip.
+      expect(cells?.[1].name).toBe("My cell")
+    })
   })
 
   describe("metricsViewState sanitization", () => {
