@@ -404,29 +404,30 @@ const CellInner: React.FC<Props> = ({
     [bufferIdForEvents, cell.id],
   )
 
-  const handleRunAll = useCallback(async () => {
-    // The editor is unmounted when the result/chart is maximized; run the
-    // cell's stored SQL directly in that case instead of bailing out.
-    if (editorRef.current) {
-      if (await tryRunSelection()) return
-      clearHighlight()
-    }
+  const handleRunAll = useCallback(
+    async (ignoreSelection = false) => {
+      if (editorRef.current) {
+        if (!ignoreSelection && (await tryRunSelection())) return
+        clearHighlight()
+      }
 
-    const priorResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const ok = await runCell(cell.id)
-    const freshResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
-  }, [
-    cell.id,
-    runCell,
-    tryRunSelection,
-    editorRef,
-    clearHighlight,
-    emitRanEvent,
-    getCellsSnapshot,
-  ])
+      const priorResult =
+        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+      const ok = await runCell(cell.id)
+      const freshResult =
+        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+      emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+    },
+    [
+      cell.id,
+      runCell,
+      tryRunSelection,
+      editorRef,
+      clearHighlight,
+      emitRanEvent,
+      getCellsSnapshot,
+    ],
+  )
 
   const handleRunSingle = useCallback(async () => {
     const ed = editorRef.current
@@ -463,7 +464,7 @@ const CellInner: React.FC<Props> = ({
   ])
 
   const runResolved = useCallback(
-    (intent: "all" | "single") => {
+    (intent: "all" | "single", ignoreSelection = false) => {
       const plan = resolveRunAction(
         { mode: cell.mode, result: cell.result },
         { isCompactTier, showBottomSlot, intent },
@@ -484,7 +485,7 @@ const CellInner: React.FC<Props> = ({
       // Start the run before revealing: under React 17 a reveal fired from a
       // native key event re-renders synchronously and unmounts the editor, so
       // the run must read the cursor first.
-      if (plan.kind === "run-all") void handleRunAll()
+      if (plan.kind === "run-all") void handleRunAll(ignoreSelection)
       else void handleRunSingle()
       if (plan.reveal) setCellViewMaximized(cell.id, true)
     },
@@ -502,6 +503,9 @@ const CellInner: React.FC<Props> = ({
   )
   const runAll = useCallback(() => runResolved("all"), [runResolved])
   const runSingle = useCallback(() => runResolved("single"), [runResolved])
+  // Refresh re-runs the whole cell to reproduce its grid — never a stray
+  // editor selection.
+  const refreshRun = useCallback(() => runResolved("all", true), [runResolved])
 
   const isExternalSyncRef = useRef(false)
 
@@ -704,7 +708,7 @@ const CellInner: React.FC<Props> = ({
   useEffect(() => {
     const runHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      runAll()
+      refreshRun()
     }
     const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
       if (payload?.cellId !== cell.id) return
@@ -718,7 +722,7 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, runAll, handleDrawClick, setCellViewMaximized])
+  }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
 
   const handleRunClick = useCallback(() => runAll(), [runAll])
   const handleHideResult = useCallback(

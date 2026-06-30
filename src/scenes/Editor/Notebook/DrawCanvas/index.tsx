@@ -359,8 +359,16 @@ export const DrawCanvas: React.FC<Props> = ({
           () => undefined,
         )
         if (cancelled) return
-        if (snap) {
-          const hydrated = successResults(snap.results.map(toExecResult))
+        // Only render a snapshot produced by the CURRENT queries — one left
+        // over from edited-but-not-rerun SQL is stale and must re-fetch (the
+        // snapshot is keyed by cell, not SQL, so it can outlive an edit).
+        const snapResult = snap && {
+          results: snap.results,
+          activeResultIndex: 0,
+          timestamp: snap.savedAt,
+        }
+        if (resultMatchesQueries(snapResult, queries)) {
+          const hydrated = successResults(snapResult.results.map(toExecResult))
           if (hydrated.length > 0) {
             // Don't clobber live data that may already have landed.
             setResults((prev) => (prev.length > 0 ? prev : hydrated))

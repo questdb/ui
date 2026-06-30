@@ -157,6 +157,7 @@ export const cellToolbarMenuFlags = (params: {
   const hasToolbarSplit = tier !== "compact" && !isNoneView
   const hasToolbarRefresh = tier === "expanded" && !isNoneView
   const hasToolbarInterval = tier === "expanded" && isChartView
+  const chartCollapsed = isCompact && isChartView && sqlShown
 
   const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
   const showViewTable =
@@ -164,10 +165,11 @@ export const cellToolbarMenuFlags = (params: {
   const showViewChart =
     isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
   const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
-  const showResetZoom = isCompact && isChartView && chartZoomed
+  const showResetZoom =
+    isCompact && isChartView && chartZoomed && !chartCollapsed
   const showAutoRefreshItem = !hasToolbarInterval && isChartView
-  const showRefreshItem = !hasToolbarRefresh && !isNoneView
-  const showChartSettings = isChartView
+  const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
+  const showChartSettings = isChartView && !chartCollapsed
   const showMoveUp = !isGridMode && cellIndex > 0
   const showMoveDown = !isGridMode && cellIndex < totalCells - 1
   const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS

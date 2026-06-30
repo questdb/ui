@@ -2056,6 +2056,26 @@ describe("cellToolbarMenuFlags", () => {
     expect(f.showChartSettings).toBe(false)
   })
 
+  it("hides chart commands that reach the unmounted chart when compact View SQL is active", () => {
+    // Given a compact chart cell collapsed to the editor (View SQL active),
+    // which unmounts the DrawCanvas the chart commands publish events to
+    const f = flags({
+      tier: "compact",
+      view: "chart",
+      sqlShown: true,
+      chartZoomed: true,
+    })
+    // Then the commands that would reach the now-unmounted chart are hidden…
+    expect(f.showRefreshItem).toBe(false)
+    expect(f.showChartSettings).toBe(false)
+    expect(f.showResetZoom).toBe(false)
+    // …but the interval submenu stays — it patches cell state, not the chart
+    expect(f.showAutoRefreshItem).toBe(true)
+    // …and View table / View chart still let the user bring a pane back
+    expect(f.showViewTable).toBe(true)
+    expect(f.showViewChart).toBe(true)
+  })
+
   it("offers Reset zoom only for a zoomed chart in the compact tier", () => {
     // Given a zoomed chart: the wider tiers expose Reset zoom inline instead
     expect(

@@ -22,6 +22,14 @@ const StyledItem = styled(RadixDropdownMenu.Item)`
   ${menuItemStyles}
 `
 
+const RadioItem = styled(RadixDropdownMenu.RadioItem)`
+  ${menuItemStyles}
+
+  &[data-state="checked"] {
+    background: ${({ theme }) => theme.color.background};
+  }
+`
+
 type ItemProps = React.ComponentPropsWithoutRef<
   typeof RadixDropdownMenu.Item
 > & {
@@ -100,6 +108,10 @@ export const DropdownMenu = {
   `,
 
   Item,
+
+  RadioGroup: RadixDropdownMenu.RadioGroup,
+
+  RadioItem,
 
   Sub: RadixDropdownMenu.Sub,
 
