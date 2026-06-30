@@ -62,6 +62,36 @@ export const resolveCellView = (
   return "none"
 }
 
+export type RunActionPlan =
+  | { kind: "chart" }
+  | { kind: "noop" }
+  | { kind: "run-all" | "run-single"; reveal: boolean; exitDraw: boolean }
+
+export const resolveRunAction = (
+  cell: Pick<NotebookCell, "mode" | "result">,
+  opts: {
+    isCompactTier: boolean
+    showBottomSlot: boolean
+    intent: "all" | "single"
+  },
+): RunActionPlan => {
+  // Reveal only the compact "View SQL" collapse — in wider tiers the slot is
+  // never force-hidden, so revealing there would wrongly maximize a split view.
+  const reveal = opts.isCompactTier && !opts.showBottomSlot
+  if (cell.mode === "draw" && !reveal) {
+    return opts.intent === "all" ? { kind: "chart" } : { kind: "noop" }
+  }
+  // Run mode, or a draw cell collapsed behind the compact "View SQL" editor:
+  // act as a grid so a shortcut never surfaces the chart from the editor. A
+  // collapsed draw cell drops to run mode first, so the grid — not the chart —
+  // is what appears.
+  return {
+    kind: opts.intent === "all" ? "run-all" : "run-single",
+    reveal,
+    exitDraw: cell.mode === "draw",
+  }
+}
+
 export type CellToolbarTier = "compact" | "standard" | "expanded"
 
 export const CELL_TOOLBAR_STANDARD_MIN = 480

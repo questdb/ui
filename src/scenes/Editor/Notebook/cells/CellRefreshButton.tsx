@@ -39,6 +39,7 @@ const SplitSide = styled(Button)`
 
   &&:hover:not(:disabled) {
     background: ${({ theme }) => `${theme.color.selection}80`};
+    color: ${({ theme }) => theme.color.foreground};
   }
 
   &:disabled {

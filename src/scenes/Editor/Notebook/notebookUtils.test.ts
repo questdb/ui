@@ -7,6 +7,7 @@ import {
   AUTO_REFRESH_OPTIONS,
   isAutoRefresh,
   resolveCellView,
+  resolveRunAction,
   buildAppliedCells,
   buildAppliedLayout,
   buildInitialScriptResults,
@@ -1873,6 +1874,96 @@ describe("resolveCellView", () => {
   it("is none for a run cell with no result", () => {
     expect(resolveCellView({ mode: "run" })).toBe("none")
     expect(resolveCellView({})).toBe("none")
+  })
+})
+
+describe("resolveRunAction", () => {
+  const result = { results: [], activeResultIndex: 0, timestamp: 0 }
+
+  it("runs a single query, or all, for a run cell with a visible grid", () => {
+    // Given a run cell whose grid is on screen
+    const cell = { mode: "run" as const, result }
+    const opts = { isCompactTier: false, showBottomSlot: true }
+    // When the user presses Run All / Run
+    // Then it runs all / one, without revealing anything
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: false,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: false,
+      exitDraw: false,
+    })
+  })
+
+  it("runs an empty run cell the same way, with nothing to reveal in wide tiers", () => {
+    // Given a run cell with no result in a wide tier (none view)
+    const cell = { mode: "run" as const }
+    const opts = { isCompactTier: false, showBottomSlot: false }
+    // When the user runs
+    // Then it runs, and never reveals outside the compact tier
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: false,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: false,
+      exitDraw: false,
+    })
+  })
+
+  it("reveals a compact run cell whose grid is collapsed by View SQL", () => {
+    // Given a compact run cell with the grid collapsed (View SQL active)
+    const cell = { mode: "run" as const, result }
+    const opts = { isCompactTier: true, showBottomSlot: false }
+    // When the user runs
+    // Then it reveals the grid first, then runs
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: true,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: true,
+      exitDraw: false,
+    })
+  })
+
+  it("refreshes the whole chart on Run All but ignores Run for a visible chart", () => {
+    // Given a draw cell whose chart is on screen
+    const cell = { mode: "draw" as const, result }
+    const opts = { isCompactTier: false, showBottomSlot: true }
+    // When the user presses Run All / Run
+    // Then Run All refreshes the chart and Run is a no-op
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "chart",
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "noop",
+    })
+  })
+
+  it("treats a compact chart collapsed behind the editor as a grid, exiting draw", () => {
+    // Given a compact draw cell with the chart collapsed (View SQL active)
+    const cell = { mode: "draw" as const, result }
+    const opts = { isCompactTier: true, showBottomSlot: false }
+    // When the user presses Run All / Run from the editor
+    // Then both reveal a grid and drop the cell out of draw — never the chart
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: true,
+      exitDraw: true,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: true,
+      exitDraw: true,
+    })
   })
 })
 

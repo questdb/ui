@@ -48,6 +48,7 @@ import {
   MIN_BOTTOM_HEIGHT_PX,
   partitionCellHeights,
   resolveCellView,
+  resolveRunAction,
   scaleCellHeights,
 } from "../notebookUtils"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
@@ -271,13 +272,6 @@ const CellInner: React.FC<Props> = ({
     validateWithGlobals,
   ])
 
-  const exitDrawIfNeeded = useCallback(() => {
-    if (isDrawMode) {
-      signalUserEdit()
-      setCellMode(cell.id, "run")
-    }
-  }, [cell.id, isDrawMode, setCellMode])
-
   const liveTopHeight = topResize.liveHeight
   const liveBottomHeight = bottomResize.liveHeight
 
@@ -344,8 +338,8 @@ const CellInner: React.FC<Props> = ({
       (state) => updateCell(cell.id, { editorViewState: state }),
       [cell.id, updateCell],
     ),
-    onRunAtCursor: () => void handleRunAtCursor(),
-    onRunAll: () => void handleRunAll(),
+    onRunAtCursor: () => runSingle(),
+    onRunAll: () => runAll(),
     onContentHeightChange: handleContentHeightChange,
     validate: validateWithGlobals,
   })
@@ -434,17 +428,80 @@ const CellInner: React.FC<Props> = ({
     getCellsSnapshot,
   ])
 
-  const handleRunAtCursor = useCallback(async () => {
-    if (await tryRunSelection()) return
+  const handleRunSingle = useCallback(async () => {
     const ed = editorRef.current
-    if (!ed) return
-
-    const queryAtCursor = getQueryFromCursor(ed)
-    if (!queryAtCursor) return
-
+    // Capture the cursor's statement before any await — a reveal in this same
+    // gesture can unmount the editor, and reading it afterwards loses it.
+    const cursorQuery = ed ? getQueryFromCursor(ed)?.query : undefined
+    if (ed && (await tryRunSelection())) return
+    // Cursor first; otherwise reuse the active result tab's query so a single
+    // run never silently expands into running every statement.
+    const activeQuery =
+      cell.result?.results[cell.result.activeResultIndex]?.query
+    const sql = cursorQuery ?? activeQuery
+    if (!sql?.trim()) {
+      await handleRunAll()
+      return
+    }
     clearHighlight()
-    void runCell(cell.id, normalizeQueryText(queryAtCursor.query))
-  }, [cell.id, runCell, tryRunSelection, editorRef, clearHighlight])
+    const priorResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+    const ok = await runCell(cell.id, normalizeQueryText(sql))
+    const freshResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+  }, [
+    cell.id,
+    cell.result,
+    runCell,
+    tryRunSelection,
+    editorRef,
+    clearHighlight,
+    handleRunAll,
+    emitRanEvent,
+    getCellsSnapshot,
+  ])
+
+  const runResolved = useCallback(
+    (intent: "all" | "single") => {
+      const plan = resolveRunAction(
+        { mode: cell.mode, result: cell.result },
+        { isCompactTier, showBottomSlot, intent },
+      )
+      if (plan.kind === "noop") return
+      if (plan.kind === "chart") {
+        firstRunRef.current = false
+        eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
+          cellId: cell.id,
+        })
+        return
+      }
+      if (plan.exitDraw) {
+        signalUserEdit()
+        setCellMode(cell.id, "run")
+      }
+      firstRunRef.current = cell.result == null
+      // Start the run before revealing: under React 17 a reveal fired from a
+      // native key event re-renders synchronously and unmounts the editor, so
+      // the run must read the cursor first.
+      if (plan.kind === "run-all") void handleRunAll()
+      else void handleRunSingle()
+      if (plan.reveal) setCellViewMaximized(cell.id, true)
+    },
+    [
+      cell.id,
+      cell.mode,
+      cell.result,
+      isCompactTier,
+      showBottomSlot,
+      setCellViewMaximized,
+      setCellMode,
+      handleRunAll,
+      handleRunSingle,
+    ],
+  )
+  const runAll = useCallback(() => runResolved("all"), [runResolved])
+  const runSingle = useCallback(() => runResolved("single"), [runResolved])
 
   const isExternalSyncRef = useRef(false)
 
@@ -647,9 +704,7 @@ const CellInner: React.FC<Props> = ({
   useEffect(() => {
     const runHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      firstRunRef.current = false
-      exitDrawIfNeeded()
-      void handleRunAll()
+      runAll()
     }
     const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
       if (payload?.cellId !== cell.id) return
@@ -663,19 +718,9 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [
-    cell.id,
-    exitDrawIfNeeded,
-    handleRunAll,
-    handleDrawClick,
-    setCellViewMaximized,
-  ])
+  }, [cell.id, runAll, handleDrawClick, setCellViewMaximized])
 
-  const handleRunClick = useCallback(() => {
-    firstRunRef.current = true
-    exitDrawIfNeeded()
-    void handleRunAll()
-  }, [exitDrawIfNeeded, handleRunAll])
+  const handleRunClick = useCallback(() => runAll(), [runAll])
   const handleHideResult = useCallback(
     () => clearCellResult(cell.id),
     [cell.id, clearCellResult],
@@ -692,22 +737,17 @@ const CellInner: React.FC<Props> = ({
   useEffect(() => {
     if (!isFocused && !isMaximized) return
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.key !== "Enter") return
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "Enter") return
+      // Focus inside Monaco: its own action handles the key (same resolver), so
+      // bail to avoid running twice.
       if (editorContainerRef.current?.contains(document.activeElement)) return
       e.preventDefault()
-      if (view === "chart") {
-        eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
-          cellId: cell.id,
-        })
-      } else if (view === "grid") {
-        eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId: cell.id })
-      } else {
-        handleRunClick()
-      }
+      if (e.shiftKey) runAll()
+      else runSingle()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [isFocused, isMaximized, view, cell.id, handleRunClick])
+  }, [isFocused, isMaximized, runAll, runSingle])
 
   const cellEl = (
     <CellWrapper
