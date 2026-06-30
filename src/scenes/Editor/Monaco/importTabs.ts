@@ -262,8 +262,8 @@ const sanitizeNotebookCell = (
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
-  if (typeof item.isChartMaximized === "boolean")
-    cell.isChartMaximized = item.isChartMaximized
+  if (typeof item.isViewMaximized === "boolean")
+    cell.isViewMaximized = item.isViewMaximized
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
   if (typeof item.bottomHeight === "number")
     cell.bottomHeight = item.bottomHeight

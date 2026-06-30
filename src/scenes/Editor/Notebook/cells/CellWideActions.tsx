@@ -9,7 +9,7 @@ type Props = {
   // Run/Draw toggles instead.
   view: "grid" | "chart"
   autoRefresh: AutoRefresh
-  isChartMaximized: boolean
+  isViewMaximized: boolean
   isRunning: boolean
   isGridLoading: boolean
   isChartLoading: boolean
@@ -21,7 +21,7 @@ export const CellWideActions: React.FC<Props> = ({
   cellId,
   view,
   autoRefresh,
-  isChartMaximized,
+  isViewMaximized,
   isRunning,
   isGridLoading,
   isChartLoading,
@@ -46,7 +46,7 @@ export const CellWideActions: React.FC<Props> = ({
     <CellViewToggle
       cellId={cellId}
       view={view}
-      isChartMaximized={isChartMaximized}
+      isViewMaximized={isViewMaximized}
       isGridLoading={isGridLoading}
       isChartLoading={isChartLoading}
       chartZoomed={chartZoomed}

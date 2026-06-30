@@ -103,7 +103,7 @@ export const CellToolbar: React.FC<Props> = ({
     deleteCell,
     setMaximizedCellId,
     setCellRefresh,
-    setCellChartMaximized,
+    setCellViewMaximized,
     setCellMode,
   } = useNotebookActions()
   const { activeBuffer } = useEditor()
@@ -117,7 +117,7 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const isViewMaximized = !isNoneView && !!cell.isChartMaximized
+  const isViewMaximized = !isNoneView && !!cell.isViewMaximized
   const autoRefresh = cell.autoRefresh ?? true
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -130,9 +130,9 @@ export const CellToolbar: React.FC<Props> = ({
   const hasToolbarInterval = tier === "expanded" && isChartView
   const isCompact = tier === "compact"
   // Compact shows one full-height pane at a time; "View SQL" minimizes the
-  // chart/table to the editor (isChartMaximized === false) without dropping the
+  // chart/table to the editor (isViewMaximized === false) without dropping the
   // data. The menu offers the two panes you're not currently viewing.
-  const sqlShown = cell.isChartMaximized === false
+  const sqlShown = cell.isViewMaximized === false
   // Each menu item is shown only when it's both applicable to the current state
   // (never a disabled/greyed item) and not already a visible toolbar button.
   const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
@@ -159,7 +159,7 @@ export const CellToolbar: React.FC<Props> = ({
   // Minimize the chart/table to the editor, keeping the data on the cell.
   const handleViewSql = () => {
     signalUserEdit()
-    setCellChartMaximized(cellId, false)
+    setCellViewMaximized(cellId, false)
   }
   const handleViewTable = () => {
     signalUserEdit()
@@ -170,18 +170,21 @@ export const CellToolbar: React.FC<Props> = ({
     // A chart transfers its data to the grid (no re-query); restore the data
     // pane in case the SQL was being shown.
     if (isChartView) setCellMode(cellId, "run")
-    setCellChartMaximized(cellId, true)
+    setCellViewMaximized(cellId, true)
   }
   const handleViewChart = () => {
     signalUserEdit()
     if (isNoneView || isGridView) {
-      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+      // Entering draw can be refused (non-DQL SQL); maximize only once the
+      // draw actually takes, so a refused chart never maximizes the grid.
+      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId, maximize: true })
+      return
     }
-    if (!isNoneView) setCellChartMaximized(cellId, true)
+    setCellViewMaximized(cellId, true)
   }
   const handleToggleMaximizeView = () => {
     signalUserEdit()
-    setCellChartMaximized(cellId, !cell.isChartMaximized)
+    setCellViewMaximized(cellId, !cell.isViewMaximized)
   }
   const handleMaximizeCell = () => {
     signalUserEdit()

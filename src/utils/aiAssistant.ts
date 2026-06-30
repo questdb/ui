@@ -186,7 +186,7 @@ export interface ModelToolsClient {
     cellId: string,
     patch: Partial<ChartConfig>,
   ) => Promise<void>
-  setCellChartMaximized: (
+  setCellViewMaximized: (
     bufferId: number,
     cellId: string,
     value: boolean,
@@ -505,8 +505,8 @@ export function createModelToolsClient(
           if (cell.mode) out.mode = cell.mode
           if (cell.autoRefresh !== undefined)
             out.auto_refresh = cell.autoRefresh
-          if (typeof cell.isChartMaximized === "boolean")
-            out.is_view_maximized = cell.isChartMaximized
+          if (typeof cell.isViewMaximized === "boolean")
+            out.is_view_maximized = cell.isViewMaximized
           if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
             out.chart_config = toChartConfigWire(cell.chartConfig)
           return Promise.resolve(out)
@@ -649,10 +649,10 @@ export function createModelToolsClient(
       })
     },
 
-    setCellChartMaximized(bufferId, cellId, value) {
+    setCellViewMaximized(bufferId, cellId, value) {
       return bound(bufferId, (ctrl) => {
         requireCell(ctrl, cellId)
-        ctrl.setCellChartMaximized(cellId, value)
+        ctrl.setCellViewMaximized(cellId, value)
         return Promise.resolve()
       })
     },

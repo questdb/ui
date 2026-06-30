@@ -50,7 +50,7 @@ const makeController = (
   setCellLayout: () => undefined,
   setCellMode: () => undefined,
   setCellChartConfig: () => undefined,
-  setCellChartMaximized: () => undefined,
+  setCellViewMaximized: () => undefined,
   setCellMaximized: () => undefined,
   applyNotebookState: () => ({
     applied: { added: [], updated: [], deleted: [] },
@@ -236,7 +236,7 @@ describe("buildSnapshot", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
-      isChartMaximized: false,
+      isViewMaximized: false,
       name: "Trades",
       chartConfig: {
         xColumn: "ts",

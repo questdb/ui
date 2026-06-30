@@ -83,7 +83,7 @@ export type NotebookActions = {
   mirrorCellResult: (cellId: string, result: CellResult | undefined) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
   setCellRefresh: (cellId: string, value: AutoRefresh) => void
-  setCellChartMaximized: (cellId: string, value: boolean) => void
+  setCellViewMaximized: (cellId: string, value: boolean) => void
   setCellLayout: (
     cellId: string,
     pos: { x: number; y: number; w: number; h: number },
@@ -118,7 +118,7 @@ const NOOP_ACTIONS: NotebookActions = {
   mirrorCellResult: () => undefined,
   setCellChartConfig: () => undefined,
   setCellRefresh: () => undefined,
-  setCellChartMaximized: () => undefined,
+  setCellViewMaximized: () => undefined,
   setCellLayout: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
@@ -544,7 +544,7 @@ export const NotebookProvider: React.FC<{
     mirrorCellResult,
     setCellChartConfig: store.setCellChartConfig,
     setCellRefresh: store.setCellRefresh,
-    setCellChartMaximized: store.setCellChartMaximized,
+    setCellViewMaximized: store.setCellViewMaximized,
     setCellLayout,
     setFocusedCell,
     setMaximizedCellId,

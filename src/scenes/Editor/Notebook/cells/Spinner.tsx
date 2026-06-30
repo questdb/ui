@@ -6,8 +6,7 @@ const spin = keyframes`
   to { transform: rotate(360deg); }
 `
 
-// Plain foreground-colored loading spinner for cell toolbar controls (the
-// gradient CircleNotchSpinner reads as a brand accent, not a neutral "busy").
+// Neutral (non-brand) spinner for toolbar controls.
 export const Spinner = styled(CircleNotchIcon)`
   color: ${({ theme }) => theme.color.foreground};
   animation: ${spin} 0.8s linear infinite;

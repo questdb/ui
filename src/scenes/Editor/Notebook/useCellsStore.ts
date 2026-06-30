@@ -162,9 +162,9 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [patchCell],
   )
 
-  const setCellChartMaximized = useCallback(
+  const setCellViewMaximized = useCallback(
     (cellId: string, value: boolean) =>
-      patchCell(cellId, { isChartMaximized: value }),
+      patchCell(cellId, { isViewMaximized: value }),
     [patchCell],
   )
 
@@ -186,6 +186,6 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     setCellMode,
     setCellChartConfig,
     setCellRefresh,
-    setCellChartMaximized,
+    setCellViewMaximized,
   }
 }

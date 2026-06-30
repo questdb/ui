@@ -720,7 +720,7 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         return routeNotebookTool(() =>
-          modelToolsClient.setCellChartMaximized(buffer_id, cell_id, value),
+          modelToolsClient.setCellViewMaximized(buffer_id, cell_id, value),
         )
       }
       case "apply_notebook_state": {
@@ -953,7 +953,7 @@ export const dispatchTool = async (
               c.is_view_maximized !== undefined &&
               c.is_view_maximized !== null
             )
-              cell.isChartMaximized = c.is_view_maximized
+              cell.isViewMaximized = c.is_view_maximized
             if (c.chart_config) {
               const cfg = c.chart_config
               const chartConfig: ChartConfig = {

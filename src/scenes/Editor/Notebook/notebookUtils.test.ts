@@ -723,6 +723,17 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].name).toBeUndefined()
   })
 
+  it("rejects a cell name over the length limit", () => {
+    // Given an apply request whose cell name exceeds the 100-character limit
+    // When the cells are built
+    // Then it throws rather than persisting the oversized name
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [{ value: "SELECT 1", name: "a".repeat(101) }],
+      }),
+    ).toThrow(/over the 100-character limit/)
+  })
+
   it("updates existing cells in place and preserves result when value unchanged", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "x", result: dql("x") },
@@ -1006,7 +1017,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
-  it("defaults isChartMaximized and autoRefresh to true on new draw cells", () => {
+  it("defaults isViewMaximized and autoRefresh to true on new draw cells", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1020,7 +1031,7 @@ describe("buildAppliedCells", () => {
       ],
     })
     expect(nextCells[0].autoRefresh).toBe(true)
-    expect(nextCells[0].isChartMaximized).toBe(true)
+    expect(nextCells[0].isViewMaximized).toBe(true)
   })
 
   it("apply is a PUT: mode='draw' with no chart_config throws even when the existing cell had one (no merge)", () => {
@@ -1053,7 +1064,7 @@ describe("buildAppliedCells", () => {
         value: "SELECT 1",
         mode: "draw",
         autoRefresh: "5s",
-        isChartMaximized: true,
+        isViewMaximized: true,
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -1066,7 +1077,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBeUndefined()
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
-    expect(nextCells[0].isChartMaximized).toBeUndefined()
+    expect(nextCells[0].isViewMaximized).toBeUndefined()
   })
 
   it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
@@ -1123,7 +1134,7 @@ describe("isDoubleView", () => {
         position: 0,
         value: "",
         mode: "draw",
-        isChartMaximized: true,
+        isViewMaximized: true,
       }),
     ).toBe(true)
   })
@@ -1620,7 +1631,7 @@ describe("cloneNotebookViewState", () => {
         value: "SELECT 2",
         mode: "draw",
         autoRefresh: true,
-        isChartMaximized: true,
+        isViewMaximized: true,
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -1670,7 +1681,7 @@ describe("cloneNotebookViewState", () => {
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)
-    expect(out.cells[1].isChartMaximized).toBe(true)
+    expect(out.cells[1].isViewMaximized).toBe(true)
     expect(out.cells[1].chartConfig).toEqual({
       xColumn: "ts",
       queries: [{ type: "line", yColumns: ["v"] }],

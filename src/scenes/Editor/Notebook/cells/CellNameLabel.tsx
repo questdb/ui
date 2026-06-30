@@ -58,10 +58,14 @@ export const CellNameLabel: React.FC<Props> = ({ name, onRename }) => {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(name ?? "")
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const labelRef = useRef<HTMLButtonElement | null>(null)
   const cancelRef = useRef(false)
+  const wasEditingRef = useRef(false)
 
   useEffect(() => {
     if (editing) inputRef.current?.select()
+    else if (wasEditingRef.current) labelRef.current?.focus()
+    wasEditingRef.current = editing
   }, [editing])
 
   const commit = () => {
@@ -106,6 +110,7 @@ export const CellNameLabel: React.FC<Props> = ({ name, onRename }) => {
 
   return (
     <Label
+      ref={labelRef}
       type="button"
       $placeholder={!name}
       aria-label={name ? `Cell name: ${name}. Rename` : "Name cell"}

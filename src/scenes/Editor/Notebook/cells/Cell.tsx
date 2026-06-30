@@ -142,6 +142,7 @@ const CellInner: React.FC<Props> = ({
     setCellMode,
     clearCellResult,
     setCellChartConfig,
+    setCellViewMaximized,
     updateCell,
     setFocusedCell,
     getCellsSnapshot,
@@ -162,9 +163,8 @@ const CellInner: React.FC<Props> = ({
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
-  // A run kicked off from the Run toggle (a neutral cell producing its first
-  // result) shows its spinner on the Run segment — like Draw spins the Chart
-  // segment. A run from the refresh button is a refresh and spins that instead.
+  // A run from the Run toggle spins the Run segment; a run from the refresh
+  // button spins the refresh button instead.
   const firstRunRef = useRef(false)
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
@@ -221,7 +221,10 @@ const CellInner: React.FC<Props> = ({
 
   const validatingDrawRef = useRef(false)
 
-  const handleDrawClick = useCallback(async () => {
+  // Returns true only when the cell actually entered draw mode, so a caller can
+  // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
+  // draw was refused by validation.
+  const handleDrawClick = useCallback(async (): Promise<boolean> => {
     if (isDrawMode) {
       setCellMode(cell.id, "run")
       clearCellResult(cell.id)
@@ -233,9 +236,9 @@ const CellInner: React.FC<Props> = ({
           mode: "run",
         })
       }
-      return
+      return false
     }
-    if (validatingDrawRef.current) return
+    if (validatingDrawRef.current) return false
     validatingDrawRef.current = true
     try {
       const decision = await requireAllDQL(cell.value, (s) =>
@@ -243,7 +246,7 @@ const CellInner: React.FC<Props> = ({
       )
       if (!decision.granted) {
         toast.error(decision.reason)
-        return
+        return false
       }
       setCellMode(cell.id, "draw")
       if (bufferIdForEvents !== undefined) {
@@ -254,6 +257,7 @@ const CellInner: React.FC<Props> = ({
           mode: "draw",
         })
       }
+      return true
     } finally {
       validatingDrawRef.current = false
     }
@@ -288,23 +292,14 @@ const CellInner: React.FC<Props> = ({
     expectingResult,
   })
   const doubleView = isDoubleView(cell) || expectingResult
-  // The compact tier can't split — it shows one full-height pane at a time. A
-  // chart/table fills the cell by default; "View SQL" (isChartMaximized ===
-  // false) shows the editor instead, keeping the data for an instant switch back
-  // (no re-run). It's the same maximize flag, just rendered editor-or-data
-  // rather than editor-and-data.
+  // Compact can't split — one full-height pane: the result fills the cell by
+  // default, "View SQL" (isViewMaximized === false) shows the editor instead.
   const isCompactTier = toolbarTier === "compact"
-  const isChartMaximized = isCompactTier
-    ? doubleView && cell.isChartMaximized !== false
-    : doubleView && !!cell.isChartMaximized
-  // The bottom slot (chart/table) shares the cell with the editor only outside
-  // compact; in compact it's the editor OR the bottom, never both.
-  const showBottomSlot = isChartMaximized || (doubleView && !isCompactTier)
-  const isSplit = doubleView && !isChartMaximized && !isCompactTier
-  // The run grid acts as a toggle: it's "selected" whenever its bottom slot is
-  // showing (a result, or the reserved space while one hydrates). Draw mode owns
-  // the bottom slot instead, so run is never active there — the two are mutually
-  // exclusive, and neither selected means editor-only.
+  const isViewMaximized = isCompactTier
+    ? doubleView && cell.isViewMaximized !== false
+    : doubleView && !!cell.isViewMaximized
+  const showBottomSlot = isViewMaximized || (doubleView && !isCompactTier)
+  const isSplit = doubleView && !isViewMaximized && !isCompactTier
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
@@ -656,9 +651,11 @@ const CellInner: React.FC<Props> = ({
       exitDrawIfNeeded()
       void handleRunAll()
     }
-    const drawHandler = (payload?: { cellId?: string }) => {
+    const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
       if (payload?.cellId !== cell.id) return
-      void handleDrawClick()
+      void handleDrawClick().then((entered) => {
+        if (entered && payload.maximize) setCellViewMaximized(cell.id, true)
+      })
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
@@ -666,7 +663,13 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, exitDrawIfNeeded, handleRunAll, handleDrawClick])
+  }, [
+    cell.id,
+    exitDrawIfNeeded,
+    handleRunAll,
+    handleDrawClick,
+    setCellViewMaximized,
+  ])
 
   const handleRunClick = useCallback(() => {
     firstRunRef.current = true
@@ -755,7 +758,7 @@ const CellInner: React.FC<Props> = ({
               cellId={cell.id}
               view={view}
               autoRefresh={cell.autoRefresh ?? true}
-              isChartMaximized={isChartMaximized}
+              isViewMaximized={isViewMaximized}
               isRunning={isRunning}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
@@ -767,7 +770,7 @@ const CellInner: React.FC<Props> = ({
             <CellViewToggle
               cellId={cell.id}
               view={view}
-              isChartMaximized={isChartMaximized}
+              isViewMaximized={isViewMaximized}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
               chartZoomed={chartZoomed}
@@ -776,7 +779,7 @@ const CellInner: React.FC<Props> = ({
           )
         }
       />
-      {!isChartMaximized && (
+      {!isViewMaximized && (
         <EditorContainer
           ref={editorContainerRef}
           $spotlight={isMaximized}
@@ -844,7 +847,7 @@ const CellInner: React.FC<Props> = ({
           ref={resultRef}
           $spotlight={isMaximized}
           style={
-            isChartMaximized
+            isViewMaximized
               ? isMaximized
                 ? { flex: 1 }
                 : { height: topHeight + bottomHeight }
@@ -891,25 +894,25 @@ const CellInner: React.FC<Props> = ({
       <ResizeHandle
         overlay
         targetRef={
-          isChartMaximized || showBottomSlot ? resultRef : editorContainerRef
+          isViewMaximized || showBottomSlot ? resultRef : editorContainerRef
         }
         onResize={
-          isChartMaximized
+          isViewMaximized
             ? maximizedChartResizeLive
             : showBottomSlot
               ? bottomResize.resizeLive
               : topResize.resizeLive
         }
         onResizeEnd={
-          isChartMaximized
+          isViewMaximized
             ? maximizedChartResizeEnd
             : showBottomSlot
               ? bottomResize.resizeEnd
               : topResize.resizeEnd
         }
-        onDoubleClick={isChartMaximized ? resetToDefaults : resetBottomArea}
+        onDoubleClick={isViewMaximized ? resetToDefaults : resetBottomArea}
         minHeight={
-          isChartMaximized
+          isViewMaximized
             ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX
             : showBottomSlot
               ? MIN_BOTTOM_HEIGHT_PX

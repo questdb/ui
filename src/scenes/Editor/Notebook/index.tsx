@@ -463,7 +463,7 @@ const GridLayout: React.FC = () => {
           // height and block shrinking. Scale both so the dragged total is
           // always reachable and the derived grid h matches the drag (mirrors
           // the list-mode handle).
-          if (cell.isChartMaximized === true) {
+          if (cell.isViewMaximized === true) {
             const { top, bottom } = scaleCellHeights(
               cell.topHeight ?? DEFAULT_TOP_HEIGHT,
               cell.bottomHeight ?? defaultBottomHeightFor(cell),

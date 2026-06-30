@@ -376,7 +376,7 @@ type ApplyCellRequest = {
   type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: AutoRefresh | null
-  isChartMaximized?: boolean | null
+  isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
@@ -616,9 +616,9 @@ export const buildAppliedCells = (
     }
 
     const isDraw = resolvedMode === "draw"
-    const isChartMaximized =
-      req.isChartMaximized != null
-        ? req.isChartMaximized
+    const isViewMaximized =
+      req.isViewMaximized != null
+        ? req.isViewMaximized
         : isDraw
           ? true
           : undefined
@@ -644,9 +644,8 @@ export const buildAppliedCells = (
       else delete next.chartConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
-      if (isChartMaximized !== undefined)
-        next.isChartMaximized = isChartMaximized
-      else delete next.isChartMaximized
+      if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
+      else delete next.isViewMaximized
       if (resolvedType === "markdown") {
         // Markdown cells carry none of the SQL/chart sub-state.
         next.type = "markdown"
@@ -654,7 +653,7 @@ export const buildAppliedCells = (
         delete next.mode
         delete next.chartConfig
         delete next.autoRefresh
-        delete next.isChartMaximized
+        delete next.isViewMaximized
         delete next.bottomHeight
         delete next.lastRunStatus
       } else {
@@ -679,8 +678,7 @@ export const buildAppliedCells = (
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
-    if (isChartMaximized !== undefined)
-      created.isChartMaximized = isChartMaximized
+    if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.

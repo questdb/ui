@@ -135,8 +135,8 @@ const buildCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  if (typeof cell.isChartMaximized === "boolean") {
-    out.is_view_maximized = cell.isChartMaximized
+  if (typeof cell.isViewMaximized === "boolean") {
+    out.is_view_maximized = cell.isViewMaximized
   }
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {

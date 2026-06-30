@@ -831,6 +831,34 @@ describe("sanitizeBuffer", () => {
       expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
     })
 
+    it("keeps a fixed-interval autoRefresh token and bottomResized, drops a malformed interval", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "interval",
+              value: "SELECT 1",
+              autoRefresh: "5s",
+              bottomResized: true,
+            },
+            { id: "bad-token", value: "SELECT 2", autoRefresh: "2s" },
+            { id: "bad-type", value: "SELECT 3", autoRefresh: 5000 },
+          ],
+        },
+      }
+      const result = sanitizeBuffer(input)
+      const cells = result.notebookViewState?.cells
+      // A valid interval token survives the round-trip…
+      expect(cells?.[0].autoRefresh).toBe("5s")
+      expect(cells?.[0].bottomResized).toBe(true)
+      // …while an unknown token or a non-AutoRefresh value is dropped.
+      expect(cells?.[1].autoRefresh).toBeUndefined()
+      expect(cells?.[2].autoRefresh).toBeUndefined()
+    })
+
     it("drops legacy chartConfig (non-array queries) and keeps valid ones", () => {
       const input = {
         label: "Notebook",

@@ -63,7 +63,7 @@ const makeClient = (
   setCellLayout: vi.fn(() => Promise.resolve()),
   setCellMode: vi.fn(() => Promise.resolve()),
   setCellChartConfig: vi.fn(() => Promise.resolve()),
-  setCellChartMaximized: vi.fn(() => Promise.resolve()),
+  setCellViewMaximized: vi.fn(() => Promise.resolve()),
   setCellMaximized: vi.fn(() => Promise.resolve()),
   applyNotebookState: vi.fn(() =>
     Promise.resolve({ applied: { added: [], updated: [], deleted: [] } }),
@@ -302,6 +302,44 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const res = await dispatchTool(
       "set_cell_autorefresh",
       { buffer_id: 1, cell_id: "c", value: "2s" },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(client.updateCell).not.toHaveBeenCalled()
+  })
+
+  it("set_cell_name sets the cell name via updateCell", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: "BTC price" },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      name: "BTC price",
+    })
+  })
+
+  it("set_cell_name clears the name when passed null", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: null },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      name: undefined,
+    })
+  })
+
+  it("set_cell_name rejects a name over the length limit", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: "a".repeat(101) },
       client,
       noopStatus,
     )
@@ -642,7 +680,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           value: "SELECT 1",
           mode: "draw",
           autoRefresh: "5s",
-          isChartMaximized: true,
+          isViewMaximized: true,
           chartConfig: {
             xColumn: "ts",
             queries: [

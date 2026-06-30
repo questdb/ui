@@ -16,7 +16,6 @@ export const useWidthObserver = (
   onWidth: (width: number) => void,
 ): void => {
   const onWidthRef = useRef(onWidth)
-  onWidthRef.current = onWidth
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useLayoutEffect(() => {
@@ -42,6 +41,10 @@ export const useWidthObserver = (
       if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [ref])
+
+  useEffect(() => {
+    onWidthRef.current = onWidth
+  }, [onWidth])
 }
 
 export const useContainerWidth = (ref: RefObject<HTMLElement>): number => {

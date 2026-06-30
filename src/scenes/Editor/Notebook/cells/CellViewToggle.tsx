@@ -2,12 +2,12 @@ import React from "react"
 import styled from "styled-components"
 import {
   TableIcon,
-  ChartLineIcon,
   ArrowsOutLineVerticalIcon,
   ArrowsInLineVerticalIcon,
 } from "@phosphor-icons/react"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { Spinner } from "./Spinner"
+import { ChartIcon } from "./ChartIcon"
 import { Tooltip } from "../../../../components"
 import { useNotebookActions } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebookAIBridge"
@@ -23,10 +23,6 @@ const Container = styled.div`
   border-radius: 0.6rem;
   background: ${({ theme }) => theme.color.backgroundLighter};
   border: 1px solid ${({ theme }) => `${theme.color.selection}80`};
-`
-
-const ChartIcon = styled(ChartLineIcon)`
-  color: ${({ theme }) => theme.color.cyan};
 `
 
 const DimSpinner = styled(Spinner)`
@@ -90,7 +86,7 @@ const IconButton = styled.button`
 type Props = {
   cellId: string
   view: CellView
-  isChartMaximized: boolean
+  isViewMaximized: boolean
   isGridLoading: boolean
   isChartLoading: boolean
   chartZoomed: boolean
@@ -100,13 +96,13 @@ type Props = {
 export const CellViewToggle: React.FC<Props> = ({
   cellId,
   view,
-  isChartMaximized,
+  isViewMaximized,
   isGridLoading,
   isChartLoading,
   chartZoomed,
   showLabels,
 }) => {
-  const { setCellChartMaximized, setCellMode, clearCellResult } =
+  const { setCellViewMaximized, setCellMode, clearCellResult } =
     useNotebookActions()
 
   // Clicking the active segment toggles it off, wiping the result back to the
@@ -131,7 +127,7 @@ export const CellViewToggle: React.FC<Props> = ({
   const handleSplit = (e: React.MouseEvent) => {
     e.stopPropagation()
     signalUserEdit()
-    setCellChartMaximized(cellId, !isChartMaximized)
+    setCellViewMaximized(cellId, !isViewMaximized)
   }
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -145,6 +141,7 @@ export const CellViewToggle: React.FC<Props> = ({
           type="button"
           $active={view === "grid"}
           aria-pressed={view === "grid"}
+          aria-busy={view === "grid" && isGridLoading}
           onClick={handleTable}
           aria-label="View table"
         >
@@ -161,6 +158,7 @@ export const CellViewToggle: React.FC<Props> = ({
           type="button"
           $active={view === "chart"}
           aria-pressed={view === "chart"}
+          aria-busy={view === "chart" && isChartLoading}
           onClick={handleChart}
           aria-label="View chart"
         >
@@ -173,13 +171,13 @@ export const CellViewToggle: React.FC<Props> = ({
         </Segment>
       </Tooltip>
       <Divider />
-      <Tooltip content={isChartMaximized ? "Split view" : "Maximize view"}>
+      <Tooltip content={isViewMaximized ? "Split view" : "Maximize view"}>
         <IconButton
           type="button"
           onClick={handleSplit}
-          aria-label={isChartMaximized ? "Split view" : "Maximize view"}
+          aria-label={isViewMaximized ? "Split view" : "Maximize view"}
         >
-          {isChartMaximized ? (
+          {isViewMaximized ? (
             <ArrowsInLineVerticalIcon />
           ) : (
             <ArrowsOutLineVerticalIcon />

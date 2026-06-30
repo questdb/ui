@@ -6,10 +6,8 @@ type ChartLoadingState = { loading: boolean; refreshing: boolean }
 
 const IDLE: ChartLoadingState = { loading: false, refreshing: false }
 
-// Tracks a cell's chart fetch state, as broadcast by its DrawCanvas, so the
-// cell toolbar can spin its controls without owning the fetch. `loading` is the
-// first-time draw (view toggle spins); `refreshing` is a re-fetch over existing
-// data (refresh button spins).
+// Tracks a cell's chart fetch state, broadcast by its DrawCanvas, so the cell
+// toolbar can spin its controls without owning the fetch.
 export const useChartLoading = (cellId: string): ChartLoadingState => {
   const [state, setState] = useState<ChartLoadingState>(IDLE)
 

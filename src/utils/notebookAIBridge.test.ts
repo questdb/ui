@@ -47,7 +47,7 @@ const makeController = (
   setCellLayout: () => undefined,
   setCellMode: () => undefined,
   setCellChartConfig: () => undefined,
-  setCellChartMaximized: () => undefined,
+  setCellViewMaximized: () => undefined,
   setCellMaximized: () => undefined,
   applyNotebookState: () => ({
     applied: { added: [], updated: [], deleted: [] },
@@ -387,7 +387,7 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
     setCellLayout: () => undefined,
     setCellMode: () => undefined,
     setCellChartConfig: () => undefined,
-    setCellChartMaximized: () => undefined,
+    setCellViewMaximized: () => undefined,
     setMaximizedCellId: vi.fn(),
     updateCells: () => undefined,
     getCellsSnapshot: () => prevCells,

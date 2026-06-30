@@ -49,7 +49,7 @@ export type NotebookCell = {
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
-  isChartMaximized?: boolean
+  isViewMaximized?: boolean
   lastRunStatus?: RunStatus
 }
 

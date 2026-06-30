@@ -1,8 +1,8 @@
 import React from "react"
 import styled from "styled-components"
-import { ChartLineIcon } from "@phosphor-icons/react"
 import { PlayIcon } from "../../Monaco/icons"
 import { Spinner } from "./Spinner"
+import { ChartIcon } from "./ChartIcon"
 import { Tooltip } from "../../../../components"
 import { ctrlCmd } from "../../../../utils/platform"
 
@@ -35,10 +35,6 @@ const ToggleButton = styled.button<{ $active?: boolean }>`
     cursor: default;
     filter: none;
   }
-`
-
-const ChartIcon = styled(ChartLineIcon)`
-  color: ${({ theme }) => theme.color.cyan};
 `
 
 type Props = {
@@ -77,6 +73,7 @@ export const CellRunDrawToggles: React.FC<Props> = ({
             onCancel()
           }}
           aria-label="Cancel"
+          aria-busy
         >
           <Spinner size={20} />
           {showLabels && "Run"}
@@ -121,6 +118,7 @@ export const CellRunDrawToggles: React.FC<Props> = ({
         $active={isDrawMode}
         aria-pressed={isDrawMode}
         aria-disabled={!canRun}
+        aria-busy={isDrawMode && isChartLoading}
         onClick={(e) => {
           e.stopPropagation()
           if (!canRun) return

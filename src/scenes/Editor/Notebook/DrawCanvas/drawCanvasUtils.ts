@@ -35,6 +35,7 @@ export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
       columns: r.columns,
       dataset: r.dataset,
       count: r.count,
+      timestamp: r.timestamp,
       timings: r.timings,
     }
   }

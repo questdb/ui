@@ -97,6 +97,7 @@ export const CellRefreshButton: React.FC<Props> = ({
           type="button"
           onClick={handleRefresh}
           aria-label="Refresh"
+          aria-busy={isRefreshing}
           disabled={isRefreshing}
         >
           {isRefreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
