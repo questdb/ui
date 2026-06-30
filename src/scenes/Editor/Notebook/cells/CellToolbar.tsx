@@ -120,6 +120,7 @@ export const CellToolbar: React.FC<Props> = ({
   const isViewMaximized = !isNoneView && !!cell.isViewMaximized
   const autoRefresh = cell.autoRefresh ?? true
   const [menuOpen, setMenuOpen] = useState(false)
+  const [triggerHovered, setTriggerHovered] = useState(false)
 
   // Which actions the visible toolbar already exposes for this tier/view — the
   // menu drops them to avoid duplicates (undefined tier = markdown, treated as
@@ -271,21 +272,26 @@ export const CellToolbar: React.FC<Props> = ({
       </Tooltip>
       {!isMaximized && (
         <DropdownMenu.Root onOpenChange={setMenuOpen}>
-          <Tooltip content="More actions">
+          {/* Hover-only tooltip (open driven by pointer, not focus) so the
+              focus Radix restores to the trigger on close doesn't pop it. */}
+          <Tooltip
+            content="More actions"
+            open={triggerHovered && !menuOpen}
+            onOpenChange={(o) => !o && setTriggerHovered(false)}
+          >
             <DropdownMenu.Trigger asChild>
-              <ToolbarButton skin="transparent" aria-label="More actions">
+              <ToolbarButton
+                skin="transparent"
+                aria-label="More actions"
+                onMouseEnter={() => setTriggerHovered(true)}
+                onMouseLeave={() => setTriggerHovered(false)}
+              >
                 <DotsThreeVerticalIcon size={20} weight="bold" />
               </ToolbarButton>
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              align="end"
-              sideOffset={4}
-              // Don't restore focus to the trigger on close — that refocus
-              // re-opens its Tooltip, which then stays stuck open.
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
+            <DropdownMenu.Content align="end" sideOffset={4}>
               {showViewSql && (
                 <DropdownMenu.Item
                   onSelect={handleViewSql}

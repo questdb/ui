@@ -44,6 +44,8 @@ type BaseButtonProps = {
   onClick?: (event: MouseEvent) => void
   onDoubleClick?: (event: MouseEvent) => void
   onMouseDown?: (event: MouseEvent) => void
+  onMouseEnter?: (event: MouseEvent) => void
+  onMouseLeave?: (event: MouseEvent) => void
   size?: Size
   fullWidth?: boolean
   type?: Type

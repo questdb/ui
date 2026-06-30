@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
 import { ArrowClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react"
 import { DropdownMenu, Tooltip, Button } from "../../../../components"
@@ -74,6 +74,8 @@ export const CellRefreshButton: React.FC<Props> = ({
 }) => {
   const { setCellRefresh } = useNotebookActions()
   const isChart = view === "chart"
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [triggerHovered, setTriggerHovered] = useState(false)
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -106,13 +108,21 @@ export const CellRefreshButton: React.FC<Props> = ({
       {isChart && (
         <>
           <SplitDivider />
-          <DropdownMenu.Root>
-            <Tooltip content="Auto-refresh interval">
+          <DropdownMenu.Root onOpenChange={setMenuOpen}>
+            {/* Hover-only tooltip (open driven by pointer, not focus) so the
+                focus Radix restores to the trigger on close doesn't pop it. */}
+            <Tooltip
+              content="Auto-refresh interval"
+              open={triggerHovered && !menuOpen}
+              onOpenChange={(o) => !o && setTriggerHovered(false)}
+            >
               <DropdownMenu.Trigger asChild>
                 <SplitSide
                   type="button"
                   onClick={(e) => e.stopPropagation()}
                   aria-label="Auto-refresh interval"
+                  onMouseEnter={() => setTriggerHovered(true)}
+                  onMouseLeave={() => setTriggerHovered(false)}
                 >
                   <IntervalLabel>{autoRefreshLabel(autoRefresh)}</IntervalLabel>
                   <CaretDownIcon />
@@ -120,13 +130,7 @@ export const CellRefreshButton: React.FC<Props> = ({
               </DropdownMenu.Trigger>
             </Tooltip>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                align="end"
-                sideOffset={4}
-                // Don't restore focus to the trigger on close — that refocus
-                // re-opens its Tooltip, which then stays stuck open.
-                onCloseAutoFocus={(e) => e.preventDefault()}
-              >
+              <DropdownMenu.Content align="end" sideOffset={4}>
                 <AutoRefreshOptions
                   value={autoRefresh}
                   onSelect={handleSelect}
