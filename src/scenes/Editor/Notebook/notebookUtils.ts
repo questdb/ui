@@ -77,6 +77,95 @@ export const cellToolbarTier = (
       ? "standard"
       : "compact"
 
+export type CellToolbarMenuFlags = {
+  showViewSql: boolean
+  showViewTable: boolean
+  showViewChart: boolean
+  showSplitItem: boolean
+  showResetZoom: boolean
+  showAutoRefreshItem: boolean
+  showRefreshItem: boolean
+  showChartSettings: boolean
+  showMoveUp: boolean
+  showMoveDown: boolean
+  showDuplicate: boolean
+  showDelete: boolean
+  groupAHasItems: boolean
+  groupBHasItems: boolean
+}
+
+// Which items the "more actions" menu shows. An item appears only when it is
+// applicable to the current state AND not already a visible toolbar button for
+// this tier/view, so the menu never duplicates an inline control or offers a
+// disabled/greyed action. `sqlShown` is the compact-tier "View SQL" state
+// (isViewMaximized === false). Markdown cells (no run/draw views) keep just the
+// move/duplicate/delete items.
+export const cellToolbarMenuFlags = (params: {
+  tier: CellToolbarTier
+  view: CellView
+  isMarkdown: boolean
+  sqlShown: boolean
+  chartZoomed: boolean
+  isGridMode: boolean
+  cellIndex: number
+  totalCells: number
+}): CellToolbarMenuFlags => {
+  const {
+    tier,
+    view,
+    isMarkdown,
+    sqlShown,
+    chartZoomed,
+    isGridMode,
+    cellIndex,
+    totalCells,
+  } = params
+  const isCompact = tier === "compact"
+  const isChartView = view === "chart"
+  const isGridView = view === "grid"
+  const isNoneView = view === "none"
+  const hasToolbarSplit = tier !== "compact" && !isNoneView
+  const hasToolbarRefresh = tier === "expanded" && !isNoneView
+  const hasToolbarInterval = tier === "expanded" && isChartView
+
+  const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
+  const showViewTable =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isChartView)
+  const showViewChart =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
+  const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
+  const showResetZoom = isCompact && isChartView && chartZoomed
+  const showAutoRefreshItem = !hasToolbarInterval && isChartView
+  const showRefreshItem = !hasToolbarRefresh && !isNoneView
+  const showChartSettings = isChartView
+  const showMoveUp = !isGridMode && cellIndex > 0
+  const showMoveDown = !isGridMode && cellIndex < totalCells - 1
+  const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
+  const showDelete = totalCells > 1
+
+  return {
+    showViewSql,
+    showViewTable,
+    showViewChart,
+    showSplitItem,
+    showResetZoom,
+    showAutoRefreshItem,
+    showRefreshItem,
+    showChartSettings,
+    showMoveUp,
+    showMoveDown,
+    showDuplicate,
+    showDelete,
+    groupAHasItems:
+      showViewSql || showViewTable || showViewChart || showSplitItem,
+    groupBHasItems:
+      showResetZoom ||
+      showAutoRefreshItem ||
+      showRefreshItem ||
+      showChartSettings,
+  }
+}
+
 export const singleResultFromExec = (
   exec: QueryExecResult,
   query: string,
@@ -474,7 +563,6 @@ const normalizeChartConfig = (
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
-  if (cfg.autoRefresh !== undefined) next.autoRefresh = cfg.autoRefresh
   return next
 }
 

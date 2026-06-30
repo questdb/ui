@@ -21,9 +21,13 @@ import {
   FileSqlIcon,
 } from "@phosphor-icons/react"
 import { DropdownMenu, Button, Tooltip } from "../../../../components"
-import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
-import { autoRefreshLabel, resolveCellView } from "../notebookUtils"
+import { useTriggerTooltip } from "./useTriggerTooltip"
+import {
+  autoRefreshLabel,
+  cellToolbarMenuFlags,
+  resolveCellView,
+} from "../notebookUtils"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions } from "../NotebookProvider"
@@ -120,42 +124,34 @@ export const CellToolbar: React.FC<Props> = ({
   const isViewMaximized = !isNoneView && !!cell.isViewMaximized
   const autoRefresh = cell.autoRefresh ?? true
   const [menuOpen, setMenuOpen] = useState(false)
-  const [triggerHovered, setTriggerHovered] = useState(false)
+  const moreActionsTooltip = useTriggerTooltip()
 
-  // Which actions the visible toolbar already exposes for this tier/view — the
-  // menu drops them to avoid duplicates (undefined tier = markdown, treated as
-  // compact so its menu keeps everything).
-  const tier = toolbarTier ?? "compact"
-  const hasToolbarSplit = tier !== "compact" && !isNoneView
-  const hasToolbarRefresh = tier === "expanded" && !isNoneView
-  const hasToolbarInterval = tier === "expanded" && isChartView
-  const isCompact = tier === "compact"
-  // Compact shows one full-height pane at a time; "View SQL" minimizes the
-  // chart/table to the editor (isViewMaximized === false) without dropping the
-  // data. The menu offers the two panes you're not currently viewing.
-  const sqlShown = cell.isViewMaximized === false
-  // Each menu item is shown only when it's both applicable to the current state
-  // (never a disabled/greyed item) and not already a visible toolbar button.
-  const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
-  const showViewTable =
-    isCompact && !isMarkdown && (isNoneView || sqlShown || isChartView)
-  const showViewChart =
-    isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
-  const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
-  // Non-compact tiers expose Reset zoom inline (next to the view toggle), so
-  // the menu only carries it in the compact tier.
-  const showResetZoom = isCompact && isChartView && chartZoomed
-  const showAutoRefreshItem = !hasToolbarInterval && isChartView
-  const showRefreshItem = !hasToolbarRefresh && !isNoneView
-  const showChartSettings = isChartView
-  const showMoveUp = !isGridMode && cellIndex > 0
-  const showMoveDown = !isGridMode && cellIndex < totalCells - 1
-  const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
-  const showDelete = totalCells > 1
-  const groupAHasItems =
-    showViewSql || showViewTable || showViewChart || showSplitItem
-  const groupBHasItems =
-    showResetZoom || showAutoRefreshItem || showRefreshItem || showChartSettings
+  const {
+    showViewSql,
+    showViewTable,
+    showViewChart,
+    showSplitItem,
+    showResetZoom,
+    showAutoRefreshItem,
+    showRefreshItem,
+    showChartSettings,
+    showMoveUp,
+    showMoveDown,
+    showDuplicate,
+    showDelete,
+    groupAHasItems,
+    groupBHasItems,
+  } = cellToolbarMenuFlags({
+    tier: toolbarTier ?? "compact",
+    view,
+    isMarkdown,
+    // "View SQL" minimizes the chart/table to the editor without dropping data.
+    sqlShown: cell.isViewMaximized === false,
+    chartZoomed,
+    isGridMode,
+    cellIndex,
+    totalCells,
+  })
 
   // Minimize the chart/table to the editor, keeping the data on the cell.
   const handleViewSql = () => {
@@ -271,21 +267,15 @@ export const CellToolbar: React.FC<Props> = ({
         </ToolbarButton>
       </Tooltip>
       {!isMaximized && (
-        <DropdownMenu.Root onOpenChange={setMenuOpen}>
-          {/* Hover-only tooltip (open driven by pointer, not focus) so the
-              focus Radix restores to the trigger on close doesn't pop it. */}
-          <Tooltip
-            content="More actions"
-            open={triggerHovered && !menuOpen}
-            onOpenChange={(o) => !o && setTriggerHovered(false)}
-          >
+        <DropdownMenu.Root
+          onOpenChange={(o) => {
+            setMenuOpen(o)
+            moreActionsTooltip.onMenuOpenChange(o)
+          }}
+        >
+          <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
-              <ToolbarButton
-                skin="transparent"
-                aria-label="More actions"
-                onMouseEnter={() => setTriggerHovered(true)}
-                onMouseLeave={() => setTriggerHovered(false)}
-              >
+              <ToolbarButton skin="transparent" aria-label="More actions">
                 <DotsThreeVerticalIcon size={20} weight="bold" />
               </ToolbarButton>
             </DropdownMenu.Trigger>

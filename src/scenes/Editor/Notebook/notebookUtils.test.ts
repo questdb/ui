@@ -14,6 +14,7 @@ import {
   capResultBytes,
   cancelAllInCell,
   cancelOneInCell,
+  cellToolbarMenuFlags,
   cellToolbarTier,
   cloneNotebookViewState,
   computeCellGridH,
@@ -42,7 +43,10 @@ import type {
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
-import { createDefaultNotebookViewState } from "../../../store/notebook"
+import {
+  createDefaultNotebookViewState,
+  MAX_NOTEBOOK_CELLS,
+} from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 
 const cell = (
@@ -1917,5 +1921,151 @@ describe("AUTO_REFRESH_OPTIONS", () => {
       "30s",
       "1m",
     ])
+  })
+})
+
+describe("cellToolbarMenuFlags", () => {
+  const flags = (
+    over: Partial<Parameters<typeof cellToolbarMenuFlags>[0]> = {},
+  ) =>
+    cellToolbarMenuFlags({
+      tier: "compact",
+      view: "none",
+      isMarkdown: false,
+      sqlShown: false,
+      chartZoomed: false,
+      isGridMode: false,
+      cellIndex: 1,
+      totalCells: 3,
+      ...over,
+    })
+
+  it("compact none-view cell offers Run and Draw entry, nothing else in group A", () => {
+    // Given a narrow SQL cell with no result yet
+    const f = flags({ tier: "compact", view: "none" })
+    // When resolving the menu
+    // Then it offers the table (Run) and chart (Draw) entry points only
+    expect(f.showViewTable).toBe(true)
+    expect(f.showViewChart).toBe(true)
+    expect(f.showViewSql).toBe(false)
+    expect(f.showSplitItem).toBe(false)
+    expect(f.showRefreshItem).toBe(false)
+    expect(f.groupAHasItems).toBe(true)
+    expect(f.groupBHasItems).toBe(false)
+  })
+
+  it("compact grid view offers View SQL and View chart, plus Refresh — never View table it already shows", () => {
+    // Given a narrow cell currently showing the table
+    const f = flags({ tier: "compact", view: "grid" })
+    // Then the menu offers the two panes it is NOT showing, plus refresh
+    expect(f.showViewSql).toBe(true)
+    expect(f.showViewChart).toBe(true)
+    expect(f.showViewTable).toBe(false)
+    expect(f.showRefreshItem).toBe(true)
+    expect(f.showChartSettings).toBe(false)
+  })
+
+  it("offers Reset zoom only for a zoomed chart in the compact tier", () => {
+    // Given a zoomed chart: the wider tiers expose Reset zoom inline instead
+    expect(
+      flags({ tier: "compact", view: "chart", chartZoomed: true })
+        .showResetZoom,
+    ).toBe(true)
+    expect(
+      flags({ tier: "compact", view: "chart", chartZoomed: false })
+        .showResetZoom,
+    ).toBe(false)
+    expect(
+      flags({ tier: "standard", view: "chart", chartZoomed: true })
+        .showResetZoom,
+    ).toBe(false)
+  })
+
+  it("standard chart keeps interval/refresh/settings in the menu (only the view toggle is inline)", () => {
+    // Given a standard-tier chart whose inline control is just the view toggle
+    const f = flags({ tier: "standard", view: "chart" })
+    // Then the menu carries the chart actions the inline toggle does not
+    expect(f.showAutoRefreshItem).toBe(true)
+    expect(f.showRefreshItem).toBe(true)
+    expect(f.showChartSettings).toBe(true)
+    expect(f.showSplitItem).toBe(false)
+  })
+
+  it("expanded tier never duplicates the inline refresh / interval / split controls", () => {
+    // Given the expanded toolbar, which shows refresh + interval + split inline
+    const chart = flags({ tier: "expanded", view: "chart" })
+    const grid = flags({ tier: "expanded", view: "grid" })
+    // Then the menu drops all of them, keeping only chart settings (chart only)
+    expect(chart.showRefreshItem).toBe(false)
+    expect(chart.showAutoRefreshItem).toBe(false)
+    expect(chart.showSplitItem).toBe(false)
+    expect(chart.showChartSettings).toBe(true)
+    expect(grid.showRefreshItem).toBe(false)
+    expect(grid.showSplitItem).toBe(false)
+    expect(grid.showChartSettings).toBe(false)
+  })
+
+  it("markdown cells expose only move/duplicate/delete", () => {
+    // Given a markdown cell (no run/draw views)
+    const f = flags({ tier: "compact", view: "none", isMarkdown: true })
+    // Then no view/chart items appear
+    expect(f.showViewSql).toBe(false)
+    expect(f.showViewTable).toBe(false)
+    expect(f.showViewChart).toBe(false)
+    expect(f.showChartSettings).toBe(false)
+    expect(f.groupAHasItems).toBe(false)
+    expect(f.groupBHasItems).toBe(false)
+  })
+
+  it("hides move up/down in grid mode and at the list ends", () => {
+    // Given grid mode, where array order doesn't move cells visually
+    expect(flags({ isGridMode: true }).showMoveUp).toBe(false)
+    expect(flags({ isGridMode: true }).showMoveDown).toBe(false)
+    // Given list mode at the first / last position
+    expect(flags({ cellIndex: 0, totalCells: 3 }).showMoveUp).toBe(false)
+    expect(flags({ cellIndex: 0, totalCells: 3 }).showMoveDown).toBe(true)
+    expect(flags({ cellIndex: 2, totalCells: 3 }).showMoveDown).toBe(false)
+    expect(flags({ cellIndex: 1, totalCells: 3 }).showMoveUp).toBe(true)
+  })
+
+  it("gates duplicate on the cell limit and delete on having more than one cell", () => {
+    expect(flags({ totalCells: 1 }).showDelete).toBe(false)
+    expect(flags({ totalCells: 2 }).showDelete).toBe(true)
+    expect(flags({ totalCells: MAX_NOTEBOOK_CELLS }).showDuplicate).toBe(false)
+    expect(flags({ totalCells: MAX_NOTEBOOK_CELLS - 1 }).showDuplicate).toBe(
+      true,
+    )
+  })
+
+  it("never shows a menu item that is also a visible inline toolbar button", () => {
+    // Given every tier × view combination
+    const tiers = ["compact", "standard", "expanded"] as const
+    const views = ["none", "grid", "chart"] as const
+    for (const tier of tiers) {
+      for (const view of views) {
+        const f = flags({ tier, view, chartZoomed: true })
+        // Then the expanded tier (which shows refresh/interval/split inline)
+        // never repeats them in the menu
+        if (tier === "expanded") {
+          expect(f.showRefreshItem).toBe(false)
+          expect(f.showAutoRefreshItem).toBe(false)
+          expect(f.showSplitItem).toBe(false)
+          expect(f.showResetZoom).toBe(false)
+        }
+        // And a divider flag is set iff at least one of its items shows
+        expect(f.groupAHasItems).toBe(
+          f.showViewSql ||
+            f.showViewTable ||
+            f.showViewChart ||
+            f.showSplitItem,
+        )
+        expect(f.groupBHasItems).toBe(
+          f.showResetZoom ||
+            f.showAutoRefreshItem ||
+            f.showRefreshItem ||
+            f.showChartSettings,
+        )
+      }
+    }
   })
 })

@@ -35,5 +35,4 @@ export type ChartConfig = {
   xColumn: string | null
   queries: (QueryChart | null)[]
   rightAxis?: { name?: string; min?: number; max?: number }
-  autoRefresh?: boolean
 }

@@ -1,9 +1,10 @@
-import React, { useState } from "react"
+import React from "react"
 import styled from "styled-components"
 import { ArrowClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react"
 import { DropdownMenu, Tooltip, Button } from "../../../../components"
 import { Spinner } from "./Spinner"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
+import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions } from "../NotebookProvider"
 import { autoRefreshLabel } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
@@ -27,7 +28,6 @@ const SplitSide = styled(Button)`
   padding: 0 1.1rem;
   border: none;
   border-radius: 0;
-  background: transparent !important;
   color: ${({ theme }) => theme.color.foreground};
   font-size: 1.4rem;
   cursor: pointer;
@@ -37,8 +37,8 @@ const SplitSide = styled(Button)`
     height: 1.8rem;
   }
 
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => `${theme.color.selection}80`} !important;
+  &&:hover:not(:disabled) {
+    background: ${({ theme }) => `${theme.color.selection}80`};
   }
 
   &:disabled {
@@ -74,8 +74,7 @@ export const CellRefreshButton: React.FC<Props> = ({
 }) => {
   const { setCellRefresh } = useNotebookActions()
   const isChart = view === "chart"
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [triggerHovered, setTriggerHovered] = useState(false)
+  const intervalTooltip = useTriggerTooltip()
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -96,6 +95,7 @@ export const CellRefreshButton: React.FC<Props> = ({
     <Container>
       <Tooltip content={isChart ? "Refresh chart" : "Refresh"}>
         <SplitSide
+          skin="transparent"
           type="button"
           onClick={handleRefresh}
           aria-label="Refresh"
@@ -108,21 +108,17 @@ export const CellRefreshButton: React.FC<Props> = ({
       {isChart && (
         <>
           <SplitDivider />
-          <DropdownMenu.Root onOpenChange={setMenuOpen}>
-            {/* Hover-only tooltip (open driven by pointer, not focus) so the
-                focus Radix restores to the trigger on close doesn't pop it. */}
+          <DropdownMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
             <Tooltip
               content="Auto-refresh interval"
-              open={triggerHovered && !menuOpen}
-              onOpenChange={(o) => !o && setTriggerHovered(false)}
+              {...intervalTooltip.tooltipProps}
             >
               <DropdownMenu.Trigger asChild>
                 <SplitSide
+                  skin="transparent"
                   type="button"
                   onClick={(e) => e.stopPropagation()}
                   aria-label="Auto-refresh interval"
-                  onMouseEnter={() => setTriggerHovered(true)}
-                  onMouseLeave={() => setTriggerHovered(false)}
                 >
                   <IntervalLabel>{autoRefreshLabel(autoRefresh)}</IntervalLabel>
                   <CaretDownIcon />

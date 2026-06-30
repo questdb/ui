@@ -232,7 +232,6 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
       typeof q === "object" && q !== null ? (q as QueryChart) : null,
     ),
   }
-  if (typeof obj.autoRefresh === "boolean") config.autoRefresh = obj.autoRefresh
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
   return config
