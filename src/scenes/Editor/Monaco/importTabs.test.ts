@@ -920,6 +920,22 @@ describe("sanitizeBuffer", () => {
       // An explicit cell name survives the round-trip.
       expect(cells?.[1].name).toBe("My cell")
     })
+
+    it("truncates an over-long cell name to the length limit", () => {
+      // Given an import whose cell name exceeds the 100-character cap
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [{ id: "long", value: "SELECT 1", name: "a".repeat(150) }],
+        },
+      }
+      // When sanitized
+      const result = sanitizeBuffer(input)
+      // Then the name is capped to 100 characters (the UI/MCP limit)
+      expect(result.notebookViewState?.cells?.[0].name).toBe("a".repeat(100))
+    })
   })
 
   describe("metricsViewState sanitization", () => {

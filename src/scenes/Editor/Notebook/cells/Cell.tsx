@@ -212,13 +212,10 @@ const CellInner: React.FC<Props> = ({
     ),
   )
 
-  const handleChartConfigChange = useCallback(
-    (config: ChartConfig) => {
-      signalUserEdit()
-      setCellChartConfig(cell.id, config)
-    },
-    [cell.id, setCellChartConfig],
-  )
+  const handleChartConfigChange = (config: ChartConfig) => {
+    signalUserEdit()
+    setCellChartConfig(cell.id, config)
+  }
 
   const validatingDrawRef = useRef(false)
 
@@ -581,54 +578,46 @@ const CellInner: React.FC<Props> = ({
     })
   }, [isFocused, editorRef])
 
-  const middleSum = useCallback(() => {
+  const middleSum = () => {
     if (!isMaximized) return topHeight + bottomHeight
     const editorH =
       editorContainerRef.current?.getBoundingClientRect().height ?? 0
     const bottomH = resultRef.current?.getBoundingClientRect().height ?? 0
     return editorH + bottomH
-  }, [isMaximized, topHeight, bottomHeight])
+  }
 
-  const middleResizeLive = useCallback(
-    (height: number) => {
-      const sum = middleSum()
-      const { top, bottom } = partitionCellHeights(
-        sum,
-        height,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      if (isMaximized) {
-        setSpotlightLiveRatio(top / (top + bottom))
-        return
-      }
-      topResize.resizeLive(top)
-      bottomResize.resizeLive(bottom)
-    },
-    [isMaximized, middleSum, topResize, bottomResize],
-  )
+  const middleResizeLive = (height: number) => {
+    const { top, bottom } = partitionCellHeights(
+      middleSum(),
+      height,
+      MIN_EDITOR_HEIGHT,
+      MIN_BOTTOM_HEIGHT_PX,
+    )
+    if (isMaximized) {
+      setSpotlightLiveRatio(top / (top + bottom))
+      return
+    }
+    topResize.resizeLive(top)
+    bottomResize.resizeLive(bottom)
+  }
 
-  const middleResizeEnd = useCallback(
-    (height: number) => {
-      const sum = middleSum()
-      const { top, bottom } = partitionCellHeights(
-        sum,
-        height,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      if (isMaximized) {
-        setSpotlightLiveRatio(null)
-        updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
-        return
-      }
-      topResize.resizeEnd(top)
-      bottomResize.resizeEnd(bottom)
-    },
-    [isMaximized, middleSum, topResize, bottomResize, cell.id, updateCell],
-  )
+  const middleResizeEnd = (height: number) => {
+    const { top, bottom } = partitionCellHeights(
+      middleSum(),
+      height,
+      MIN_EDITOR_HEIGHT,
+      MIN_BOTTOM_HEIGHT_PX,
+    )
+    if (isMaximized) {
+      setSpotlightLiveRatio(null)
+      updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
+      return
+    }
+    topResize.resizeEnd(top)
+    bottomResize.resizeEnd(bottom)
+  }
 
-  const resetToDefaults = useCallback(() => {
+  const resetToDefaults = () => {
     if (isMaximized) {
       setSpotlightLiveRatio(null)
       updateCell(cell.id, { spotlightEditorRatio: undefined })
@@ -636,7 +625,7 @@ const CellInner: React.FC<Props> = ({
     }
     bottomResize.resetHeight()
     topResize.resetHeight()
-  }, [isMaximized, bottomResize, topResize, cell.id, updateCell])
+  }
 
   const resetBottomArea = useCallback(() => {
     if (isMaximized) {
@@ -658,35 +647,29 @@ const CellInner: React.FC<Props> = ({
   // When a chart is maximized the BottomSlot fills the whole cell, so its
   // measured height IS the cell total — scale top/bottom to that new total
   // (preserving the split so it's intact when the chart is restored).
-  const maximizedChartResizeLive = useCallback(
-    (newTotalHeight: number) => {
-      const { top, bottom } = scaleCellHeights(
-        topHeight,
-        bottomHeight,
-        newTotalHeight,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      topResize.resizeLive(top)
-      bottomResize.resizeLive(bottom)
-    },
-    [topHeight, bottomHeight, topResize, bottomResize],
-  )
+  const maximizedChartResizeLive = (newTotalHeight: number) => {
+    const { top, bottom } = scaleCellHeights(
+      topHeight,
+      bottomHeight,
+      newTotalHeight,
+      MIN_EDITOR_HEIGHT,
+      MIN_BOTTOM_HEIGHT_PX,
+    )
+    topResize.resizeLive(top)
+    bottomResize.resizeLive(bottom)
+  }
 
-  const maximizedChartResizeEnd = useCallback(
-    (newTotalHeight: number) => {
-      const { top, bottom } = scaleCellHeights(
-        topHeight,
-        bottomHeight,
-        newTotalHeight,
-        MIN_EDITOR_HEIGHT,
-        MIN_BOTTOM_HEIGHT_PX,
-      )
-      topResize.resizeEnd(top)
-      bottomResize.resizeEnd(bottom)
-    },
-    [topHeight, bottomHeight, topResize, bottomResize],
-  )
+  const maximizedChartResizeEnd = (newTotalHeight: number) => {
+    const { top, bottom } = scaleCellHeights(
+      topHeight,
+      bottomHeight,
+      newTotalHeight,
+      MIN_EDITOR_HEIGHT,
+      MIN_BOTTOM_HEIGHT_PX,
+    )
+    topResize.resizeEnd(top)
+    bottomResize.resizeEnd(bottom)
+  }
 
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
@@ -723,20 +706,6 @@ const CellInner: React.FC<Props> = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
   }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
-
-  const handleRunClick = useCallback(() => runAll(), [runAll])
-  const handleHideResult = useCallback(
-    () => clearCellResult(cell.id),
-    [cell.id, clearCellResult],
-  )
-  const handleCancelClick = useCallback(
-    () => cancelCell(cell.id),
-    [cell.id, cancelCell],
-  )
-  const handleDraw = useCallback(
-    () => void handleDrawClick(),
-    [handleDrawClick],
-  )
 
   useEffect(() => {
     if (!isFocused && !isMaximized) return
@@ -792,10 +761,10 @@ const CellInner: React.FC<Props> = ({
               canRun={canRun}
               autoRefreshOn={cell.autoRefresh !== false}
               showLabels={toolbarTier === "expanded"}
-              onRun={handleRunClick}
-              onHideResult={handleHideResult}
-              onCancel={handleCancelClick}
-              onDraw={handleDraw}
+              onRun={runAll}
+              onHideResult={() => clearCellResult(cell.id)}
+              onCancel={() => cancelCell(cell.id)}
+              onDraw={() => void handleDrawClick()}
             />
           ) : toolbarTier === "expanded" ? (
             <CellWideActions

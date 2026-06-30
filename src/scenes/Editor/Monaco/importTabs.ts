@@ -23,6 +23,7 @@ import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
+  MAX_CELL_NAME_LENGTH,
   exceedsCellLineLimit,
 } from "../../../store/notebook"
 
@@ -249,11 +250,17 @@ const sanitizeNotebookCell = (
     position: index,
     value: item.value as string,
   }
-  // Cell name, with a fallback to the legacy chart title (chartConfig.name).
+  // Cell name, with a fallback to the legacy chart title (chartConfig.name),
+  // capped to the same length the UI and MCP tools enforce.
   const legacyChartName = (item.chartConfig as { name?: unknown } | undefined)
     ?.name
-  if (typeof item.name === "string") cell.name = item.name
-  else if (typeof legacyChartName === "string") cell.name = legacyChartName
+  const rawName =
+    typeof item.name === "string"
+      ? item.name
+      : typeof legacyChartName === "string"
+        ? legacyChartName
+        : undefined
+  if (rawName !== undefined) cell.name = rawName.slice(0, MAX_CELL_NAME_LENGTH)
   // Whitelist the kind so a hand-crafted import can't smuggle a bogus type
   // (anything other than "markdown" collapses to the SQL default).
   if (item.type === "markdown") cell.type = "markdown"

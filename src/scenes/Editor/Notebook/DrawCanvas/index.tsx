@@ -159,6 +159,10 @@ export const DrawCanvas: React.FC<Props> = ({
     skipNextPollFetchRef.current = false
     return skip
   }, [])
+  // Whether the poll is driving the fetch. The mount effect's fallback reads it
+  // (live, via a ref) so it only fetches when polling is off — otherwise the
+  // poll's immediate first tick is the single fetch, not a duplicate.
+  const pollEnabledRef = useRef(false)
   const lastSavedRef = useRef<{
     sqlHash: string
     results: QueryExecResult[]
@@ -380,7 +384,7 @@ export const DrawCanvas: React.FC<Props> = ({
           }
         }
       }
-      if (!cancelled) void fetchAll()
+      if (!cancelled && !pollEnabledRef.current) void fetchAll()
     })()
     return () => {
       cancelled = true
@@ -397,10 +401,15 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const autoRefresh = cell.autoRefresh ?? true
   const fixedIntervalMs = autoRefreshIntervalMs(autoRefresh)
+  const pollEnabled = autoRefresh !== false && queries.length > 0
+
+  useEffect(() => {
+    pollEnabledRef.current = pollEnabled
+  }, [pollEnabled])
 
   useAdaptivePoll({
     fetchFn: fetchAll,
-    enabled: autoRefresh !== false && queries.length > 0,
+    enabled: pollEnabled,
     key: `${cell.id}:${queriesKey}:${autoRefresh}`,
     minIntervalMs: fixedIntervalMs ?? REFRESH_MIN_MS,
     maxIntervalMs: fixedIntervalMs ?? REFRESH_MAX_MS,
