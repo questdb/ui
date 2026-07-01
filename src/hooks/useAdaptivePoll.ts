@@ -8,6 +8,7 @@ type AdaptivePollOptions = {
   maxIntervalMs: number
   sampleSize?: number
   multiplier?: number
+  getSkipInitialFetch?: () => boolean
 }
 
 type AdaptivePollResult = {
@@ -25,6 +26,7 @@ export const useAdaptivePoll = (
     maxIntervalMs,
     sampleSize = 3,
     multiplier = 2,
+    getSkipInitialFetch,
   } = options
 
   const samplesRef = useRef<number[]>([])
@@ -67,25 +69,34 @@ export const useAdaptivePoll = (
       })
 
     const runPollingLoop = async () => {
+      let skipFetch = getSkipInitialFetch?.() ?? false
       while (!abortController.signal.aborted) {
-        const startTime = performance.now()
+        let nextInterval = minIntervalMs
 
-        try {
-          await fetchFn()
-        } catch (error) {
-          // Silently handle errors - the fetchFn should handle its own errors
+        if (skipFetch) {
+          // Data was just transferred in — wait one interval before the first
+          // background refresh instead of re-querying it immediately.
+          skipFetch = false
+        } else {
+          const startTime = performance.now()
+
+          try {
+            await fetchFn()
+          } catch (error) {
+            // Silently handle errors - the fetchFn should handle its own errors
+          }
+
+          // Check if we should stop after the fetch completed
+          if (abortController.signal.aborted) break
+
+          const responseTime = performance.now() - startTime
+          samplesRef.current = [...samplesRef.current, responseTime].slice(
+            -sampleSize,
+          )
+
+          nextInterval = calculateInterval(samplesRef.current)
+          setCurrentInterval(nextInterval)
         }
-
-        // Check if we should stop after the fetch completed
-        if (abortController.signal.aborted) break
-
-        const responseTime = performance.now() - startTime
-        samplesRef.current = [...samplesRef.current, responseTime].slice(
-          -sampleSize,
-        )
-
-        const nextInterval = calculateInterval(samplesRef.current)
-        setCurrentInterval(nextInterval)
 
         try {
           await sleep(nextInterval, abortController.signal)
@@ -109,6 +120,7 @@ export const useAdaptivePoll = (
     maxIntervalMs,
     sampleSize,
     multiplier,
+    getSkipInitialFetch,
   ])
 
   return { currentInterval }

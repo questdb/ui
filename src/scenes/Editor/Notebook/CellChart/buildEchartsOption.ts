@@ -20,7 +20,6 @@ export type ResolvedQuery = {
 
 export type ChartGlobals = {
   xColumn: string | null
-  name?: string
   rightAxis?: ChartConfig["rightAxis"]
 }
 

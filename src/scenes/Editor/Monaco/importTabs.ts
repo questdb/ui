@@ -18,10 +18,12 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
+import { isAutoRefresh } from "../Notebook/notebookUtils"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
+  MAX_CELL_NAME_LENGTH,
   exceedsCellLineLimit,
 } from "../../../store/notebook"
 
@@ -231,8 +233,6 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
       typeof q === "object" && q !== null ? (q as QueryChart) : null,
     ),
   }
-  if (typeof obj.name === "string") config.name = obj.name
-  if (typeof obj.autoRefresh === "boolean") config.autoRefresh = obj.autoRefresh
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
   return config
@@ -250,19 +250,32 @@ const sanitizeNotebookCell = (
     position: index,
     value: item.value as string,
   }
+  // Cell name, with a fallback to the legacy chart title (chartConfig.name),
+  // capped to the same length the UI and MCP tools enforce.
+  const legacyChartName = (item.chartConfig as { name?: unknown } | undefined)
+    ?.name
+  const rawName =
+    typeof item.name === "string"
+      ? item.name
+      : typeof legacyChartName === "string"
+        ? legacyChartName
+        : undefined
+  if (rawName !== undefined) cell.name = rawName.slice(0, MAX_CELL_NAME_LENGTH)
   // Whitelist the kind so a hand-crafted import can't smuggle a bogus type
   // (anything other than "markdown" collapses to the SQL default).
   if (item.type === "markdown") cell.type = "markdown"
   if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
-  if (typeof item.autoRefresh === "boolean") cell.autoRefresh = item.autoRefresh
-  if (typeof item.isChartMaximized === "boolean")
-    cell.isChartMaximized = item.isChartMaximized
+  if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+  if (typeof item.isViewMaximized === "boolean")
+    cell.isViewMaximized = item.isViewMaximized
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
   if (typeof item.bottomHeight === "number")
     cell.bottomHeight = item.bottomHeight
   if (typeof item.topResized === "boolean") cell.topResized = item.topResized
+  if (typeof item.bottomResized === "boolean")
+    cell.bottomResized = item.bottomResized
   if (typeof item.spotlightEditorRatio === "number")
     cell.spotlightEditorRatio = item.spotlightEditorRatio
   return cell

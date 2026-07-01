@@ -4,6 +4,7 @@ import {
 } from "../notebookAIBridge"
 import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
 import type {
+  AutoRefresh,
   CellLayoutItem,
   NotebookCell,
   NotebookSettings,
@@ -25,7 +26,6 @@ type ChartQueryWire = {
 }
 export type ChartConfigWire = {
   x_column: string | null
-  name?: string
   queries: (ChartQueryWire | null)[]
   right_axis?: { name?: string; min?: number; max?: number }
 }
@@ -39,12 +39,13 @@ export type NotebookContextCell = {
   // value to echo back — read the cell with get_cell when rewriting it.
   preview_truncated?: true
   full_length?: number
+  name?: string
   // Omitted for SQL cells (the default); "markdown" for prose cells (rendered,
   // never executed).
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
-  auto_refresh?: boolean
-  is_chart_maximized?: boolean
+  auto_refresh?: AutoRefresh
+  is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
@@ -82,7 +83,6 @@ const preview = (value: string): string =>
 
 export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
   x_column: cfg.xColumn,
-  ...(cfg.name != null ? { name: cfg.name } : {}),
   queries: cfg.queries.map((q) =>
     q == null
       ? null
@@ -131,11 +131,12 @@ const buildCell = (
     out.preview_truncated = true
     out.full_length = cell.value.length
   }
+  if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
-  if (typeof cell.autoRefresh === "boolean") out.auto_refresh = cell.autoRefresh
-  if (typeof cell.isChartMaximized === "boolean") {
-    out.is_chart_maximized = cell.isChartMaximized
+  if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  if (typeof cell.isViewMaximized === "boolean") {
+    out.is_view_maximized = cell.isViewMaximized
   }
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {
@@ -238,12 +239,16 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       lines.push(`      preview_truncated: true`)
       lines.push(`      full_length: ${c.full_length}`)
     }
+    if (c.name)
+      lines.push(
+        `      name: ${JSON.stringify(sanitizeForPromptContext(c.name))}`,
+      )
     if (c.type) lines.push(`      type: ${c.type}`)
     if (c.mode) lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
-    if (c.is_chart_maximized !== undefined)
-      lines.push(`      is_chart_maximized: ${c.is_chart_maximized}`)
+    if (c.is_view_maximized !== undefined)
+      lines.push(`      is_view_maximized: ${c.is_view_maximized}`)
     if (c.chart_config) {
       lines.push(
         `      chart_config: ${sanitizeForPromptContext(

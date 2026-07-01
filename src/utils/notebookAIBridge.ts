@@ -1,4 +1,5 @@
 import type {
+  AutoRefresh,
   CellMode,
   CellType,
   NotebookCell,
@@ -35,7 +36,14 @@ import { sanitizeForPromptContext } from "./ai/sanitizeForPromptContext"
 export type NotebookController = {
   bufferId: number
   addCell: (value: string, afterCellId?: string, type?: CellType) => string
-  updateCell: (cellId: string, updates: { value?: string }) => void
+  updateCell: (
+    cellId: string,
+    updates: {
+      value?: string
+      name?: string
+      autoRefresh?: AutoRefresh
+    },
+  ) => void
   deleteCell: (cellId: string) => void
   moveCellUp: (cellId: string) => void
   moveCellDown: (cellId: string) => void
@@ -59,8 +67,7 @@ export type NotebookController = {
   ) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
-  setCellAutoRefresh: (cellId: string, value: boolean) => void
-  setCellChartMaximized: (cellId: string, value: boolean) => void
+  setCellViewMaximized: (cellId: string, value: boolean) => void
   setCellMaximized: (cellId: string | null) => void
   applyNotebookState: (request: ApplyNotebookStateRequest) => {
     applied: { added: string[]; updated: string[]; deleted: string[] }
@@ -89,8 +96,7 @@ export type NotebookControllerActions = {
   ) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
-  setCellAutoRefresh: (cellId: string, value: boolean) => void
-  setCellChartMaximized: (cellId: string, value: boolean) => void
+  setCellViewMaximized: (cellId: string, value: boolean) => void
   setMaximizedCellId: (cellId: string | null) => void
   updateCells: (updater: (prev: NotebookCell[]) => NotebookCell[]) => void
   getCellsSnapshot: () => NotebookCell[]
@@ -103,12 +109,13 @@ export type NotebookControllerActions = {
 // dispatchTool boundary. Exactly one of value / preserveValue:true per cell.
 export type ApplyNotebookStateCellRequest = {
   id?: string | null
+  name?: string | null
   value?: string | null
   preserveValue?: boolean | null
   type?: CellType | null
   mode?: "run" | "draw" | null
-  autoRefresh?: boolean | null
-  isChartMaximized?: boolean | null
+  autoRefresh?: AutoRefresh | null
+  isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
@@ -189,15 +196,13 @@ export const createNotebookController = (
   setCellMode: (cellId, mode) => {
     liveActionsRef.current.setCellMode(cellId, mode)
     if (mode === "draw") {
-      liveActionsRef.current.setCellChartMaximized(cellId, false)
+      liveActionsRef.current.setCellViewMaximized(cellId, false)
     }
   },
   setCellChartConfig: (cellId, cfg) =>
     liveActionsRef.current.setCellChartConfig(cellId, cfg),
-  setCellAutoRefresh: (cellId, value) =>
-    liveActionsRef.current.setCellAutoRefresh(cellId, value),
-  setCellChartMaximized: (cellId, value) =>
-    liveActionsRef.current.setCellChartMaximized(cellId, value),
+  setCellViewMaximized: (cellId, value) =>
+    liveActionsRef.current.setCellViewMaximized(cellId, value),
   setCellMaximized: (cellId) =>
     liveActionsRef.current.setMaximizedCellId(cellId),
   applyNotebookState: (request) => {

@@ -15,7 +15,10 @@ import type {
   StateFreshness,
 } from "../../utils/mcp/dispatchMCPTool"
 import { mcpTools } from "../../utils/tools/tools"
-import { EXPECTED_BRIDGE_VERSION } from "../../utils/mcp/protocolVersion"
+import {
+  EXPECTED_BRIDGE_VERSION,
+  type BridgeVersionMismatch,
+} from "../../utils/mcp/protocolVersion"
 import type { ToolCallMessage } from "../../utils/mcp/types"
 import {
   clearLegacyLocalStorage,
@@ -48,6 +51,7 @@ export type MCPBridgeContextValue = {
   latencyMs: number | null
   lastError: string | null
   retryAttempt: number
+  versionMismatch: BridgeVersionMismatch | null
   url: string | null
   token: string | null
   connect: (url: string, token: string) => void
@@ -61,6 +65,7 @@ const defaultContext: MCPBridgeContextValue = {
   latencyMs: null,
   lastError: null,
   retryAttempt: 0,
+  versionMismatch: null,
   url: null,
   token: null,
   connect: () => undefined,
@@ -96,6 +101,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
+  const [versionMismatch, setVersionMismatch] =
+    useState<BridgeVersionMismatch | null>(null)
   const [permissions, setPermissionsState] = useState<Permissions>(() =>
     readPermissions(),
   )
@@ -216,6 +223,9 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     const offLatency = client.on("latency", (ms) => setLatencyMs(ms))
     const offError = client.on("error", (err) => setLastError(err.message))
     const offRetry = client.on("retryAttempt", (n) => setRetryAttempt(n))
+    const offVersionMismatch = client.on("versionMismatch", (m) =>
+      setVersionMismatch(m),
+    )
     const offHelloAck = client.on("helloAck", () => {
       // Promote pending → consented so a same-tab refresh silently restores.
       markPendingPairConsented()
@@ -294,6 +304,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       offLatency()
       offError()
       offRetry()
+      offVersionMismatch()
       offHelloAck()
       offToolCall()
       offCancel()
@@ -309,6 +320,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const connect = useCallback((nextUrl: string, nextToken: string) => {
     setRetryAttempt(0)
     setLastError(null)
+    setVersionMismatch(null)
     setConnectAttempt((n) => n + 1)
     setUrl(nextUrl)
     setToken(nextToken)
@@ -350,6 +362,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setLatencyMs(null)
     setLastError(null)
     setRetryAttempt(0)
+    setVersionMismatch(null)
     digestRef.current = createEmptyDigest()
     freshnessRef.current = "unfetched"
   }, [])
@@ -404,13 +417,15 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   // Don't flip consentSucceeded inside the timer: React 17 doesn't batch
   // setStates in setTimeout, and Radix keeps the modal mounted during its
   // 0.25s exit animation, so a flip would briefly swap success → default.
+  // A minor mismatch connects fine but must keep the modal open so the user
+  // actually reads the upgrade command — never auto-close past it.
   useEffect(() => {
-    if (!consentSucceeded) return
+    if (!consentSucceeded || versionMismatch === "minor") return
     const t = setTimeout(() => {
       setPendingConsent(null)
     }, CONSENT_SUCCESS_AUTOCLOSE_MS)
     return () => clearTimeout(t)
-  }, [consentSucceeded])
+  }, [consentSucceeded, versionMismatch])
 
   const acceptPendingConsent = useCallback(
     (committedPermissions: Permissions) => {
@@ -423,6 +438,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConsentSucceeded(false)
       setLastError(null)
       setRetryAttempt(0)
+      setVersionMismatch(null)
       setConnectAttempt((n) => n + 1)
       setUrl(pendingConsent.url)
       setToken(pendingConsent.token)
@@ -447,6 +463,8 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setUrl(null)
     setToken(null)
     setRetryAttempt(0)
+    setLastError(null)
+    setVersionMismatch(null)
     clearPendingPair()
   }, [consentSucceeded])
 
@@ -456,6 +474,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       latencyMs,
       lastError,
       retryAttempt,
+      versionMismatch,
       url,
       token,
       connect,
@@ -468,6 +487,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       latencyMs,
       lastError,
       retryAttempt,
+      versionMismatch,
       url,
       token,
       connect,
@@ -486,6 +506,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         succeeded={consentSucceeded}
         retryAttempt={retryAttempt}
         error={consentInFlight ? null : lastError}
+        versionMismatch={versionMismatch}
         permissions={permissions}
         onConnect={acceptPendingConsent}
         onCancel={declinePendingConsent}

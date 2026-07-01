@@ -293,15 +293,17 @@
 
 
 .monaco-menu {
-  background: #21222c;
+  background: #1a1b23;
   color: #f8f8f2;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
 }
 
 .monaco-menu .action-menu-item {
   height: 3rem !important;
 
   &:hover, &.focused {
-    background: #043c5c !important;
+    background: #2d303e !important;
     box-shadow: none !important;
   }
 
@@ -311,7 +313,10 @@
 }
 
 .monaco-menu-container .monaco-scrollable-element {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36) !important;
+  border-radius: 6px;
+  box-shadow: 0 2px 2px -1px rgba(10, 13, 18, 0.04),
+    0 4px 6px -2px rgba(10, 13, 18, 0.03),
+    0 12px 16px -4px rgba(10, 13, 18, 0.08) !important;
 }
 
 .monaco-editor .find-widget.visible {
@@ -330,6 +335,6 @@
 }
 
 .action-label.separator {
-  border-bottom: 1px solid #606060 !important;
+  border-bottom: 1px solid #44475a !important;
   margin: 5px 0 !important;
 }

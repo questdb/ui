@@ -1,7 +1,6 @@
 import React from "react"
-import styled from "styled-components"
-import { Plus } from "@styled-icons/boxicons-regular"
-import { MarkdownLogoIcon } from "@phosphor-icons/react"
+import styled, { css } from "styled-components"
+import { MarkdownLogoIcon, PlusSquareIcon } from "@phosphor-icons/react"
 import { color } from "../../../../utils"
 import { Tooltip } from "../../../../components"
 import type { CellType } from "../../../../store/notebook"
@@ -10,9 +9,11 @@ import { useNotebookActions, useNotebookState } from "../NotebookProvider"
 import { useEditor } from "../../../../providers/EditorProvider"
 import { emitUserAction } from "../../../../utils/notebookAIBridge"
 
+type AddVariant = "primary" | "secondary"
+type AddTier = "between" | "bottom"
+
 const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: 0.8rem;
   height: ${({ $alignCenter }) => ($alignCenter ? "100%" : "auto")};
@@ -20,21 +21,55 @@ const BottomButton = styled.div<{ $alignCenter?: boolean }>`
   margin-top: 1rem;
 `
 
-const AddButton = styled.button`
+// Add Cell is the primary (pink) action; Add Markdown stays the secondary
+// (gray) one. The "bottom" tier fills half the row each (full-width click
+// target); the "between" tier is compact and centered on the divider line.
+const AddButton = styled.button<{ $variant: AddVariant; $tier: AddTier }>`
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.4rem 1rem;
   border: none;
   border-radius: 0.3rem;
   background: transparent;
-  color: ${color("comment")};
   cursor: pointer;
   font-family: ${({ theme }) => theme.font};
+  font-weight: 600;
+  color: ${({ $variant }) =>
+    $variant === "primary" ? color("pink") : color("comment")};
+
+  ${({ $tier }) =>
+    $tier === "bottom"
+      ? css`
+          flex: 1;
+          padding: 0.6rem 1rem;
+          font-size: 1.4rem;
+          line-height: 2rem;
+          svg {
+            width: 2rem;
+            height: 2rem;
+          }
+        `
+      : css`
+          padding: 0.6rem 1rem;
+          font-size: 1.2rem;
+          line-height: 1.4rem;
+          svg {
+            width: 1.4rem;
+            height: 1.4rem;
+          }
+        `}
 
   &:hover {
-    color: ${color("foreground")};
-    background: ${color("selection")};
+    ${({ $variant }) =>
+      $variant === "primary"
+        ? css`
+            background: ${color("pink50")};
+          `
+        : css`
+            color: ${color("foreground")};
+            background: ${color("selection")};
+          `}
   }
 
   &:disabled {
@@ -42,14 +77,10 @@ const AddButton = styled.button`
     opacity: 0.4;
 
     &:hover {
-      color: ${color("comment")};
+      color: ${({ $variant }) =>
+        $variant === "primary" ? color("pink") : color("comment")};
       background: transparent;
     }
-  }
-
-  svg {
-    width: 1.4rem;
-    height: 1.4rem;
   }
 `
 
@@ -57,7 +88,7 @@ const BetweenWrapper = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 1.2rem;
+  height: 1.6rem;
   position: relative;
   opacity: 0;
   transition: opacity 0.1s;
@@ -72,8 +103,7 @@ const BetweenLine = styled.div`
   top: 50%;
   left: 0;
   right: 0;
-  height: 1px;
-  background: ${color("selection")};
+  border-top: 1px dashed ${color("dividerAccent")};
 `
 
 // Groups the two add buttons and masks the divider line behind them (matching
@@ -94,8 +124,7 @@ const useUserAddCell = () => {
   const { cells } = useNotebookState()
   const { activeBuffer } = useEditor()
   const atLimit = cells.length >= MAX_NOTEBOOK_CELLS
-  const add = (afterCellId?: string, type?: CellType) => {
-    const cellId = addCell(afterCellId, undefined, type)
+  const emit = (cellId: string) => {
     if (typeof activeBuffer.id === "number" && cellId) {
       emitUserAction({
         kind: "user_added_cell",
@@ -103,6 +132,9 @@ const useUserAddCell = () => {
         cellId,
       })
     }
+  }
+  const add = (afterCellId?: string, type?: CellType) => {
+    emit(addCell(afterCellId, undefined, type))
   }
   return { add, atLimit }
 }
@@ -112,6 +144,8 @@ const CELL_LIMIT_TITLE = `Notebook limit of ${MAX_NOTEBOOK_CELLS} cells reached`
 type AddActionProps = {
   icon: React.ReactNode
   label: string
+  variant: AddVariant
+  tier: AddTier
   atLimit: boolean
   onClick: () => void
 }
@@ -119,20 +153,35 @@ type AddActionProps = {
 const AddAction: React.FC<AddActionProps> = ({
   icon,
   label,
+  variant,
+  tier,
   atLimit,
   onClick,
 }) => {
   const button = (
-    <AddButton onClick={onClick} disabled={atLimit}>
+    <AddButton
+      $variant={variant}
+      $tier={tier}
+      onClick={onClick}
+      disabled={atLimit}
+    >
       {icon}
       {label}
     </AddButton>
   )
   if (!atLimit) return button
-  // The span lets the tooltip fire on a disabled button, which gets no pointer events.
+  // The span lets the tooltip fire on a disabled button, which gets no pointer
+  // events; it also carries the flex so the bottom tier keeps its 50% width.
   return (
     <Tooltip content={CELL_LIMIT_TITLE}>
-      <span style={{ display: "inline-flex" }}>{button}</span>
+      <span
+        style={{
+          display: "inline-flex",
+          flex: tier === "bottom" ? 1 : undefined,
+        }}
+      >
+        {button}
+      </span>
     </Tooltip>
   )
 }
@@ -151,14 +200,18 @@ export const AddCellBottom: React.FC<AddCellBottomProps> = ({
   return (
     <BottomButton $alignCenter={alignCenter}>
       <AddAction
-        icon={<Plus />}
+        icon={<PlusSquareIcon />}
         label="Add Cell"
+        variant="primary"
+        tier="bottom"
         atLimit={atLimit}
         onClick={() => add(afterCellId)}
       />
       <AddAction
         icon={<MarkdownLogoIcon />}
         label="Add Markdown"
+        variant="secondary"
+        tier="bottom"
         atLimit={atLimit}
         onClick={() => add(afterCellId, "markdown")}
       />
@@ -180,14 +233,18 @@ export const AddCellBetween: React.FC<AddCellBetweenProps> = ({
       <BetweenLine />
       <BetweenButtons>
         <AddAction
-          icon={<Plus />}
+          icon={<PlusSquareIcon />}
           label="Add Cell"
+          variant="primary"
+          tier="between"
           atLimit={atLimit}
           onClick={() => add(afterCellId)}
         />
         <AddAction
           icon={<MarkdownLogoIcon />}
           label="Add Markdown"
+          variant="secondary"
+          tier="between"
           atLimit={atLimit}
           onClick={() => add(afterCellId, "markdown")}
         />

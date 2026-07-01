@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest"
 import {
   resolveDraw,
+  resultMatchesQueries,
   resultsEquivalent,
   successResults,
   toExecResult,
 } from "./drawCanvasUtils"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
-import type { SingleQueryResult } from "../../../../store/notebook"
+import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 
 const dql = (
@@ -19,6 +20,27 @@ const dql = (
   columns,
   dataset,
   count: dataset.length,
+})
+
+const errorResult = (error: string, query = "q"): QueryExecResult => ({
+  type: "error",
+  query,
+  columns: [],
+  dataset: [],
+  count: 0,
+  error,
+})
+
+const cellResult = (queries: string[]): CellResult => ({
+  results: queries.map((query) => ({
+    type: "dql",
+    query,
+    columns: [],
+    dataset: [],
+    count: 0,
+  })),
+  activeResultIndex: 0,
+  timestamp: 0,
 })
 
 describe("successResults", () => {
@@ -129,6 +151,77 @@ describe("resultsEquivalent", () => {
     const c = [dql([{ name: "x", type: "INT" }], [[null], [null]])]
     const d = [dql([{ name: "x", type: "INT" }], [[null], [1]])]
     expect(resultsEquivalent(c, d)).toBe(false)
+  })
+
+  it("returns false when one frame is DQL and the other is an error", () => {
+    // Given a DQL frame and an error frame (both with no rows)
+    const a = [dql([{ name: "x", type: "INT" }], [])]
+    const b = [errorResult("boom")]
+    // When compared
+    // Then they are not equivalent — the type differs, so the mirror must update
+    expect(resultsEquivalent(a, b)).toBe(false)
+  })
+
+  it("returns false when two error frames carry different messages", () => {
+    // Given two error frames with the same (empty) shape but different messages
+    // When compared
+    // Then a changed error message is not treated as equivalent
+    expect(
+      resultsEquivalent([errorResult("boom")], [errorResult("bang")]),
+    ).toBe(false)
+  })
+
+  it("returns true for two identical error frames", () => {
+    // Given two error frames with the same message
+    // Then they are equivalent (no redundant mirror write)
+    expect(
+      resultsEquivalent([errorResult("boom")], [errorResult("boom")]),
+    ).toBe(true)
+  })
+})
+
+describe("resultMatchesQueries", () => {
+  it("matches when count and per-statement query text are identical", () => {
+    // Given a result produced by exactly these two queries
+    const result = cellResult(["select a", "select b"])
+    // When checked against the same query list
+    // Then it matches — safe to transfer into the chart without re-querying
+    expect(resultMatchesQueries(result, ["select a", "select b"])).toBe(true)
+  })
+
+  it("rejects a result left over from edited-but-not-rerun SQL", () => {
+    // Given a result for the previous query text
+    const result = cellResult(["select a"])
+    // When the current SQL differs
+    // Then it does not match — the chart must re-fetch
+    expect(resultMatchesQueries(result, ["select a WHERE x > 0"])).toBe(false)
+  })
+
+  it("matches when the stored query carries a trailing semicolon/whitespace the parse drops", () => {
+    // Given a grid result that stored the raw cell value verbatim
+    // When compared against the parsed (trimmed, semicolon-stripped) query
+    // Then it still matches — the chart transfers instead of re-querying
+    expect(resultMatchesQueries(cellResult(["SELECT 1;"]), ["SELECT 1"])).toBe(
+      true,
+    )
+    expect(
+      resultMatchesQueries(cellResult(["  SELECT 1\n"]), ["SELECT 1"]),
+    ).toBe(true)
+  })
+
+  it("rejects on statement-count mismatch", () => {
+    // Given a single-statement result
+    const result = cellResult(["select a"])
+    // When the current SQL has two statements
+    // Then it does not match
+    expect(resultMatchesQueries(result, ["select a", "select b"])).toBe(false)
+  })
+
+  it("rejects a null/undefined result", () => {
+    // Given no existing result
+    // Then there is nothing to transfer
+    expect(resultMatchesQueries(null, ["select a"])).toBe(false)
+    expect(resultMatchesQueries(undefined, ["select a"])).toBe(false)
   })
 })
 

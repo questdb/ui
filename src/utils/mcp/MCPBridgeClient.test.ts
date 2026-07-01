@@ -3,6 +3,12 @@ import { MCPBridgeClient } from "./MCPBridgeClient"
 import { EXPECTED_BRIDGE_VERSION } from "./protocolVersion"
 import { WS_CLOSE_CODES, type HelloMessage, type ToolSchema } from "./types"
 
+// A version within the same major as expected — drifted enough to read as a
+// mismatch, yet never equal to EXPECTED_BRIDGE_VERSION whatever it's bumped to.
+const [expectedMajor, expectedMinor, expectedPatch] =
+  EXPECTED_BRIDGE_VERSION.split(".").map(Number)
+const SAME_MAJOR_DRIFT = `${expectedMajor}.${expectedMinor + 1}.${expectedPatch}`
+
 class FakeWebSocket {
   static OPEN_CONSTANT = 1
   readyState = 0
@@ -188,7 +194,7 @@ describe("MCPBridgeClient", () => {
     client.connect()
     handshake(client, socket())
     socket().receive({
-      v: "0.99.0",
+      v: SAME_MAJOR_DRIFT,
       type: "tool_call",
       requestId: "r1",
       name: "add_cell",
@@ -351,7 +357,7 @@ describe("MCPBridgeClient", () => {
       {
         code: WS_CLOSE_CODES.major_version_mismatch,
         label: "major_version_mismatch (4004)",
-        expectInMessage: "Bridge major version doesn't match",
+        expectInMessage: "incompatible with what this console expects",
       },
     ]
     for (const { code, label, expectInMessage } of cases) {
@@ -379,6 +385,53 @@ describe("MCPBridgeClient", () => {
       handshake(client, socket())
       socket().dropFromServer(1006)
       expect(client.status).toBe("reconnecting")
+    })
+  })
+
+  describe("version mismatch signalling", () => {
+    it("emits a major versionMismatch on a 4004 close", () => {
+      // Given a connected client
+      const { client, socket } = makeClient()
+      const mismatches: Array<"major" | "minor" | null> = []
+      client.on("versionMismatch", (m) => mismatches.push(m))
+      client.connect()
+      handshake(client, socket())
+      // When the bridge hard-rejects on a major version mismatch
+      socket().dropFromServer(WS_CLOSE_CODES.major_version_mismatch)
+      // Then a major mismatch is signalled
+      expect(mismatches).toContain("major")
+    })
+
+    it("emits a minor versionMismatch when hello_ack reports a same-major drift", () => {
+      // Given a client whose expected version differs only in minor/patch
+      const { client, socket } = makeClient()
+      const mismatches: Array<"major" | "minor" | null> = []
+      client.on("versionMismatch", (m) => mismatches.push(m))
+      client.connect()
+      socket().open()
+      // When the bridge acks with a drifted same-major version
+      socket().receive({
+        v: SAME_MAJOR_DRIFT,
+        type: "hello_ack",
+        sessionId: "s1",
+        heartbeatIntervalMs: 5_000,
+        seenToolCount: 1,
+      })
+      // Then the client connects but flags a minor mismatch
+      expect(client.status).toBe("connected")
+      expect(mismatches).toEqual(["minor"])
+    })
+
+    it("emits null versionMismatch when hello_ack matches the expected version", () => {
+      // Given a client connecting to a matching bridge
+      const { client, socket } = makeClient()
+      const mismatches: Array<"major" | "minor" | null> = []
+      client.on("versionMismatch", (m) => mismatches.push(m))
+      client.connect()
+      // When the handshake reports the exact expected version
+      handshake(client, socket())
+      // Then no mismatch is flagged
+      expect(mismatches).toEqual([null])
     })
   })
 

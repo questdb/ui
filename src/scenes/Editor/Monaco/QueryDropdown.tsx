@@ -7,16 +7,6 @@ import { PlayFilled } from "../../../components/icons/play-filled"
 import { AISparkle } from "../../../components/AISparkle"
 import type { Request } from "./utils"
 
-const IconWrapper = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`
-
-const StyledPlayFilled = styled(PlayFilled)`
-  transform: scale(1.3);
-`
-
 const HiddenTrigger = styled.div<{ style?: { top: string; left: string } }>`
   position: fixed;
   width: 1px;
@@ -91,10 +81,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                   key={`ask-ai-${query.query}-${index}`}
                   onClick={() => onAskAIRef.current(query)}
                   data-hook={`dropdown-item-ask-ai-${index}`}
+                  icon={<AISparkle size={16} variant="filled" />}
                 >
-                  <IconWrapper>
-                    <AISparkle size={18} variant="filled" />
-                  </IconWrapper>
                   Ask AI about {extractQueryTextToRun(query)}
                 </DropdownMenu.Item>
               ))
@@ -108,10 +96,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                         key={`run-${query.query}-${index}`}
                         onClick={() => onRunQuery(query)}
                         data-hook={`dropdown-item-run-query-${index}`}
+                        icon={<PlayFilled size={16} color="#fff" />}
                       >
-                        <IconWrapper>
-                          <StyledPlayFilled size={18} color="#fff" />
-                        </IconWrapper>
                         Run {extractQueryTextToRun(query)}
                       </DropdownMenu.Item>,
                     ]
@@ -124,10 +110,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                           disabled={isExplainDisabled(query)}
                           onClick={() => onExplainQuery(query)}
                           data-hook={`dropdown-item-explain-query-${index}`}
+                          icon={<Information size={16} />}
                         >
-                          <IconWrapper>
-                            <Information size={18} />
-                          </IconWrapper>
                           Get query plan for {extractQueryTextToRun(query)}
                         </DropdownMenu.Item>,
                         <DropdownMenu.Item
@@ -135,10 +119,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                           key={`copy-link-${query.query}-${index}`}
                           onClick={() => onCopyQueryLink(query)}
                           data-hook={`dropdown-item-copy-query-link-${index}`}
+                          icon={<LinkSimpleIcon size={16} />}
                         >
-                          <IconWrapper>
-                            <LinkSimpleIcon size={18} />
-                          </IconWrapper>
                           Copy link to {extractQueryTextToRun(query)}
                         </DropdownMenu.Item>,
                       )
@@ -152,10 +134,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     key="run"
                     onClick={() => onRunQuery(queriesRef.current[0])}
                     data-hook="dropdown-item-run-query"
+                    icon={<PlayFilled size={16} color="#fff" />}
                   >
-                    <IconWrapper>
-                      <StyledPlayFilled size={18} color="#fff" />
-                    </IconWrapper>
                     Run {extractQueryTextToRun(queriesRef.current[0])}
                   </DropdownMenu.Item>,
                   <DropdownMenu.Item
@@ -163,10 +143,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     disabled={isExplainDisabled(queriesRef.current[0])}
                     onClick={() => onExplainQuery(queriesRef.current[0])}
                     data-hook="dropdown-item-get-query-plan"
+                    icon={<Information size={16} />}
                   >
-                    <IconWrapper>
-                      <Information size={18} />
-                    </IconWrapper>
                     Get query plan for{" "}
                     {extractQueryTextToRun(queriesRef.current[0])}
                   </DropdownMenu.Item>,
@@ -174,10 +152,8 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     key="copy-link"
                     onClick={() => onCopyQueryLink(queriesRef.current[0])}
                     data-hook="dropdown-item-copy-query-link"
+                    icon={<LinkSimpleIcon size={16} />}
                   >
-                    <IconWrapper>
-                      <LinkSimpleIcon size={18} />
-                    </IconWrapper>
                     Copy link to {extractQueryTextToRun(queriesRef.current[0])}
                   </DropdownMenu.Item>,
                 ]}
