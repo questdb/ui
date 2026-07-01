@@ -38,19 +38,32 @@ type Props = Readonly<{
 
 type ScreenSize = Readonly<{
   sm: boolean
+  // True below 1024 px: left schema/search panel auto-collapses so the
+  // notebook keeps a usable width even when the right panel is also open.
+  md: boolean
+  // True below 1280 px: right AI/table-details panel (470 px min-width)
+  // auto-collapses first because it has the larger footprint. The left panel
+  // remains available at 1024–1279 px.
+  lg: boolean
 }>
 
 enum Breakpoint {
   SM = 767,
+  MD = 1024,
+  LG = 1280,
 }
 
 const ScreenSizeContext = createContext<ScreenSize>({
   sm: window.innerWidth <= Breakpoint.SM,
+  md: window.innerWidth <= Breakpoint.MD,
+  lg: window.innerWidth <= Breakpoint.LG,
 })
 
 export const ScreenSizeProvider = ({ children }: Props) => {
   const [screenSize, setScreenSize] = useState<ScreenSize>({
     sm: window.innerWidth <= Breakpoint.SM,
+    md: window.innerWidth <= Breakpoint.MD,
+    lg: window.innerWidth <= Breakpoint.LG,
   })
   const [_screenSize, _setScreenSize] = useState<ScreenSize | undefined>()
 
@@ -58,6 +71,8 @@ export const ScreenSizeProvider = ({ children }: Props) => {
     const handleResize = throttle(16, () => {
       _setScreenSize({
         sm: window.innerWidth <= Breakpoint.SM,
+        md: window.innerWidth <= Breakpoint.MD,
+        lg: window.innerWidth <= Breakpoint.LG,
       })
     })
     window.addEventListener("resize", handleResize)

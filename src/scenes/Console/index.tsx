@@ -100,7 +100,7 @@ const viewModes: {
 
 const Console = () => {
   const dispatch = useDispatch()
-  const { sm } = useScreenSize()
+  const { sm, md, lg } = useScreenSize()
   const {
     resultsSplitterBasis,
     updateSettings,
@@ -147,6 +147,7 @@ const Console = () => {
   return (
     <Root>
       <Allotment
+        proportionalLayout={false}
         onDragEnd={(sizes) => {
           // sizes[1] is the AI chat panel width when it's open
           if (activeSidebar !== null && sizes[1] !== undefined) {
@@ -294,7 +295,9 @@ const Console = () => {
                       <Allotment.Pane
                         preferredSize={leftPanelState.width}
                         visible={
-                          (isDataSourcesPanelOpen || isSearchPanelOpen) && !sm
+                          (isDataSourcesPanelOpen || isSearchPanelOpen) &&
+                          !sm &&
+                          !md
                         }
                         minSize={320}
                       >
@@ -332,7 +335,7 @@ const Console = () => {
         <Allotment.Pane
           minSize={470}
           preferredSize={aiChatPanelWidth}
-          visible={!!activeSidebar}
+          visible={!!activeSidebar && !lg}
         >
           <SidePanelRight id="side-panel-right" />
         </Allotment.Pane>
