@@ -458,7 +458,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
               <strong>Could not connect to MCP bridge</strong>
               <StatusDetail>
                 {lastError ??
-                  `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Click Try again, or ask your coding agent for a fresh deep link.`}
+                  `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
               </StatusDetail>
             </StatusText>
           </StatusRow>
