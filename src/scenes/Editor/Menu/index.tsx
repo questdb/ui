@@ -36,7 +36,7 @@ import {
   TransitionDuration,
   SetupAIAssistant,
 } from "../../../components"
-import { useKeyPress, useScreenSize } from "../../../hooks"
+import { ScreenSize, useKeyPress, useScreenSize } from "../../../hooks"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import QueryPicker from "../QueryPicker"
@@ -140,7 +140,7 @@ const Menu = () => {
   const escPress = useKeyPress("Escape")
   const { consoleConfig } = useSettings()
   const opened = useSelector(selectors.console.getSideMenuOpened)
-  const { sm } = useScreenSize()
+  const isSmallScreen = useScreenSize() === ScreenSize.SM
   const { exampleQueriesVisited, updateSettings } = useLocalStorage()
   const handleQueriesToggle = useCallback((active: boolean) => {
     if (!exampleQueriesVisited && active) {
@@ -160,13 +160,13 @@ const Menu = () => {
   }, [escPress])
 
   useEffect(() => {
-    if (!sm && opened) {
+    if (!isSmallScreen && opened) {
       dispatch(actions.console.toggleSideMenu())
     }
-  }, [dispatch, opened, sm])
+  }, [dispatch, opened, isSmallScreen])
 
   return (
-    <Wrapper _display={sm ? "none" : "inline"}>
+    <Wrapper _display={isSmallScreen ? "none" : "inline"}>
       <Separator />
 
       {consoleConfig.savedQueries && consoleConfig.savedQueries.length > 0 && (
@@ -221,7 +221,7 @@ const Menu = () => {
         )}
       </MenuItems>
 
-      {sm && (
+      {isSmallScreen && (
         <SideMenuMenuButton
           skin="transparent"
           onClick={handleSideMenuButtonClick}
