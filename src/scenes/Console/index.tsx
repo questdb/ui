@@ -144,6 +144,33 @@ const Console = () => {
     showPanel(activeBottomPanel)
   }, [activeBottomPanel])
 
+  // Crossing into ≤1280px: auto-close the right sidebar so the notebook
+  // keeps usable width. The user can reopen it at any time.
+  useEffect(() => {
+    if (lg) {
+      dispatch(actions.console.closeSidebar())
+    }
+  }, [lg]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Crossing into ≤1024px: auto-close the left panels. The right sidebar
+  // was already closed by the lg effect above.
+  useEffect(() => {
+    if (md) {
+      updateLeftPanelState({ type: null, width: leftPanelState.width })
+      setSearchPanelOpen(false)
+    }
+  }, [md]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Crossing into ≤767px: close everything, including any panel the user
+  // manually re-opened while in the md range.
+  useEffect(() => {
+    if (sm) {
+      dispatch(actions.console.closeSidebar())
+      updateLeftPanelState({ type: null, width: leftPanelState.width })
+      setSearchPanelOpen(false)
+    }
+  }, [sm]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <Root>
       <Allotment
@@ -159,35 +186,33 @@ const Console = () => {
           <MainContent>
             <ContentArea>
               <Sidebar align="top">
-                {!sm && (
-                  <Tooltip
-                    placement="right"
-                    content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
+                <Tooltip
+                  placement="right"
+                  content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
+                >
+                  <Navigation
+                    data-hook="tables-panel-button"
+                    direction="left"
+                    onClick={() => {
+                      if (isDataSourcesPanelOpen) {
+                        void trackEvent(ConsoleEvent.SCHEMA_OPEN)
+                        updateLeftPanelState({
+                          type: null,
+                          width: leftPanelState.width,
+                        })
+                      } else {
+                        void trackEvent(ConsoleEvent.SCHEMA_CLOSE)
+                        updateLeftPanelState({
+                          type: LeftPanelType.DATASOURCES,
+                          width: leftPanelState.width,
+                        })
+                      }
+                    }}
+                    selected={isDataSourcesPanelOpen}
                   >
-                    <Navigation
-                      data-hook="tables-panel-button"
-                      direction="left"
-                      onClick={() => {
-                        if (isDataSourcesPanelOpen) {
-                          void trackEvent(ConsoleEvent.SCHEMA_OPEN)
-                          updateLeftPanelState({
-                            type: null,
-                            width: leftPanelState.width,
-                          })
-                        } else {
-                          void trackEvent(ConsoleEvent.SCHEMA_CLOSE)
-                          updateLeftPanelState({
-                            type: LeftPanelType.DATASOURCES,
-                            width: leftPanelState.width,
-                          })
-                        }
-                      }}
-                      selected={isDataSourcesPanelOpen}
-                    >
-                      <Database2 size={BUTTON_ICON_SIZE} />
-                    </Navigation>
-                  </Tooltip>
-                )}
+                    <Database2 size={BUTTON_ICON_SIZE} />
+                  </Navigation>
+                </Tooltip>
                 <Tooltip
                   placement="right"
                   content={
@@ -294,11 +319,7 @@ const Console = () => {
                     >
                       <Allotment.Pane
                         preferredSize={leftPanelState.width}
-                        visible={
-                          (isDataSourcesPanelOpen || isSearchPanelOpen) &&
-                          !sm &&
-                          !md
-                        }
+                        visible={isDataSourcesPanelOpen || isSearchPanelOpen}
                         minSize={320}
                       >
                         <Schema open={isDataSourcesPanelOpen} />
@@ -335,7 +356,7 @@ const Console = () => {
         <Allotment.Pane
           minSize={470}
           preferredSize={aiChatPanelWidth}
-          visible={!!activeSidebar && !lg}
+          visible={!!activeSidebar}
         >
           <SidePanelRight id="side-panel-right" />
         </Allotment.Pane>

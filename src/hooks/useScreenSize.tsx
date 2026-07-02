@@ -37,13 +37,13 @@ type Props = Readonly<{
 }>
 
 type ScreenSize = Readonly<{
+  // ≤767px: all sidebars are auto-closed; user can reopen any of them.
   sm: boolean
-  // True below 1024 px: left schema/search panel auto-collapses so the
-  // notebook keeps a usable width even when the right panel is also open.
+  // ≤1024px: left schema/search panel is auto-closed; user can reopen it.
+  // Right sidebar was already closed by the lg transition.
   md: boolean
-  // True below 1280 px: right AI/table-details panel (470 px min-width)
-  // auto-collapses first because it has the larger footprint. The left panel
-  // remains available at 1024–1279 px.
+  // ≤1280px: right AI/table-details panel is auto-closed first (largest
+  // footprint at 470px min); left panel remains available. User can reopen.
   lg: boolean
 }>
 
