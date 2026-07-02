@@ -7,7 +7,7 @@ import { Tooltip } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
-import { useScreenSize } from "../../hooks"
+import { ScreenSize, useScreenSize } from "../../hooks"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
@@ -20,7 +20,7 @@ import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
-import { Allotment, AllotmentHandle } from "allotment"
+import { Allotment, AllotmentHandle, LayoutPriority } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
@@ -100,7 +100,7 @@ const viewModes: {
 
 const Console = () => {
   const dispatch = useDispatch()
-  const { sm, md, lg } = useScreenSize()
+  const screenSize = useScreenSize()
   const {
     resultsSplitterBasis,
     updateSettings,
@@ -122,6 +122,7 @@ const Console = () => {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const importRef = React.useRef<HTMLDivElement>(null)
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
+  const previousScreenSizeRef = React.useRef(ScreenSize.XL)
 
   const showPanel = (panel: BottomPanel) => {
     if (resultRef.current) {
@@ -144,32 +145,20 @@ const Console = () => {
     showPanel(activeBottomPanel)
   }, [activeBottomPanel])
 
-  // Crossing into ≤1280px: auto-close the right sidebar so the notebook
-  // keeps usable width. The user can reopen it at any time.
   useEffect(() => {
-    if (lg) {
+    const previousScreenSize = previousScreenSizeRef.current
+    previousScreenSizeRef.current = screenSize
+    const shrankInto = (size: ScreenSize) =>
+      previousScreenSize > size && screenSize <= size
+
+    if (shrankInto(ScreenSize.LG) || shrankInto(ScreenSize.SM)) {
       dispatch(actions.console.closeSidebar())
     }
-  }, [lg]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Crossing into ≤1024px: auto-close the left panels. The right sidebar
-  // was already closed by the lg effect above.
-  useEffect(() => {
-    if (md) {
+    if (shrankInto(ScreenSize.MD) || shrankInto(ScreenSize.SM)) {
       updateLeftPanelState({ type: null, width: leftPanelState.width })
       setSearchPanelOpen(false)
     }
-  }, [md]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Crossing into ≤767px: close everything, including any panel the user
-  // manually re-opened while in the md range.
-  useEffect(() => {
-    if (sm) {
-      dispatch(actions.console.closeSidebar())
-      updateLeftPanelState({ type: null, width: leftPanelState.width })
-      setSearchPanelOpen(false)
-    }
-  }, [sm]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [screenSize])
 
   return (
     <Root>
@@ -182,7 +171,7 @@ const Console = () => {
           }
         }}
       >
-        <Allotment.Pane>
+        <Allotment.Pane priority={LayoutPriority.High}>
           <MainContent>
             <ContentArea>
               <Sidebar align="top">
@@ -321,6 +310,7 @@ const Console = () => {
                         preferredSize={leftPanelState.width}
                         visible={isDataSourcesPanelOpen || isSearchPanelOpen}
                         minSize={320}
+                        priority={LayoutPriority.Low}
                       >
                         <Schema open={isDataSourcesPanelOpen} />
                         <SearchPanel
@@ -328,7 +318,7 @@ const Console = () => {
                           open={isSearchPanelOpen}
                         />
                       </Allotment.Pane>
-                      <Allotment.Pane>
+                      <Allotment.Pane priority={LayoutPriority.High}>
                         <Editor />
                       </Allotment.Pane>
                     </Allotment>
@@ -357,6 +347,7 @@ const Console = () => {
           minSize={470}
           preferredSize={aiChatPanelWidth}
           visible={!!activeSidebar}
+          priority={LayoutPriority.Low}
         >
           <SidePanelRight id="side-panel-right" />
         </Allotment.Pane>
