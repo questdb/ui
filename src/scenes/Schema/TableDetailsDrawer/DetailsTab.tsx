@@ -180,7 +180,7 @@ export const DetailsTab = ({
     [ddl],
   )
   const hasStoragePolicy = storagePolicyClauses.length > 0
-  const hasTtl = tableData.ttlValue !== 0
+  const hasTtl = (tableData.ttlValue ?? 0) !== 0
   const showStoragePolicySection = isEnterprise || hasStoragePolicy
 
   return (
