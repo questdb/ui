@@ -81,7 +81,7 @@ const color: ColorShape = {
   aiBadgeIconBg: "#290a13",
   aiBadgeIconBorder: "rgba(122, 31, 58, 0.64)",
   dividerAccent: "#9c274b",
-  mutedLabel: "#9ca3af",
+  mutedLabel: "#9e9e9e",
   pinkGradientEnd: "#892c6c",
 }
 
