@@ -19,7 +19,7 @@ describe("TableDetailsDrawer in enterprise", () => {
         .within(() => {
           cy.contains("Not configured").should("be.visible")
           cy.contains("To Parquet").should("not.exist")
-          cy.contains("Drop Native").should("not.exist")
+          cy.contains("To Remote").should("not.exist")
           cy.contains("Drop Local").should("not.exist")
           cy.contains("Drop Remote").should("not.exist")
         })

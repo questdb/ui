@@ -35,16 +35,23 @@ export function formatRowCount(count: number | string | null): string {
     : Number(count).toLocaleString()
 }
 
-export function formatTTL(value: number, unit: string): string {
-  if (value === 0) return "None"
-  return `${value} ${unit}`
+function formatDurationUnit(value: number, unit: string): string {
+  const lower = unit.toLowerCase()
+  const singular = lower.endsWith("s") ? lower.slice(0, -1) : lower
+  const normalized = value === 1 ? singular : `${singular}s`
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+export function formatTTL(value?: number, unit?: string): string {
+  if (!value || !unit) return "None"
+  return `${value} ${formatDurationUnit(value, unit)}`
 }
 
 export type StoragePolicyClause = { action: string; duration: string }
 
 const STORAGE_POLICY_LABELS = [
   ["toParquet", "To Parquet"],
-  ["dropNative", "Drop Native"],
+  ["toRemote", "To Remote"],
   ["dropLocal", "Drop Local"],
   ["dropRemote", "Drop Remote"],
 ] as const
@@ -63,10 +70,12 @@ export function extractStoragePolicyClauses(
   return STORAGE_POLICY_LABELS.flatMap(([key, label]) => {
     const v = policy[key]
     if (!v) return []
-    const unit = v.unit.charAt(0).toUpperCase() + v.unit.slice(1).toLowerCase()
-    const normalizedUnit =
-      v.value === 1 ? (unit.endsWith("s") ? unit.slice(0, -1) : unit) : unit
-    return [{ action: label, duration: `${v.value} ${normalizedUnit}` }]
+    return [
+      {
+        action: label,
+        duration: `${v.value} ${formatDurationUnit(v.value, v.unit)}`,
+      },
+    ]
   })
 }
 
