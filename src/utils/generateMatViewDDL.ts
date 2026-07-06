@@ -175,13 +175,6 @@ const PARTITION_INFO: Partial<
   YEAR: { interval: "1y", ttlUnit: "YEARS" },
 }
 
-const STORAGE_POLICY_PIPELINE_ORDER = [
-  "toParquet",
-  "dropNative",
-  "dropLocal",
-  "dropRemote",
-] as const
-
 const HEADER =
   "-- Review SAMPLE BY, PARTITION BY, TTL, refresh clause, and aggregates before running."
 
@@ -233,11 +226,6 @@ const ladderStringToTTL = (s: string): TTLAst | null => {
   return { value: Number(m[1]), unit }
 }
 
-const ttlSeconds = (ttl: TTLAst): number | null => {
-  const s = ttlToLadderString(ttl)
-  return s ? toSeconds(s) : null
-}
-
 const partitionInfo = (
   partition: CreateMaterializedViewStatement["partitionBy"],
 ) => (partition ? PARTITION_INFO[partition] : undefined)
@@ -270,69 +258,12 @@ const deriveNextTTL = (
   return ladderStringToTTL(nextTTL(baseline))
 }
 
-const projectClauseToPartition = (
-  src: TTLAst,
-  partition: CreateMaterializedViewStatement["partitionBy"],
-): TTLAst | null => {
-  const info = partitionInfo(partition)
-  if (!info) return null
-  const partSec = toSeconds(info.interval)
-  const srcSec = ttlSeconds(src)
-  if (partSec == null || srcSec == null) return null
-  const count = Math.max(1, Math.ceil(srcSec / partSec))
-  return { value: count, unit: info.ttlUnit }
-}
-
-const projectStoragePolicyForMatView = (
-  source: StoragePolicy,
-  partition: CreateMaterializedViewStatement["partitionBy"],
-): StoragePolicy | null => {
-  const present = STORAGE_POLICY_PIPELINE_ORDER.filter(
-    (k) => source[k] !== undefined,
-  )
-  if (present.length === 0) return null
-
-  const next: StoragePolicy = { type: "storagePolicy" }
-  const terminal = present[present.length - 1]
-  let prevSec = 0
-  for (const kind of present) {
-    let projected = projectClauseToPartition(source[kind] as TTLAst, partition)
-    // Unreachable in practice: partition is always DAY/MONTH/YEAR here
-    if (!projected) return null
-
-    let projectedSec = ttlSeconds(projected) ?? 0
-    while (projectedSec > 0 && projectedSec < prevSec) {
-      projected = { ...projected, value: projected.value + 1 }
-      projectedSec = ttlSeconds(projected) ?? 0
-    }
-
-    if (kind === terminal) {
-      const bumpedStr = ttlToLadderString(projected)
-      const bumped = bumpedStr ? ladderStringToTTL(nextTTL(bumpedStr)) : null
-      if (bumped) {
-        projected = bumped
-        projectedSec = ttlSeconds(projected) ?? projectedSec
-      }
-    }
-
-    next[kind] = projected
-    prevSec = projectedSec
-  }
-  return next
-}
-
 const projectRetention = (
   src: { ttl?: TTLAst; storagePolicy?: StoragePolicy },
   partitionBy: CreateMaterializedViewStatement["partitionBy"],
-): Pick<CreateMaterializedViewStatement, "ttl" | "storagePolicy"> => {
-  const storagePolicy = src.storagePolicy
-    ? (projectStoragePolicyForMatView(src.storagePolicy, partitionBy) ??
-      undefined)
-    : undefined
-  const ttl = storagePolicy
-    ? undefined
-    : (deriveNextTTL(src.ttl, partitionBy) ?? undefined)
-  return { ttl, storagePolicy }
+): Pick<CreateMaterializedViewStatement, "ttl"> => {
+  const retention = src.storagePolicy ? src.storagePolicy.dropLocal : src.ttl
+  return { ttl: deriveNextTTL(retention, partitionBy) ?? undefined }
 }
 
 const matchesPattern = (name: string, patterns: string[]): boolean =>

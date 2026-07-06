@@ -131,8 +131,9 @@ echo $MVN_REPO
 CORE_CLASSES=tmp/questdb-enterprise/questdb/core/target/classes
 ENT_CLASSES=tmp/questdb-enterprise/questdb-ent/target/classes
 JAR_JNI=org/questdb/jar-jni/1.1.1/jar-jni-1.1.1.jar
+JVM_ARGS="--add-exports=java.base/jdk.internal.vm=ALL-UNNAMED"
 
-$JAVA_HOME/bin/java -cp $CORE_CLASSES:$ENT_CLASSES:$MVN_REPO/$JAR_JNI com.questdb.EntServerMain -d tmp/dbroot &
+$JAVA_HOME/bin/java $JVM_ARGS -cp $CORE_CLASSES:$ENT_CLASSES:$MVN_REPO/$JAR_JNI com.questdb.EntServerMain -d tmp/dbroot &
 PID2="$!"
 yarn test:e2e:enterprise
 TEST_EXIT=$?

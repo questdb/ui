@@ -1208,7 +1208,7 @@ describe("TableDetailsDrawer", () => {
             if (row && typeof row[0] === "string") {
               row[0] = row[0].replace(
                 /(\bPARTITION\s+BY\s+\w+)/i,
-                "$1 STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS, DROP LOCAL 1 YEARS)",
+                "$1 STORAGE POLICY(TO PARQUET 3 DAYS, TO REMOTE 10 DAYS, DROP LOCAL 1 YEARS)",
               )
             }
           })
@@ -1228,7 +1228,7 @@ describe("TableDetailsDrawer", () => {
         .within(() => {
           cy.contains("To Parquet").should("be.visible")
           cy.contains("3 Days").should("be.visible")
-          cy.contains("Drop Native").should("be.visible")
+          cy.contains("To Remote").should("be.visible")
           cy.contains("10 Days").should("be.visible")
           cy.contains("Drop Local").should("be.visible")
           cy.contains("1 Year").should("be.visible")
