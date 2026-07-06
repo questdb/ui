@@ -3141,14 +3141,14 @@ Syntax: \`avg(column)\`
       // Then
       cy.getByDataHook("success-notification").should("be.visible")
 
-      // When
-      cy.clickLine(1)
+      // When the notifications log is expanded
+      cy.expandNotifications()
 
-      // Then
-      cy.getByDataHook("error-notification").should(
-        "contain",
-        "Cancelled by user",
-      )
+      // Then the superseded editor query is recorded as cancelled, without the
+      // editor having to steal focus to surface it
+      cy.getExpandedNotifications()
+        .find('[data-hook="error-notification"]')
+        .should("contain", "Cancelled by user")
     })
 
     it("should show abort dialog when running editor query while chat query is in flight", () => {
