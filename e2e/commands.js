@@ -2,7 +2,7 @@ require("cypress-real-events")
 
 require("@4tw/cypress-drag-drop")
 
-const { ctrlOrCmd, escapeRegExp } = require("./utils")
+const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
@@ -52,6 +52,8 @@ Cypress.on("uncaught:exception", (err) => {
 })
 
 Cypress.on("window:before:load", (win) => {
+  seedNotebookOnboarding(win)
+
   const OriginalRO = win.ResizeObserver
   win.ResizeObserver = class extends OriginalRO {
     constructor(cb) {
@@ -534,7 +536,7 @@ Cypress.Commands.add(
 
 Cypress.Commands.add(
   "handleStorageAndVisit",
-  (url, clearLocalStorage = true, localStorageItems = {}) => {
+  (url, clearLocalStorage = true, localStorageItems = {}, onBeforeLoad) => {
     cy.visit(url, {
       onBeforeLoad: (win) => {
         if (clearLocalStorage) {
@@ -543,7 +545,9 @@ Cypress.Commands.add(
         for (const [key, value] of Object.entries(localStorageItems)) {
           win.localStorage.setItem(key, value)
         }
+        seedNotebookOnboarding(win)
         win.indexedDB.deleteDatabase("web-console")
+        onBeforeLoad?.(win)
       },
     })
   },
