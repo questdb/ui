@@ -28,10 +28,12 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useMemo,
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { parseInteger, parseBoolean } from "./utils"
+import { parseInteger, parseBoolean, parseMaxColumnWidth } from "./utils"
+import type { MaxColumnWidth } from "../../components/ResultGrid/types"
 import {
   AiAssistantSettings,
   LocalConfig,
@@ -53,6 +55,8 @@ const defaultConfig: LocalConfig = {
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   useNewGrid: true,
+  runWithSelection: true,
+  maxColumnWidth: "auto",
   aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
     type: LeftPanelType.DATASOURCES,
@@ -70,11 +74,36 @@ type ContextProps = {
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   useNewGrid: boolean
+  runWithSelection: boolean
+  maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
   aiAssistantSettings: AiAssistantSettings
   aiChatPanelWidth: number
   updateAiChatPanelWidth: (width: number) => void
+}
+
+const getAiAssistantSettings = (): AiAssistantSettings => {
+  const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as AiAssistantSettings
+      const reconciled = reconcileSettings({
+        selectedModel: parsed.selectedModel,
+        providers: parsed.providers || {},
+        ...(parsed.customProviders && {
+          customProviders: parsed.customProviders,
+        }),
+      })
+      if (JSON.stringify(reconciled) !== stored) {
+        setValue(StoreKey.AI_ASSISTANT_SETTINGS, JSON.stringify(reconciled))
+      }
+      return reconciled
+    } catch (e) {
+      return defaultConfig.aiAssistantSettings
+    }
+  }
+  return defaultConfig.aiAssistantSettings
 }
 
 const defaultValues: ContextProps = {
@@ -86,6 +115,8 @@ const defaultValues: ContextProps = {
   exampleQueriesVisited: false,
   autoRefreshTables: true,
   useNewGrid: true,
+  runWithSelection: true,
+  maxColumnWidth: "auto",
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
   aiAssistantSettings: defaultConfig.aiAssistantSettings,
@@ -147,6 +178,17 @@ export const LocalStorageProvider = ({
 
   const [useNewGrid, setUseNewGrid] = useState<boolean>(getInitialNewGrid)
 
+  const [runWithSelection, setRunWithSelection] = useState<boolean>(
+    parseBoolean(
+      getValue(StoreKey.RUN_WITH_SELECTION),
+      defaultConfig.runWithSelection,
+    ),
+  )
+
+  const [maxColumnWidth, setMaxColumnWidth] = useState<MaxColumnWidth>(
+    parseMaxColumnWidth(getValue(StoreKey.MAX_COLUMN_WIDTH)),
+  )
+
   useEffect(() => {
     const override = readNewGridOverride()
     if (override === null) return
@@ -178,29 +220,6 @@ export const LocalStorageProvider = ({
   const [leftPanelState, setLeftPanelState] =
     useState<LeftPanelState>(getLeftPanelState())
 
-  const getAiAssistantSettings = (): AiAssistantSettings => {
-    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as AiAssistantSettings
-        const reconciled = reconcileSettings({
-          selectedModel: parsed.selectedModel,
-          providers: parsed.providers || {},
-          ...(parsed.customProviders && {
-            customProviders: parsed.customProviders,
-          }),
-        })
-        if (JSON.stringify(reconciled) !== stored) {
-          setValue(StoreKey.AI_ASSISTANT_SETTINGS, JSON.stringify(reconciled))
-        }
-        return reconciled
-      } catch (e) {
-        return defaultConfig.aiAssistantSettings
-      }
-    }
-    return defaultConfig.aiAssistantSettings
-  }
-
   const [aiAssistantSettings, setAiAssistantSettings] =
     useState<AiAssistantSettings>(getAiAssistantSettings())
 
@@ -216,22 +235,12 @@ export const LocalStorageProvider = ({
     setAiChatPanelWidth(width)
   }, [])
 
-  const updateSettings = (key: StoreKey, value: SettingsType) => {
-    if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
-      setValue(key, JSON.stringify(value))
-    } else {
-      const typedValue = value as string | boolean | number
-      setValue(key, typedValue as string)
-    }
-    refreshSettings(key)
-  }
-
   const updateLeftPanelState = useCallback((state: LeftPanelState) => {
     setValue(StoreKey.LEFT_PANEL_STATE, JSON.stringify(state))
     setLeftPanelState(state)
   }, [])
 
-  const refreshSettings = (key: StoreKey) => {
+  const refreshSettings = useCallback((key: StoreKey) => {
     const value = getValue(key)
     switch (key) {
       case StoreKey.EDITOR_COL:
@@ -259,30 +268,70 @@ export const LocalStorageProvider = ({
       case StoreKey.USE_NEW_GRID:
         setUseNewGrid(value === "true")
         break
+      case StoreKey.RUN_WITH_SELECTION:
+        setRunWithSelection(value === "true")
+        break
+      case StoreKey.MAX_COLUMN_WIDTH:
+        setMaxColumnWidth(parseMaxColumnWidth(value))
+        break
       case StoreKey.AI_ASSISTANT_SETTINGS:
         setAiAssistantSettings(getAiAssistantSettings())
         break
     }
-  }
+  }, [])
+
+  const updateSettings = useCallback(
+    (key: StoreKey, value: SettingsType) => {
+      if (key === StoreKey.AI_ASSISTANT_SETTINGS) {
+        setValue(key, JSON.stringify(value))
+      } else {
+        const typedValue = value as string | boolean | number
+        setValue(key, typedValue as string)
+      }
+      refreshSettings(key)
+    },
+    [refreshSettings],
+  )
+
+  const value = useMemo(
+    () => ({
+      editorCol,
+      editorLine,
+      editorSplitterBasis,
+      resultsSplitterBasis,
+      updateSettings,
+      exampleQueriesVisited,
+      autoRefreshTables,
+      useNewGrid,
+      runWithSelection,
+      maxColumnWidth,
+      leftPanelState,
+      updateLeftPanelState,
+      aiAssistantSettings,
+      aiChatPanelWidth,
+      updateAiChatPanelWidth,
+    }),
+    [
+      editorCol,
+      editorLine,
+      editorSplitterBasis,
+      resultsSplitterBasis,
+      updateSettings,
+      exampleQueriesVisited,
+      autoRefreshTables,
+      useNewGrid,
+      runWithSelection,
+      maxColumnWidth,
+      leftPanelState,
+      updateLeftPanelState,
+      aiAssistantSettings,
+      aiChatPanelWidth,
+      updateAiChatPanelWidth,
+    ],
+  )
 
   return (
-    <LocalStorageContext.Provider
-      value={{
-        editorCol,
-        editorLine,
-        editorSplitterBasis,
-        resultsSplitterBasis,
-        updateSettings,
-        exampleQueriesVisited,
-        autoRefreshTables,
-        useNewGrid,
-        leftPanelState,
-        updateLeftPanelState,
-        aiAssistantSettings,
-        aiChatPanelWidth,
-        updateAiChatPanelWidth,
-      }}
-    >
+    <LocalStorageContext.Provider value={value}>
       {children}
     </LocalStorageContext.Provider>
   )

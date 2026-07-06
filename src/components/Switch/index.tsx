@@ -8,6 +8,8 @@ type Props = {
   onChange: (checked: boolean) => void
   dataHook?: string
   checked?: boolean
+  id?: string
+  ariaDescribedBy?: string
 }
 
 const Root = styled(SwitchPrimitive.Root)`
@@ -69,6 +71,8 @@ export const Switch = ({
   disabled,
   onChange,
   dataHook,
+  id,
+  ariaDescribedBy,
 }: Props) => (
   <Root
     data-hook={dataHook}
@@ -76,6 +80,8 @@ export const Switch = ({
     disabled={disabled}
     onCheckedChange={onChange}
     checked={checked}
+    id={id}
+    aria-describedby={ariaDescribedBy}
   >
     <StyledThumb />
   </Root>

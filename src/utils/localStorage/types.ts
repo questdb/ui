@@ -45,4 +45,6 @@ export enum StoreKey {
   AI_CHAT_PANEL_WIDTH = "ai.chat.panel.width",
   CLIENT_ID = "client.id",
   USE_NEW_GRID = "feature.new.grid",
+  RUN_WITH_SELECTION = "editor.runWithSelection",
+  MAX_COLUMN_WIDTH = "grid.maxColumnWidth",
 }

@@ -167,9 +167,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
         const updatedBufferNotifications = { ...bufferNotifications }
 
-        if (updatedBufferNotifications[oldKey]) {
-          updatedBufferNotifications[newKey] =
-            updatedBufferNotifications[oldKey]
+        const moved = updatedBufferNotifications[oldKey]
+        const existing = updatedBufferNotifications[newKey]
+        if (
+          moved &&
+          existing &&
+          existing.latest.createdAt > moved.latest.createdAt
+        ) {
+          return state
+        }
+
+        if (moved) {
+          updatedBufferNotifications[newKey] = moved
           if (!preserveOldKey) {
             delete updatedBufferNotifications[oldKey]
           }

@@ -15,6 +15,7 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 
 type Props = {
   data: DqlQueryResult
@@ -41,6 +42,7 @@ export const ResultGridPanel: React.FC<Props> = ({
   onYieldFocus,
 }) => {
   const gridRef = useRef<ResultGridHandle | null>(null)
+  const { maxColumnWidth } = useLocalStorage()
 
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
@@ -76,6 +78,7 @@ export const ResultGridPanel: React.FC<Props> = ({
       <ResultGrid
         ref={gridRef}
         dataSource={dataSource}
+        maxColumnWidth={maxColumnWidth}
         runToken={runToken}
         isFocused={isFocused}
         initialColumnSizing={initialLayout?.columnSizing}

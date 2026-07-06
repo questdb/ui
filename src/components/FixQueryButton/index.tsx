@@ -1,5 +1,4 @@
 import React, { useContext } from "react"
-import type { MutableRefObject } from "react"
 import styled from "styled-components"
 import { Button } from ".."
 import { AISparkle } from "../AISparkle"
@@ -10,7 +9,6 @@ import { selectors } from "../../store"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
-import type { ExecutionRefs } from "../../scenes/Editor/index"
 import { executeAIFlow, createFixFlowConfig } from "../../utils/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -42,16 +40,18 @@ export const FixQueryButton = () => {
   } = useAIConversation()
 
   const handleFixQuery = () => {
-    void trackEvent(ConsoleEvent.AI_FIX_QUERY)
-    const conversationId = chatWindowState.activeConversationId!
-    const conversation = getConversationMeta(conversationId)!
-
+    const conversationId = chatWindowState.activeConversationId
+    if (!conversationId) return
+    const conversation = getConversationMeta(conversationId)
+    if (!conversation?.queryKey || conversation.bufferId == null) return
     const errorInfo = extractErrorByQueryKey(
-      conversation.queryKey!,
-      conversation.bufferId!,
-      executionRefs as MutableRefObject<ExecutionRefs> | undefined,
+      conversation.queryKey,
+      conversation.bufferId,
+      executionRefs,
       editorRef,
-    )!
+    )
+    if (!errorInfo) return
+    void trackEvent(ConsoleEvent.AI_FIX_QUERY)
 
     const { errorMessage, queryText, word } = errorInfo
 

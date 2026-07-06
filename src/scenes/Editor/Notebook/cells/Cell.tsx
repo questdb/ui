@@ -26,6 +26,7 @@ import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
 import { useCellReveal } from "./useCellReveal"
 import { useEditor } from "../../../../providers/EditorProvider"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import {
   emitUserAction,
   signalUserEdit,
@@ -190,6 +191,7 @@ const CellInner: React.FC<Props> = ({
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const { activeBuffer } = useEditor()
+  const { runWithSelection } = useLocalStorage()
   const bufferIdForEvents =
     typeof activeBuffer.id === "number" ? activeBuffer.id : undefined
   const isDrawMode = cell.mode === "draw"
@@ -411,6 +413,7 @@ const CellInner: React.FC<Props> = ({
   }, [editorRef])
 
   const tryRunSelection = useCallback(async (): Promise<boolean> => {
+    if (!runWithSelection) return false
     const ed = editorRef.current
     if (!ed) return false
     const selection = ed.getSelection()
@@ -425,7 +428,14 @@ const CellInner: React.FC<Props> = ({
     const success = await runCell(cell.id, normalized)
     applyHighlight(success)
     return true
-  }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
+  }, [
+    runWithSelection,
+    cell.id,
+    runCell,
+    editorRef,
+    applyHighlight,
+    clearHighlight,
+  ])
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {

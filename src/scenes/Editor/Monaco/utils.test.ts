@@ -1,9 +1,59 @@
 import { describe, it, expect } from "vitest"
+import type { editor } from "monaco-editor"
 import {
   getQueriesFromText,
   isCursorInComment,
   isCursorInQuotedIdentifier,
+  getQueriesToRun,
+  getQueryRequestFromEditor,
+  getQueryFromCursor,
+  isQueryTextAtOffset,
+  createInflightQuery,
+  shiftInflightQuery,
+  isInflightQueryStillInPlace,
+  shiftSelection,
 } from "./utils"
+
+type SingleLineSelection = { startColumn: number; endColumn: number }
+
+const makeSingleLineEditor = (
+  text: string,
+  cursorColumn: number,
+  selection: SingleLineSelection | null,
+) => {
+  let currentSelection = selection
+
+  const toSelection = (sel: SingleLineSelection) => ({
+    startLineNumber: 1,
+    startColumn: sel.startColumn,
+    endLineNumber: 1,
+    endColumn: sel.endColumn,
+    getStartPosition: () => ({ lineNumber: 1, column: sel.startColumn }),
+    getEndPosition: () => ({ lineNumber: 1, column: sel.endColumn }),
+    isEmpty: () => sel.startColumn === sel.endColumn,
+  })
+
+  const model = {
+    getValueInRange: (range: { startColumn: number; endColumn: number }) =>
+      text.substring(range.startColumn - 1, range.endColumn - 1),
+    getOffsetAt: (position: { column: number }) => position.column - 1,
+    getPositionAt: (offset: number) => ({ lineNumber: 1, column: offset + 1 }),
+  }
+
+  return {
+    getModel: () => model,
+    getValue: () => text,
+    getPosition: () => ({ lineNumber: 1, column: cursorColumn }),
+    getSelection: () =>
+      currentSelection ? toSelection(currentSelection) : null,
+    setSelection: (range: { startColumn: number; endColumn: number }) => {
+      currentSelection = {
+        startColumn: range.startColumn,
+        endColumn: range.endColumn,
+      }
+    },
+  } as unknown as editor.IStandaloneCodeEditor
+}
 
 describe("getQueriesFromText", () => {
   it("splits two simple statements", () => {
@@ -325,5 +375,409 @@ describe("isCursorInQuotedIdentifier", () => {
     // cursor at the closing " (still inside)
     const cursor = text.lastIndexOf('"')
     expect(isCursorInQuotedIdentifier(text, 0, cursor)).toBe(text.indexOf('"'))
+  })
+})
+
+describe("run with selection gating", () => {
+  // "SELECT 11" spans columns 1..10 on the single line; the cursor sits inside it.
+  const TEXT = "SELECT 11; SELECT 22"
+  const FIRST_STATEMENT_SELECTION = { startColumn: 1, endColumn: 10 }
+  const QUERY_OFFSETS = [
+    { startOffset: 0, endOffset: 9 },
+    { startOffset: 11, endOffset: 20 },
+  ]
+
+  describe("getQueriesToRun", () => {
+    it("runs only the selected text when enabled", () => {
+      // Given the first statement is selected and running with selection is enabled
+      const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
+
+      // When resolving the queries to run
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, true)
+
+      // Then the run carries the selection
+      expect(result.length).toBeGreaterThan(0)
+      expect(result.some((request) => request.selection)).toBe(true)
+    })
+
+    it("ignores the selection and runs the cursor query when disabled", () => {
+      // Given the first statement is selected but running with selection is disabled
+      const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
+
+      // When resolving the queries to run
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, false)
+
+      // Then it falls back to the cursor query with no selection attached
+      expect(result).toEqual([getQueryFromCursor(editor)])
+      expect(result.every((request) => !request.selection)).toBe(true)
+    })
+  })
+
+  describe("getQueryRequestFromEditor", () => {
+    it("builds a selection request when enabled", () => {
+      // Given the first statement is selected and running with selection is enabled
+      const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
+
+      // When building the request from the editor
+      const request = getQueryRequestFromEditor(editor, true)
+
+      // Then the request carries the selection
+      expect(request?.selection).toBeDefined()
+    })
+
+    it("ignores the selection and uses the cursor query when disabled", () => {
+      // Given the first statement is selected but running with selection is disabled
+      const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
+
+      // When building the request from the editor
+      const request = getQueryRequestFromEditor(editor, false)
+
+      // Then the request has no selection
+      expect(request?.selection).toBeUndefined()
+    })
+  })
+})
+
+describe("isQueryTextAtOffset", () => {
+  it("matches when the query is still at its offset", () => {
+    // Given a buffer holding the query at a known offset
+    const text = "SELECT a FROM t;\nSELECT b FROM u;"
+
+    // When checking the second query at its start offset
+    const result = isQueryTextAtOffset(text, 17, "SELECT b FROM u")
+
+    // Then it reports the query is still in place
+    expect(result).toBe(true)
+  })
+
+  it("does not match when text was inserted so the offset points elsewhere", () => {
+    // Given text inserted above shifts the query past its original offset
+    const text = "-- note\nSELECT a FROM t;"
+
+    // When checking at the offset the query used to start at
+    const result = isQueryTextAtOffset(text, 0, "SELECT a FROM t")
+
+    // Then it reports the query is no longer in place
+    expect(result).toBe(false)
+  })
+
+  it("does not match when the text at the offset was edited", () => {
+    // Given the query text at the offset was changed
+    const text = "SELECT z FROM t;"
+
+    // When checking against the original query text
+    const result = isQueryTextAtOffset(text, 0, "SELECT a FROM t")
+
+    // Then it reports the query is no longer in place
+    expect(result).toBe(false)
+  })
+
+  it("ignores a trailing semicolon difference", () => {
+    // Given the buffer keeps a trailing semicolon the request text omits
+    const text = "SELECT a FROM t;"
+
+    // When checking against the normalized query without the semicolon
+    const result = isQueryTextAtOffset(text, 0, "SELECT a FROM t")
+
+    // Then it still reports the query is in place
+    expect(result).toBe(true)
+  })
+})
+
+describe("shiftInflightQuery", () => {
+  // "SELECT a FROM t" is 15 chars, so the query spans offsets 20-35
+  const runningQuery = () => createInflightQuery(1, "SELECT a FROM t", 20)
+
+  it("shifts the query forward when text is inserted above it", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When 5 characters are inserted above the query
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 3, rangeLength: 0, text: "hello" },
+    ])
+
+    // Then the offsets and the key move by the inserted length
+    expect(shifted).toEqual({
+      bufferId: 1,
+      queryKey: "SELECT a FROM t@25-40",
+      startOffset: 25,
+      endOffset: 40,
+      dislodged: false,
+    })
+  })
+
+  it("shifts the query backward when text is deleted above it", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When 4 characters are deleted above the query
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 0, rangeLength: 4, text: "" },
+    ])
+
+    // Then the offsets and the key move back by the deleted length
+    expect(shifted.queryKey).toBe("SELECT a FROM t@16-31")
+    expect(shifted.startOffset).toBe(16)
+    expect(shifted.endOffset).toBe(31)
+  })
+
+  it("shifts by the net delta when a change above replaces text", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When 4 characters above are replaced with 2
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 5, rangeLength: 4, text: "ab" },
+    ])
+
+    // Then the query moves back by the net difference
+    expect(shifted.startOffset).toBe(18)
+    expect(shifted.endOffset).toBe(33)
+  })
+
+  it("shifts when text is inserted exactly at the query start", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When a character is inserted at offset 20
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 20, rangeLength: 0, text: "x" },
+    ])
+
+    // Then the query text is pushed forward intact
+    expect(shifted.startOffset).toBe(21)
+    expect(shifted.dislodged).toBe(false)
+  })
+
+  it("shifts when a deletion ends exactly at the query start", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When a deletion whose range ends exactly at the query start is applied
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 15, rangeLength: 5, text: "" },
+    ])
+
+    // Then the query shifts back rather than being dislodged
+    expect(shifted.dislodged).toBe(false)
+    expect(shifted.startOffset).toBe(15)
+    expect(shifted.endOffset).toBe(30)
+  })
+
+  it("stays untouched when the edit is after the query end", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When text is inserted past the query end
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 36, rangeLength: 0, text: "x" },
+    ])
+
+    // Then nothing changes
+    expect(shifted).toBe(inflightQuery)
+  })
+
+  it("stays untouched when text is deleted right at the query end", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When text after the query is deleted starting at its end
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 35, rangeLength: 3, text: "" },
+    ])
+
+    // Then nothing changes
+    expect(shifted).toBe(inflightQuery)
+  })
+
+  it("dislodges the query when text is inserted exactly at its end", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When text is appended right at the query end, extending the statement
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 35, rangeLength: 0, text: " where x = 1" },
+    ])
+
+    // Then the query is dislodged
+    expect(shifted.dislodged).toBe(true)
+  })
+
+  it("dislodges the query when an edit lands inside it", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When a character is inserted in the middle of the query
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 25, rangeLength: 0, text: "x" },
+    ])
+
+    // Then the query is dislodged and keeps its last known key
+    expect(shifted.dislodged).toBe(true)
+    expect(shifted.queryKey).toBe(inflightQuery.queryKey)
+  })
+
+  it("dislodges the query when a deletion straddles its start", () => {
+    // Given a query running at offsets 20-35
+    const inflightQuery = runningQuery()
+
+    // When a deletion covers text above and inside the query
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 18, rangeLength: 5, text: "" },
+    ])
+
+    // Then the query is dislodged
+    expect(shifted.dislodged).toBe(true)
+  })
+
+  it("applies only the changes above the query when an event carries several", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When one change lands above the query and one after it
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 0, rangeLength: 0, text: "abc" },
+      { rangeOffset: 40, rangeLength: 2, text: "" },
+    ])
+
+    // Then only the change above contributes to the shift
+    expect(shifted.startOffset).toBe(23)
+    expect(shifted.endOffset).toBe(38)
+  })
+
+  it("accumulates the deltas of several changes above the query", () => {
+    // Given a query running at offset 20
+    const inflightQuery = runningQuery()
+
+    // When two changes land above the query: +2 chars and -1 char
+    const shifted = shiftInflightQuery(inflightQuery, [
+      { rangeOffset: 0, rangeLength: 0, text: "ab" },
+      { rangeOffset: 5, rangeLength: 1, text: "" },
+    ])
+
+    // Then the shift is the sum of both deltas
+    expect(shifted.startOffset).toBe(21)
+    expect(shifted.endOffset).toBe(36)
+  })
+
+  it("never shifts again once dislodged", () => {
+    // Given a query that was dislodged by an inner edit
+    const dislodgedQuery = shiftInflightQuery(runningQuery(), [
+      { rangeOffset: 25, rangeLength: 0, text: "x" },
+    ])
+
+    // When more text is inserted above it
+    const shifted = shiftInflightQuery(dislodgedQuery, [
+      { rangeOffset: 0, rangeLength: 0, text: "abc" },
+    ])
+
+    // Then it stays dislodged at its last known offsets
+    expect(shifted).toBe(dislodgedQuery)
+  })
+})
+
+describe("isInflightQueryStillInPlace", () => {
+  it("reports in place while the query text sits at the tracked offset", () => {
+    // Given a query tracked at the start of the buffer
+    const inflightQuery = createInflightQuery(1, "SELECT a FROM t", 0)
+
+    // When the buffer still holds the query there
+    const result = isInflightQueryStillInPlace(
+      "SELECT a FROM t;",
+      inflightQuery,
+    )
+
+    // Then the query is still in place
+    expect(result).toBe(true)
+  })
+
+  it("reports in place at the shifted offset after edits above", () => {
+    // Given a running query shifted by an insertion above it
+    const inflightQuery = shiftInflightQuery(
+      createInflightQuery(1, "SELECT a FROM t", 0),
+      [{ rangeOffset: 0, rangeLength: 0, text: "-- note\n" }],
+    )
+
+    // When the buffer holds the query at the shifted offset
+    const result = isInflightQueryStillInPlace(
+      "-- note\nSELECT a FROM t;",
+      inflightQuery,
+    )
+
+    // Then the query is still in place
+    expect(result).toBe(true)
+  })
+
+  it("reports out of place once the query is dislodged", () => {
+    // Given a query dislodged by an inner edit
+    const inflightQuery = shiftInflightQuery(
+      createInflightQuery(1, "SELECT a FROM t", 0),
+      [{ rangeOffset: 5, rangeLength: 0, text: "x" }],
+    )
+
+    // When checking against a buffer that still matches the tracked offset
+    const result = isInflightQueryStillInPlace(
+      "SELECT a FROM t;",
+      inflightQuery,
+    )
+
+    // Then the query is no longer trusted to be in place
+    expect(result).toBe(false)
+  })
+
+  it("reports out of place when the buffer text at the offset differs", () => {
+    // Given a query tracked at the start of the buffer
+    const inflightQuery = createInflightQuery(1, "SELECT a FROM t", 0)
+
+    // When the buffer content changed underneath it
+    const result = isInflightQueryStillInPlace(
+      "SELECT z FROM t;",
+      inflightQuery,
+    )
+
+    // Then the query is no longer in place
+    expect(result).toBe(false)
+  })
+})
+
+describe("shiftSelection", () => {
+  const selection = {
+    startOffset: 20,
+    endOffset: 35,
+    queryText: "SELECT a FROM t",
+  }
+
+  it("moves both offsets forward by a positive delta and keeps the query text", () => {
+    // Given a stored selection
+    // When it is shifted forward by inserted text above it
+    const shifted = shiftSelection(selection, 5)
+
+    // Then both offsets move by the delta and the query text is preserved
+    expect(shifted).toEqual({
+      startOffset: 25,
+      endOffset: 40,
+      queryText: "SELECT a FROM t",
+    })
+  })
+
+  it("moves both offsets backward by a negative delta", () => {
+    // Given a stored selection
+    // When it is shifted back by deleted text above it
+    const shifted = shiftSelection(selection, -4)
+
+    // Then both offsets move back by the delta
+    expect(shifted.startOffset).toBe(16)
+    expect(shifted.endOffset).toBe(31)
+  })
+
+  it("leaves the offsets unchanged for a zero delta", () => {
+    // Given a stored selection
+    // When it is shifted by nothing
+    const shifted = shiftSelection(selection, 0)
+
+    // Then the offsets are unchanged
+    expect(shifted.startOffset).toBe(20)
+    expect(shifted.endOffset).toBe(35)
   })
 })

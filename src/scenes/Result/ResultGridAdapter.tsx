@@ -15,6 +15,7 @@ import {
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import type { IQuestDBGrid } from "../../js/console/grid"
 import { usePagedDataSource, type PaginationFn } from "./usePagedDataSource"
+import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import {
@@ -53,6 +54,7 @@ export const ResultGridAdapter = forwardRef<
 >(({ isFocused = true, paginationFn }, ref) => {
   const { dataSource, setResult, getSQL, getCurrentPageRows, hasData } =
     usePagedDataSource(paginationFn)
+  const { maxColumnWidth } = useLocalStorage()
 
   const [visible, setVisible] = useState(true)
   const [runToken, setRunToken] = useState(0)
@@ -169,6 +171,7 @@ export const ResultGridAdapter = forwardRef<
         <ResultGrid
           ref={gridImperativeRef}
           dataSource={dataSource}
+          maxColumnWidth={maxColumnWidth}
           runToken={runToken}
           isFocused={isFocused}
           initialColumnSizing={restoredSizing}
