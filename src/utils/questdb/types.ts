@@ -178,8 +178,8 @@ export type Table = {
   designatedTimestamp: string
   walEnabled: boolean
   dedup: boolean
-  ttlValue: number
-  ttlUnit: string
+  ttlValue?: number
+  ttlUnit?: string
   matView?: boolean // Optional for backward compatibility with older servers
   table_type?: TableType // Optional for backward compatibility with older servers
   directoryName: string
