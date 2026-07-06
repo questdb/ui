@@ -21,17 +21,23 @@ const StyledCheckboxCircle = styled(CheckboxCircle)`
 export const CopyButton = ({
   text,
   iconOnly,
+  icon,
   size = "md",
   onCopy,
   ...props
 }: {
   text: string
   iconOnly?: boolean
+  icon?: React.ReactNode
   size?: ButtonProps["size"]
   onCopy?: () => void
 } & ButtonProps) => {
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const displayIcon = icon ?? (
+    <FileCopy size={size === "sm" ? "12px" : "16px"} />
+  )
 
   useEffect(() => {
     return () => {
@@ -55,13 +61,11 @@ export const CopyButton = ({
         timeoutRef.current = setTimeout(() => setCopied(false), 2000)
         onCopy?.()
       }}
-      {...(!iconOnly && {
-        prefixIcon: <FileCopy size={size === "sm" ? "12px" : "16px"} />,
-      })}
+      {...(!iconOnly && { prefixIcon: displayIcon })}
       {...props}
     >
       {copied && <StyledCheckboxCircle size={size === "sm" ? "8px" : "14px"} />}
-      {iconOnly ? <FileCopy size={size === "sm" ? "12px" : "16px"} /> : "Copy"}
+      {iconOnly ? displayIcon : "Copy"}
     </StyledButton>
   )
 }

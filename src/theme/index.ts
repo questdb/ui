@@ -66,6 +66,7 @@ const color: ColorShape = {
   pinkDarker: "#be2f5b",
   pinkPrimary: "#c93261",
   pinkLighter: "#ff79c6",
+  pinkBadge: "#eb477a",
   transparent: "transparent",
   white: "#fafafa",
   inherit: "inherit",
