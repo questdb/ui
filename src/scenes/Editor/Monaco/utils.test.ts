@@ -12,6 +12,7 @@ import {
   shiftInflightQuery,
   isInflightQueryStillInPlace,
   shiftSelection,
+  applyQueryKeyUpdates,
 } from "./utils"
 
 type SingleLineSelection = { startColumn: number; endColumn: number }
@@ -779,5 +780,29 @@ describe("shiftSelection", () => {
     // Then the offsets are unchanged
     expect(shifted.startOffset).toBe(20)
     expect(shifted.endOffset).toBe(35)
+  })
+})
+
+describe("applyQueryKeyUpdates", () => {
+  it("moves chained keys without overwriting a destination source", () => {
+    const firstKey = "select 1@0-8"
+    const secondKey = "select 1@10-18"
+    const thirdKey = "select 1@20-28"
+    const first = { id: "first" }
+    const second = { id: "second" }
+    const record = {
+      [firstKey]: first,
+      [secondKey]: second,
+    }
+
+    applyQueryKeyUpdates(record, [
+      { oldKey: firstKey, newKey: secondKey, data: first },
+      { oldKey: secondKey, newKey: thirdKey, data: second },
+    ])
+
+    expect(record).toEqual({
+      [secondKey]: first,
+      [thirdKey]: second,
+    })
   })
 })

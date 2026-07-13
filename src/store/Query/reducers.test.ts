@@ -148,3 +148,36 @@ describe("query reducer — UPDATE_NOTIFICATION_KEY", () => {
     expect(next).toBe(state)
   })
 })
+
+describe("query reducer — UPDATE_NOTIFICATION_KEYS", () => {
+  it("moves chained keys atomically after vacating every source", () => {
+    const firstKey = "select 1@0-8" as QueryKey
+    const secondKey = "select 1@10-18" as QueryKey
+    const thirdKey = "select 1@20-28" as QueryKey
+    const first = notificationGroup(firstKey, new Date(1000))
+    const second = notificationGroup(secondKey, new Date(2000))
+    const state = {
+      ...stateWithGroups({ [firstKey]: first, [secondKey]: second }),
+      activeNotification: second.latest,
+    }
+
+    const next = query(
+      state,
+      actions.updateNotificationKeys(
+        [
+          { oldKey: firstKey, newKey: secondKey },
+          { oldKey: secondKey, newKey: thirdKey },
+        ],
+        BUFFER_ID,
+      ),
+    )
+
+    expect(next.queryNotifications[BUFFER_ID][firstKey]).toBeUndefined()
+    expect(next.queryNotifications[BUFFER_ID][secondKey]).toBe(first)
+    expect(next.queryNotifications[BUFFER_ID][thirdKey]).toBe(second)
+    expect(
+      next.notifications.map((notification) => notification.query),
+    ).toEqual([secondKey, thirdKey])
+    expect(next.activeNotification?.query).toBe(thirdKey)
+  })
+})

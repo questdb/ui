@@ -67,6 +67,7 @@ import {
   createInflightQuery,
   shiftInflightQuery,
   shiftSelection,
+  applyQueryKeyUpdates,
   isInflightQueryStillInPlace,
   validateQueryJIT,
   setErrorMarkerForQuery,
@@ -1027,7 +1028,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const activeBufferId = activeBufferRef.current.id as number
       const bufferExecutions = executionRefs.current[activeBufferId.toString()]
 
-      const notificationUpdates: Array<() => void> = []
+      const notificationKeyUpdates = new Map<QueryKey, QueryKey>()
 
       const inflightQueryBeforeChanges =
         inflightQueryRef.current &&
@@ -1104,18 +1105,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
         })
 
-        keysToUpdate.forEach(({ oldKey, newKey, data }) => {
-          delete bufferExecutions[oldKey]
-          bufferExecutions[newKey] = data
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.updateNotificationKey(
-                oldKey,
-                newKey,
-                activeBufferId,
-              ),
-            ),
-          )
+        applyQueryKeyUpdates(bufferExecutions, keysToUpdate)
+        keysToUpdate.forEach(({ oldKey, newKey }) => {
+          notificationKeyUpdates.set(oldKey, newKey)
         })
       }
 
@@ -1145,15 +1137,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
         const newOffset = startOffset + effectiveOffsetDelta
         const newKey = createQueryKey(queryText, newOffset)
-        notificationUpdates.push(() =>
-          dispatch(
-            actions.query.updateNotificationKey(
-              queryKey,
-              newKey,
-              activeBufferId,
-            ),
-          ),
-        )
+        notificationKeyUpdates.set(queryKey, newKey)
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
@@ -1186,7 +1170,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       syncQueriesToRun(editor, runWithSelectionRef.current)
 
       contentJustChangedRef.current = false
-      notificationUpdates.forEach((update) => update())
+      if (notificationKeyUpdates.size > 0) {
+        dispatch(
+          actions.query.updateNotificationKeys(
+            Array.from(notificationKeyUpdates, ([oldKey, newKey]) => ({
+              oldKey,
+              newKey,
+            })),
+            activeBufferId,
+          ),
+        )
+      }
 
       // JIT validation (debounced)
       if (validationTimeoutRef.current) {

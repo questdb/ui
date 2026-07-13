@@ -1157,6 +1157,22 @@ export const shiftSelection = (
   endOffset: selection.endOffset + offsetDelta,
 })
 
+export const applyQueryKeyUpdates = <T>(
+  record: Record<QueryKey, T>,
+  updates: readonly {
+    oldKey: QueryKey
+    newKey: QueryKey
+    data: T
+  }[],
+): void => {
+  updates.forEach(({ oldKey }) => {
+    delete record[oldKey]
+  })
+  updates.forEach(({ newKey, data }) => {
+    record[newKey] = data
+  })
+}
+
 export const setErrorMarkerForQuery = (
   monaco: Monaco,
   editor: IStandaloneCodeEditor,
