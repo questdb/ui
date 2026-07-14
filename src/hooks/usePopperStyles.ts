@@ -27,12 +27,13 @@ import { CSSProperties, useEffect } from "react"
 export const usePopperStyles = (
   element: HTMLElement,
   styles: CSSProperties,
+  zIndex = 1000,
 ) => {
   useEffect(() => {
     const css = Object.entries(styles).reduce(
       (acc, [prop, value]) => `${acc} ${prop}: ${value as string};`,
-      "z-index: 1000;",
+      `z-index: ${zIndex};`,
     )
     element.setAttribute("style", css)
-  }, [element, styles])
+  }, [element, styles, zIndex])
 }

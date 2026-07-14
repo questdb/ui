@@ -1,17 +1,23 @@
+import "../../test/stubBrowserGlobals"
 import { describe, it, expect, beforeEach } from "vitest"
+
 import {
   buildSnapshot,
   formatDigest,
   formatNotebookContextPrefix,
   formatSnapshot,
+  summarizeCells,
   type NotebookContextSnapshot,
 } from "./notebookSnapshot"
+import { __resetNotebookAIBridgeForTests } from "../notebooks/notebookAIBridge"
 import {
-  __resetNotebookAIBridgeForTests,
+  __resetNotebookControllerForTests,
   registerController,
+  unregisterController,
   type NotebookController,
-  type NotebookWorkspaceController,
-} from "../notebookAIBridge"
+} from "../notebooks/notebookController"
+import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
+import { db } from "../../store/db"
 import type {
   NotebookCell,
   NotebookSettings,
@@ -37,107 +43,108 @@ const makeController = (
   maximizedCellId: string | null = null,
 ): NotebookController => ({
   bufferId,
-  addCell: () => "c",
-  updateCell: () => undefined,
-  deleteCell: () => undefined,
-  moveCellUp: () => undefined,
-  moveCellDown: () => undefined,
-  duplicateCell: () => "c",
+  kind: "live",
+  mutate: (transition) =>
+    Promise.resolve(
+      transition({ cells, settings, maximizedCellId, focusedCellId: null })
+        .result,
+    ),
+  readView: () =>
+    Promise.resolve({
+      cells,
+      settings,
+      maximizedCellId: maximizedCellId ?? undefined,
+    }),
   runCell: () =>
     Promise.resolve({ success: true, queryCount: 1, results: ["success"] }),
-  setLayoutMode: () => undefined,
-  setVariables: () => undefined,
-  setCellLayout: () => undefined,
-  setCellMode: () => undefined,
-  setCellChartConfig: () => undefined,
-  setCellViewMaximized: () => undefined,
-  setCellMaximized: () => undefined,
-  applyNotebookState: () => ({
-    applied: { added: [], updated: [], deleted: [] },
-  }),
-  getCellsSnapshot: () => cells,
-  getSettings: () => settings,
-  getMaximizedCellId: () => maximizedCellId,
 })
 
-const makeWorkspace = (
-  stateByBuffer: Map<number, NotebookViewState>,
-  archivedSet = new Set<number>(),
-  deletedSet = new Set<number>(),
-): NotebookWorkspaceController => ({
-  createNotebook: () => Promise.resolve({ bufferId: 0, label: "x" }),
-  duplicateNotebook: () => Promise.resolve({ bufferId: 0, label: "x (copy)" }),
-  deleteNotebook: () => Promise.resolve(),
-  activateNotebook: () => Promise.resolve(true),
-  getBufferMeta(bufferId) {
-    if (deletedSet.has(bufferId)) return { kind: "deleted" }
-    if (archivedSet.has(bufferId))
-      return { kind: "archived", label: `nb-${bufferId}` }
-    const state = stateByBuffer.get(bufferId)
-    if (!state) return null
-    return {
-      kind: "inactive",
-      label: `nb-${bufferId}`,
-      notebookViewState: state,
-    }
-  },
-  listNotebookBuffers: () => [],
-})
+const seedNotebook = async (
+  view: NotebookViewState,
+  opts: { archived?: boolean; label?: string } = {},
+): Promise<number> => {
+  const id = await db.buffers.add({
+    label: opts.label ?? "nb",
+    value: "",
+    position: 0,
+    ...(opts.archived ? { archived: true } : {}),
+    notebookViewState: view,
+  })
+  return id
+}
 
-beforeEach(() => {
+beforeEach(async () => {
+  __resetNotebookControllerForTests()
   __resetNotebookAIBridgeForTests()
+  __resetNotebookBufferQueuesForTests()
+  await db.buffers.clear()
 })
 
 describe("buildSnapshot", () => {
-  it("returns null when no workspace is provided", () => {
-    expect(buildSnapshot(undefined, 1)).toBeNull()
+  it("returns null for a buffer that is not a notebook", async () => {
+    const id = await db.buffers.add({
+      label: "sql tab",
+      value: "SELECT 1",
+      position: 0,
+    })
+    expect(await buildSnapshot(id)).toBeNull()
   })
 
-  it("returns { status: deleted } for a deleted buffer", () => {
-    const ws = makeWorkspace(new Map(), new Set(), new Set([1]))
-    const snap = buildSnapshot(ws, 1)
+  it("returns { status: deleted } for a missing buffer", async () => {
+    const snap = await buildSnapshot(999)
     expect(snap?.status).toBe("deleted")
   })
 
-  it("returns { status: archived, label } for an archived buffer", () => {
-    const ws = makeWorkspace(new Map(), new Set([1]))
-    const snap = buildSnapshot(ws, 1)
-    expect(snap).toEqual({ status: "archived", buffer_id: 1, label: "nb-1" })
+  it("returns { status: archived, label } for an archived buffer", async () => {
+    const id = await seedNotebook(
+      { cells: [] },
+      { archived: true, label: "nb-1" },
+    )
+    const snap = await buildSnapshot(id)
+    expect(snap).toEqual({ status: "archived", buffer_id: id, label: "nb-1" })
   })
 
-  it("prefers the mounted controller over persisted state", () => {
-    const ws = makeWorkspace(new Map([[1, { cells: [sql("a", "old")] }]]))
-    registerController(makeController(1, [sql("b", "new")]))
-    const snap = buildSnapshot(ws, 1)
+  it("prefers the mounted controller over persisted state", async () => {
+    const id = await seedNotebook({ cells: [sql("a", "old")] })
+    registerController(makeController(id, [sql("b", "new")]))
+    const snap = await buildSnapshot(id)
     expect(snap?.status).toBe("ok")
     if (snap?.status === "ok") {
       expect(snap.cells.map((c) => c.id)).toEqual(["b"])
     }
   })
 
-  it("falls back to persisted state when the controller is not mounted", () => {
-    const ws = makeWorkspace(new Map([[1, { cells: [sql("a", "persisted")] }]]))
-    const snap = buildSnapshot(ws, 1)
+  it("serves the live snapshot when the controller unregisters mid-read", async () => {
+    // Given a mounted notebook whose Dexie copy lags the live cells
+    const id = await seedNotebook({ cells: [sql("a", "persisted")] })
+    registerController(makeController(id, [sql("b", "live")]))
+    // When the tab unmounts while the snapshot's queued read is in flight
+    const pending = buildSnapshot(id)
+    unregisterController(id)
+    const snap = await pending
+    // Then the snapshot reflects the live cells its freshness baseline covers
+    expect(snap?.status).toBe("ok")
+    if (snap?.status === "ok") {
+      expect(snap.cells.map((c) => c.id)).toEqual(["b"])
+    }
+  })
+
+  it("falls back to persisted state when the controller is not mounted", async () => {
+    const id = await seedNotebook({ cells: [sql("a", "persisted")] })
+    const snap = await buildSnapshot(id)
     expect(snap?.status).toBe("ok")
     if (snap?.status === "ok") {
       expect(snap.cells[0].preview).toBe("persisted")
     }
   })
 
-  it("truncates previews to 120 chars and escapes newlines", () => {
+  it("truncates previews to 120 chars and escapes newlines", async () => {
     const long = "a".repeat(200)
     const withNewline = `line1\nline2`
-    const ws = makeWorkspace(
-      new Map([
-        [
-          1,
-          {
-            cells: [sql("a", long), sql("b", withNewline)],
-          },
-        ],
-      ]),
-    )
-    const snap = buildSnapshot(ws, 1)
+    const id = await seedNotebook({
+      cells: [sql("a", long), sql("b", withNewline)],
+    })
+    const snap = await buildSnapshot(id)
     if (snap?.status === "ok") {
       expect(snap.cells[0].preview.length).toBeLessThanOrEqual(120)
       expect(snap.cells[0].preview.endsWith("...")).toBe(true)
@@ -147,7 +154,7 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("trims last_run_error_summary to 200 chars and never leaks dataset/columns", () => {
+  it("trims last_run_error_summary to 200 chars and never leaks dataset/columns", async () => {
     const longErr = "x".repeat(300)
     const cell = sql("a", "SELECT 1", {
       result: {
@@ -162,8 +169,8 @@ describe("buildSnapshot", () => {
         timestamp: 0,
       },
     })
-    const ws = makeWorkspace(new Map([[1, { cells: [cell] }]]))
-    const snap = buildSnapshot(ws, 1)
+    const id = await seedNotebook({ cells: [cell] })
+    const snap = await buildSnapshot(id)
     const json = JSON.stringify(snap)
     expect(json).not.toContain("dataset")
     expect(json).not.toContain("columns")
@@ -178,49 +185,46 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("includes grid positions only when layout_mode is 'grid'", () => {
+  it("includes grid positions only when layout_mode is 'grid'", async () => {
     const cells = [sql("a"), sql("b")]
     const layout = [
       { i: "a", x: 0, y: 0, w: 6, h: 4 },
       { i: "b", x: 6, y: 0, w: 6, h: 4 },
     ]
-    const listWs = makeWorkspace(
-      new Map([[1, { cells, settings: { layoutMode: "list", layout } }]]),
-    )
-    const gridWs = makeWorkspace(
-      new Map([[1, { cells, settings: { layoutMode: "grid", layout } }]]),
-    )
-    const listSnap = buildSnapshot(listWs, 1)
-    const gridSnap = buildSnapshot(gridWs, 1)
+    const listId = await seedNotebook({
+      cells,
+      settings: { layoutMode: "list", layout },
+    })
+    const gridId = await seedNotebook({
+      cells,
+      settings: { layoutMode: "grid", layout },
+    })
+    const listSnap = await buildSnapshot(listId)
+    const gridSnap = await buildSnapshot(gridId)
     if (listSnap?.status === "ok" && gridSnap?.status === "ok") {
       expect(listSnap.cells[0].grid).toBeUndefined()
-      expect(gridSnap.cells[0].grid).toEqual({ x: 0, y: 0, w: 6, h: 4 })
+      // h is derived from the cell's content, not the stored layout h (4) —
+      // a fresh run cell resolves to 5 rows regardless of the persisted shadow.
+      expect(gridSnap.cells[0].grid).toEqual({ x: 0, y: 0, w: 6, h: 5 })
     } else {
       throw new Error("expected ok snapshots")
     }
   })
 
-  it("includes settings.variables when non-empty and omits when missing", () => {
+  it("includes settings.variables when non-empty and omits when missing", async () => {
     const cells = [sql("a", "SELECT @x FROM trades")]
-    const withVars = makeWorkspace(
-      new Map([
-        [
-          1,
-          {
-            cells,
-            settings: {
-              variables: [
-                { name: "x", value: "10" },
-                { name: "sym", value: "'BTC'" },
-              ],
-            },
-          },
+    const withVarsId = await seedNotebook({
+      cells,
+      settings: {
+        variables: [
+          { name: "x", value: "10" },
+          { name: "sym", value: "'BTC'" },
         ],
-      ]),
-    )
-    const withoutVars = makeWorkspace(new Map([[2, { cells }]]))
-    const a = buildSnapshot(withVars, 1)
-    const b = buildSnapshot(withoutVars, 2)
+      },
+    })
+    const withoutVarsId = await seedNotebook({ cells })
+    const a = await buildSnapshot(withVarsId)
+    const b = await buildSnapshot(withoutVarsId)
     if (a?.status === "ok" && b?.status === "ok") {
       expect(a.variables).toEqual([
         { name: "x", value: "10" },
@@ -232,7 +236,7 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", () => {
+  it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
@@ -243,8 +247,8 @@ describe("buildSnapshot", () => {
         queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
     })
-    const ws = makeWorkspace(new Map([[1, { cells: [cell] }]]))
-    const snap = buildSnapshot(ws, 1)
+    const id = await seedNotebook({ cells: [cell] })
+    const snap = await buildSnapshot(id)
     if (snap?.status === "ok") {
       // Snake-case wire shape the model can copy straight back into apply_notebook_state.
       expect(snap.cells[0].chart_config).toEqual({
@@ -258,6 +262,23 @@ describe("buildSnapshot", () => {
     } else {
       throw new Error("expected ok snapshot")
     }
+  })
+})
+
+describe("summarizeCells", () => {
+  it("includes the cell name when the cell has one", () => {
+    // Given a named cell and an unnamed one
+    const cells = [
+      sql("a", "select 1", { name: "Recent Trades" }),
+      sql("b", "select 2"),
+    ]
+
+    // When summarizing for list_cells
+    const [named, unnamed] = summarizeCells(cells)
+
+    // Then the name is surfaced for the named cell and omitted otherwise
+    expect(named.name).toBe("Recent Trades")
+    expect(unnamed.name).toBeUndefined()
   })
 })
 
@@ -281,30 +302,23 @@ describe("formatSnapshot", () => {
     expect(out).not.toMatch(/label:/)
   })
 
-  it("serialises ok snapshots with cells and grid positions", () => {
-    const ws = makeWorkspace(
-      new Map([
-        [
-          1,
-          {
-            cells: [sql("a", "SELECT 1")],
-            settings: {
-              layoutMode: "grid",
-              layout: [{ i: "a", x: 0, y: 0, w: 12, h: 4 }],
-            },
-          },
-        ],
-      ]),
-    )
-    const snap = buildSnapshot(ws, 1)!
+  it("serialises ok snapshots with cells and grid positions", async () => {
+    const id = await seedNotebook({
+      cells: [sql("a", "SELECT 1")],
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 12, h: 4 }],
+      },
+    })
+    const snap = (await buildSnapshot(id))!
     const out = formatSnapshot(snap)
-    expect(out).toContain("buffer_id: 1")
+    expect(out).toContain(`buffer_id: ${id}`)
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("- id: a")
-    expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 4 }")
+    expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 5 }")
   })
 
-  it("renders chart_config as one-line wire JSON the model can copy back", () => {
+  it("renders chart_config as one-line wire JSON the model can copy back", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       chartConfig: {
@@ -312,39 +326,30 @@ describe("formatSnapshot", () => {
         queries: [{ type: "line", yColumns: ["price"] }],
       },
     })
-    const ws = makeWorkspace(new Map([[1, { cells: [cell] }]]))
-    const out = formatSnapshot(buildSnapshot(ws, 1)!)
+    const id = await seedNotebook({ cells: [cell] })
+    const out = formatSnapshot((await buildSnapshot(id))!)
     expect(out).toContain(
       'chart_config: {"x_column":"ts","queries":[{"type":"line","y_columns":["price"]}]}',
     )
   })
 
-  it("emits a variables block when present, omits when empty", () => {
-    const withVars = makeWorkspace(
-      new Map([
-        [
-          1,
-          {
-            cells: [sql("a", "SELECT @x")],
-            settings: {
-              variables: [
-                { name: "x", value: "10" },
-                { name: "sym", value: "'BTC'" },
-              ],
-            },
-          },
+  it("emits a variables block when present, omits when empty", async () => {
+    const withVarsId = await seedNotebook({
+      cells: [sql("a", "SELECT @x")],
+      settings: {
+        variables: [
+          { name: "x", value: "10" },
+          { name: "sym", value: "'BTC'" },
         ],
-      ]),
-    )
-    const out = formatSnapshot(buildSnapshot(withVars, 1)!)
+      },
+    })
+    const out = formatSnapshot((await buildSnapshot(withVarsId))!)
     expect(out).toContain("variables:")
     expect(out).toMatch(/x: "10"/)
     expect(out).toMatch(/sym: "'BTC'"/)
 
-    const noVars = makeWorkspace(
-      new Map([[2, { cells: [sql("a", "SELECT 1")] }]]),
-    )
-    const out2 = formatSnapshot(buildSnapshot(noVars, 2)!)
+    const noVarsId = await seedNotebook({ cells: [sql("a", "SELECT 1")] })
+    const out2 = formatSnapshot((await buildSnapshot(noVarsId))!)
     expect(out2).not.toContain("variables:")
   })
 })

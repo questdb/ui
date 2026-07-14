@@ -26,8 +26,12 @@ import {
   readFromClipboard,
 } from "../../../../utils/copyToClipboard"
 import type { NotebookVariable } from "../../../../store/notebook"
-import { signalUserEdit } from "../../../../utils/notebookAIBridge"
-import { useNotebookActions, useNotebookState } from "../NotebookProvider"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookState,
+} from "../NotebookProvider"
 import {
   isValidVariableName,
   normalizeVariables,
@@ -309,6 +313,7 @@ export const VariablesPopover: React.FC = () => {
   const { quest } = useContext(QuestContext)
   const { settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
+  const bufferId = useNotebookBufferId()
   const [open, setOpen] = useState(false)
   const [drafts, setDrafts] = useState<Draft[]>([])
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
@@ -454,7 +459,7 @@ export const VariablesPopover: React.FC = () => {
       if (!(await validateOnServer(list))) return
       if (cancelledRef.current) return
       if (!variablesEqual(normalizeVariables(settings.variables), list)) {
-        signalUserEdit()
+        signalUserEdit(bufferId)
         updateSettings({ variables: list })
       }
       setOpen(false)

@@ -1,5 +1,4 @@
-import { getWorkspace } from "../notebookAIBridge"
-import type { WorkspaceInfo } from "../executeAIFlow"
+import type { WorkspaceInfo } from "../ai/executeAIFlow"
 import {
   buildSnapshot,
   formatDigest,
@@ -36,16 +35,15 @@ const noNotebookOpenPayload = (ws: WorkspaceInfo | null): ToolContent[] => {
 const emptyDigestText =
   '<user_events since_last_turn="true">\n  (no recent actions)\n</user_events>'
 
-export const resolveGetWorkspaceState = (
+export const resolveGetWorkspaceState = async (
   args: { include_user_events?: boolean } | undefined,
   ctx: MetaToolContext,
-): ToolContent[] => {
+): Promise<ToolContent[]> => {
   const ws = ctx.getWorkspace()
   const bufferId = ctx.getActiveBufferId()
   if (bufferId === null) return noNotebookOpenPayload(ws)
 
-  const workspaceController = getWorkspace()
-  const snapshot = buildSnapshot(workspaceController, bufferId)
+  const snapshot = await buildSnapshot(bufferId)
 
   const parts: string[] = []
   if (ws) parts.push(formatWorkspace(ws))

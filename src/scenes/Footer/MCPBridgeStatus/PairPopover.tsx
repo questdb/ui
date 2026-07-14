@@ -1,11 +1,14 @@
 import React, { forwardRef, useEffect, useState } from "react"
 import styled from "styled-components"
 import {
+  InfoIcon,
+  ArrowRightIcon,
   PlugsConnectedIcon,
   PlugsIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
 import { Button, LoadingSpinner } from "../../../components"
+import type { AgentChanges } from "./useAgentChanges"
 import { Input } from "../../../components/Input"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MAX_RECONNECT_ATTEMPTS } from "../../../utils/mcp/MCPBridgeClient"
@@ -156,6 +159,44 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   }
 `
 
+const AgentChangesRow = styled(StatusRow)`
+  background: ${({ theme }) => theme.color.cyan10};
+  color: ${({ theme }) => theme.color.foreground};
+
+  strong {
+    line-height: 1.1;
+  }
+
+  & > svg {
+    color: ${({ theme }) => theme.color.cyan};
+  }
+`
+
+const AgentChangesViewButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  line-height: 1.3;
+  color: ${({ theme }) => theme.color.cyan};
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: center;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.cyan};
+    outline-offset: 2px;
+  }
+`
+
 const StatusText = styled.div`
   display: flex;
   flex-direction: column;
@@ -189,10 +230,11 @@ const RightActions = styled.div`
 type Props = {
   open: boolean
   onClose: () => void
+  agentChanges: AgentChanges
 }
 
 export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
-  ({ open, onClose, ...rest }, ref) => {
+  ({ open, onClose, agentChanges, ...rest }, ref) => {
     const {
       status,
       lastError,
@@ -475,6 +517,28 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
         )}
 
         {tone === "idle" && !validationError && <BridgeSetupNotice />}
+
+        {agentChanges.hasUnseen && (
+          <AgentChangesRow $tone="info" data-hook="mcp-pair-agent-changes">
+            <InfoIcon size={16} weight="duotone" />
+            <span>
+              New changes from the agent in{" "}
+              <strong>{agentChanges.label}</strong>.
+            </span>
+            <AgentChangesViewButton
+              type="button"
+              onClick={() => {
+                void agentChanges.view()
+                onClose()
+              }}
+              aria-label={`View agent changes in ${agentChanges.label}`}
+              data-hook="mcp-pair-agent-changes-view"
+            >
+              View
+              <ArrowRightIcon size={13} />
+            </AgentChangesViewButton>
+          </AgentChangesRow>
+        )}
 
         {!succeeded && (
           <Footer>

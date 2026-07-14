@@ -1,7 +1,7 @@
-import {
-  getController,
-  type NotebookWorkspaceController,
-} from "../notebookAIBridge"
+import { getController } from "../notebooks/notebookController"
+import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
+import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
+import { NotebookToolError } from "../notebooks/notebookToolError"
 import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
 import type {
   AutoRefresh,
@@ -10,8 +10,9 @@ import type {
   NotebookSettings,
 } from "../../store/notebook"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
-import type { WorkspaceInfo } from "../executeAIFlow"
+import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
@@ -75,8 +76,6 @@ const truncate = (s: string, max: number): string =>
   s.length <= max ? s : `${s.slice(0, max - 3)}...`
 
 const escapeNewlines = (s: string): string => s.replace(/\n/g, "\\n")
-
-export { sanitizeForPromptContext }
 
 const preview = (value: string): string =>
   sanitizeForPromptContext(escapeNewlines(truncate(value, PREVIEW_MAX)))
@@ -144,36 +143,36 @@ const buildCell = (
   }
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
-    if (g) out.grid = { x: g.x, y: g.y, w: g.w, h: g.h }
+    if (g) {
+      out.grid = {
+        x: g.x,
+        y: g.y,
+        w: g.w,
+        h: computeAgentCellGridH(cell),
+      }
+    }
   }
   return out
 }
 
-// Prefers live controller (freshest); falls back to persisted view state so unmounted notebooks work without a tab switch.
-export const buildSnapshot = (
-  workspace: NotebookWorkspaceController | undefined,
+export const buildSnapshot = async (
   bufferId: number,
-): NotebookContextSnapshot | null => {
-  if (!workspace) return null
-  const meta = workspace.getBufferMeta(bufferId)
-  if (meta === null) return null
+): Promise<NotebookContextSnapshot | null> => {
+  const controller = getController(bufferId)
+  const meta = await enqueueBufferTask(bufferId, () =>
+    readNotebookBufferMeta(bufferId),
+  )
+  if (meta.kind === "not_a_notebook") return null
   if (meta.kind === "deleted") {
     return { status: "deleted", buffer_id: bufferId }
   }
   if (meta.kind === "archived") {
     return { status: "archived", buffer_id: bufferId, label: meta.label }
   }
-
-  const controller = getController(bufferId)
-  const cells: NotebookCell[] = controller
-    ? controller.getCellsSnapshot()
-    : meta.notebookViewState.cells
-  const settings: NotebookSettings = controller
-    ? controller.getSettings()
-    : (meta.notebookViewState.settings ?? {})
-  const maximizedCellId = controller
-    ? controller.getMaximizedCellId()
-    : (meta.notebookViewState.maximizedCellId ?? null)
+  const view = controller ? await controller.readView() : meta.view
+  const cells: NotebookCell[] = view.cells
+  const settings: NotebookSettings = view.settings ?? {}
+  const maximizedCellId = view.maximizedCellId ?? null
 
   const layoutMode: "list" | "grid" = settings.layoutMode ?? "list"
   const gridByCellId = new Map<string, CellLayoutItem>(
@@ -326,6 +325,146 @@ export const formatWorkspace = (ws: WorkspaceInfo): string => {
   }
   lines.push("</workspace>")
   return lines.join("\n")
+}
+
+// === Read serializers — model-facing payloads for get_cell / list_cells /
+// get_notebook_state. Dispatch reads a bound view (withBoundNotebookReadOnly)
+// and formats it here, the one read-serialization home. ===
+
+const CELL_VALUE_MAX = 4096
+const FULL_CELL_VALUE_MAX = 1_000_000
+const LAST_ERROR_MAX = 200
+
+const trimRunError = (msg: string | undefined): string | undefined => {
+  if (!msg) return undefined
+  const clipped =
+    msg.length <= LAST_ERROR_MAX
+      ? msg
+      : `${msg.slice(0, LAST_ERROR_MAX - 3)}...`
+  return sanitizeForPromptContext(clipped)
+}
+
+const runStatusOf = (
+  cell: NotebookCell,
+): { status: RunStatus; error?: string } => {
+  const { status, error } = getCellRunStatus(cell)
+  return status === "error"
+    ? { status, error: trimRunError(error) }
+    : { status }
+}
+
+export type NotebookCellSummary = {
+  id: string
+  name?: string
+  preview: string
+  position: number
+  type?: "sql" | "markdown"
+  mode?: "run" | "draw"
+  last_run_status?: RunStatus
+}
+
+export type NotebookCellDetails = {
+  id: string
+  value: string
+  truncated?: true
+  full_length?: number
+  name?: string
+  position: number
+  type?: "sql" | "markdown"
+  mode?: "run" | "draw"
+  auto_refresh?: AutoRefresh
+  is_view_maximized?: boolean
+  chart_config?: ChartConfigWire
+  last_run_status?: RunStatus
+  last_run_error?: string
+}
+
+export const summarizeCells = (cells: NotebookCell[]): NotebookCellSummary[] =>
+  cells.map((cell) => {
+    const summary: NotebookCellSummary = {
+      id: cell.id,
+      preview:
+        cell.value.length <= 120
+          ? cell.value
+          : `${cell.value.slice(0, 117)}...`,
+      position: cell.position,
+      last_run_status: runStatusOf(cell).status,
+    }
+    if (cell.name) summary.name = cell.name
+    if (cell.type === "markdown") summary.type = "markdown"
+    if (cell.mode) summary.mode = cell.mode
+    return summary
+  })
+
+export const serializeCell = (
+  cells: NotebookCell[],
+  cellId: string,
+  bufferId: number,
+  getFullContent: boolean,
+): NotebookCellDetails => {
+  const cell = cells.find((c) => c.id === cellId)
+  if (!cell) {
+    throw new NotebookToolError(
+      "unknown_cell",
+      `Cell ${cellId} not found in notebook ${bufferId}.`,
+    )
+  }
+  if (getFullContent && cell.value.length > FULL_CELL_VALUE_MAX) {
+    throw new NotebookToolError(
+      "cell_too_large",
+      `Cell ${cellId} is ${cell.value.length} chars — over the ${FULL_CELL_VALUE_MAX}-char get_full_content limit, so it cannot be read or edited via agent tools. In apply_notebook_state, keep it with preserve_value:true.`,
+    )
+  }
+  const truncated = !getFullContent && cell.value.length > CELL_VALUE_MAX
+  const value = truncated ? cell.value.slice(0, CELL_VALUE_MAX) : cell.value
+  const run = runStatusOf(cell)
+  const out: NotebookCellDetails = {
+    id: cell.id,
+    value,
+    position: cell.position,
+    last_run_status: run.status,
+    last_run_error: run.error,
+  }
+  if (truncated) {
+    out.truncated = true
+    out.full_length = cell.value.length
+  }
+  if (cell.name != null) out.name = cell.name
+  if (cell.type === "markdown") out.type = "markdown"
+  if (cell.mode) out.mode = cell.mode
+  if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  if (typeof cell.isViewMaximized === "boolean")
+    out.is_view_maximized = cell.isViewMaximized
+  if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
+    out.chart_config = toChartConfigWire(cell.chartConfig)
+  return out
+}
+
+// buildSnapshot + the not-a-notebook / deleted / archived guards get_notebook_state
+// enforces. Returns the "ok" snapshot; throws typed errors otherwise.
+export const readNotebookState = async (
+  bufferId: number,
+): Promise<NotebookContextSnapshot> => {
+  const snap = await buildSnapshot(bufferId)
+  if (!snap) {
+    throw new NotebookToolError(
+      "not_a_notebook",
+      `Buffer ${bufferId} has no notebook state.`,
+    )
+  }
+  if (snap.status === "deleted") {
+    throw new NotebookToolError(
+      "deleted",
+      `Notebook ${bufferId} no longer exists.`,
+    )
+  }
+  if (snap.status === "archived") {
+    throw new NotebookToolError(
+      "archived",
+      `Notebook "${snap.label ?? bufferId}" is archived.`,
+    )
+  }
+  return snap
 }
 
 // Order matters: workspace first (label resolution), then snapshot, then digest.

@@ -122,7 +122,9 @@ Cypress.Commands.add("clearSimulatedWarnings", () => {
   cy.execQuery("select simulate_warnings('', '');")
 })
 
-Cypress.Commands.add("getByDataHook", (name) => cy.get(`[data-hook="${name}"]`))
+Cypress.Commands.add("getByDataHook", (name, options) =>
+  cy.get(`[data-hook="${name}"]`, options),
+)
 
 Cypress.Commands.add("getByRole", (name) => cy.get(`[role="${name}"]`))
 

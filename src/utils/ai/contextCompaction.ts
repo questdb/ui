@@ -1,8 +1,8 @@
-import type { ConversationMessage } from "../providers/AIConversationProvider/types"
-import { getTestModel } from "./ai"
-import type { AIProvider, Message } from "./ai"
-import { getMessageTextLength } from "./ai/shared"
-import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
+import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
+import { getTestModel } from "./index"
+import type { AIProvider, Message } from "./index"
+import { getMessageTextLength } from "./shared"
+import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 
 type CompactionResultSuccess = {
   compactedMessage: string

@@ -16,7 +16,7 @@ import {
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { requestCellReveal } from "../Editor/Notebook/cellReveal"
-import { waitForController } from "../../utils/notebookAIBridge"
+import { waitForController } from "../../utils/notebooks/notebookController"
 
 const ResultsContainer = styled.div`
   padding: 0;

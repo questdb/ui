@@ -23,7 +23,7 @@ import {
   isBlockingAIStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
-import { emitUserAction } from "../../../utils/notebookAIBridge"
+import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
 
 const Toolbar = styled(Box).attrs({

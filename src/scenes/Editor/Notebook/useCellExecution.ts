@@ -12,16 +12,18 @@ import { getQueriesFromText } from "../Monaco/utils"
 import {
   buildInitialScriptResults,
   capResultBytes,
+  type CellRunOutcome,
+  hasPendingResult,
   NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ROW_CAP,
+  resolveRunCompletion,
   singleResultFromExec,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { deleteCellSnapshot } from "../../../store/notebookResults"
 
-// Schema panel + completions listen for MSG_QUERY_SCHEMA to refresh.
-const publishSchemaIfMutating = (type: QueryExecResult["type"]): void => {
-  if (type === "ddl" || type === "dml") {
+const publishSchemaIfMutating = (exec: QueryExecResult): void => {
+  if (exec.type === "ddl" || exec.type === "dml") {
     eventBus.publish(EventType.MSG_QUERY_SCHEMA)
   }
 }
@@ -112,7 +114,7 @@ export const useCellExecution = ({
       if (!cell) return
       const result = explicitResult ?? cell.result
       if (!result) return
-      persistCellSnapshot({
+      void persistCellSnapshot({
         bufferId,
         cellId,
         results: result.results,
@@ -126,14 +128,20 @@ export const useCellExecution = ({
     async (
       cellId: string,
       queries: string[],
-      externalSignal?: AbortSignal,
-    ): Promise<boolean> => {
-      if (queries.length === 0) return false
+      externalSignal: AbortSignal | undefined,
+      expectFullValue: boolean,
+    ): Promise<CellRunOutcome> => {
+      if (queries.length === 0) return { ok: false, superseded: false }
 
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const startCell = cellsRef.current.find((c) => c.id === cellId)
+      const priorResult = hasPendingResult(startCell?.result)
+        ? undefined
+        : startCell?.result
+      const valueAtRunStart = startCell?.value
 
       // One AbortController per query so `cancelQuery(index)` cancels just that slot.
       const controllers = queries.map(() => new AbortController())
@@ -158,6 +166,8 @@ export const useCellExecution = ({
       }
       updateCell(cellId, { result: initialCellResult })
 
+      const finalResults = buildInitialScriptResults(queries)
+
       setRunningCellIds((prev) => new Set(prev).add(cellId))
 
       let successCount = 0
@@ -168,10 +178,12 @@ export const useCellExecution = ({
           const perQuery = controllers[i]
           if (perQuery.signal.aborted) {
             for (let j = i; j < queries.length; j++) {
-              updateCellResult(cellId, j, {
+              const cancelled: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
-              })
+              }
+              finalResults[j] = cancelled
+              updateCellResult(cellId, j, cancelled)
             }
             break
           }
@@ -190,30 +202,69 @@ export const useCellExecution = ({
             perQuery.signal,
             NOTEBOOK_ROW_CAP,
           )
-          if (!isCurrentRun()) return failedCount === 0
-          updateCellResult(
-            cellId,
-            i,
-            capResultBytes(
-              singleResultFromExec(result, sql),
-              NOTEBOOK_BYTE_CAP,
-            ),
+          if (!isCurrentRun()) {
+            return { ok: failedCount === 0, superseded: true }
+          }
+          const capped = capResultBytes(
+            singleResultFromExec(result, sql),
+            NOTEBOOK_BYTE_CAP,
           )
-          publishSchemaIfMutating(result.type)
+          finalResults[i] = capped
+          updateCellResult(cellId, i, capped)
+          publishSchemaIfMutating(result)
 
           if (result.type === "error") {
             failedCount++
             for (let j = i + 1; j < queries.length; j++) {
-              updateCellResult(cellId, j, {
+              const cancelled: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
-              })
+              }
+              finalResults[j] = cancelled
+              updateCellResult(cellId, j, cancelled)
             }
             break
           }
           successCount++
         }
 
+        const liveCell = cellsRef.current.find((c) => c.id === cellId)
+        if (!liveCell) {
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        const completion = resolveRunCompletion(
+          liveCell,
+          valueAtRunStart,
+          expectFullValue,
+        )
+        if (completion === "result_cleared") {
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        if (completion === "cell_changed") {
+          updateCell(cellId, { result: priorResult })
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            cellChanged: true,
+          }
+        }
+        if (!liveCell.result) {
+          updateCell(cellId, {
+            result: {
+              results: finalResults,
+              activeResultIndex: 0,
+              timestamp: Date.now(),
+            },
+          })
+        }
         setScriptSummary(cellId, {
           successCount,
           failedCount,
@@ -232,9 +283,10 @@ export const useCellExecution = ({
         }
       }
 
-      return failedCount === 0
+      return { ok: failedCount === 0, superseded: false }
     },
     [
+      cellsRef,
       executeSingle,
       updateCell,
       updateCellResult,
@@ -248,25 +300,39 @@ export const useCellExecution = ({
       cellId: string,
       sql?: string,
       externalSignal?: AbortSignal,
-    ): Promise<boolean> => {
+      expectFullValue: boolean = false,
+    ): Promise<CellRunOutcome> => {
+      const notRun: CellRunOutcome = { ok: false, superseded: false }
       const cell = cellsRef.current.find((c) => c.id === cellId)
-      if (!cell) return false
+      if (!cell) return notRun
       // Markdown cells hold prose, not SQL — never execute them.
-      if (cell.type === "markdown") return false
+      if (cell.type === "markdown") return notRun
 
       const queryText = sql ?? cell.value
-      if (!queryText.trim()) return false
-      if (externalSignal?.aborted) return false
+      if (!queryText.trim()) return notRun
+      if (externalSignal?.aborted) return notRun
+
+      if (expectFullValue && queryText !== cell.value) {
+        return {
+          ok: false,
+          superseded: false,
+          cellChanged: true,
+          notStarted: true,
+        }
+      }
 
       const queries = getQueriesFromText(queryText)
       if (queries.length > 1) {
-        return runScript(cellId, queries, externalSignal)
+        return runScript(cellId, queries, externalSignal, expectFullValue)
       }
 
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const valueAtRunStart = cell.value
+      const priorRaw = cellsRef.current.find((c) => c.id === cellId)?.result
+      const priorResult = hasPendingResult(priorRaw) ? undefined : priorRaw
 
       const ac = new AbortController()
       const onExternalAbort = () => ac.abort(externalSignal?.reason)
@@ -290,12 +356,38 @@ export const useCellExecution = ({
           NOTEBOOK_ROW_CAP,
         )
         // A newer run (or a cancel) superseded this one; don't write its result.
-        if (!isCurrentRun()) return execResult.type !== "error"
-        publishSchemaIfMutating(execResult.type)
-        // Mirrors setResultAt's guard on the script path: a null result means
-        // apply_notebook_state invalidated this cell mid-run; don't resurrect it.
+        if (!isCurrentRun()) {
+          return { ok: execResult.type !== "error", superseded: true }
+        }
+        publishSchemaIfMutating(execResult)
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
-        if (!liveCell?.result) return execResult.type !== "error"
+        if (!liveCell) {
+          return {
+            ok: execResult.type !== "error",
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        const completion = resolveRunCompletion(
+          liveCell,
+          valueAtRunStart,
+          expectFullValue,
+        )
+        if (completion === "result_cleared") {
+          return {
+            ok: execResult.type !== "error",
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        if (completion === "cell_changed") {
+          updateCell(cellId, { result: priorResult })
+          return {
+            ok: execResult.type !== "error",
+            superseded: false,
+            cellChanged: true,
+          }
+        }
         const cellResult: CellResult = {
           results: [
             capResultBytes(
@@ -308,7 +400,7 @@ export const useCellExecution = ({
         }
         updateCell(cellId, { result: cellResult })
         persistSnapshot(cellId, cellResult)
-        return execResult.type !== "error"
+        return { ok: execResult.type !== "error", superseded: false }
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -342,7 +434,7 @@ export const useCellExecution = ({
 
       const execResult = await executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP)
       if (ac.signal.aborted) return execResult.type !== "error"
-      publishSchemaIfMutating(execResult.type)
+      publishSchemaIfMutating(execResult)
       const liveCell = cellsRef.current.find((c) => c.id === cellId)
       if (!liveCell?.result) return execResult.type !== "error"
       updateCellResult(

@@ -10,12 +10,11 @@ import { CheckIcon, PencilSimpleIcon } from "@phosphor-icons/react"
 import { color } from "../../../../utils"
 import { SafeMarkdown, Button, Tooltip } from "../../../../components"
 import type { NotebookCell } from "../../../../store/notebook"
-import { useNotebookActions } from "../NotebookProvider"
-import { useEditor } from "../../../../providers/EditorProvider"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
   emitUserAction,
   signalUserEdit,
-} from "../../../../utils/notebookAIBridge"
+} from "../../../../utils/notebooks/notebookAIBridge"
 import { CellWrapper } from "./CellWrapper"
 import { CellDragHeader } from "./CellDragHeader"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
@@ -24,8 +23,11 @@ import { ResizeHandle } from "../resize"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { ctrlCmd } from "../../../../utils/platform"
-
-const MIN_MARKDOWN_HEIGHT = 48
+import {
+  hasAgentVisibleCellHeightChanged,
+  MIN_MARKDOWN_HEIGHT_PX,
+  snapMarkdownTopHeight,
+} from "../notebookUtils"
 
 // The whole cell body shares the editor canvas color so edit and rendered
 // modes are one uniform surface (no card-colored gap at the bottom).
@@ -224,9 +226,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   isMaximized,
 }) => {
   const { updateCell } = useNotebookActions()
-  const { activeBuffer } = useEditor()
-  const bufferIdForEvents =
-    typeof activeBuffer.id === "number" ? activeBuffer.id : undefined
+  const bufferIdForEvents = useNotebookBufferId()
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
     cellId: cell.id,
@@ -248,17 +248,23 @@ const MarkdownCellInner: React.FC<Props> = ({
 
   const resetToContentHeight = useCallback(() => {
     const el = measureRef.current
-    const next = el
-      ? Math.max(
-          MIN_MARKDOWN_HEIGHT,
-          Math.round(el.getBoundingClientRect().height),
-        )
-      : MIN_MARKDOWN_HEIGHT
+    const next = snapMarkdownTopHeight(
+      el ? Math.round(el.getBoundingClientRect().height) : 0,
+    )
+    if (
+      hasAgentVisibleCellHeightChanged(
+        cell,
+        { topHeight: next, topResized: false },
+        layoutMode,
+      )
+    ) {
+      signalUserEdit(bufferIdForEvents)
+    }
     updateCell(cell.id, { topHeight: next, topResized: false })
-  }, [cell.id, updateCell])
+  }, [bufferIdForEvents, cell, layoutMode, updateCell])
 
   const heightResize = useCellResize(
-    MIN_MARKDOWN_HEIGHT,
+    MIN_MARKDOWN_HEIGHT_PX,
     useCallback(
       (height: number) =>
         updateCell(cell.id, { topHeight: height, topResized: true }),
@@ -273,20 +279,18 @@ const MarkdownCellInner: React.FC<Props> = ({
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       updateCell(cell.id, { value: e.target.value })
-      signalUserEdit()
+      signalUserEdit(bufferIdForEvents)
     },
-    [cell.id, updateCell],
+    [cell.id, bufferIdForEvents, updateCell],
   )
 
   const apply = useCallback(() => {
     setEditing(false)
-    if (bufferIdForEvents !== undefined) {
-      emitUserAction({
-        kind: "user_updated_cell",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-      })
-    }
+    emitUserAction({
+      kind: "user_updated_cell",
+      bufferId: bufferIdForEvents,
+      cellId: cell.id,
+    })
   }, [bufferIdForEvents, cell.id])
 
   const edit = useCallback(() => setEditing(true), [])
@@ -321,8 +325,10 @@ const MarkdownCellInner: React.FC<Props> = ({
     if (!el) return
     const observer = new ResizeObserver(() => {
       if (isMaximized) return
-      const next = Math.round(el.getBoundingClientRect().height)
-      if (next <= 0 || next === topHeightRef.current) return
+      const measured = Math.round(el.getBoundingClientRect().height)
+      if (measured <= 0) return
+      const next = snapMarkdownTopHeight(measured)
+      if (next === topHeightRef.current) return
       updateCell(cell.id, { topHeight: next })
     })
     observer.observe(el)
@@ -426,7 +432,7 @@ const MarkdownCellInner: React.FC<Props> = ({
           onResize={heightResize.resizeLive}
           onResizeEnd={heightResize.resizeEnd}
           onDoubleClick={heightResize.resetHeight}
-          minHeight={MIN_MARKDOWN_HEIGHT}
+          minHeight={MIN_MARKDOWN_HEIGHT_PX}
         />
       </CellShell>
     )

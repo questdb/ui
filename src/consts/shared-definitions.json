@@ -2,6 +2,9 @@
   {
     "name": "get_tables",
     "category": "schema",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get a list of all tables and materialized views in the QuestDB database",
     "inputSchema": {
       "type": "object",
@@ -12,6 +15,9 @@
   {
     "name": "get_table_schema",
     "category": "schema",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get the full schema definition (DDL) for a specific table or materialized view",
     "inputSchema": {
       "type": "object",
@@ -28,6 +34,9 @@
   {
     "name": "get_table_details",
     "category": "schema",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get the runtime details/statistics of a specific table or materialized view",
     "inputSchema": {
       "type": "object",
@@ -45,6 +54,8 @@
     "name": "suggest_query",
     "category": "free",
     "surfaces": ["ai"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Suggest a SQL query to the user. The query will be displayed as a suggestion that the user can accept or reject. Always validate the query using validate_query before suggesting it.",
     "inputSchema": {
       "type": "object",
@@ -61,6 +72,9 @@
   {
     "name": "validate_query",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Validate the syntax correctness of a SQL query using QuestDB's SQL syntax validator. All generated SQL queries should be validated using this tool before responding to the user.",
     "inputSchema": {
       "type": "object",
@@ -77,6 +91,9 @@
   {
     "name": "get_questdb_toc",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get a table of contents listing all available QuestDB functions, operators, and SQL keywords. Use this first to see what documentation is available before requesting specific items.",
     "inputSchema": {
       "type": "object",
@@ -87,6 +104,9 @@
   {
     "name": "get_questdb_documentation",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get documentation for specific QuestDB functions, operators, or SQL keywords. This is much more efficient than loading all documentation.",
     "inputSchema": {
       "type": "object",
@@ -118,8 +138,10 @@
   {
     "name": "create_notebook",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "description": "Create a new QuestDB notebook tab in the editor. You never see query data; this only scaffolds the tab and binds the current chat if it isn't already bound to a notebook.",
+    "createsNotebook": true,
+    "description": "Create a new QuestDB notebook tab in the editor. You never see query data; this only scaffolds the tab and binds the current chat if it isn't already bound to a notebook. The tab is ALWAYS created in the background — you never switch the user's active tab. The user sees a notification and opens it themselves; only call activate_notebook if they explicitly ask to be taken there.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -133,10 +155,35 @@
     }
   },
   {
+    "name": "activate_notebook",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
+    "description": "Switch the user's editor to the given notebook tab so it becomes visible and focused. ONLY call this after the user has explicitly agreed to be taken to the notebook (e.g. they accepted your offer to open it). Never call it to auto-switch while the user is working elsewhere.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number",
+          "description": "Notebook buffer id to activate (from a create_notebook result or the <notebook_context>/<workspace> prefix)."
+        },
+        "cell_to_focus": {
+          "type": ["string", "null"],
+          "description": "Optional cell id to focus and scroll into view after switching — useful to land the user on the specific cell you want them to see. Pass null to just open the tab without scrolling to a particular cell."
+        }
+      },
+      "required": ["buffer_id", "cell_to_focus"]
+    }
+  },
+  {
     "name": "duplicate_notebook",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "description": "Duplicate a notebook tab. Copies every cell (SQL, mode, chart config) and the layout into a NEW notebook labelled \"<label> (copy)\" placed right after the original; cell ids are regenerated and last-run results are cleared. Returns the new { bufferId, label }.",
+    "createsNotebook": true,
+    "description": "Duplicate a notebook tab. Copies every cell (SQL, mode, chart config) and the layout into a NEW notebook labelled \"<label> (copy)\" placed right after the original; cell ids are regenerated and last-run results are cleared. The copy is ALWAYS made in the background — you never switch the user's active tab. The user sees a notification and opens it themselves; only call activate_notebook if they explicitly ask to be taken there.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -152,7 +199,9 @@
   {
     "name": "delete_notebook",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
+    "createsNotebook": false,
     "description": "Archive (soft-delete) a notebook tab — the same as the user closing it with the X. It moves to history and the user can restore it; it is not permanently destroyed and query data is untouched. If this notebook is bound to the current chat, the binding goes stale (start a new one with create_notebook).",
     "inputSchema": {
       "type": "object",
@@ -169,6 +218,9 @@
   {
     "name": "list_cells",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "List the cells in a notebook. Returns id, type, short preview (≤120 chars), position, mode, and last-run status. No cell data values.",
     "inputSchema": {
       "type": "object",
@@ -185,6 +237,9 @@
   {
     "name": "get_cell",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Get full details of a cell (value, kind via `type`, UI flags, chart config, last-run status + trimmed error). `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
     "inputSchema": {
       "type": "object",
@@ -207,6 +262,9 @@
   {
     "name": "get_notebook_state",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Full structural snapshot of a notebook (layout, cells with previews, kind via `type`, last-run statuses). `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
     "inputSchema": {
       "type": "object",
@@ -222,7 +280,9 @@
   {
     "name": "add_cell",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
+    "createsNotebook": false,
     "description": "Append a cell to the notebook. Returns the new cell id and, if run=true, a per-query status array. You never see query rows or column data. Set type:\"markdown\" to add a prose cell instead of a SQL cell — its `sql` field then carries the markdown source, it is rendered (never executed), and `run` is ignored.",
     "inputSchema": {
       "type": "object",
@@ -255,8 +315,9 @@
   {
     "name": "update_cell",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Replace a cell's value. Overwrites preemptively — cells are auto-saved. Use to fix a broken SQL cell. When editing part of a long cell, base the new value on a non-truncated read (get_cell with get_full_content: true) — never on a preview or a `truncated: true` read.",
     "inputSchema": {
       "type": "object",
@@ -278,8 +339,9 @@
   {
     "name": "delete_cell",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Delete a cell from the notebook.",
     "inputSchema": {
       "type": "object",
@@ -298,8 +360,9 @@
   {
     "name": "move_cell_up",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Swap a cell with the one above it.",
     "inputSchema": {
       "type": "object",
@@ -318,8 +381,9 @@
   {
     "name": "move_cell_down",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Swap a cell with the one below it.",
     "inputSchema": {
       "type": "object",
@@ -338,7 +402,9 @@
   {
     "name": "duplicate_cell",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
+    "createsNotebook": false,
     "description": "Duplicate a cell immediately after the original.",
     "inputSchema": {
       "type": "object",
@@ -357,7 +423,9 @@
   {
     "name": "run_cell",
     "category": "sql",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
+    "createsNotebook": false,
     "description": "Execute a SQL cell. Each `;`-separated statement runs sequentially; if one fails, the remaining statements are NOT attempted. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`.",
     "inputSchema": {
       "type": "object",
@@ -376,8 +444,9 @@
   {
     "name": "set_layout_mode",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Switch a notebook between list and grid layouts.",
     "inputSchema": {
       "type": "object",
@@ -397,8 +466,9 @@
   {
     "name": "set_cell_layout",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Position a single cell in grid mode. x/y/w/h are integers in the 12-column react-grid-layout grid (w ≤ 12).",
     "inputSchema": {
       "type": "object",
@@ -429,8 +499,9 @@
   {
     "name": "set_cell_mode",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Switch a SQL cell between run (table output) and draw (chart output). Draw cells auto-execute — do not call run_cell afterwards. MULTI-SERIES TIP: a draw-mode cell can hold multiple SELECT statements separated by `;`. The first query's timestamp column is the chart's x-axis (the 'anchor'); every additional query contributes its numeric columns as extra series merged on the time axis. Use this to overlay metrics that come from different tables or different aggregations on a single chart.",
     "inputSchema": {
       "type": "object",
@@ -453,8 +524,9 @@
   {
     "name": "set_cell_chart_config",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
     "inputSchema": {
       "type": "object",
@@ -493,7 +565,9 @@
               },
               "y_columns": {
                 "type": ["array", "null"],
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "description": "Columns to plot from THIS query; null = all numeric. Not used for candlestick — set `ohlc` instead."
               },
               "ohlc": {
@@ -501,10 +575,18 @@
                 "additionalProperties": false,
                 "description": "Candlestick OHLC mapping. All four required when used; null otherwise.",
                 "properties": {
-                  "open": { "type": "string" },
-                  "high": { "type": "string" },
-                  "low": { "type": "string" },
-                  "close": { "type": "string" }
+                  "open": {
+                    "type": "string"
+                  },
+                  "high": {
+                    "type": "string"
+                  },
+                  "low": {
+                    "type": "string"
+                  },
+                  "close": {
+                    "type": "string"
+                  }
                 },
                 "required": ["open", "high", "low", "close"]
               },
@@ -542,7 +624,9 @@
           "additionalProperties": false,
           "description": "Shared right y-axis; meaningful when some query has axis='right'. Null preserves.",
           "properties": {
-            "name": { "type": ["string", "null"] },
+            "name": {
+              "type": ["string", "null"]
+            },
             "min": {
               "type": ["number", "null"],
               "description": "Pin axis min (e.g. 0). Null = autoscale."
@@ -561,8 +645,9 @@
   {
     "name": "set_cell_autorefresh",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Set auto-refresh polling for a draw-mode cell's chart. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\").",
     "inputSchema": {
       "type": "object",
@@ -592,8 +677,9 @@
   {
     "name": "set_cell_name",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Set or clear a cell's name (its display label in the cell header). Applies to any cell; for a chart cell it is also the chart title. Pass null to clear.",
     "inputSchema": {
       "type": "object",
@@ -617,8 +703,9 @@
   {
     "name": "set_cell_view_maximized",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Toggle whether the cell's result view (chart OR table) fills the cell, hiding the editor. Applies to any cell that has a result — not just charts. For narrow cells, there is no split-view.  When this is false, the cell only shows the editor for narrow cells. For wide cells, it shows the editor and the result view if result exists.",
     "inputSchema": {
       "type": "object",
@@ -640,8 +727,10 @@
   {
     "name": "apply_notebook_state",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config when composing a multi-cell layout from scratch or restructuring an existing notebook — far faster than per-cell calls. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
+    "createsNotebook": false,
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use this for bulk edits spanning multiple cells or creating a notebook from scratch. Use update_cell or set_cell_* for small operations. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config only when composing a multi-cell layout from scratch, changing many cells at once, or restructuring an existing notebook. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -756,16 +845,26 @@
                         },
                         "y_columns": {
                           "type": ["array", "null"],
-                          "items": { "type": "string" }
+                          "items": {
+                            "type": "string"
+                          }
                         },
                         "ohlc": {
                           "type": ["object", "null"],
                           "additionalProperties": false,
                           "properties": {
-                            "open": { "type": "string" },
-                            "high": { "type": "string" },
-                            "low": { "type": "string" },
-                            "close": { "type": "string" }
+                            "open": {
+                              "type": "string"
+                            },
+                            "high": {
+                              "type": "string"
+                            },
+                            "low": {
+                              "type": "string"
+                            },
+                            "close": {
+                              "type": "string"
+                            }
                           },
                           "required": ["open", "high", "low", "close"]
                         },
@@ -798,9 +897,15 @@
                     "type": ["object", "null"],
                     "additionalProperties": false,
                     "properties": {
-                      "name": { "type": ["string", "null"] },
-                      "min": { "type": ["number", "null"] },
-                      "max": { "type": ["number", "null"] }
+                      "name": {
+                        "type": ["string", "null"]
+                      },
+                      "min": {
+                        "type": ["number", "null"]
+                      },
+                      "max": {
+                        "type": ["number", "null"]
+                      }
                     },
                     "required": ["name", "min", "max"]
                   }
@@ -855,8 +960,9 @@
   {
     "name": "set_cell_maximized",
     "category": "free",
+    "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
-    "editsCells": true,
+    "createsNotebook": false,
     "description": "Spotlight one cell (or null to restore normal layout). Hides other cells in the notebook view.",
     "inputSchema": {
       "type": "object",
@@ -876,6 +982,9 @@
   {
     "name": "run_query",
     "category": "sql",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "Execute an arbitrary SQL statement against the user's QuestDB instance and return the result rows so you can inspect data, validate work, or compose follow-up queries. UNLIKE `run_cell`, this tool DOES return data values. Default limit is 100 rows; pass `limit` (max 10000) to request more. The response payload is capped at ~1 MB — rows beyond that are dropped from the tail. The response includes `truncated`, `total_count`, and `returned_count` so you know exactly what was clipped. DDL/DML (CREATE / INSERT / UPDATE / DROP / etc.) is allowed and executes against the live database — be deliberate. Auth + connection are handled by the user's already-authenticated browser session.",
     "inputSchema": {
       "type": "object",
@@ -899,6 +1008,8 @@
     "name": "get_workspace_state",
     "category": "free",
     "surfaces": ["mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
@@ -914,6 +1025,8 @@
     "name": "get_recent_user_actions",
     "category": "free",
     "surfaces": ["mcp"],
+    "mutatesNotebook": false,
+    "createsNotebook": false,
     "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
     "inputSchema": {
       "type": "object",

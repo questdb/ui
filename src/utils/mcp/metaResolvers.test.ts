@@ -1,40 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import "../../test/stubBrowserGlobals"
+import { beforeEach, describe, expect, it } from "vitest"
+
 import {
   resolveGetRecentUserActions,
   resolveGetWorkspaceState,
   type MetaToolContext,
 } from "./metaResolvers"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
-import {
-  __resetNotebookAIBridgeForTests,
-  registerWorkspace,
-  unregisterWorkspace,
-} from "../notebookAIBridge"
-import type { NotebookViewState } from "../../store/notebook"
+import { __resetNotebookAIBridgeForTests } from "../notebooks/notebookAIBridge"
+import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
+import { db } from "../../store/db"
 
-const minimalWorkspace = (
-  override: Partial<{
-    notebookViewState: NotebookViewState
-    label: string
-    archived: boolean
-  }> = {},
-) => ({
-  createNotebook: () =>
-    Promise.resolve({ bufferId: 1, label: override.label ?? "n1" }),
-  duplicateNotebook: () =>
-    Promise.resolve({ bufferId: 2, label: `${override.label ?? "n1"} (copy)` }),
-  deleteNotebook: () => Promise.resolve(),
-  activateNotebook: () => Promise.resolve(true),
-  getBufferMeta: () => ({
-    kind: "active" as const,
-    label: override.label ?? "n1",
-    notebookViewState: override.notebookViewState ?? {
-      cells: [],
-      settings: { layoutMode: "list" as const },
-    },
-  }),
-  listNotebookBuffers: () => [],
-})
+const seedNotebookBuffer = (id: number) =>
+  db.buffers.put({
+    id,
+    label: `n${id}`,
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [], settings: { layoutMode: "list" } },
+  })
 
 const emptyDigest = (): UserActionDigest => ({
   added: new Set(),
@@ -43,28 +27,26 @@ const emptyDigest = (): UserActionDigest => ({
   ran: new Map(),
 })
 
-beforeEach(() => {
+beforeEach(async () => {
   __resetNotebookAIBridgeForTests()
-})
-
-afterEach(() => {
-  __resetNotebookAIBridgeForTests()
+  __resetNotebookBufferQueuesForTests()
+  await db.buffers.clear()
 })
 
 describe("resolveGetWorkspaceState", () => {
-  it("returns no_notebook_open status when no active buffer", () => {
+  it("returns no_notebook_open status when no active buffer", async () => {
     const ctx: MetaToolContext = {
       getActiveBufferId: () => null,
       getWorkspace: () => null,
       getDigest: () => null,
     }
-    const out = resolveGetWorkspaceState(undefined, ctx)
+    const out = await resolveGetWorkspaceState(undefined, ctx)
     expect(out).toHaveLength(1)
     expect(out[0].text).toMatch(/no_notebook_open/)
     expect(out[0].text).toMatch(/create_notebook/)
   })
 
-  it("lists openable notebooks when active tab is not a notebook", () => {
+  it("lists openable notebooks when active tab is not a notebook", async () => {
     // Given the active tab is a SQL buffer but notebooks exist in the workspace
     const ctx: MetaToolContext = {
       getActiveBufferId: () => null,
@@ -79,7 +61,7 @@ describe("resolveGetWorkspaceState", () => {
     }
 
     // When workspace state is resolved
-    const out = resolveGetWorkspaceState(undefined, ctx)
+    const out = await resolveGetWorkspaceState(undefined, ctx)
 
     // Then it surfaces the openable notebooks and how to target them by buffer_id
     expect(out[0].text).toMatch(/no_notebook_open/)
@@ -89,8 +71,8 @@ describe("resolveGetWorkspaceState", () => {
     expect(out[0].text).toMatch(/buffer_id/)
   })
 
-  it("returns workspace + notebook_context when buffer is active", () => {
-    registerWorkspace(minimalWorkspace())
+  it("returns workspace + notebook_context when buffer is active", async () => {
+    await seedNotebookBuffer(1)
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => ({
@@ -99,14 +81,13 @@ describe("resolveGetWorkspaceState", () => {
       }),
       getDigest: () => null,
     }
-    const out = resolveGetWorkspaceState(undefined, ctx)
+    const out = await resolveGetWorkspaceState(undefined, ctx)
     expect(out[0].text).toContain("<workspace>")
     expect(out[0].text).toContain("<notebook_context>")
-    unregisterWorkspace()
   })
 
-  it("appends user_events block when include_user_events is true", () => {
-    registerWorkspace(minimalWorkspace())
+  it("appends user_events block when include_user_events is true", async () => {
+    await seedNotebookBuffer(1)
     const digest = emptyDigest()
     digest.added.add("cell-1")
     const ctx: MetaToolContext = {
@@ -117,22 +98,23 @@ describe("resolveGetWorkspaceState", () => {
       }),
       getDigest: () => digest,
     }
-    const out = resolveGetWorkspaceState({ include_user_events: true }, ctx)
+    const out = await resolveGetWorkspaceState(
+      { include_user_events: true },
+      ctx,
+    )
     expect(out[0].text).toContain("<user_events")
     expect(out[0].text).toContain("cell-1")
-    unregisterWorkspace()
   })
 
-  it("omits user_events block when include_user_events is false / unset", () => {
-    registerWorkspace(minimalWorkspace())
+  it("omits user_events block when include_user_events is false / unset", async () => {
+    await seedNotebookBuffer(1)
     const ctx: MetaToolContext = {
       getActiveBufferId: () => 1,
       getWorkspace: () => null,
       getDigest: () => emptyDigest(),
     }
-    const out = resolveGetWorkspaceState(undefined, ctx)
+    const out = await resolveGetWorkspaceState(undefined, ctx)
     expect(out[0].text).not.toContain("<user_events")
-    unregisterWorkspace()
   })
 })
 

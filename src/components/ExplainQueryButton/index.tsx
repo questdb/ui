@@ -13,7 +13,7 @@ import type { ConversationId } from "../../providers/AIConversationProvider/type
 import {
   executeAIFlow,
   createExplainFlowConfig,
-} from "../../utils/executeAIFlow"
+} from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
