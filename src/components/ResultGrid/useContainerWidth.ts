@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useState, type RefObject } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
 
 const RESIZE_DEBOUNCE_MS = 100
 
@@ -20,7 +26,7 @@ export const useWidthObserver = (
 
   useEffect(() => {
     if (!ref.current) return
-    let timer: number | null = null
+    const timer: number | null = null
     const observer = new ResizeObserver(([entry]) => {
       const measured = entry.contentRect.width
       if (!measured) return
