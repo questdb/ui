@@ -25,4 +25,11 @@ export enum EventType {
   NOTEBOOK_CELL_RESET_SIZE = "notebook.cell.reset.size",
   NOTEBOOK_CELL_EXPAND_WIDTH = "notebook.cell.expand.width",
   NOTEBOOK_REVEAL_CELL = "notebook.cell.reveal",
+  NOTEBOOK_CELL_REFRESH_CHART = "notebook.cell.refresh.chart",
+  NOTEBOOK_CELL_OPEN_CHART_SETTINGS = "notebook.cell.open.chart.settings",
+  NOTEBOOK_CELL_RESET_ZOOM = "notebook.cell.reset.zoom",
+  NOTEBOOK_CELL_CHART_ZOOM = "notebook.cell.chart.zoom",
+  NOTEBOOK_CELL_CHART_LOADING = "notebook.cell.chart.loading",
+  NOTEBOOK_CELL_RUN = "notebook.cell.run",
+  NOTEBOOK_CELL_DRAW = "notebook.cell.draw",
 }

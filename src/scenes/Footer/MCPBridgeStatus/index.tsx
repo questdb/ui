@@ -65,7 +65,8 @@ const Pill = forwardRef<
   HTMLButtonElement,
   PillProps & React.HTMLAttributes<HTMLButtonElement>
 >(({ tone, label, title, ...rest }, ref) => {
-  const Icon = tone === "connected" ? PlugsConnectedIcon : PlugsIcon
+  const Icon =
+    tone === "connected" || tone === "warning" ? PlugsConnectedIcon : PlugsIcon
   return (
     <Wrapper
       ref={ref}
@@ -88,10 +89,10 @@ const POPPER_MODIFIERS = [
 ]
 
 export const MCPBridgeStatus: React.FC = () => {
-  const { status, url, token } = useMCPBridge()
+  const { status, url, token, versionMismatch } = useMCPBridge()
   const [popoverOpen, setPopoverOpen] = useState(false)
   const paired = !!(url && token)
-  const tone = deriveTone(paired, status)
+  const tone = deriveTone(paired, status, versionMismatch)
 
   let label: string
   let title: string
@@ -103,6 +104,10 @@ export const MCPBridgeStatus: React.FC = () => {
   } else if (tone === "connected") {
     label = "MCP connected"
     title = "Paired with the MCP bridge. Click to manage."
+  } else if (tone === "warning") {
+    label = "MCP connected (outdated)"
+    title =
+      "Connected, but the bridge version differs from what this console expects. Click to see the upgrade command."
   } else if (tone === "connecting") {
     label = "MCP connecting…"
     title = "Connecting to the bridge. Click to manage."

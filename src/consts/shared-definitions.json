@@ -455,7 +455,7 @@
     "category": "free",
     "mutatesNotebook": true,
     "editsCells": true,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`name`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -469,10 +469,6 @@
         "x_column": {
           "type": ["string", "null"],
           "description": "Shared x-axis column (the first query's). Null preserves."
-        },
-        "name": {
-          "type": ["string", "null"],
-          "description": "Chart title. Null preserves."
         },
         "queries": {
           "type": ["array", "null"],
@@ -559,14 +555,7 @@
           "required": ["name", "min", "max"]
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "x_column",
-        "name",
-        "queries",
-        "right_axis"
-      ]
+      "required": ["buffer_id", "cell_id", "x_column", "queries", "right_axis"]
     }
   },
   {
@@ -574,7 +563,7 @@
     "category": "free",
     "mutatesNotebook": true,
     "editsCells": true,
-    "description": "Enable or disable auto-refresh polling for a draw-mode cell's chart.",
+    "description": "Set auto-refresh polling for a draw-mode cell's chart. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\").",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -586,18 +575,51 @@
           "type": "string"
         },
         "value": {
-          "type": "boolean"
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": ["1s", "5s", "10s", "30s", "1m"]
+            }
+          ]
         }
       },
       "required": ["buffer_id", "cell_id", "value"]
     }
   },
   {
-    "name": "set_cell_chart_maximized",
+    "name": "set_cell_name",
     "category": "free",
     "mutatesNotebook": true,
     "editsCells": true,
-    "description": "Toggle chart-fills-cell (maximized chart) for a draw cell.",
+    "description": "Set or clear a cell's name (its display label in the cell header). Applies to any cell; for a chart cell it is also the chart title. Pass null to clear.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": ["string", "null"],
+          "maxLength": 100,
+          "description": "Cell name (max 100 characters). Pass null to clear."
+        }
+      },
+      "required": ["buffer_id", "cell_id", "name"]
+    }
+  },
+  {
+    "name": "set_cell_view_maximized",
+    "category": "free",
+    "mutatesNotebook": true,
+    "editsCells": true,
+    "description": "Toggle whether the cell's result view (chart OR table) fills the cell, hiding the editor. Applies to any cell that has a result — not just charts. For narrow cells, there is no split-view.  When this is false, the cell only shows the editor for narrow cells. For wide cells, it shows the editor and the result view if result exists.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -664,6 +686,11 @@
                 "type": ["string", "null"],
                 "description": "Existing cell id to update, or null/omitted for a new cell."
               },
+              "name": {
+                "type": ["string", "null"],
+                "maxLength": 100,
+                "description": "Cell name (its header label; for a chart cell it is also the chart title; max 100 characters). apply is a full PUT — a string sets it, null/\"\" clears it (the existing name is NOT preserved). Read the current name from the cell in <notebook_context> / get_notebook_state."
+              },
               "value": {
                 "type": ["string", "null"],
                 "description": "SQL text of the cell, VERBATIM and COMPLETE (from a non-truncated get_cell read; never from a preview or a `truncated: true` read). May contain multiple statements separated by `;`. In draw mode, this overlays series on one chart: the first query's timestamp is the x-axis anchor; subsequent queries contribute extra numeric series merged on time. Use this to combine metrics from different tables or different aggregations into a single chart. Null/omitted REQUIRES preserve_value: true."
@@ -683,12 +710,20 @@
                 "description": "Cell mode. Null defaults to 'run' for new cells, preserves current for existing."
               },
               "auto_refresh": {
-                "type": ["boolean", "null"],
-                "description": "Auto-refresh polling for draw cells. Null defaults to true when mode='draw'."
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["1s", "5s", "10s", "30s", "1m"]
+                  }
+                ],
+                "description": "Auto-refresh for draw cells: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Null defaults to true (adaptive) when mode='draw'."
               },
-              "is_chart_maximized": {
+              "is_view_maximized": {
                 "type": ["boolean", "null"],
-                "description": "Chart-fills-cell flag. Null defaults to true when mode='draw'."
+                "description": "Whether the cell's result view (chart OR table) fills the cell, hiding the editor. Null defaults to true when mode='draw'."
               },
               "chart_config": {
                 "type": ["object", "null"],
@@ -696,9 +731,6 @@
                 "description": "Chart configuration; required when mode='draw'. apply_notebook_state is a full PUT — this REPLACES the cell's chart entirely; null/omitted means NO chart (it is NOT preserved). To keep an existing chart unchanged, re-send its full config (shown as `chart_config` on the cell in <notebook_context> / get_notebook_state). The cell's `;`-separated SELECTs auto-combine into one chart sharing the first query's x-axis; `queries` holds one config per statement (each keeps its own type; axis:'right' for a second scale).",
                 "properties": {
                   "x_column": {
-                    "type": ["string", "null"]
-                  },
-                  "name": {
                     "type": ["string", "null"]
                   },
                   "queries": {
@@ -773,7 +805,7 @@
                     "required": ["name", "min", "max"]
                   }
                 },
-                "required": ["x_column", "name", "queries", "right_axis"]
+                "required": ["x_column", "queries", "right_axis"]
               },
               "grid": {
                 "type": ["object", "null"],
@@ -798,12 +830,13 @@
             },
             "required": [
               "id",
+              "name",
               "value",
               "preserve_value",
               "type",
               "mode",
               "auto_refresh",
-              "is_chart_maximized",
+              "is_view_maximized",
               "chart_config",
               "grid"
             ]

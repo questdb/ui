@@ -64,7 +64,7 @@ const Header = styled(Text)`
   margin-bottom: 1rem;
 `
 
-const Charts = styled.div<{ noMetrics: boolean; viewMode: MetricViewMode }>`
+const Charts = styled.div<{ $hasMetrics: boolean; $viewMode: MetricViewMode }>`
   padding: 2.5rem;
   overflow-y: auto;
   height: 100%;
@@ -72,9 +72,12 @@ const Charts = styled.div<{ noMetrics: boolean; viewMode: MetricViewMode }>`
   gap: 2.5rem;
 
   display: grid;
-  grid-template-columns: ${({ viewMode }: { viewMode: MetricViewMode }) =>
-    viewMode === MetricViewMode.GRID ? "repeat(2, 1fr)" : "1fr"};
-  grid-auto-rows: min-content;
+  grid-template-columns: ${({ $viewMode, $hasMetrics }) =>
+    $viewMode === MetricViewMode.GRID && $hasMetrics
+      ? "repeat(2, 1fr)"
+      : "1fr"};
+  grid-auto-rows: ${({ $hasMetrics }) =>
+    $hasMetrics ? "min-content" : "unset"};
 `
 
 const GlobalInfo = styled(Box).attrs({
@@ -418,7 +421,7 @@ export const Metrics = () => {
               />
             </Box>
           </Toolbar>
-          <Charts noMetrics={metrics.length === 0} viewMode={metricViewMode}>
+          <Charts $hasMetrics={metrics.length > 0} $viewMode={metricViewMode}>
             {metrics.length === 0 && (
               <GlobalInfo>
                 <Box gap="1.5rem" flexDirection="column">

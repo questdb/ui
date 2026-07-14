@@ -29,36 +29,41 @@ import React, {
   useEffect,
   useState,
 } from "react"
-import { shallowEqual } from "react-redux"
 import { throttle } from "throttle-debounce"
 
 type Props = Readonly<{
   children: ReactNode
 }>
 
-type ScreenSize = Readonly<{
-  sm: boolean
-}>
+export enum ScreenSize {
+  SM,
+  MD,
+  LG,
+  XL,
+}
 
 enum Breakpoint {
   SM = 767,
+  MD = 1024,
+  LG = 1280,
 }
 
-const ScreenSizeContext = createContext<ScreenSize>({
-  sm: window.innerWidth <= Breakpoint.SM,
-})
+const getScreenSize = (): ScreenSize => {
+  const width = window.innerWidth
+  if (width <= Breakpoint.SM) return ScreenSize.SM
+  if (width <= Breakpoint.MD) return ScreenSize.MD
+  if (width <= Breakpoint.LG) return ScreenSize.LG
+  return ScreenSize.XL
+}
+
+const ScreenSizeContext = createContext<ScreenSize>(getScreenSize())
 
 export const ScreenSizeProvider = ({ children }: Props) => {
-  const [screenSize, setScreenSize] = useState<ScreenSize>({
-    sm: window.innerWidth <= Breakpoint.SM,
-  })
-  const [_screenSize, _setScreenSize] = useState<ScreenSize | undefined>()
+  const [screenSize, setScreenSize] = useState(getScreenSize)
 
   useEffect(() => {
     const handleResize = throttle(16, () => {
-      _setScreenSize({
-        sm: window.innerWidth <= Breakpoint.SM,
-      })
+      setScreenSize(getScreenSize())
     })
     window.addEventListener("resize", handleResize)
 
@@ -66,12 +71,6 @@ export const ScreenSizeProvider = ({ children }: Props) => {
       window.removeEventListener("resize", handleResize)
     }
   }, [])
-
-  useEffect(() => {
-    if (_screenSize && !shallowEqual(_screenSize, screenSize)) {
-      setScreenSize(_screenSize)
-    }
-  }, [screenSize, _screenSize])
 
   return (
     <ScreenSizeContext.Provider value={screenSize}>

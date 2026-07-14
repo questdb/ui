@@ -6,7 +6,8 @@ import { Key } from "../../../components"
 import { ChevronDown } from "@styled-icons/boxicons-solid"
 import { Box, Button, PopperToggle } from "../../../components"
 import { actions, selectors } from "../../../store"
-import { platform, color } from "../../../utils"
+import { color } from "../../../utils"
+import { ctrlCmd, altOption } from "../../../utils/platform"
 import { RunningType } from "../../../store/Query/types"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 
@@ -169,21 +170,11 @@ const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
 
 const RUN_DROPDOWN_MENU_ID = "run-query-dropdown-menu"
 
-const isMac = platform.isMacintosh || platform.isIOS
-const ctrlCmd = isMac ? "⌘" : "Ctrl"
-const altOpt = isMac ? "⌥" : "Alt"
-const shortcutTitles = isMac
-  ? {
-      [RunningType.QUERY]: "Run query (Cmd+Enter)",
-      [RunningType.SCRIPT]: "Run all queries (Cmd+Shift+Enter)",
-    }
-  : {
-      [RunningType.QUERY]: "Run query (Ctrl+Enter)",
-      [RunningType.SCRIPT]: "Run all queries (Ctrl+Shift+Enter)",
-    }
-const copyLinkShortcutTitle = isMac
-  ? "Copy query link (Option+Shift+L)"
-  : "Copy query link (Alt+Shift+L)"
+const shortcutTitles = {
+  [RunningType.QUERY]: `Run query (${ctrlCmd}+Enter)`,
+  [RunningType.SCRIPT]: `Run all queries (${ctrlCmd}+Shift+Enter)`,
+}
+const copyLinkShortcutTitle = `Copy query link (${altOption}+Shift+L)`
 
 const ButtonBar = ({
   onTriggerRunScript,
@@ -421,7 +412,7 @@ const ButtonBar = ({
               Copy link to all queries
               <RunShortcut>
                 <Key
-                  keyString={altOpt}
+                  keyString={altOption}
                   color={color("foreground")}
                   hoverColor={color("foreground")}
                 />

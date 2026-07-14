@@ -261,18 +261,6 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
           }}
         >
           <Field>
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              name="chart-name"
-              placeholder="e.g. Daily trades"
-              value={draft.name ?? ""}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, name: e.target.value }))
-              }
-            />
-          </Field>
-
-          <Field>
             <FieldLabel>X-axis</FieldLabel>
             <Select
               name="x-axis"

@@ -559,6 +559,7 @@ export const Tabs = () => {
                   <DropdownMenu.Item
                     data-hook="editor-tabs-history-item"
                     key={buffer.id}
+                    title={buffer.label}
                     onClick={async () => {
                       void trackEvent(ConsoleEvent.TAB_HISTORY_RESTORE)
                       await updateBuffer(buffer.id as number, {
@@ -570,54 +571,38 @@ export const Tabs = () => {
                       })
                       await setActiveBuffer(buffer)
                     }}
-                  >
-                    <Box
-                      align="flex-start"
-                      justifyContent="flex-start"
-                      gap="0.5rem"
-                      title={buffer.label}
-                    >
-                      {buffer.metricsViewState ? (
-                        <LineChart size="18px" />
+                    icon={
+                      buffer.metricsViewState ? (
+                        <LineChart size="16px" />
                       ) : buffer.notebookViewState ? (
-                        <NotebookIcon size="18px" />
+                        <NotebookIcon size="16px" />
                       ) : (
-                        <FileTextIcon size="18px" />
-                      )}
-                      <Box
-                        flexDirection="column"
-                        align="flex-start"
-                        gap="0"
-                        {...(buffer.archivedAt
-                          ? {
-                              title: format(
-                                new Date(buffer.archivedAt),
-                                "P pppp",
-                                {
-                                  locale: getLocaleFromLanguage(userLocale),
-                                },
-                              ),
-                            }
-                          : {})}
-                      >
-                        <Text color="foreground" ellipsis>
-                          {buffer.label.substring(0, 30)}
-                          {buffer.label.length > 30 ? "..." : ""}
-                        </Text>
-                        {buffer.archivedAt && (
-                          <Text color="gray2">
-                            {formatDistance(
-                              buffer.archivedAt,
-                              new Date().getTime(),
-                              {
-                                locale: getLocaleFromLanguage(userLocale),
-                              },
-                            )}
-                            {" ago"}
-                          </Text>
-                        )}
-                      </Box>
-                    </Box>
+                        <FileTextIcon size="16px" />
+                      )
+                    }
+                    subtitle={
+                      buffer.archivedAt ? (
+                        <span
+                          title={format(new Date(buffer.archivedAt), "P pppp", {
+                            locale: getLocaleFromLanguage(userLocale),
+                          })}
+                        >
+                          {formatDistance(
+                            buffer.archivedAt,
+                            new Date().getTime(),
+                            {
+                              locale: getLocaleFromLanguage(userLocale),
+                            },
+                          )}
+                          {" ago"}
+                        </span>
+                      ) : undefined
+                    }
+                  >
+                    <Text color="foreground" ellipsis>
+                      {buffer.label.substring(0, 30)}
+                      {buffer.label.length > 30 ? "..." : ""}
+                    </Text>
                   </DropdownMenu.Item>
                 ))}
               </ArchivedBuffersList>
@@ -631,8 +616,8 @@ export const Tabs = () => {
                     void removeAllArchived()
                   }}
                   data-hook="editor-tabs-history-clear"
+                  icon={<Trash size="16px" />}
                 >
-                  <Trash size="18px" />
                   <Text color="foreground">Clear history</Text>
                 </DropdownMenu.Item>
               </>
@@ -657,15 +642,15 @@ export const Tabs = () => {
             <DropdownMenu.Item
               onClick={handleImportTabs}
               data-hook="editor-tabs-menu-import"
+              icon={<UploadSimpleIcon size={16} />}
             >
-              <UploadSimpleIcon size={18} />
               <Text color="foreground">Import tabs</Text>
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onClick={handleExportTabs}
               data-hook="editor-tabs-menu-export"
+              icon={<DownloadSimpleIcon size={16} />}
             >
-              <DownloadSimpleIcon size={18} />
               <Text color="foreground">Export tabs</Text>
             </DropdownMenu.Item>
             <DropdownMenu.Divider />
@@ -706,8 +691,8 @@ export const Tabs = () => {
                 void addBuffer()
               }}
               data-hook="new-tab-editor"
+              icon={<FileTextIcon size={16} />}
             >
-              <FileTextIcon size={16} />
               New editor
             </DropdownMenu.Item>
             <DropdownMenu.Item
@@ -717,8 +702,8 @@ export const Tabs = () => {
                 })
               }}
               data-hook="new-tab-notebook"
+              icon={<NotebookIcon size={16} />}
             >
-              <NotebookIcon size={16} />
               New notebook
             </DropdownMenu.Item>
           </DropdownMenu.Content>

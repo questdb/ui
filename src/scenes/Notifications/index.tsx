@@ -40,7 +40,7 @@ import {
   PaneWrapper,
   Text,
 } from "../../components"
-import { useScreenSize } from "../../hooks"
+import { ScreenSize, useScreenSize } from "../../hooks"
 import { selectors } from "../../store"
 import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
 import Notification from "./Notification"
@@ -131,7 +131,7 @@ const Notifications = ({
       ),
     ) || {}
   const activeNotification = useSelector(selectors.query.getActiveNotification)
-  const { sm } = useScreenSize()
+  const isSmallScreen = useScreenSize() === ScreenSize.SM
   const [isMinimized, setIsMinimized] = useState(true)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
@@ -181,10 +181,10 @@ const Notifications = ({
   }, [isMinimized])
 
   useEffect(() => {
-    if (sm) {
+    if (isSmallScreen) {
       setIsMinimized(true)
     }
-  }, [sm])
+  }, [isSmallScreen])
 
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">

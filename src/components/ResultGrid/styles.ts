@@ -101,6 +101,10 @@ export const StyledCopyButton = styled(CopyButton)`
   &:hover {
     background: transparent !important;
   }
+
+  && [data-copy-check] {
+    transform: translate(50%, calc(-50% + 2px));
+  }
 `
 
 export const ColResizer = styled.div`

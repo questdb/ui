@@ -23,6 +23,7 @@ import { useCellResize } from "./useCellResize"
 import { ResizeHandle } from "../resize"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { ctrlCmd } from "../../../../utils/platform"
 
 const MIN_MARKDOWN_HEIGHT = 48
 
@@ -200,10 +201,11 @@ const CellShell = styled.div`
   position: relative;
 `
 
-const PLACEHOLDER = "Write markdown… (⌘/Ctrl + Enter to apply)"
-
+const PLACEHOLDER = `Write markdown… (${ctrlCmd}+Enter to apply)`
 type Props = {
   cell: NotebookCell
+  index: number
+  totalCells: number
   layoutMode?: "list" | "grid"
   isFocused: boolean
   isMaximized: boolean
@@ -215,6 +217,8 @@ type Props = {
 
 const MarkdownCellInner: React.FC<Props> = ({
   cell,
+  index,
+  totalCells,
   layoutMode = "list",
   isFocused,
   isMaximized,
@@ -240,6 +244,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const topHeightRef = useRef(cell.topHeight)
   topHeightRef.current = cell.topHeight
+  const wasFocusedRef = useRef(isFocused)
 
   const resetToContentHeight = useCallback(() => {
     const el = measureRef.current
@@ -300,12 +305,17 @@ const MarkdownCellInner: React.FC<Props> = ({
     if (editing) textareaRef.current?.focus()
   }, [editing])
 
+  useEffect(() => {
+    if (wasFocusedRef.current && !isFocused && editing) apply()
+    wasFocusedRef.current = isFocused
+  }, [isFocused, editing, apply])
+
   // Grid rows are sized from cell.topHeight (computeCellGridH). Markdown has no
   // Monaco content-height feedback, so measure the content and write topHeight.
   // The equality guard (read from a ref to avoid re-subscribing) stops the
   // observe → write → re-render → observe feedback loop.
   useEffect(() => {
-    if (layoutMode !== "grid") return
+    if (layoutMode !== "grid" || isMaximized) return
     if (cell.topResized) return
     const el = measureRef.current
     if (!el) return
@@ -331,7 +341,7 @@ const MarkdownCellInner: React.FC<Props> = ({
 
   const isEmpty = cell.value.trim() === ""
 
-  const isGrid = layoutMode === "grid"
+  const isGrid = layoutMode === "grid" && !isMaximized
   const listHeight =
     !isGrid && !isMaximized
       ? (heightResize.liveHeight ??
@@ -345,15 +355,19 @@ const MarkdownCellInner: React.FC<Props> = ({
       tabIndex={-1}
       $focused={isFocused}
       $maximized={isMaximized}
-      $gridMode={layoutMode === "grid"}
+      $gridMode={isGrid}
       {...wrapperHandlers}
     >
       <CellDragHeader
         cellId={cell.id}
+        cell={cell}
+        cellIndex={index}
+        totalCells={totalCells}
         layoutMode={layoutMode}
+        isMaximized={isMaximized}
         right={
           editing ? (
-            <Tooltip content="Apply (⌘/Ctrl + Enter)">
+            <Tooltip content={`Apply (${ctrlCmd}+Enter)`}>
               <Button skin="transparent" onClick={apply} aria-label="Apply">
                 <CheckIcon size={20} />
               </Button>
@@ -375,6 +389,7 @@ const MarkdownCellInner: React.FC<Props> = ({
           {editing ? (
             <TextArea
               ref={textareaRef}
+              rows={1}
               value={cell.value}
               placeholder={PLACEHOLDER}
               spellCheck={false}

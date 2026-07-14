@@ -42,7 +42,7 @@ import {
   MAX_CELL_LINES,
   exceedsCellLineLimit,
 } from "../store/notebook"
-import type { CellMode, CellType } from "../store/notebook"
+import type { AutoRefresh, CellMode, CellType } from "../store/notebook"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   buildSnapshot,
@@ -95,11 +95,12 @@ export type NotebookCellDetails = {
   value: string
   truncated?: true
   full_length?: number
+  name?: string
   position: number
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
-  auto_refresh?: boolean
-  is_chart_maximized?: boolean
+  auto_refresh?: AutoRefresh
+  is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
@@ -141,7 +142,11 @@ export interface ModelToolsClient {
   updateCell: (
     bufferId: number,
     cellId: string,
-    updates: { value: string },
+    updates: {
+      value?: string
+      name?: string
+      autoRefresh?: AutoRefresh
+    },
   ) => Promise<void>
   deleteCell: (bufferId: number, cellId: string) => Promise<void>
   moveCellUp: (bufferId: number, cellId: string) => Promise<void>
@@ -181,12 +186,7 @@ export interface ModelToolsClient {
     cellId: string,
     patch: Partial<ChartConfig>,
   ) => Promise<void>
-  setCellAutoRefresh: (
-    bufferId: number,
-    cellId: string,
-    value: boolean,
-  ) => Promise<void>
-  setCellChartMaximized: (
+  setCellViewMaximized: (
     bufferId: number,
     cellId: string,
     value: boolean,
@@ -500,12 +500,13 @@ export function createModelToolsClient(
             out.truncated = true
             out.full_length = cell.value.length
           }
+          if (cell.name != null) out.name = cell.name
           if (cell.type === "markdown") out.type = "markdown"
           if (cell.mode) out.mode = cell.mode
-          if (typeof cell.autoRefresh === "boolean")
+          if (cell.autoRefresh !== undefined)
             out.auto_refresh = cell.autoRefresh
-          if (typeof cell.isChartMaximized === "boolean")
-            out.is_chart_maximized = cell.isChartMaximized
+          if (typeof cell.isViewMaximized === "boolean")
+            out.is_view_maximized = cell.isViewMaximized
           if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
             out.chart_config = toChartConfigWire(cell.chartConfig)
           return Promise.resolve(out)
@@ -648,18 +649,10 @@ export function createModelToolsClient(
       })
     },
 
-    setCellAutoRefresh(bufferId, cellId, value) {
+    setCellViewMaximized(bufferId, cellId, value) {
       return bound(bufferId, (ctrl) => {
         requireCell(ctrl, cellId)
-        ctrl.setCellAutoRefresh(cellId, value)
-        return Promise.resolve()
-      })
-    },
-
-    setCellChartMaximized(bufferId, cellId, value) {
-      return bound(bufferId, (ctrl) => {
-        requireCell(ctrl, cellId)
-        ctrl.setCellChartMaximized(cellId, value)
+        ctrl.setCellViewMaximized(cellId, value)
         return Promise.resolve()
       })
     },

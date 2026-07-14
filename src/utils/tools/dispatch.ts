@@ -15,6 +15,10 @@ import {
 } from "../notebookAIBridge"
 import type { CellMode } from "../../store/notebook"
 import type { NotebookVariable } from "../../store/notebook"
+import {
+  MAX_CELL_NAME_LENGTH,
+  exceedsCellNameLimit,
+} from "../../store/notebook"
 import type {
   ChartConfig,
   ChartType,
@@ -33,6 +37,7 @@ import {
 import { categoryFor, editsCells, mutatesNotebook } from "./tools"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
+  isAutoRefresh,
   isUnverifiableExecError,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
@@ -602,12 +607,11 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, name, queries, right_axis } =
+        const { buffer_id, cell_id, x_column, queries, right_axis } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
-            name?: string | null
             queries?: (ToolQueryChart | null)[] | null
             right_axis?: ToolRightAxis | null
           }) || {}
@@ -617,7 +621,6 @@ export const dispatchTool = async (
         const patch: Partial<ChartConfig> = {}
         if (x_column !== undefined && x_column !== null)
           patch.xColumn = x_column
-        if (name !== undefined && name !== null) patch.name = name
         if (queries !== undefined && queries !== null)
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
         if (right_axis !== undefined && right_axis !== null)
@@ -662,19 +665,53 @@ export const dispatchTool = async (
           modelToolsClient.setCellChartConfig(buffer_id, cell_id, patch),
         )
       }
+      case "set_cell_name": {
+        const { buffer_id, cell_id, name } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            name?: string | null
+          }) || {}
+        if (typeof name === "string" && exceedsCellNameLimit(name)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: name must be at most ${MAX_CELL_NAME_LENGTH} characters.`,
+            }),
+            is_error: true,
+          }
+        }
+        setStatus(AIOperationStatus.UpdatingCell, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          modelToolsClient.updateCell(buffer_id, cell_id, {
+            name: name ?? undefined,
+          }),
+        )
+      }
       case "set_cell_autorefresh": {
         const { buffer_id, cell_id, value } =
           (input as {
             buffer_id: number
             cell_id: string
-            value: boolean
+            value: unknown
           }) || {}
+        if (!isAutoRefresh(value)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: value must be true, false, or one of "1s", "5s", "10s", "30s", "1m".`,
+            }),
+            is_error: true,
+          }
+        }
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         return routeNotebookTool(() =>
-          modelToolsClient.setCellAutoRefresh(buffer_id, cell_id, value),
+          modelToolsClient.updateCell(buffer_id, cell_id, {
+            autoRefresh: value,
+          }),
         )
       }
-      case "set_cell_chart_maximized": {
+      case "set_cell_view_maximized": {
         const { buffer_id, cell_id, value } =
           (input as {
             buffer_id: number
@@ -683,7 +720,7 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         return routeNotebookTool(() =>
-          modelToolsClient.setCellChartMaximized(buffer_id, cell_id, value),
+          modelToolsClient.setCellViewMaximized(buffer_id, cell_id, value),
         )
       }
       case "apply_notebook_state": {
@@ -695,15 +732,15 @@ export const dispatchTool = async (
             variables?: NotebookVariable[] | null
             cells: Array<{
               id?: string | null
+              name?: string | null
               value?: string | null
               preserve_value?: boolean | null
               type?: "sql" | "markdown" | null
               mode?: CellMode | null
-              auto_refresh?: boolean | null
-              is_chart_maximized?: boolean | null
+              auto_refresh?: boolean | string | null
+              is_view_maximized?: boolean | null
               chart_config?: {
                 x_column?: string | null
-                name?: string | null
                 queries?: (ToolQueryChart | null)[] | null
                 right_axis?: ToolRightAxis | null
               } | null
@@ -908,15 +945,15 @@ export const dispatchTool = async (
                 ? { preserveValue: true }
                 : { value: c.value }
             if (c.id !== undefined && c.id !== null) cell.id = c.id
+            if (c.name !== undefined) cell.name = c.name
             if (c.type === "sql" || c.type === "markdown") cell.type = c.type
             if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
-            if (c.auto_refresh !== undefined && c.auto_refresh !== null)
-              cell.autoRefresh = c.auto_refresh
+            if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
             if (
-              c.is_chart_maximized !== undefined &&
-              c.is_chart_maximized !== null
+              c.is_view_maximized !== undefined &&
+              c.is_view_maximized !== null
             )
-              cell.isChartMaximized = c.is_chart_maximized
+              cell.isViewMaximized = c.is_view_maximized
             if (c.chart_config) {
               const cfg = c.chart_config
               const chartConfig: ChartConfig = {
@@ -925,7 +962,6 @@ export const dispatchTool = async (
                   q ? mapQueryChart(q) : null,
                 ),
               }
-              if (cfg.name) chartConfig.name = cfg.name
               if (cfg.right_axis)
                 chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
               cell.chartConfig = chartConfig

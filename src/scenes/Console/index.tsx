@@ -7,7 +7,7 @@ import { Tooltip } from "../../components"
 import Editor from "../Editor"
 import Result from "../Result"
 import Schema from "../Schema"
-import { useScreenSize } from "../../hooks"
+import { ScreenSize, useScreenSize } from "../../hooks"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { useSelector } from "react-redux"
@@ -20,7 +20,7 @@ import { BUTTON_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
-import { Allotment, AllotmentHandle } from "allotment"
+import { Allotment, AllotmentHandle, LayoutPriority } from "allotment"
 import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
@@ -100,7 +100,7 @@ const viewModes: {
 
 const Console = () => {
   const dispatch = useDispatch()
-  const { sm } = useScreenSize()
+  const screenSize = useScreenSize()
   const {
     resultsSplitterBasis,
     updateSettings,
@@ -122,6 +122,7 @@ const Console = () => {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const importRef = React.useRef<HTMLDivElement>(null)
   const horizontalSplitterRef = React.useRef<AllotmentHandle>(null)
+  const previousScreenSizeRef = React.useRef(ScreenSize.XL)
 
   const showPanel = (panel: BottomPanel) => {
     if (resultRef.current) {
@@ -144,9 +145,25 @@ const Console = () => {
     showPanel(activeBottomPanel)
   }, [activeBottomPanel])
 
+  useEffect(() => {
+    const previousScreenSize = previousScreenSizeRef.current
+    previousScreenSizeRef.current = screenSize
+    const shrankInto = (size: ScreenSize) =>
+      previousScreenSize > size && screenSize <= size
+
+    if (shrankInto(ScreenSize.LG) || shrankInto(ScreenSize.SM)) {
+      dispatch(actions.console.closeSidebar())
+    }
+    if (shrankInto(ScreenSize.MD) || shrankInto(ScreenSize.SM)) {
+      updateLeftPanelState({ type: null, width: leftPanelState.width })
+      setSearchPanelOpen(false)
+    }
+  }, [screenSize])
+
   return (
     <Root>
       <Allotment
+        proportionalLayout={false}
         onDragEnd={(sizes) => {
           // sizes[1] is the AI chat panel width when it's open
           if (activeSidebar !== null && sizes[1] !== undefined) {
@@ -154,39 +171,37 @@ const Console = () => {
           }
         }}
       >
-        <Allotment.Pane>
+        <Allotment.Pane priority={LayoutPriority.High}>
           <MainContent>
             <ContentArea>
               <Sidebar align="top">
-                {!sm && (
-                  <Tooltip
-                    placement="right"
-                    content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
+                <Tooltip
+                  placement="right"
+                  content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
+                >
+                  <Navigation
+                    data-hook="tables-panel-button"
+                    direction="left"
+                    onClick={() => {
+                      if (isDataSourcesPanelOpen) {
+                        void trackEvent(ConsoleEvent.SCHEMA_OPEN)
+                        updateLeftPanelState({
+                          type: null,
+                          width: leftPanelState.width,
+                        })
+                      } else {
+                        void trackEvent(ConsoleEvent.SCHEMA_CLOSE)
+                        updateLeftPanelState({
+                          type: LeftPanelType.DATASOURCES,
+                          width: leftPanelState.width,
+                        })
+                      }
+                    }}
+                    selected={isDataSourcesPanelOpen}
                   >
-                    <Navigation
-                      data-hook="tables-panel-button"
-                      direction="left"
-                      onClick={() => {
-                        if (isDataSourcesPanelOpen) {
-                          void trackEvent(ConsoleEvent.SCHEMA_OPEN)
-                          updateLeftPanelState({
-                            type: null,
-                            width: leftPanelState.width,
-                          })
-                        } else {
-                          void trackEvent(ConsoleEvent.SCHEMA_CLOSE)
-                          updateLeftPanelState({
-                            type: LeftPanelType.DATASOURCES,
-                            width: leftPanelState.width,
-                          })
-                        }
-                      }}
-                      selected={isDataSourcesPanelOpen}
-                    >
-                      <Database2 size={BUTTON_ICON_SIZE} />
-                    </Navigation>
-                  </Tooltip>
-                )}
+                    <Database2 size={BUTTON_ICON_SIZE} />
+                  </Navigation>
+                </Tooltip>
                 <Tooltip
                   placement="right"
                   content={
@@ -293,10 +308,9 @@ const Console = () => {
                     >
                       <Allotment.Pane
                         preferredSize={leftPanelState.width}
-                        visible={
-                          (isDataSourcesPanelOpen || isSearchPanelOpen) && !sm
-                        }
+                        visible={isDataSourcesPanelOpen || isSearchPanelOpen}
                         minSize={320}
+                        priority={LayoutPriority.Low}
                       >
                         <Schema open={isDataSourcesPanelOpen} />
                         <SearchPanel
@@ -304,7 +318,7 @@ const Console = () => {
                           open={isSearchPanelOpen}
                         />
                       </Allotment.Pane>
-                      <Allotment.Pane>
+                      <Allotment.Pane priority={LayoutPriority.High}>
                         <Editor />
                       </Allotment.Pane>
                     </Allotment>
@@ -333,6 +347,7 @@ const Console = () => {
           minSize={470}
           preferredSize={aiChatPanelWidth}
           visible={!!activeSidebar}
+          priority={LayoutPriority.Low}
         >
           <SidePanelRight id="side-panel-right" />
         </Allotment.Pane>
