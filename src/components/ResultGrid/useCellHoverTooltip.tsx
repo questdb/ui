@@ -180,10 +180,6 @@ export const useCellHoverTooltip = (
     [hovered, hideTooltip],
   )
 
-  useEffect(() => {
-    hideTooltip()
-  }, [getData, getColumn, hideTooltip])
-
   useEffect(() => () => window.clearTimeout(showTimeoutRef.current), [])
 
   const overlay = hovered ? (

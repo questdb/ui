@@ -490,6 +490,10 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       handleScroll()
     }, [hideCellTooltip, handleScroll])
 
+    useEffect(() => {
+      hideCellTooltip()
+    }, [dataSource, runToken, hideCellTooltip])
+
     const hasSelection = focusedCell != null
     useEffect(() => {
       onSelectionChange?.(hasSelection)

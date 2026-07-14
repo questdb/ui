@@ -627,7 +627,7 @@ describe("questdb grid", () => {
     })
   })
 
-  describe.only("cell hover tooltip", () => {
+  describe("cell hover tooltip", () => {
     // Radix renders the content twice: the visible popper instance first, then
     // a visually-hidden aria copy, so value assertions read the first match.
     const getTooltipValue = () =>
