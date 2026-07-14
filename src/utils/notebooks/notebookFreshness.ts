@@ -9,9 +9,10 @@ import { getBufferActionSeq } from "./notebookAIBridge"
 type FreshnessVerdict = "fresh" | "not_fetched" | "stale"
 
 export type NotebookFreshness = {
-  recordRead: (bufferId: number, seq: number) => void
+  recordRead: (bufferId: number, seq: number, readAtGeneration?: number) => void
   getReadSeq: (bufferId: number) => number | undefined
   assertFresh: (bufferId: number) => FreshnessVerdict
+  generation: () => number
   reset: () => void
 }
 
@@ -22,14 +23,24 @@ export const createNotebookFreshness = (
   seed?: Iterable<readonly [number, number]>,
 ): NotebookFreshness => {
   const readSeq = new Map<number, number>(seed)
+  let generation = 0
   return {
-    recordRead: (bufferId, seq) => readSeq.set(bufferId, seq),
+    recordRead: (bufferId, seq, readAtGeneration) => {
+      if (readAtGeneration !== undefined && readAtGeneration !== generation) {
+        return
+      }
+      readSeq.set(bufferId, seq)
+    },
     getReadSeq: (bufferId) => readSeq.get(bufferId),
     assertFresh: (bufferId) => {
       const baseline = readSeq.get(bufferId)
       if (baseline === undefined) return "not_fetched"
       return getBufferActionSeq(bufferId) === baseline ? "fresh" : "stale"
     },
-    reset: () => readSeq.clear(),
+    generation: () => generation,
+    reset: () => {
+      readSeq.clear()
+      generation += 1
+    },
   }
 }

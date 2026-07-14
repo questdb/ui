@@ -15,6 +15,7 @@ type Options = {
   focusedCellIdRef: MutableRefObject<string | null>
   maximizedCellIdRef: MutableRefObject<string | null>
   settingsRef: MutableRefObject<NotebookSettings>
+  preview: boolean
 }
 
 // On unmount, flushes any pending debounced write via refs so a tab
@@ -25,6 +26,7 @@ export const useNotebookPersistence = ({
   focusedCellIdRef,
   maximizedCellIdRef,
   settingsRef,
+  preview,
 }: Options) => {
   const persistTimeoutRef = useRef<number | null>(null)
   const pendingCellsRef = useRef<NotebookCell[] | null>(null)
@@ -45,7 +47,7 @@ export const useNotebookPersistence = ({
   // ops route to the live controller), but the boundary writes — the unmount
   // flush above all — stay strictly ordered against later agent ops.
   const scheduleFlush = useCallback(() => {
-    if (disposedRef.current) return
+    if (preview || disposedRef.current) return
     if (persistTimeoutRef.current) {
       window.clearTimeout(persistTimeoutRef.current)
     }
@@ -60,7 +62,7 @@ export const useNotebookPersistence = ({
         }),
       )
     }, PERSIST_DEBOUNCE_MS)
-  }, [bufferId, updateBuffer, buildPayload])
+  }, [bufferId, updateBuffer, buildPayload, preview])
 
   const persistCells = useCallback(
     (newCells: NotebookCell[]) => {
@@ -80,7 +82,7 @@ export const useNotebookPersistence = ({
 
   const persistImmediately = useCallback(
     (cells: NotebookCell[], exact = false) => {
-      if (disposedRef.current) return
+      if (preview || disposedRef.current) return
       const effective = exact ? cells : (pendingCellsRef.current ?? cells)
       if (persistTimeoutRef.current) {
         window.clearTimeout(persistTimeoutRef.current)
@@ -93,7 +95,7 @@ export const useNotebookPersistence = ({
         }),
       )
     },
-    [bufferId, updateBuffer, buildPayload],
+    [bufferId, updateBuffer, buildPayload, preview],
   )
 
   // Refs so the unmount-flush effect keeps stable deps and doesn't
@@ -104,6 +106,7 @@ export const useNotebookPersistence = ({
   bufferIdRef.current = bufferId
 
   const flushPending = useCallback(() => {
+    if (preview) return
     if (persistTimeoutRef.current === null) return
     window.clearTimeout(persistTimeoutRef.current)
     persistTimeoutRef.current = null
@@ -116,7 +119,7 @@ export const useNotebookPersistence = ({
         notebookViewState: buildPayload(cells),
       }),
     )
-  }, [buildPayload])
+  }, [buildPayload, preview])
 
   useEffect(() => {
     return () => {

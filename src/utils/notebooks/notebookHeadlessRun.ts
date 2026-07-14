@@ -39,6 +39,7 @@ import {
   partsOf,
   readNotebookView,
   requireCellIn,
+  type CommitOutcome,
 } from "./notebookDexieView"
 import {
   getMountEpoch,
@@ -288,16 +289,16 @@ export const runHeadlessCell = async (
         return { committed: false, reason: "cell_changed" }
       }
       const parts = partsOf(view)
-      let committed: boolean
+      let commit: CommitOutcome
       try {
-        committed = await commitView(bufferId, {
+        commit = await commitView(bufferId, {
           ...parts,
           cells: patchCellRunResult(parts.cells, cellId, ranResult),
         })
       } catch {
         return { committed: false, reason: "storage_full" }
       }
-      if (!committed) {
+      if (commit !== "committed") {
         return { committed: false, reason: "notebook_gone" }
       }
       const snapshotSaved = await persistCellSnapshot({

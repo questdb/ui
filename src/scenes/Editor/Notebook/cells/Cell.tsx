@@ -798,7 +798,10 @@ const CellInner: React.FC<Props> = ({
               autoRefreshOn={cell.autoRefresh !== false}
               showLabels={toolbarTier === "expanded"}
               onRun={runAll}
-              onHideResult={() => clearCellResult(cell.id)}
+              onHideResult={() => {
+                signalUserEdit(bufferIdForEvents)
+                clearCellResult(cell.id)
+              }}
               onCancel={() => cancelCell(cell.id)}
               onDraw={() => void handleDrawClick()}
             />

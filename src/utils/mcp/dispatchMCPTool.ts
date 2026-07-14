@@ -80,8 +80,9 @@ const buildSinceLastCheckBlock = (
   const ws = meta.getWorkspace()
   if (ws?.active) {
     const label = sanitizeForPromptContext(ws.active.label)
+    const archived = ws.active.archived ? ", archived: true" : ""
     parts.push(
-      `  active_buffer: { id: ${ws.active.buffer_id}, label: ${JSON.stringify(label)}, kind: ${ws.active.kind} }`,
+      `  active_buffer: { id: ${ws.active.buffer_id}, label: ${JSON.stringify(label)}, kind: ${ws.active.kind}${archived} }`,
     )
   }
   if (digest) {
@@ -174,6 +175,11 @@ const dispatchInner = async (
   call: ToolCallMessage,
   ctx: DispatchContext,
 ): Promise<ToolResultPayload> => {
+  // Every read below records freshness after an await; the reads are unabortable,
+  // so capture the connection generation now and reject a recordRead whose read
+  // began before a reconnect reset — otherwise a stale read could seed freshness
+  // for a notebook the new connection never saw.
+  const readGeneration = ctx.freshness.generation()
   if (isMcpMetaToolName(call.name)) {
     if (call.name === "get_workspace_state") {
       const activeId = ctx.metaToolContext.getActiveBufferId()
@@ -183,7 +189,7 @@ const dispatchInner = async (
         ctx.metaToolContext,
       )
       if (activeId !== null && seqBeforeRead !== null) {
-        ctx.freshness.recordRead(activeId, seqBeforeRead)
+        ctx.freshness.recordRead(activeId, seqBeforeRead, readGeneration)
       }
       return { content, isError: false }
     }
@@ -225,11 +231,19 @@ const dispatchInner = async (
   )
   if (!out.is_error) {
     if (fullReadTarget !== null && seqBeforeFullRead !== null) {
-      ctx.freshness.recordRead(fullReadTarget, seqBeforeFullRead)
+      ctx.freshness.recordRead(
+        fullReadTarget,
+        seqBeforeFullRead,
+        readGeneration,
+      )
     } else if (createsNotebook(call.name)) {
       const created = createdBufferIdOf(out.content)
       if (created !== null) {
-        ctx.freshness.recordRead(created, getBufferActionSeq(created))
+        ctx.freshness.recordRead(
+          created,
+          getBufferActionSeq(created),
+          readGeneration,
+        )
       }
     }
   }

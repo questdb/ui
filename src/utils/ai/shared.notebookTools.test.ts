@@ -988,6 +988,65 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(parsed.error_code).toBe("stale")
   })
 
+  it("apply_notebook_state reports state_applied + post_apply_aborted when the turn is cancelled after the durable commit", async () => {
+    // Given a mounted notebook whose commit lands, but the turn is cancelled the
+    // instant afterwards — before the post-apply read.
+    const abort = new AbortController()
+    const state: { parts: ViewParts } = {
+      parts: {
+        cells: [cell("b", "old")],
+        settings: {},
+        maximizedCellId: null,
+        focusedCellId: null,
+      },
+    }
+    const controller: NotebookController = {
+      bufferId: 1,
+      kind: "live",
+      mutate: (transition) => {
+        try {
+          const out = transition(state.parts)
+          state.parts = out.parts
+          abort.abort()
+          return Promise.resolve(out.result)
+        } catch (error) {
+          return Promise.reject(error)
+        }
+      },
+      readView: () =>
+        Promise.resolve({
+          cells: state.parts.cells,
+          settings: state.parts.settings,
+          maximizedCellId: state.parts.maximizedCellId ?? undefined,
+        }),
+      runCell: vi.fn(okRun),
+    }
+    registerController(controller)
+
+    // When apply_notebook_state runs under that signal
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ id: "b", value: "SELECT 1" }] },
+      makeClient(),
+      noopStatus,
+      undefined,
+      undefined,
+      abort.signal,
+    )
+
+    // Then it is not reported as a failure: the commit is acknowledged and the
+    // aborted post-apply phase is flagged, so a retry is never ambiguous.
+    expect(res.is_error).toBeFalsy()
+    const parsed = JSON.parse(res.content) as {
+      state_applied?: boolean
+      post_apply_aborted?: boolean
+    }
+    expect(parsed.state_applied).toBe(true)
+    expect(parsed.post_apply_aborted).toBe(true)
+    // The mutation really committed.
+    expect(state.parts.cells[0].value).toBe("SELECT 1")
+  })
+
   it("update_cell rejects STATE_STALE when the user edited since the read baseline", async () => {
     const client = makeClient()
     const readSeq = getBufferActionSeq(1)
@@ -2135,6 +2194,7 @@ describe("dispatchMCPTool — data-leak invariant", () => {
       getReadSeq: (bufferId: number) => getBufferActionSeq(bufferId),
       recordRead: () => undefined,
       assertFresh: () => "fresh" as const,
+      generation: () => 0,
       reset: () => undefined,
     },
     metaToolContext: {

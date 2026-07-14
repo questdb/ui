@@ -190,6 +190,12 @@ export const createNotebookController = (
 const notebookGone = (bufferId: number): NotebookToolError =>
   new NotebookToolError("deleted", `Notebook ${bufferId} no longer exists.`)
 
+const notebookArchivedMidEdit = (bufferId: number): NotebookToolError =>
+  new NotebookToolError(
+    "archived",
+    `Notebook ${bufferId} was archived while this edit was in flight; nothing was changed. Call get_notebook_state to re-sync, then retry.`,
+  )
+
 export const __resetNotebookDexieControllerForTests = (): void => {
   __resetNotebookDexieViewForTests()
   __resetNotebookHeadlessRunsForTests()
@@ -231,8 +237,12 @@ export const createDexieNotebookController = (
         const view = await readNotebookView(bufferId)
         const out = transition(partsOf(view))
         requireActive()
-        if (!(await commitView(bufferId, out.parts))) {
+        const commit = await commitView(bufferId, out.parts)
+        if (commit === "deleted") {
           throw notebookGone(bufferId)
+        }
+        if (commit === "archived") {
+          throw notebookArchivedMidEdit(bufferId)
         }
         // Runs only after a durable commit and is never awaited: the write is
         // done, and failing the tool over orphaned snapshot/layout cleanup

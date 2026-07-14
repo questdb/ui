@@ -76,6 +76,7 @@ export type WorkspaceInfo = {
     buffer_id: number
     label: string
     kind: "notebook" | "sql" | "metrics" | "other"
+    archived?: boolean
   }
 }
 

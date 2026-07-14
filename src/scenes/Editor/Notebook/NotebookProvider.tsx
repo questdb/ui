@@ -186,7 +186,8 @@ export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
 export const NotebookProvider: React.FC<{
   initialState: NotebookViewState
   bufferId: number
-}> = ({ initialState, bufferId, children }) => {
+  preview?: boolean
+}> = ({ initialState, bufferId, preview = false, children }) => {
   const { updateBuffer } = useEditor()
   const { questExecution } = useContext(QuestContext)
 
@@ -220,6 +221,7 @@ export const NotebookProvider: React.FC<{
       focusedCellIdRef,
       maximizedCellIdRef,
       settingsRef,
+      preview,
     })
 
   const store = useCellsStore({
@@ -615,10 +617,11 @@ export const NotebookProvider: React.FC<{
   }, [bufferId, questExecution])
 
   useEffect(() => {
+    if (preview) return
     const controller = createNotebookController(bufferId, liveActionsRef)
     registerController(controller)
     return () => unregisterController(bufferId)
-  }, [bufferId])
+  }, [bufferId, preview])
 
   return (
     <NotebookBufferIdContext.Provider value={bufferId}>

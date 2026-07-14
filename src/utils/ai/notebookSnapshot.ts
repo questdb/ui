@@ -303,10 +303,11 @@ export const formatDigest = (digest: UserActionDigest): string => {
 export const formatWorkspace = (ws: WorkspaceInfo): string => {
   const lines: string[] = ["<workspace>"]
   if (ws.active) {
+    const archived = ws.active.archived ? ", archived: true" : ""
     lines.push(
       `  active: { buffer_id: ${ws.active.buffer_id}, label: ${JSON.stringify(
         sanitizeForPromptContext(ws.active.label),
-      )}, kind: ${ws.active.kind} }`,
+      )}, kind: ${ws.active.kind}${archived} }`,
     )
   }
   if (ws.notebooks.length > 0) {

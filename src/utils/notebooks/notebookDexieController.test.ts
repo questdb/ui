@@ -36,6 +36,7 @@ import {
 import { __resetAgentActivityForTests, onAgentEdit } from "./agentActivity"
 import type { AgentEdit } from "./agentActivity"
 import { NotebookToolError } from "./notebookToolError"
+import { commitView, partsOf } from "./notebookDexieView"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
@@ -954,6 +955,63 @@ describe("createDexieNotebookController — runCell", () => {
     } finally {
       putSpy.mockRestore()
     }
+  })
+})
+
+describe("commitView — archived / deleted guard", () => {
+  it("commits into a live notebook", async () => {
+    // Given a live notebook
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+
+    // When a passive edit commits its view
+    const outcome = await commitView(
+      BUFFER_ID,
+      partsOf({ cells: [cell("a", "SELECT 2")] }),
+    )
+
+    // Then the write lands
+    expect(outcome).toBe("committed")
+    expect((await persistedView()).cells[0].value).toBe("SELECT 2")
+  })
+
+  it("refuses the commit and leaves the row untouched when the buffer was archived after the read", async () => {
+    // Given a view read while the notebook was still live
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const parts = partsOf({ cells: [cell("a", "SELECT 2")] })
+
+    // When the user archives it before this commit lands
+    await bufferStore.update(BUFFER_ID, { archived: true })
+    const outcome = await commitView(BUFFER_ID, parts)
+
+    // Then the hidden edit is rejected atomically and the view is unchanged
+    expect(outcome).toBe("archived")
+    expect((await persistedView()).cells[0].value).toBe("SELECT 1")
+  })
+
+  it("reports the notebook deleted when the row is gone", async () => {
+    // Given no such buffer
+    // When / Then
+    expect(
+      await commitView(BUFFER_ID, partsOf({ cells: [cell("a", "SELECT 1")] })),
+    ).toBe("deleted")
+  })
+})
+
+describe("createDexieNotebookController — archived guard", () => {
+  it("rejects a structural edit on an archived notebook without writing or notifying", async () => {
+    // Given an archived notebook
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] }, { archived: true })
+    const controller = makeController()
+    const seen: AgentEdit[] = []
+    onAgentEdit((event) => seen.push(event))
+
+    // When the agent tries to edit it
+    const update = controller.updateCell("a", { value: "SELECT 2" })
+
+    // Then it is refused as archived, and nothing is written or announced
+    await expect(update).rejects.toMatchObject({ code: "archived" })
+    expect((await persistedView()).cells[0].value).toBe("SELECT 1")
+    expect(seen).toEqual([])
   })
 })
 

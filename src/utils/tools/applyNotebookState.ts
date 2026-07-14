@@ -40,6 +40,9 @@ import { captureReadSeq } from "../notebooks/notebookFreshness"
 
 type ToolResult = { content: string; is_error?: boolean }
 
+const isAbortError = (e: unknown): boolean =>
+  e instanceof Error && e.name === "AbortError"
+
 const validationError = (message: string): ToolResult => ({
   content: JSON.stringify({
     error_code: "validation",
@@ -385,13 +388,17 @@ export const dispatchApplyNotebookState = async (
   if (getBufferActionSeq(buffer_id) !== staleBaseline) {
     return applyStaleNotebookResult(toolContext)
   }
+  let committed:
+    | { applied: { added: string[]; updated: string[]; deleted: string[] } }
+    | undefined
   try {
-    const out = await withBoundNotebook(
+    committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
         ctrl.mutate((parts) => applyNotebookStateTransition(parts, request)),
       signal,
     )
+    const out = committed
     // New-cell ids arrive in request order via `applied.added`.
     const resolved: ResolvedRun[] = []
     const postApplyBasics = await readBasics()
@@ -431,6 +438,20 @@ export const dispatchApplyNotebookState = async (
     )
     return { content: JSON.stringify({ ...out, runs }) }
   } catch (e) {
+    // Once withBoundNotebook resolved the mutation is durably committed, so an
+    // abort during the post-apply read/auto-run must report the state as applied
+    // — a generic failure would invite an ambiguous full re-PUT that duplicates
+    // the newly added cells.
+    if (committed && isAbortError(e)) {
+      return {
+        content: JSON.stringify({
+          ...committed,
+          runs: [],
+          state_applied: true,
+          post_apply_aborted: true,
+        }),
+      }
+    }
     if (e instanceof NotebookToolError) {
       return {
         is_error: true,

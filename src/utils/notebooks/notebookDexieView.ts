@@ -1,5 +1,6 @@
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
+import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
@@ -25,6 +26,10 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
+export const migratePersistedNotebookView = (
+  view: NotebookViewState,
+): NotebookViewState => dropLegacyChartConfigs(migrateLegacyCellNames(view))
+
 export const readNotebookBufferMeta = async (
   bufferId: number,
 ): Promise<NotebookBufferMeta> => {
@@ -35,9 +40,7 @@ export const readNotebookBufferMeta = async (
   return {
     kind: "ok",
     label: buffer.label,
-    view: dropLegacyChartConfigs(
-      migrateLegacyCellNames(buffer.notebookViewState),
-    ),
+    view: migratePersistedNotebookView(buffer.notebookViewState),
   }
 }
 
@@ -109,24 +112,38 @@ export const partsOf = (view: NotebookViewState): ViewParts => ({
   focusedCellId: view.focusedCellId ?? null,
 })
 
-// False when the buffer row vanished between this task's read and its write
-// (deleteBuffer is not routed through the queue) — Dexie's update() silently
-// reports 0 rows and the op must not pretend it committed.
+export type CommitOutcome = "committed" | "archived" | "deleted"
+
+// Re-reads the row inside the write transaction and rejects an archived or
+// deleted buffer atomically with the update. Archive and delete both bypass the
+// buffer queue (direct Dexie writes), so a task that read a live view can reach
+// here after the user archived/deleted the notebook; a bare update() would
+// silently overwrite the archived row (or report 0 rows on a deleted one) and
+// pretend it committed, surfacing the hidden edit when the notebook is restored.
 export const commitView = async (
   bufferId: number,
   parts: ViewParts,
-): Promise<boolean> => {
-  const updated = await bufferStore.update(bufferId, {
-    notebookViewState: buildPersistPayload(
-      parts.cells,
-      parts.focusedCellId,
-      parts.maximizedCellId,
-      parts.settings,
-    ),
-  })
-  if (updated === 0) return false
-  schedulePublishSearchUpdate(bufferId)
-  return true
+): Promise<CommitOutcome> => {
+  const outcome = await db.transaction(
+    "rw",
+    db.buffers,
+    async (): Promise<CommitOutcome> => {
+      const buffer = await bufferStore.getById(bufferId)
+      if (!buffer) return "deleted"
+      if (buffer.archived) return "archived"
+      const updated = await bufferStore.update(bufferId, {
+        notebookViewState: buildPersistPayload(
+          parts.cells,
+          parts.focusedCellId,
+          parts.maximizedCellId,
+          parts.settings,
+        ),
+      })
+      return updated === 0 ? "deleted" : "committed"
+    },
+  )
+  if (outcome === "committed") schedulePublishSearchUpdate(bufferId)
+  return outcome
 }
 
 export const requireCellIn = (

@@ -16,6 +16,7 @@ import type { CellLayoutItem, NotebookViewState } from "../../../store/notebook"
 import {
   beginNotebookMount,
   cancelNotebookMount,
+  migratePersistedNotebookView,
 } from "../../../utils/notebooks/notebookController"
 import { NotebookToolError } from "../../../utils/notebooks/notebookToolError"
 import { color } from "../../../utils"
@@ -777,13 +778,23 @@ export const Notebook: React.FC = () => {
 
   const bufferId = typeof activeBuffer.id === "number" ? activeBuffer.id : null
   const isNotebook = !!activeBuffer.notebookViewState
+  const archived = !!activeBuffer.archived
+  const previewView = activeBuffer.notebookViewState
+
+  const previewSeed = useMemo(
+    () =>
+      archived && previewView
+        ? migratePersistedNotebookView(previewView)
+        : null,
+    [archived, previewView],
+  )
 
   const retrySeed = () => {
     setSeedAttempt((attempt) => attempt + 1)
   }
 
   useEffect(() => {
-    if (bufferId === null || !isNotebook) return
+    if (bufferId === null || !isNotebook || archived) return
     let cancelled = false
     setSeedError(null)
     setShowSeedSpinner(false)
@@ -813,10 +824,18 @@ export const Notebook: React.FC = () => {
       window.clearTimeout(spinnerTimer)
       cancelNotebookMount(bufferId)
     }
-  }, [bufferId, isNotebook, seedAttempt])
+  }, [bufferId, isNotebook, archived, seedAttempt])
 
   if (bufferId === null || !isNotebook) {
     return null
+  }
+
+  if (archived) {
+    return previewSeed ? (
+      <NotebookProvider initialState={previewSeed} bufferId={bufferId} preview>
+        <NotebookContent />
+      </NotebookProvider>
+    ) : null
   }
 
   if (seedError) {

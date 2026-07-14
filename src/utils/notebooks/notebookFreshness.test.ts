@@ -76,6 +76,43 @@ describe("createNotebookFreshness", () => {
     expect(freshness.getReadSeq(1)).toBeUndefined()
     expect(freshness.assertFresh(1)).toBe("not_fetched")
   })
+
+  it("advances the generation on every reset", () => {
+    // Given
+    const freshness = createNotebookFreshness()
+    const before = freshness.generation()
+
+    // When
+    freshness.reset()
+
+    // Then
+    expect(freshness.generation()).toBe(before + 1)
+  })
+
+  it("ignores a recordRead whose read began before a reset (reconnect)", () => {
+    // Given — a workspace read captures the generation, then a reconnect resets
+    const freshness = createNotebookFreshness()
+    const readGeneration = freshness.generation()
+    freshness.reset()
+
+    // When — the obsolete read resolves and tries to record freshness
+    freshness.recordRead(1, captureReadSeq(1), readGeneration)
+
+    // Then — the new connection never inherits freshness it never fetched
+    expect(freshness.assertFresh(1)).toBe("not_fetched")
+    expect(freshness.getReadSeq(1)).toBeUndefined()
+  })
+
+  it("records a read whose generation still matches", () => {
+    // Given
+    const freshness = createNotebookFreshness()
+
+    // When — read and record within the same generation
+    freshness.recordRead(1, captureReadSeq(1), freshness.generation())
+
+    // Then
+    expect(freshness.assertFresh(1)).toBe("fresh")
+  })
 })
 
 describe("captureReadSeq", () => {

@@ -457,4 +457,14 @@ describe("formatNotebookContextPrefix", () => {
     expect(prefix).toContain("buffer_id: 42")
     expect(prefix).toContain('label: "Trades"')
   })
+
+  it("flags the active buffer as archived when previewing an archived notebook", () => {
+    const prefix = formatNotebookContextPrefix(null, undefined, {
+      notebooks: [{ buffer_id: 7, label: "Old", archived: true }],
+      active: { buffer_id: 7, label: "Old", kind: "notebook", archived: true },
+    })
+    expect(prefix).toContain(
+      'active: { buffer_id: 7, label: "Old", kind: notebook, archived: true }',
+    )
+  })
 })

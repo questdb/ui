@@ -405,6 +405,22 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
     expect(out.content[0].text).toMatch(/"n1"/)
   })
 
+  it("flags the active_buffer as archived when the active tab is an archived preview", async () => {
+    const archivedMeta: MetaToolContext = {
+      getActiveBufferId: () => 1,
+      getWorkspace: () => ({
+        notebooks: [{ buffer_id: 1, label: "n1", archived: true }],
+        active: { buffer_id: 1, label: "n1", kind: "notebook", archived: true },
+      }),
+      getDigest: () => emptyDigest(),
+    }
+    const out = await dispatchMCPTool(
+      makeCall("list_cells"),
+      ctx("fresh", archivedMeta),
+    )
+    expect(out.content[0].text).toMatch(/active_buffer:.*archived: true/)
+  })
+
   it("does NOT append the suffix to get_workspace_state (it owns the digest)", async () => {
     const c = ctx("unfetched")
     const out = await dispatchMCPTool(makeCall("get_workspace_state"), c)

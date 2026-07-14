@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import ReactDOM from "react-dom"
 import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
@@ -96,6 +96,8 @@ export const AgentChangesPopper: React.FC<Props> = ({
 }) => {
   const [container] = useState<HTMLElement>(() => document.createElement("div"))
   const transitionTimeoutId = useRef<number | undefined>()
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
   const { attributes, styles, forceUpdate } = usePopper(anchorEl, container, {
     placement: "top-end",
     modifiers: [...MODIFIERS, { name: "eventListeners", enabled: open }],
@@ -103,6 +105,30 @@ export const AgentChangesPopper: React.FC<Props> = ({
 
   usePopperStyles(container, styles.popper, OVERLAY_Z_INDEX - 1)
   useTransition(container, open, transitionTimeoutId, forceUpdate)
+
+  // Hover and focus each pause auto-hide independently: a single shared flag let
+  // a pointer-leave resume the timer while keyboard focus was still inside.
+  useEffect(() => {
+    onAutoHidePausedChange(hovered || focused)
+  }, [hovered, focused, onAutoHidePausedChange])
+
+  // Removing the focused control (View / close / Escape) would drop focus to the
+  // document body; return it to the pill the toast points at.
+  const focusAnchorPill = useCallback(() => {
+    anchorEl
+      ?.querySelector<HTMLElement>('[data-hook="mcp-bridge-status-pill"]')
+      ?.focus()
+  }, [anchorEl])
+
+  const handleView = useCallback(() => {
+    focusAnchorPill()
+    onView()
+  }, [focusAnchorPill, onView])
+
+  const handleDismiss = useCallback(() => {
+    focusAnchorPill()
+    onDismiss()
+  }, [focusAnchorPill, onDismiss])
 
   useEffect(
     () => () => {
@@ -121,11 +147,11 @@ export const AgentChangesPopper: React.FC<Props> = ({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       if (!container.contains(document.activeElement)) return
-      onDismiss()
+      handleDismiss()
     }
     document.addEventListener("keydown", onKeyDown)
     return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, onDismiss, container])
+  }, [open, handleDismiss, container])
 
   return (
     <CSSTransition
@@ -138,21 +164,19 @@ export const AgentChangesPopper: React.FC<Props> = ({
         {ReactDOM.createPortal(
           <Card
             {...attributes.popper}
-            role="status"
-            aria-atomic="true"
             data-hook="agent-changes-popper"
-            onPointerEnter={() => onAutoHidePausedChange(true)}
-            onPointerLeave={() => onAutoHidePausedChange(false)}
-            onFocus={() => onAutoHidePausedChange(true)}
-            onBlur={() => onAutoHidePausedChange(false)}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
           >
-            <InfoIcon size={18} weight="duotone" />
+            <InfoIcon size={18} weight="duotone" aria-hidden="true" />
             <Message>
               New changes from the agent in <b>{label}</b>
             </Message>
             <ViewLink
               type="button"
-              onClick={onView}
+              onClick={handleView}
               aria-label={`View agent changes in ${label}`}
               data-hook="agent-changes-view"
             >
@@ -160,7 +184,7 @@ export const AgentChangesPopper: React.FC<Props> = ({
             </ViewLink>
             <CloseButton
               type="button"
-              onClick={onDismiss}
+              onClick={handleDismiss}
               aria-label="Dismiss agent changes notification"
             >
               <XIcon size={14} />

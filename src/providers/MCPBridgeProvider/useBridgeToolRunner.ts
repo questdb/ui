@@ -46,6 +46,7 @@ export const useBridgeToolRunner = (
                   : activeBuffer.editorViewState
                     ? ("sql" as const)
                     : ("other" as const),
+              archived: !!activeBuffer.archived,
             },
           }
         : {}),

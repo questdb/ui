@@ -111,6 +111,7 @@ export {
 
 // Transition primitives the live provider composes in its own applyTransition.
 export type { ViewParts } from "../notebookDexieView"
+export { migratePersistedNotebookView } from "../notebookDexieView"
 export {
   addCellTransition,
   applyNotebookStateTransition,
