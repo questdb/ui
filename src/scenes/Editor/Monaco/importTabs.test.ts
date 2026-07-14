@@ -831,6 +831,34 @@ describe("sanitizeBuffer", () => {
       expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
     })
 
+    it("keeps a fixed-interval autoRefresh token and bottomResized, drops a malformed interval", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "interval",
+              value: "SELECT 1",
+              autoRefresh: "5s",
+              bottomResized: true,
+            },
+            { id: "bad-token", value: "SELECT 2", autoRefresh: "2s" },
+            { id: "bad-type", value: "SELECT 3", autoRefresh: 5000 },
+          ],
+        },
+      }
+      const result = sanitizeBuffer(input)
+      const cells = result.notebookViewState?.cells
+      // A valid interval token survives the round-trip…
+      expect(cells?.[0].autoRefresh).toBe("5s")
+      expect(cells?.[0].bottomResized).toBe(true)
+      // …while an unknown token or a non-AutoRefresh value is dropped.
+      expect(cells?.[1].autoRefresh).toBeUndefined()
+      expect(cells?.[2].autoRefresh).toBeUndefined()
+    })
+
     it("drops legacy chartConfig (non-array queries) and keeps valid ones", () => {
       const input = {
         label: "Notebook",
@@ -860,6 +888,53 @@ describe("sanitizeBuffer", () => {
         xColumn: "ts",
         queries: [{ type: "line", yColumns: ["price"] }, null],
       })
+    })
+
+    it("migrates a legacy chartConfig.name to the cell name and preserves an explicit cell name", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "legacy",
+              value: "SELECT 1",
+              chartConfig: {
+                xColumn: "ts",
+                name: "BTC price",
+                queries: [{ type: "line", yColumns: ["price"] }],
+              },
+            },
+            { id: "named", value: "SELECT 2", name: "My cell" },
+          ],
+        },
+      }
+      const result = sanitizeBuffer(input)
+      const cells = result.notebookViewState?.cells
+      // Legacy chart title becomes the cell name; chartConfig keeps no name.
+      expect(cells?.[0].name).toBe("BTC price")
+      expect(
+        (cells?.[0].chartConfig as Record<string, unknown> | undefined)?.name,
+      ).toBeUndefined()
+      // An explicit cell name survives the round-trip.
+      expect(cells?.[1].name).toBe("My cell")
+    })
+
+    it("truncates an over-long cell name to the length limit", () => {
+      // Given an import whose cell name exceeds the 100-character cap
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [{ id: "long", value: "SELECT 1", name: "a".repeat(150) }],
+        },
+      }
+      // When sanitized
+      const result = sanitizeBuffer(input)
+      // Then the name is capped to 100 characters (the UI/MCP limit)
+      expect(result.notebookViewState?.cells?.[0].name).toBe("a".repeat(100))
     })
   })
 

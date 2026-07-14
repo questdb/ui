@@ -1,4 +1,10 @@
-import { EXPECTED_BRIDGE_VERSION } from "./protocolVersion"
+import {
+  BRIDGE_UPGRADE_COMMAND,
+  BRIDGE_VERSION_MISMATCH_COPY,
+  EXPECTED_BRIDGE_VERSION,
+  isBridgeVersionMismatch,
+  type BridgeVersionMismatch,
+} from "./protocolVersion"
 import type { Permissions } from "../tools/permissions"
 import {
   WS_CLOSE_CODES,
@@ -30,10 +36,7 @@ const terminalCloseMessage = (code: number, reason: string): string => {
     return "Pairing token is no longer valid — the bridge likely restarted. Re-pair via a fresh deep link."
   }
   if (code === WS_CLOSE_CODES.major_version_mismatch) {
-    return (
-      `Bridge major version doesn't match what this console expects (${EXPECTED_BRIDGE_VERSION}). ` +
-      `Install a compatible bridge release, or update the console.`
-    )
+    return `${BRIDGE_VERSION_MISMATCH_COPY.major.message} ${BRIDGE_UPGRADE_COMMAND}`
   }
   return reason || `Bridge closed with code ${code}.`
 }
@@ -54,6 +57,7 @@ type EventMap = {
   latency: number
   error: Error
   retryAttempt: number
+  versionMismatch: BridgeVersionMismatch | null
 }
 
 const HEARTBEAT_INTERVAL_MS = 5_000
@@ -329,6 +333,9 @@ export class MCPBridgeClient {
     if (TERMINAL_BRIDGE_CLOSE_CODES.has(code)) {
       this.cancelReconnect()
       this.explicitlyClosed = true
+      if (code === WS_CLOSE_CODES.major_version_mismatch) {
+        this.emit("versionMismatch", "major")
+      }
       this.emit("error", new Error(terminalCloseMessage(code, reason)))
       this.setStatus("disconnected")
       return
@@ -344,6 +351,12 @@ export class MCPBridgeClient {
   private handleHelloAck(msg: HelloAckMessage): void {
     this.sessionId = msg.sessionId
     this.consecutiveFailedAttempts = 0
+    // Emit before `connected` so consumers see the drift in the same paint
+    // the session goes live, never a frame of clean-connected first.
+    this.emit(
+      "versionMismatch",
+      isBridgeVersionMismatch(msg.v) ? "minor" : null,
+    )
     this.setStatus("connected")
     this.emit("helloAck", msg)
     if (this.pendingResults.length > 0) {

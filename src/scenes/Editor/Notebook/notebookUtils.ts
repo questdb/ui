@@ -1,5 +1,7 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type {
+  AutoRefresh,
+  AutoRefreshInterval,
   CellLayoutItem,
   CellMode,
   CellResult,
@@ -10,10 +12,13 @@ import type {
   SingleQueryResult,
 } from "../../../store/notebook"
 import {
+  AUTO_REFRESH_INTERVALS,
   createCell,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   exceedsCellLineLimit,
+  MAX_CELL_NAME_LENGTH,
+  exceedsCellNameLimit,
 } from "../../../store/notebook"
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
@@ -23,6 +28,175 @@ import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
 } from "../../../components/ResultGrid/dimensions"
+
+// Auto-refresh (draw cells): true = adaptive poll, false = off, a token like
+// "5s" = fixed cadence. The cell stores this value verbatim (= the MCP wire
+// form), so there is no conversion layer.
+export const AUTO_REFRESH_OPTIONS: AutoRefresh[] = [
+  true,
+  false,
+  ...(Object.keys(AUTO_REFRESH_INTERVALS) as AutoRefreshInterval[]),
+]
+
+export const autoRefreshLabel = (value: AutoRefresh): string =>
+  value === true ? "Auto" : value === false ? "Off" : value
+
+export const autoRefreshIntervalMs = (
+  value: AutoRefresh,
+): number | undefined =>
+  typeof value === "string" ? AUTO_REFRESH_INTERVALS[value] : undefined
+
+export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
+  typeof value === "boolean" ||
+  (typeof value === "string" && value in AUTO_REFRESH_INTERVALS)
+
+// What a cell currently shows in its bottom slot — drives the toolbar's
+// view-switch / refresh / chart actions and their disabled states.
+export type CellView = "none" | "grid" | "chart"
+
+export const resolveCellView = (
+  cell: Pick<NotebookCell, "mode" | "result">,
+): CellView => {
+  if (cell.mode === "draw") return "chart"
+  if (cell.result != null) return "grid"
+  return "none"
+}
+
+export type RunActionPlan =
+  | { kind: "chart" }
+  | { kind: "noop" }
+  | { kind: "run-all" | "run-single"; reveal: boolean; exitDraw: boolean }
+
+export const resolveRunAction = (
+  cell: Pick<NotebookCell, "mode" | "result">,
+  opts: {
+    isCompactTier: boolean
+    showBottomSlot: boolean
+    intent: "all" | "single"
+  },
+): RunActionPlan => {
+  // Reveal only the compact "View SQL" collapse — in wider tiers the slot is
+  // never force-hidden, so revealing there would wrongly maximize a split view.
+  const reveal = opts.isCompactTier && !opts.showBottomSlot
+  if (cell.mode === "draw" && !reveal) {
+    return opts.intent === "all" ? { kind: "chart" } : { kind: "noop" }
+  }
+  // Run mode, or a draw cell collapsed behind the compact "View SQL" editor:
+  // act as a grid so a shortcut never surfaces the chart from the editor. A
+  // collapsed draw cell drops to run mode first, so the grid — not the chart —
+  // is what appears.
+  return {
+    kind: opts.intent === "all" ? "run-all" : "run-single",
+    reveal,
+    exitDraw: cell.mode === "draw",
+  }
+}
+
+export type CellToolbarTier = "compact" | "standard" | "expanded"
+
+export const CELL_TOOLBAR_STANDARD_MIN = 480
+export const CELL_TOOLBAR_EXPANDED_MIN = 720
+
+export const cellToolbarTier = (
+  width: number,
+  isMaximized: boolean,
+): CellToolbarTier =>
+  isMaximized || width >= CELL_TOOLBAR_EXPANDED_MIN
+    ? "expanded"
+    : width >= CELL_TOOLBAR_STANDARD_MIN
+      ? "standard"
+      : "compact"
+
+export type CellToolbarMenuFlags = {
+  showViewSql: boolean
+  showViewTable: boolean
+  showViewChart: boolean
+  showSplitItem: boolean
+  showResetZoom: boolean
+  showAutoRefreshItem: boolean
+  showRefreshItem: boolean
+  showChartSettings: boolean
+  showMoveUp: boolean
+  showMoveDown: boolean
+  showDuplicate: boolean
+  showDelete: boolean
+  groupAHasItems: boolean
+  groupBHasItems: boolean
+}
+
+// Which items the "more actions" menu shows. An item appears only when it is
+// applicable to the current state AND not already a visible toolbar button for
+// this tier/view, so the menu never duplicates an inline control or offers a
+// disabled/greyed action. `sqlShown` is the compact-tier "View SQL" state
+// (isViewMaximized === false). Markdown cells (no run/draw views) keep just the
+// move/duplicate/delete items.
+export const cellToolbarMenuFlags = (params: {
+  tier: CellToolbarTier
+  view: CellView
+  isMarkdown: boolean
+  sqlShown: boolean
+  chartZoomed: boolean
+  isGridMode: boolean
+  cellIndex: number
+  totalCells: number
+}): CellToolbarMenuFlags => {
+  const {
+    tier,
+    view,
+    isMarkdown,
+    sqlShown,
+    chartZoomed,
+    isGridMode,
+    cellIndex,
+    totalCells,
+  } = params
+  const isCompact = tier === "compact"
+  const isChartView = view === "chart"
+  const isGridView = view === "grid"
+  const isNoneView = view === "none"
+  const hasToolbarSplit = tier !== "compact" && !isNoneView
+  const hasToolbarRefresh = tier === "expanded" && !isNoneView
+  const hasToolbarInterval = tier === "expanded" && isChartView
+  const chartCollapsed = isCompact && isChartView && sqlShown
+
+  const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
+  const showViewTable =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isChartView)
+  const showViewChart =
+    isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
+  const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
+  const showResetZoom =
+    isCompact && isChartView && chartZoomed && !chartCollapsed
+  const showAutoRefreshItem = !hasToolbarInterval && isChartView
+  const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
+  const showChartSettings = isChartView && !chartCollapsed
+  const showMoveUp = !isGridMode && cellIndex > 0
+  const showMoveDown = !isGridMode && cellIndex < totalCells - 1
+  const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
+  const showDelete = totalCells > 1
+
+  return {
+    showViewSql,
+    showViewTable,
+    showViewChart,
+    showSplitItem,
+    showResetZoom,
+    showAutoRefreshItem,
+    showRefreshItem,
+    showChartSettings,
+    showMoveUp,
+    showMoveDown,
+    showDuplicate,
+    showDelete,
+    groupAHasItems:
+      showViewSql || showViewTable || showViewChart || showSplitItem,
+    groupBHasItems:
+      showResetZoom ||
+      showAutoRefreshItem ||
+      showRefreshItem ||
+      showChartSettings,
+  }
+}
 
 export const singleResultFromExec = (
   exec: QueryExecResult,
@@ -317,12 +491,13 @@ export const buildInitialScriptResults = (
 
 type ApplyCellRequest = {
   id?: string | null
+  name?: string | null
   value?: string | null
   preserveValue?: boolean | null
   type?: CellType | null
   mode?: CellMode | null
-  autoRefresh?: boolean | null
-  isChartMaximized?: boolean | null
+  autoRefresh?: AutoRefresh | null
+  isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
@@ -419,9 +594,7 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
-  if (cfg.name) next.name = cfg.name
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
-  if (cfg.autoRefresh !== undefined) next.autoRefresh = cfg.autoRefresh
   return next
 }
 
@@ -479,6 +652,17 @@ export const buildAppliedCells = (
     }
     const resolvedMode: CellMode | undefined =
       req.mode === undefined || req.mode === null ? undefined : req.mode
+
+    // PUT semantics: a non-empty string sets the name, null/"" clears it.
+    const resolvedName =
+      typeof req.name === "string" && req.name.length > 0 ? req.name : undefined
+
+    if (resolvedName !== undefined && exceedsCellNameLimit(resolvedName)) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has a ${resolvedName.length}-character name, over the ${MAX_CELL_NAME_LENGTH}-character limit.`,
+        "cells",
+      )
+    }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
 
@@ -552,9 +736,9 @@ export const buildAppliedCells = (
     }
 
     const isDraw = resolvedMode === "draw"
-    const isChartMaximized =
-      req.isChartMaximized != null
-        ? req.isChartMaximized
+    const isViewMaximized =
+      req.isViewMaximized != null
+        ? req.isViewMaximized
         : isDraw
           ? true
           : undefined
@@ -580,9 +764,8 @@ export const buildAppliedCells = (
       else delete next.chartConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
-      if (isChartMaximized !== undefined)
-        next.isChartMaximized = isChartMaximized
-      else delete next.isChartMaximized
+      if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
+      else delete next.isViewMaximized
       if (resolvedType === "markdown") {
         // Markdown cells carry none of the SQL/chart sub-state.
         next.type = "markdown"
@@ -590,12 +773,14 @@ export const buildAppliedCells = (
         delete next.mode
         delete next.chartConfig
         delete next.autoRefresh
-        delete next.isChartMaximized
+        delete next.isViewMaximized
         delete next.bottomHeight
         delete next.lastRunStatus
       } else {
         delete next.type
       }
+      if (resolvedName !== undefined) next.name = resolvedName
+      else delete next.name
       return next
     }
 
@@ -605,6 +790,7 @@ export const buildAppliedCells = (
       position: index,
       value,
     }
+    if (resolvedName !== undefined) created.name = resolvedName
     if (resolvedType === "markdown") {
       created.type = "markdown"
       return created
@@ -612,8 +798,7 @@ export const buildAppliedCells = (
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
-    if (isChartMaximized !== undefined)
-      created.isChartMaximized = isChartMaximized
+    if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.
@@ -779,6 +964,29 @@ export const isDoubleView = (cell: NotebookCell): boolean => {
   return cell.result != null
 }
 
+// Resolves a cell's editor (top) and bottom-slot heights — shared by the
+// rendered cell (Cell.tsx, with live drag overrides) and computeCellGridH.
+export const computeCellHeights = (
+  cell: NotebookCell,
+  opts: {
+    liveTopHeight?: number | null
+    liveBottomHeight?: number | null
+    expectingResult?: boolean
+  } = {},
+): { topHeight: number; bottomHeight: number } => {
+  const topHeight = opts.liveTopHeight ?? cell.topHeight ?? DEFAULT_TOP_HEIGHT
+  const bottomHeight = isDoubleView(cell)
+    ? (opts.liveBottomHeight ??
+      cell.bottomHeight ??
+      defaultBottomHeightFor(cell))
+    : opts.expectingResult === true
+      ? (opts.liveBottomHeight ??
+        cell.bottomHeight ??
+        RESERVED_RESULT_BOTTOM_HEIGHT)
+      : 0
+  return { topHeight, bottomHeight }
+}
+
 // Derives the react-grid-layout `h` (row count) for a cell from its
 // topHeight + bottomHeight + chrome. Recomputed at render time on every
 // state change.
@@ -797,13 +1005,10 @@ export const computeCellGridH = (
   marginY: number = 0,
   expectingResult: boolean = false,
 ): number => {
-  const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
-  const bottom = isDoubleView(cell)
-    ? (cell.bottomHeight ?? defaultBottomHeightFor(cell))
-    : expectingResult
-      ? (cell.bottomHeight ?? RESERVED_RESULT_BOTTOM_HEIGHT)
-      : 0
-  const totalPx = CELL_CHROME_PX + top + bottom
+  const { topHeight, bottomHeight } = computeCellHeights(cell, {
+    expectingResult,
+  })
+  const totalPx = CELL_CHROME_PX + topHeight + bottomHeight
   return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
 }
 

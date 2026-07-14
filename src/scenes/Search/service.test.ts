@@ -62,7 +62,7 @@ describe("getNotebookCellSearchTargets", () => {
     // Given a SQL cell that also has a named chart
     const chartCell = cell({
       value: "SELECT price FROM trades",
-      chartConfig: { xColumn: null, name: "BTC price", queries: [] },
+      name: "BTC price",
     })
 
     // When the searchable targets are derived
@@ -83,7 +83,7 @@ describe("getNotebookCellSearchTargets", () => {
     // Given a cell whose query is empty but whose chart is named
     const chartOnly = cell({
       value: "",
-      chartConfig: { xColumn: null, name: "BTC price", queries: [] },
+      name: "BTC price",
     })
 
     // When the searchable targets are derived
@@ -172,7 +172,7 @@ describe("SearchService.searchInSingleBuffer (notebook)", () => {
       cell({
         id: "chart-cell",
         value: "SELECT ts, last FROM trades",
-        chartConfig: { xColumn: null, name: "BTC price", queries: [] },
+        name: "BTC price",
       }),
     ])
 
@@ -234,7 +234,7 @@ describe("SearchService.searchInSingleBuffer (notebook)", () => {
       cell({
         id: "c1",
         value: "price price price",
-        chartConfig: { xColumn: null, name: "price chart", queries: [] },
+        name: "price chart",
       }),
     ])
 
