@@ -722,6 +722,41 @@ describe("createDexieNotebookController — runCell", () => {
     expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
   })
 
+  it("a superseded script never starts its remaining statements", async () => {
+    // Given a slow write script whose first statement is already in flight
+    await seedNotebook({
+      cells: [cell("a", "INSERT INTO t VALUES (1); INSERT INTO t VALUES (2)")],
+    })
+    const { quest, pending: inFlight } = makeQuest()
+    const controller = makeController({}, quest)
+    const first = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length !== 1) throw new Error("first not in flight")
+    })
+
+    // When a newer run supersedes it and finishes on its first statement
+    const second = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length !== 2) throw new Error("second not in flight")
+    })
+    inFlight[1].resolve(errorResult)
+    await second
+
+    // And the older in-flight write then reports its real completion
+    inFlight[0].resolve({ type: "dml" })
+    const firstSummary = await first
+
+    // Then the older run is still reported as superseded, but its second write
+    // was never dispatched and therefore cannot land as an untracked side effect
+    expect(firstSummary.unverified).toBe(true)
+    expect(firstSummary.note).toMatch(/newer run/)
+    expect(inFlight).toHaveLength(2)
+    expect(inFlight.map(({ sql }) => sql)).toEqual([
+      "INSERT INTO t VALUES (1)",
+      "INSERT INTO t VALUES (1)",
+    ])
+  })
+
   it("a run whose cell was deleted mid-flight records nothing and says so", async () => {
     await seedNotebook({ cells: [cell("a", "SELECT 1"), cell("b")] })
     const { quest, respondNext } = makeQuest()
@@ -886,6 +921,32 @@ describe("createDexieNotebookController — runCell", () => {
     // Then the note names the real reason
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/notebook was deleted/)
+  })
+
+  it("reports an archived notebook distinctly from a deleted one mid-run", async () => {
+    // Given a background run already in flight
+    await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("not in flight")
+    })
+
+    // When the user archives the notebook before the run can record its result
+    await bufferStore.update(BUFFER_ID, { archived: true })
+    respondNext({ type: "dml" })
+    const summary = await run
+
+    // Then the message tells the agent how to recover the archived notebook and
+    // retains the warning that the write may already have committed server-side
+    expect(summary.unverified).toBe(true)
+    expect(summary.note).toMatch(/notebook was archived/)
+    expect(summary.note).toMatch(/Restore it/)
+    expect(summary.note).not.toMatch(/notebook was deleted/)
+    expect((await db.buffers.get(BUFFER_ID))?.archived).toBe(true)
+    expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
   it("reports the notebook gone when the buffer row vanishes between read and write", async () => {

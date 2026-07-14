@@ -26,8 +26,11 @@ const Card = styled.div`
 `
 
 const Message = styled.span`
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 1.3rem;
   color: ${({ theme }) => theme.color.foreground};
+  overflow-wrap: anywhere;
 
   b {
     font-weight: 600;

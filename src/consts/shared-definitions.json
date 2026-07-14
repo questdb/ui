@@ -148,7 +148,8 @@
       "properties": {
         "label": {
           "type": ["string", "null"],
-          "description": "Label shown on the new notebook tab. Pass null to use the default."
+          "maxLength": 100,
+          "description": "Label shown on the new notebook tab (max 100 characters). Pass null to use the default."
         }
       },
       "required": ["label"]

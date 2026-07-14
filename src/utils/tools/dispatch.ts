@@ -13,6 +13,10 @@ import {
   MAX_CELL_NAME_LENGTH,
   exceedsCellNameLimit,
 } from "../../store/notebook"
+import {
+  MAX_BUFFER_NAME_LENGTH,
+  exceedsBufferNameLimit,
+} from "../../store/buffers"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   classifyAndCheckSqlForAutoRun,
@@ -433,6 +437,15 @@ export const dispatchTool = async (
 
       case "create_notebook": {
         const { label } = (input as { label?: string }) || {}
+        if (typeof label === "string" && exceedsBufferNameLimit(label)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: label must be at most ${MAX_BUFFER_NAME_LENGTH} characters.`,
+            }),
+            is_error: true,
+          }
+        }
         setStatus(AIOperationStatus.BuildingNotebook, { label })
         return routeNotebookTool(async () => {
           const res = await modelToolsClient.createNotebook(label, signal)

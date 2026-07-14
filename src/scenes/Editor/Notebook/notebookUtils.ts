@@ -323,6 +323,11 @@ export const NOTEBOOK_DELETED_MID_RUN_NOTE =
   "result was not recorded. Call get_workspace_state to see the current " +
   "workspace, and verify before re-running anything with side effects."
 
+export const NOTEBOOK_ARCHIVED_MID_RUN_NOTE =
+  "Run completed, but the notebook was archived while it was running, so the " +
+  "result was not recorded. Restore it and call get_notebook_state to see the " +
+  "current cell state, and verify before re-running anything with side effects."
+
 export const STORAGE_FULL_RUN_NOTE =
   "Run completed, but the result could not be saved because the browser's " +
   "local storage limit is exceeded, so it was NOT recorded. Tell the user to " +

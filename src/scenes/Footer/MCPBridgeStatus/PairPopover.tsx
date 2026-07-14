@@ -197,6 +197,12 @@ const AgentChangesViewButton = styled.button`
   }
 `
 
+const AgentChangesMessage = styled.span`
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+`
+
 const StatusText = styled.div`
   display: flex;
   flex-direction: column;
@@ -521,10 +527,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
         {agentChanges.hasUnseen && (
           <AgentChangesRow $tone="info" data-hook="mcp-pair-agent-changes">
             <InfoIcon size={16} weight="duotone" />
-            <span>
+            <AgentChangesMessage>
               New changes from the agent in{" "}
               <strong>{agentChanges.label}</strong>.
-            </span>
+            </AgentChangesMessage>
             <AgentChangesViewButton
               type="button"
               onClick={() => {
