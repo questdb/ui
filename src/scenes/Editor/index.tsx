@@ -49,7 +49,8 @@ import { NotebookWorkspaceBridge } from "./Notebook/NotebookWorkspaceBridge"
 import Notifications from "../../scenes/Notifications"
 import type { QueryKey } from "../../store/Query/types"
 import type { ErrorResult } from "../../utils"
-import { color, platform } from "../../utils"
+import { color } from "../../utils"
+import { ctrlCmd } from "../../utils/platform"
 import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
 import {
@@ -180,8 +181,6 @@ const AcceptButton = styled(Button)`
   }
   width: 13.5rem;
 `
-
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
 
 const Editor = ({
   innerRef,

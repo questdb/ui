@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { Download2, Refresh, ArrowDownS } from "@styled-icons/remix-line"
+import { Download2, ArrowDownS } from "@styled-icons/remix-line"
 import { Reset } from "@styled-icons/boxicons-regular"
 import { HandPointLeft } from "@styled-icons/fa-regular"
 import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
@@ -18,6 +18,7 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useNotebookActions } from "../NotebookProvider"
 import { expandGlobals } from "../declareUtils"
 import { ActionButton, ActionsBar, FreezeToggle } from "./styles"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
 
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault()
 
@@ -131,14 +132,14 @@ export const ResultActionsBar: React.FC<Props> = ({
         </ActionButton>
       </Tooltip>
 
-      <Tooltip delay={350} placement="bottom" content="Re-run cell">
+      <Tooltip delay={350} placement="bottom" content="Re-run query">
         <ActionButton
           skin="transparent"
-          aria-label="Re-run cell"
+          aria-label="Re-run query"
           disabled={isRunning || !onReRun}
           onClick={reRun}
         >
-          <Refresh size="18px" />
+          <ArrowClockwiseIcon size="18px" weight="bold" />
         </ActionButton>
       </Tooltip>
 

@@ -2,6 +2,12 @@ import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
   attachScriptSummary,
+  autoRefreshIntervalMs,
+  autoRefreshLabel,
+  AUTO_REFRESH_OPTIONS,
+  isAutoRefresh,
+  resolveCellView,
+  resolveRunAction,
   buildAppliedCells,
   buildAppliedLayout,
   buildInitialScriptResults,
@@ -9,8 +15,11 @@ import {
   capResultBytes,
   cancelAllInCell,
   cancelOneInCell,
+  cellToolbarMenuFlags,
+  cellToolbarTier,
   cloneNotebookViewState,
   computeCellGridH,
+  computeCellHeights,
   computeResultBottomHeight,
   duplicateCellAt,
   generateDefaultLayout,
@@ -20,7 +29,9 @@ import {
   isUnverifiableExecError,
   mergeCellLayout,
   nextCopyLabel,
+  partitionCellHeights,
   removeCell,
+  scaleCellHeights,
   setResultAt,
   singleResultFromExec,
   sqlHash,
@@ -33,7 +44,10 @@ import type {
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
-import { createDefaultNotebookViewState } from "../../../store/notebook"
+import {
+  createDefaultNotebookViewState,
+  MAX_NOTEBOOK_CELLS,
+} from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 
 const cell = (
@@ -685,6 +699,46 @@ describe("buildAppliedCells", () => {
     expect(diff.deleted).toEqual([])
   })
 
+  it("sets a cell name on create, then clears it on update with null (PUT)", () => {
+    // Given a fresh cell created with a name
+    const { nextCells: created } = buildAppliedCells([], {
+      cells: [{ value: "SELECT 1", name: "BTC price" }],
+    })
+    expect(created[0].name).toBe("BTC price")
+
+    // When the cell is re-applied with name: null
+    const { nextCells: cleared } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, value: "SELECT 1", name: null }],
+    })
+    // Then the name is dropped (apply is a full PUT, no preservation)
+    expect(cleared[0].name).toBeUndefined()
+  })
+
+  it("does not preserve an existing name when name is omitted (PUT reset)", () => {
+    // Given an existing named cell
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x", name: "Mine" },
+    ]
+
+    // When re-applied without a name field
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "x" }],
+    })
+    // Then the name is reset (apply describes the cell in full)
+    expect(nextCells[0].name).toBeUndefined()
+  })
+
+  it("rejects a cell name over the length limit", () => {
+    // Given an apply request whose cell name exceeds the 100-character limit
+    // When the cells are built
+    // Then it throws rather than persisting the oversized name
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [{ value: "SELECT 1", name: "a".repeat(101) }],
+      }),
+    ).toThrow(/over the 100-character limit/)
+  })
+
   it("updates existing cells in place and preserves result when value unchanged", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "x", result: dql("x") },
@@ -968,7 +1022,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
-  it("defaults isChartMaximized and autoRefresh to true on new draw cells", () => {
+  it("defaults isViewMaximized and autoRefresh to true on new draw cells", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -982,7 +1036,7 @@ describe("buildAppliedCells", () => {
       ],
     })
     expect(nextCells[0].autoRefresh).toBe(true)
-    expect(nextCells[0].isChartMaximized).toBe(true)
+    expect(nextCells[0].isViewMaximized).toBe(true)
   })
 
   it("apply is a PUT: mode='draw' with no chart_config throws even when the existing cell had one (no merge)", () => {
@@ -1014,8 +1068,8 @@ describe("buildAppliedCells", () => {
         position: 0,
         value: "SELECT 1",
         mode: "draw",
-        autoRefresh: true,
-        isChartMaximized: true,
+        autoRefresh: "5s",
+        isViewMaximized: true,
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -1028,7 +1082,30 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBeUndefined()
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
-    expect(nextCells[0].isChartMaximized).toBeUndefined()
+    expect(nextCells[0].isViewMaximized).toBeUndefined()
+  })
+
+  it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
+    // Given a draw cell created with a 5s fixed interval
+    const drawCell = {
+      value: "SELECT 1",
+      mode: "draw" as const,
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "line" as const, yColumns: ["v"] }],
+      },
+    }
+    const created = buildAppliedCells([], {
+      cells: [{ ...drawCell, autoRefresh: "5s" as const }],
+    }).nextCells
+    expect(created[0].autoRefresh).toBe("5s")
+
+    // When the cell is re-applied (PUT) without auto_refresh
+    const { nextCells } = buildAppliedCells(created, {
+      cells: [{ ...drawCell, id: created[0].id }],
+    })
+    // Then a draw cell defaults back to adaptive (true)
+    expect(nextCells[0].autoRefresh).toBe(true)
   })
 
   it("refuses an empty cells array", () => {
@@ -1062,7 +1139,7 @@ describe("isDoubleView", () => {
         position: 0,
         value: "",
         mode: "draw",
-        isChartMaximized: true,
+        isViewMaximized: true,
       }),
     ).toBe(true)
   })
@@ -1200,6 +1277,120 @@ describe("computeResultBottomHeight", () => {
         timestamp: 0,
       }),
     ).toBe(84)
+  })
+})
+
+describe("computeCellHeights", () => {
+  const cell = (over = {}) => ({ id: "x", position: 0, value: "", ...over })
+
+  it("single-view (run, no result): default editor, zero bottom", () => {
+    expect(computeCellHeights(cell())).toEqual({
+      topHeight: 72,
+      bottomHeight: 0,
+    })
+  })
+  it("uses persisted topHeight / bottomHeight when present", () => {
+    expect(
+      computeCellHeights(
+        cell({
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        }),
+      ),
+    ).toEqual({ topHeight: 200, bottomHeight: 300 })
+  })
+  it("draw cell defaults the bottom to the chart height", () => {
+    expect(computeCellHeights(cell({ mode: "draw" }))).toEqual({
+      topHeight: 72,
+      bottomHeight: 350,
+    })
+  })
+  it("double-view (empty result) defaults to the notification-only height", () => {
+    expect(
+      computeCellHeights(
+        cell({ result: { results: [], activeResultIndex: 0, timestamp: 0 } }),
+      ),
+    ).toEqual({ topHeight: 72, bottomHeight: 44 })
+  })
+  it("expectingResult reserves the result area when bottomHeight is unset", () => {
+    expect(
+      computeCellHeights(cell({ lastRunStatus: "success" }), {
+        expectingResult: true,
+      }),
+    ).toEqual({ topHeight: 72, bottomHeight: 424 })
+  })
+  it("live drag overrides win over persisted values", () => {
+    expect(
+      computeCellHeights(
+        cell({
+          topHeight: 200,
+          bottomHeight: 300,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        }),
+        { liveTopHeight: 111, liveBottomHeight: 222 },
+      ),
+    ).toEqual({ topHeight: 111, bottomHeight: 222 })
+  })
+  it("keeps the bottom at zero in single-view regardless of live value", () => {
+    expect(computeCellHeights(cell(), { liveBottomHeight: 999 })).toEqual({
+      topHeight: 72,
+      bottomHeight: 0,
+    })
+  })
+})
+
+describe("scaleCellHeights", () => {
+  it("scales both heights proportionally to the new content", () => {
+    expect(scaleCellHeights(200, 200, 200, 72, 88)).toEqual({
+      top: 100,
+      bottom: 100,
+    })
+  })
+  it("clamps the bottom to its minimum and gives the rest to the top", () => {
+    expect(scaleCellHeights(400, 100, 200, 72, 88)).toEqual({
+      top: 112,
+      bottom: 88,
+    })
+  })
+  it("clamps the top to its minimum and gives the rest to the bottom", () => {
+    expect(scaleCellHeights(100, 400, 200, 72, 88)).toEqual({
+      top: 72,
+      bottom: 128,
+    })
+  })
+  it("never shrinks below the combined minimum, even when asked smaller", () => {
+    expect(scaleCellHeights(400, 200, 50, 72, 88)).toEqual({
+      top: 72,
+      bottom: 88,
+    })
+  })
+  it("falls back to scale 1 when the old content is zero", () => {
+    expect(scaleCellHeights(0, 0, 300, 72, 88)).toEqual({
+      top: 72,
+      bottom: 228,
+    })
+  })
+})
+
+describe("partitionCellHeights", () => {
+  it("keeps the requested top and gives the remainder to the bottom", () => {
+    expect(partitionCellHeights(300, 200, 72, 88)).toEqual({
+      top: 200,
+      bottom: 100,
+    })
+  })
+  it("raises the top to its minimum when requested below it", () => {
+    expect(partitionCellHeights(300, 40, 72, 88)).toEqual({
+      top: 72,
+      bottom: 228,
+    })
+  })
+  it("shrinks the top once the bottom would drop below its minimum", () => {
+    expect(partitionCellHeights(300, 260, 72, 88)).toEqual({
+      top: 212,
+      bottom: 88,
+    })
   })
 })
 
@@ -1445,7 +1636,7 @@ describe("cloneNotebookViewState", () => {
         value: "SELECT 2",
         mode: "draw",
         autoRefresh: true,
-        isChartMaximized: true,
+        isViewMaximized: true,
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -1495,7 +1686,7 @@ describe("cloneNotebookViewState", () => {
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)
-    expect(out.cells[1].isChartMaximized).toBe(true)
+    expect(out.cells[1].isViewMaximized).toBe(true)
     expect(out.cells[1].chartConfig).toEqual({
       xColumn: "ts",
       queries: [{ type: "line", yColumns: ["v"] }],
@@ -1629,5 +1820,363 @@ describe("sqlHash", () => {
     expect(sqlHash("select 1")).toBe(sqlHash("select 1"))
     expect(sqlHash("select 1")).not.toBe(sqlHash("select 2"))
     expect(typeof sqlHash("anything")).toBe("string")
+  })
+})
+
+describe("isAutoRefresh", () => {
+  it("accepts booleans and the fixed-interval tokens", () => {
+    // Booleans are the 2.0.0-compatible auto/off values.
+    expect(isAutoRefresh(true)).toBe(true)
+    expect(isAutoRefresh(false)).toBe(true)
+    expect(isAutoRefresh("5s")).toBe(true)
+    expect(isAutoRefresh("1m")).toBe(true)
+  })
+
+  it("rejects unknown tokens and non-values", () => {
+    expect(isAutoRefresh("2s")).toBe(false)
+    expect(isAutoRefresh("")).toBe(false)
+    expect(isAutoRefresh(5000)).toBe(false)
+    expect(isAutoRefresh(null)).toBe(false)
+    expect(isAutoRefresh(undefined)).toBe(false)
+  })
+})
+
+describe("autoRefreshLabel", () => {
+  it("labels true/false and shows the token verbatim for intervals", () => {
+    expect(autoRefreshLabel(true)).toBe("Auto")
+    expect(autoRefreshLabel(false)).toBe("Off")
+    expect(autoRefreshLabel("5s")).toBe("5s")
+    expect(autoRefreshLabel("1m")).toBe("1m")
+  })
+})
+
+describe("autoRefreshIntervalMs", () => {
+  it("maps a fixed token to milliseconds; true/false have no fixed interval", () => {
+    expect(autoRefreshIntervalMs("1s")).toBe(1000)
+    expect(autoRefreshIntervalMs("5s")).toBe(5000)
+    expect(autoRefreshIntervalMs("1m")).toBe(60000)
+    expect(autoRefreshIntervalMs(true)).toBeUndefined()
+    expect(autoRefreshIntervalMs(false)).toBeUndefined()
+  })
+})
+
+describe("resolveCellView", () => {
+  const result = { results: [], activeResultIndex: 0, timestamp: 0 }
+  it("is chart whenever the cell is in draw mode", () => {
+    expect(resolveCellView({ mode: "draw" })).toBe("chart")
+    // Draw wins even if a stale result is hanging around.
+    expect(resolveCellView({ mode: "draw", result })).toBe("chart")
+  })
+  it("is grid for a run cell that has a result", () => {
+    expect(resolveCellView({ mode: "run", result })).toBe("grid")
+    expect(resolveCellView({ result })).toBe("grid")
+  })
+  it("is none for a run cell with no result", () => {
+    expect(resolveCellView({ mode: "run" })).toBe("none")
+    expect(resolveCellView({})).toBe("none")
+  })
+})
+
+describe("resolveRunAction", () => {
+  const result = { results: [], activeResultIndex: 0, timestamp: 0 }
+
+  it("runs a single query, or all, for a run cell with a visible grid", () => {
+    // Given a run cell whose grid is on screen
+    const cell = { mode: "run" as const, result }
+    const opts = { isCompactTier: false, showBottomSlot: true }
+    // When the user presses Run All / Run
+    // Then it runs all / one, without revealing anything
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: false,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: false,
+      exitDraw: false,
+    })
+  })
+
+  it("runs an empty run cell the same way, with nothing to reveal in wide tiers", () => {
+    // Given a run cell with no result in a wide tier (none view)
+    const cell = { mode: "run" as const }
+    const opts = { isCompactTier: false, showBottomSlot: false }
+    // When the user runs
+    // Then it runs, and never reveals outside the compact tier
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: false,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: false,
+      exitDraw: false,
+    })
+  })
+
+  it("reveals a compact run cell whose grid is collapsed by View SQL", () => {
+    // Given a compact run cell with the grid collapsed (View SQL active)
+    const cell = { mode: "run" as const, result }
+    const opts = { isCompactTier: true, showBottomSlot: false }
+    // When the user runs
+    // Then it reveals the grid first, then runs
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: true,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: true,
+      exitDraw: false,
+    })
+  })
+
+  it("refreshes the whole chart on Run All but ignores Run for a visible chart", () => {
+    // Given a draw cell whose chart is on screen
+    const cell = { mode: "draw" as const, result }
+    const opts = { isCompactTier: false, showBottomSlot: true }
+    // When the user presses Run All / Run
+    // Then Run All refreshes the chart and Run is a no-op
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "chart",
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "noop",
+    })
+  })
+
+  it("treats a compact chart collapsed behind the editor as a grid, exiting draw", () => {
+    // Given a compact draw cell with the chart collapsed (View SQL active)
+    const cell = { mode: "draw" as const, result }
+    const opts = { isCompactTier: true, showBottomSlot: false }
+    // When the user presses Run All / Run from the editor
+    // Then both reveal a grid and drop the cell out of draw — never the chart
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: true,
+      exitDraw: true,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: true,
+      exitDraw: true,
+    })
+  })
+})
+
+describe("cellToolbarTier", () => {
+  it("is compact below the standard threshold", () => {
+    // Given a cell narrower than 480px
+    // When resolving the toolbar tier
+    // Then it hides the Run/Draw toggles (compact)
+    expect(cellToolbarTier(0, false)).toBe("compact")
+    expect(cellToolbarTier(479, false)).toBe("compact")
+  })
+
+  it("is standard from 480px up to the expanded threshold", () => {
+    // Given a cell at least 480px but under 720px wide
+    // When resolving the toolbar tier
+    // Then it shows the current Run/Draw toggles (standard)
+    expect(cellToolbarTier(480, false)).toBe("standard")
+    expect(cellToolbarTier(719, false)).toBe("standard")
+  })
+
+  it("is expanded from 720px up", () => {
+    // Given a cell at least 720px wide
+    // When resolving the toolbar tier
+    // Then it shows the rich toolbar (expanded)
+    expect(cellToolbarTier(720, false)).toBe("expanded")
+    expect(cellToolbarTier(1200, false)).toBe("expanded")
+  })
+
+  it("is expanded when the cell is maximized, regardless of width", () => {
+    // Given a maximized cell that is otherwise narrow
+    // When resolving the toolbar tier
+    // Then maximized forces the expanded toolbar
+    expect(cellToolbarTier(0, true)).toBe("expanded")
+    expect(cellToolbarTier(479, true)).toBe("expanded")
+  })
+})
+
+describe("AUTO_REFRESH_OPTIONS", () => {
+  it("lists the menu choices in order: auto, off, then intervals", () => {
+    expect(AUTO_REFRESH_OPTIONS).toEqual([
+      true,
+      false,
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+    ])
+  })
+})
+
+describe("cellToolbarMenuFlags", () => {
+  const flags = (
+    over: Partial<Parameters<typeof cellToolbarMenuFlags>[0]> = {},
+  ) =>
+    cellToolbarMenuFlags({
+      tier: "compact",
+      view: "none",
+      isMarkdown: false,
+      sqlShown: false,
+      chartZoomed: false,
+      isGridMode: false,
+      cellIndex: 1,
+      totalCells: 3,
+      ...over,
+    })
+
+  it("compact none-view cell offers Run and Draw entry, nothing else in group A", () => {
+    // Given a narrow SQL cell with no result yet
+    const f = flags({ tier: "compact", view: "none" })
+    // When resolving the menu
+    // Then it offers the table (Run) and chart (Draw) entry points only
+    expect(f.showViewTable).toBe(true)
+    expect(f.showViewChart).toBe(true)
+    expect(f.showViewSql).toBe(false)
+    expect(f.showSplitItem).toBe(false)
+    expect(f.showRefreshItem).toBe(false)
+    expect(f.groupAHasItems).toBe(true)
+    expect(f.groupBHasItems).toBe(false)
+  })
+
+  it("compact grid view offers View SQL and View chart, plus Refresh — never View table it already shows", () => {
+    // Given a narrow cell currently showing the table
+    const f = flags({ tier: "compact", view: "grid" })
+    // Then the menu offers the two panes it is NOT showing, plus refresh
+    expect(f.showViewSql).toBe(true)
+    expect(f.showViewChart).toBe(true)
+    expect(f.showViewTable).toBe(false)
+    expect(f.showRefreshItem).toBe(true)
+    expect(f.showChartSettings).toBe(false)
+  })
+
+  it("hides chart commands that reach the unmounted chart when compact View SQL is active", () => {
+    // Given a compact chart cell collapsed to the editor (View SQL active),
+    // which unmounts the DrawCanvas the chart commands publish events to
+    const f = flags({
+      tier: "compact",
+      view: "chart",
+      sqlShown: true,
+      chartZoomed: true,
+    })
+    // Then the commands that would reach the now-unmounted chart are hidden…
+    expect(f.showRefreshItem).toBe(false)
+    expect(f.showChartSettings).toBe(false)
+    expect(f.showResetZoom).toBe(false)
+    // …but the interval submenu stays — it patches cell state, not the chart
+    expect(f.showAutoRefreshItem).toBe(true)
+    // …and View table / View chart still let the user bring a pane back
+    expect(f.showViewTable).toBe(true)
+    expect(f.showViewChart).toBe(true)
+  })
+
+  it("offers Reset zoom only for a zoomed chart in the compact tier", () => {
+    // Given a zoomed chart: the wider tiers expose Reset zoom inline instead
+    expect(
+      flags({ tier: "compact", view: "chart", chartZoomed: true })
+        .showResetZoom,
+    ).toBe(true)
+    expect(
+      flags({ tier: "compact", view: "chart", chartZoomed: false })
+        .showResetZoom,
+    ).toBe(false)
+    expect(
+      flags({ tier: "standard", view: "chart", chartZoomed: true })
+        .showResetZoom,
+    ).toBe(false)
+  })
+
+  it("standard chart keeps interval/refresh/settings in the menu (only the view toggle is inline)", () => {
+    // Given a standard-tier chart whose inline control is just the view toggle
+    const f = flags({ tier: "standard", view: "chart" })
+    // Then the menu carries the chart actions the inline toggle does not
+    expect(f.showAutoRefreshItem).toBe(true)
+    expect(f.showRefreshItem).toBe(true)
+    expect(f.showChartSettings).toBe(true)
+    expect(f.showSplitItem).toBe(false)
+  })
+
+  it("expanded tier never duplicates the inline refresh / interval / split controls", () => {
+    // Given the expanded toolbar, which shows refresh + interval + split inline
+    const chart = flags({ tier: "expanded", view: "chart" })
+    const grid = flags({ tier: "expanded", view: "grid" })
+    // Then the menu drops all of them, keeping only chart settings (chart only)
+    expect(chart.showRefreshItem).toBe(false)
+    expect(chart.showAutoRefreshItem).toBe(false)
+    expect(chart.showSplitItem).toBe(false)
+    expect(chart.showChartSettings).toBe(true)
+    expect(grid.showRefreshItem).toBe(false)
+    expect(grid.showSplitItem).toBe(false)
+    expect(grid.showChartSettings).toBe(false)
+  })
+
+  it("markdown cells expose only move/duplicate/delete", () => {
+    // Given a markdown cell (no run/draw views)
+    const f = flags({ tier: "compact", view: "none", isMarkdown: true })
+    // Then no view/chart items appear
+    expect(f.showViewSql).toBe(false)
+    expect(f.showViewTable).toBe(false)
+    expect(f.showViewChart).toBe(false)
+    expect(f.showChartSettings).toBe(false)
+    expect(f.groupAHasItems).toBe(false)
+    expect(f.groupBHasItems).toBe(false)
+  })
+
+  it("hides move up/down in grid mode and at the list ends", () => {
+    // Given grid mode, where array order doesn't move cells visually
+    expect(flags({ isGridMode: true }).showMoveUp).toBe(false)
+    expect(flags({ isGridMode: true }).showMoveDown).toBe(false)
+    // Given list mode at the first / last position
+    expect(flags({ cellIndex: 0, totalCells: 3 }).showMoveUp).toBe(false)
+    expect(flags({ cellIndex: 0, totalCells: 3 }).showMoveDown).toBe(true)
+    expect(flags({ cellIndex: 2, totalCells: 3 }).showMoveDown).toBe(false)
+    expect(flags({ cellIndex: 1, totalCells: 3 }).showMoveUp).toBe(true)
+  })
+
+  it("gates duplicate on the cell limit and delete on having more than one cell", () => {
+    expect(flags({ totalCells: 1 }).showDelete).toBe(false)
+    expect(flags({ totalCells: 2 }).showDelete).toBe(true)
+    expect(flags({ totalCells: MAX_NOTEBOOK_CELLS }).showDuplicate).toBe(false)
+    expect(flags({ totalCells: MAX_NOTEBOOK_CELLS - 1 }).showDuplicate).toBe(
+      true,
+    )
+  })
+
+  it("never shows a menu item that is also a visible inline toolbar button", () => {
+    // Given every tier × view combination
+    const tiers = ["compact", "standard", "expanded"] as const
+    const views = ["none", "grid", "chart"] as const
+    for (const tier of tiers) {
+      for (const view of views) {
+        const f = flags({ tier, view, chartZoomed: true })
+        // Then the expanded tier (which shows refresh/interval/split inline)
+        // never repeats them in the menu
+        if (tier === "expanded") {
+          expect(f.showRefreshItem).toBe(false)
+          expect(f.showAutoRefreshItem).toBe(false)
+          expect(f.showSplitItem).toBe(false)
+          expect(f.showResetZoom).toBe(false)
+        }
+        // And a divider flag is set iff at least one of its items shows
+        expect(f.groupAHasItems).toBe(
+          f.showViewSql ||
+            f.showViewTable ||
+            f.showViewChart ||
+            f.showSplitItem,
+        )
+        expect(f.groupBHasItems).toBe(
+          f.showResetZoom ||
+            f.showAutoRefreshItem ||
+            f.showRefreshItem ||
+            f.showChartSettings,
+        )
+      }
+    }
   })
 })

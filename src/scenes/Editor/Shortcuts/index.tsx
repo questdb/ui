@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { color } from "../../../utils"
 import { Text } from "../../../components"
-import { platform } from "../../../utils"
+import { ctrlCmd, altOption } from "../../../utils/platform"
 import { keys } from "ramda"
 
 type ShortcutsList = { keys: string[][]; title: string }[]
@@ -66,9 +66,6 @@ const Key = styled.span`
     margin-right: 0.25rem;
   }
 `
-
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-const altOption = platform.isMacintosh || platform.isIOS ? "⌥" : "Alt"
 
 const editorList: ShortcutsList = [
   {

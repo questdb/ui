@@ -43,6 +43,8 @@ export type ColorShape = {
   inputBorder: string
   selectionDarker: string
   baseGrey: string
+  dropdownBackground: string
+  dropdownBorder: string
   comment: string
   midnight: string
   red: string

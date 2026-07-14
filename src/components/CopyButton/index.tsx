@@ -64,7 +64,12 @@ export const CopyButton = ({
       {...(!iconOnly && { prefixIcon: displayIcon })}
       {...props}
     >
-      {copied && <StyledCheckboxCircle size={size === "sm" ? "8px" : "14px"} />}
+      {copied && (
+        <StyledCheckboxCircle
+          data-copy-check
+          size={size === "sm" ? "8px" : "14px"}
+        />
+      )}
       {iconOnly ? displayIcon : "Copy"}
     </StyledButton>
   )

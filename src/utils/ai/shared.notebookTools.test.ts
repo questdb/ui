@@ -63,8 +63,7 @@ const makeClient = (
   setCellLayout: vi.fn(() => Promise.resolve()),
   setCellMode: vi.fn(() => Promise.resolve()),
   setCellChartConfig: vi.fn(() => Promise.resolve()),
-  setCellAutoRefresh: vi.fn(() => Promise.resolve()),
-  setCellChartMaximized: vi.fn(() => Promise.resolve()),
+  setCellViewMaximized: vi.fn(() => Promise.resolve()),
   setCellMaximized: vi.fn(() => Promise.resolve()),
   applyNotebookState: vi.fn(() =>
     Promise.resolve({ applied: { added: [], updated: [], deleted: [] } }),
@@ -236,7 +235,6 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         cell_id: "c",
         x_column: "ts",
-        name: "Trades",
         queries: [
           {
             type: "line",
@@ -250,7 +248,6 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     expect(client.setCellChartConfig).toHaveBeenCalledWith(1, "c", {
       xColumn: "ts",
-      name: "Trades",
       queries: [
         {
           type: "line",
@@ -259,6 +256,95 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         },
       ],
     })
+  })
+
+  it("set_cell_autorefresh maps a fixed interval token to the cell patch (5s)", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_autorefresh",
+      { buffer_id: 1, cell_id: "c", value: "5s" },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      autoRefresh: "5s",
+    })
+  })
+
+  it("set_cell_autorefresh maps true to adaptive (2.0.0-compatible)", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_autorefresh",
+      { buffer_id: 1, cell_id: "c", value: true },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      autoRefresh: true,
+    })
+  })
+
+  it("set_cell_autorefresh maps false to disabled (2.0.0-compatible)", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_autorefresh",
+      { buffer_id: 1, cell_id: "c", value: false },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      autoRefresh: false,
+    })
+  })
+
+  it("set_cell_autorefresh rejects a token outside the allowed set", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "set_cell_autorefresh",
+      { buffer_id: 1, cell_id: "c", value: "2s" },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(client.updateCell).not.toHaveBeenCalled()
+  })
+
+  it("set_cell_name sets the cell name via updateCell", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: "BTC price" },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      name: "BTC price",
+    })
+  })
+
+  it("set_cell_name clears the name when passed null", async () => {
+    const client = makeClient()
+    await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: null },
+      client,
+      noopStatus,
+    )
+    expect(client.updateCell).toHaveBeenCalledWith(1, "c", {
+      name: undefined,
+    })
+  })
+
+  it("set_cell_name rejects a name over the length limit", async () => {
+    const client = makeClient()
+    const res = await dispatchTool(
+      "set_cell_name",
+      { buffer_id: 1, cell_id: "c", name: "a".repeat(101) },
+      client,
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(client.updateCell).not.toHaveBeenCalled()
   })
 
   it("run_query flags a transport-dropped error as unverified, a server error as not", async () => {
@@ -560,13 +646,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         cells: [
           {
             id: "b",
+            name: "Trades",
             value: "SELECT 1",
             mode: "draw",
-            auto_refresh: true,
-            is_chart_maximized: true,
+            auto_refresh: "5s",
+            is_view_maximized: true,
             chart_config: {
               x_column: "ts",
-              name: "Trades",
               right_axis: null,
               queries: [
                 {
@@ -590,13 +676,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       cells: [
         {
           id: "b",
+          name: "Trades",
           value: "SELECT 1",
           mode: "draw",
-          autoRefresh: true,
-          isChartMaximized: true,
+          autoRefresh: "5s",
+          isViewMaximized: true,
           chartConfig: {
             xColumn: "ts",
-            name: "Trades",
             queries: [
               {
                 type: "line",
@@ -923,7 +1009,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "SELECT * FROM trades",
             mode: "draw",
             auto_refresh: null,
-            is_chart_maximized: null,
+            is_view_maximized: null,
             chart_config: {
               x_column: "ts",
               name: null,
@@ -970,7 +1056,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "a",
             mode: null,
             auto_refresh: null,
-            is_chart_maximized: null,
+            is_view_maximized: null,
             chart_config: null,
             grid: null,
           },
@@ -1068,7 +1154,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "DROP TABLE victim",
             mode: "draw",
             auto_refresh: null,
-            is_chart_maximized: null,
+            is_view_maximized: null,
             chart_config: { type: "line", x_column: "ts", y_columns: ["x"] },
             grid: null,
           },

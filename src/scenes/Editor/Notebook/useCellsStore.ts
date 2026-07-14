@@ -17,6 +17,7 @@ import {
   swapCellDown,
   swapCellUp,
 } from "./notebookUtils"
+import type { AutoRefresh } from "../../../store/notebook"
 
 type Options = {
   initialCells: NotebookCell[]
@@ -155,15 +156,15 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [patchCell],
   )
 
-  const setCellAutoRefresh = useCallback(
-    (cellId: string, value: boolean) =>
+  const setCellRefresh = useCallback(
+    (cellId: string, value: AutoRefresh) =>
       patchCell(cellId, { autoRefresh: value }),
     [patchCell],
   )
 
-  const setCellChartMaximized = useCallback(
+  const setCellViewMaximized = useCallback(
     (cellId: string, value: boolean) =>
-      patchCell(cellId, { isChartMaximized: value }),
+      patchCell(cellId, { isViewMaximized: value }),
     [patchCell],
   )
 
@@ -184,7 +185,7 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     setScriptSummary,
     setCellMode,
     setCellChartConfig,
-    setCellAutoRefresh,
-    setCellChartMaximized,
+    setCellRefresh,
+    setCellViewMaximized,
   }
 }

@@ -1,4 +1,4 @@
-import React, { MouseEvent, ReactNode } from "react"
+import React, { FocusEvent, MouseEvent, ReactNode } from "react"
 import styled, { css } from "styled-components"
 import type { DefaultTheme } from "styled-components"
 import { Tooltip } from "../Tooltip"
@@ -44,6 +44,10 @@ type BaseButtonProps = {
   onClick?: (event: MouseEvent) => void
   onDoubleClick?: (event: MouseEvent) => void
   onMouseDown?: (event: MouseEvent) => void
+  onMouseEnter?: (event: MouseEvent) => void
+  onMouseLeave?: (event: MouseEvent) => void
+  onFocus?: (event: FocusEvent) => void
+  onBlur?: (event: FocusEvent) => void
   size?: Size
   fullWidth?: boolean
   type?: Type

@@ -34,6 +34,8 @@ type Props = {
   content: React.ReactNode | null
   placement?: Placement
   delay?: number
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   children: React.ReactNode
 }
 
@@ -160,11 +162,17 @@ export const Tooltip = ({
   content,
   placement = "bottom",
   delay,
+  open,
+  onOpenChange,
   children,
 }: Props): JSX.Element => {
   if (!content) return <>{children}</>
   return (
-    <RadixTooltip.Root delayDuration={delay}>
+    <RadixTooltip.Root
+      delayDuration={delay}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <TooltipContent

@@ -1,7 +1,8 @@
 import React, { useContext } from "react"
 import styled from "styled-components"
 import { Button, Box, Key } from "../../components"
-import { color, platform } from "../../utils"
+import { color } from "../../utils"
+import { ctrlCmd } from "../../utils/platform"
 import { useSelector } from "react-redux"
 import { AISparkle } from "../AISparkle"
 import { QuestContext } from "../../providers"
@@ -20,10 +21,7 @@ const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   color: ${({ theme }) => theme.color.pinkPrimary};
 `
 
-const ctrlCmd = platform.isMacintosh || platform.isIOS ? "⌘" : "Ctrl"
-
-const shortcutTitle =
-  platform.isMacintosh || platform.isIOS ? "Cmd+E" : "Ctrl+E"
+const shortcutTitle = `${ctrlCmd}+E`
 
 const ExplainButton = styled(Button)`
   gap: 1rem;

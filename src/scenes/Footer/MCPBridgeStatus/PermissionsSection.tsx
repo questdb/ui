@@ -111,22 +111,13 @@ const ItemRoot = styled.div`
 `
 
 const Item = styled(DropdownMenu.Item)`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
   padding: 0.8rem 2.4rem 0.8rem 1rem;
 `
 
 const ItemLabel = styled.span`
-  font-size: 1.3rem;
+  font-size: 1.4rem;
   font-weight: 500;
   color: ${({ theme }) => theme.color.foreground};
-`
-
-const ItemHint = styled.span`
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
 `
 
 const Check = styled.span`
@@ -179,9 +170,9 @@ export const PermissionsSection: React.FC<Props> = ({
             <Item
               onSelect={() => handleSelect(opt.level)}
               data-hook={`permission-level-${opt.level}`}
+              subtitle={opt.hint}
             >
               <ItemLabel>{opt.label}</ItemLabel>
-              <ItemHint>{opt.hint}</ItemHint>
             </Item>
             {opt.level === currentLevel && <Check>✓</Check>}
           </ItemRoot>
