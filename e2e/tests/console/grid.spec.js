@@ -712,16 +712,14 @@ describe("questdb grid", () => {
       // Given a result with one very long column
       runQuery("select string_agg(x::string, ',') s from long_sequence(500)")
 
-      // Then it stretches to the full grid width
-      let gridWidth
-      gridArea().then(($grid) => {
-        gridWidth = $grid[0].getBoundingClientRect().width
-      })
-      cellIn(0).then(($cell) => {
-        expect($cell[0].getBoundingClientRect().width).to.be.closeTo(
-          gridWidth,
-          20,
-        )
+      // Then it stretches to the full grid width — asserted retryably, since
+      // widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const cellWidth = $grid
+          .find("#cell-0-0")[0]
+          .getBoundingClientRect().width
+        expect(cellWidth).to.be.closeTo(gridWidth, 20)
       })
     })
 
@@ -731,17 +729,16 @@ describe("questdb grid", () => {
         `select string_agg(x::string, ',') s, ${longArray(300)} arr from long_sequence(500)`,
       )
 
-      // Then each column takes half of the grid width
-      let gridWidth
-      gridArea().then(($grid) => {
-        gridWidth = $grid[0].getBoundingClientRect().width
-      })
-      let firstWidth
-      cellIn(0).then(($cell) => {
-        firstWidth = $cell[0].getBoundingClientRect().width
-      })
-      cellIn(1).then(($cell) => {
-        const secondWidth = $cell[0].getBoundingClientRect().width
+      // Then each column takes half of the grid width — asserted retryably,
+      // since widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const firstWidth = $grid
+          .find("#cell-0-0")[0]
+          .getBoundingClientRect().width
+        const secondWidth = $grid
+          .find("#cell-0-1")[0]
+          .getBoundingClientRect().width
         expect(firstWidth).to.be.closeTo(secondWidth, 8)
         expect(firstWidth).to.be.closeTo(gridWidth / 2, 20)
       })
@@ -758,29 +755,19 @@ describe("questdb grid", () => {
       // Given a few narrow columns and one wide array column
       runQuery(`select 1, 2, 3, ${longArray(300)} arr`)
 
-      let gridWidth
-      gridArea().then(($grid) => {
-        gridWidth = $grid[0].getBoundingClientRect().width
-      })
-
-      // Then the narrow columns settle at one small, shared width
-      let firstDigitWidth
-      let digitsTotal = 0
-      for (let col = 0; col < 3; col++) {
-        cellIn(col).then(($cell) => {
-          const width = $cell[0].getBoundingClientRect().width
-          if (col === 0) firstDigitWidth = width
-          else expect(width).to.be.closeTo(firstDigitWidth, 8)
-          digitsTotal += width
-        })
-      }
-
-      // And the array column takes exactly what the narrow columns leave behind
-      cellIn(3).then(($cell) => {
-        expect($cell[0].getBoundingClientRect().width).to.be.closeTo(
-          gridWidth - digitsTotal,
-          20,
+      // Then the narrow columns settle at one small, shared width, and the
+      // array column takes exactly what they leave behind — asserted retryably,
+      // since widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const widths = [0, 1, 2, 3].map(
+          (col) =>
+            $grid.find(`#cell-0-${col}`)[0].getBoundingClientRect().width,
         )
+        expect(widths[1]).to.be.closeTo(widths[0], 8)
+        expect(widths[2]).to.be.closeTo(widths[0], 8)
+        const digitsTotal = widths[0] + widths[1] + widths[2]
+        expect(widths[3]).to.be.closeTo(gridWidth - digitsTotal, 20)
       })
     })
 
@@ -796,7 +783,7 @@ describe("questdb grid", () => {
       // Then it settles at the maximum column width
       cellIn(100)
         .should("be.visible")
-        .then(($cell) => {
+        .should(($cell) => {
           expect($cell[0].getBoundingClientRect().width).to.be.closeTo(400, 3)
         })
     })
