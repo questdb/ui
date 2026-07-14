@@ -37,6 +37,7 @@ export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
       count: r.count,
       timestamp: r.timestamp,
       timings: r.timings,
+      notice: r.notice,
     }
   }
   if (r.type === "error") {
@@ -92,6 +93,7 @@ export const resultsEquivalent = (
     if (x.type !== y.type) return false
     if (x.count !== y.count) return false
     if (x.error !== y.error) return false
+    if (x.notice !== y.notice) return false
     // Cheap O(1) reject before the O(rows×cols) walk: a live poll that moved
     // almost always changes the row count or the first/last row's x value, so
     // most ticks bail here without scanning every cell.
