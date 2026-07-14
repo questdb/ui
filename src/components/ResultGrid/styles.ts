@@ -239,6 +239,39 @@ export const CellText = styled.div`
   white-space: nowrap;
 `
 
+export const CellTooltipAnchor = styled.div`
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+`
+
+export const CellTooltipTextColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+`
+
+export const CellTooltipValue = styled.div`
+  max-height: min(40vh, 280px);
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+`
+
+export const CellTooltipNote = styled.div`
+  margin-top: 0.6rem;
+  color: ${color("mutedLabel")};
+  font-size: ${({ theme }) => theme.fontSize.xs};
+`
+
+export const CellTooltipCopyButton = styled(CopyButton).attrs({
+  iconOnly: true,
+  size: "sm",
+})`
+  margin-left: auto;
+  background: transparent;
+`
+
 export const FrozenShadow = styled.div`
   position: absolute;
   top: 0;

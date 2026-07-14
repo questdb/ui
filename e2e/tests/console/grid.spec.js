@@ -627,6 +627,40 @@ describe("questdb grid", () => {
     })
   })
 
+  describe.only("cell hover tooltip", () => {
+    // Radix renders the content twice: the visible popper instance first, then
+    // a visually-hidden aria copy, so value assertions read the first match.
+    const getTooltipValue = () =>
+      cy.getByDataHook("grid-cell-tooltip-value").first()
+
+    it("shows the full value of a truncated cell after a hover delay", () => {
+      // Given
+      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      cy.runLine()
+
+      // When
+      cy.getGridCellAt(0, 0).realHover()
+
+      // Then
+      getTooltipValue().should("have.text", "a" + "b".repeat(399))
+      cy.contains("+100 more characters").should("be.visible")
+    })
+
+    it("re-running the query hides the open tooltip", () => {
+      // Given
+      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      cy.runLine()
+      cy.getGridCellAt(0, 0).realHover()
+      getTooltipValue().should("be.visible")
+
+      // When
+      cy.runLine()
+
+      // Then
+      cy.getByDataHook("grid-cell-tooltip-value").should("not.exist")
+    })
+  })
+
   describe("toolbar actions", () => {
     it("copies the current page as a Markdown table", () => {
       // Given

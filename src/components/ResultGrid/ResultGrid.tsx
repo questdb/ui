@@ -66,6 +66,7 @@ import { useFontsReady } from "./useFontsReady"
 import { useScrollShadows } from "./useScrollShadows"
 import { useColumnSizing } from "./useColumnSizing"
 import { useFreezeDrag } from "./useFreezeDrag"
+import { useCellHoverTooltip } from "./useCellHoverTooltip"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -477,6 +478,18 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onCellCopy,
     )
 
+    const {
+      overlay: cellTooltipOverlay,
+      onMouseOver: onCellTooltipMouseOver,
+      onMouseLeave: onCellTooltipMouseLeave,
+      hideTooltip: hideCellTooltip,
+    } = useCellHoverTooltip(getData, getColumn)
+
+    const handleViewportScroll = useCallback(() => {
+      hideCellTooltip()
+      handleScroll()
+    }, [hideCellTooltip, handleScroll])
+
     const hasSelection = focusedCell != null
     useEffect(() => {
       onSelectionChange?.(hasSelection)
@@ -774,7 +787,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         <ScrollContainer
           ref={scrollRef}
           data-hook="grid-viewport"
-          onScroll={handleScroll}
+          onScroll={handleViewportScroll}
+          onMouseOver={onCellTooltipMouseOver}
+          onMouseLeave={onCellTooltipMouseLeave}
           $scrollable={isFocused}
           role="presentation"
         >
@@ -841,6 +856,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 </Row>
               )
             })}
+            {cellTooltipOverlay}
           </div>
         </ScrollContainer>
         {frozenCount > 0 && shadowLeft && (

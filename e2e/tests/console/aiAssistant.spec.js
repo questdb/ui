@@ -303,7 +303,7 @@ describe("ai assistant", () => {
       // Then
       cy.getByDataHook("ai-assistant-settings-button").should(
         "contain",
-        "Settings",
+        "AI Settings",
       )
       cy.getByDataHook("ai-chat-button").should("be.visible")
       cy.getByDataHook("ai-settings-model-dropdown").should("be.visible")

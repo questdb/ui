@@ -55,7 +55,7 @@ export const SetupAIAssistant = () => {
             data-hook="ai-assistant-settings-button"
             title="AI Assistant Settings"
           >
-            {isConfigured ? "Settings" : "Configure"}
+            {isConfigured ? "AI Settings" : "Configure"}
           </SettingsButton>
         </div>
       </Box>
