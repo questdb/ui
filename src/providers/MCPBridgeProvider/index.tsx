@@ -10,10 +10,7 @@ import React, {
 import { MCPBridgeClient } from "../../utils/mcp/MCPBridgeClient"
 import type { MCPBridgeClientStatus } from "../../utils/mcp/MCPBridgeClient"
 import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
-import type {
-  FreshnessGate,
-  StateFreshness,
-} from "../../utils/mcp/dispatchMCPTool"
+import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
 import { mcpTools } from "../../utils/tools/tools"
 import {
   EXPECTED_BRIDGE_VERSION,
@@ -37,7 +34,7 @@ import {
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
 import { QuestContext } from "../QuestProvider"
 import { useLocalStorage } from "../LocalStorageProvider"
-import { on as onUserAction, onUserEdit } from "../../utils/notebookAIBridge"
+import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
 import {
   applyUserActionToDigest,
@@ -123,21 +120,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   // (consecutiveFailedAttempts pinned at the cap) is never rebuilt.
   const [connectAttempt, setConnectAttempt] = useState(0)
 
-  const freshnessRef = useRef<StateFreshness>("unfetched")
-  const freshBufferRef = useRef<number | null>(null)
-  const freshnessGate: FreshnessGate = useMemo(
-    () => ({
-      get: () => freshnessRef.current,
-      set: (next) => {
-        freshnessRef.current = next
-      },
-      getReadBuffer: () => freshBufferRef.current,
-      setReadBuffer: (bufferId) => {
-        freshBufferRef.current = bufferId
-      },
-    }),
-    [],
-  )
+  const freshnessRef = useRef(createNotebookFreshness())
 
   const digestRef = useRef<UserActionDigest>(createEmptyDigest())
   const getDigest = useCallback(() => digestRef.current, [])
@@ -174,14 +157,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const dispatchCtxRef = useRef({
     modelToolsClient,
-    freshness: freshnessGate,
+    freshness: freshnessRef.current,
     metaToolContext,
     permissions: permissionsRefs,
     validateSql,
   })
   dispatchCtxRef.current = {
     modelToolsClient,
-    freshness: freshnessGate,
+    freshness: freshnessRef.current,
     metaToolContext,
     permissions: permissionsRefs,
     validateSql,
@@ -199,19 +182,16 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     const cleanupUserActionListener = onUserAction("user-action", (evt) => {
       digestRef.current = applyUserActionToDigest(digestRef.current, evt)
-      freshnessRef.current = "stale"
-    })
-    const cleanupUserEditListener = onUserEdit(() => {
-      freshnessRef.current = "stale"
     })
     return () => {
       cleanupUserActionListener()
-      cleanupUserEditListener()
     }
   }, [])
 
   useEffect(() => {
     if (!url || !token) return
+    digestRef.current = createEmptyDigest()
+    freshnessRef.current.reset()
     const client = new MCPBridgeClient({
       url,
       token,
@@ -366,7 +346,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     setRetryAttempt(0)
     setVersionMismatch(null)
     digestRef.current = createEmptyDigest()
-    freshnessRef.current = "unfetched"
+    freshnessRef.current.reset()
   }, [])
 
   useEffect(() => {

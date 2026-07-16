@@ -325,6 +325,9 @@ export class Client {
         if (data.notice) {
           return {
             ...data,
+            ...(data.timings
+              ? { timings: { ...data.timings, fetch: fetchTime } }
+              : {}),
             type: Type.NOTICE,
           }
         }

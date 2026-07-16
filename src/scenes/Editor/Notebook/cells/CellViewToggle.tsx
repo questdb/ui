@@ -9,8 +9,8 @@ import { Reset } from "@styled-icons/boxicons-regular"
 import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
 import { Tooltip } from "../../../../components"
-import { useNotebookActions } from "../NotebookProvider"
-import { signalUserEdit } from "../../../../utils/notebookAIBridge"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { CellView } from "../notebookUtils"
@@ -48,9 +48,14 @@ const Segment = styled.button<{ $active?: boolean }>`
     height: 1.8rem;
   }
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: ${({ $active, theme }) =>
       $active ? theme.color.selection : `${theme.color.selection}80`};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 `
 
@@ -89,6 +94,7 @@ type Props = {
   isViewMaximized: boolean
   isGridLoading: boolean
   isChartLoading: boolean
+  isRunning: boolean
   chartZoomed: boolean
   showLabels: boolean
 }
@@ -99,11 +105,13 @@ export const CellViewToggle: React.FC<Props> = ({
   isViewMaximized,
   isGridLoading,
   isChartLoading,
+  isRunning,
   chartZoomed,
   showLabels,
 }) => {
   const { setCellViewMaximized, setCellMode, clearCellResult } =
     useNotebookActions()
+  const bufferId = useNotebookBufferId()
 
   // Clicking the active segment toggles it off, wiping the result back to the
   // empty "none" state. Switching between grid and chart transfers the existing
@@ -112,12 +120,14 @@ export const CellViewToggle: React.FC<Props> = ({
   // just flips the mode back, where the grid shows the chart's mirrored result.
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
-    signalUserEdit()
+    if (isRunning) return
+    signalUserEdit(bufferId)
     eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
   }
   const handleTable = (e: React.MouseEvent) => {
     e.stopPropagation()
-    signalUserEdit()
+    if (isRunning) return
+    signalUserEdit(bufferId)
     if (view === "grid") {
       clearCellResult(cellId)
       return
@@ -126,7 +136,7 @@ export const CellViewToggle: React.FC<Props> = ({
   }
   const handleSplit = (e: React.MouseEvent) => {
     e.stopPropagation()
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setCellViewMaximized(cellId, !isViewMaximized)
   }
   const handleResetZoom = (e: React.MouseEvent) => {
@@ -142,6 +152,7 @@ export const CellViewToggle: React.FC<Props> = ({
           $active={view === "grid"}
           aria-pressed={view === "grid"}
           aria-busy={view === "grid" && isGridLoading}
+          disabled={isRunning}
           onClick={handleTable}
           aria-label="View table"
         >
@@ -159,6 +170,7 @@ export const CellViewToggle: React.FC<Props> = ({
           $active={view === "chart"}
           aria-pressed={view === "chart"}
           aria-busy={view === "chart" && isChartLoading}
+          disabled={isRunning}
           onClick={handleChart}
           aria-label="View chart"
         >

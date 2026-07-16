@@ -53,7 +53,7 @@ export const InlineResultTable: React.FC<Props> = ({
         />
       )}
 
-      {activeResult?.type === "dql" && activeResult.dataset.length > 0 && (
+      {activeResult?.type === "dql" && activeResult.columns.length > 0 && (
         <ResultGridPanel
           key={`${result.activeResultIndex}-${activeResult.query}`}
           data={activeResult}

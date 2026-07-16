@@ -1,2 +1,2 @@
 export { ResizeHandle } from "./ResizeHandle"
-export { EdgeHandle, renderEdgeHandle } from "./EdgeHandle"
+export { renderEdgeHandle } from "./EdgeHandle"

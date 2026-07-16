@@ -1,21 +1,11 @@
 import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
-import type {
-  CellMode,
-  CellType,
-  NotebookCell,
-  SingleQueryResult,
-} from "../../../store/notebook"
+import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
 import {
   attachScriptSummary,
   cancelAllInCell,
   cancelOneInCell,
-  duplicateCellAt,
-  insertCell,
-  removeCell,
   setResultAt,
-  swapCellDown,
-  swapCellUp,
 } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
 
@@ -30,13 +20,15 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   const cellsRef = useRef(cells)
   cellsRef.current = cells
 
+  // Writes advance cellsRef synchronously (React refreshes it only on render),
+  // so two mutations in one tick compose instead of the second reading pre-write
+  // cells and clobbering the first.
   const updateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
-      setCells((prev) => {
-        const next = updater(prev)
-        persistCells(next)
-        return next
-      })
+      const next = updater(cellsRef.current)
+      cellsRef.current = next
+      persistCells(next)
+      setCells(next)
     },
     [persistCells],
   )
@@ -48,27 +40,12 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   // re-triggers itself off its own buffer write, looping forever. Stable
   // identity ([] deps) so the hydration effect runs once per mount.
   const hydrateCells = useCallback(
-    (updater: (prev: NotebookCell[]) => NotebookCell[]) => setCells(updater),
+    (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
+      const next = updater(cellsRef.current)
+      cellsRef.current = next
+      setCells(next)
+    },
     [],
-  )
-
-  // Id generated up-front so the synchronous return matches the deferred state update.
-  const addCell = useCallback(
-    (afterCellId?: string, value?: string, type?: CellType): string => {
-      const id = crypto.randomUUID()
-      updateCells((prev) =>
-        insertCell(prev, afterCellId, undefined, { id, value, type }),
-      )
-      return id
-    },
-    [updateCells],
-  )
-
-  const removeCellById = useCallback(
-    (cellId: string) => {
-      updateCells((prev) => removeCell(prev, cellId))
-    },
-    [updateCells],
   )
 
   const updateCell = useCallback(
@@ -76,25 +53,6 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
       updateCells((prev) =>
         prev.map((c) => (c.id === cellId ? { ...c, ...updates } : c)),
       )
-    },
-    [updateCells],
-  )
-
-  const moveCellUp = useCallback(
-    (cellId: string) => updateCells((prev) => swapCellUp(prev, cellId)),
-    [updateCells],
-  )
-
-  const moveCellDown = useCallback(
-    (cellId: string) => updateCells((prev) => swapCellDown(prev, cellId)),
-    [updateCells],
-  )
-
-  const duplicateCell = useCallback(
-    (cellId: string): string => {
-      const newId = crypto.randomUUID()
-      updateCells((prev) => duplicateCellAt(prev, cellId, newId))
-      return newId
     },
     [updateCells],
   )
@@ -136,36 +94,16 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [updateCells],
   )
 
-  const patchCell = useCallback(
-    (cellId: string, patch: Partial<NotebookCell>) => {
-      updateCells((prev) =>
-        prev.map((c) => (c.id === cellId ? { ...c, ...patch } : c)),
-      )
-    },
-    [updateCells],
-  )
-
-  const setCellMode = useCallback(
-    (cellId: string, mode: CellMode) => patchCell(cellId, { mode }),
-    [patchCell],
-  )
-
   const setCellChartConfig = useCallback(
     (cellId: string, config: ChartConfig) =>
-      patchCell(cellId, { chartConfig: config }),
-    [patchCell],
+      updateCell(cellId, { chartConfig: config }),
+    [updateCell],
   )
 
   const setCellRefresh = useCallback(
     (cellId: string, value: AutoRefresh) =>
-      patchCell(cellId, { autoRefresh: value }),
-    [patchCell],
-  )
-
-  const setCellViewMaximized = useCallback(
-    (cellId: string, value: boolean) =>
-      patchCell(cellId, { isViewMaximized: value }),
-    [patchCell],
+      updateCell(cellId, { autoRefresh: value }),
+    [updateCell],
   )
 
   return {
@@ -175,17 +113,10 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     hydrateCells,
     updateCell,
     updateCellResult,
-    addCell,
-    removeCellById,
-    moveCellUp,
-    moveCellDown,
-    duplicateCell,
     markCancelledAll,
     markCancelledOne,
     setScriptSummary,
-    setCellMode,
     setCellChartConfig,
     setCellRefresh,
-    setCellViewMaximized,
   }
 }

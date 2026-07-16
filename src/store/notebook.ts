@@ -59,8 +59,10 @@ export type DqlQueryResult = {
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
+  truncated?: boolean
   timestamp?: number
   timings?: Timings
+  notice?: string
 }
 
 export type DdlDmlQueryResult = {

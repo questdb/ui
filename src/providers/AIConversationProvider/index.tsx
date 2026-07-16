@@ -22,7 +22,7 @@ import { applyUserActionToDigest, createEmptyDigest } from "./userActionDigest"
 import {
   on as onUserAction,
   type UserActionEvent,
-} from "../../utils/notebookAIBridge"
+} from "../../utils/notebooks/notebookAIBridge"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import {
   normalizeQueryText,

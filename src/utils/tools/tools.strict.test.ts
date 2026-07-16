@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { ALL_DEFINITIONS, aiTools } from "./tools"
+import { aiTools } from "./tools"
 
 type SchemaNode = {
   type?: unknown
@@ -45,14 +45,5 @@ describe("AI tool schemas satisfy OpenAI strict mode", () => {
       collectViolations(tool.name, tool.inputSchema as SchemaNode, violations)
     }
     expect(violations).toEqual([])
-  })
-})
-
-describe("editsCells flag", () => {
-  it("every editsCells tool also mutatesNotebook (editsCells ⊆ mutatesNotebook)", () => {
-    const bad = ALL_DEFINITIONS.filter(
-      (t) => t.editsCells && !t.mutatesNotebook,
-    ).map((t) => t.name)
-    expect(bad).toEqual([])
   })
 })

@@ -156,5 +156,3 @@ export const renderEdgeHandle = (axis: string, ref: React.Ref<HTMLElement>) => {
     </Handle>
   )
 }
-
-export const EdgeHandle = Handle

@@ -11,9 +11,7 @@ import type { MutableRefObject } from "react"
 import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
-import { MAX_NOTEBOOK_CELLS } from "../../../store/notebook"
 import type {
-  CellLayoutItem,
   CellResult,
   NotebookCell,
   NotebookVariable,
@@ -28,15 +26,27 @@ import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
 import {
+  addCellTransition,
   createNotebookController,
+  deleteCellTransition,
+  duplicateCellTransition,
+  moveCellDownTransition,
+  moveCellUpTransition,
   registerController,
+  setCellMaximizedTransition,
+  setCellModeTransition,
+  setCellViewMaximizedTransition,
   unregisterController,
   type NotebookControllerActions,
-} from "../../../utils/notebookAIBridge"
+  type NotebookTransitionResult,
+  type ViewParts,
+} from "../../../utils/notebooks/notebookController"
 import {
+  type CellRunOutcome,
   computeResultBottomHeight,
-  DEFAULT_CHART_BOTTOM_HEIGHT,
+  generateId,
 } from "./notebookUtils"
+import { silently } from "../../../utils/notebooks/notebookToolError"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
   deleteCellSnapshot,
@@ -73,7 +83,8 @@ export type NotebookActions = {
     cellId: string,
     sql?: string,
     signal?: AbortSignal,
-  ) => Promise<boolean>
+    expectFullValue?: boolean,
+  ) => Promise<CellRunOutcome>
   reRunResultAt: (cellId: string, index: number) => Promise<boolean>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
@@ -84,16 +95,10 @@ export type NotebookActions = {
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
   setCellRefresh: (cellId: string, value: AutoRefresh) => void
   setCellViewMaximized: (cellId: string, value: boolean) => void
-  setCellLayout: (
-    cellId: string,
-    pos: { x: number; y: number; w: number; h: number },
-  ) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
   getCellsSnapshot: () => NotebookCell[]
 }
-
-export type NotebookContextType = NotebookState & NotebookActions
 
 type LiveNotebookActions = NotebookActions & NotebookControllerActions
 
@@ -108,7 +113,7 @@ const NOOP_ACTIONS: NotebookActions = {
   moveCellUp: () => undefined,
   moveCellDown: () => undefined,
   duplicateCell: () => "",
-  runCell: () => Promise.resolve(false),
+  runCell: () => Promise.resolve({ ok: false, superseded: false }),
   reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
@@ -119,7 +124,6 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellChartConfig: () => undefined,
   setCellRefresh: () => undefined,
   setCellViewMaximized: () => undefined,
-  setCellLayout: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
   getCellsSnapshot: () => [],
@@ -129,7 +133,13 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   ...NOOP_ACTIONS,
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
-  updateCells: () => undefined,
+  applyTransition: (run) =>
+    run({
+      cells: [],
+      settings: {},
+      maximizedCellId: null,
+      focusedCellId: null,
+    }).result,
 }
 
 const NOTEBOOK_ACTION_KEYS = Object.keys(NOOP_ACTIONS) as Array<
@@ -167,20 +177,17 @@ const createNotebookScopeKey = (bufferId: number, cellId: string): string =>
 
 const NotebookStateContext = createContext<NotebookState>(EMPTY_STATE)
 const NotebookActionsContext = createContext<NotebookActions>(NOOP_ACTIONS)
+const NotebookBufferIdContext = createContext<number>(0)
 
 export const useNotebookState = () => useContext(NotebookStateContext)
 export const useNotebookActions = () => useContext(NotebookActionsContext)
-
-export const useNotebook = (): NotebookContextType => {
-  const state = useNotebookState()
-  const actions = useNotebookActions()
-  return useMemo(() => ({ ...state, ...actions }), [state, actions])
-}
+export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
 
 export const NotebookProvider: React.FC<{
   initialState: NotebookViewState
   bufferId: number
-}> = ({ initialState, bufferId, children }) => {
+  preview?: boolean
+}> = ({ initialState, bufferId, preview = false, children }) => {
   const { updateBuffer } = useEditor()
   const { questExecution } = useContext(QuestContext)
 
@@ -214,6 +221,7 @@ export const NotebookProvider: React.FC<{
       focusedCellIdRef,
       maximizedCellIdRef,
       settingsRef,
+      preview,
     })
 
   const store = useCellsStore({
@@ -222,11 +230,8 @@ export const NotebookProvider: React.FC<{
   })
 
   // Restore persisted result snapshots on mount. Results are stripped before
-  // persist, so cells load empty; rehydrate each from its bounded snapshot when
-  // the cell's SQL still matches and no live result has landed yet. Cells that
-  // had a result (`lastRunStatus` set — known synchronously) reserve their
-  // result area + show a spinner while `isHydrating`, so the grid lands in
-  // place rather than elongating the cell once this async load resolves.
+  // persist, so cells load empty; rehydrate each from its bounded snapshot by
+  // cell id when no live result has landed yet.
   const { hydrateCells, cellsRef } = store
   const [hydrationSettled, setHydrationSettled] = useState(false)
   useEffect(() => {
@@ -296,79 +301,91 @@ export const NotebookProvider: React.FC<{
     [persistImmediately, store.cellsRef],
   )
 
-  const setMaximizedCellId = useCallback(
-    (cellId: string | null) => {
-      maximizedCellIdRef.current = cellId
-      setMaximizedCellIdState(cellId)
-      persistImmediately(store.cellsRef.current)
-    },
-    [persistImmediately, store.cellsRef],
-  )
+  const cancelCell = useCallback(
+    (cellId: string) => {
+      execution.cancelCell(cellId)
 
-  const setCellLayout = useCallback(
-    (cellId: string, pos: { x: number; y: number; w: number; h: number }) => {
-      const prev = settingsRef.current
-      const layout = prev.layout ?? []
-      const idx = layout.findIndex((l) => l.i === cellId)
-      const nextLayout: CellLayoutItem[] =
-        idx >= 0
-          ? layout.map((l) => (l.i === cellId ? { ...l, ...pos } : l))
-          : [...layout, { i: cellId, ...pos }]
-      const next = { ...prev, layout: nextLayout }
-      settingsRef.current = next
-      setSettingsState(next)
-      persistImmediately(store.cellsRef.current)
-    },
-    [persistImmediately, store.cellsRef],
-  )
-
-  // In grid mode, freshly added cells must land in `settings.layout` so
-  // mergeCellLayout has a real position entry to read. The `h` value
-  // written here is a placeholder — the actual rendered grid h is derived
-  // at render time from cell.topHeight + cell.bottomHeight (see
-  // computeCellGridH).
-  const addCell = useCallback(
-    (afterCellId?: string, value?: string, type?: CellType): string => {
-      if (store.cellsRef.current.length >= MAX_NOTEBOOK_CELLS) return ""
-      let newId = ""
-      unstable_batchedUpdates(() => {
-        newId = store.addCell(afterCellId, value, type)
-        if (settingsRef.current.layoutMode !== "grid") return
-        const layout = settingsRef.current.layout ?? []
-        const maxY =
-          layout.length > 0 ? Math.max(...layout.map((l) => l.y + l.h)) : 0
-        // h = 1 sentinel; computeCellGridH overrides at render.
-        setCellLayout(newId, { x: 0, y: maxY, w: 12, h: 1 })
-      })
-      return newId
-    },
-    [store, setCellLayout],
-  )
-
-  // Mode toggle: when a cell flips between run and draw, seed bottomHeight
-  // with the mode-appropriate default. This puts the cell into double-view
-  // immediately for draw, and back to single-view (or result-double-view)
-  // for run.
-  const setCellMode = useCallback(
-    (cellId: string, mode: CellMode) => {
-      const cell = store.cellsRef.current.find((c) => c.id === cellId)
-      store.setCellMode(cellId, mode)
-      if (cell?.bottomResized) return
-      if (mode === "draw") {
-        store.updateCell(cellId, { bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT })
-      } else {
-        // back to run mode: size the bottom slot based on what the
-        // existing result actually contains (DQL-with-rows → 10-row
-        // height; DDL/DML/error/empty → notification-only). No result
-        // yet → drop to single-view by clearing bottomHeight.
-        store.updateCell(cellId, {
-          bottomHeight: cell?.result
-            ? computeResultBottomHeight(cell.result)
-            : undefined,
-        })
+      const queryKey = activeCellQueryKeysRef.current.get(cellId)
+      if (queryKey) {
+        activeCellQueryKeysRef.current.delete(cellId)
+        questExecution.releaseExecution(
+          queryKey,
+          createNotebookScopeKey(bufferId, cellId),
+        )
       }
     },
-    [store],
+    [bufferId, execution, questExecution],
+  )
+
+  const applyTransition = useCallback(
+    <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+      const out = run({
+        cells: store.cellsRef.current,
+        settings: settingsRef.current,
+        maximizedCellId: maximizedCellIdRef.current,
+        focusedCellId: focusedCellIdRef.current,
+      })
+      const { parts } = out
+      // Sync refs so a second transition in the same tick composes on top of
+      // this one (cells is kept current by the store's setters).
+      settingsRef.current = parts.settings
+      maximizedCellIdRef.current = parts.maximizedCellId
+      focusedCellIdRef.current = parts.focusedCellId
+      unstable_batchedUpdates(() => {
+        store.hydrateCells(() => parts.cells)
+        setSettingsState(parts.settings)
+        setMaximizedCellIdState(parts.maximizedCellId)
+        setFocusedCellState(parts.focusedCellId)
+      })
+      persistImmediately(parts.cells, true)
+      // A deleted cell's in-flight run must be cancelled; the transition reports
+      // deleted cells via cleanup, so every delete route (UI or agent) cancels
+      // here rather than at each call site.
+      if (out.cleanup) {
+        for (const cellId of out.cleanup.cellIds) {
+          cancelCell(cellId)
+          void deleteCellSnapshot(bufferId, cellId)
+          removeNotebookCellLayouts(bufferId, cellId)
+        }
+      }
+      return out.result
+    },
+    [store, persistImmediately, bufferId, cancelCell],
+  )
+
+  const setMaximizedCellId = useCallback(
+    (cellId: string | null) =>
+      silently(() =>
+        applyTransition((parts) =>
+          setCellMaximizedTransition(parts, bufferId, cellId),
+        ),
+      ),
+    [applyTransition, bufferId],
+  )
+
+  const addCell = useCallback(
+    (afterCellId?: string, value?: string, type?: CellType): string =>
+      silently(() =>
+        applyTransition((parts) =>
+          addCellTransition(parts, bufferId, {
+            id: generateId(),
+            value: value ?? "",
+            afterCellId,
+            type,
+          }),
+        ),
+      ) ?? "",
+    [applyTransition, bufferId],
+  )
+
+  const setCellMode = useCallback(
+    (cellId: string, mode: CellMode) =>
+      silently(() =>
+        applyTransition((parts) =>
+          setCellModeTransition(parts, bufferId, cellId, mode),
+        ),
+      ),
+    [applyTransition, bufferId],
   )
 
   // Toggle the run grid off: drop the in-memory result and run-status so the
@@ -396,22 +413,6 @@ export const NotebookProvider: React.FC<{
     [hydrateCells],
   )
 
-  const cancelCell = useCallback(
-    (cellId: string) => {
-      execution.cancelCell(cellId)
-
-      const queryKey = activeCellQueryKeysRef.current.get(cellId)
-      if (queryKey) {
-        activeCellQueryKeysRef.current.delete(cellId)
-        questExecution.releaseExecution(
-          queryKey,
-          createNotebookScopeKey(bufferId, cellId),
-        )
-      }
-    },
-    [bufferId, execution, questExecution],
-  )
-
   const runCellNow = useCallback(
     async (
       cellId: string,
@@ -419,11 +420,17 @@ export const NotebookProvider: React.FC<{
       scopeKey: string,
       sql?: string,
       signal?: AbortSignal,
+      expectFullValue: boolean = false,
     ) => {
       activeCellQueryKeysRef.current.set(cellId, queryKey)
 
       try {
-        const ok = await execution.runCell(cellId, sql, signal)
+        const outcome = await execution.runCell(
+          cellId,
+          sql,
+          signal,
+          expectFullValue,
+        )
         // Size the result-double-view to the result shape, unless the user
         // locked the bottom height (bottomResized).
         const cell = store.cellsRef.current.find((c) => c.id === cellId)
@@ -438,7 +445,7 @@ export const NotebookProvider: React.FC<{
           })
         }
 
-        return ok
+        return outcome
       } finally {
         if (activeCellQueryKeysRef.current.get(cellId) === queryKey) {
           activeCellQueryKeysRef.current.delete(cellId)
@@ -450,21 +457,33 @@ export const NotebookProvider: React.FC<{
   )
 
   const runCell = useCallback(
-    async (cellId: string, sql?: string, signal?: AbortSignal) => {
+    async (
+      cellId: string,
+      sql?: string,
+      signal?: AbortSignal,
+      expectFullValue: boolean = false,
+    ) => {
       const runId = ++notebookRunIdRef.current
       const queryKey = createNotebookQueryKey(bufferId, cellId, runId)
       const scopeKey = createNotebookScopeKey(bufferId, cellId)
 
-      return new Promise<boolean>((resolve) => {
+      return new Promise<CellRunOutcome>((resolve) => {
         const execute = () => {
-          void runCellNow(cellId, queryKey, scopeKey, sql, signal).then(resolve)
+          void runCellNow(
+            cellId,
+            queryKey,
+            scopeKey,
+            sql,
+            signal,
+            expectFullValue,
+          ).then(resolve)
         }
         const request = () =>
           questExecution.requestExecution({
             abort: () => cancelCell(cellId),
             bufferId,
             execute,
-            onDismiss: () => resolve(false),
+            onDismiss: () => resolve({ ok: false, superseded: false }),
             queryKey,
             scopeKey,
           })
@@ -483,46 +502,54 @@ export const NotebookProvider: React.FC<{
   )
 
   const deleteCell = useCallback(
-    (cellId: string) => {
-      cancelCell(cellId)
-      store.removeCellById(cellId)
-      void deleteCellSnapshot(bufferId, cellId)
-      removeNotebookCellLayouts(bufferId, cellId)
-      if (focusedCellIdRef.current === cellId) {
-        setFocusedCell(null)
-      }
-      if (maximizedCellIdRef.current === cellId) {
-        setMaximizedCellId(null)
-      }
-    },
-    [store, setMaximizedCellId, cancelCell, bufferId],
+    // applyTransition cancels the deleted cell's in-flight run via its cleanup.
+    (cellId: string) =>
+      silently(() =>
+        applyTransition((parts) =>
+          deleteCellTransition(parts, bufferId, cellId),
+        ),
+      ),
+    [applyTransition, bufferId],
   )
 
   const duplicateCell = useCallback(
-    (cellId: string): string => {
-      if (store.cellsRef.current.length >= MAX_NOTEBOOK_CELLS) return ""
-      // batchedUpdates ensures the cells append and the layout entry land
-      // in a single render. React 17 doesn't auto-batch outside event
-      // handlers (Radix DropdownMenu defers onSelect via setTimeout), so
-      // without this the duplicate flashes at the bottom before snapping
-      // into place.
-      let newId = ""
-      unstable_batchedUpdates(() => {
-        newId = store.duplicateCell(cellId)
-        if (settingsRef.current.layoutMode !== "grid") return
-        const layout = settingsRef.current.layout ?? []
-        const original = layout.find((l) => l.i === cellId)
-        if (!original) return
-        setCellLayout(newId, {
-          x: original.x,
-          y: original.y,
-          w: original.w,
-          h: original.h,
-        })
-      })
-      return newId
-    },
-    [store, setCellLayout],
+    (cellId: string): string =>
+      silently(() =>
+        applyTransition((parts) =>
+          duplicateCellTransition(parts, bufferId, cellId, generateId()),
+        ),
+      ) ?? "",
+    [applyTransition, bufferId],
+  )
+
+  const moveCellUp = useCallback(
+    (cellId: string) =>
+      silently(() =>
+        applyTransition((parts) =>
+          moveCellUpTransition(parts, bufferId, cellId),
+        ),
+      ),
+    [applyTransition, bufferId],
+  )
+
+  const moveCellDown = useCallback(
+    (cellId: string) =>
+      silently(() =>
+        applyTransition((parts) =>
+          moveCellDownTransition(parts, bufferId, cellId),
+        ),
+      ),
+    [applyTransition, bufferId],
+  )
+
+  const setCellViewMaximized = useCallback(
+    (cellId: string, value: boolean) =>
+      silently(() =>
+        applyTransition((parts) =>
+          setCellViewMaximizedTransition(parts, bufferId, cellId, value),
+        ),
+      ),
+    [applyTransition, bufferId],
   )
 
   liveActionsRef.current = {
@@ -531,8 +558,8 @@ export const NotebookProvider: React.FC<{
     addCell,
     deleteCell,
     updateCell: store.updateCell,
-    moveCellUp: store.moveCellUp,
-    moveCellDown: store.moveCellDown,
+    moveCellUp,
+    moveCellDown,
     duplicateCell,
     runCell,
     reRunResultAt: execution.reRunResultAt,
@@ -544,14 +571,13 @@ export const NotebookProvider: React.FC<{
     mirrorCellResult,
     setCellChartConfig: store.setCellChartConfig,
     setCellRefresh: store.setCellRefresh,
-    setCellViewMaximized: store.setCellViewMaximized,
-    setCellLayout,
+    setCellViewMaximized,
     setFocusedCell,
     setMaximizedCellId,
     getCellsSnapshot: () => store.cellsRef.current.slice(),
     getSettings: () => ({ ...settingsRef.current }),
     getMaximizedCellId: () => maximizedCellIdRef.current,
-    updateCells: store.updateCells,
+    applyTransition,
   }
 
   const stateValue = useMemo<NotebookState>(
@@ -591,16 +617,19 @@ export const NotebookProvider: React.FC<{
   }, [bufferId, questExecution])
 
   useEffect(() => {
+    if (preview) return
     const controller = createNotebookController(bufferId, liveActionsRef)
     registerController(controller)
     return () => unregisterController(bufferId)
-  }, [bufferId])
+  }, [bufferId, preview])
 
   return (
-    <NotebookActionsContext.Provider value={actionsValue}>
-      <NotebookStateContext.Provider value={stateValue}>
-        {children}
-      </NotebookStateContext.Provider>
-    </NotebookActionsContext.Provider>
+    <NotebookBufferIdContext.Provider value={bufferId}>
+      <NotebookActionsContext.Provider value={actionsValue}>
+        <NotebookStateContext.Provider value={stateValue}>
+          {children}
+        </NotebookStateContext.Provider>
+      </NotebookActionsContext.Provider>
+    </NotebookBufferIdContext.Provider>
   )
 }

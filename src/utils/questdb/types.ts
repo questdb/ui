@@ -85,6 +85,11 @@ export type RawNoticeResult = {
   notice: "<notice message>"
   position: undefined
   query: string
+  columns?: ColumnDefinition[]
+  count?: number
+  dataset?: DatasetType[]
+  timestamp?: number
+  timings?: Timings
 }
 
 export type DdlResult = {

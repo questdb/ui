@@ -8,7 +8,7 @@ import type {
   StatusCallback,
   StreamingCallback,
   TokenUsage,
-} from "../aiAssistant"
+} from "./aiAssistant"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import {

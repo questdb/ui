@@ -48,22 +48,24 @@ export const deleteNotebookSnapshots = async (
 
 // Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
 // recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
-// keys only — snapshot payloads are never deserialized.
-export const pruneToRecentNotebooks = async (
+// keys only — snapshot payloads are never deserialized. One transaction: a save
+// landing between the recency read and the delete must not lose its snapshot.
+export const pruneToRecentNotebooks = (
   keep: number = MAX_PERSISTED_NOTEBOOKS,
-): Promise<void> => {
-  const latestByBuffer = new Map<number, number>()
-  await db.notebook_results
-    .orderBy("savedAt")
-    .eachKey((savedAt, { primaryKey }) => {
-      // Ascending key order: the last write per buffer is its latest savedAt.
-      const [bufferId] = primaryKey
-      latestByBuffer.set(bufferId, savedAt as number)
-    })
-  if (latestByBuffer.size <= keep) return
-  const staleBuffers = Array.from(latestByBuffer.entries())
-    .sort((a, b) => b[1] - a[1]) // newest first
-    .slice(keep) // everything past the `keep` newest
-    .map(([bufferId]) => bufferId)
-  await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
-}
+): Promise<void> =>
+  db.transaction("rw", db.notebook_results, async () => {
+    const latestByBuffer = new Map<number, number>()
+    await db.notebook_results
+      .orderBy("savedAt")
+      .eachKey((savedAt, { primaryKey }) => {
+        // Ascending key order: the last write per buffer is its latest savedAt.
+        const [bufferId] = primaryKey
+        latestByBuffer.set(bufferId, savedAt as number)
+      })
+    if (latestByBuffer.size <= keep) return
+    const staleBuffers = Array.from(latestByBuffer.entries())
+      .sort((a, b) => b[1] - a[1]) // newest first
+      .slice(keep) // everything past the `keep` newest
+      .map(([bufferId]) => bufferId)
+    await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
+  })
