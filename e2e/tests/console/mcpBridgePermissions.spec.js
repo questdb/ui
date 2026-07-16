@@ -45,17 +45,15 @@ const deepLinkSuffix = () =>
 
 // Visit with deep-link params before login so they survive into the SPA boot.
 const loginAndVisitDeepLink = (seedLocalStorage = {}) => {
-  cy.visit(`${baseUrl}/${deepLinkSuffix()}`, {
-    onBeforeLoad: (win) => {
-      win.localStorage.clear()
+  cy.handleStorageAndVisit(
+    `${baseUrl}/${deepLinkSuffix()}`,
+    true,
+    seedLocalStorage,
+    (win) => {
       win.sessionStorage.clear()
-      win.indexedDB.deleteDatabase("web-console")
-      for (const [k, v] of Object.entries(seedLocalStorage)) {
-        win.localStorage.setItem(k, v)
-      }
       installFakeWebSocket(win)
     },
-  })
+  )
   cy.loginWithUserAndPassword()
 }
 

@@ -32,6 +32,7 @@ import type { NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
 import { Button, LoadingSpinner } from "../../../components"
 import { NotebookToolbar } from "./NotebookToolbar"
+import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
   cellChromePx,
@@ -80,6 +81,12 @@ const CellListContainer = styled.div<{ $maximized?: boolean }>`
      scrollTop so the cell looks frozen while the cells above shuffle. Disabled
      so the moved cell visibly travels and scrollIntoView can pin it. */
   overflow-anchor: none;
+`
+
+const PromoGridSlot = styled.div`
+  &:not(:empty) {
+    margin-bottom: 2rem;
+  }
 `
 
 const CellItem = styled.div<{ $maximized?: boolean }>`
@@ -332,6 +339,7 @@ const ListLayout: React.FC = () => {
         if (!target.closest("[data-notebook-cell]")) setFocusedCell(null)
       }}
     >
+      <NotebookMcpPromo />
       {cells.map((cell, index) => (
         <React.Fragment key={cell.id}>
           <CellItem>
@@ -541,6 +549,9 @@ const GridLayout: React.FC = () => {
         }
       }}
     >
+      <PromoGridSlot>
+        <NotebookMcpPromo />
+      </PromoGridSlot>
       {/* No `key` on ResponsiveGridLayout: keying it on cellIds would
        * unmount every Cell/DrawCanvas on add/remove and wipe chart state.
        * rgl reconciles children by their own key matched against
@@ -713,6 +724,7 @@ const NotebookContent: React.FC = () => {
       <NotebookWrapper>
         <NotebookToolbar />
         <CellListContainer>
+          <NotebookMcpPromo />
           <AddCellBottom alignCenter />
         </CellListContainer>
       </NotebookWrapper>
