@@ -843,6 +843,8 @@ describe("TableDetailsDrawer", () => {
         "AI Assistant is not configured",
       )
 
+      cy.getByDataHook("table-details-tab-details").realHover()
+      cy.getByDataHook("tooltip").should("not.exist")
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-explain-ai").realHover()
@@ -892,6 +894,9 @@ describe("TableDetailsDrawer", () => {
         "contain",
         "Schema access is not granted to this model",
       )
+
+      cy.getByDataHook("table-details-tab-details").realHover()
+      cy.getByDataHook("tooltip").should("not.exist")
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-copy-ddl").should("be.visible").click()

@@ -1,5 +1,5 @@
-import type { Client } from "./questdb/client"
-import type { Table } from "./questdb/types"
+import type { Client } from "../questdb/client"
+import type { Table } from "../questdb/types"
 import type {
   ConversationId,
   ConversationMessage,
@@ -7,17 +7,21 @@ import type {
   SchemaDisplayData,
   HealthIssueDisplayData,
   UserActionDigest,
-} from "../providers/AIConversationProvider/types"
+} from "../../providers/AIConversationProvider/types"
 import {
   formatNotebookContextPrefix,
   type NotebookContextSnapshot,
-} from "./ai/notebookSnapshot"
+} from "./notebookSnapshot"
 import type {
   OperationHistory,
   StatusArgs,
-} from "../providers/AIStatusProvider"
-import { AIOperationStatus } from "../providers/AIStatusProvider"
-import type { ToolCall } from "./ai"
+} from "../../providers/AIStatusProvider"
+import { AIOperationStatus } from "../../providers/AIStatusProvider"
+import {
+  createNotebookFreshness,
+  type NotebookFreshness,
+} from "../notebooks/notebookFreshness"
+import type { ToolCall } from "./index"
 import {
   continueConversation,
   createModelToolsClient,
@@ -28,13 +32,13 @@ import {
   type AiAssistantAPIError,
   type StreamingCallback,
 } from "./aiAssistant"
-import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./ai"
-import { providerForModel, getTestModel, getAllModelOptions } from "./ai"
-import type { AiAssistantSettings } from "../providers/LocalStorageProvider/types"
-import { eventBus } from "../modules/EventBus"
-import { EventType } from "../modules/EventBus/types"
-import { trackEvent } from "../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../modules/ConsoleEventTracker/events"
+import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./index"
+import { providerForModel, getTestModel, getAllModelOptions } from "./index"
+import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 // Prepended onto every user turn. buffer_id is internal — the AI must never surface it to the user.
 export type NotebookFlowContext = {
@@ -42,6 +46,23 @@ export type NotebookFlowContext = {
   digest?: UserActionDigest
   workspace?: WorkspaceInfo
   readSeq?: number
+}
+
+// Per-turn freshness tracker for the flow. Seeded with the bound notebook's
+// action seq when the chat has an up-to-date snapshot; otherwise empty. Always
+// a real tracker (never undefined) so a flow with no notebook context — a
+// Fix/Explain quick action, or a chat before any notebook is open — can still
+// record a read (get_notebook_state) and then mutate a notebook. An undefined
+// tracker would strand the gate at STATE_NOT_FETCHED forever: recordRead would
+// have nowhere to write, so the prescribed recovery could never take effect.
+export const buildNotebookFreshness = (
+  ctx: NotebookFlowContext | undefined,
+): NotebookFreshness => {
+  const seed =
+    ctx?.snapshot?.status === "ok" && ctx.readSeq !== undefined
+      ? [[ctx.snapshot.buffer_id, ctx.readSeq] as const]
+      : undefined
+  return createNotebookFreshness(seed)
 }
 
 export type WorkspaceInfo = {
@@ -55,6 +76,7 @@ export type WorkspaceInfo = {
     buffer_id: number
     label: string
     kind: "notebook" | "sql" | "metrics" | "other"
+    archived?: boolean
   }
 }
 
@@ -783,7 +805,7 @@ export async function executeAIFlow(
       setStatus: setStatusWithHistoryAndResetFlags,
       abortSignal,
       streaming: streamingCallback,
-      notebookReadSeq: config.notebookContext?.readSeq,
+      notebookFreshness: buildNotebookFreshness(config.notebookContext),
     })
 
     const flowResult = processResult({

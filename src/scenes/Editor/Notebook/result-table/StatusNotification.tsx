@@ -20,7 +20,9 @@ const liveRegionMessage = (result: SingleQueryResult): string => {
     case "error":
       return `Query failed: ${result.error}`
     case "dql":
-      return `Query succeeded: ${result.dataset.length} rows`
+      return result.notice !== undefined
+        ? `Query succeeded: ${result.dataset.length} rows. ${result.notice}`
+        : `Query succeeded: ${result.dataset.length} rows`
     default:
       return "Query succeeded"
   }
@@ -42,6 +44,7 @@ export const StatusNotification: React.FC<Props> = ({
   const { type } = activeResult
   const isError = type === "error"
   const isCancelled = type === "cancelled"
+  const notice = activeResult.type === "dql" ? activeResult.notice : undefined
 
   const baseProps = {
     query: "@0-0" as const,
@@ -116,15 +119,23 @@ export const StatusNotification: React.FC<Props> = ({
             fetch={activeResult.timings.fetch}
           />
         }
-        type={NotificationType.SUCCESS}
+        type={
+          notice !== undefined
+            ? NotificationType.NOTICE
+            : NotificationType.SUCCESS
+        }
       />
     )
   } else {
     body = (
       <Notification
         {...baseProps}
-        content={<span>OK</span>}
-        type={NotificationType.SUCCESS}
+        content={<span>{notice ?? "OK"}</span>}
+        type={
+          notice !== undefined
+            ? NotificationType.NOTICE
+            : NotificationType.SUCCESS
+        }
       />
     )
   }
@@ -134,6 +145,7 @@ export const StatusNotification: React.FC<Props> = ({
       role={isError || isCancelled ? "alert" : "status"}
       aria-live={isError || isCancelled ? "assertive" : "polite"}
       aria-atomic="true"
+      title={notice}
     >
       <LiveRegion>{liveRegionMessage(activeResult)}</LiveRegion>
       {body}

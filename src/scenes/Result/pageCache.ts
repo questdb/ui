@@ -52,7 +52,7 @@ export const applyPageResponse = (
   currentGeneration: number,
 ): boolean => {
   if (requestedGeneration !== currentGeneration) return false
-  if (!("dataset" in response)) return false
+  if (!("dataset" in response) || response.dataset === undefined) return false
   applyFetchedPages(cache, plan, response.dataset)
   return true
 }

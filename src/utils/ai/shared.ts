@@ -1,4 +1,4 @@
-import type { ModelToolsClient, StatusCallback } from "../aiAssistant"
+import type { ModelToolsClient, StatusCallback } from "./aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
@@ -7,6 +7,7 @@ import {
   DocCategory,
 } from "../questdbDocsRetrieval"
 import { jsonrepair } from "jsonrepair"
+import type { NotebookFreshness } from "../notebooks/notebookFreshness"
 
 export class RefusalError extends Error {
   constructor(message: string) {
@@ -73,7 +74,7 @@ export type ToolExecutionContext = {
   suggestedSQL?: string
   notebookMutated?: boolean
   sqlWriteExecuted?: boolean
-  notebookReadSeq?: number
+  notebookFreshness?: NotebookFreshness
 }
 
 export const executeTool = async (

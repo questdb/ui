@@ -190,7 +190,7 @@ export const DrawCanvas: React.FC<Props> = ({
       const results = execResults.map((r) =>
         capResultBytes(singleResultFromExec(r, r.query), NOTEBOOK_BYTE_CAP),
       )
-      persistCellSnapshot({
+      void persistCellSnapshot({
         bufferId,
         cellId: cell.id,
         results,

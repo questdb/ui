@@ -18,14 +18,11 @@ if (runQueryLimit?.maximum !== RUN_QUERY_MAX_LIMIT) {
 
 const _DEF_BY_NAME = new Map(ALL_DEFINITIONS.map((d) => [d.name, d]))
 
-const surfacesFor = (def: ToolDefinition): readonly ("ai" | "mcp")[] =>
-  def.surfaces ?? ["ai", "mcp"]
-
 export const aiTools: ToolDefinition[] = ALL_DEFINITIONS.filter((d) =>
-  surfacesFor(d).includes("ai"),
+  d.surfaces.includes("ai"),
 )
 export const mcpTools: ToolDefinition[] = ALL_DEFINITIONS.filter((d) =>
-  surfacesFor(d).includes("mcp"),
+  d.surfaces.includes("mcp"),
 )
 
 export const categoryFor = (name: string): ToolCategory =>
@@ -34,11 +31,17 @@ export const categoryFor = (name: string): ToolCategory =>
 export const mutatesNotebook = (name: string): boolean =>
   !!_DEF_BY_NAME.get(name)?.mutatesNotebook
 
-export const editsCells = (name: string): boolean =>
-  !!_DEF_BY_NAME.get(name)?.editsCells
+export const createsNotebook = (name: string): boolean =>
+  !!_DEF_BY_NAME.get(name)?.createsNotebook
+
+export const declaresBufferId = (name: string): boolean =>
+  _DEF_BY_NAME.get(name)?.inputSchema.properties.buffer_id !== undefined
+
+export const requiresFreshNotebookRead = (name: string): boolean =>
+  mutatesNotebook(name) && declaresBufferId(name)
 
 export const MCP_META_TOOL_NAMES: readonly string[] = ALL_DEFINITIONS.filter(
-  (d) => d.surfaces?.length === 1 && d.surfaces[0] === "mcp",
+  (d) => d.surfaces.length === 1 && d.surfaces[0] === "mcp",
 ).map((d) => d.name)
 
 export const isMcpMetaToolName = (name: string): boolean =>

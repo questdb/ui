@@ -2,10 +2,10 @@ import { useContext, useMemo } from "react"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
 import { QuestContext } from "../QuestProvider"
-import { createModelToolsClient } from "../../utils/aiAssistant"
+import { createModelToolsClient } from "../../utils/ai/aiAssistant"
 import { useEditor } from "../EditorProvider"
 import type { MetaToolContext } from "../../utils/mcp/metaResolvers"
-import type { WorkspaceInfo } from "../../utils/executeAIFlow"
+import type { WorkspaceInfo } from "../../utils/ai/executeAIFlow"
 import type { UserActionDigest } from "../AIConversationProvider/types"
 
 export const useBridgeToolRunner = (
@@ -46,6 +46,7 @@ export const useBridgeToolRunner = (
                   : activeBuffer.editorViewState
                     ? ("sql" as const)
                     : ("other" as const),
+              archived: !!activeBuffer.archived,
             },
           }
         : {}),

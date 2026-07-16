@@ -53,6 +53,7 @@ type Props = {
   totalCells: number
   layoutMode: "list" | "grid"
   isMaximized: boolean
+  isRunning?: boolean
   left?: React.ReactNode
   right?: React.ReactNode
   // SQL cells pass this so the toolbar can adapt to the header's width; markdown
@@ -69,6 +70,7 @@ export const CellDragHeader: React.FC<Props> = ({
   totalCells,
   layoutMode,
   isMaximized,
+  isRunning = false,
   left,
   right,
   headerRef,
@@ -102,6 +104,7 @@ export const CellDragHeader: React.FC<Props> = ({
         totalCells={totalCells}
         layoutMode={layoutMode}
         isMaximized={isMaximized}
+        isRunning={isRunning}
         inline
         toolbarTier={toolbarTier}
         chartZoomed={chartZoomed}

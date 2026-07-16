@@ -38,6 +38,27 @@ describe("buildRunQueryPayload", () => {
     ).toEqual({ type: "notice", ok: true, message: "hi", duration_ms: 1 })
   })
 
+  it("includes the notice on dql payloads and omits the key otherwise", () => {
+    // Given a dql result carrying a notice
+    const withNotice = buildRunQueryPayload(
+      {
+        type: "dql",
+        columns: [{ name: "x" }],
+        dataset: [[1]],
+        count: 1,
+        notice: "partition converted",
+      },
+      10,
+    )
+    // Then the payload surfaces it, and plain dql payloads stay unchanged
+    expect(withNotice.notice).toBe("partition converted")
+    const without = buildRunQueryPayload(
+      { type: "dql", columns: [{ name: "x" }], dataset: [[1]], count: 1 },
+      10,
+    )
+    expect("notice" in without).toBe(false)
+  })
+
   it("returns error envelope with position", () => {
     expect(
       buildRunQueryPayload(
@@ -130,6 +151,49 @@ describe("mapQueryRawToResult", () => {
       count: 0,
     }),
     queryId: 1,
+  })
+
+  it("maps a NOTICE carrying a result set to dql + notice", async () => {
+    // Given a notice response that also returns rows
+    const queryRaw = vi.fn().mockReturnValue({
+      promise: Promise.resolve({
+        type: Type.NOTICE,
+        notice: "partition converted",
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+      }),
+      queryId: 1,
+    })
+    // When the tool runs it
+    const res = await mapQueryRawToResult(
+      { queryRaw, abort: vi.fn() } as never,
+      "SELECT 1",
+      25,
+    )
+    // Then the agent gets the rows and the notice
+    expect(res).toMatchObject({
+      type: "dql",
+      count: 1,
+      dataset: [[1]],
+      notice: "partition converted",
+    })
+  })
+
+  it("maps a payload-less NOTICE to a message-only envelope", async () => {
+    const queryRaw = vi.fn().mockReturnValue({
+      promise: Promise.resolve({
+        type: Type.NOTICE,
+        notice: "hint applied",
+      }),
+      queryId: 1,
+    })
+    const res = await mapQueryRawToResult(
+      { queryRaw, abort: vi.fn() } as never,
+      "SELECT 1",
+      25,
+    )
+    expect(res).toMatchObject({ type: "notice", message: "hint applied" })
   })
 
   it("sends the requested row limit to /exec using the cancellable queryRaw overload", async () => {

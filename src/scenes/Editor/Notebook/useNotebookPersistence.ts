@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react"
 import type { MutableRefObject } from "react"
 import type { useEditor } from "../../../providers/EditorProvider"
 import type { NotebookCell, NotebookSettings } from "../../../store/notebook"
+import { enqueueBufferTask } from "../../../utils/notebooks/notebookBufferQueue"
 import { buildPersistPayload as buildPersistPayloadPure } from "./notebookUtils"
 
 const PERSIST_DEBOUNCE_MS = 300
@@ -14,6 +15,7 @@ type Options = {
   focusedCellIdRef: MutableRefObject<string | null>
   maximizedCellIdRef: MutableRefObject<string | null>
   settingsRef: MutableRefObject<NotebookSettings>
+  preview: boolean
 }
 
 // On unmount, flushes any pending debounced write via refs so a tab
@@ -24,9 +26,11 @@ export const useNotebookPersistence = ({
   focusedCellIdRef,
   maximizedCellIdRef,
   settingsRef,
+  preview,
 }: Options) => {
   const persistTimeoutRef = useRef<number | null>(null)
   const pendingCellsRef = useRef<NotebookCell[] | null>(null)
+  const disposedRef = useRef(false)
 
   const buildPayload = useCallback(
     (cells: NotebookCell[]) =>
@@ -39,7 +43,11 @@ export const useNotebookPersistence = ({
     [],
   )
 
+  // Every write is a queued buffer task: zero contention while mounted (agent
+  // ops route to the live controller), but the boundary writes — the unmount
+  // flush above all — stay strictly ordered against later agent ops.
   const scheduleFlush = useCallback(() => {
+    if (preview || disposedRef.current) return
     if (persistTimeoutRef.current) {
       window.clearTimeout(persistTimeoutRef.current)
     }
@@ -48,11 +56,13 @@ export const useNotebookPersistence = ({
       pendingCellsRef.current = null
       persistTimeoutRef.current = null
       if (cells === null) return
-      void updateBuffer(bufferId, {
-        notebookViewState: buildPayload(cells),
-      })
+      void enqueueBufferTask(bufferId, () =>
+        updateBuffer(bufferId, {
+          notebookViewState: buildPayload(cells),
+        }),
+      )
     }, PERSIST_DEBOUNCE_MS)
-  }, [bufferId, updateBuffer, buildPayload])
+  }, [bufferId, updateBuffer, buildPayload, preview])
 
   const persistCells = useCallback(
     (newCells: NotebookCell[]) => {
@@ -71,20 +81,21 @@ export const useNotebookPersistence = ({
   )
 
   const persistImmediately = useCallback(
-    (cells: NotebookCell[]) => {
-      // A pending debounced write holds newer cells than callers' cellsRef
-      // (which only updates at render) — never replace it with older state.
-      const effective = pendingCellsRef.current ?? cells
+    (cells: NotebookCell[], exact = false) => {
+      if (preview || disposedRef.current) return
+      const effective = exact ? cells : (pendingCellsRef.current ?? cells)
       if (persistTimeoutRef.current) {
         window.clearTimeout(persistTimeoutRef.current)
         persistTimeoutRef.current = null
       }
       pendingCellsRef.current = null
-      void updateBuffer(bufferId, {
-        notebookViewState: buildPayload(effective),
-      })
+      void enqueueBufferTask(bufferId, () =>
+        updateBuffer(bufferId, {
+          notebookViewState: buildPayload(effective),
+        }),
+      )
     },
-    [bufferId, updateBuffer, buildPayload],
+    [bufferId, updateBuffer, buildPayload, preview],
   )
 
   // Refs so the unmount-flush effect keeps stable deps and doesn't
@@ -95,19 +106,26 @@ export const useNotebookPersistence = ({
   bufferIdRef.current = bufferId
 
   const flushPending = useCallback(() => {
+    if (preview) return
     if (persistTimeoutRef.current === null) return
     window.clearTimeout(persistTimeoutRef.current)
     persistTimeoutRef.current = null
     const cells = pendingCellsRef.current
     pendingCellsRef.current = null
     if (cells === null) return
-    void updateBufferRef.current(bufferIdRef.current, {
-      notebookViewState: buildPayload(cells),
-    })
-  }, [buildPayload])
+    const bufferId = bufferIdRef.current
+    void enqueueBufferTask(bufferId, () =>
+      updateBufferRef.current(bufferId, {
+        notebookViewState: buildPayload(cells),
+      }),
+    )
+  }, [buildPayload, preview])
 
   useEffect(() => {
-    return flushPending
+    return () => {
+      flushPending()
+      disposedRef.current = true
+    }
   }, [flushPending])
 
   useEffect(() => {

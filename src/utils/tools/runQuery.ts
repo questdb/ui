@@ -12,6 +12,7 @@ export type RunQueryRawResult =
       dataset: Array<Array<unknown>>
       count: number
       durationMs?: number
+      notice?: string
     }
   | { type: "ddl" | "dml" | "notice"; durationMs?: number; message?: string }
   | { type: "error"; error: string; position?: number }
@@ -77,6 +78,7 @@ export const buildRunQueryPayload = (
     total_count: totalCount,
     truncated: rowCountClipped || byteCapped,
     duration_ms: raw.durationMs ?? null,
+    ...(raw.notice !== undefined ? { notice: raw.notice } : {}),
   }
 }
 
@@ -90,6 +92,7 @@ export const mapQueryRawToResult = async (
   signal?: AbortSignal,
 ): Promise<RunQueryRawResult> => {
   const startedAt = performance.now()
+  let cleanup: (() => void) | undefined
   try {
     const limit = clampRunQueryLimit(requestedLimit)
     if (signal?.aborted) {
@@ -100,9 +103,9 @@ export const mapQueryRawToResult = async (
       cancellable: true,
     })
     if (signal) {
-      signal.addEventListener("abort", () => questClient.abort(queryId), {
-        once: true,
-      })
+      const onAbort = () => questClient.abort(queryId)
+      signal.addEventListener("abort", onAbort, { once: true })
+      cleanup = () => signal.removeEventListener("abort", onAbort)
     }
     const res = await promise
     const durationMs = Math.round(performance.now() - startedAt)
@@ -119,6 +122,16 @@ export const mapQueryRawToResult = async (
       return { type: res.type, durationMs }
     }
     if (res.type === Type.NOTICE) {
+      if (res.columns && res.columns.length > 0) {
+        return {
+          type: "dql",
+          columns: res.columns,
+          dataset: res.dataset ?? [],
+          count: res.count ?? 0,
+          durationMs,
+          notice: res.notice,
+        }
+      }
       return { type: "notice", durationMs, message: res.notice }
     }
     return { type: "error", error: res.error, position: res.position }
@@ -139,5 +152,7 @@ export const mapQueryRawToResult = async (
       error: e instanceof Error ? e.message : "Unknown error",
       position: -1,
     }
+  } finally {
+    cleanup?.()
   }
 }

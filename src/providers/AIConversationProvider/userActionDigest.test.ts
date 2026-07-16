@@ -4,7 +4,7 @@ import {
   createEmptyDigest,
   isEmptyDigest,
 } from "./userActionDigest"
-import type { UserActionEvent } from "../../utils/notebookAIBridge"
+import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
 
 const apply = (events: UserActionEvent[]) => {
   const d = createEmptyDigest()

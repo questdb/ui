@@ -63,6 +63,7 @@ const color: ColorShape = {
   greenDarker: "#00aa3b",
   purple: "#bd93f9",
   cyan: "#8be9fd",
+  cyan10: "rgba(139, 233, 253, 0.10)",
   pink: "#d14671",
   pink50: "rgba(209, 70, 113, 0.25)",
   pinkDarker: "#be2f5b",

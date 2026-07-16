@@ -5,10 +5,10 @@ import { DropdownMenu, Tooltip, Button } from "../../../../components"
 import { Spinner } from "./Spinner"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
-import { useNotebookActions } from "../NotebookProvider"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { autoRefreshLabel } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
-import { signalUserEdit } from "../../../../utils/notebookAIBridge"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 
@@ -74,12 +74,13 @@ export const CellRefreshButton: React.FC<Props> = ({
   isRefreshing,
 }) => {
   const { setCellRefresh } = useNotebookActions()
+  const bufferId = useNotebookBufferId()
   const isChart = view === "chart"
   const intervalTooltip = useTriggerTooltip()
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
-    signalUserEdit()
+    signalUserEdit(bufferId)
     eventBus.publish(
       isChart
         ? EventType.NOTEBOOK_CELL_REFRESH_CHART
@@ -88,7 +89,7 @@ export const CellRefreshButton: React.FC<Props> = ({
     )
   }
   const handleSelect = (value: AutoRefresh) => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setCellRefresh(cellId, value)
   }
 

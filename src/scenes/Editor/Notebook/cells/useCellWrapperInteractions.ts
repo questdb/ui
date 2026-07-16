@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef } from "react"
-import { useNotebookActions } from "../NotebookProvider"
-import { useEditor } from "../../../../providers/EditorProvider"
-import { emitUserAction } from "../../../../utils/notebookAIBridge"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 
 // Wrapper-level interactions shared by every cell kind (SQL and markdown) so
 // they behave identically and can't drift: click-to-focus, arrow-key reorder
@@ -24,9 +23,7 @@ export const useCellWrapperInteractions = ({
   isFocused,
 }: Options) => {
   const { moveCellUp, moveCellDown, setFocusedCell } = useNotebookActions()
-  const { activeBuffer } = useEditor()
-  const bufferIdForEvents =
-    typeof activeBuffer.id === "number" ? activeBuffer.id : undefined
+  const bufferIdForEvents = useNotebookBufferId()
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const canArrowMove = layoutMode !== "grid" && !isMaximized
@@ -52,13 +49,11 @@ export const useCellWrapperInteractions = ({
       e.preventDefault()
       if (e.key === "ArrowUp") moveCellUp(cellId)
       else moveCellDown(cellId)
-      if (bufferIdForEvents !== undefined) {
-        emitUserAction({
-          kind: "user_moved_cell",
-          bufferId: bufferIdForEvents,
-          cellId,
-        })
-      }
+      emitUserAction({
+        kind: "user_moved_cell",
+        bufferId: bufferIdForEvents,
+        cellId,
+      })
       requestAnimationFrame(() => {
         const node = wrapperRef.current
         if (!node) return

@@ -1,6 +1,6 @@
 import OpenAI from "openai"
 import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
-import type { StatusCallback, AiAssistantAPIError } from "../aiAssistant"
+import type { StatusCallback, AiAssistantAPIError } from "./aiAssistant"
 import { StreamingError, RefusalError, MaxTokensError } from "./shared"
 
 let tiktokenEncoder: Tiktoken | null = null
