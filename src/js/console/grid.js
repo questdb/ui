@@ -22,7 +22,6 @@
  *
  ******************************************************************************/
 import { copyToClipboard } from "../../utils/copyToClipboard"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import { toast } from "../../components"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -1107,9 +1106,7 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.textContent = unescapeHtml(
-        getDisplayedCellValue(column, cellData, columnWidth),
-      )
+      cell.textContent = getDisplayedCellValue(column, cellData, columnWidth)
 
       cell.classList.remove("qg-null")
 

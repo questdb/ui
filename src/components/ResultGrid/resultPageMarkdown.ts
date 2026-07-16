@@ -1,5 +1,4 @@
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import type { ResultGridRow } from "./types"
 import { formatCellValueForCopy } from "./inlineGridUtils"
 
@@ -11,7 +10,7 @@ const buildQueryPlanMarkdown = (rows: ResultGridRow[]): string => {
   for (const row of rows) {
     const cell = row[0]
     if (cell === null || cell === undefined) continue
-    lines.push(unescapeHtml(String(cell)))
+    lines.push(String(cell))
   }
   lines.push("```")
   return lines.join("\n")

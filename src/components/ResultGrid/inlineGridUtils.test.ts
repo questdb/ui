@@ -185,14 +185,13 @@ describe("formatCellValueForCopy", () => {
     expect(out).toBe("ARRAY[1.0,2.0]")
   })
 
-  it("unescapes HTML entities so copy matches the displayed text", () => {
-    // Given a string value carrying HTML entities, as the grid displays it
-    // unescaped
+  it("preserves HTML entity-looking text", () => {
+    // Given a string value containing entity-looking text
     // When formatting it for copy
     const out = formatCellValueForCopy("a&amp;b&lt;c&gt;d", col("x", "VARCHAR"))
 
-    // Then the copied text is unescaped, matching the cell
-    expect(out).toBe("a&b<c>d")
+    // Then the copied text is preserved exactly as returned by the server
+    expect(out).toBe("a&amp;b&lt;c&gt;d")
   })
 })
 

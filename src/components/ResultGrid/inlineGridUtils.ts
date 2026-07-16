@@ -1,5 +1,4 @@
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import type { CellValue, ResultGridRow } from "./types"
 
 const CELL_WIDTH_MULTIPLIER = 9.6
@@ -170,8 +169,8 @@ export const formatCellValueForCopy = (
   if (value === null) return "null"
 
   if (col && isArrayColumn(col)) {
-    return unescapeHtml(formatArrayFull(value, col))
+    return formatArrayFull(value, col)
   }
 
-  return unescapeHtml(formatCellValue(value, col))
+  return formatCellValue(value, col)
 }
