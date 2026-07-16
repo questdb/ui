@@ -119,7 +119,6 @@ const FieldLabel = styled.span`
   font-size: 1.1rem;
   color: ${({ theme }) => theme.color.gray2};
   text-transform: uppercase;
-  letter-spacing: 0.08em;
   font-weight: 600;
 `
 

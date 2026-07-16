@@ -48,6 +48,7 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
 import { MCPBridgeProvider } from "../../providers/MCPBridgeProvider"
+import { NotebookOnboardingModal } from "../../components/NotebookOnboardingModal"
 
 const Page = styled.div`
   display: flex;
@@ -125,6 +126,7 @@ const Layout = () => {
               <SideMenu />
 
               <Footer />
+              <NotebookOnboardingModal />
             </MCPBridgeProvider>
           </AIStatusProvider>
         </AIConversationProvider>

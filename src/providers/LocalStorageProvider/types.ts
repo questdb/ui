@@ -37,6 +37,13 @@ export type LeftPanelState = {
   width: number
 }
 
+export type NotebookOnboarding = {
+  mcpEverConnected: boolean
+  showNotebookPromo: boolean
+  showMcpPromo: boolean
+  collapseMcpPromo: boolean
+}
+
 export type LocalConfig = {
   editorCol: number
   editorLine: number
@@ -48,4 +55,5 @@ export type LocalConfig = {
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
   aiChatPanelWidth: number
+  notebookOnboarding: NotebookOnboarding
 }

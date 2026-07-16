@@ -69,6 +69,7 @@ const color: ColorShape = {
   pinkDarker: "#be2f5b",
   pinkPrimary: "#c93261",
   pinkLighter: "#ff79c6",
+  pinkBadge: "#eb477a",
   transparent: "transparent",
   white: "#fafafa",
   inherit: "inherit",
@@ -83,7 +84,7 @@ const color: ColorShape = {
   aiBadgeIconBg: "#290a13",
   aiBadgeIconBorder: "rgba(122, 31, 58, 0.64)",
   dividerAccent: "#9c274b",
-  mutedLabel: "#9ca3af",
+  mutedLabel: "#9e9e9e",
   pinkGradientEnd: "#892c6c",
 }
 

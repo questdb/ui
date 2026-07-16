@@ -33,6 +33,7 @@ import {
 } from "../../utils/tools/permissions"
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
 import { QuestContext } from "../QuestProvider"
+import { useLocalStorage } from "../LocalStorageProvider"
 import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
 import type { ToolDefinition } from "../../utils/ai/types"
 import {
@@ -93,6 +94,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const { quest } = useContext(QuestContext)
+  const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
   const [url, setUrl] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [status, setStatus] = useState<MCPBridgeClientStatus>("disconnected")
@@ -393,6 +395,14 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     const stored = readPendingPair()
     if (stored?.consented) clearPendingPair()
   }, [status, url, token, lastError])
+
+  // Remember the first successful bridge connection to suppress the
+  // notebooks onboarding surfaces from then on.
+  useEffect(() => {
+    if (status === "connected" && !notebookOnboarding.mcpEverConnected) {
+      updateNotebookOnboarding({ mcpEverConnected: true })
+    }
+  }, [status, notebookOnboarding.mcpEverConnected, updateNotebookOnboarding])
 
   // Don't flip consentSucceeded inside the timer: React 17 doesn't batch
   // setStates in setTimeout, and Radix keeps the modal mounted during its
