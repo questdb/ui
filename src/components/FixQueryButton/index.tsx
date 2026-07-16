@@ -9,7 +9,11 @@ import { selectors } from "../../store"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
-import { executeAIFlow, createFixFlowConfig } from "../../utils/executeAIFlow"
+import type { ExecutionRefs } from "../../scenes/Editor/index"
+import {
+  executeAIFlow,
+  createFixFlowConfig,
+} from "../../utils/ai/executeAIFlow"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 

@@ -16,7 +16,7 @@ import {
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { requestCellReveal } from "../Editor/Notebook/cellReveal"
-import { waitForController } from "../../utils/notebookAIBridge"
+import { waitForController } from "../../utils/notebooks/notebookController"
 
 const ResultsContainer = styled.div`
   padding: 0;
@@ -336,12 +336,16 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
           if (temporaryBufferId !== null && temporaryBufferId === bufferId) {
             await convertTemporaryToPermanent()
           } else {
-            await updateBuffer(bufferId, {
+            const restoredFields = {
               archived: false,
               archivedAt: undefined,
               position: activeBufferCount,
-            })
-            await setActiveBuffer(buffer, { focus: true, fromSearch: true })
+            }
+            await updateBuffer(bufferId, restoredFields)
+            await setActiveBuffer(
+              { ...buffer, ...restoredFields },
+              { focus: true, fromSearch: true },
+            )
 
             if (temporaryBufferId !== null) {
               await updateBuffer(temporaryBufferId, { isTemporary: false })
@@ -594,9 +598,6 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             >
               {renderResultIcon(item)}
             </FileIcon>
-            {item.isNotebookMatch && (
-              <MatchType aria-hidden="true">Title</MatchType>
-            )}
             <ItemText
               $isArchived={item.match.isArchived}
               data-hook="search-result-title-match-text"

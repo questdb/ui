@@ -1,4 +1,4 @@
-import type { UserActionEvent } from "../../utils/notebookAIBridge"
+import type { UserActionEvent } from "../../utils/notebooks/notebookAIBridge"
 import type { UserActionDigest } from "./types"
 
 export const createEmptyDigest = (): UserActionDigest => ({

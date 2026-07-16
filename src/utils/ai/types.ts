@@ -4,7 +4,7 @@ import type {
   StatusCallback,
   StreamingCallback,
   TokenUsage,
-} from "../aiAssistant"
+} from "./aiAssistant"
 import type { Permissions, ToolCategory } from "../tools/permissions"
 import type { ValidateQueryResult } from "../questdb/types"
 import type { ProviderId } from "./settings"
@@ -14,7 +14,7 @@ export type ToolSurface = "ai" | "mcp"
 
 export interface ToolDefinition {
   name: string
-  description?: string
+  description: string
   inputSchema: {
     type: "object"
     properties: Record<string, unknown>
@@ -23,10 +23,10 @@ export interface ToolDefinition {
     additionalProperties?: boolean
   }
   category: ToolCategory
-  surfaces?: ToolSurface[]
-  mutatesNotebook?: boolean
-  // Modifies existing cell content/arrangement in place
-  editsCells?: boolean
+  surfaces: ToolSurface[]
+  mutatesNotebook: boolean
+  // Produces a brand-new notebook whose bufferId is in the result
+  createsNotebook: boolean
 }
 
 export type ToolCall = {

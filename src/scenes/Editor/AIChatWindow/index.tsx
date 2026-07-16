@@ -46,7 +46,7 @@ import {
   createExplainFlowConfig,
   createFixFlowConfig,
   createSchemaExplainFlowConfig,
-} from "../../../utils/executeAIFlow"
+} from "../../../utils/ai/executeAIFlow"
 import { getTableKindLabel } from "../../Schema/VirtualTables"
 import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
@@ -60,12 +60,12 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { Stop } from "@styled-icons/remix-line"
 import { CircleNotchSpinner } from "../Monaco/icons"
-import { getUserActionSeq, getWorkspace } from "../../../utils/notebookAIBridge"
+import { getBufferActionSeq } from "../../../utils/notebooks/notebookAIBridge"
 import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
 import type {
   NotebookFlowContext,
   WorkspaceInfo,
-} from "../../../utils/executeAIFlow"
+} from "../../../utils/ai/executeAIFlow"
 import { QueryInNotification } from "../Monaco/query-in-notification"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 import { getLastTurnWithUnactionedDiff } from "../../../utils/ai/turnView"
@@ -395,11 +395,22 @@ const AIChatWindow: React.FC = () => {
 
   // <workspace> always emits when tabs exist so unbound chats can resolve user-said labels to buffer_ids.
   const buildNotebookFlowContext = useCallback(
-    (conversationId: string): NotebookFlowContext | undefined => {
+    async (
+      conversationId: string,
+    ): Promise<NotebookFlowContext | undefined> => {
       const meta = getConversationMeta(conversationId)
       const bufferId = meta?.notebookBufferId
-      const readSeq = getUserActionSeq()
-      const snapshot = bufferId ? buildSnapshot(getWorkspace(), bufferId) : null
+      const readSeq =
+        typeof bufferId === "number" ? getBufferActionSeq(bufferId) : undefined
+      const snapshot = bufferId
+        ? await buildSnapshot(bufferId).catch((err) => {
+            console.warn(
+              "Notebook snapshot unavailable, sending without it",
+              err,
+            )
+            return null
+          })
+        : null
       const digest = readUserActionDigest(conversationId)
       const notebookBuffers = buffers.filter(
         (b) => !!b.notebookViewState && typeof b.id === "number",
@@ -435,7 +446,7 @@ const AIChatWindow: React.FC = () => {
     [getConversationMeta, readUserActionDigest, buffers, activeBuffer],
   )
 
-  const handleSendMessage = (
+  const handleSendMessage = async (
     userMessage: string,
     hasUnactionedDiffParam: boolean = false,
   ) => {
@@ -468,7 +479,7 @@ const AIChatWindow: React.FC = () => {
         tables,
         hasSchemaAccess,
         abortSignal: abortController?.signal,
-        notebookContext: buildNotebookFlowContext(conversationId),
+        notebookContext: await buildNotebookFlowContext(conversationId),
       }),
       {
         addMessage,
@@ -733,7 +744,7 @@ const AIChatWindow: React.FC = () => {
         tables,
         hasSchemaAccess,
         abortSignal: abortController?.signal,
-        notebookContext: buildNotebookFlowContext(conversationId),
+        notebookContext: await buildNotebookFlowContext(conversationId),
       }
 
       const callbacks = {

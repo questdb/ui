@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
+  buildAppliedNotebookState,
   attachScriptSummary,
   autoRefreshIntervalMs,
   autoRefreshLabel,
@@ -15,29 +16,41 @@ import {
   capResultBytes,
   cancelAllInCell,
   cancelOneInCell,
+  cellHeightPatchForRows,
   cellToolbarMenuFlags,
   cellToolbarTier,
   cloneNotebookViewState,
+  computeAgentCellGridH,
   computeCellGridH,
   computeCellHeights,
   computeResultBottomHeight,
+  DEFAULT_CHART_BOTTOM_HEIGHT,
   duplicateCellAt,
   generateDefaultLayout,
+  hasAgentVisibleCellHeightChanged,
   insertCell,
   isDoubleView,
   isExpectingResult,
   isUnverifiableExecError,
   mergeCellLayout,
+  MIN_MARKDOWN_HEIGHT_PX,
+  modeChangeBottomHeightPatch,
   nextCopyLabel,
+  nextGridSeedPosition,
   partitionCellHeights,
+  patchCellRunResult,
   removeCell,
+  resolveRunCompletion,
   scaleCellHeights,
   setResultAt,
   singleResultFromExec,
+  snapMarkdownTopHeight,
+  summarizeCellResults,
   sqlHash,
   stripCellResults,
   swapCellDown,
   swapCellUp,
+  upsertCellLayout,
 } from "./notebookUtils"
 import type {
   NotebookCell,
@@ -59,6 +72,67 @@ const cell = (
   position: 0,
   value,
   result,
+})
+
+describe("singleResultFromExec — notice results", () => {
+  it("passes the notice through on dql results and omits the key otherwise", () => {
+    // Given a notice-carrying exec result
+    const exec = {
+      type: "dql" as const,
+      query: "Q",
+      columns: [{ name: "x", type: "INT" }],
+      dataset: [[1]],
+      count: 1,
+      notice: "partition converted",
+    }
+    // When it is mapped to a cell result
+    const withNotice = singleResultFromExec(exec, "Q")
+    // Then the notice survives, and plain dql results never gain the key
+    expect(withNotice).toMatchObject({
+      type: "dql",
+      notice: "partition converted",
+    })
+    const plain = singleResultFromExec({ ...exec, notice: undefined }, "Q")
+    expect("notice" in plain).toBe(false)
+  })
+})
+
+describe("summarizeCellResults — notice results", () => {
+  const cellWith = (notice: string) => ({
+    id: "a",
+    position: 0,
+    value: "Q",
+    result: {
+      results: [
+        {
+          type: "dql" as const,
+          query: "Q",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+          notice,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    },
+  })
+
+  it("keeps the run successful and surfaces the notice to the agent", () => {
+    // When a notice-carrying DQL is summarized
+    const summary = summarizeCellResults(cellWith("partition converted"))
+    // Then it still counts as success and names the notice
+    expect(summary.success).toBe(true)
+    expect(summary.results).toEqual(["success (NOTICE: partition converted)"])
+  })
+
+  it("trims a long notice to 200 chars", () => {
+    const summary = summarizeCellResults(cellWith("x".repeat(300)))
+    expect(summary.results[0].length).toBeLessThanOrEqual(
+      "success (NOTICE: )".length + 200,
+    )
+    expect(summary.results[0].endsWith("...)")).toBe(true)
+  })
 })
 
 describe("singleResultFromExec", () => {
@@ -175,6 +249,47 @@ describe("isUnverifiableExecError", () => {
     expect(isUnverifiableExecError({ type: "dml" })).toBe(false)
     expect(isUnverifiableExecError({ type: "dql" })).toBe(false)
     expect(isUnverifiableExecError({ type: "error" })).toBe(false)
+  })
+})
+
+describe("resolveRunCompletion", () => {
+  const runningResult = {
+    results: [{ type: "running" as const, query: "SELECT 1" }],
+    activeResultIndex: 0,
+    timestamp: 0,
+  }
+
+  it("rolls back a user run after an external SQL edit clears its result", () => {
+    // Given a user run whose SQL and in-flight result were replaced externally
+    const liveCell = { value: "SELECT 2", result: null }
+
+    // When the run completes
+    const decision = resolveRunCompletion(liveCell, "SELECT 1", false)
+
+    // Then the stale execution is rolled back instead of committed
+    expect(decision).toBe("cell_changed")
+  })
+
+  it("keeps a user run when the user edits its SQL during execution", () => {
+    // Given a direct editor change that leaves the in-flight result present
+    const liveCell = { value: "SELECT 2", result: runningResult }
+
+    // When the run completes
+    const decision = resolveRunCompletion(liveCell, "SELECT 1", false)
+
+    // Then the result of the user's explicit run can still be committed
+    expect(decision).toBe("commit")
+  })
+
+  it("discards an agent run when its result was cleared", () => {
+    // Given an agent run whose result was cleared during execution
+    const liveCell = { value: "SELECT 1", result: null }
+
+    // When the run completes with full-value attribution required
+    const decision = resolveRunCompletion(liveCell, "SELECT 1", true)
+
+    // Then it cannot resurrect the cleared result
+    expect(decision).toBe("result_cleared")
   })
 })
 
@@ -780,6 +895,51 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
+  it("resets lastRunStatus when a value change drops an error result", () => {
+    // Given a cell that errored on its previous SQL
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT * FROM missing",
+        result: {
+          results: [
+            { type: "error", query: "SELECT * FROM missing", error: "boom" },
+          ],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      },
+    ]
+    // When the SQL is fixed via apply_notebook_state
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
+    })
+    // Then the stale error must not leak onto the fixed, not-yet-rerun cell
+    expect(nextCells[0].result).toBeNull()
+    expect(nextCells[0].lastRunStatus).toBeUndefined()
+  })
+
+  it("resets a persisted error status when the SQL changes", () => {
+    // Given a passive cell whose error survives only as persisted run history
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT * FROM missing",
+        lastRunStatus: "error",
+      },
+    ]
+
+    // When the SQL is fixed without a live result blob
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
+    })
+
+    // Then the previous SQL's error is cleared
+    expect(nextCells[0].lastRunStatus).toBeUndefined()
+  })
+
   it("preserveValue keeps the existing cell's value, result, and run history", () => {
     const prev: NotebookCell[] = [
       {
@@ -1061,13 +1221,14 @@ describe("buildAppliedCells", () => {
     ).toThrow(/no chart_config/)
   })
 
-  it("apply is a PUT: omitted fields on an existing cell are cleared, not inherited", () => {
+  it("preserves an existing mode while clearing omitted PUT fields", () => {
+    // Given an existing run cell with optional chart presentation fields
     const prev: NotebookCell[] = [
       {
         id: "a",
         position: 0,
         value: "SELECT 1",
-        mode: "draw",
+        mode: "run",
         autoRefresh: "5s",
         isViewMaximized: true,
         chartConfig: {
@@ -1076,13 +1237,50 @@ describe("buildAppliedCells", () => {
         },
       },
     ]
+
+    // When apply omits mode and the other presentation fields
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "SELECT 1" }], // bare cell — everything omitted
     })
-    expect(nextCells[0].mode).toBeUndefined()
+
+    // Then mode is sticky while the documented PUT fields are cleared
+    expect(nextCells[0].mode).toBe("run")
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
     expect(nextCells[0].isViewMaximized).toBeUndefined()
+  })
+
+  it("preserves draw mode when apply omits mode and supplies its full chart", () => {
+    // Given an existing draw cell
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT 1",
+        mode: "draw",
+        chartConfig: {
+          xColumn: "ts",
+          queries: [{ type: "line", yColumns: ["v"] }],
+        },
+      },
+    ]
+
+    // When apply omits mode but re-sends the full chart configuration
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [
+        {
+          id: "a",
+          value: "SELECT 2",
+          chartConfig: {
+            xColumn: "ts",
+            queries: [{ type: "line", yColumns: ["v"] }],
+          },
+        },
+      ],
+    })
+
+    // Then the cell remains a draw cell
+    expect(nextCells[0].mode).toBe("draw")
   })
 
   it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
@@ -1188,7 +1386,26 @@ describe("computeResultBottomHeight", () => {
     }
   })
 
-  it("single DQL with 0 rows → notification-only (no grid header, no rows)", () => {
+  it("single DQL with columns but 0 rows → notification + actions bar + header (no rows)", () => {
+    // The column headers show even with no rows: 44 + 36 + 44 + 0*30 = 124.
+    expect(
+      computeResultBottomHeight({
+        results: [
+          {
+            type: "dql",
+            query: "SELECT 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+    ).toBe(124)
+  })
+
+  it("single DQL with no columns → notification-only", () => {
     expect(
       computeResultBottomHeight({
         results: [
@@ -1212,7 +1429,7 @@ describe("computeResultBottomHeight", () => {
         {
           type: "dql" as const,
           query: "SELECT 1",
-          columns: [],
+          columns: [{ name: "x", type: "INT" }],
           dataset: Array.from({ length: rowCount }, () => [1]),
           count: rowCount,
         },
@@ -1238,7 +1455,7 @@ describe("computeResultBottomHeight", () => {
           {
             type: "dql",
             query: "Q1",
-            columns: [],
+            columns: [{ name: "x", type: "INT" }],
             dataset: [[1]],
             count: 1,
           },
@@ -1250,13 +1467,19 @@ describe("computeResultBottomHeight", () => {
     ).toBe(464)
   })
 
-  it("multi-statement, first is error → tab + notification only (we never saw rows)", () => {
+  it("multi-statement, first is error → tab + notification only (no grid to show)", () => {
     // 40 + 44 = 84
     expect(
       computeResultBottomHeight({
         results: [
           { type: "error", query: "Q1", error: "boom" },
-          { type: "dql", query: "Q2", columns: [], dataset: [[1]], count: 1 },
+          {
+            type: "dql",
+            query: "Q2",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+          },
         ],
         activeResultIndex: 1,
         timestamp: 0,
@@ -1264,19 +1487,31 @@ describe("computeResultBottomHeight", () => {
     ).toBe(84)
   })
 
-  it("multi-statement, first DQL with 0 rows → tab + notification only", () => {
-    // Same shape as first-is-error: the first query produced no rows, so
-    // we never reserved 10-row space.
+  it("multi-statement, first DQL with columns but 0 rows → tab + full grid block", () => {
+    // The first query shows its column headers, so we reserve the grid block
+    // like any DQL-first script: 40 + 44 + 36 + 44 + 10*30 = 464.
     expect(
       computeResultBottomHeight({
         results: [
-          { type: "dql", query: "Q1", columns: [], dataset: [], count: 0 },
-          { type: "dql", query: "Q2", columns: [], dataset: [[1]], count: 1 },
+          {
+            type: "dql",
+            query: "Q1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [],
+            count: 0,
+          },
+          {
+            type: "dql",
+            query: "Q2",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 1,
+          },
         ],
         activeResultIndex: 0,
         timestamp: 0,
       }),
-    ).toBe(84)
+    ).toBe(464)
   })
 })
 
@@ -1508,6 +1743,197 @@ describe("computeCellGridH", () => {
         true,
       ),
     ).toBe(4)
+  })
+})
+
+describe("markdown cell grid lattice", () => {
+  const markdown = (patch: Partial<NotebookCell> = {}): NotebookCell => ({
+    id: "m",
+    position: 0,
+    value: "",
+    type: "markdown",
+    ...patch,
+  })
+
+  it("snapMarkdownTopHeight snaps content height up to the next lattice point", () => {
+    // Given 10px rows, 20px margins and 42px markdown chrome, on-lattice
+    // content heights are 28, 58, 88, …
+    // When the measured content falls between points
+    // Then it snaps up to the next one
+    expect(snapMarkdownTopHeight(36)).toBe(58)
+    expect(snapMarkdownTopHeight(59)).toBe(88)
+  })
+
+  it("snapMarkdownTopHeight is idempotent on lattice points", () => {
+    expect(snapMarkdownTopHeight(58)).toBe(58)
+    expect(snapMarkdownTopHeight(88)).toBe(88)
+  })
+
+  it("snapMarkdownTopHeight floors at the markdown minimum", () => {
+    expect(snapMarkdownTopHeight(0)).toBe(MIN_MARKDOWN_HEIGHT_PX)
+    expect(snapMarkdownTopHeight(10)).toBe(MIN_MARKDOWN_HEIGHT_PX)
+  })
+
+  it("a fresh markdown cell derives an exact 4-row box from its 58px default", () => {
+    // Given a markdown cell with no stored topHeight
+    // When grid h derives from the 58px default + 42px markdown chrome
+    // Then 58 + 42 = 100px = exactly 4 rows (4×10 + 3×20), zero slack
+    expect(computeCellGridH(markdown(), 10, 20)).toBe(4)
+  })
+
+  it("uses markdown chrome (42) instead of SQL chrome (56)", () => {
+    // With SQL chrome, 58 + 56 = 114px would round up to 5 rows
+    expect(computeCellGridH(markdown({ topHeight: 58 }), 10, 20)).toBe(4)
+  })
+
+  it("cellHeightPatchForRows back-solves markdown rows with markdown chrome", () => {
+    // Given a markdown cell rendered at 4 rows
+    const cell = markdown({ topHeight: 58 })
+    // When the user drags the cell to 7 rows (7×10 + 6×20 = 190px box)
+    const patch = cellHeightPatchForRows(cell, 7, 10, 20)
+    // Then content = 190 − 42 = 148, pinned like a manual drag
+    expect(patch).toEqual({ topHeight: 148, topResized: true })
+  })
+
+  it("cellHeightPatchForRows floors a tiny markdown drag at the markdown minimum", () => {
+    // Given a markdown cell rendered at 4 rows
+    const cell = markdown({ topHeight: 58 })
+    // When the user drags the cell down to 2 rows (40px box < 42px chrome)
+    const patch = cellHeightPatchForRows(cell, 2, 10, 20)
+    // Then the content floors at the markdown minimum, not the SQL 72px
+    expect(patch).toEqual({
+      topHeight: MIN_MARKDOWN_HEIGHT_PX,
+      topResized: true,
+    })
+  })
+})
+
+describe("hasAgentVisibleCellHeightChanged", () => {
+  const runCell: NotebookCell = {
+    id: "x",
+    position: 0,
+    value: "",
+    topHeight: 72,
+  }
+
+  it("ignores exact pixel changes within the same agent height breakpoint", () => {
+    // Given a grid cell whose next pixel height maps to its current h
+    const currentH = computeAgentCellGridH(runCell)
+    const nextH = computeAgentCellGridH({ ...runCell, topHeight: 73 })
+
+    // When the resize is checked against the agent-visible state
+    const changed = hasAgentVisibleCellHeightChanged(
+      runCell,
+      { topHeight: 73, topResized: true },
+      "grid",
+    )
+
+    // Then the pixel-only change does not stale the agent
+    expect(nextH).toBe(currentH)
+    expect(changed).toBe(false)
+  })
+
+  it("reports a grid resize that crosses an agent height breakpoint", () => {
+    // Given a grid cell whose next pixel height maps to a different h
+    const currentH = computeAgentCellGridH(runCell)
+    const nextH = computeAgentCellGridH({ ...runCell, topHeight: 100 })
+
+    // When the resize is checked against the agent-visible state
+    const changed = hasAgentVisibleCellHeightChanged(
+      runCell,
+      { topHeight: 100, topResized: true },
+      "grid",
+    )
+
+    // Then the agent is told to re-read the new breakpoint
+    expect(nextH).not.toBe(currentH)
+    expect(changed).toBe(true)
+  })
+
+  it("ignores list resize values because they are absent from agent state", () => {
+    // Given a list cell with a large pixel height change
+    const patch = { topHeight: 300, topResized: true }
+
+    // When the resize is checked against the agent-visible state
+    const changed = hasAgentVisibleCellHeightChanged(runCell, patch, "list")
+
+    // Then the invisible height does not stale the agent
+    expect(changed).toBe(false)
+  })
+
+  it("ignores split changes that preserve the agent-visible total height", () => {
+    // Given a double-view grid cell whose editor and result heights trade space
+    const splitCell: NotebookCell = {
+      ...runCell,
+      topHeight: 200,
+      bottomHeight: 300,
+      result: { results: [], activeResultIndex: 0, timestamp: 0 },
+    }
+
+    // When the split moves without changing the total cell height
+    const changed = hasAgentVisibleCellHeightChanged(
+      splitCell,
+      { topHeight: 250, bottomHeight: 250 },
+      "grid",
+    )
+
+    // Then the agent-visible h remains unchanged
+    expect(changed).toBe(false)
+  })
+})
+
+describe("cellHeightPatchForRows", () => {
+  const withResult = (over: Partial<NotebookCell> = {}): NotebookCell => ({
+    id: "x",
+    position: 0,
+    value: "",
+    result: { results: [], activeResultIndex: 0, timestamp: 0 },
+    ...over,
+  })
+
+  it("returns an empty patch when rows already match the derived height", () => {
+    // Given a single-view run cell whose content-derived height is 5 rows
+    const runCell: NotebookCell = { id: "x", position: 0, value: "" }
+    // When the requested rows equal that derived height (not a real resize)
+    const patch = cellHeightPatchForRows(runCell, 5, 10, 20)
+    // Then nothing is pinned — auto-height is left intact
+    expect(patch).toEqual({})
+  })
+
+  it("single-view: grows the editor and pins topResized", () => {
+    // Given a single-view run cell (no bottom slot)
+    const runCell: NotebookCell = { id: "x", position: 0, value: "" }
+    // When a taller height is requested (targetContentPx = 30*10 - 76 = 224)
+    const patch = cellHeightPatchForRows(runCell, 10, 10, 20)
+    // Then the editor grows to fill it and is pinned
+    expect(patch).toEqual({ topHeight: 224, topResized: true })
+  })
+
+  it("split double-view: resizes the result pane and pins bottomResized", () => {
+    // Given a double-view cell (has result), not maximized
+    const c = withResult({ topHeight: 72, bottomHeight: 100 })
+    // When a taller height is requested (targetContentPx = 30*15 - 76 = 374)
+    const patch = cellHeightPatchForRows(c, 15, 10, 20)
+    // Then only the bottom slot grows (editor kept), pinned via bottomResized
+    expect(patch).toEqual({ bottomHeight: 302, bottomResized: true })
+  })
+
+  it("maximized double-view: scales both panes and pins both", () => {
+    // Given a maximized double-view cell
+    const c = withResult({
+      topHeight: 72,
+      bottomHeight: 100,
+      isViewMaximized: true,
+    })
+    // When a taller height is requested (targetContentPx = 374, scale ~2.174)
+    const patch = cellHeightPatchForRows(c, 15, 10, 20)
+    // Then editor and result scale together, both pinned
+    expect(patch).toEqual({
+      topHeight: 157,
+      bottomHeight: 217,
+      topResized: true,
+      bottomResized: true,
+    })
   })
 })
 
@@ -1799,6 +2225,7 @@ describe("capResultBytes", () => {
     // existing "X of Y rows" indicator still reflects truncation
     expect(capped.dataset).toEqual(r.dataset.slice(0, capped.dataset.length))
     expect(capped.count).toBe(100)
+    expect(capped.truncated).toBe(true)
   })
 
   it("passes non-DQL and empty results through untouched", () => {
@@ -2178,5 +2605,304 @@ describe("cellToolbarMenuFlags", () => {
         )
       }
     }
+  })
+})
+
+describe("nextGridSeedPosition", () => {
+  it("empty or missing layout → seeds at the top", () => {
+    // Given no existing layout entries
+    // When a seed position is computed
+    // Then the cell lands at the origin, full-width, with the h=1 sentinel
+    expect(nextGridSeedPosition(undefined)).toEqual({ x: 0, y: 0, w: 12, h: 1 })
+    expect(nextGridSeedPosition([])).toEqual({ x: 0, y: 0, w: 12, h: 1 })
+  })
+
+  it("existing layout → seeds below the lowest cell", () => {
+    // Given entries whose lowest edge is y+h = 9
+    const layout = [
+      { i: "a", x: 0, y: 0, w: 6, h: 4 },
+      { i: "b", x: 6, y: 5, w: 6, h: 4 },
+    ]
+    // When a seed position is computed
+    const pos = nextGridSeedPosition(layout)
+    // Then the new cell starts exactly below the lowest edge
+    expect(pos).toEqual({ x: 0, y: 9, w: 12, h: 1 })
+  })
+})
+
+describe("upsertCellLayout", () => {
+  it("updates the entry in place when the cell already has one", () => {
+    // Given a layout containing cell "a"
+    const layout = [
+      { i: "a", x: 0, y: 0, w: 6, h: 4 },
+      { i: "b", x: 6, y: 0, w: 6, h: 4 },
+    ]
+    // When "a" is repositioned
+    const next = upsertCellLayout(layout, "a", { x: 2, y: 3, w: 4, h: 5 })
+    // Then only "a" changed and no entry was added
+    expect(next).toHaveLength(2)
+    expect(next[0]).toEqual({ i: "a", x: 2, y: 3, w: 4, h: 5 })
+    expect(next[1]).toBe(layout[1])
+  })
+
+  it("appends an entry when the cell has none (including undefined layout)", () => {
+    // Given no entry for cell "c"
+    // When "c" is positioned
+    const next = upsertCellLayout(undefined, "c", { x: 0, y: 9, w: 12, h: 1 })
+    // Then the entry is appended
+    expect(next).toEqual([{ i: "c", x: 0, y: 9, w: 12, h: 1 }])
+  })
+})
+
+describe("modeChangeBottomHeightPatch", () => {
+  it("never overrides a user-resized bottom slot", () => {
+    // Given a cell whose bottom slot the user resized
+    const resized = { ...cell("a"), bottomResized: true }
+    // When the mode flips either way
+    // Then no patch is produced
+    expect(modeChangeBottomHeightPatch(resized, "draw")).toEqual({})
+    expect(modeChangeBottomHeightPatch(resized, "run")).toEqual({})
+  })
+
+  it("draw mode → chart default height", () => {
+    // When a cell flips to draw
+    const patch = modeChangeBottomHeightPatch(cell("a"), "draw")
+    // Then the chart default bottom height is seeded
+    expect(patch).toEqual({ bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT })
+  })
+
+  it("run mode with a result → height derived from the result", () => {
+    // Given a cell holding an error result (notification-only → 44)
+    const withResult = cell("a", "SELECT 1", {
+      results: [{ type: "error", query: "X", error: "boom" }],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+    // When the cell flips back to run
+    const patch = modeChangeBottomHeightPatch(withResult, "run")
+    // Then the bottom slot matches the result's computed height
+    expect(patch).toEqual({ bottomHeight: 44 })
+  })
+
+  it("run mode without a result → clears bottomHeight (single view)", () => {
+    // When a result-less cell flips back to run
+    const patch = modeChangeBottomHeightPatch(cell("a"), "run")
+    // Then bottomHeight is explicitly cleared
+    expect(patch).toEqual({ bottomHeight: undefined })
+  })
+})
+
+describe("patchCellRunResult", () => {
+  const errorResult = {
+    results: [{ type: "error" as const, query: "X", error: "boom" }],
+    activeResultIndex: 0,
+    timestamp: 0,
+  }
+
+  it("patches only the target cell and sizes its bottom slot", () => {
+    // Given two cells
+    const cells = [cell("a"), cell("b")]
+    // When a run result lands on "a"
+    const next = patchCellRunResult(cells, "a", errorResult)
+    // Then "a" carries the result + derived bottomHeight and "b" is untouched
+    expect(next[0].result).toBe(errorResult)
+    expect(next[0].bottomHeight).toBe(44)
+    expect(next[1]).toBe(cells[1])
+  })
+
+  it("keeps a user-resized bottom slot and skips draw/markdown sizing", () => {
+    // Given a resized cell, a draw cell, and a markdown cell
+    const resized = { ...cell("a"), bottomResized: true, bottomHeight: 500 }
+    const draw = { ...cell("b"), mode: "draw" as const }
+    const markdown = { ...cell("c"), type: "markdown" as const }
+    // When results land on each
+    const [a] = patchCellRunResult([resized], "a", errorResult)
+    const [b] = patchCellRunResult([draw], "b", errorResult)
+    const [c] = patchCellRunResult([markdown], "c", errorResult)
+    // Then the result is stored but bottomHeight is never touched
+    expect(a.result).toBe(errorResult)
+    expect(a.bottomHeight).toBe(500)
+    expect(b.bottomHeight).toBeUndefined()
+    expect(c.bottomHeight).toBeUndefined()
+  })
+})
+
+describe("buildAppliedNotebookState", () => {
+  const state = (cells: NotebookCell[]) => ({
+    cells,
+    settings: {},
+    maximizedCellId: null,
+  })
+
+  it("applies cells and reports the diff", () => {
+    // Given one existing cell
+    const current = state([cell("a", "SELECT 1")])
+    // When the request keeps "a" and adds a new cell
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ id: "a", preserveValue: true }, { value: "SELECT 2" }],
+    })
+    // Then both cells exist and the diff names them
+    expect(next.cells).toHaveLength(2)
+    expect(next.diff.updated).toEqual(["a"])
+    expect(next.diff.added).toHaveLength(1)
+    expect(next.diff.deleted).toEqual([])
+  })
+
+  it("grid layout mode builds a layout for every cell", () => {
+    // Given a list-mode notebook
+    const current = state([cell("a", "SELECT 1")])
+    // When the request switches to grid
+    const next = buildAppliedNotebookState(current, {
+      layoutMode: "grid",
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then grid mode is set with one layout entry per cell
+    expect(next.settings.layoutMode).toBe("grid")
+    expect(next.settings.layout).toHaveLength(1)
+    expect(next.settings.layout?.[0].i).toBe("a")
+  })
+
+  it("grid.h differing from the derived height pins it into the cell", () => {
+    // Given a single-view run cell (derived height is 5 rows at 10/20)
+    const current = state([cell("a", "SELECT 1")])
+    // When apply requests a taller grid.h (targetContentPx = 30*20 - 76 = 524)
+    const next = buildAppliedNotebookState(current, {
+      layoutMode: "grid",
+      cells: [
+        { id: "a", preserveValue: true, grid: { x: 0, y: 0, w: 6, h: 20 } },
+      ],
+    })
+    // Then the height is back-solved into the editor and pinned (topResized)
+    expect(next.cells[0].topHeight).toBe(524)
+    expect(next.cells[0].topResized).toBe(true)
+  })
+
+  it("grid.h equal to the derived height does not pin (auto-height intact)", () => {
+    // Given a single-view run cell whose derived height is 5 rows
+    const current = state([cell("a", "SELECT 1")])
+    // When apply merely echoes that height (the required grid.h round-trip)
+    const next = buildAppliedNotebookState(current, {
+      layoutMode: "grid",
+      cells: [
+        { id: "a", preserveValue: true, grid: { x: 0, y: 0, w: 6, h: 5 } },
+      ],
+    })
+    // Then nothing is pinned — the cell keeps auto-height
+    expect(next.cells[0].topResized).toBeUndefined()
+    expect(next.cells[0].bottomResized).toBeUndefined()
+  })
+
+  it("value edit that echoes the pre-apply grid.h does not pin the editor", () => {
+    // Given a run cell showing a table result (double-view)
+    const withTable = cell("a", "SELECT 1", {
+      results: [],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+    const current = state([withTable])
+    // Its grid height is derived from editor + result together
+    const h = computeCellGridH(withTable, 10, 20)
+    // When the agent fixes the SQL (clearing the result) and echoes that same h
+    const next = buildAppliedNotebookState(current, {
+      layoutMode: "grid",
+      cells: [{ id: "a", value: "SELECT 2", grid: { x: 0, y: 0, w: 6, h } }],
+    })
+    // Then the result clears but no phantom resize is pinned — after the re-run
+    // the cell returns to the same split, not a ballooned editor
+    expect(next.cells[0].result).toBeNull()
+    expect(next.cells[0].topHeight).toBeUndefined()
+    expect(next.cells[0].topResized).toBeUndefined()
+    expect(next.cells[0].bottomResized).toBeUndefined()
+  })
+
+  it("value edit with a taller grid.h resizes the result pane, like a bottom-edge drag", () => {
+    // Given a run cell showing a table result (double-view)
+    const withTable = cell("a", "SELECT 1", {
+      results: [],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+    const current = state([withTable])
+    const h = computeCellGridH(withTable, 10, 20)
+    // When the agent fixes the SQL and grows the cell taller (a real resize)
+    const next = buildAppliedNotebookState(current, {
+      layoutMode: "grid",
+      cells: [
+        { id: "a", value: "SELECT 2", grid: { x: 0, y: 0, w: 6, h: h + 5 } },
+      ],
+    })
+    // Then it pins the result pane (bottomResized), never the editor — matching
+    // what the user's grid bottom-edge drag on a table cell writes
+    expect(next.cells[0].bottomResized).toBe(true)
+    expect(next.cells[0].topResized).toBeUndefined()
+  })
+
+  it("keeps settings referentially identical when nothing settings-related changed", () => {
+    // Given a list-mode notebook
+    const current = state([cell("a", "SELECT 1")])
+    // When the request touches only cells
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ id: "a", value: "SELECT 2" }],
+    })
+    // Then the settings object is the same reference
+    expect(next.settings).toBe(current.settings)
+  })
+
+  it("maximizedCellId: explicit id is kept only when the cell exists", () => {
+    const current = state([cell("a", "SELECT 1")])
+    // When the request maximizes an existing cell
+    const kept = buildAppliedNotebookState(current, {
+      maximizedCellId: "a",
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then it is kept
+    expect(kept.maximizedCellId).toBe("a")
+    // When the request maximizes a cell that does not exist
+    const dropped = buildAppliedNotebookState(current, {
+      maximizedCellId: "ghost",
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then it falls back to null
+    expect(dropped.maximizedCellId).toBeNull()
+  })
+
+  it("maximizedCellId: a stale maximized cell is cleared when deleted", () => {
+    // Given "b" is maximized
+    const current = {
+      cells: [cell("a", "SELECT 1"), cell("b", "SELECT 2")],
+      settings: {},
+      maximizedCellId: "b",
+    }
+    // When the request omits maximizedCellId but deletes "b"
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then the stale maximize is cleared
+    expect(next.maximizedCellId).toBeNull()
+  })
+
+  it("variables: set when provided, cleared on null, untouched when omitted", () => {
+    const current = {
+      cells: [cell("a", "SELECT 1")],
+      settings: { variables: [{ name: "x", value: "1" }] },
+      maximizedCellId: null,
+    }
+    const request = { cells: [{ id: "a", preserveValue: true as const }] }
+    // When variables are omitted → untouched
+    expect(
+      buildAppliedNotebookState(current, request).settings.variables,
+    ).toEqual([{ name: "x", value: "1" }])
+    // When variables are null → cleared
+    expect(
+      buildAppliedNotebookState(current, { ...request, variables: null })
+        .settings.variables,
+    ).toEqual([])
+    // When variables are provided → replaced
+    expect(
+      buildAppliedNotebookState(current, {
+        ...request,
+        variables: [{ name: "y", value: "2" }],
+      }).settings.variables,
+    ).toEqual([{ name: "y", value: "2" }])
   })
 })

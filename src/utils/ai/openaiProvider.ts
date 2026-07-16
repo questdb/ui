@@ -4,7 +4,7 @@ import type {
   AiAssistantAPIError,
   StatusCallback,
   StreamingCallback,
-} from "../aiAssistant"
+} from "./aiAssistant"
 import { getModelProps } from "./settings"
 import type { ProviderId } from "./settings"
 import {

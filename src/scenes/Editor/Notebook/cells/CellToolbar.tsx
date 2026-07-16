@@ -30,12 +30,11 @@ import {
 } from "../notebookUtils"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
-import { useNotebookActions } from "../NotebookProvider"
-import { useEditor } from "../../../../providers/EditorProvider"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
   emitUserAction,
   signalUserEdit,
-} from "../../../../utils/notebookAIBridge"
+} from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 
@@ -84,6 +83,7 @@ type Props = {
   totalCells: number
   layoutMode: "list" | "grid"
   isMaximized: boolean
+  isRunning?: boolean
   inline?: boolean
   toolbarTier?: CellToolbarTier
   chartZoomed?: boolean
@@ -96,6 +96,7 @@ export const CellToolbar: React.FC<Props> = ({
   totalCells,
   layoutMode,
   isMaximized,
+  isRunning = false,
   inline,
   toolbarTier,
   chartZoomed = false,
@@ -105,12 +106,13 @@ export const CellToolbar: React.FC<Props> = ({
     moveCellDown,
     duplicateCell,
     deleteCell,
+    setFocusedCell,
     setMaximizedCellId,
     setCellRefresh,
     setCellViewMaximized,
     setCellMode,
   } = useNotebookActions()
-  const { activeBuffer } = useEditor()
+  const bufferId = useNotebookBufferId()
 
   // Grid positions cells via settings.layout, so swapping array order doesn't
   // move them visually — hide move up/down there.
@@ -155,11 +157,12 @@ export const CellToolbar: React.FC<Props> = ({
 
   // Minimize the chart/table to the editor, keeping the data on the cell.
   const handleViewSql = () => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setCellViewMaximized(cellId, false)
   }
   const handleViewTable = () => {
-    signalUserEdit()
+    if (isRunning) return
+    signalUserEdit(bufferId)
     if (isNoneView) {
       eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
       return
@@ -170,7 +173,8 @@ export const CellToolbar: React.FC<Props> = ({
     setCellViewMaximized(cellId, true)
   }
   const handleViewChart = () => {
-    signalUserEdit()
+    if (isRunning) return
+    signalUserEdit(bufferId)
     if (isNoneView || isGridView) {
       // Entering draw can be refused (non-DQL SQL); maximize only once the
       // draw actually takes, so a refused chart never maximizes the grid.
@@ -180,15 +184,15 @@ export const CellToolbar: React.FC<Props> = ({
     setCellViewMaximized(cellId, true)
   }
   const handleToggleMaximizeView = () => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setCellViewMaximized(cellId, !cell.isViewMaximized)
   }
   const handleMaximizeCell = () => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setMaximizedCellId(isMaximized ? null : cellId)
   }
   const handleRefreshNow = () => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     eventBus.publish(
       isChartView
         ? EventType.NOTEBOOK_CELL_REFRESH_CHART
@@ -201,36 +205,25 @@ export const CellToolbar: React.FC<Props> = ({
   const handleChartSettings = () =>
     eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
   const handleRefreshSelect = (value: AutoRefresh) => {
-    signalUserEdit()
+    signalUserEdit(bufferId)
     setCellRefresh(cellId, value)
   }
 
   const handleMoveUp = () => {
     moveCellUp(cellId)
-    if (typeof activeBuffer.id === "number") {
-      emitUserAction({
-        kind: "user_moved_cell",
-        bufferId: activeBuffer.id,
-        cellId,
-      })
-    }
+    emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
   const handleMoveDown = () => {
     moveCellDown(cellId)
-    if (typeof activeBuffer.id === "number") {
-      emitUserAction({
-        kind: "user_moved_cell",
-        bufferId: activeBuffer.id,
-        cellId,
-      })
-    }
+    emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
   const handleDuplicate = () => {
     const newCellId = duplicateCell(cellId)
-    if (typeof activeBuffer.id === "number" && newCellId) {
+    if (newCellId) {
+      setFocusedCell(newCellId)
       emitUserAction({
         kind: "user_duplicated_cell",
-        bufferId: activeBuffer.id,
+        bufferId,
         cellId,
         newCellId,
       })
@@ -238,13 +231,7 @@ export const CellToolbar: React.FC<Props> = ({
   }
   const handleDelete = () => {
     deleteCell(cellId)
-    if (typeof activeBuffer.id === "number") {
-      emitUserAction({
-        kind: "user_deleted_cell",
-        bufferId: activeBuffer.id,
-        cellId,
-      })
-    }
+    emitUserAction({ kind: "user_deleted_cell", bufferId, cellId })
   }
 
   return (
@@ -293,6 +280,7 @@ export const CellToolbar: React.FC<Props> = ({
               {showViewTable && (
                 <DropdownMenu.Item
                   onSelect={handleViewTable}
+                  disabled={isRunning}
                   icon={
                     isNoneView ? (
                       <PlayIcon size={16} />
@@ -307,6 +295,7 @@ export const CellToolbar: React.FC<Props> = ({
               {showViewChart && (
                 <DropdownMenu.Item
                   onSelect={handleViewChart}
+                  disabled={isRunning}
                   icon={<ChartLineIcon size={16} />}
                 >
                   {isNoneView ? "Draw" : "View chart"}

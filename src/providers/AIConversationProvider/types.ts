@@ -2,10 +2,8 @@ import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
 import type { RanStatus } from "../../utils/ai/runStatus"
-import type { TokenUsage } from "../../utils/aiAssistant"
+import type { TokenUsage } from "../../utils/ai/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
-
-export type { QueryKey }
 
 export type ConversationId = string
 

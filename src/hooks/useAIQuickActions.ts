@@ -8,7 +8,7 @@ import {
   executeAIFlow,
   createSchemaExplainFlowConfig,
   createHealthIssueFlowConfig,
-} from "../utils/executeAIFlow"
+} from "../utils/ai/executeAIFlow"
 import { getDocsSectionByUrl } from "../utils/questdbDocsRetrieval"
 import { ISSUE_DOCS_URLS } from "../scenes/Schema/TableDetailsDrawer/healthCheck"
 import type {

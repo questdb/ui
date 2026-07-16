@@ -49,6 +49,7 @@ export const CellWideActions: React.FC<Props> = ({
       isViewMaximized={isViewMaximized}
       isGridLoading={isGridLoading}
       isChartLoading={isChartLoading}
+      isRunning={isRunning}
       chartZoomed={chartZoomed}
       showLabels
     />

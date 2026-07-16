@@ -33,7 +33,7 @@ import {
 } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
-import type { Buffer } from "../../../store/buffers"
+import { type Buffer, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -443,7 +443,9 @@ export const Tabs = () => {
 
   const rename = async (id: string, title: string) => {
     void trackEvent(ConsoleEvent.TAB_RENAME)
-    await updateBuffer(parseInt(id), { label: title })
+    await updateBuffer(parseInt(id), {
+      label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
+    })
   }
 
   const removeAllArchived = async () => {

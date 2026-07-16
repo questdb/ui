@@ -37,6 +37,7 @@ export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
       count: r.count,
       timestamp: r.timestamp,
       timings: r.timings,
+      notice: r.notice,
     }
   }
   if (r.type === "error") {
@@ -56,11 +57,12 @@ export const toExecResult = (r: SingleQueryResult): QueryExecResult => {
   return { type: "error", query: r.query, columns: [], dataset: [], count: 0 }
 }
 
-// True when an existing cell result was produced by exactly the CURRENT queries
-// (same count, same per-statement query text). The run grid stores the raw cell
-// value verbatim (trailing `;`, surrounding whitespace) while the draw side
-// parses each statement, so both sides are normalized before comparing. A result
-// left over from edited-but-not-rerun SQL fails this, so the chart re-fetches.
+// True when an existing, complete cell result was produced by exactly the
+// CURRENT queries (same count, same per-statement query text). The run grid
+// stores the raw cell value verbatim (trailing `;`, surrounding whitespace)
+// while the draw side parses each statement, so both sides are normalized
+// before comparing. A result left over from edited-but-not-rerun SQL or capped
+// by the notebook byte limit fails this, so the chart re-fetches.
 export const resultMatchesQueries = (
   result: CellResult | null | undefined,
   queries: string[],
@@ -68,7 +70,9 @@ export const resultMatchesQueries = (
   result != null &&
   result.results.length === queries.length &&
   result.results.every(
-    (r, i) => normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
+    (r, i) =>
+      !(r.type === "dql" && r.truncated) &&
+      normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
   )
 
 export const resultsEquivalent = (
@@ -79,6 +83,17 @@ export const resultsEquivalent = (
   for (let i = 0; i < a.length; i++) {
     const x = a[i]
     const y = b[i]
+    // Query identity is the primary discriminator. Formatting differences
+    // introduced by parsing (surrounding whitespace / trailing semicolon) do
+    // not make a new result, but different SQL must always replace the prior
+    // frame even when it happens to return identical rows.
+    if (normalizeQueryText(x.query) !== normalizeQueryText(y.query)) {
+      return false
+    }
+    if (x.type !== y.type) return false
+    if (x.count !== y.count) return false
+    if (x.error !== y.error) return false
+    if (x.notice !== y.notice) return false
     // Cheap O(1) reject before the O(rows×cols) walk: a live poll that moved
     // almost always changes the row count or the first/last row's x value, so
     // most ticks bail here without scanning every cell.
@@ -88,11 +103,17 @@ export const resultsEquivalent = (
       if (x.dataset[0][0] !== y.dataset[0][0]) return false
       if (x.dataset[last][0] !== y.dataset[last][0]) return false
     }
-    if (x.type !== y.type) return false
-    if (x.error !== y.error) return false
     if (x.columns.length !== y.columns.length) return false
     for (let c = 0; c < x.columns.length; c++) {
-      if (x.columns[c].name !== y.columns[c].name) return false
+      const colX = x.columns[c]
+      const colY = y.columns[c]
+      if (
+        colX.name !== colY.name ||
+        colX.type !== colY.type ||
+        colX.dim !== colY.dim ||
+        colX.elemType !== colY.elemType
+      )
+        return false
     }
     for (let r = 0; r < x.dataset.length; r++) {
       const rowA = x.dataset[r]
