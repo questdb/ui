@@ -13,6 +13,7 @@ const {
   TEST_BRIDGE_TOKEN,
   TEST_BRIDGE_URL,
 } = require("../../utils/mcpFakeWebSocket")
+const { seedNotebookOnboarding } = require("../../utils")
 
 const deepLinkSuffix = () =>
   `?mcp-pair=1&mcp-ws=${encodeURIComponent(TEST_BRIDGE_URL)}` +
@@ -24,6 +25,7 @@ const loginAndVisitDeepLink = () => {
       win.localStorage.clear()
       win.sessionStorage.clear()
       win.indexedDB.deleteDatabase("web-console")
+      seedNotebookOnboarding(win)
       win.localStorage.setItem(
         "mcp:permissions",
         JSON.stringify({ grantSchemaAccess: true, read: true, write: true }),
