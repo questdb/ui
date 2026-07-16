@@ -174,3 +174,6 @@ export const formatCellValueForCopy = (
 
   return formatCellValue(value, col)
 }
+
+export const toSingleLineDisplay = (text: string): string =>
+  text.replace(/[\r\n]+/g, " ")

@@ -26,6 +26,7 @@ import { toast } from "../../components"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { buildResultPageMarkdown } from "../../components/ResultGrid/resultPageMarkdown"
+import { toSingleLineDisplay } from "../../components/ResultGrid/inlineGridUtils"
 
 const hashString = (str) => {
   let hash = 0
@@ -1106,7 +1107,9 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.textContent = getDisplayedCellValue(column, cellData, columnWidth)
+      cell.textContent = toSingleLineDisplay(
+        getDisplayedCellValue(column, cellData, columnWidth),
+      )
 
       cell.classList.remove("qg-null")
 

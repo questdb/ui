@@ -26,6 +26,7 @@ import {
   isLeftAligned,
   formatCellValue,
   formatColumnType,
+  toSingleLineDisplay,
 } from "./inlineGridUtils"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
 import {
@@ -105,7 +106,9 @@ const GridCell = React.memo(function GridCell({
 }: GridCellProps) {
   const colType = col?.type ?? ""
   const align = isLeftAligned(colType) ? "left" : "right"
-  const displayValue = loaded ? formatCellValue(rawValue, col, colWidth) : ""
+  const displayValue = loaded
+    ? toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
+    : ""
   return (
     <Cell
       id={`cell-${rowIndex}-${colIndex}`}
