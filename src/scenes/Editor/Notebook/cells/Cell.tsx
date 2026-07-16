@@ -912,7 +912,6 @@ const CellInner: React.FC<Props> = ({
           {isDrawMode ? (
             <DrawCanvas
               cell={cell}
-              bufferId={bufferIdForEvents}
               isFocused={isFocused}
               onConfigChange={handleChartConfigChange}
             />

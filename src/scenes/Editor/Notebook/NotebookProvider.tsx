@@ -54,6 +54,11 @@ import {
 } from "../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import type { QueryKey } from "../../../store/Query/types"
+import { createValidateWithGlobals } from "./declareUtils"
+import {
+  ChartRefreshProvider,
+  useChartRefreshEngine,
+} from "./chartRefresh/ChartRefreshContext"
 
 // State and actions live in SEPARATE contexts: action-only consumers never
 // re-render when state changes (the actions value is ref-stable for life).
@@ -189,7 +194,7 @@ export const NotebookProvider: React.FC<{
   preview?: boolean
 }> = ({ initialState, bufferId, preview = false, children }) => {
   const { updateBuffer } = useEditor()
-  const { questExecution } = useContext(QuestContext)
+  const { quest, questExecution } = useContext(QuestContext)
 
   const [focusedCellId, setFocusedCellState] = useState<string | null>(
     initialState.focusedCellId ?? null,
@@ -413,6 +418,23 @@ export const NotebookProvider: React.FC<{
     [hydrateCells],
   )
 
+  const validateWithGlobals = useMemo(
+    () => createValidateWithGlobals(quest, () => settingsRef.current.variables),
+    [quest],
+  )
+
+  const chartRefreshEngine = useChartRefreshEngine({
+    bufferId,
+    cells: store.cells,
+    deps: {
+      executeSingle,
+      validateWithGlobals,
+      mirrorCellResult,
+      getCellResult: (cellId) =>
+        store.cellsRef.current.find((c) => c.id === cellId)?.result,
+    },
+  })
+
   const runCellNow = useCallback(
     async (
       cellId: string,
@@ -627,7 +649,9 @@ export const NotebookProvider: React.FC<{
     <NotebookBufferIdContext.Provider value={bufferId}>
       <NotebookActionsContext.Provider value={actionsValue}>
         <NotebookStateContext.Provider value={stateValue}>
-          {children}
+          <ChartRefreshProvider value={chartRefreshEngine}>
+            {children}
+          </ChartRefreshProvider>
         </NotebookStateContext.Provider>
       </NotebookActionsContext.Provider>
     </NotebookBufferIdContext.Provider>
