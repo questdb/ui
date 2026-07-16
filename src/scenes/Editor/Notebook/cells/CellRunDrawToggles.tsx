@@ -117,11 +117,11 @@ export const CellRunDrawToggles: React.FC<Props> = ({
         type="button"
         $active={isDrawMode}
         aria-pressed={isDrawMode}
-        aria-disabled={!canRun}
+        aria-disabled={isRunning || !canRun}
         aria-busy={isDrawMode && isChartLoading}
         onClick={(e) => {
           e.stopPropagation()
-          if (!canRun) return
+          if (isRunning || !canRun) return
           onDraw()
         }}
         aria-label="Draw"

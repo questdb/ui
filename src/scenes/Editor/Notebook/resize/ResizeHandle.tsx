@@ -87,6 +87,11 @@ type Props = {
   overlay?: boolean
 }
 
+// A press only becomes a drag once the pointer travels this far; below it,
+// mouseup is a click and must not commit a resize (which would pin the
+// cell's auto-height).
+const DRAG_THRESHOLD_PX = 3
+
 export const ResizeHandle: React.FC<Props> = ({
   targetRef,
   onResize,
@@ -110,9 +115,12 @@ export const ResizeHandle: React.FC<Props> = ({
       if (!targetRef.current) return
       startHeightRef.current = targetRef.current.getBoundingClientRect().height
       lastHeightRef.current = startHeightRef.current
+      let dragged = false
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const delta = moveEvent.clientY - startYRef.current
+        if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
+        dragged = true
         const newHeight = Math.max(minHeight, startHeightRef.current + delta)
         lastHeightRef.current = newHeight
         onResize(newHeight)
@@ -128,7 +136,7 @@ export const ResizeHandle: React.FC<Props> = ({
 
       const handleMouseUp = () => {
         endDrag()
-        onResizeEnd(lastHeightRef.current)
+        if (dragged) onResizeEnd(lastHeightRef.current)
       }
 
       document.body.style.cursor = "ns-resize"

@@ -5,9 +5,12 @@ import { color } from "../../../../utils"
 import { Tooltip } from "../../../../components"
 import type { CellType } from "../../../../store/notebook"
 import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
-import { useNotebookActions, useNotebookState } from "../NotebookProvider"
-import { useEditor } from "../../../../providers/EditorProvider"
-import { emitUserAction } from "../../../../utils/notebookAIBridge"
+import {
+  useNotebookActions,
+  useNotebookBufferId,
+  useNotebookState,
+} from "../NotebookProvider"
+import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 
 type AddVariant = "primary" | "secondary"
 type AddTier = "between" | "bottom"
@@ -122,13 +125,13 @@ const BetweenButtons = styled.div`
 const useUserAddCell = () => {
   const { addCell } = useNotebookActions()
   const { cells } = useNotebookState()
-  const { activeBuffer } = useEditor()
+  const bufferId = useNotebookBufferId()
   const atLimit = cells.length >= MAX_NOTEBOOK_CELLS
   const emit = (cellId: string) => {
-    if (typeof activeBuffer.id === "number" && cellId) {
+    if (cellId) {
       emitUserAction({
         kind: "user_added_cell",
-        bufferId: activeBuffer.id,
+        bufferId,
         cellId,
       })
     }

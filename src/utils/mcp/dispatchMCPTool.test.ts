@@ -1,38 +1,27 @@
+import "../../test/stubBrowserGlobals"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { dispatchMCPTool, type DispatchContext } from "./dispatchMCPTool"
 import {
-  dispatchMCPTool,
-  type DispatchContext,
-  type FreshnessGate,
-  type StateFreshness,
-} from "./dispatchMCPTool"
+  createNotebookFreshness,
+  type NotebookFreshness,
+} from "../notebooks/notebookFreshness"
+import { db } from "../../store/db"
 import { EXPECTED_BRIDGE_VERSION } from "./protocolVersion"
 import type { ToolCallMessage } from "./types"
-import type { ModelToolsClient } from "../aiAssistant"
+import type { ModelToolsClient } from "../ai/aiAssistant"
 import type { MetaToolContext } from "./metaResolvers"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import {
   __resetNotebookAIBridgeForTests,
+  emitUserAction,
+  getBufferActionSeq,
   registerWorkspace,
   unregisterWorkspace,
-} from "../notebookAIBridge"
+} from "../notebooks/notebookAIBridge"
 
-const makeFreshness = (
-  initial: StateFreshness,
-  readBuffer: number | null = 1,
-): FreshnessGate => {
-  let state = initial
-  let buf = readBuffer
-  return {
-    get: () => state,
-    set: (next) => {
-      state = next
-    },
-    getReadBuffer: () => buf,
-    setReadBuffer: (id) => {
-      buf = id
-    },
-  }
-}
+const isFresh = (freshness: NotebookFreshness, bufferId: number): boolean =>
+  freshness.assertFresh(bufferId) === "fresh"
 
 const emptyDigest = (): UserActionDigest => ({
   added: new Set(),
@@ -51,8 +40,10 @@ const minimalMetaCtx = (): MetaToolContext => ({
 })
 
 const minimalWorkspace = () => ({
-  createNotebook: () => Promise.resolve({ bufferId: 1, label: "n1" }),
-  duplicateNotebook: () => Promise.resolve({ bufferId: 2, label: "n1 (copy)" }),
+  createNotebook: () =>
+    Promise.resolve({ bufferId: 1, label: "n1", activated: true }),
+  duplicateNotebook: () =>
+    Promise.resolve({ bufferId: 2, label: "n1 (copy)", activated: true }),
   deleteNotebook: () => Promise.resolve(),
   activateNotebook: () => Promise.resolve(true),
   getBufferMeta: () => ({
@@ -102,19 +93,41 @@ vi.mock("../tools/dispatch", async () => {
 
 import { dispatchTool as mockedDispatchTool } from "../tools/dispatch"
 
-const ctx = (
-  freshness: StateFreshness = "fresh",
-  meta: MetaToolContext = minimalMetaCtx(),
-): DispatchContext => ({
-  modelToolsClient: {} as unknown as ModelToolsClient,
-  freshness: makeFreshness(freshness),
-  metaToolContext: meta,
-})
+type Freshness = "unfetched" | "fresh" | "stale"
 
-beforeEach(() => {
+// Sets up the gate for buffer 1: "unfetched" records nothing; "fresh" records a
+// read at the current seq; "stale" records a read and then bumps buffer 1's seq
+// via a user edit so the recorded read no longer matches.
+const ctx = (
+  freshness: Freshness = "fresh",
+  meta: MetaToolContext = minimalMetaCtx(),
+): DispatchContext => {
+  const gate = createNotebookFreshness()
+  if (freshness === "fresh" || freshness === "stale") {
+    gate.recordRead(1, getBufferActionSeq(1))
+  }
+  if (freshness === "stale") {
+    emitUserAction({ kind: "user_added_cell", bufferId: 1, cellId: "u1" })
+  }
+  return {
+    modelToolsClient: {} as unknown as ModelToolsClient,
+    freshness: gate,
+    metaToolContext: meta,
+  }
+}
+
+beforeEach(async () => {
   __resetNotebookAIBridgeForTests()
   vi.mocked(mockedDispatchTool).mockClear()
   registerWorkspace(minimalWorkspace())
+  await db.buffers.clear()
+  await db.buffers.put({
+    id: 1,
+    label: "n1",
+    value: "",
+    position: 0,
+    notebookViewState: { cells: [], settings: { layoutMode: "list" } },
+  })
 })
 
 afterEach(() => {
@@ -131,10 +144,10 @@ describe("dispatchMCPTool — meta tools", () => {
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
 
-  it("get_workspace_state flips freshness to fresh", async () => {
+  it("get_workspace_state records the active buffer as fresh", async () => {
     const c = ctx("unfetched")
     await dispatchMCPTool(makeCall("get_workspace_state"), c)
-    expect(c.freshness.get()).toBe("fresh")
+    expect(isFresh(c.freshness, 1)).toBe(true)
   })
 
   // Digest-only read (IDs, no cell values) is not a full re-sync, so it must
@@ -145,7 +158,7 @@ describe("dispatchMCPTool — meta tools", () => {
     const out = await dispatchMCPTool(makeCall("get_recent_user_actions"), c)
     expect(out.isError).toBe(false)
     expect(out.content[0].text).toMatch(/<user_events/)
-    expect(c.freshness.get()).toBe("stale")
+    expect(isFresh(c.freshness, 1)).toBe(false)
   })
 })
 
@@ -167,20 +180,20 @@ describe("dispatchMCPTool — state-freshness gate", () => {
     "set_cell_maximized",
   ]
 
-  it("rejects every mutation tool when freshness is 'unfetched'", async () => {
+  it("rejects every mutation tool when the target buffer is unfetched", async () => {
     for (const name of mutations) {
       const c = ctx("unfetched")
-      const out = await dispatchMCPTool(makeCall(name), c)
+      const out = await dispatchMCPTool(makeCall(name, { buffer_id: 1 }), c)
       expect(out.isError).toBe(true)
       expect(out.content[0].text).toMatch(/STATE_NOT_FETCHED/)
     }
     expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
   })
 
-  it("rejects every mutation tool when freshness is 'stale'", async () => {
+  it("rejects every mutation tool when the target buffer is stale", async () => {
     for (const name of mutations) {
       const c = ctx("stale")
-      const out = await dispatchMCPTool(makeCall(name), c)
+      const out = await dispatchMCPTool(makeCall(name, { buffer_id: 1 }), c)
       expect(out.isError).toBe(true)
       expect(out.content[0].text).toMatch(/STATE_STALE/)
     }
@@ -196,17 +209,42 @@ describe("dispatchMCPTool — state-freshness gate", () => {
     expect(vi.mocked(mockedDispatchTool)).toHaveBeenCalledOnce()
   })
 
-  it("forwards mutation tools when freshness is 'fresh'", async () => {
+  it("STATE_NOT_FETCHED points at get_notebook_state for the target buffer", async () => {
+    // Given nothing has been read (e.g. the target is a background notebook
+    // that get_workspace_state can never mark fresh)
+    const c = ctx("unfetched")
+    // When a mutation is attempted
+    const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
+    // Then the recovery instruction names the read that actually unblocks it
+    expect(out.isError).toBe(true)
+    expect(out.content[0].text).toMatch(/get_notebook_state/)
+  })
+
+  it("create_notebook records the created buffer as fresh so the agent can populate it", async () => {
+    // Given a background create whose result carries the new bufferId
+    const c = ctx("unfetched")
+    vi.mocked(mockedDispatchTool).mockResolvedValueOnce({
+      content: JSON.stringify({ bufferId: 7, label: "n7", activated: false }),
+    })
+    // When the notebook is created
+    await dispatchMCPTool(makeCall("create_notebook", { label: "n7" }), c)
+    // Then the create → populate flow proceeds without a guaranteed
+    // STATE_NOT_FETCHED round-trip
+    const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 7 }), c)
+    expect(out.isError).toBe(false)
+  })
+
+  it("forwards mutation tools when the target buffer is fresh", async () => {
     const c = ctx("fresh")
-    const out = await dispatchMCPTool(makeCall("add_cell"), c)
+    const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
     expect(out.isError).toBe(false)
     expect(vi.mocked(mockedDispatchTool)).toHaveBeenCalledOnce()
   })
 
-  it("does NOT flip freshness on a successful mutation", async () => {
+  it("does NOT change the target's freshness on a successful mutation", async () => {
     const c = ctx("fresh")
-    await dispatchMCPTool(makeCall("add_cell"), c)
-    expect(c.freshness.get()).toBe("fresh")
+    await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
+    expect(isFresh(c.freshness, 1)).toBe(true)
   })
 })
 
@@ -223,10 +261,10 @@ describe("dispatchMCPTool — read tools through dispatchTool", () => {
     }
   })
 
-  it("flips freshness to 'fresh' after a full-state read (get_notebook_state)", async () => {
+  it("records the buffer as fresh after a full-state read (get_notebook_state)", async () => {
     const c = ctx("unfetched")
-    await dispatchMCPTool(makeCall("get_notebook_state"), c)
-    expect(c.freshness.get()).toBe("fresh")
+    await dispatchMCPTool(makeCall("get_notebook_state", { buffer_id: 1 }), c)
+    expect(isFresh(c.freshness, 1)).toBe(true)
   })
 
   // Partial reads must NOT clear a user-edit "stale" bit: they don't surface a
@@ -235,8 +273,8 @@ describe("dispatchMCPTool — read tools through dispatchTool", () => {
   it("does NOT clear 'stale' after a partial read (get_cell / list_cells)", async () => {
     for (const name of ["get_cell", "list_cells"]) {
       const c = ctx("stale")
-      await dispatchMCPTool(makeCall(name), c)
-      expect(c.freshness.get()).toBe("stale")
+      await dispatchMCPTool(makeCall(name, { buffer_id: 1 }), c)
+      expect(isFresh(c.freshness, 1)).toBe(false)
     }
   })
 })
@@ -264,12 +302,50 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
     expect(vi.mocked(mockedDispatchTool)).toHaveBeenCalledOnce()
   })
 
-  it("a successful get_notebook_state sets the fresh buffer to the one read", async () => {
+  // The core WS2 guarantee: background work on X isn't thrashed by user edits
+  // elsewhere.
+  it("a user edit to another buffer does NOT stale the agent's target", async () => {
+    // Given the agent has read buffer 1
+    const c = ctx("fresh")
+    // When the user edits a DIFFERENT buffer
+    emitUserAction({ kind: "user_added_cell", bufferId: 2, cellId: "u1" })
+    // Then a mutation on buffer 1 still goes through
+    const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
+    expect(out.isError).toBe(false)
+    expect(vi.mocked(mockedDispatchTool)).toHaveBeenCalledOnce()
+  })
+
+  it("a successful get_notebook_state records the buffer it read as fresh", async () => {
     const c = ctx("stale")
-    c.freshness.setReadBuffer(99)
     await dispatchMCPTool(makeCall("get_notebook_state", { buffer_id: 7 }), c)
-    expect(c.freshness.get()).toBe("fresh")
-    expect(c.freshness.getReadBuffer()).toBe(7)
+    expect(isFresh(c.freshness, 7)).toBe(true)
+  })
+
+  it("rejects a mutation without a numeric buffer_id outright", async () => {
+    // Given a fresh context
+    const c = ctx("fresh")
+    // When a mutation omits buffer_id
+    const out = await dispatchMCPTool(makeCall("add_cell"), c)
+    // Then it is refused before reaching the executor
+    expect(out.isError).toBe(true)
+    expect(out.content[0].text).toMatch(/INVALID_BUFFER_ID/)
+    expect(vi.mocked(mockedDispatchTool)).not.toHaveBeenCalled()
+  })
+
+  it("records the PRE-read baseline: an edit during get_notebook_state keeps the buffer stale", async () => {
+    // Given a full-state read that races a user edit
+    const c = ctx("unfetched")
+    vi.mocked(mockedDispatchTool).mockImplementationOnce(() => {
+      emitUserAction({ kind: "user_added_cell", bufferId: 1, cellId: "mid" })
+      return Promise.resolve({ content: "{}" })
+    })
+    // When the agent reads, then mutates
+    await dispatchMCPTool(makeCall("get_notebook_state", { buffer_id: 1 }), c)
+    const out = await dispatchMCPTool(makeCall("add_cell", { buffer_id: 1 }), c)
+    // Then the mid-read edit still blocks the write — the returned snapshot
+    // may predate it
+    expect(out.isError).toBe(true)
+    expect(out.content[0].text).toMatch(/STATE_STALE/)
   })
 
   // Finding 2: a failed full-state read surfaced no state → must not clear it.
@@ -280,7 +356,7 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
     })
     const c = ctx("stale")
     await dispatchMCPTool(makeCall("get_notebook_state", { buffer_id: 1 }), c)
-    expect(c.freshness.get()).toBe("stale")
+    expect(isFresh(c.freshness, 1)).toBe(false)
   })
 
   // C1: get_workspace_state with no open notebook surfaces nothing → must not clear.
@@ -291,7 +367,7 @@ describe("dispatchMCPTool — buffer-scoped freshness", () => {
     }
     const c = ctx("stale", meta)
     await dispatchMCPTool(makeCall("get_workspace_state"), c)
-    expect(c.freshness.get()).toBe("stale")
+    expect(isFresh(c.freshness, 1)).toBe(false)
   })
 })
 
@@ -327,6 +403,22 @@ describe("dispatchMCPTool — since_last_check suffix", () => {
     expect(out.content[0].text).toMatch(/<since_last_check>/)
     expect(out.content[0].text).toMatch(/active_buffer/)
     expect(out.content[0].text).toMatch(/"n1"/)
+  })
+
+  it("flags the active_buffer as archived when the active tab is an archived preview", async () => {
+    const archivedMeta: MetaToolContext = {
+      getActiveBufferId: () => 1,
+      getWorkspace: () => ({
+        notebooks: [{ buffer_id: 1, label: "n1", archived: true }],
+        active: { buffer_id: 1, label: "n1", kind: "notebook", archived: true },
+      }),
+      getDigest: () => emptyDigest(),
+    }
+    const out = await dispatchMCPTool(
+      makeCall("list_cells"),
+      ctx("fresh", archivedMeta),
+    )
+    expect(out.content[0].text).toMatch(/active_buffer:.*archived: true/)
   })
 
   it("does NOT append the suffix to get_workspace_state (it owns the digest)", async () => {

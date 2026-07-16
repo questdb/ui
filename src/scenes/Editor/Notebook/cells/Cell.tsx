@@ -10,7 +10,7 @@ import {
 } from "../../Monaco/utils"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { QuestContext } from "../../../../providers/QuestProvider"
-import { useNotebookActions } from "../NotebookProvider"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { CellDragHeader } from "./CellDragHeader"
 import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
@@ -31,11 +31,10 @@ import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
 import { useCellReveal } from "./useCellReveal"
-import { useEditor } from "../../../../providers/EditorProvider"
 import {
   emitUserAction,
   signalUserEdit,
-} from "../../../../utils/notebookAIBridge"
+} from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
@@ -43,6 +42,7 @@ import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import {
   computeCellHeights,
+  hasAgentVisibleCellHeightChanged,
   isDoubleView,
   isExpectingResult,
   MIN_BOTTOM_HEIGHT_PX,
@@ -150,9 +150,7 @@ const CellInner: React.FC<Props> = ({
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
-  const { activeBuffer } = useEditor()
-  const bufferIdForEvents =
-    typeof activeBuffer.id === "number" ? activeBuffer.id : undefined
+  const bufferIdForEvents = useNotebookBufferId()
   const isDrawMode = cell.mode === "draw"
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
@@ -177,6 +175,22 @@ const CellInner: React.FC<Props> = ({
 
   const validateWithGlobals = useValidateWithGlobals()
 
+  const readResetTopHeight = useCallback(() => {
+    const contentHeight = contentHeightGetterRef.current()
+    return contentHeight != null
+      ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
+      : MIN_EDITOR_HEIGHT
+  }, [])
+
+  const signalAgentVisibleHeightChange = useCallback(
+    (patch: Partial<NotebookCell>) => {
+      if (hasAgentVisibleCellHeightChanged(cell, patch, layoutMode)) {
+        signalUserEdit(bufferIdForEvents)
+      }
+    },
+    [bufferIdForEvents, cell, layoutMode],
+  )
+
   const topResize = useCellResize(
     MIN_EDITOR_HEIGHT,
     useCallback(
@@ -190,13 +204,11 @@ const CellInner: React.FC<Props> = ({
     // one-frame flicker where `topHeight` falls back to
     // DEFAULT_TOP_HEIGHT (72 px) and the bottom slot jumps up.
     useCallback(() => {
-      const contentH = contentHeightGetterRef.current()
-      const next =
-        contentH != null
-          ? Math.max(MIN_EDITOR_HEIGHT, contentH)
-          : MIN_EDITOR_HEIGHT
-      updateCell(cell.id, { topHeight: next, topResized: false })
-    }, [cell.id, updateCell]),
+      updateCell(cell.id, {
+        topHeight: readResetTopHeight(),
+        topResized: false,
+      })
+    }, [cell.id, readResetTopHeight, updateCell]),
   )
   const bottomResize = useCellResize(
     MIN_BOTTOM_HEIGHT_PX,
@@ -213,7 +225,7 @@ const CellInner: React.FC<Props> = ({
   )
 
   const handleChartConfigChange = (config: ChartConfig) => {
-    signalUserEdit()
+    signalUserEdit(bufferIdForEvents)
     setCellChartConfig(cell.id, config)
   }
 
@@ -223,17 +235,16 @@ const CellInner: React.FC<Props> = ({
   // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
   // draw was refused by validation.
   const handleDrawClick = useCallback(async (): Promise<boolean> => {
+    if (isRunning) return false
     if (isDrawMode) {
       setCellMode(cell.id, "run")
       clearCellResult(cell.id)
-      if (bufferIdForEvents !== undefined) {
-        emitUserAction({
-          kind: "user_changed_cell_mode",
-          bufferId: bufferIdForEvents,
-          cellId: cell.id,
-          mode: "run",
-        })
-      }
+      emitUserAction({
+        kind: "user_changed_cell_mode",
+        bufferId: bufferIdForEvents,
+        cellId: cell.id,
+        mode: "run",
+      })
       return false
     }
     if (validatingDrawRef.current) return false
@@ -247,14 +258,12 @@ const CellInner: React.FC<Props> = ({
         return false
       }
       setCellMode(cell.id, "draw")
-      if (bufferIdForEvents !== undefined) {
-        emitUserAction({
-          kind: "user_changed_cell_mode",
-          bufferId: bufferIdForEvents,
-          cellId: cell.id,
-          mode: "draw",
-        })
-      }
+      emitUserAction({
+        kind: "user_changed_cell_mode",
+        bufferId: bufferIdForEvents,
+        cellId: cell.id,
+        mode: "draw",
+      })
       return true
     } finally {
       validatingDrawRef.current = false
@@ -262,6 +271,7 @@ const CellInner: React.FC<Props> = ({
   }, [
     cell.id,
     cell.value,
+    isRunning,
     isDrawMode,
     setCellMode,
     clearCellResult,
@@ -350,7 +360,7 @@ const CellInner: React.FC<Props> = ({
     editorRef,
     monacoRef,
     cell.id,
-    activeBuffer.id,
+    bufferIdForEvents,
   )
 
   const handleRevealMount = useCallback<typeof handleEditorMount>(
@@ -383,14 +393,13 @@ const CellInner: React.FC<Props> = ({
     if (!normalized) return false
 
     clearHighlight()
-    const success = await runCell(cell.id, normalized)
-    applyHighlight(success)
+    const { ok } = await runCell(cell.id, normalized)
+    applyHighlight(ok)
     return true
   }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {
-      if (bufferIdForEvents === undefined) return
       emitUserAction({
         kind: "user_ran_cell",
         bufferId: bufferIdForEvents,
@@ -410,7 +419,7 @@ const CellInner: React.FC<Props> = ({
 
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      const ok = await runCell(cell.id)
+      const { ok } = await runCell(cell.id)
       const freshResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
       emitRanEvent(createRunStatus(priorResult, freshResult, ok))
@@ -444,7 +453,7 @@ const CellInner: React.FC<Props> = ({
     clearHighlight()
     const priorResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const ok = await runCell(cell.id, normalizeQueryText(sql))
+    const { ok } = await runCell(cell.id, normalizeQueryText(sql))
     const freshResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
     emitRanEvent(createRunStatus(priorResult, freshResult, ok))
@@ -475,7 +484,7 @@ const CellInner: React.FC<Props> = ({
         return
       }
       if (plan.exitDraw) {
-        signalUserEdit()
+        signalUserEdit(bufferIdForEvents)
         setCellMode(cell.id, "run")
       }
       firstRunRef.current = cell.result == null
@@ -490,6 +499,7 @@ const CellInner: React.FC<Props> = ({
       cell.id,
       cell.mode,
       cell.result,
+      bufferIdForEvents,
       isCompactTier,
       showBottomSlot,
       setCellViewMaximized,
@@ -509,7 +519,6 @@ const CellInner: React.FC<Props> = ({
   // 500 ms-debounced — one event per cell per typing burst keeps the digest tiny.
   const updateEmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleUpdateEvent = useCallback(() => {
-    if (bufferIdForEvents === undefined) return
     if (updateEmitTimerRef.current !== null) {
       clearTimeout(updateEmitTimerRef.current)
     }
@@ -543,10 +552,10 @@ const CellInner: React.FC<Props> = ({
       }
       const viewState = editorRef.current?.saveViewState() ?? undefined
       updateCell(cell.id, { value, editorViewState: viewState })
-      signalUserEdit()
+      signalUserEdit(bufferIdForEvents)
       scheduleUpdateEvent()
     },
-    [cell.id, updateCell, editorRef, scheduleUpdateEvent],
+    [cell.id, bufferIdForEvents, updateCell, editorRef, scheduleUpdateEvent],
   )
 
   // <Editor defaultValue> only seeds on mount — push external edits (AI
@@ -613,6 +622,12 @@ const CellInner: React.FC<Props> = ({
       updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
       return
     }
+    signalAgentVisibleHeightChange({
+      topHeight: top,
+      topResized: true,
+      bottomHeight: bottom,
+      bottomResized: true,
+    })
     topResize.resizeEnd(top)
     bottomResize.resizeEnd(bottom)
   }
@@ -623,6 +638,12 @@ const CellInner: React.FC<Props> = ({
       updateCell(cell.id, { spotlightEditorRatio: undefined })
       return
     }
+    signalAgentVisibleHeightChange({
+      topHeight: readResetTopHeight(),
+      topResized: false,
+      bottomHeight: undefined,
+      bottomResized: false,
+    })
     bottomResize.resetHeight()
     topResize.resetHeight()
   }
@@ -633,14 +654,27 @@ const CellInner: React.FC<Props> = ({
       updateCell(cell.id, { spotlightEditorRatio: undefined })
       return
     }
-    if (showBottomSlot) bottomResize.resetHeight()
-    else topResize.resetHeight()
+    if (showBottomSlot) {
+      signalAgentVisibleHeightChange({
+        bottomHeight: undefined,
+        bottomResized: false,
+      })
+      bottomResize.resetHeight()
+    } else {
+      signalAgentVisibleHeightChange({
+        topHeight: readResetTopHeight(),
+        topResized: false,
+      })
+      topResize.resetHeight()
+    }
   }, [
     isMaximized,
     showBottomSlot,
     bottomResize,
     topResize,
     cell.id,
+    readResetTopHeight,
+    signalAgentVisibleHeightChange,
     updateCell,
   ])
 
@@ -739,15 +773,17 @@ const CellInner: React.FC<Props> = ({
         totalCells={totalCells}
         layoutMode={layoutMode}
         isMaximized={isMaximized}
+        isRunning={isRunning}
         headerRef={headerRef}
         toolbarTier={toolbarTier}
         chartZoomed={chartZoomed}
         left={
           <CellNameLabel
             name={cell.name}
-            onRename={(name) =>
+            onRename={(name) => {
               updateCell(cell.id, { name: name || undefined })
-            }
+              signalUserEdit(bufferIdForEvents)
+            }}
           />
         }
         right={
@@ -762,7 +798,10 @@ const CellInner: React.FC<Props> = ({
               autoRefreshOn={cell.autoRefresh !== false}
               showLabels={toolbarTier === "expanded"}
               onRun={runAll}
-              onHideResult={() => clearCellResult(cell.id)}
+              onHideResult={() => {
+                signalUserEdit(bufferIdForEvents)
+                clearCellResult(cell.id)
+              }}
               onCancel={() => cancelCell(cell.id)}
               onDraw={() => void handleDrawClick()}
             />
@@ -786,6 +825,7 @@ const CellInner: React.FC<Props> = ({
               isViewMaximized={isViewMaximized}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
+              isRunning={isRunning}
               chartZoomed={chartZoomed}
               showLabels={false}
             />

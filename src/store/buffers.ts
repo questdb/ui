@@ -90,6 +90,11 @@ export type Buffer = {
   previewContent?: PreviewContent
 }
 
+export const MAX_BUFFER_NAME_LENGTH = 100
+
+export const exceedsBufferNameLimit = (label: string): boolean =>
+  label.length > MAX_BUFFER_NAME_LENGTH
+
 export const defaultEditorViewState: editor.ICodeEditorViewState = {
   cursorState: [
     {

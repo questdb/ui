@@ -9,14 +9,25 @@ import {
 // quota is exhausted) collapses into a single toast instead of flooding.
 const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 
-export const persistCellSnapshot = (snapshot: NotebookResultSnapshot): void => {
+// Resolves true when the result is durably saved, false when the write failed
+// (after surfacing the toast). The live path ignores the result — the run is
+// already in React state. The headless path commits the run status separately;
+// a false here means only the offline result-rows snapshot was lost, which it
+// surfaces to the agent as a soft success (RESULT_NOT_SAVED_RUN_NOTE), not as a
+// "not recorded" outcome.
+export const persistCellSnapshot = (
+  snapshot: NotebookResultSnapshot,
+): Promise<boolean> =>
   saveCellSnapshot(snapshot)
     .then(() => pruneToRecentNotebooks())
-    .catch((error) => {
-      console.error("Failed to persist notebook cell result", error)
-      toast.error(
-        "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
-        { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
-      )
-    })
-}
+    .then(
+      () => true,
+      (error) => {
+        console.error("Failed to persist notebook cell result", error)
+        toast.error(
+          "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
+          { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
+        )
+        return false
+      },
+    )

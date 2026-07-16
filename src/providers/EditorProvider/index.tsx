@@ -42,7 +42,12 @@ import { deleteNotebookSnapshots } from "../../store/notebookResults"
 import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
-import { emitUserAction } from "../../utils/notebookAIBridge"
+import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
+import {
+  forgetBuffer,
+  releaseArchivedBuffer,
+  withBoundNotebookReadOnly,
+} from "../../utils/notebooks/notebookController"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -94,11 +99,19 @@ export type EditorContext = {
   ) => Promise<void>
   addBuffer: (
     buffer?: Partial<Buffer>,
-    options?: { shouldSelectAll?: boolean; afterBufferId?: number },
+    options?: {
+      shouldSelectAll?: boolean
+      afterBufferId?: number
+      activate?: boolean
+      signal?: AbortSignal
+    },
   ) => Promise<Buffer | undefined>
   deleteBuffer: (id: number, setActiveBuffer?: boolean) => Promise<void>
-  archiveBuffer: (id: number) => Promise<void>
-  duplicateNotebook: (id: number) => Promise<Buffer | undefined>
+  archiveBuffer: (id: number, initiator?: "user" | "agent") => Promise<void>
+  duplicateNotebook: (
+    id: number,
+    options?: { activate?: boolean; signal?: AbortSignal },
+  ) => Promise<Buffer | undefined>
   updateBuffer: (
     id: number,
     buffer?: Partial<Buffer>,
@@ -312,7 +325,13 @@ export const EditorProvider: React.FC = ({ children }) => {
   )
 
   const addBuffer: EditorContext["addBuffer"] = useCallback(
-    async (newBuffer, { shouldSelectAll = false, afterBufferId } = {}) => {
+    async (
+      newBuffer,
+      { shouldSelectAll = false, afterBufferId, activate = true, signal } = {},
+    ) => {
+      if (signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError")
+      }
       if (buffers && buffers.length >= MAX_TABS) {
         toast.error(
           `Tab limit reached (${MAX_TABS}). Please clear history to free up space.`,
@@ -383,19 +402,31 @@ export const EditorProvider: React.FC = ({ children }) => {
         )
         id = await db.transaction("rw", db.buffers, async () => {
           for (const b of toShift) {
+            if (signal?.aborted) {
+              throw new DOMException("Aborted", "AbortError")
+            }
             await db.buffers.update(b.id as number, {
               position: b.position + 1,
             })
           }
+          if (signal?.aborted) {
+            throw new DOMException("Aborted", "AbortError")
+          }
           return db.buffers.add(buffer)
         })
       } else {
+        if (signal?.aborted) {
+          throw new DOMException("Aborted", "AbortError")
+        }
         id = await db.buffers.add(buffer)
       }
 
-      await setActiveBuffer(buffer, { focus: true })
+      if (activate) {
+        await setActiveBuffer(buffer, { focus: true })
+      }
 
       if (
+        activate &&
         shouldSelectAll &&
         editorRef.current &&
         !newBuffer?.notebookViewState
@@ -566,7 +597,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
-  const archiveBuffer: EditorContext["archiveBuffer"] = async (id) => {
+  const archiveBuffer: EditorContext["archiveBuffer"] = async (
+    id,
+    initiator = "user",
+  ) => {
     // Snapshot before write — live query refresh makes post-update read unreliable.
     const wasNotebook = !!buffers.find((b) => b.id === id)?.notebookViewState
     await updateBuffer(id, {
@@ -580,22 +614,35 @@ export const EditorProvider: React.FC = ({ children }) => {
       bufferId: id,
     })
     if (wasNotebook) {
-      emitUserAction({ kind: "user_archived_notebook", bufferId: id })
+      if (initiator === "user") {
+        emitUserAction({ kind: "user_archived_notebook", bufferId: id })
+      }
+      releaseArchivedBuffer(id)
     }
   }
 
-  const duplicateNotebook: EditorContext["duplicateNotebook"] = async (id) => {
+  const duplicateNotebook: EditorContext["duplicateNotebook"] = async (
+    id,
+    { activate = true, signal } = {},
+  ) => {
     const source = buffers.find((b) => b.id === id)
-    if (!source?.notebookViewState) return undefined
+    const sourceView = source?.notebookViewState
+    if (!sourceView) return undefined
 
-    const persisted = await bufferStore.getById(id)
-    const view = persisted?.notebookViewState ?? source.notebookViewState
+    const view = await withBoundNotebookReadOnly(
+      id,
+      (v) => Promise.resolve(v),
+      signal,
+    ).catch((error) => {
+      if (signal?.aborted) throw error
+      return sourceView
+    })
     return addBuffer(
       {
         label: nextCopyLabel(source.label),
         notebookViewState: cloneNotebookViewState(view),
       },
-      { afterBufferId: id },
+      { afterBufferId: id, activate, signal },
     )
   }
 
@@ -618,6 +665,7 @@ export const EditorProvider: React.FC = ({ children }) => {
       removeNotebookBufferLayouts(id)
       emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }
+    forgetBuffer(id)
   }
 
   const setTemporaryBuffer: EditorContext["setTemporaryBuffer"] = async (

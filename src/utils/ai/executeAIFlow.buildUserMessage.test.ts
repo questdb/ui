@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { buildUserMessage } from "./executeAIFlow"
-import type { NotebookContextSnapshot } from "./ai/notebookSnapshot"
-import { createEmptyDigest } from "../providers/AIConversationProvider/userActionDigest"
+import type { NotebookContextSnapshot } from "./notebookSnapshot"
+import { createEmptyDigest } from "../../providers/AIConversationProvider/userActionDigest"
 
 const baseChatConfig = {
   conversationId: "conv-1",

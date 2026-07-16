@@ -3,6 +3,8 @@ import styled, { css } from "styled-components"
 import { Overlay as RadixDialogOverlay } from "@radix-ui/react-dialog"
 import { Overlay as RadixAlertDialogOverlay } from "@radix-ui/react-alert-dialog"
 
+export const OVERLAY_Z_INDEX = 100
+
 const overlayShow = css`
   @keyframes overlayShow {
     from {
@@ -29,7 +31,7 @@ const StyledOverlay = styled.div`
   background-color: ${({ theme }) => theme.color.overlayBackground};
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: ${OVERLAY_Z_INDEX};
 
   ${overlayShow}
   ${overlayHide}

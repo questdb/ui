@@ -8,10 +8,11 @@ import {
 } from "./drawCanvasUtils"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig } from "../CellChart/chartTypes"
 
 const dql = (
-  columns: { name: string; type: string }[],
+  columns: ColumnDefinition[],
   dataset: (number | string | boolean | null)[][],
   query = "q",
 ): QueryExecResult => ({
@@ -81,10 +82,45 @@ describe("resultsEquivalent", () => {
     expect(resultsEquivalent(a, b)).toBe(true)
   })
 
+  it("returns false when normalized query identity differs", () => {
+    const a = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
+    const b = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 2 AS x")]
+    expect(resultsEquivalent(a, b)).toBe(false)
+  })
+
+  it("ignores parser-only query formatting differences", () => {
+    const a = [dql([{ name: "x", type: "INT" }], [[1]], " SELECT 1;\n")]
+    const b = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1")]
+    expect(resultsEquivalent(a, b)).toBe(true)
+  })
+
+  it("returns false when result counts differ", () => {
+    const a = dql([{ name: "x", type: "INT" }], [[1]])
+    const b = { ...a, count: 2 }
+    expect(resultsEquivalent([a], [b])).toBe(false)
+  })
+
   it("returns false when column names differ", () => {
     const a = [dql([{ name: "x", type: "INT" }], [[1]])]
     const b = [dql([{ name: "y", type: "INT" }], [[1]])]
     expect(resultsEquivalent(a, b)).toBe(false)
+  })
+
+  it("returns false when column metadata differs", () => {
+    const rows = [[1]]
+    const base = dql([{ name: "x", type: "INT", dim: 1 }], rows)
+    expect(
+      resultsEquivalent(
+        [base],
+        [dql([{ name: "x", type: "LONG", dim: 1 }], rows)],
+      ),
+    ).toBe(false)
+    expect(
+      resultsEquivalent(
+        [base],
+        [dql([{ name: "x", type: "INT", dim: 2 }], rows)],
+      ),
+    ).toBe(false)
   })
 
   it("returns false when column count differs", () => {
@@ -215,6 +251,14 @@ describe("resultMatchesQueries", () => {
     // When the current SQL has two statements
     // Then it does not match
     expect(resultMatchesQueries(result, ["select a", "select b"])).toBe(false)
+  })
+
+  it("rejects a byte-truncated result even when its query matches", () => {
+    const result = cellResult(["select a"])
+    const first = result.results[0]
+    if (first.type !== "dql") throw new Error("expected dql")
+    first.truncated = true
+    expect(resultMatchesQueries(result, ["select a"])).toBe(false)
   })
 
   it("rejects a null/undefined result", () => {

@@ -12,48 +12,51 @@ import { absoluteStrategy } from "react-grid-layout/core"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 import { useEditor } from "../../../providers/EditorProvider"
-import type { CellLayoutItem } from "../../../store/notebook"
+import type { CellLayoutItem, NotebookViewState } from "../../../store/notebook"
 import {
-  dropLegacyChartConfigs,
-  migrateLegacyCellNames,
-} from "../../../store/notebook"
+  beginNotebookMount,
+  cancelNotebookMount,
+  migratePersistedNotebookView,
+} from "../../../utils/notebooks/notebookController"
+import { NotebookToolError } from "../../../utils/notebooks/notebookToolError"
 import { color } from "../../../utils"
 import {
   NotebookProvider,
   useNotebookActions,
+  useNotebookBufferId,
   useNotebookState,
 } from "./NotebookProvider"
 import { Cell } from "./cells/Cell"
 import { MarkdownCell } from "./cells/MarkdownCell"
 import type { NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
+import { Button, LoadingSpinner } from "../../../components"
 import { NotebookToolbar } from "./NotebookToolbar"
 import { renderEdgeHandle } from "./resize"
 import {
-  CELL_CHROME_PX,
+  cellChromePx,
+  cellHeightPatchForRows,
   computeCellGridH,
-  defaultBottomHeightFor,
-  DEFAULT_TOP_HEIGHT,
   generateDefaultLayout as generateDefaultLayoutPure,
   isDoubleView,
   isExpectingResult,
   mergeCellLayout,
   MIN_BOTTOM_HEIGHT_PX,
-  partitionCellHeights,
-  scaleCellHeights,
+  minTopHeightFor,
+  NOTEBOOK_GRID_COLS,
+  NOTEBOOK_GRID_MARGIN_Y,
+  NOTEBOOK_GRID_ROW_HEIGHT,
 } from "./notebookUtils"
-import { emitUserAction } from "../../../utils/notebookAIBridge"
+import {
+  emitUserAction,
+  on as onUserAction,
+} from "../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
 
-const GRID_COLS = 12
-// 10 px row increments — fine enough that `computeCellGridH`'s `Math.ceil`
-// adds at most 9 px of trailing whitespace per cell (vs. 49 px with the
-// previous 50 px rows). Makes drag-resize feel smoother too. All
-// row-unit constants below scale up 5× to keep the same pixel-equivalent
-// defaults and minimums.
-const ROW_HEIGHT = 10
+const GRID_COLS = NOTEBOOK_GRID_COLS
+const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
 const DEFAULT_CELL_H = 30 // 30 × 10 = 300 px (was 6 × 50 = 300 px)
 
 const NotebookWrapper = styled.div.attrs({ "data-notebook-root": "true" })`
@@ -159,7 +162,7 @@ const MIN_CELL_W = 2
 const MIN_CELL_H = 5
 
 const GRID_MARGIN_X = 20
-const GRID_MARGIN_Y = 20
+const GRID_MARGIN_Y = NOTEBOOK_GRID_MARGIN_Y
 const GRID_MARGIN: [number, number] = [GRID_MARGIN_X, GRID_MARGIN_Y]
 const GRID_CONTAINER_PADDING: [number, number] = [0, 0]
 const GRID_BREAKPOINTS = { lg: 0 }
@@ -185,21 +188,37 @@ const LAYOUT_OPTS = {
 const generateDefaultLayout = (cells: { id: string }[]): CellLayoutItem[] =>
   generateDefaultLayoutPure(cells, LAYOUT_OPTS)
 
-const useScrollAddedCellIntoView = (cells: { id: string }[]) => {
-  const prev = React.useRef<Set<string>>(new Set(cells.map((c) => c.id)))
+const ADDED_CELL_SCROLL_SETTLE_MS = 250
+const ADDED_CELL_SCROLL_BOTTOM_GAP_PX = 20
+
+const useScrollUserAddedCellIntoView = () => {
+  const bufferId = useNotebookBufferId()
   useEffect(() => {
-    const added = cells.filter((c) => !prev.current.has(c.id))
-    prev.current = new Set(cells.map((c) => c.id))
-    if (added.length !== 1) return
-    const targetId = added[0].id
-    requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>(
-          `[data-notebook-cell][data-cell-id="${CSS.escape(targetId)}"]`,
+    let timer = 0
+    const unsubscribe = onUserAction("user-action", (evt) => {
+      const addedId =
+        evt.kind === "user_added_cell" && evt.bufferId === bufferId
+          ? evt.cellId
+          : evt.kind === "user_duplicated_cell" && evt.bufferId === bufferId
+            ? evt.newCellId
+            : null
+      if (!addedId) return
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const node = document.querySelector<HTMLElement>(
+          `[data-notebook-cell][data-cell-id="${CSS.escape(addedId)}"]`,
         )
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+        if (!node) return
+        node.style.scrollMarginBottom = `${ADDED_CELL_SCROLL_BOTTOM_GAP_PX}px`
+        node.scrollIntoView({ block: "nearest", behavior: "smooth" })
+        node.style.scrollMarginBottom = ""
+      }, ADDED_CELL_SCROLL_SETTLE_MS)
     })
-  }, [cells])
+    return () => {
+      window.clearTimeout(timer)
+      unsubscribe()
+    }
+  }, [bufferId])
 }
 
 // Restoring a maximized cell re-renders the full list at scrollTop 0; scroll the
@@ -304,7 +323,7 @@ const ListLayout: React.FC = () => {
   const { cells, focusedCellId, maximizedCellId, runningCellIds, isHydrating } =
     useNotebookState()
   const { setFocusedCell } = useNotebookActions()
-  useScrollAddedCellIntoView(cells)
+  useScrollUserAddedCellIntoView()
 
   return (
     <CellListContainer
@@ -359,7 +378,7 @@ const GridLayout: React.FC = () => {
   const autoScroll = useGridDragAutoScroll(
     containerRef as React.RefObject<HTMLElement>,
   )
-  useScrollAddedCellIntoView(cells)
+  useScrollUserAddedCellIntoView()
 
   // Suppress react-grid-layout's item transition until the grid has rendered
   // and the width has settled, so cells don't animate into place on mount.
@@ -397,10 +416,10 @@ const GridLayout: React.FC = () => {
       const expectingResult = isExpectingResult(cell, isHydrating)
       const minBottomPx =
         isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
-      const minTotalPx = DEFAULT_TOP_HEIGHT + minBottomPx + CELL_CHROME_PX
-      const minH = Math.max(
-        MIN_CELL_H,
-        Math.ceil((minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y)),
+      const minTotalPx =
+        minTopHeightFor(cell) + minBottomPx + cellChromePx(cell)
+      const minH = Math.ceil(
+        (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
       )
       return {
         ...item,
@@ -449,71 +468,14 @@ const GridLayout: React.FC = () => {
       for (const item of newLayout) {
         const cell = cellById.get(item.i)
         if (!cell) continue
-        const derivedH = computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y)
-        if (item.h === derivedH) continue
-        // Rendered px for an h-row cell is `h*rowHeight + (h-1)*marginY`,
-        // accounting for the inter-row gaps react-grid-layout inserts.
-        // Plain `h * rowHeight` is too small and made the resulting
-        // bottomHeight ~marginY-per-row shorter than the user dragged.
-        const rowsToPx = (h: number) => h * ROW_HEIGHT + (h - 1) * GRID_MARGIN_Y
-        const targetTotalPx = rowsToPx(item.h)
-        if (isDoubleView(cell)) {
-          // A maximized view (chart or table) hides the editor, folding
-          // topHeight into the slot's footprint — pinning it would strand that
-          // height and block shrinking. Scale both so the dragged total is
-          // always reachable and the derived grid h matches the drag (mirrors
-          // the list-mode handle).
-          if (cell.isViewMaximized === true) {
-            const { top, bottom } = scaleCellHeights(
-              cell.topHeight ?? DEFAULT_TOP_HEIGHT,
-              cell.bottomHeight ?? defaultBottomHeightFor(cell),
-              targetTotalPx - CELL_CHROME_PX,
-              DEFAULT_TOP_HEIGHT,
-              MIN_BOTTOM_HEIGHT_PX,
-            )
-            updateCell(cell.id, {
-              topHeight: top,
-              bottomHeight: bottom,
-              topResized: true,
-              bottomResized: true,
-            })
-          } else {
-            // Split view: resize the chart/result, keeping the editor — until
-            // the result reaches its minimum, then let the editor give way too
-            // so the dragged total stays reachable. Pinning the editor let the
-            // cell be dragged shorter than top + min-bottom, collapsing the
-            // result out of view and making rgl snap the cell back.
-            const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
-            const { top: nextTop, bottom: nextBottom } = partitionCellHeights(
-              targetTotalPx - CELL_CHROME_PX,
-              top,
-              DEFAULT_TOP_HEIGHT,
-              MIN_BOTTOM_HEIGHT_PX,
-            )
-            updateCell(cell.id, {
-              bottomHeight: nextBottom,
-              bottomResized: true,
-              ...(nextTop !== top
-                ? { topHeight: nextTop, topResized: true }
-                : {}),
-            })
-          }
-        } else {
-          // Single-view: no bottom slot — south drag grows the editor.
-          // Mark topResized so Monaco's content-driven auto-grow stops
-          // snapping the cell back to MIN_EDITOR_HEIGHT after the user's
-          // drag. Without this, the dragged size only lingered in rgl's
-          // internal state and disappeared on the next layouts-prop
-          // reconciliation (e.g. when another cell was added).
-          const nextTopHeight = Math.max(
-            DEFAULT_TOP_HEIGHT,
-            targetTotalPx - CELL_CHROME_PX,
-          )
-          updateCell(cell.id, {
-            topHeight: nextTopHeight,
-            topResized: true,
-          })
-        }
+        // rgl reports every cell; the helper no-ops those whose h is unchanged.
+        const patch = cellHeightPatchForRows(
+          cell,
+          item.h,
+          ROW_HEIGHT,
+          GRID_MARGIN_Y,
+        )
+        if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
       }
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
@@ -790,20 +752,115 @@ const NotebookContent: React.FC = () => {
   )
 }
 
+const SeedFallback = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.6rem;
+  height: 100%;
+  color: ${color("gray2")};
+`
+
+const SEED_SPINNER_DELAY_MS = 200
+
+type SeedError = { message: string; retryable: boolean }
+
+// Seeds from a queued Dexie read instead of the (potentially lagging) React
+// buffer object: the queue orders the read behind every committed agent write,
+// and the mount claim reroutes later agent ops to the live controller.
 export const Notebook: React.FC = () => {
   const { activeBuffer } = useEditor()
+  const [seed, setSeed] = useState<NotebookViewState | null>(null)
+  const [seedError, setSeedError] = useState<SeedError | null>(null)
+  const [seedAttempt, setSeedAttempt] = useState(0)
+  const [showSeedSpinner, setShowSeedSpinner] = useState(false)
 
-  if (!activeBuffer.notebookViewState || !activeBuffer.id) {
+  const bufferId = typeof activeBuffer.id === "number" ? activeBuffer.id : null
+  const isNotebook = !!activeBuffer.notebookViewState
+  const archived = !!activeBuffer.archived
+  const previewView = activeBuffer.notebookViewState
+
+  const previewSeed = useMemo(
+    () =>
+      archived && previewView
+        ? migratePersistedNotebookView(previewView)
+        : null,
+    [archived, previewView],
+  )
+
+  const retrySeed = () => {
+    setSeedAttempt((attempt) => attempt + 1)
+  }
+
+  useEffect(() => {
+    if (bufferId === null || !isNotebook || archived) return
+    let cancelled = false
+    setSeedError(null)
+    setShowSeedSpinner(false)
+    const spinnerTimer = window.setTimeout(() => {
+      if (!cancelled) setShowSeedSpinner(true)
+    }, SEED_SPINNER_DELAY_MS)
+    beginNotebookMount(bufferId).then(
+      (result) => {
+        if (cancelled) return
+        if (result instanceof NotebookToolError) {
+          setSeedError({ message: result.message, retryable: false })
+        } else {
+          setSeed(result)
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setSeedError({
+            message: "Could not load this notebook.",
+            retryable: true,
+          })
+        }
+      },
+    )
+    return () => {
+      cancelled = true
+      window.clearTimeout(spinnerTimer)
+      cancelNotebookMount(bufferId)
+    }
+  }, [bufferId, isNotebook, archived, seedAttempt])
+
+  if (bufferId === null || !isNotebook) {
     return null
   }
 
+  if (archived) {
+    return previewSeed ? (
+      <NotebookProvider initialState={previewSeed} bufferId={bufferId} preview>
+        <NotebookContent />
+      </NotebookProvider>
+    ) : null
+  }
+
+  if (seedError) {
+    return (
+      <SeedFallback role="alert" aria-live="assertive" aria-atomic="true">
+        <span>{seedError.message}</span>
+        {seedError.retryable && (
+          <Button skin="secondary" onClick={retrySeed}>
+            Retry
+          </Button>
+        )}
+      </SeedFallback>
+    )
+  }
+
+  if (!seed) {
+    return showSeedSpinner ? (
+      <SeedFallback role="status" aria-live="polite">
+        <LoadingSpinner />
+      </SeedFallback>
+    ) : null
+  }
+
   return (
-    <NotebookProvider
-      initialState={dropLegacyChartConfigs(
-        migrateLegacyCellNames(activeBuffer.notebookViewState),
-      )}
-      bufferId={activeBuffer.id}
-    >
+    <NotebookProvider initialState={seed} bufferId={bufferId}>
       <NotebookContent />
     </NotebookProvider>
   )

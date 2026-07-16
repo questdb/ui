@@ -1,6 +1,12 @@
-import type { ModelToolsClient } from "../aiAssistant"
-import { dispatchTool, STALE_RETRY_GUIDANCE } from "../tools/dispatch"
-import { formatDigest, sanitizeForPromptContext } from "../ai/notebookSnapshot"
+import type { ModelToolsClient } from "../ai/aiAssistant"
+import { dispatchTool } from "../tools/dispatch"
+import {
+  INVALID_BUFFER_ID_MESSAGE,
+  STATE_NOT_FETCHED_MESSAGE,
+  STATE_STALE_MESSAGE,
+} from "../notebooks/notebookToolMessages"
+import { formatDigest } from "../ai/notebookSnapshot"
+import { sanitizeForPromptContext } from "../ai/sanitizeForPromptContext"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import {
   resolveGetRecentUserActions,
@@ -10,16 +16,16 @@ import {
 import { DEFAULT_GRANTED, type Permissions } from "../tools/permissions"
 import type { ToolCallMessage, ToolContent, ToolResultPayload } from "./types"
 import type { ValidateQueryResult } from "../questdb/types"
-import { isMcpMetaToolName, mutatesNotebook } from "../tools/tools"
-
-export type StateFreshness = "unfetched" | "fresh" | "stale"
-
-export type FreshnessGate = {
-  get: () => StateFreshness
-  set: (next: StateFreshness) => void
-  getReadBuffer: () => number | null
-  setReadBuffer: (bufferId: number | null) => void
-}
+import {
+  createsNotebook,
+  isMcpMetaToolName,
+  requiresFreshNotebookRead,
+} from "../tools/tools"
+import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
+import {
+  captureReadSeq,
+  type NotebookFreshness,
+} from "../notebooks/notebookFreshness"
 
 export type PermissionsRefs = {
   get: () => Permissions
@@ -30,32 +36,25 @@ export type PermissionsRefs = {
 
 export type DispatchContext = {
   modelToolsClient: ModelToolsClient
-  freshness: FreshnessGate
+  freshness: NotebookFreshness
   metaToolContext: MetaToolContext
   permissions?: PermissionsRefs
   validateSql?: (sql: string) => Promise<ValidateQueryResult>
   signal?: AbortSignal
 }
 
-const FULL_STATE_READ_TOOLS = new Set<string>(["get_notebook_state"])
-
-const STATE_NOT_FETCHED_MESSAGE =
-  "STATE_NOT_FETCHED: Call get_workspace_state first to see the current " +
-  "notebook layout, cells, and any user edits. Then retry this tool."
-
-const STATE_STALE_MESSAGE =
-  "STATE_STALE: The user changed the notebook since your last fetch. Call " +
-  "get_workspace_state to re-sync, then retry this tool. " +
-  STALE_RETRY_GUIDANCE
-
-const STATE_WRONG_BUFFER_MESSAGE =
-  "STATE_NOT_FETCHED: Your last full read was of a different notebook. Call " +
-  "get_notebook_state for this buffer_id to see its current cells and any " +
-  "user edits, then retry this tool."
-
 const bufferIdOf = (args: unknown): number | null => {
   const id = (args as { buffer_id?: unknown } | null | undefined)?.buffer_id
   return typeof id === "number" ? id : null
+}
+
+const createdBufferIdOf = (content: string): number | null => {
+  try {
+    const parsed = JSON.parse(content) as { bufferId?: unknown }
+    return typeof parsed.bufferId === "number" ? parsed.bufferId : null
+  } catch {
+    return null
+  }
 }
 
 const errorPayload = (text: string): ToolResultPayload => ({
@@ -81,8 +80,9 @@ const buildSinceLastCheckBlock = (
   const ws = meta.getWorkspace()
   if (ws?.active) {
     const label = sanitizeForPromptContext(ws.active.label)
+    const archived = ws.active.archived ? ", archived: true" : ""
     parts.push(
-      `  active_buffer: { id: ${ws.active.buffer_id}, label: ${JSON.stringify(label)}, kind: ${ws.active.kind} }`,
+      `  active_buffer: { id: ${ws.active.buffer_id}, label: ${JSON.stringify(label)}, kind: ${ws.active.kind}${archived} }`,
     )
   }
   if (digest) {
@@ -175,16 +175,21 @@ const dispatchInner = async (
   call: ToolCallMessage,
   ctx: DispatchContext,
 ): Promise<ToolResultPayload> => {
+  // Every read below records freshness after an await; the reads are unabortable,
+  // so capture the connection generation now and reject a recordRead whose read
+  // began before a reconnect reset — otherwise a stale read could seed freshness
+  // for a notebook the new connection never saw.
+  const readGeneration = ctx.freshness.generation()
   if (isMcpMetaToolName(call.name)) {
     if (call.name === "get_workspace_state") {
-      const content = resolveGetWorkspaceState(
+      const activeId = ctx.metaToolContext.getActiveBufferId()
+      const seqBeforeRead = activeId !== null ? captureReadSeq(activeId) : null
+      const content = await resolveGetWorkspaceState(
         call.arguments as { include_user_events?: boolean } | undefined,
         ctx.metaToolContext,
       )
-      const activeId = ctx.metaToolContext.getActiveBufferId()
-      if (activeId !== null) {
-        ctx.freshness.set("fresh")
-        ctx.freshness.setReadBuffer(activeId)
+      if (activeId !== null && seqBeforeRead !== null) {
+        ctx.freshness.recordRead(activeId, seqBeforeRead, readGeneration)
       }
       return { content, isError: false }
     }
@@ -197,22 +202,24 @@ const dispatchInner = async (
     }
   }
 
-  // Mutations gate on freshness; the deny text is the recovery instruction.
-  // create_notebook is exempt: it makes a NEW notebook, so there is no existing
-  // buffer whose unseen user edit it could overwrite
-  if (mutatesNotebook(call.name) && call.name !== "create_notebook") {
-    const flag = ctx.freshness.get()
-    if (flag === "unfetched") return errorPayload(STATE_NOT_FETCHED_MESSAGE)
-    if (flag === "stale") return errorPayload(STATE_STALE_MESSAGE)
+  if (requiresFreshNotebookRead(call.name)) {
     const target = bufferIdOf(call.arguments)
-    if (target !== null && ctx.freshness.getReadBuffer() !== target) {
-      return errorPayload(STATE_WRONG_BUFFER_MESSAGE)
+    if (target === null) return errorPayload(INVALID_BUFFER_ID_MESSAGE)
+    switch (ctx.freshness.assertFresh(target)) {
+      case "not_fetched":
+        return errorPayload(STATE_NOT_FETCHED_MESSAGE)
+      case "stale":
+        return errorPayload(STATE_STALE_MESSAGE)
     }
   }
 
   const perms = ctx.permissions
     ? (ctx.permissions.get() ?? DEFAULT_GRANTED)
     : undefined
+  const fullReadTarget =
+    call.name === "get_notebook_state" ? bufferIdOf(call.arguments) : null
+  const seqBeforeFullRead =
+    fullReadTarget !== null ? captureReadSeq(fullReadTarget) : null
   const out = await dispatchTool(
     call.name,
     call.arguments,
@@ -222,9 +229,23 @@ const dispatchInner = async (
     ctx.validateSql,
     ctx.signal,
   )
-  if (FULL_STATE_READ_TOOLS.has(call.name) && !out.is_error) {
-    ctx.freshness.set("fresh")
-    ctx.freshness.setReadBuffer(bufferIdOf(call.arguments))
+  if (!out.is_error) {
+    if (fullReadTarget !== null && seqBeforeFullRead !== null) {
+      ctx.freshness.recordRead(
+        fullReadTarget,
+        seqBeforeFullRead,
+        readGeneration,
+      )
+    } else if (createsNotebook(call.name)) {
+      const created = createdBufferIdOf(out.content)
+      if (created !== null) {
+        ctx.freshness.recordRead(
+          created,
+          getBufferActionSeq(created),
+          readGeneration,
+        )
+      }
+    }
   }
   return wrapDispatchToolOutput(out)
 }

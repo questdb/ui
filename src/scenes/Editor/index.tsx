@@ -489,7 +489,9 @@ const Editor = ({
             {/* Metrics view */}
             {activeBuffer.metricsViewState && <Metrics key={activeBuffer.id} />}
             {activeBuffer.notebookViewState && (
-              <Notebook key={activeBuffer.id} />
+              <Notebook
+                key={`${activeBuffer.id}:${activeBuffer.archived ? "archived" : "live"}`}
+              />
             )}
             <Notifications
               onClearNotifications={handleClearNotifications}

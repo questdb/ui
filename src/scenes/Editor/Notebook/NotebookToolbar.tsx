@@ -17,13 +17,14 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
+import { MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
 import { useEditor } from "../../../providers/EditorProvider"
 import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import {
   isBlockingAIStatus,
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
-import { emitUserAction } from "../../../utils/notebookAIBridge"
+import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
 
 const Toolbar = styled(Box).attrs({
@@ -270,6 +271,7 @@ export const NotebookToolbar: React.FC = () => {
           <NameInput
             ref={nameInputRef}
             value={draftName}
+            maxLength={MAX_BUFFER_NAME_LENGTH}
             onChange={(e) => setDraftName(e.target.value)}
             onKeyDown={handleNameKeyDown}
             onBlur={commitRename}
