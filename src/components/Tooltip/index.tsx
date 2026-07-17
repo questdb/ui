@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React from "react"
-import styled, { keyframes } from "styled-components"
+import styled, { css, keyframes } from "styled-components"
 import * as RadixTooltip from "@radix-ui/react-tooltip"
 import type { Placement } from "@popperjs/core"
 
@@ -34,8 +34,12 @@ type Props = {
   content: React.ReactNode | null
   placement?: Placement
   delay?: number
+  maxWidth?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  collisionBoundary?: Element | null | Array<Element | null>
+  collisionPadding?: number
+  hoverBridge?: boolean
   children: React.ReactNode
 }
 
@@ -109,12 +113,19 @@ const ArrowWithBorder = React.forwardRef<SVGSVGElement>((props, ref) => (
   </StyledArrowSvg>
 ))
 
-const TooltipContent = styled(RadixTooltip.Content)`
+// Overreaches the arrow gap (arrow height + sideOffset) so the bridge overlaps
+// slightly into the trigger, leaving no seam between them.
+const HOVER_BRIDGE_PX = 10
+
+const TooltipContent = styled(RadixTooltip.Content)<{
+  $maxWidth?: string
+  $hoverBridge?: boolean
+}>`
   --tooltip-bg: ${color("backgroundDarker")};
   --tooltip-border: ${color("gray1")};
 
   position: relative;
-  max-width: 460px;
+  max-width: ${({ $maxWidth }) => $maxWidth ?? "460px"};
   padding: 1rem;
   background: var(--tooltip-bg);
   border: 1px solid var(--tooltip-border);
@@ -124,18 +135,57 @@ const TooltipContent = styled(RadixTooltip.Content)`
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
 
-  &[data-state="delayed-open"][data-side="top"] {
+  &[data-state="delayed-open"][data-side="top"],
+  &[data-state="instant-open"][data-side="top"] {
     animation-name: ${slideDownAndFade};
   }
-  &[data-state="delayed-open"][data-side="bottom"] {
+  &[data-state="delayed-open"][data-side="bottom"],
+  &[data-state="instant-open"][data-side="bottom"] {
     animation-name: ${slideUpAndFade};
   }
-  &[data-state="delayed-open"][data-side="left"] {
+  &[data-state="delayed-open"][data-side="left"],
+  &[data-state="instant-open"][data-side="left"] {
     animation-name: ${slideRightAndFade};
   }
-  &[data-state="delayed-open"][data-side="right"] {
+  &[data-state="delayed-open"][data-side="right"],
+  &[data-state="instant-open"][data-side="right"] {
     animation-name: ${slideLeftAndFade};
   }
+
+  ${({ $hoverBridge }) =>
+    $hoverBridge &&
+    css`
+      /* Transparent, full-width bridge filling the arrow gap so a pointer
+         moving between the trigger and the tooltip never crosses open space. */
+      &::before {
+        content: "";
+        position: absolute;
+      }
+      &[data-side="bottom"]::before {
+        left: 0;
+        right: 0;
+        top: -${HOVER_BRIDGE_PX}px;
+        height: ${HOVER_BRIDGE_PX}px;
+      }
+      &[data-side="top"]::before {
+        left: 0;
+        right: 0;
+        bottom: -${HOVER_BRIDGE_PX}px;
+        height: ${HOVER_BRIDGE_PX}px;
+      }
+      &[data-side="left"]::before {
+        top: 0;
+        bottom: 0;
+        right: -${HOVER_BRIDGE_PX}px;
+        width: ${HOVER_BRIDGE_PX}px;
+      }
+      &[data-side="right"]::before {
+        top: 0;
+        bottom: 0;
+        left: -${HOVER_BRIDGE_PX}px;
+        width: ${HOVER_BRIDGE_PX}px;
+      }
+    `}
 `
 
 const mapPlacementToSide = (
@@ -162,8 +212,12 @@ export const Tooltip = ({
   content,
   placement = "bottom",
   delay,
+  maxWidth,
   open,
   onOpenChange,
+  collisionBoundary,
+  collisionPadding,
+  hoverBridge,
   children,
 }: Props): JSX.Element => {
   if (!content) return <>{children}</>
@@ -176,9 +230,13 @@ export const Tooltip = ({
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <TooltipContent
+          $maxWidth={maxWidth}
+          $hoverBridge={hoverBridge}
           side={mapPlacementToSide(placement)}
           align={mapPlacementToAlign(placement)}
           sideOffset={0}
+          collisionBoundary={collisionBoundary}
+          collisionPadding={collisionPadding}
         >
           <Text color="offWhite2" data-hook="tooltip">
             {content}

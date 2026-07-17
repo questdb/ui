@@ -1,3 +1,5 @@
+import type { MaxColumnWidth } from "../../components/ResultGrid/types"
+
 export type ProviderSettings = {
   apiKey: string
   enabledModels: string[]
@@ -52,6 +54,8 @@ export type LocalConfig = {
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   useNewGrid: boolean
+  runWithSelection: boolean
+  maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
   aiChatPanelWidth: number

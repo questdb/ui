@@ -20,8 +20,14 @@ import {
 
 import type { ColumnDefinition } from "../../utils/questdb/types"
 import { unescapeHtml } from "../../utils/escapeHtml"
-import type { CellValue, ResultGridDataSource, ResultGridRow } from "./types"
+import type {
+  CellValue,
+  MaxColumnWidth,
+  ResultGridDataSource,
+  ResultGridRow,
+} from "./types"
 import {
+  applyMaxColumnWidth,
   clampColumnWidths,
   sampleColumnWidths,
   isLeftAligned,
@@ -54,10 +60,13 @@ import {
   toAbsoluteIndex,
   toVisibleAbsoluteRange,
 } from "./virtualRowMapping"
+import { MIN_COLUMN_WIDTH } from "./dimensions"
 import { useContainerWidth } from "./useContainerWidth"
+import { useFontsReady } from "./useFontsReady"
 import { useScrollShadows } from "./useScrollShadows"
 import { useColumnSizing } from "./useColumnSizing"
 import { useFreezeDrag } from "./useFreezeDrag"
+import { useCellHoverTooltip } from "./useCellHoverTooltip"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -140,6 +149,7 @@ const GridCell = React.memo(function GridCell({
 
 type Props = {
   dataSource: ResultGridDataSource
+  maxColumnWidth: MaxColumnWidth
   runToken?: number // changes per run to reset focus/selection on the grid
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
@@ -202,6 +212,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
   (
     {
       dataSource,
+      maxColumnWidth,
       runToken,
       isFocused = true,
       initialColumnSizing,
@@ -231,29 +242,44 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const scrollRef = useRef<HTMLDivElement>(null)
 
     const containerWidth = useContainerWidth(gridRef)
+    const fontsReady = useFontsReady()
     const { scrolledDown, shadowLeft, handleScroll } =
       useScrollShadows(scrollRef)
 
     const virtualRowCount = Math.min(rowCount, MAX_VIRTUAL_ROWS)
 
     // Sampling text lengths over 1000 rows is the expensive part, so it runs
-    // once per result; the per-resize work is only the container clamp.
+    // once per result — and once more if the webfont finishes loading after a
+    // fallback-font measurement.
     const sampledWidths = useMemo(
       () => sampleColumnWidths(columns, sampleRows.slice(0, WIDTH_SAMPLE_ROWS)),
-      [columns, sampleRows],
+      [columns, sampleRows, fontsReady],
+    )
+
+    const cappedWidths = useMemo(
+      () => applyMaxColumnWidth(sampledWidths, maxColumnWidth),
+      [sampledWidths, maxColumnWidth],
+    )
+
+    const clampedWidths = useMemo(
+      () =>
+        containerWidth === null
+          ? null
+          : clampColumnWidths(cappedWidths, containerWidth),
+      [cappedWidths, containerWidth],
     )
 
     const columnDefs = useMemo<ColumnDef<ResultGridRow, unknown>[]>(() => {
-      const widths = clampColumnWidths(sampledWidths, containerWidth)
+      const widths = clampedWidths ?? cappedWidths
       return columns.map((col, i) => ({
         id: columnId(i),
         accessorFn: (row: ResultGridRow) => row[i],
         header: col.name,
         size: widths[i],
-        minSize: 60,
+        minSize: MIN_COLUMN_WIDTH,
         meta: { col },
       }))
-    }, [columns, sampledWidths, containerWidth])
+    }, [columns, clampedWidths, cappedWidths])
 
     const [columnOrder, setColumnOrder] = useState<string[]>([])
     const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
@@ -452,6 +478,22 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onCellCopy,
     )
 
+    const {
+      overlay: cellTooltipOverlay,
+      onMouseOver: onCellTooltipMouseOver,
+      onMouseLeave: onCellTooltipMouseLeave,
+      hideTooltip: hideCellTooltip,
+    } = useCellHoverTooltip(getData, getColumn)
+
+    const handleViewportScroll = useCallback(() => {
+      hideCellTooltip()
+      handleScroll()
+    }, [hideCellTooltip, handleScroll])
+
+    useEffect(() => {
+      hideCellTooltip()
+    }, [dataSource, runToken, hideCellTooltip])
+
     const hasSelection = focusedCell != null
     useEffect(() => {
       onSelectionChange?.(hasSelection)
@@ -564,6 +606,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const totalHeight = rowVirtualizer.getTotalSize()
     const virtualRows = rowVirtualizer.getVirtualItems()
     const virtualColumns = columnVirtualizer.getVirtualItems()
+    const rowsToRender = containerWidth === null ? [] : virtualRows
 
     const firstVirtual = virtualRows[0]?.index ?? 0
     const lastVirtual = virtualRows[virtualRows.length - 1]?.index ?? 0
@@ -717,7 +760,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       }
     }
 
-    const viewportWidth = scrollRef.current?.clientWidth ?? containerWidth
+    const viewportWidth = scrollRef.current?.clientWidth ?? containerWidth ?? 0
     const freezeHandleLeft = Math.min(
       frozenWidth,
       Math.max(0, viewportWidth - FREEZE_HANDLE_EDGE_INSET),
@@ -748,7 +791,9 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         <ScrollContainer
           ref={scrollRef}
           data-hook="grid-viewport"
-          onScroll={handleScroll}
+          onScroll={handleViewportScroll}
+          onMouseOver={onCellTooltipMouseOver}
+          onMouseLeave={onCellTooltipMouseLeave}
           $scrollable={isFocused}
           role="presentation"
         >
@@ -763,7 +808,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               position: "relative",
             }}
           >
-            {virtualRows.map((virtualRow) => {
+            {rowsToRender.map((virtualRow) => {
               const virtualIndex = virtualRow.index
               const absoluteIndex = toAbsoluteIndex(virtualIndex, rowCount)
               const rowData = getRow(absoluteIndex)
@@ -815,6 +860,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 </Row>
               )
             })}
+            {cellTooltipOverlay}
           </div>
         </ScrollContainer>
         {frozenCount > 0 && shadowLeft && (

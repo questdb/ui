@@ -31,6 +31,7 @@ import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
 import { useCellReveal } from "./useCellReveal"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import {
   emitUserAction,
   signalUserEdit,
@@ -150,6 +151,7 @@ const CellInner: React.FC<Props> = ({
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
+  const { runWithSelection } = useLocalStorage()
   const bufferIdForEvents = useNotebookBufferId()
   const isDrawMode = cell.mode === "draw"
 
@@ -382,6 +384,7 @@ const CellInner: React.FC<Props> = ({
   }, [editorRef])
 
   const tryRunSelection = useCallback(async (): Promise<boolean> => {
+    if (!runWithSelection) return false
     const ed = editorRef.current
     if (!ed) return false
     const selection = ed.getSelection()
@@ -396,7 +399,14 @@ const CellInner: React.FC<Props> = ({
     const { ok } = await runCell(cell.id, normalized)
     applyHighlight(ok)
     return true
-  }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
+  }, [
+    runWithSelection,
+    cell.id,
+    runCell,
+    editorRef,
+    applyHighlight,
+    clearHighlight,
+  ])
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {

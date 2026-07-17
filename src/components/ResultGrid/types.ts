@@ -8,6 +8,8 @@ export type CellValue = boolean | string | number | null
 
 export type ResultGridRow = CellValue[]
 
+export type MaxColumnWidth = number | "auto"
+
 export type ColumnLayout = {
   columnSizing?: Record<string, number>
   columnOrder?: string[]

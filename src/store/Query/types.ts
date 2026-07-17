@@ -10,6 +10,11 @@ import type { Request } from "../../scenes/Editor/Monaco/utils"
 export type QueryKey = `${string}@${number}-${number}`
 export type NotificationNamespaceKey = string | number
 
+export type QueryKeyUpdate = Readonly<{
+  oldKey: QueryKey
+  newKey: QueryKey
+}>
+
 export enum NotificationType {
   ERROR = "error",
   INFO = "info",
@@ -69,6 +74,7 @@ export enum QueryAT {
   CLEANUP_BUFFER_NOTIFICATIONS = "QUERY/CLEANUP_BUFFER_NOTIFICATIONS",
   REMOVE_NOTIFICATION = "QUERY/REMOVE_NOTIFICATION",
   UPDATE_NOTIFICATION_KEY = "QUERY/UPDATE_NOTIFICATION_KEY",
+  UPDATE_NOTIFICATION_KEYS = "QUERY/UPDATE_NOTIFICATION_KEYS",
   MOVE_NOTIFICATION_NAMESPACE = "QUERY/MOVE_NOTIFICATION_NAMESPACE",
   SET_RESULT = "QUERY/SET_RESULT",
   STOP_RUNNING = "QUERY/STOP_RUNNING",
@@ -144,6 +150,14 @@ type UpdateNotificationKeyAction = Readonly<{
   }
 }>
 
+type UpdateNotificationKeysAction = Readonly<{
+  type: QueryAT.UPDATE_NOTIFICATION_KEYS
+  payload: {
+    updates: QueryKeyUpdate[]
+    bufferId: NotificationNamespaceKey
+  }
+}>
+
 type MoveNotificationNamespaceAction = Readonly<{
   type: QueryAT.MOVE_NOTIFICATION_NAMESPACE
   payload: {
@@ -164,6 +178,7 @@ export type QueryAction =
   | CleanupBufferNotificationsAction
   | RemoveNotificationAction
   | UpdateNotificationKeyAction
+  | UpdateNotificationKeysAction
   | MoveNotificationNamespaceAction
   | SetResultAction
   | StopRunningAction

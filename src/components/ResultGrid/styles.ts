@@ -2,7 +2,18 @@ import styled, { css, keyframes } from "styled-components"
 import { color } from "../../utils"
 import { theme } from "../../theme"
 import { CopyButton } from "../CopyButton"
-import { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
+import {
+  CELL_BORDER_PX,
+  CELL_FONT_SIZE_PX,
+  CELL_PADDING_PX,
+  HEADER_BORDER_PX,
+  HEADER_GAP_PX,
+  HEADER_HEIGHT,
+  HEADER_NAME_FONT_SIZE_PX,
+  HEADER_PADDING_PX,
+  HEADER_TYPE_FONT_SIZE_PX,
+  ROW_HEIGHT,
+} from "./dimensions"
 
 export { HEADER_HEIGHT, ROW_HEIGHT }
 
@@ -36,13 +47,13 @@ export const HeaderRow = styled.div<{ $shadowBottom: boolean }>`
 export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
   position: relative;
   flex-shrink: 0;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem ${HEADER_PADDING_PX / 2}px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   user-select: none;
   text-align: ${({ $align }) => $align};
-  border-right: 1px solid ${color("selection")};
+  border-right: ${HEADER_BORDER_PX}px solid ${color("selection")};
   /* Sticky-left: opaque background so scrolled-under headers don't show through. */
   ${({ $frozen }) =>
     $frozen &&
@@ -63,7 +74,7 @@ export const HeaderNameRow = styled.div<{ $align: string }>`
   flex-direction: ${({ $align }) =>
     $align === "right" ? "row-reverse" : "row"};
   justify-content: flex-start;
-  gap: 6px;
+  gap: ${HEADER_GAP_PX}px;
 `
 
 export const HeaderName = styled.span`
@@ -72,12 +83,12 @@ export const HeaderName = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
-  font-size: ${({ theme }) => theme.fontSize.md};
+  font-size: ${HEADER_NAME_FONT_SIZE_PX}px;
 `
 
 export const HeaderType = styled.span`
   color: ${color("gray2")};
-  font-size: ${({ theme }) => theme.fontSize.ms};
+  font-size: ${HEADER_TYPE_FONT_SIZE_PX}px;
   white-space: nowrap;
   text-transform: lowercase;
 `
@@ -187,16 +198,16 @@ export const Cell = styled.div<{
   height: ${ROW_HEIGHT}px;
   display: flex;
   align-items: center;
-  padding: 0 0.6rem;
+  padding: 0 ${CELL_PADDING_PX / 2}px;
   overflow: hidden;
-  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-size: ${CELL_FONT_SIZE_PX}px;
   color: ${({ $isNull, $isTimestamp }) =>
     $isNull
       ? color("mutedLabel")
       : $isTimestamp
         ? color("green")
         : color("foreground")};
-  border-right: 1px solid ${color("selection")};
+  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
   border-bottom: 1px solid ${color("selection")};
   box-sizing: border-box;
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
@@ -230,6 +241,39 @@ export const CellText = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+`
+
+export const CellTooltipAnchor = styled.div`
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+`
+
+export const CellTooltipTextColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+`
+
+export const CellTooltipValue = styled.div`
+  max-height: min(40vh, 280px);
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+`
+
+export const CellTooltipNote = styled.div`
+  margin-top: 0.6rem;
+  color: ${color("mutedLabel")};
+  font-size: ${({ theme }) => theme.fontSize.xs};
+`
+
+export const CellTooltipCopyButton = styled(CopyButton).attrs({
+  iconOnly: true,
+  size: "sm",
+})`
+  margin-left: auto;
+  background: transparent;
 `
 
 export const FrozenShadow = styled.div`

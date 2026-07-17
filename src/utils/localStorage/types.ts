@@ -46,4 +46,6 @@ export enum StoreKey {
   CLIENT_ID = "client.id",
   USE_NEW_GRID = "feature.new.grid",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
+  RUN_WITH_SELECTION = "editor.runWithSelection",
+  MAX_COLUMN_WIDTH = "grid.maxColumnWidth",
 }

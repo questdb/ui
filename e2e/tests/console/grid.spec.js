@@ -398,8 +398,10 @@ describe("questdb grid", () => {
 
     it("keeps the frozen column pinned while scrolling horizontally", () => {
       // Given a result wide enough to scroll horizontally, left column frozen
-      const columns = Array.from({ length: 20 }, (_, i) => `x c${i}`).join(", ")
-      cy.typeQuery(`select ${columns} from long_sequence(10)`)
+      const columns = Array.from({ length: 100 }, (_, i) => `x c${i}`).join(
+        ", ",
+      )
+      cy.typeQueryDirectly(`select ${columns} from long_sequence(10)`)
       cy.runLine()
       cy.gridToolbar("freeze").click()
       cy.getGridCellAt(0, 0).should("have.attr", "data-frozen", "true")
@@ -625,6 +627,40 @@ describe("questdb grid", () => {
     })
   })
 
+  describe("cell hover tooltip", () => {
+    // Radix renders the content twice: the visible popper instance first, then
+    // a visually-hidden aria copy, so value assertions read the first match.
+    const getTooltipValue = () =>
+      cy.getByDataHook("grid-cell-tooltip-value").first()
+
+    it("shows the full value of a truncated cell after a hover delay", () => {
+      // Given
+      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      cy.runLine()
+
+      // When
+      cy.getGridCellAt(0, 0).realHover()
+
+      // Then
+      getTooltipValue().should("have.text", "a" + "b".repeat(399))
+      cy.contains("+100 more characters").should("be.visible")
+    })
+
+    it("re-running the query hides the open tooltip", () => {
+      // Given
+      cy.typeQuery("select rpad('a', 500, 'b') wide from long_sequence(1)")
+      cy.runLine()
+      cy.getGridCellAt(0, 0).realHover()
+      getTooltipValue().should("be.visible")
+
+      // When
+      cy.runLine()
+
+      // Then
+      cy.getByDataHook("grid-cell-tooltip-value").should("not.exist")
+    })
+  })
+
   describe("toolbar actions", () => {
     it("copies the current page as a Markdown table", () => {
       // Given
@@ -650,6 +686,106 @@ describe("questdb grid", () => {
       // Then
       cy.wait("@refresh")
       cy.getGridRows().should("have.length.greaterThan", 0)
+    })
+  })
+
+  describe("column width allocation", () => {
+    beforeEach(() => {
+      cy.getEditorContent().should("be.visible")
+      cy.clearEditor()
+    })
+
+    const longArray = (n) =>
+      `ARRAY[${Array.from({ length: n }, (_, i) => `${i + 1}.0`).join(",")}]`
+
+    const gridArea = () => cy.get('[data-hook="result-grid-tanstack"]:visible')
+
+    const cellIn = (col) => gridArea().find(`#cell-0-${col}`)
+
+    const runQuery = (query) => {
+      cy.typeQueryDirectly(query)
+      cy.clickRunQuery()
+      cellIn(0).should("be.visible")
+    }
+
+    it("S1: a single wide column fills the grid width", () => {
+      // Given a result with one very long column
+      runQuery("select string_agg(x::string, ',') s from long_sequence(500)")
+
+      // Then it stretches to the full grid width — asserted retryably, since
+      // widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const cellWidth = $grid
+          .find("#cell-0-0")[0]
+          .getBoundingClientRect().width
+        expect(cellWidth).to.be.closeTo(gridWidth, 20)
+      })
+    })
+
+    it("S2: two wide columns split the grid width evenly and the array is truncated", () => {
+      // Given a result with two very wide columns
+      runQuery(
+        `select string_agg(x::string, ',') s, ${longArray(300)} arr from long_sequence(500)`,
+      )
+
+      // Then each column takes half of the grid width — asserted retryably,
+      // since widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const firstWidth = $grid
+          .find("#cell-0-0")[0]
+          .getBoundingClientRect().width
+        const secondWidth = $grid
+          .find("#cell-0-1")[0]
+          .getBoundingClientRect().width
+        expect(firstWidth).to.be.closeTo(secondWidth, 8)
+        expect(firstWidth).to.be.closeTo(gridWidth / 2, 20)
+      })
+
+      // And the clipped array ends with an ellipsis before its closing bracket
+      cellIn(1)
+        .invoke("text")
+        .then((text) => {
+          expect(text.trim()).to.match(/\.\.\.]$/)
+        })
+    })
+
+    it("S3: narrow columns keep their width and the array takes the remaining space", () => {
+      // Given a few narrow columns and one wide array column
+      runQuery(`select 1, 2, 3, ${longArray(300)} arr`)
+
+      // Then the narrow columns settle at one small, shared width, and the
+      // array column takes exactly what they leave behind — asserted retryably,
+      // since widths re-measure and expand once the webfont finishes loading
+      gridArea().should(($grid) => {
+        const gridWidth = $grid[0].getBoundingClientRect().width
+        const widths = [0, 1, 2, 3].map(
+          (col) =>
+            $grid.find(`#cell-0-${col}`)[0].getBoundingClientRect().width,
+        )
+        expect(widths[1]).to.be.closeTo(widths[0], 8)
+        expect(widths[2]).to.be.closeTo(widths[0], 8)
+        const digitsTotal = widths[0] + widths[1] + widths[2]
+        expect(widths[3]).to.be.closeTo(gridWidth - digitsTotal, 20)
+      })
+    })
+
+    it("S4: the array column stops at the 400px cap when space is tight", () => {
+      const digits = Array.from({ length: 100 }, (_, i) => i + 1).join(",")
+
+      // Given more narrow columns than the width can hold, plus a wide array
+      runQuery(`select ${digits}, ${longArray(300)} arr`)
+
+      // When the far-right array column is scrolled into view
+      gridArea().find('[data-hook="grid-viewport"]').scrollTo("right")
+
+      // Then it settles at the maximum column width
+      cellIn(100)
+        .should("be.visible")
+        .should(($cell) => {
+          expect($cell[0].getBoundingClientRect().width).to.be.closeTo(400, 3)
+        })
     })
   })
 })

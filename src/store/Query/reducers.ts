@@ -167,9 +167,18 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         const bufferNotifications = state.queryNotifications[bufferId] || {}
         const updatedBufferNotifications = { ...bufferNotifications }
 
-        if (updatedBufferNotifications[oldKey]) {
-          updatedBufferNotifications[newKey] =
-            updatedBufferNotifications[oldKey]
+        const moved = updatedBufferNotifications[oldKey]
+        const existing = updatedBufferNotifications[newKey]
+        if (
+          moved &&
+          existing &&
+          existing.latest.createdAt > moved.latest.createdAt
+        ) {
+          return state
+        }
+
+        if (moved) {
+          updatedBufferNotifications[newKey] = moved
           if (!preserveOldKey) {
             delete updatedBufferNotifications[oldKey]
           }
@@ -212,6 +221,57 @@ const query = (state = initialState, action: QueryAction): QueryStateShape => {
         ...state,
         notifications: updatedNotifications,
         activeNotification: updatedActiveNotification,
+      }
+    }
+
+    case QueryAT.UPDATE_NOTIFICATION_KEYS: {
+      const { updates, bufferId } = action.payload
+      const effectiveUpdates = updates.filter(
+        ({ oldKey, newKey }) => oldKey !== newKey,
+      )
+      if (effectiveUpdates.length === 0) return state
+
+      const bufferNotifications = state.queryNotifications[bufferId] || {}
+      const updatedBufferNotifications = { ...bufferNotifications }
+      const keyMap = new Map(
+        effectiveUpdates.map(({ oldKey, newKey }) => [oldKey, newKey]),
+      )
+
+      // Vacate every source before writing any destination so chained moves
+      // such as 0 -> 10 and 10 -> 20 cannot collide with transient keys.
+      effectiveUpdates.forEach(({ oldKey }) => {
+        delete updatedBufferNotifications[oldKey]
+      })
+
+      effectiveUpdates.forEach(({ oldKey, newKey }) => {
+        const moved = bufferNotifications[oldKey]
+        if (!moved) return
+        const existing = updatedBufferNotifications[newKey]
+        if (!existing || existing.latest.createdAt <= moved.latest.createdAt) {
+          updatedBufferNotifications[newKey] = moved
+        }
+      })
+
+      const updatedNotifications = state.notifications.map((notification) => {
+        const newKey = keyMap.get(notification.query)
+        return newKey ? { ...notification, query: newKey } : notification
+      })
+
+      const activeNotificationKey = state.activeNotification
+        ? keyMap.get(state.activeNotification.query)
+        : undefined
+
+      return {
+        ...state,
+        notifications: updatedNotifications,
+        queryNotifications: {
+          ...state.queryNotifications,
+          [bufferId]: updatedBufferNotifications,
+        },
+        activeNotification:
+          state.activeNotification && activeNotificationKey
+            ? { ...state.activeNotification, query: activeNotificationKey }
+            : state.activeNotification,
       }
     }
 

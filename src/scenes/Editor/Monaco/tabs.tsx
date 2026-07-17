@@ -9,6 +9,7 @@ import {
   UploadSimpleIcon,
   NotebookIcon,
   FileTextIcon,
+  GearSixIcon,
 } from "@phosphor-icons/react"
 import { createDefaultNotebookViewState } from "../../../store/notebook"
 import { toast } from "../../../components/Toast"
@@ -22,6 +23,7 @@ import { migrateBuffer, getCurrentDbVersion } from "../../../store/migrations"
 import { importInto, peakImportFile } from "dexie-export-import"
 import { exportBuffers } from "./exportTabs"
 import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
+import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
 import {
   Box,
   Button,
@@ -119,6 +121,7 @@ export const Tabs = () => {
     x: number
     y: number
   } | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [importSummaryOpen, setImportSummaryOpen] = useState(false)
   const [importedCount, setImportedCount] = useState(0)
   const [skippedTabs, setSkippedTabs] = useState<SkippedTab[]>([])
@@ -652,9 +655,18 @@ export const Tabs = () => {
             >
               <Text color="foreground">Export tabs</Text>
             </DropdownMenu.Item>
+            <DropdownMenu.Divider />
+            <DropdownMenu.Item
+              onClick={() => setSettingsOpen(true)}
+              data-hook="editor-tabs-menu-settings"
+            >
+              <GearSixIcon size={18} />
+              <Text color="foreground">Editor settings</Text>
+            </DropdownMenu.Item>
           </DropdownMenuContent>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
+      <EditorSettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <ImportSummaryDialog
         open={importSummaryOpen}
         onOpenChange={setImportSummaryOpen}

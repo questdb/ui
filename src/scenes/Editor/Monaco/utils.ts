@@ -138,13 +138,14 @@ export const getSelectedText = (
 export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
   queryOffsets: { startOffset: number; endOffset: number }[],
+  runWithSelection: boolean,
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
 
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
-  if (!selection || !selectedText) {
+  if (!runWithSelection || !selection || !selectedText) {
     const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
@@ -725,6 +726,7 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
+  runWithSelection: boolean,
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
@@ -732,7 +734,7 @@ export const getQueryRequestFromEditor = (
     ? stripSQLComments(normalizeQueryText(selectedText))
     : undefined
 
-  if (strippedNormalizedSelectedText) {
+  if (runWithSelection && strippedNormalizedSelectedText) {
     request = getQueryFromSelection(editor)
   } else {
     request = getQueryFromCursor(editor)
@@ -1004,6 +1006,15 @@ export const getQueryStartOffset = (
   })
 }
 
+export const isQueryTextAtOffset = (
+  fullText: string,
+  startOffset: number,
+  expectedQueryText: string,
+): boolean => {
+  const expected = normalizeQueryText(expectedQueryText)
+  return fullText.slice(startOffset, startOffset + expected.length) === expected
+}
+
 export const createQueryKey = (
   queryText: string,
   startOffset: number,
@@ -1070,6 +1081,96 @@ export const createQueryKeyFromRequest = (
 ): QueryKey => {
   const startOffset = getQueryStartOffset(editor, request)
   return createQueryKey(request.query, startOffset)
+}
+
+export type InflightQuery = {
+  bufferId: number
+  queryKey: QueryKey
+  startOffset: number
+  endOffset: number
+  dislodged: boolean
+}
+
+type ContentChange = Pick<
+  editor.IModelContentChange,
+  "rangeOffset" | "rangeLength" | "text"
+>
+
+export const createInflightQuery = (
+  bufferId: number,
+  queryText: string,
+  startOffset: number,
+): InflightQuery => ({
+  bufferId,
+  queryKey: createQueryKey(queryText, startOffset),
+  startOffset,
+  endOffset: startOffset + normalizeQueryText(queryText).length,
+  dislodged: false,
+})
+
+export const shiftInflightQuery = (
+  inflightQuery: InflightQuery,
+  changes: readonly ContentChange[],
+): InflightQuery => {
+  if (inflightQuery.dislodged) return inflightQuery
+
+  const { startOffset, endOffset } = inflightQuery
+  const touchesQuery = changes.some(
+    (change) =>
+      change.rangeOffset + change.rangeLength > startOffset &&
+      (change.rangeOffset < endOffset ||
+        (change.rangeOffset === endOffset && change.text.length > 0)),
+  )
+  if (touchesQuery) {
+    return { ...inflightQuery, dislodged: true }
+  }
+
+  const offsetDelta = changes
+    .filter((change) => change.rangeOffset + change.rangeLength <= startOffset)
+    .reduce((acc, change) => acc + change.text.length - change.rangeLength, 0)
+  if (offsetDelta === 0) return inflightQuery
+
+  const { queryText } = parseQueryKey(inflightQuery.queryKey)
+  return {
+    ...inflightQuery,
+    queryKey: createQueryKey(queryText, startOffset + offsetDelta),
+    startOffset: startOffset + offsetDelta,
+    endOffset: endOffset + offsetDelta,
+  }
+}
+
+export const isInflightQueryStillInPlace = (
+  fullText: string,
+  inflightQuery: InflightQuery,
+): boolean => {
+  if (inflightQuery.dislodged) return false
+  const { queryText } = parseQueryKey(inflightQuery.queryKey)
+  return isQueryTextAtOffset(fullText, inflightQuery.startOffset, queryText)
+}
+
+export const shiftSelection = (
+  selection: NonNullable<Request["selection"]>,
+  offsetDelta: number,
+): NonNullable<Request["selection"]> => ({
+  ...selection,
+  startOffset: selection.startOffset + offsetDelta,
+  endOffset: selection.endOffset + offsetDelta,
+})
+
+export const applyQueryKeyUpdates = <T>(
+  record: Record<QueryKey, T>,
+  updates: readonly {
+    oldKey: QueryKey
+    newKey: QueryKey
+    data: T
+  }[],
+): void => {
+  updates.forEach(({ oldKey }) => {
+    delete record[oldKey]
+  })
+  updates.forEach(({ newKey, data }) => {
+    record[newKey] = data
+  })
 }
 
 export const setErrorMarkerForQuery = (
