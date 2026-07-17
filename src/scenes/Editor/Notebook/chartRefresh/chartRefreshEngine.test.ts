@@ -60,8 +60,14 @@ describe("ChartRefreshEngine", () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    // clearAllMocks keeps implementations; reset the module mock explicitly so
+    // one test's snapshot fixture can't hydrate another test's cells.
+    vi.mocked(loadCellSnapshot).mockResolvedValue(undefined)
     deps = makeDeps()
-    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps)
+    // Jitter off: tests assert exact fetch timing.
+    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+      initialFetchJitterMs: 0,
+    })
     engine.attach()
   })
 
@@ -271,6 +277,137 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).not.toHaveBeenCalled()
     expect(engine.getState("c1")?.results).toHaveLength(1)
     expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not poll a cell that is hidden before it enters draw mode", async () => {
+    // Given the observer reported the cell offscreen before it became a chart
+    engine.setVisible("c1", false)
+
+    // When the engine syncs the polling draw cell
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then no fetch happens no matter how much time passes
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+  })
+
+  it("catches up immediately on reveal when the cell never fetched", async () => {
+    // Given a hidden, never-fetched polling cell
+    engine.setVisible("c1", false)
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // When the cell scrolls into view
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then it fetches immediately and keeps polling
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("pauses polling when the cell scrolls out of view", async () => {
+    // Given a visible polling cell that has fetched once
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When it scrolls out of view
+    engine.setVisible("c1", false)
+
+    // Then polling stops while its data stays intact
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(engine.getState("c1")?.results).toHaveLength(1)
+  })
+
+  it("skips the reveal catch-up when the data is still fresh", async () => {
+    // Given a cell hidden right after a fetch
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    engine.setVisible("c1", false)
+
+    // When it is revealed again well within its refresh interval
+    await vi.advanceTimersByTimeAsync(100)
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then there is no immediate refetch — the next one waits a full interval
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("defers an auto-refresh-off cell's initial fetch to its first reveal", async () => {
+    // Given a hidden cell with auto-refresh off
+    engine.setVisible("c1", false)
+    engine.sync([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // When it is revealed for the first time
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then it fetches exactly once
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // And hiding and revealing it again does not refetch settled data
+    engine.setVisible("c1", false)
+    engine.setVisible("c1", true)
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("bounds concurrent fetches across cells", async () => {
+    // Given an engine capped at one in-flight fetch and a slow first query
+    engine.destroy()
+    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+      initialFetchJitterMs: 0,
+      maxConcurrentFetches: 1,
+    })
+    engine.attach()
+    let releaseFirst!: (value: QueryExecResult) => void
+    deps.executeSingle
+      .mockImplementationOnce(
+        () => new Promise<QueryExecResult>((res) => (releaseFirst = res)),
+      )
+      .mockImplementation((sql: string) => Promise.resolve(dqlResult(sql)))
+
+    // When two cells want to fetch at the same time
+    engine.sync([
+      drawCell("c1", "select 1", false),
+      drawCell("c2", "select 2", false),
+    ])
+    await flushAsync()
+
+    // Then only the first is in flight; the second waits its turn
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    releaseFirst(dqlResult("select 1"))
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("spreads a loop's first fetch by the configured jitter", async () => {
+    // Given an engine with 300ms of initial jitter
+    engine.destroy()
+    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+      initialFetchJitterMs: 300,
+    })
+    engine.attach()
+
+    // When a polling cell syncs
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then the first fetch waits for the jitter window instead of firing at t=0
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(300)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
   it("publishes loading state for the cell toolbar", async () => {

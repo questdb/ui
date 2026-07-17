@@ -17,6 +17,8 @@ const ChartRefreshContext = createContext<ChartRefreshEngine | null>(null)
 
 export const ChartRefreshProvider = ChartRefreshContext.Provider
 
+export const useChartRefresh = () => useContext(ChartRefreshContext)
+
 export const useChartRefreshEngine = (options: {
   bufferId: number
   cells: NotebookCell[]

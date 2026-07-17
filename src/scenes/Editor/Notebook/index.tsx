@@ -55,6 +55,7 @@ import {
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
+import { useChartCellVisibility } from "./chartRefresh/useChartCellVisibility"
 
 const GRID_COLS = NOTEBOOK_GRID_COLS
 const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
@@ -334,6 +335,7 @@ const ListLayout: React.FC = () => {
 
   return (
     <CellListContainer
+      id="notebook-scroll-container"
       onMouseDown={(e) => {
         const target = e.target as HTMLElement
         if (!target.closest("[data-notebook-cell]")) setFocusedCell(null)
@@ -538,6 +540,7 @@ const GridLayout: React.FC = () => {
   return (
     <GridScrollContainer
       ref={containerRef as React.RefObject<HTMLDivElement>}
+      id="notebook-scroll-container"
       $suppressTransitions={!gridReady}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement
@@ -718,6 +721,7 @@ const NotebookContent: React.FC = () => {
   useScrollRestoredCellIntoView(maximizedCellId)
   useScrollFocusedCellIntoViewOnOpen(focusedCellId, isHydrating)
   useNotebookSearchReveal()
+  useChartCellVisibility()
 
   if (cells.length === 0) {
     return (

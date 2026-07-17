@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { sleep } from "../utils/sleep"
 
 type AdaptivePollLoopOptions = {
   fetchFn: () => Promise<void>
@@ -10,15 +11,6 @@ type AdaptivePollLoopOptions = {
   skipInitialFetch?: boolean
   onIntervalChange?: (intervalMs: number) => void
 }
-
-const sleep = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    const timeoutId = setTimeout(resolve, ms)
-    signal.addEventListener("abort", () => {
-      clearTimeout(timeoutId)
-      reject(new DOMException("Aborted", "AbortError"))
-    })
-  })
 
 export const runAdaptivePollLoop = async ({
   fetchFn,
@@ -54,11 +46,8 @@ export const runAdaptivePollLoop = async ({
       )
       onIntervalChange?.(nextInterval)
     }
-    try {
-      await sleep(nextInterval, signal)
-    } catch {
-      break
-    }
+    const aborted = await sleep(nextInterval, signal)
+    if (aborted) break
   }
 }
 

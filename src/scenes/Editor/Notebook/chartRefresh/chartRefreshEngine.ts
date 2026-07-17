@@ -1,5 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { runAdaptivePollLoop } from "../../../../hooks/useAdaptivePoll"
+import { sleep } from "../../../../utils/sleep"
+import { createLimiter } from "../../../../utils/limiter"
 import type {
   AutoRefresh,
   CellResult,
@@ -35,6 +37,8 @@ const SQL_DEBOUNCE_MS = 300
 // Draw auto-refresh can poll every few seconds; throttle snapshot writes so a
 // live chart doesn't churn IndexedDB. A reload restores the last saved frame.
 const SNAPSHOT_THROTTLE_MS = 10000
+const MAX_CONCURRENT_FETCHES = 6
+const INITIAL_FETCH_JITTER_MS = 300
 
 export type ChartClassifyBlock =
   | { kind: "write"; queryType: string }
@@ -86,10 +90,17 @@ const errorExecResult = (query: string): QueryExecResult => ({
   error: "Query failed",
 })
 
+export type ChartRefreshEngineOptions = {
+  maxConcurrentFetches?: number
+  initialFetchJitterMs?: number
+}
+
 type Entry = {
   cellId: string
   sql: string
   autoRefresh: AutoRefresh
+  visible: boolean
+  lastFetchedAt: number
   state: ChartFetchState
   classifyCache: Map<string, "DQL" | "DDL_DML" | "ERROR">
   sqlDebounce: ReturnType<typeof setTimeout> | null
@@ -111,21 +122,49 @@ type Entry = {
 export class ChartRefreshEngine {
   private entries = new Map<string, Entry>()
   private listeners = new Map<string, Set<() => void>>()
+  private visibilityByCell = new Map<string, boolean>()
+  private documentHidden = false
+  private limitFetch: <T>(task: () => Promise<T>) => Promise<T>
+  private initialFetchJitterMs: number
 
   private refreshHandler = (payload?: { cellId?: string }) => {
     if (payload?.cellId) this.refresh(payload.cellId)
   }
 
+  private documentVisibilityHandler = () => {
+    const hidden = document.hidden
+    if (hidden === this.documentHidden) return
+    this.documentHidden = hidden
+    for (const entry of this.entries.values()) {
+      if (hidden) this.updatePoll(entry)
+      else if (entry.visible) this.resume(entry)
+    }
+  }
+
   constructor(
     private bufferId: number,
     private getDeps: () => ChartRefreshDeps,
-  ) {}
+    options: ChartRefreshEngineOptions = {},
+  ) {
+    this.limitFetch = createLimiter(
+      options.maxConcurrentFetches ?? MAX_CONCURRENT_FETCHES,
+    )
+    this.initialFetchJitterMs =
+      options.initialFetchJitterMs ?? INITIAL_FETCH_JITTER_MS
+  }
 
   attach() {
     eventBus.subscribe(
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
     )
+    if (typeof document !== "undefined") {
+      this.documentHidden = document.hidden
+      document.addEventListener(
+        "visibilitychange",
+        this.documentVisibilityHandler,
+      )
+    }
   }
 
   destroy() {
@@ -133,7 +172,14 @@ export class ChartRefreshEngine {
       EventType.NOTEBOOK_CELL_REFRESH_CHART,
       this.refreshHandler,
     )
+    if (typeof document !== "undefined") {
+      document.removeEventListener(
+        "visibilitychange",
+        this.documentVisibilityHandler,
+      )
+    }
     for (const cellId of [...this.entries.keys()]) this.removeEntry(cellId)
+    this.visibilityByCell.clear()
   }
 
   sync(cells: NotebookCell[]) {
@@ -152,7 +198,33 @@ export class ChartRefreshEngine {
 
   refresh(cellId: string) {
     const entry = this.entries.get(cellId)
-    if (entry) void this.fetchCycle(entry)
+    if (entry) void this.fetchOnce(entry)
+  }
+
+  // Called by the notebook's cell visibility observer. Hiding pauses the poll
+  // (in-flight fetches finish and land); revealing resumes it, fetching
+  // immediately when the data is older than the cell's interval.
+  setVisible(cellId: string, visible: boolean) {
+    this.visibilityByCell.set(cellId, visible)
+    const entry = this.entries.get(cellId)
+    if (!entry || entry.visible === visible) return
+    entry.visible = visible
+    if (visible) this.resume(entry)
+    else this.updatePoll(entry)
+  }
+
+  private resume(entry: Entry) {
+    if (this.shouldAutoRefresh(entry)) {
+      const interval =
+        autoRefreshIntervalMs(entry.autoRefresh) ?? REFRESH_MIN_MS
+      entry.skipNextPollFetch = Date.now() - entry.lastFetchedAt < interval
+      this.updatePoll(entry)
+      return
+    }
+    // Auto-refresh is off, and has not run yet
+    if (entry.state.settledKey === null && entry.state.queries.length > 0) {
+      void this.fetchOnce(entry)
+    }
   }
 
   getState(cellId: string): ChartFetchState | undefined {
@@ -190,6 +262,8 @@ export class ChartRefreshEngine {
         lastFetchHadError: false,
         classifyBlock: null,
       },
+      visible: this.visibilityByCell.get(cell.id) ?? true,
+      lastFetchedAt: 0,
       classifyCache: new Map(),
       sqlDebounce: null,
       pendingSql: null,
@@ -244,6 +318,7 @@ export class ChartRefreshEngine {
   private applySql(entry: Entry, sql: string) {
     entry.sql = sql
     entry.classifyCache = new Map()
+    entry.lastFetchedAt = 0
     const queries = getQueriesFromText(sql)
     this.setState(entry, { queries, queriesKey: queries.join("\u0001") })
     this.hydrate(entry)
@@ -300,17 +375,29 @@ export class ChartRefreshEngine {
           return
         }
       }
-      if (!this.pollEnabled(entry)) void this.fetchCycle(entry)
+      if (
+        !this.shouldAutoRefresh(entry) &&
+        entry.visible &&
+        !this.documentHidden
+      ) {
+        void this.fetchOnce(entry)
+      }
     })()
     this.updatePoll(entry)
   }
 
-  private pollEnabled(entry: Entry): boolean {
+  private shouldAutoRefresh(entry: Entry): boolean {
     return entry.autoRefresh !== false && entry.state.queries.length > 0
   }
 
+  private shouldPoll(entry: Entry): boolean {
+    return (
+      this.shouldAutoRefresh(entry) && entry.visible && !this.documentHidden
+    )
+  }
+
   private updatePoll(entry: Entry) {
-    const enabled = this.pollEnabled(entry)
+    const enabled = this.shouldPoll(entry)
     const key = enabled
       ? `${entry.state.queriesKey}\u0001${String(entry.autoRefresh)}`
       : null
@@ -324,14 +411,18 @@ export class ChartRefreshEngine {
     void this.runPollLoop(entry, abort)
   }
 
-  // Pacing lives in runAdaptivePollLoop, shared with useAdaptivePoll; a fixed
-  // interval pins min = max. One loop per entry.
+  // The jitter offsets each loop's start so charts starting together don't tick together.
   private async runPollLoop(entry: Entry, abort: AbortController) {
+    if (this.initialFetchJitterMs > 0) {
+      const jitter = Math.random() * this.initialFetchJitterMs
+      const aborted = await sleep(jitter, abort.signal)
+      if (aborted) return
+    }
     const fixed = autoRefreshIntervalMs(entry.autoRefresh)
     const skipInitialFetch = entry.skipNextPollFetch
     entry.skipNextPollFetch = false
     await runAdaptivePollLoop({
-      fetchFn: () => this.fetchCycle(entry),
+      fetchFn: () => this.fetchOnce(entry),
       signal: abort.signal,
       minIntervalMs: fixed ?? REFRESH_MIN_MS,
       maxIntervalMs: fixed ?? REFRESH_MAX_MS,
@@ -339,8 +430,7 @@ export class ChartRefreshEngine {
     })
   }
 
-  private async fetchCycle(entry: Entry) {
-    const deps = this.getDeps()
+  private async fetchOnce(entry: Entry) {
     // Supersede any in-flight fetch up front, so a slow earlier response can't
     // land after the query changed — including when it's cleared to empty.
     entry.inFlight?.abort()
@@ -362,6 +452,15 @@ export class ChartRefreshEngine {
     const ac = new AbortController()
     entry.inFlight = ac
     this.setState(entry, { fetching: true })
+    await this.limitFetch(async () => {
+      if (ac.signal.aborted) return
+      await this.runFetch(entry, ac)
+    })
+  }
+
+  private async runFetch(entry: Entry, ac: AbortController) {
+    const deps = this.getDeps()
+    const { queries, queriesKey } = entry.state
     try {
       // Runtime backstop: a user typing DDL into an already-draw cell would
       // otherwise reach executeSingle on the next poll tick.
@@ -438,6 +537,7 @@ export class ChartRefreshEngine {
       // must not flip `fetching` off while its replacement is in flight.
       if (entry.inFlight === ac) {
         entry.inFlight = null
+        entry.lastFetchedAt = Date.now()
         this.setState(entry, { fetching: false })
       }
     }
