@@ -54,7 +54,6 @@ const Name = styled.span`
   min-width: 0;
   font-size: 1.6rem;
   font-weight: 600;
-  letter-spacing: -0.32px;
   color: ${color("foreground")};
   white-space: nowrap;
   overflow: hidden;

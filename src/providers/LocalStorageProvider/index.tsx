@@ -29,6 +29,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -40,11 +41,19 @@ import {
   SettingsType,
   LeftPanelState,
   LeftPanelType,
+  NotebookOnboarding,
 } from "./types"
 import { reconcileSettings } from "../../utils/ai/settings"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
   providers: {},
+}
+
+export const DEFAULT_NOTEBOOK_ONBOARDING: NotebookOnboarding = {
+  mcpEverConnected: false,
+  showNotebookPromo: true,
+  showMcpPromo: true,
+  collapseMcpPromo: false,
 }
 
 const defaultConfig: LocalConfig = {
@@ -63,6 +72,7 @@ const defaultConfig: LocalConfig = {
     width: 350,
   },
   aiChatPanelWidth: 500,
+  notebookOnboarding: DEFAULT_NOTEBOOK_ONBOARDING,
 }
 
 type ContextProps = {
@@ -81,6 +91,8 @@ type ContextProps = {
   aiAssistantSettings: AiAssistantSettings
   aiChatPanelWidth: number
   updateAiChatPanelWidth: (width: number) => void
+  notebookOnboarding: NotebookOnboarding
+  updateNotebookOnboarding: (patch: Partial<NotebookOnboarding>) => void
 }
 
 const getAiAssistantSettings = (): AiAssistantSettings => {
@@ -122,6 +134,8 @@ const defaultValues: ContextProps = {
   aiAssistantSettings: defaultConfig.aiAssistantSettings,
   aiChatPanelWidth: defaultConfig.aiChatPanelWidth,
   updateAiChatPanelWidth: (_width: number) => undefined,
+  notebookOnboarding: defaultConfig.notebookOnboarding,
+  updateNotebookOnboarding: (_patch: Partial<NotebookOnboarding>) => undefined,
 }
 
 export const LocalStorageContext = createContext<ContextProps>(defaultValues)
@@ -235,6 +249,35 @@ export const LocalStorageProvider = ({
     setAiChatPanelWidth(width)
   }, [])
 
+  const getNotebookOnboarding = (): NotebookOnboarding => {
+    const stored = getValue(StoreKey.NOTEBOOK_ONBOARDING)
+    if (stored) {
+      try {
+        return {
+          ...defaultConfig.notebookOnboarding,
+          ...(JSON.parse(stored) as Partial<NotebookOnboarding>),
+        }
+      } catch (e) {
+        return defaultConfig.notebookOnboarding
+      }
+    }
+    return defaultConfig.notebookOnboarding
+  }
+
+  const [notebookOnboarding, setNotebookOnboarding] =
+    useState<NotebookOnboarding>(getNotebookOnboarding)
+  const notebookOnboardingRef = useRef(notebookOnboarding)
+
+  const updateNotebookOnboarding = useCallback(
+    (patch: Partial<NotebookOnboarding>) => {
+      const next = { ...notebookOnboardingRef.current, ...patch }
+      notebookOnboardingRef.current = next
+      setValue(StoreKey.NOTEBOOK_ONBOARDING, JSON.stringify(next))
+      setNotebookOnboarding(next)
+    },
+    [],
+  )
+
   const updateLeftPanelState = useCallback((state: LeftPanelState) => {
     setValue(StoreKey.LEFT_PANEL_STATE, JSON.stringify(state))
     setLeftPanelState(state)
@@ -310,6 +353,8 @@ export const LocalStorageProvider = ({
       aiAssistantSettings,
       aiChatPanelWidth,
       updateAiChatPanelWidth,
+      notebookOnboarding,
+      updateNotebookOnboarding,
     }),
     [
       editorCol,
@@ -327,6 +372,8 @@ export const LocalStorageProvider = ({
       aiAssistantSettings,
       aiChatPanelWidth,
       updateAiChatPanelWidth,
+      notebookOnboarding,
+      updateNotebookOnboarding,
     ],
   )
 

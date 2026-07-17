@@ -9,7 +9,6 @@ import { selectors } from "../../store"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { extractErrorByQueryKey } from "../../scenes/Editor/utils"
-import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   executeAIFlow,
   createFixFlowConfig,

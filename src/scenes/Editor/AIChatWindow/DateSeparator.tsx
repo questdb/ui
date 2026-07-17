@@ -26,7 +26,6 @@ const LabelContainer = styled.div`
 
 const Label = styled.span`
   font-size: 1.3rem;
-  letter-spacing: 0.016rem;
   white-space: nowrap;
 `
 

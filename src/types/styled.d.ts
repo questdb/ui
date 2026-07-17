@@ -68,6 +68,7 @@ export type ColorShape = {
   pinkPrimary: string
   pinkDarker: string
   pinkLighter: string
+  pinkBadge: string
   transparent: string
   white: string
   inherit: string
