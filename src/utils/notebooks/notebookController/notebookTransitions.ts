@@ -22,6 +22,7 @@ import {
   removeCell,
   swapCellDown,
   swapCellUp,
+  topHeightForSql,
   upsertCellLayout,
   type CellGridPosition,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
@@ -101,11 +102,15 @@ export const updateCellTransition = (
   updates: Partial<NotebookCell>,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  let patch = updates
   if (updates.value !== undefined && cell.type !== "markdown") {
     requireCellWithinLineLimit(updates.value)
+    if (!cell.topResized && updates.topHeight === undefined) {
+      patch = { ...updates, topHeight: topHeightForSql(updates.value) }
+    }
   }
   return {
-    parts: { ...parts, cells: patchCellIn(parts.cells, cellId, updates) },
+    parts: { ...parts, cells: patchCellIn(parts.cells, cellId, patch) },
     result: undefined,
     touchedCellId: cellId,
   }

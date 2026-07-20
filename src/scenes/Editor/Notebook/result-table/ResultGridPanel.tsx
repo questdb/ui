@@ -7,9 +7,8 @@ import {
 import type { DqlQueryResult } from "../../../../store/notebook"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
-import { normalizeSql } from "../../../../utils/formatSql"
-import { sqlHash } from "../notebookUtils"
 import {
+  columnLayoutQueryKey,
   loadNotebookColumnLayout,
   saveNotebookColumnLayout,
   removeNotebookColumnLayout,
@@ -46,13 +45,7 @@ export const ResultGridPanel: React.FC<Props> = ({
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data],
   )
-  const queryKey = useMemo(() => {
-    try {
-      return "q" + sqlHash(normalizeSql(data.query, false))
-    } catch {
-      return "q" + sqlHash(data.query.trim())
-    }
-  }, [data.query])
+  const queryKey = useMemo(() => columnLayoutQueryKey(data.query), [data.query])
   const initialLayout = useMemo(
     () => loadNotebookColumnLayout(bufferId, cellId, queryKey),
     [bufferId, cellId, queryKey],

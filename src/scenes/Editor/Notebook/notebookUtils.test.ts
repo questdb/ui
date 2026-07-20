@@ -38,6 +38,7 @@ import {
   nextCopyLabel,
   nextGridSeedPosition,
   partitionCellHeights,
+  topHeightForSql,
   patchCellRunResult,
   removeCell,
   resolveRunCompletion,
@@ -985,21 +986,25 @@ describe("buildAppliedCells", () => {
     ).toThrow(/without an existing cell id/)
   })
 
-  it("rejects a request that would exceed the 50-cell limit", () => {
+  it("rejects a request that would exceed the cell limit", () => {
     const prev: NotebookCell[] = []
     expect(() =>
       buildAppliedCells(prev, {
-        cells: Array.from({ length: 51 }, () => ({ value: "SELECT 1" })),
+        cells: Array.from({ length: MAX_NOTEBOOK_CELLS + 1 }, () => ({
+          value: "SELECT 1",
+        })),
       }),
-    ).toThrow(/at most 50/)
+    ).toThrow(new RegExp(`at most ${MAX_NOTEBOOK_CELLS}`))
   })
 
-  it("accepts a request of exactly 50 cells", () => {
+  it("accepts a request of exactly the cell limit", () => {
     const prev: NotebookCell[] = []
     const { nextCells } = buildAppliedCells(prev, {
-      cells: Array.from({ length: 50 }, () => ({ value: "SELECT 1" })),
+      cells: Array.from({ length: MAX_NOTEBOOK_CELLS }, () => ({
+        value: "SELECT 1",
+      })),
     })
-    expect(nextCells).toHaveLength(50)
+    expect(nextCells).toHaveLength(MAX_NOTEBOOK_CELLS)
   })
 
   it("rejects a cell whose value exceeds the line limit", () => {
@@ -2808,9 +2813,10 @@ describe("buildAppliedNotebookState", () => {
       cells: [{ id: "a", value: "SELECT 2", grid: { x: 0, y: 0, w: 6, h } }],
     })
     // Then the result clears but no phantom resize is pinned — after the re-run
-    // the cell returns to the same split, not a ballooned editor
+    // the cell returns to the same split, not a ballooned editor. The height
+    // is restamped from the new SQL (auto-height, not a resize).
     expect(next.cells[0].result).toBeNull()
-    expect(next.cells[0].topHeight).toBeUndefined()
+    expect(next.cells[0].topHeight).toBe(topHeightForSql("SELECT 2"))
     expect(next.cells[0].topResized).toBeUndefined()
     expect(next.cells[0].bottomResized).toBeUndefined()
   })
@@ -2904,5 +2910,75 @@ describe("buildAppliedNotebookState", () => {
         variables: [{ name: "y", value: "2" }],
       }).settings.variables,
     ).toEqual([{ name: "y", value: "2" }])
+  })
+})
+
+describe("topHeight stamping", () => {
+  const tenLines = Array.from({ length: 10 }, (_, i) => `SELECT ${i}`).join(
+    "\n",
+  )
+
+  it("floors topHeightForSql at the default editor height for short SQL", () => {
+    expect(topHeightForSql("SELECT 1")).toBe(72)
+  })
+
+  it("computes lines × lineHeight + padding beyond the floor", () => {
+    expect(topHeightForSql(tenLines)).toBe(10 * 24 + 8)
+  })
+
+  it("insertCell stamps topHeight so never-mounted cells keep exact heights", () => {
+    // Given an insert of a ten-line SQL cell
+    const out = insertCell([], undefined, undefined, { value: tenLines })
+
+    // Then the created cell carries the stamped editor height
+    expect(out[0].topHeight).toBe(topHeightForSql(tenLines))
+  })
+
+  it("insertCell does not stamp topHeight on markdown cells", () => {
+    // Given an insert of a markdown cell (its height is measured, not stamped)
+    const out = insertCell([], undefined, undefined, {
+      value: "# note",
+      type: "markdown",
+    })
+
+    // Then no height is stamped
+    expect(out[0].topHeight).toBeUndefined()
+  })
+
+  it("buildAppliedCells stamps new SQL cells and restamps value changes", () => {
+    // Given a fresh agent-built cell
+    const { nextCells: created } = buildAppliedCells([], {
+      cells: [{ value: tenLines }],
+    })
+    expect(created[0].topHeight).toBe(topHeightForSql(tenLines))
+
+    // When the same cell's SQL shrinks to one line
+    const { nextCells: updated } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, value: "SELECT 1" }],
+    })
+
+    // Then the height follows the new SQL
+    expect(updated[0].topHeight).toBe(topHeightForSql("SELECT 1"))
+  })
+
+  it("buildAppliedCells keeps a user-resized topHeight (hard cap wins)", () => {
+    // Given a cell the user resized to a fixed editor height
+    const prev: NotebookCell[] = [
+      {
+        id: "a",
+        position: 0,
+        value: "SELECT 1",
+        topHeight: 300,
+        topResized: true,
+      },
+    ]
+
+    // When an apply changes its SQL
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: tenLines }],
+    })
+
+    // Then the user's height stays pinned
+    expect(nextCells[0].topHeight).toBe(300)
   })
 })

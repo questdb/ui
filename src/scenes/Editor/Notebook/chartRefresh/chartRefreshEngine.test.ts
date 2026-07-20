@@ -363,6 +363,32 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
+  it("refetches on reveal when the SQL changed while the cell was hidden", async () => {
+    // Given a visible auto-refresh-off cell whose query settled
+    engine.sync([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When its SQL is edited (agent path) while the cell is hidden
+    engine.setVisible("c1", false)
+    engine.sync([drawCell("c1", "select 2", false)])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // And the cell is revealed again
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the new SQL fetches — the old settled key must not suppress the
+    // catch-up (previously this left the chart on a spinner forever)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    expect(deps.executeSingle).toHaveBeenLastCalledWith(
+      "select 2",
+      expect.any(AbortSignal),
+      10_000,
+    )
+  })
+
   it("bounds concurrent fetches across cells", async () => {
     // Given an engine capped at one in-flight fetch and a slow first query
     engine.destroy()

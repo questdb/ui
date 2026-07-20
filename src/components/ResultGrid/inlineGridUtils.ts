@@ -79,6 +79,12 @@ const formatArrayValue = (
 // constant ceiling keeps the sampling loop bounded for very long values.
 const MAX_SAMPLED_WIDTH_PX = 4000
 
+export const WIDTH_SAMPLE_ROWS = 1000
+
+// tanstack column ids — also the key contract of persisted column layouts.
+export const COLUMN_ID_PREFIX = "col_"
+export const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
+
 export const sampleColumnWidths = (
   columns: ColumnDefinition[],
   dataset: ResultGridRow[],

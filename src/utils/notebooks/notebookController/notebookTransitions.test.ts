@@ -10,6 +10,7 @@ import {
 } from "./notebookTransitions"
 import type { ViewParts } from "../notebookDexieView"
 import { NotebookToolError } from "../notebookToolError"
+import { topHeightForSql } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   MAX_CELL_LINES,
   MAX_NOTEBOOK_CELLS,
@@ -219,6 +220,41 @@ describe("transition validation guards", () => {
         }),
       ),
     ).toBe("unknown_cell")
+  })
+
+  it("updateCell stamps topHeight from a changed SQL value", () => {
+    // Given a three-line SQL edit to a plain cell
+    const value = "SELECT 1\nFROM trades\nLIMIT 10"
+    const out = updateCellTransition(partsOf([cell("a")]), BUFFER_ID, "a", {
+      value,
+    })
+
+    // Then the patched cell carries the stamped editor height
+    expect(out.parts.cells[0].topHeight).toBe(topHeightForSql(value))
+  })
+
+  it("updateCell leaves a user-resized topHeight pinned on value edits", () => {
+    // Given a cell the user resized to a hard cap
+    const resized = cell("a", "SELECT 1", { topHeight: 300, topResized: true })
+
+    // When its SQL changes
+    const out = updateCellTransition(partsOf([resized]), BUFFER_ID, "a", {
+      value: "SELECT 2",
+    })
+
+    // Then the user's height stays
+    expect(out.parts.cells[0].topHeight).toBe(300)
+  })
+
+  it("updateCell does not stamp topHeight on markdown value edits", () => {
+    // Given a markdown cell edit (markdown heights are measured, not stamped)
+    const md = cell("a", "# one", { type: "markdown" })
+    const out = updateCellTransition(partsOf([md]), BUFFER_ID, "a", {
+      value: "# one\ntwo\nthree",
+    })
+
+    // Then no height is stamped
+    expect(out.parts.cells[0].topHeight).toBeUndefined()
   })
 
   it("deleteCell throws unknown_cell for a missing id", () => {

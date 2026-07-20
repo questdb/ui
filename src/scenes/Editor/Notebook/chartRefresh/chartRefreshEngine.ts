@@ -221,8 +221,13 @@ export class ChartRefreshEngine {
       this.updatePoll(entry)
       return
     }
-    // Auto-refresh is off, and has not run yet
-    if (entry.state.settledKey === null && entry.state.queries.length > 0) {
+    // Auto-refresh is off and the CURRENT queries have never settled — the
+    // deferred initial fetch, or the catch-up for SQL that changed while the
+    // cell was hidden (settledKey then still holds the old queries' key).
+    if (
+      entry.state.settledKey !== entry.state.queriesKey &&
+      entry.state.queries.length > 0
+    ) {
       void this.fetchOnce(entry)
     }
   }

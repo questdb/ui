@@ -56,6 +56,8 @@ import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
 import { useChartCellVisibility } from "./chartRefresh/useChartCellVisibility"
+import { useCellVirtualizationObserver } from "./cellVirtualization/useCellVirtualizationObserver"
+import { useCellVirtualizationEngine } from "./cellVirtualization/CellVirtualizationContext"
 
 const GRID_COLS = NOTEBOOK_GRID_COLS
 const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
@@ -201,6 +203,7 @@ const ADDED_CELL_SCROLL_BOTTOM_GAP_PX = 20
 
 const useScrollUserAddedCellIntoView = () => {
   const bufferId = useNotebookBufferId()
+  const virtualizationEngine = useCellVirtualizationEngine()
   useEffect(() => {
     let timer = 0
     const unsubscribe = onUserAction("user-action", (evt) => {
@@ -211,6 +214,7 @@ const useScrollUserAddedCellIntoView = () => {
             ? evt.newCellId
             : null
       if (!addedId) return
+      virtualizationEngine?.ensureFullContent(addedId)
       window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         const node = document.querySelector<HTMLElement>(
@@ -226,17 +230,19 @@ const useScrollUserAddedCellIntoView = () => {
       window.clearTimeout(timer)
       unsubscribe()
     }
-  }, [bufferId])
+  }, [bufferId, virtualizationEngine])
 }
 
 // Restoring a maximized cell re-renders the full list at scrollTop 0; scroll the
 // just-restored cell back into view so the user lands where they left off.
 const useScrollRestoredCellIntoView = (maximizedCellId: string | null) => {
+  const virtualizationEngine = useCellVirtualizationEngine()
   const prev = React.useRef<string | null>(maximizedCellId)
   useEffect(() => {
     const restoredId = prev.current
     prev.current = maximizedCellId
     if (!restoredId || maximizedCellId) return
+    virtualizationEngine?.ensureFullContent(restoredId)
     requestAnimationFrame(() => {
       document
         .querySelector<HTMLElement>(
@@ -244,7 +250,7 @@ const useScrollRestoredCellIntoView = (maximizedCellId: string | null) => {
         )
         ?.scrollIntoView({ block: "nearest" })
     })
-  }, [maximizedCellId])
+  }, [maximizedCellId, virtualizationEngine])
 }
 
 const readClientY = (event: Event): number | null => {
@@ -722,6 +728,7 @@ const NotebookContent: React.FC = () => {
   useScrollFocusedCellIntoViewOnOpen(focusedCellId, isHydrating)
   useNotebookSearchReveal()
   useChartCellVisibility()
+  useCellVirtualizationObserver()
 
   if (cells.length === 0) {
     return (

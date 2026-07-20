@@ -59,6 +59,12 @@ import {
   ChartRefreshProvider,
   useChartRefreshEngine,
 } from "./chartRefresh/ChartRefreshContext"
+import {
+  CellVirtualizationProvider,
+  createVirtualizationEngine,
+} from "./cellVirtualization/CellVirtualizationContext"
+import { clearChartZoom } from "./cellVirtualization/chartZoomStore"
+import { resetChartEntryAnimation } from "./CellChart/chartEntryAnimation"
 
 // State and actions live in SEPARATE contexts: action-only consumers never
 // re-render when state changes (the actions value is ref-stable for life).
@@ -351,6 +357,7 @@ export const NotebookProvider: React.FC<{
           cancelCell(cellId)
           void deleteCellSnapshot(bufferId, cellId)
           removeNotebookCellLayouts(bufferId, cellId)
+          clearChartZoom(cellId)
         }
       }
       return out.result
@@ -434,6 +441,16 @@ export const NotebookProvider: React.FC<{
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
     },
   })
+
+  const cellVirtualizationEngine = createVirtualizationEngine({
+    bufferId,
+    cells: store.cells,
+    focusedCellId,
+    maximizedCellId,
+    runningCellIds: execution.runningCellIds,
+  })
+
+  useEffect(() => () => resetChartEntryAnimation(bufferId), [bufferId])
 
   const runCellNow = useCallback(
     async (
@@ -650,7 +667,9 @@ export const NotebookProvider: React.FC<{
       <NotebookActionsContext.Provider value={actionsValue}>
         <NotebookStateContext.Provider value={stateValue}>
           <ChartRefreshProvider value={chartRefreshEngine}>
-            {children}
+            <CellVirtualizationProvider value={cellVirtualizationEngine}>
+              {children}
+            </CellVirtualizationProvider>
           </ChartRefreshProvider>
         </NotebookStateContext.Provider>
       </NotebookActionsContext.Provider>

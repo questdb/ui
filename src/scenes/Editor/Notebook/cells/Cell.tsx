@@ -41,6 +41,8 @@ import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import {
+  CELL_EDITOR_LINE_HEIGHT,
+  CELL_EDITOR_PADDING,
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
   isDoubleView,
@@ -50,7 +52,12 @@ import {
   resolveCellView,
   resolveRunAction,
   scaleCellHeights,
+  topHeightForSql,
 } from "../notebookUtils"
+import { useCellContentMode } from "../cellVirtualization/CellVirtualizationContext"
+import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
+import { GridShimmer } from "../cellVirtualization/GridShimmer"
+import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 
 // Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
@@ -170,6 +177,7 @@ const CellInner: React.FC<Props> = ({
   const { loading: chartLoading, refreshing: chartRefreshing } =
     useChartLoading(cell.id)
   const chartZoomed = useChartZoomed(cell.id)
+  const contentMode = useCellContentMode(cell.id)
 
   const contentHeightGetterRef = useRef<() => number | null>(() => null)
 
@@ -179,8 +187,8 @@ const CellInner: React.FC<Props> = ({
     const contentHeight = contentHeightGetterRef.current()
     return contentHeight != null
       ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
-      : MIN_EDITOR_HEIGHT
-  }, [])
+      : topHeightForSql(cell.value)
+  }, [cell.value])
 
   const signalAgentVisibleHeightChange = useCallback(
     (patch: Partial<NotebookCell>) => {
@@ -335,6 +343,7 @@ const CellInner: React.FC<Props> = ({
 
   const { editorRef, monacoRef, handleEditorMount } = useMonacoCellEditor({
     cellId: cell.id,
+    editorMounted: !isViewMaximized && contentMode === "full",
     editorViewState: cell.editorViewState,
     quest,
     onFocus: useCallback(
@@ -840,44 +849,51 @@ const CellInner: React.FC<Props> = ({
             isMaximized ? { flex: spotlightEditorRatio } : { height: topHeight }
           }
         >
-          <Editor
-            defaultValue={cell.value}
-            language={QuestDBLanguageName}
-            theme="dracula"
-            // Default is the literal text "loading..."; the container already
-            // shows the editor background, so render nothing until Monaco mounts
-            // instead of a flashing placeholder.
-            loading={null}
-            onMount={handleRevealMount}
-            onChange={handleEditorChange}
-            options={{
-              useShadowDOM: false,
-              automaticLayout: true,
-              occurrencesHighlight: "off",
-              overviewRulerLanes: 0,
-              minimap: { enabled: false },
-              stickyScroll: {
-                enabled: false,
-              },
-              scrollbar: {
-                useShadows: false,
-                handleMouseWheel: isFocused,
-                alwaysConsumeMouseWheel: false,
-              },
-              folding: false,
-              renderLineHighlight: "gutter",
-              glyphMargin: toolbarTier !== "compact",
-              lineDecorationsWidth: toolbarTier === "compact" ? 16 : 24,
-              lineNumbers: toolbarTier === "compact" ? "off" : "on",
-              lineNumbersMinChars: 3,
-              scrollBeyondLastLine: false,
-              wordWrap: "off",
-              padding: { top: 4, bottom: 4 },
-              fontSize: 14,
-              lineHeight: 24,
-              fixedOverflowWidgets: true,
-            }}
-          />
+          {contentMode === "full" ? (
+            <Editor
+              defaultValue={cell.value}
+              language={QuestDBLanguageName}
+              theme="dracula"
+              // Default is the literal text "loading..."; the container already
+              // shows the editor background, so render nothing until Monaco mounts
+              // instead of a flashing placeholder.
+              loading={null}
+              onMount={handleRevealMount}
+              onChange={handleEditorChange}
+              options={{
+                useShadowDOM: false,
+                automaticLayout: true,
+                occurrencesHighlight: "off",
+                overviewRulerLanes: 0,
+                minimap: { enabled: false },
+                stickyScroll: {
+                  enabled: false,
+                },
+                scrollbar: {
+                  useShadows: false,
+                  handleMouseWheel: isFocused,
+                  alwaysConsumeMouseWheel: false,
+                },
+                folding: false,
+                renderLineHighlight: "gutter",
+                glyphMargin: toolbarTier !== "compact",
+                lineDecorationsWidth: toolbarTier === "compact" ? 16 : 24,
+                lineNumbers: toolbarTier === "compact" ? "off" : "on",
+                lineNumbersMinChars: 3,
+                scrollBeyondLastLine: false,
+                wordWrap: "off",
+                padding: CELL_EDITOR_PADDING,
+                fontSize: 14,
+                lineHeight: CELL_EDITOR_LINE_HEIGHT,
+                fixedOverflowWidgets: true,
+              }}
+            />
+          ) : (
+            <EditorShimmer
+              value={cell.value}
+              compact={toolbarTier === "compact"}
+            />
+          )}
         </EditorContainer>
       )}
       {/* Inner-top resize handle (between editor and bottom slot). Only
@@ -910,25 +926,37 @@ const CellInner: React.FC<Props> = ({
           }
         >
           {isDrawMode ? (
-            <DrawCanvas
-              cell={cell}
-              isFocused={isFocused}
-              onConfigChange={handleChartConfigChange}
-            />
+            contentMode === "full" ? (
+              <DrawCanvas
+                cell={cell}
+                isFocused={isFocused}
+                onConfigChange={handleChartConfigChange}
+              />
+            ) : (
+              <ChartPlaceholder />
+            )
           ) : cell.result ? (
-            <InlineResultTable
-              result={cell.result}
-              isFocused={isFocused}
-              onTabChange={(index) => setActiveResultIndex(cell.id, index)}
-              onCancelQuery={(index) => {
-                cancelQuery(cell.id, index)
-              }}
-              bufferId={bufferIdForEvents}
-              cellId={cell.id}
-              isRunning={isRunning}
-              onReRun={(index) => void reRunResultAt(cell.id, index)}
-              onYieldFocus={() => editorRef.current?.focus()}
-            />
+            contentMode === "full" ? (
+              <InlineResultTable
+                result={cell.result}
+                isFocused={isFocused}
+                onTabChange={(index) => setActiveResultIndex(cell.id, index)}
+                onCancelQuery={(index) => {
+                  cancelQuery(cell.id, index)
+                }}
+                bufferId={bufferIdForEvents}
+                cellId={cell.id}
+                isRunning={isRunning}
+                onReRun={(index) => void reRunResultAt(cell.id, index)}
+                onYieldFocus={() => editorRef.current?.focus()}
+              />
+            ) : (
+              <GridShimmer
+                result={cell.result}
+                bufferId={bufferIdForEvents}
+                cellId={cell.id}
+              />
+            )
           ) : expectingResult ? (
             <HydrationLoader>
               <CircleNotchSpinner size={24} />

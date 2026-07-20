@@ -531,8 +531,12 @@ export const insertCell = (
   if (override?.id) patch.id = override.id
   if (override?.value !== undefined) patch.value = override.value
   if (override?.type) patch.type = override.type
-  const newCell: NotebookCell =
+  const created: NotebookCell =
     Object.keys(patch).length > 0 ? { ...base, ...patch } : base
+  const newCell: NotebookCell =
+    created.type === "markdown" || created.topHeight !== undefined
+      ? created
+      : { ...created, topHeight: topHeightForSql(created.value) }
   const next = [...cells]
   next.splice(insertIndex, 0, newCell)
   return reindex(next)
@@ -945,6 +949,9 @@ export const buildAppliedCells = (
         delete next.lastRunStatus
       } else {
         delete next.type
+        if (valueChanged && !existing.topResized) {
+          next.topHeight = topHeightForSql(value)
+        }
       }
       if (resolvedName !== undefined) next.name = resolvedName
       else delete next.name
@@ -962,6 +969,7 @@ export const buildAppliedCells = (
       created.type = "markdown"
       return created
     }
+    created.topHeight = topHeightForSql(value)
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
@@ -1024,6 +1032,17 @@ export const CELL_CHROME_PX = 56
 // Matches MIN_EDITOR_HEIGHT used by Monaco; kept here so layout math doesn't
 // need to import Cell.tsx constants.
 export const DEFAULT_TOP_HEIGHT = 72
+
+export const CELL_EDITOR_LINE_HEIGHT = 24
+export const CELL_EDITOR_PADDING = { top: 4, bottom: 4 }
+
+export const topHeightForSql = (value: string): number =>
+  Math.max(
+    DEFAULT_TOP_HEIGHT,
+    value.split("\n").length * CELL_EDITOR_LINE_HEIGHT +
+      CELL_EDITOR_PADDING.top +
+      CELL_EDITOR_PADDING.bottom,
+  )
 
 // Markdown cells carry less chrome than SQL cells (a 40px drag header plus
 // 2px of wrapper borders) and keep their heights on the grid-row lattice

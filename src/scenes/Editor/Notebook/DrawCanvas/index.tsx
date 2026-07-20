@@ -15,6 +15,10 @@ import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { useChartFetchState } from "../chartRefresh/ChartRefreshContext"
 import { pendingChartFetchState } from "../chartRefresh/chartRefreshEngine"
+import {
+  getChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 
 const Wrapper = styled.div`
   display: flex;
@@ -52,8 +56,12 @@ export const DrawCanvas: React.FC<Props> = ({
   onConfigChange,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [zoomStart, setZoomStart] = useState(0)
-  const [zoomEnd, setZoomEnd] = useState(100)
+  const [zoomStart, setZoomStart] = useState(
+    () => getChartZoom(cell.id)?.start ?? 0,
+  )
+  const [zoomEnd, setZoomEnd] = useState(
+    () => getChartZoom(cell.id)?.end ?? 100,
+  )
 
   const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
@@ -74,16 +82,21 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 
-  const handleZoomChange = useCallback((start: number, end: number) => {
-    setZoomStart(start)
-    setZoomEnd(end)
-  }, [])
+  const handleZoomChange = useCallback(
+    (start: number, end: number) => {
+      setZoomStart(start)
+      setZoomEnd(end)
+      setChartZoom(cell.id, start, end)
+    },
+    [cell.id],
+  )
 
   const handleResetZoom = useCallback(() => {
     chartRendererRef.current?.resetZoom()
     setZoomStart(0)
     setZoomEnd(100)
-  }, [])
+    setChartZoom(cell.id, 0, 100)
+  }, [cell.id])
 
   const resolution = useMemo(
     () => resolveDraw(queries, results, cell.chartConfig),
@@ -172,6 +185,7 @@ export const DrawCanvas: React.FC<Props> = ({
             option={option}
             onZoomChange={handleZoomChange}
             isFocused={isFocused}
+            zoomWindow={{ start: zoomStart, end: zoomEnd }}
           />
         </Canvas>
       )}

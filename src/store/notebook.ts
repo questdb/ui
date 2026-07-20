@@ -3,7 +3,8 @@ import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 
-export const MAX_NOTEBOOK_CELLS = 50
+// Virtualization bounds render cost; the cap guards notebook data size.
+export const MAX_NOTEBOOK_CELLS = 500
 
 export const MAX_CELL_LINES = 99_999
 

@@ -16,6 +16,7 @@ import {
   SUPERSEDED_RUN_NOTE,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
+import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
 import { deleteCellSnapshot } from "../../../store/notebookResults"
 import { NotebookToolError } from "../notebookToolError"
 import { enqueueBufferTask } from "../notebookBufferQueue"
@@ -251,6 +252,7 @@ export const createDexieNotebookController = (
           for (const cellId of out.cleanup.cellIds) {
             void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
             removeNotebookCellLayouts(bufferId, cellId)
+            clearChartZoom(cellId)
           }
         }
         return out

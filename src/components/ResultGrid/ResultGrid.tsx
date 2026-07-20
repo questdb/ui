@@ -23,10 +23,13 @@ import { unescapeHtml } from "../../utils/escapeHtml"
 import type { CellValue, ResultGridDataSource, ResultGridRow } from "./types"
 import {
   clampColumnWidths,
+  columnId,
+  COLUMN_ID_PREFIX,
   sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
   formatColumnType,
+  WIDTH_SAMPLE_ROWS,
 } from "./inlineGridUtils"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
 import {
@@ -66,10 +69,7 @@ declare module "@tanstack/react-table" {
   }
 }
 
-const WIDTH_SAMPLE_ROWS = 1000
 const FREEZE_HANDLE_EDGE_INSET = 4
-const COLUMN_ID_PREFIX = "col_"
-const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
 type GridCellProps = {
   rowIndex: number
