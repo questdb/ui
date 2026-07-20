@@ -30,10 +30,12 @@ export const ShimmerSweep = styled.div`
   left: 0;
   width: 50%;
   pointer-events: none;
-  /* Compositor-promote the sweep so it animates off the main thread.
-     content-visibility on the host keeps the layer count to the few
-     surfaces actually rendered. */
-  will-change: transform;
+  /* Compositor-promote the sweep so it animates off the main thread — but
+     only where content-visibility can skip offscreen surfaces; without that
+     (Safari <18, Firefox <125) every placeholder would hold a GPU layer. */
+  @supports (content-visibility: auto) {
+    will-change: transform;
+  }
   /* the 22 suffix is ~13% alpha on the theme hex */
   background: linear-gradient(
     90deg,

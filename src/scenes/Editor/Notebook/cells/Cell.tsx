@@ -8,7 +8,6 @@ import {
   normalizeQueryText,
   stripSQLComments,
 } from "../../Monaco/utils"
-import { CircleNotchSpinner } from "../../Monaco/icons"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { CellDragHeader } from "./CellDragHeader"
@@ -54,7 +53,11 @@ import {
   scaleCellHeights,
   topHeightForSql,
 } from "../notebookUtils"
-import { useCellContentMode } from "../cellVirtualization/CellVirtualizationContext"
+import {
+  useCellContentMode,
+  useCellVirtualizationEngine,
+} from "../cellVirtualization/CellVirtualizationContext"
+import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
@@ -111,13 +114,15 @@ const CellShell = styled.div`
   position: relative;
 `
 
-const HydrationLoader = styled.div`
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  color: ${({ theme }) => theme.color.gray2};
+// Screen-reader-only: the shimmer placeholders are aria-hidden, so a
+// browse-mode cursor landing on a virtualized cell needs an announced state.
+const HiddenCellStatus = styled.span`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 `
 
 type Props = {
@@ -128,7 +133,6 @@ type Props = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
-  isHydrating: boolean
 }
 
 const CellInner: React.FC<Props> = ({
@@ -139,7 +143,6 @@ const CellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
   isRunning,
-  isHydrating,
 }) => {
   const {
     runCell,
@@ -178,6 +181,8 @@ const CellInner: React.FC<Props> = ({
     useChartLoading(cell.id)
   const chartZoomed = useChartZoomed(cell.id)
   const contentMode = useCellContentMode(cell.id)
+  const virtualizationEngine = useCellVirtualizationEngine()
+  const resultStatus = useCellResultStatus(cell.id)
 
   const contentHeightGetterRef = useRef<() => number | null>(() => null)
 
@@ -294,7 +299,7 @@ const CellInner: React.FC<Props> = ({
   // synchronously from the view state) reserves its result area from the FIRST
   // render while the snapshot hydrates; computeCellGridH reserves the same space
   // in the grid item's height (both go through computeCellHeights).
-  const expectingResult = isExpectingResult(cell, isHydrating)
+  const expectingResult = isExpectingResult(cell, resultStatus)
   const { topHeight, bottomHeight } = computeCellHeights(cell, {
     liveTopHeight,
     liveBottomHeight,
@@ -774,7 +779,16 @@ const CellInner: React.FC<Props> = ({
       $maximized={isMaximized}
       $gridMode={layoutMode === "grid" && !isMaximized}
       {...wrapperHandlers}
+      onFocusCapture={() => {
+        if (contentMode !== "full")
+          virtualizationEngine?.ensureFullContent(cell.id)
+      }}
     >
+      {contentMode === "placeholder" && (
+        <HiddenCellStatus>
+          Cell content is unloaded while off screen; focus the cell to load it.
+        </HiddenCellStatus>
+      )}
       <CellDragHeader
         cellId={cell.id}
         cell={cell}
@@ -958,9 +972,7 @@ const CellInner: React.FC<Props> = ({
               />
             )
           ) : expectingResult ? (
-            <HydrationLoader>
-              <CircleNotchSpinner size={24} />
-            </HydrationLoader>
+            <GridShimmer bufferId={bufferIdForEvents} cellId={cell.id} />
           ) : null}
         </BottomSlot>
       )}

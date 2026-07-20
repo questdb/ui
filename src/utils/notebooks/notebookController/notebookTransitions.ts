@@ -15,6 +15,7 @@ import {
   cellModeChangePatch,
   duplicateCellAt,
   insertCell,
+  isExpectingResult,
   mergeCellChartConfig,
   nextGridSeedPosition,
   NOTEBOOK_GRID_MARGIN_Y,
@@ -106,7 +107,10 @@ export const updateCellTransition = (
   if (updates.value !== undefined && cell.type !== "markdown") {
     requireCellWithinLineLimit(updates.value)
     if (!cell.topResized && updates.topHeight === undefined) {
-      patch = { ...updates, topHeight: topHeightForSql(updates.value) }
+      const estimated = topHeightForSql(updates.value)
+      if (cell.topHeight == null || estimated !== topHeightForSql(cell.value)) {
+        patch = { ...updates, topHeight: estimated }
+      }
     }
   }
   return {
@@ -224,6 +228,7 @@ export const setCellLayoutTransition = (
     pos.h,
     NOTEBOOK_GRID_ROW_HEIGHT,
     NOTEBOOK_GRID_MARGIN_Y,
+    isExpectingResult(cell, "unrequested"),
   )
   return {
     parts: {

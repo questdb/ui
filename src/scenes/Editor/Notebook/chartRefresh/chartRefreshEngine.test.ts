@@ -54,12 +54,30 @@ const flushAsync = async () => {
   await vi.advanceTimersByTimeAsync(0)
 }
 
+// The node test environment has no document; the engine only needs the
+// visibility surface, so stub exactly that.
+const fakeDocument = Object.assign(new EventTarget(), { hidden: false })
+
+const setDocumentHidden = (hidden: boolean) => {
+  fakeDocument.hidden = hidden
+  fakeDocument.dispatchEvent(new Event("visibilitychange"))
+}
+
 describe("ChartRefreshEngine", () => {
   let deps: ReturnType<typeof makeDeps>
   let engine: ChartRefreshEngine
 
+  // Entries start hidden until an observer reports them (no init-load fetch
+  // burst); tests that model on-screen cells report visibility before sync.
+  const syncOnScreen = (cells: NotebookCell[]) => {
+    for (const cell of cells) engine.setVisible(cell.id, true)
+    engine.sync(cells)
+  }
+
   beforeEach(() => {
     vi.useFakeTimers()
+    fakeDocument.hidden = false
+    ;(globalThis as { document?: unknown }).document = fakeDocument
     // clearAllMocks keeps implementations; reset the module mock explicitly so
     // one test's snapshot fixture can't hydrate another test's cells.
     vi.mocked(loadCellSnapshot).mockResolvedValue(undefined)
@@ -73,6 +91,7 @@ describe("ChartRefreshEngine", () => {
 
   afterEach(() => {
     engine.destroy()
+    delete (globalThis as { document?: unknown }).document
     vi.useRealTimers()
     vi.clearAllMocks()
   })
@@ -82,7 +101,7 @@ describe("ChartRefreshEngine", () => {
     const cell = drawCell("c1", "select 1", false)
 
     // When the engine syncs it
-    engine.sync([cell])
+    syncOnScreen([cell])
     await flushAsync()
 
     // Then it executes the query exactly once and settles the state
@@ -103,7 +122,7 @@ describe("ChartRefreshEngine", () => {
 
   it("mirrors fetched results into the cell result", async () => {
     // Given a draw cell whose query succeeds
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
 
     // When the fetch completes
     await flushAsync()
@@ -133,7 +152,7 @@ describe("ChartRefreshEngine", () => {
     })
 
     // When the engine syncs the draw cell with auto-refresh off
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
 
     // Then the data is transferred without a fetch
@@ -145,7 +164,7 @@ describe("ChartRefreshEngine", () => {
 
   it("polls on a fixed interval without any mounted component", async () => {
     // Given a draw cell with a fixed 1s auto-refresh interval
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
 
     // When the poll loop runs — an immediate first fetch, then one per interval
     await flushAsync()
@@ -175,7 +194,7 @@ describe("ChartRefreshEngine", () => {
     })
 
     // When the engine syncs the cell
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
     // Then the transferred frame serves as the first tick, and the poll only
@@ -187,7 +206,7 @@ describe("ChartRefreshEngine", () => {
 
   it("stops polling when the cell leaves draw mode", async () => {
     // Given a polling draw cell
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
@@ -202,7 +221,7 @@ describe("ChartRefreshEngine", () => {
 
   it("refetches when the refresh-chart event fires, even with auto-refresh off", async () => {
     // Given a settled draw cell with auto-refresh off
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
@@ -216,7 +235,7 @@ describe("ChartRefreshEngine", () => {
 
   it("debounces SQL changes before refetching", async () => {
     // Given a settled draw cell
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
@@ -243,7 +262,7 @@ describe("ChartRefreshEngine", () => {
     deps.validateWithGlobals.mockResolvedValue({ queryType: "update" })
 
     // When the engine syncs it
-    engine.sync([drawCell("c1", "update t set x = 1", false)])
+    syncOnScreen([drawCell("c1", "update t set x = 1", false)])
     await flushAsync()
 
     // Then the query never executes and the block reaches the state
@@ -270,7 +289,7 @@ describe("ChartRefreshEngine", () => {
     })
 
     // When the engine syncs the cell with auto-refresh off
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
 
     // Then the snapshot renders without a fetch and is mirrored for the grid
@@ -311,7 +330,7 @@ describe("ChartRefreshEngine", () => {
 
   it("pauses polling when the cell scrolls out of view", async () => {
     // Given a visible polling cell that has fetched once
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
@@ -326,7 +345,7 @@ describe("ChartRefreshEngine", () => {
 
   it("skips the reveal catch-up when the data is still fresh", async () => {
     // Given a cell hidden right after a fetch
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     engine.setVisible("c1", false)
@@ -365,7 +384,7 @@ describe("ChartRefreshEngine", () => {
 
   it("refetches on reveal when the SQL changed while the cell was hidden", async () => {
     // Given a visible auto-refresh-off cell whose query settled
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
@@ -405,7 +424,7 @@ describe("ChartRefreshEngine", () => {
       .mockImplementation((sql: string) => Promise.resolve(dqlResult(sql)))
 
     // When two cells want to fetch at the same time
-    engine.sync([
+    syncOnScreen([
       drawCell("c1", "select 1", false),
       drawCell("c2", "select 2", false),
     ])
@@ -427,7 +446,7 @@ describe("ChartRefreshEngine", () => {
     engine.attach()
 
     // When a polling cell syncs
-    engine.sync([drawCell("c1", "select 1", "1s")])
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
     // Then the first fetch waits for the jitter window instead of firing at t=0
@@ -453,7 +472,7 @@ describe("ChartRefreshEngine", () => {
     eventBus.subscribe(EventType.NOTEBOOK_CELL_CHART_LOADING, handler)
 
     // When a draw cell fetches for the first time
-    engine.sync([drawCell("c1", "select 1", false)])
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
     eventBus.unsubscribe(EventType.NOTEBOOK_CELL_CHART_LOADING, handler)
 
@@ -462,6 +481,119 @@ describe("ChartRefreshEngine", () => {
     expect(events[events.length - 1]).toEqual({
       loading: false,
       refreshing: false,
+    })
+  })
+
+  it("defers fetching until the observer reports the cell visible", async () => {
+    // Given a synced draw cell that no observer has reported yet
+    engine.sync([drawCell("c1", "select 1", false)])
+    await flushAsync()
+
+    // Then nothing fetches — entries start hidden to avoid an init-load burst
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // When the observer reports it on screen
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the deferred initial fetch runs
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("discards the in-flight fetch when the SQL changes mid-flight", async () => {
+    // Given a visible cell whose first fetch hangs
+    let releaseFirst!: (value: QueryExecResult) => void
+    deps.executeSingle
+      .mockImplementationOnce(
+        () => new Promise<QueryExecResult>((res) => (releaseFirst = res)),
+      )
+      .mockImplementation((sql: string) => Promise.resolve(dqlResult(sql)))
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When the SQL changes while that fetch is still in flight
+    syncOnScreen([drawCell("c1", "select 2", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // And the superseded fetch finally lands
+    releaseFirst(dqlResult("select 1"))
+    await flushAsync()
+
+    // Then the old query's frame reaches neither the state nor the grid mirror
+    expect(engine.getState("c1")?.results[0]?.query).toBe("select 2")
+    const mirrored = deps.mirrorCellResult.mock.calls.map(
+      ([, result]) => result?.results[0]?.query,
+    )
+    expect(mirrored).not.toContain("select 1")
+  })
+
+  it("pauses polling while the document is hidden and catches up on return", async () => {
+    // Given a visible polling cell with one fetch landed
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When the tab is hidden
+    setDocumentHidden(true)
+
+    // Then polling fully stops
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When the tab becomes visible again with stale data
+    setDocumentHidden(false)
+    await flushAsync()
+
+    // Then it fetches immediately and the poll cadence resumes
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+  })
+
+  it("flags a fetch whose query returns a server-side error", async () => {
+    // Given a query that executes into an error result
+    deps.executeSingle.mockImplementation((sql: string) =>
+      Promise.resolve({
+        type: "error",
+        query: sql,
+        columns: [],
+        dataset: [],
+        count: 0,
+        error: "table does not exist",
+      } as QueryExecResult),
+    )
+
+    // When a visible draw cell fetches
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+
+    // Then the failure is flagged and the real message reaches the grid mirror
+    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
+    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
+    expect(result?.results[0]).toMatchObject({
+      type: "error",
+      error: "table does not exist",
+    })
+  })
+
+  it("preserves the thrown error's message when a fetch rejects", async () => {
+    // Given a query whose execution rejects outright
+    deps.executeSingle.mockImplementation(() =>
+      Promise.reject(new Error("network down")),
+    )
+
+    // When a visible draw cell fetches
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+
+    // Then the rejection is flagged and its message survives to the mirror
+    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
+    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
+    expect(result?.results[0]).toMatchObject({
+      type: "error",
+      error: "network down",
     })
   })
 })

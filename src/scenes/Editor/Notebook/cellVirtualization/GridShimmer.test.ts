@@ -93,4 +93,13 @@ describe("displayColumnsFor", () => {
     // Then the unknown id is gone and every real column is present
     expect(cols.map((c) => c.name)).toEqual(["symbol", "ts", "price"])
   })
+
+  it("returns no columns when the result is not in memory", () => {
+    // Given a cell whose result has not hydrated yet
+    // When display columns are computed without a result
+    const cols = displayColumnsFor(undefined, BUFFER_ID, "cell-lazy")
+
+    // Then the shimmer falls back to its generic silhouette
+    expect(cols).toEqual([])
+  })
 })

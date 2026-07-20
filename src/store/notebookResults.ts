@@ -1,15 +1,20 @@
 import { db } from "./db"
-import type { SingleQueryResult } from "./notebook"
+import type { CellResult, SingleQueryResult } from "./notebook"
 
 // A persisted, bounded copy of a cell's last run/draw result. One record per
 // cell (mode-agnostic: both the run grid and the draw chart render the same
 // rows). `results` is a faithful copy of the live `cell.result.results`, already
 // capped at the notebook row/byte limits before it is saved.
+// `activeResultIndex` and `script` restore the tab the user was viewing and the
+// script summary; records written before these fields existed omit them, so
+// readers must default (index 0, no summary).
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
   results: SingleQueryResult[]
   savedAt: number
+  activeResultIndex?: number
+  script?: CellResult["script"]
 }
 
 // Only the N most-recently-saved notebooks keep persisted results; older ones
@@ -22,10 +27,25 @@ export const saveCellSnapshot = async (
   await db.notebook_results.put(snapshot)
 }
 
-export const loadNotebookSnapshots = (
+// Records the result tab the user switched to, so a release/re-hydrate cycle
+// (or a reload) restores the tab they were viewing. No-op when the cell has no
+// snapshot yet.
+export const updateCellSnapshotActiveIndex = (
   bufferId: number,
-): Promise<NotebookResultSnapshot[]> =>
-  db.notebook_results.where("bufferId").equals(bufferId).toArray()
+  cellId: string,
+  activeResultIndex: number,
+): Promise<void> =>
+  db.notebook_results
+    .update([bufferId, cellId], { activeResultIndex })
+    .then(() => undefined)
+
+// Index-only read: snapshot payloads are never deserialized.
+export const loadSnapshotCellIds = (bufferId: number): Promise<string[]> =>
+  db.notebook_results
+    .where("bufferId")
+    .equals(bufferId)
+    .primaryKeys()
+    .then((keys) => keys.map(([, cellId]) => cellId))
 
 export const loadCellSnapshot = (
   bufferId: number,
@@ -44,6 +64,18 @@ export const deleteNotebookSnapshots = async (
   bufferId: number,
 ): Promise<void> => {
   await db.notebook_results.where("bufferId").equals(bufferId).delete()
+}
+
+// An open notebook releases its results to IndexedDB-only as cells leave the
+// retain band, so its snapshots are the ONLY copy of data the user can scroll
+// back to. Pinned notebooks are exempt from recency eviction until unpinned on
+// unmount — otherwise saves in 10 other notebooks (e.g. agent background runs)
+// would silently destroy an open notebook's released results.
+const pinnedBufferIds = new Set<number>()
+
+export const pinNotebookSnapshots = (bufferId: number): (() => void) => {
+  pinnedBufferIds.add(bufferId)
+  return () => pinnedBufferIds.delete(bufferId)
 }
 
 // Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
@@ -67,5 +99,7 @@ export const pruneToRecentNotebooks = (
       .sort((a, b) => b[1] - a[1]) // newest first
       .slice(keep) // everything past the `keep` newest
       .map(([bufferId]) => bufferId)
+      .filter((bufferId) => !pinnedBufferIds.has(bufferId))
+    if (staleBuffers.length === 0) return
     await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
   })

@@ -21,10 +21,19 @@ export const createVirtualizationEngine = (options: {
   focusedCellId: string | null
   maximizedCellId: string | null
   runningCellIds: Iterable<string>
+  onCellDataNeeded: (cellId: string) => void
+  onCellDataReleasable: (cellId: string) => void
 }): CellVirtualizationEngine => {
   const { bufferId, cells, focusedCellId, maximizedCellId, runningCellIds } =
     options
-  const engine = useMemo(() => new CellVirtualizationEngine(), [])
+  const engine = useMemo(
+    () =>
+      new CellVirtualizationEngine({
+        onCellDataNeeded: options.onCellDataNeeded,
+        onCellDataReleasable: options.onCellDataReleasable,
+      }),
+    [],
+  )
 
   useEffect(() => () => engine.destroy(), [engine])
 
@@ -40,10 +49,6 @@ export const createVirtualizationEngine = (options: {
   )
 
   useEffect(() => {
-    engine.sync(cells)
-  }, [engine, cells])
-
-  useEffect(() => {
     engine.setFocusedCell(focusedCellId)
   }, [engine, focusedCellId])
 
@@ -54,6 +59,10 @@ export const createVirtualizationEngine = (options: {
   useEffect(() => {
     engine.setRunningCells(runningCellIds)
   }, [engine, runningCellIds])
+
+  useEffect(() => {
+    engine.sync(cells)
+  }, [engine, cells])
 
   return engine
 }

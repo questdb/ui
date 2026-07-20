@@ -20,7 +20,10 @@ import {
   singleResultFromExec,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
-import { deleteCellSnapshot } from "../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  updateCellSnapshotActiveIndex,
+} from "../../../store/notebookResults"
 
 const publishSchemaIfMutating = (exec: QueryExecResult): void => {
   if (exec.type === "ddl" || exec.type === "dml") {
@@ -85,6 +88,7 @@ type Options = {
     cellId: string,
     summary: { successCount: number; failedCount: number; durationMs: number },
   ) => void
+  onSnapshotPersisted: (cellId: string, results: SingleQueryResult[]) => void
 }
 
 export const useCellExecution = ({
@@ -97,6 +101,7 @@ export const useCellExecution = ({
   markCancelledAll,
   markCancelledOne,
   setScriptSummary,
+  onSnapshotPersisted,
 }: Options) => {
   const [runningCellIds, setRunningCellIds] = useState<Set<string>>(new Set())
 
@@ -119,9 +124,13 @@ export const useCellExecution = ({
         cellId,
         results: result.results,
         savedAt: Date.now(),
+        activeResultIndex: result.activeResultIndex,
+        ...(result.script ? { script: result.script } : {}),
+      }).then((saved) => {
+        if (saved) onSnapshotPersisted(cellId, result.results)
       })
     },
-    [bufferId, cellsRef],
+    [bufferId, cellsRef, onSnapshotPersisted],
   )
 
   const runScript = useCallback(
@@ -283,7 +292,15 @@ export const useCellExecution = ({
         }
       }
 
-      return { ok: failedCount === 0, superseded: false }
+      return {
+        ok: failedCount === 0,
+        superseded: false,
+        result: {
+          results: finalResults,
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        },
+      }
     },
     [
       cellsRef,
@@ -400,7 +417,11 @@ export const useCellExecution = ({
         }
         updateCell(cellId, { result: cellResult })
         persistSnapshot(cellId, cellResult)
-        return { ok: execResult.type !== "error", superseded: false }
+        return {
+          ok: execResult.type !== "error",
+          superseded: false,
+          result: cellResult,
+        }
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -491,8 +512,13 @@ export const useCellExecution = ({
           return { ...c, result: { ...c.result, activeResultIndex: index } }
         }),
       )
+      // Keep the snapshot on the tab the user is viewing, so a release or a
+      // reload restores this tab instead of snapping back to the first.
+      void updateCellSnapshotActiveIndex(bufferId, cellId, index).catch(
+        () => undefined,
+      )
     },
-    [updateCells],
+    [updateCells, bufferId],
   )
 
   useEffect(() => {

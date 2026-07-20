@@ -25,6 +25,7 @@ import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
+import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
 import {
   HEADER_HEIGHT,
@@ -353,6 +354,10 @@ export type CellRunOutcome = {
   cellChanged?: boolean
   notStarted?: boolean
   resultCleared?: boolean
+  // The result THIS run produced, set only when it committed. Consumers that
+  // report the run's output must read this instead of cell.result — a draw
+  // cell's auto-refresh mirror replaces cell.result independently of the run.
+  result?: CellResult
 }
 
 export type RunCompletionDecision = "commit" | "cell_changed" | "result_cleared"
@@ -950,7 +955,13 @@ export const buildAppliedCells = (
       } else {
         delete next.type
         if (valueChanged && !existing.topResized) {
-          next.topHeight = topHeightForSql(value)
+          const estimated = topHeightForSql(value)
+          if (
+            existing.topHeight == null ||
+            estimated !== topHeightForSql(existing.value)
+          ) {
+            next.topHeight = estimated
+          }
         }
       }
       if (resolvedName !== undefined) next.name = resolvedName
@@ -1015,18 +1026,16 @@ export const buildAppliedCells = (
 // is *derived* from topHeight + bottomHeight on every render.
 // ============================================================================
 
-// Approximate fixed chrome around the editor in a cell, in pixels.
-// Breakdown:
-//   - RunBar: 40 px (1rem vertical padding + ~24 px button glyph)
-//   - CellWrapper top/bottom border: 2 px
-//   - Inner-top ResizeHandle (only when double-view): 10 px
-//   - Safety margin for sub-pixel rounding, grid row bottom-border,
-//     and any single-pixel adornments inside the result panel: 4 px
-// Stays a single conservative constant rather than state-aware: the
-// extra ~14 px in single-view is at most a half-row of trailing
-// whitespace at our 10 px grid granularity — invisible — but avoids
-// the "row cut by 2-3 px" symptom in double-view cells.
-export const CELL_CHROME_PX = 56
+// Exact fixed chrome every cell carries, in pixels:
+//   - Drag header: 42 px (HeaderBar's FIXED height — its right slot swaps
+//     between the neutral Run/Draw toggles and the view toggle without
+//     changing cell geometry)
+//   - CellWrapper top + bottom border: 1 px each
+export const CELL_BASE_CHROME_PX = 44
+
+// The in-flow editor/result divider (the split ResizeHandle's $doubleView
+// variant) — rendered only when the editor and a bottom slot are both visible.
+export const SPLIT_HANDLE_PX = 6
 
 // Default editor height for a newly-created cell, before any content arrives.
 // Matches MIN_EDITOR_HEIGHT used by Monaco; kept here so layout math doesn't
@@ -1044,13 +1053,11 @@ export const topHeightForSql = (value: string): number =>
       CELL_EDITOR_PADDING.bottom,
   )
 
-// Markdown cells carry less chrome than SQL cells (a 40px drag header plus
-// 2px of wrapper borders) and keep their heights on the grid-row lattice
-// (58, 88, 118, …) so the derived cell box is always exact — see
-// snapMarkdownTopHeight.
-export const MARKDOWN_CELL_CHROME_PX = 42
-export const MARKDOWN_DEFAULT_TOP_HEIGHT = 58
-export const MIN_MARKDOWN_HEIGHT_PX = 28
+// Markdown cells carry the base chrome only (they never split) and keep their
+// heights on the grid-row lattice (26, 56, 86, …) so the derived cell box is
+// always exact — see snapMarkdownTopHeight.
+export const MARKDOWN_DEFAULT_TOP_HEIGHT = 56
+export const MIN_MARKDOWN_HEIGHT_PX = 26
 
 // Default chart height for draw mode (experimental — per user spec).
 export const DEFAULT_CHART_BOTTOM_HEIGHT = 350
@@ -1063,7 +1070,7 @@ export const MIN_BOTTOM_HEIGHT_PX = 100
 const TAB_BAR_PX = 40 // TabBarWrapper height = 4rem
 const NOTIFICATION_PX = 44 // StatusNotification (compact=true → 4rem + 1-2 px borders)
 const RESULT_ACTIONS_BAR_PX = 36 // ResultActionsBar height = 3.6rem (shown with the grid)
-const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
+export const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
 
 // Height to reserve for a run cell's result area while its snapshot hydrates —
 // the same max single-statement grid height `computeResultBottomHeight` settles
@@ -1075,15 +1082,33 @@ export const RESERVED_RESULT_BOTTOM_HEIGHT =
   HEADER_HEIGHT +
   MAX_RESERVED_ROWS * ROW_HEIGHT
 
+// A run-marked cell reserves its result area whenever the result is not in
+// memory — before its snapshot is requested, while it loads, and after a far
+// scroll released it. It collapses only once its own snapshot load proved
+// there is nothing to restore.
 export const isExpectingResult = (
   cell: NotebookCell,
-  isHydrating: boolean,
+  resultStatus: CellResultStatus,
 ): boolean =>
-  isHydrating &&
   cell.mode !== "draw" &&
   cell.lastRunStatus != null &&
   cell.lastRunStatus !== "none" &&
-  cell.result == null
+  cell.result == null &&
+  resultStatus !== "missing"
+
+// Stamps the derived bottom height when none is stored, so the released cell
+// keeps the exact geometry its result rendered at — the expecting-result path
+// would otherwise fall back to RESERVED_RESULT_BOTTOM_HEIGHT and jitter on
+// every release/re-hydrate cycle.
+export const releaseCellResultPatch = (
+  cell: NotebookCell,
+): Pick<NotebookCell, "result" | "lastRunStatus" | "bottomHeight"> => ({
+  result: undefined,
+  lastRunStatus: carriedRunStatus(cell),
+  ...(cell.bottomHeight == null && cell.result != null
+    ? { bottomHeight: computeResultBottomHeight(cell.result) }
+    : {}),
+})
 
 const isDqlWithColumns = (r: SingleQueryResult): boolean =>
   r.type === "dql" && r.columns.length > 0
@@ -1211,8 +1236,19 @@ export const patchCellRunResult = (
     return next
   })
 
-export const cellChromePx = (cell: NotebookCell): number =>
-  cell.type === "markdown" ? MARKDOWN_CELL_CHROME_PX : CELL_CHROME_PX
+// Exact per-state chrome. Split cells (editor above, result/chart or its
+// reserved shimmer below) add the in-flow divider; a view-maximized cell hides
+// both the editor and the divider — its bottom slot spans topHeight +
+// bottomHeight — so it carries the base chrome only, like markdown.
+export const cellChromePx = (
+  cell: NotebookCell,
+  expectingResult: boolean = false,
+): number => {
+  if (cell.type === "markdown") return CELL_BASE_CHROME_PX
+  const split =
+    (isDoubleView(cell) || expectingResult) && cell.isViewMaximized !== true
+  return split ? CELL_BASE_CHROME_PX + SPLIT_HANDLE_PX : CELL_BASE_CHROME_PX
+}
 
 export const minTopHeightFor = (cell: NotebookCell): number =>
   cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
@@ -1271,19 +1307,58 @@ export const computeCellGridH = (
   const { topHeight, bottomHeight } = computeCellHeights(cell, {
     expectingResult,
   })
-  const totalPx = cellChromePx(cell) + topHeight + bottomHeight
+  const totalPx = cellChromePx(cell, expectingResult) + topHeight + bottomHeight
   return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
 }
 
 export const snapMarkdownTopHeight = (px: number): number => {
   const step = NOTEBOOK_GRID_ROW_HEIGHT + NOTEBOOK_GRID_MARGIN_Y
-  const totalPx = Math.max(px, MIN_MARKDOWN_HEIGHT_PX) + MARKDOWN_CELL_CHROME_PX
+  const totalPx = Math.max(px, MIN_MARKDOWN_HEIGHT_PX) + CELL_BASE_CHROME_PX
   const rows = Math.ceil((totalPx + NOTEBOOK_GRID_MARGIN_Y) / step)
-  return rows * step - NOTEBOOK_GRID_MARGIN_Y - MARKDOWN_CELL_CHROME_PX
+  return rows * step - NOTEBOOK_GRID_MARGIN_Y - CELL_BASE_CHROME_PX
 }
 
+// The fixed 42px drag header replaced a content-driven 40px one, growing
+// markdown chrome from 42 to 44px and re-anchoring the height lattice.
+// Persisted topHeights snapped on the old lattice (28, 58, 88, …) drop the
+// 2px the header gained, keeping the cell box (topHeight + chrome)
+// pixel-identical; anything off-lattice snaps up as usual. Idempotent on
+// current-lattice values.
+const MARKDOWN_HEADER_GROWTH_PX = 2
+
+const migratedMarkdownTopHeight = (cell: NotebookCell): number | undefined =>
+  cell.type === "markdown" && cell.topHeight != null
+    ? snapMarkdownTopHeight(cell.topHeight - MARKDOWN_HEADER_GROWTH_PX)
+    : undefined
+
+export const migrateMarkdownTopHeights = (
+  view: NotebookViewState,
+): NotebookViewState => {
+  const needsMigration = (cell: NotebookCell): boolean => {
+    const next = migratedMarkdownTopHeight(cell)
+    return next !== undefined && next !== cell.topHeight
+  }
+  if (!view.cells.some(needsMigration)) return view
+  return {
+    ...view,
+    cells: view.cells.map((cell) =>
+      needsMigration(cell)
+        ? { ...cell, topHeight: migratedMarkdownTopHeight(cell) }
+        : cell,
+    ),
+  }
+}
+
+// Hydration status isn't knowable headlessly; "unrequested" (reserved space)
+// matches what the notebook renders for a run-marked cell before its snapshot
+// loads, so agent-visible heights agree with the screen.
 export const computeAgentCellGridH = (cell: NotebookCell): number =>
-  computeCellGridH(cell, NOTEBOOK_GRID_ROW_HEIGHT, NOTEBOOK_GRID_MARGIN_Y)
+  computeCellGridH(
+    cell,
+    NOTEBOOK_GRID_ROW_HEIGHT,
+    NOTEBOOK_GRID_MARGIN_Y,
+    isExpectingResult(cell, "unrequested"),
+  )
 
 export const hasAgentVisibleCellHeightChanged = (
   cell: NotebookCell,
@@ -1340,11 +1415,16 @@ export const cellHeightPatchForRows = (
   rows: number,
   rowHeight: number,
   marginY: number,
+  expectingResult: boolean = false,
 ): Partial<NotebookCell> => {
-  if (rows === computeCellGridH(cell, rowHeight, marginY)) return {}
+  if (rows === computeCellGridH(cell, rowHeight, marginY, expectingResult)) {
+    return {}
+  }
   const targetContentPx =
-    rows * rowHeight + (rows - 1) * marginY - cellChromePx(cell)
-  if (!isDoubleView(cell)) {
+    rows * rowHeight +
+    (rows - 1) * marginY -
+    cellChromePx(cell, expectingResult)
+  if (!isDoubleView(cell) && !expectingResult) {
     return {
       topHeight: Math.max(minTopHeightFor(cell), targetContentPx),
       topResized: true,
@@ -1400,7 +1480,12 @@ export const buildAppliedLayout = (
       nextY = Math.max(nextY, existing.y + existing.h)
       return existing
     }
-    const cellH = computeCellGridH(cell, defaults.rowHeight, defaults.marginY)
+    const cellH = computeCellGridH(
+      cell,
+      defaults.rowHeight,
+      defaults.marginY,
+      isExpectingResult(cell, "unrequested"),
+    )
     const item: CellLayoutItem = {
       i: cell.id,
       x: 0,
@@ -1443,11 +1528,13 @@ export const buildAppliedNotebookState = (
       ? nextCells.map((cell, i) => {
           const g = request.cells[i]?.grid
           if (!g) return cell
+          const prior = prevById.get(cell.id) ?? cell
           const patch = cellHeightPatchForRows(
-            prevById.get(cell.id) ?? cell,
+            prior,
             g.h,
             NOTEBOOK_GRID_ROW_HEIGHT,
             NOTEBOOK_GRID_MARGIN_Y,
+            isExpectingResult(prior, "unrequested"),
           )
           return Object.keys(patch).length > 0 ? { ...cell, ...patch } : cell
         })

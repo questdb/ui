@@ -55,9 +55,13 @@ import {
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
-import { useChartCellVisibility } from "./chartRefresh/useChartCellVisibility"
-import { useCellVirtualizationObserver } from "./cellVirtualization/useCellVirtualizationObserver"
+import { useCellBandObservers } from "./useCellBandObservers"
+import { useChartRefresh } from "./chartRefresh/ChartRefreshContext"
 import { useCellVirtualizationEngine } from "./cellVirtualization/CellVirtualizationContext"
+import {
+  useCellResultHydrationEngine,
+  useResultStatusVersion,
+} from "./resultHydration/CellResultHydrationContext"
 
 const GRID_COLS = NOTEBOOK_GRID_COLS
 const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
@@ -163,7 +167,7 @@ const renderResizeHandle = renderEdgeHandle
 
 const MIN_CELL_W = 2
 // Minimum grid rows. Sized so the rendered floor is ~editor + chrome
-// (`MIN_EDITOR_HEIGHT 72 + CELL_CHROME_PX 40 ≈ 112 px`), letting the
+// (`DEFAULT_TOP_HEIGHT 72 + CELL_BASE_CHROME_PX 44 = 116 px`), letting the
 // user collapse a cell down to "just the editor". Rendered px for
 // h rows in rgl with our margins = h*rowHeight + (h-1)*marginY
 // = 5*10 + 4*20 = 130 px. Earlier value (20 rows) translated to 580 px
@@ -323,7 +327,6 @@ type CellViewProps = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
-  isHydrating: boolean
 }
 
 const CellView: React.FC<CellViewProps> = (props) =>
@@ -334,7 +337,7 @@ const CellView: React.FC<CellViewProps> = (props) =>
   )
 
 const ListLayout: React.FC = () => {
-  const { cells, focusedCellId, maximizedCellId, runningCellIds, isHydrating } =
+  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
   const { setFocusedCell } = useNotebookActions()
   useScrollUserAddedCellIntoView()
@@ -359,7 +362,6 @@ const ListLayout: React.FC = () => {
               isFocused={focusedCellId === cell.id}
               isMaximized={maximizedCellId === cell.id}
               isRunning={runningCellIds.has(cell.id)}
-              isHydrating={isHydrating}
             />
           </CellItem>
           {index < cells.length - 1 && <AddCellBetween afterCellId={cell.id} />}
@@ -373,14 +375,10 @@ const ListLayout: React.FC = () => {
 }
 
 const GridLayout: React.FC = () => {
-  const {
-    cells,
-    settings,
-    focusedCellId,
-    maximizedCellId,
-    runningCellIds,
-    isHydrating,
-  } = useNotebookState()
+  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
+    useNotebookState()
+  const resultHydration = useCellResultHydrationEngine()
+  const statusVersion = useResultStatusVersion()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
   // measureBeforeMount: don't render the grid until the container width is
@@ -429,11 +427,16 @@ const GridLayout: React.FC = () => {
     return base.map((item) => {
       const cell = cellById.get(item.i)
       if (!cell) return item
-      const expectingResult = isExpectingResult(cell, isHydrating)
+      const expectingResult = isExpectingResult(
+        cell,
+        resultHydration?.statusOf(cell.id) ?? "unrequested",
+      )
       const minBottomPx =
         isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
       const minTotalPx =
-        minTopHeightFor(cell) + minBottomPx + cellChromePx(cell)
+        minTopHeightFor(cell) +
+        minBottomPx +
+        cellChromePx(cell, expectingResult)
       const minH = Math.ceil(
         (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
       )
@@ -443,7 +446,10 @@ const GridLayout: React.FC = () => {
         minH,
       }
     })
-  }, [settings.layout, cells, isHydrating])
+    // statusVersion stands in for the statusOf reads: it bumps exactly when
+    // some cell's known-missing state — the only status input
+    // isExpectingResult uses — changes.
+  }, [settings.layout, cells, resultHydration, statusVersion])
 
   const mapLayoutXYW = useCallback(
     (rglLayout: Layout): CellLayoutItem[] =>
@@ -490,6 +496,10 @@ const GridLayout: React.FC = () => {
           item.h,
           ROW_HEIGHT,
           GRID_MARGIN_Y,
+          isExpectingResult(
+            cell,
+            resultHydration?.statusOf(cell.id) ?? "unrequested",
+          ),
         )
         if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
       }
@@ -500,7 +510,14 @@ const GridLayout: React.FC = () => {
         })
       }
     },
-    [mapLayoutXYW, updateSettings, updateCell, cells, activeBuffer.id],
+    [
+      mapLayoutXYW,
+      updateSettings,
+      updateCell,
+      cells,
+      activeBuffer.id,
+      resultHydration,
+    ],
   )
 
   useEffect(() => {
@@ -597,7 +614,6 @@ const GridLayout: React.FC = () => {
                 isFocused={focusedCellId === cell.id}
                 isMaximized={maximizedCellId === cell.id}
                 isRunning={runningCellIds.has(cell.id)}
-                isHydrating={isHydrating}
               />
             </GridCellWrapper>
           ))}
@@ -626,40 +642,17 @@ const scrollNotebookCellIntoView = (cellId: string, attempt = 0): void => {
   }
 }
 
-let isFirstNotebookMountSinceLoad = true
-
-const RELOAD_SCROLL_SETTLE_MS = 120
-
-const useScrollFocusedCellIntoViewOnOpen = (
-  focusedCellId: string | null,
-  isHydrating: boolean,
-) => {
+// Cell geometry derives synchronously from stored heights + lastRunStatus, so
+// the restored position is exact on the first frame — no waiting on result
+// hydration.
+const useScrollFocusedCellIntoViewOnOpen = (focusedCellId: string | null) => {
   const focusedOnOpenRef = useRef(focusedCellId)
-  const isReloadRef = useRef(isFirstNotebookMountSinceLoad)
-  const didScrollRef = useRef(false)
-
-  useEffect(() => {
-    isFirstNotebookMountSinceLoad = false
-  }, [])
 
   useEffect(() => {
     const cellId = focusedOnOpenRef.current
-    if (!cellId || didScrollRef.current || getPendingReveal()) return
-
-    if (!isReloadRef.current) {
-      didScrollRef.current = true
-      scrollNotebookCellIntoView(cellId)
-      return
-    }
-
-    if (isHydrating) return
-    didScrollRef.current = true
-    const timer = setTimeout(
-      () => scrollNotebookCellIntoView(cellId),
-      RELOAD_SCROLL_SETTLE_MS,
-    )
-    return () => clearTimeout(timer)
-  }, [isHydrating])
+    if (!cellId || getPendingReveal()) return
+    scrollNotebookCellIntoView(cellId)
+  }, [])
 }
 
 // Scroll + glow the cell a search result points at, drained on mount and on the nudge.
@@ -715,20 +708,38 @@ const useNotebookSearchReveal = () => {
 }
 
 const NotebookContent: React.FC = () => {
-  const {
-    cells,
-    settings,
-    focusedCellId,
-    maximizedCellId,
-    runningCellIds,
-    isHydrating,
-  } = useNotebookState()
+  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
+    useNotebookState()
+  const chartEngine = useChartRefresh()
+  const virtualizationEngine = useCellVirtualizationEngine()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
-  useScrollFocusedCellIntoViewOnOpen(focusedCellId, isHydrating)
+  useScrollFocusedCellIntoViewOnOpen(focusedCellId)
   useNotebookSearchReveal()
-  useChartCellVisibility()
-  useCellVirtualizationObserver()
+  useCellBandObservers({
+    onNearBand: useCallback(
+      (cellId, inBand, distancePx) => {
+        chartEngine?.setVisible(cellId, inBand)
+        virtualizationEngine?.reportMountBand(cellId, inBand, distancePx)
+      },
+      [chartEngine, virtualizationEngine],
+    ),
+    onFarBand: useCallback(
+      (cellId, inBand) => {
+        virtualizationEngine?.reportRetainBand(cellId, inBand)
+      },
+      [virtualizationEngine],
+    ),
+    onUnrooted: useCallback(
+      (cellIds) => {
+        for (const cellId of cellIds) {
+          chartEngine?.setVisible(cellId, true)
+          virtualizationEngine?.ensureFullContent(cellId)
+        }
+      },
+      [chartEngine, virtualizationEngine],
+    ),
+  })
 
   if (cells.length === 0) {
     return (
@@ -759,7 +770,6 @@ const NotebookContent: React.FC = () => {
               isFocused={focusedCellId === cell.id}
               isMaximized
               isRunning={runningCellIds.has(cell.id)}
-              isHydrating={isHydrating}
             />
           </CellItem>
         </CellListContainer>

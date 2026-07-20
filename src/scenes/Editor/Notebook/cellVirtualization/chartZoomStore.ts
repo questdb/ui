@@ -15,3 +15,7 @@ export const getChartZoom = (
 export const clearChartZoom = (cellId: string) => {
   zoomWindows.delete(cellId)
 }
+
+export const clearChartZooms = (cellIds: Iterable<string>) => {
+  for (const cellId of cellIds) zoomWindows.delete(cellId)
+}

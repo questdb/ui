@@ -12,6 +12,8 @@ export type CellVirtualizationEngineOptions = {
   recentEditLimit?: number
   scheduleFrame?: (callback: () => void) => void
   scheduleIdle?: (callback: () => void) => void
+  onCellDataNeeded?: (cellId: string) => void
+  onCellDataReleasable?: (cellId: string) => void
 }
 
 type Entry = {
@@ -58,12 +60,16 @@ export class CellVirtualizationEngine {
   private recentEditLimit: number
   private scheduleFrame: (callback: () => void) => void
   private scheduleIdle: (callback: () => void) => void
+  private onCellDataNeeded?: (cellId: string) => void
+  private onCellDataReleasable?: (cellId: string) => void
 
   constructor(options: CellVirtualizationEngineOptions = {}) {
     this.dwellMs = options.dwellMs ?? DWELL_MS
     this.recentEditLimit = options.recentEditLimit ?? RECENT_EDIT_LIMIT
     this.scheduleFrame = options.scheduleFrame ?? defaultScheduleFrame
     this.scheduleIdle = options.scheduleIdle ?? defaultScheduleIdle
+    this.onCellDataNeeded = options.onCellDataNeeded
+    this.onCellDataReleasable = options.onCellDataReleasable
   }
 
   destroy() {
@@ -82,14 +88,16 @@ export class CellVirtualizationEngine {
       if (cell.type === "markdown") continue
       present.add(cell.id)
       if (this.entries.has(cell.id)) continue
+      const pinned = this.isPinned(cell.id)
       this.entries.set(cell.id, {
         cellId: cell.id,
-        mode: this.isPinned(cell.id) ? "full" : "placeholder",
+        mode: pinned ? "full" : "placeholder",
         inMountBand: false,
         inRetainBand: false,
         distance: Number.MAX_SAFE_INTEGER,
         candidateSince: null,
       })
+      if (pinned) this.onCellDataNeeded?.(cell.id)
     }
     for (const cellId of [...this.entries.keys()]) {
       if (!present.has(cellId)) this.removeEntry(cellId)
@@ -127,6 +135,7 @@ export class CellVirtualizationEngine {
     entry.inRetainBand = inBand
     if (inBand) {
       this.pendingDrops.delete(cellId)
+      this.onCellDataNeeded?.(cellId)
     } else {
       this.requestDrop(cellId)
     }
@@ -210,10 +219,18 @@ export class CellVirtualizationEngine {
     this.setMode(entry, "full")
   }
 
+  canReleaseData(cellId: string): boolean {
+    const entry = this.entries.get(cellId)
+    if (!entry) return true
+    return !entry.inRetainBand && !entry.inMountBand && !this.isPinned(cellId)
+  }
+
   private requestDrop(cellId: string) {
     const entry = this.entries.get(cellId)
-    if (!entry || entry.mode !== "full") return
+    if (!entry) return
     if (entry.inRetainBand || entry.inMountBand || this.isPinned(cellId)) return
+    this.onCellDataReleasable?.(cellId)
+    if (entry.mode !== "full") return
     this.pendingDrops.add(cellId)
     this.scheduleNextDrop()
   }
@@ -289,6 +306,7 @@ export class CellVirtualizationEngine {
     if (entry.mode === mode) return
     entry.mode = mode
     entry.candidateSince = null
+    if (mode === "full") this.onCellDataNeeded?.(entry.cellId)
     this.notify(entry.cellId)
   }
 

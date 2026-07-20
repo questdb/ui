@@ -32,9 +32,12 @@ vi.hoisted(() => {
 import { db } from "./db"
 import {
   saveCellSnapshot,
-  loadNotebookSnapshots,
+  loadCellSnapshot,
+  loadSnapshotCellIds,
+  updateCellSnapshotActiveIndex,
   deleteCellSnapshot,
   deleteNotebookSnapshots,
+  pinNotebookSnapshots,
   pruneToRecentNotebooks,
   type NotebookResultSnapshot,
 } from "./notebookResults"
@@ -72,38 +75,73 @@ describe("notebookResults", () => {
       { type: "error", query: "bad", error: "boom" },
     ]
     await saveCellSnapshot(snap(1, "c1", 100, results))
-    const loaded = await loadNotebookSnapshots(1)
-    expect(loaded).toHaveLength(1)
-    expect(loaded[0].results).toEqual(results)
+    const loaded = await loadCellSnapshot(1, "c1")
+    expect(loaded?.results).toEqual(results)
   })
 
-  it("loadNotebookSnapshots returns only the given buffer's cells", async () => {
+  it("round-trips the viewed tab and script summary", async () => {
+    // Given a script cell's snapshot with a non-default tab and a summary
+    await saveCellSnapshot({
+      ...snap(1, "c1", 100),
+      activeResultIndex: 2,
+      script: { successCount: 2, failedCount: 1, durationMs: 42 },
+    })
+
+    // When it is loaded back
+    const loaded = await loadCellSnapshot(1, "c1")
+
+    // Then both fields survive
+    expect(loaded?.activeResultIndex).toBe(2)
+    expect(loaded?.script).toEqual({
+      successCount: 2,
+      failedCount: 1,
+      durationMs: 42,
+    })
+  })
+
+  it("reads a pre-tab-field record with the fields absent", async () => {
+    // Given a record written before activeResultIndex/script existed
+    await saveCellSnapshot(snap(1, "c1", 100))
+
+    // When it is loaded back
+    const loaded = await loadCellSnapshot(1, "c1")
+
+    // Then the fields are undefined and the reader must default
+    expect(loaded?.activeResultIndex).toBeUndefined()
+    expect(loaded?.script).toBeUndefined()
+  })
+
+  it("updateCellSnapshotActiveIndex updates an existing record and skips a missing one", async () => {
+    await saveCellSnapshot(snap(1, "c1", 100))
+    await updateCellSnapshotActiveIndex(1, "c1", 3)
+    expect((await loadCellSnapshot(1, "c1"))?.activeResultIndex).toBe(3)
+
+    await updateCellSnapshotActiveIndex(1, "ghost", 3)
+    expect(await loadCellSnapshot(1, "ghost")).toBeUndefined()
+  })
+
+  it("loadSnapshotCellIds returns the buffer's cell ids only", async () => {
     await saveCellSnapshot(snap(1, "c1", 100))
     await saveCellSnapshot(snap(1, "c2", 100))
-    await saveCellSnapshot(snap(2, "c1", 100))
-    expect(
-      (await loadNotebookSnapshots(1)).map((s) => s.cellId).sort(),
-    ).toEqual(["c1", "c2"])
-    expect(await loadNotebookSnapshots(2)).toHaveLength(1)
+    await saveCellSnapshot(snap(2, "other", 100))
+    expect((await loadSnapshotCellIds(1)).sort()).toEqual(["c1", "c2"])
+    expect(await loadSnapshotCellIds(3)).toEqual([])
   })
 
   it("put overwrites the same [bufferId+cellId]", async () => {
     await saveCellSnapshot(snap(1, "c1", 100))
     await saveCellSnapshot(snap(1, "c1", 200))
-    const loaded = await loadNotebookSnapshots(1)
-    expect(loaded).toHaveLength(1)
-    expect(loaded[0].savedAt).toBe(200)
+    expect(await loadSnapshotCellIds(1)).toHaveLength(1)
+    expect((await loadCellSnapshot(1, "c1"))?.savedAt).toBe(200)
   })
 
   it("deletes one cell, then a whole notebook", async () => {
     await saveCellSnapshot(snap(1, "c1", 100))
     await saveCellSnapshot(snap(1, "c2", 100))
     await deleteCellSnapshot(1, "c1")
-    expect((await loadNotebookSnapshots(1)).map((s) => s.cellId)).toEqual([
-      "c2",
-    ])
+    expect(await loadSnapshotCellIds(1)).toEqual(["c2"])
     await deleteNotebookSnapshots(1)
-    expect(await loadNotebookSnapshots(1)).toHaveLength(0)
+    expect(await loadSnapshotCellIds(1)).toHaveLength(0)
   })
 
   it("prunes to the N most-recently-saved notebooks (recency = latest cell)", async () => {
@@ -113,16 +151,37 @@ describe("notebookResults", () => {
     await saveCellSnapshot(snap(3, "c1", 50))
     await pruneToRecentNotebooks(2)
     // buffers 3 (50) and 2 (30) kept; buffer 1 (10) evicted
-    expect(await loadNotebookSnapshots(1)).toHaveLength(0)
-    expect(await loadNotebookSnapshots(2)).toHaveLength(2)
-    expect(await loadNotebookSnapshots(3)).toHaveLength(1)
+    expect(await loadSnapshotCellIds(1)).toHaveLength(0)
+    expect(await loadSnapshotCellIds(2)).toHaveLength(2)
+    expect(await loadSnapshotCellIds(3)).toHaveLength(1)
   })
 
   it("prune is a no-op under the budget", async () => {
     await saveCellSnapshot(snap(1, "c1", 10))
     await saveCellSnapshot(snap(2, "c1", 20))
     await pruneToRecentNotebooks(10)
-    expect(await loadNotebookSnapshots(1)).toHaveLength(1)
-    expect(await loadNotebookSnapshots(2)).toHaveLength(1)
+    expect(await loadSnapshotCellIds(1)).toHaveLength(1)
+    expect(await loadSnapshotCellIds(2)).toHaveLength(1)
+  })
+
+  it("never prunes a pinned (open) notebook's snapshots", async () => {
+    // Given the oldest notebook is open (pinned) while newer ones save
+    await saveCellSnapshot(snap(1, "c1", 10))
+    await saveCellSnapshot(snap(2, "c1", 20))
+    await saveCellSnapshot(snap(3, "c1", 30))
+    const unpin = pinNotebookSnapshots(1)
+
+    // When the recency prune runs over budget
+    await pruneToRecentNotebooks(2)
+
+    // Then the open notebook's snapshots survive the eviction
+    expect(await loadSnapshotCellIds(1)).toEqual(["c1"])
+
+    // When it is closed (unpinned)
+    unpin()
+    await pruneToRecentNotebooks(2)
+
+    // Then the next prune evicts it normally
+    expect(await loadSnapshotCellIds(1)).toEqual([])
   })
 })

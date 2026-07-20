@@ -367,3 +367,140 @@ describe("CellVirtualizationEngine", () => {
     busyEngine.destroy()
   })
 })
+
+describe("CellVirtualizationEngine data callbacks", () => {
+  let engine: CellVirtualizationEngine
+  let dataNeeded: string[]
+  let dataReleasable: string[]
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    dataNeeded = []
+    dataReleasable = []
+    engine = new CellVirtualizationEngine({
+      dwellMs: DWELL_MS,
+      scheduleFrame: (callback) => {
+        setTimeout(callback, FRAME_MS)
+      },
+      scheduleIdle: (callback) => {
+        setTimeout(callback, 0)
+      },
+      onCellDataNeeded: (cellId) => dataNeeded.push(cellId),
+      onCellDataReleasable: (cellId) => dataReleasable.push(cellId),
+    })
+  })
+
+  afterEach(() => {
+    engine.destroy()
+    vi.useRealTimers()
+  })
+
+  it("reports data needed when a cell enters the retain band", () => {
+    // Given a synced placeholder cell
+    engine.sync([sqlCell("c1")])
+
+    // When it enters the retain band
+    engine.reportRetainBand("c1", true)
+
+    // Then its data is requested ahead of the mount band
+    expect(dataNeeded).toEqual(["c1"])
+  })
+
+  it("reports data needed when sync creates a cell already pinned", () => {
+    // Given the reload-focused cell, pinned before its entry exists
+    engine.setFocusedCell("c1")
+
+    // When sync creates its entry directly in full mode
+    engine.sync([sqlCell("c1")])
+
+    // Then its data is requested immediately
+    expect(engine.getContentMode("c1")).toBe("full")
+    expect(dataNeeded).toEqual(["c1"])
+  })
+
+  it("reports data needed when a cell is promoted to full content", () => {
+    // Given a synced placeholder cell outside the retain band
+    engine.sync([sqlCell("c1")])
+
+    // When a reveal forces it to full content
+    engine.ensureFullContent("c1")
+
+    // Then its data is requested by the promotion
+    expect(dataNeeded).toEqual(["c1"])
+  })
+
+  it("reports data releasable when an unpinned cell leaves the retain band", async () => {
+    // Given a fully mounted cell
+    engine.sync([sqlCell("c1")])
+    engine.reportRetainBand("c1", true)
+    engine.reportMountBand("c1", true, 0)
+    await vi.advanceTimersByTimeAsync(DWELL_MS + FRAME_MS)
+
+    // When it leaves both bands
+    engine.reportMountBand("c1", false, 3000)
+    engine.reportRetainBand("c1", false)
+
+    // Then its data is reported releasable
+    expect(dataReleasable).toEqual(["c1"])
+  })
+
+  it("reports data releasable for a placeholder cell that leaves the retain band", () => {
+    // Given a cell hydrated by retain-band entry but never mounted
+    engine.sync([sqlCell("c1")])
+    engine.reportRetainBand("c1", true)
+    expect(engine.getContentMode("c1")).toBe("placeholder")
+
+    // When it leaves the retain band
+    engine.reportRetainBand("c1", false)
+
+    // Then its data is reported releasable even though no content drop happens
+    expect(dataReleasable).toEqual(["c1"])
+  })
+
+  it("does not report data releasable while the cell is pinned or inside a band", () => {
+    // Given a focused, fully mounted cell
+    engine.sync([sqlCell("c1")])
+    engine.setFocusedCell("c1")
+    engine.reportRetainBand("c1", true)
+    engine.reportMountBand("c1", true, 0)
+
+    // When it leaves the mount band but stays in the retain band
+    engine.reportMountBand("c1", false, 800)
+    expect(dataReleasable).toEqual([])
+
+    // And when it leaves the retain band while still focused
+    engine.reportRetainBand("c1", false)
+
+    // Then the pin keeps its data resident
+    expect(dataReleasable).toEqual([])
+  })
+
+  it("reports data releasable when the last pin is removed outside the bands", () => {
+    // Given a focused cell outside both bands
+    engine.sync([sqlCell("c1")])
+    engine.setFocusedCell("c1")
+    engine.reportRetainBand("c1", false)
+    expect(dataReleasable).toEqual([])
+
+    // When focus moves away
+    engine.setFocusedCell(null)
+
+    // Then its data becomes releasable
+    expect(dataReleasable).toEqual(["c1"])
+  })
+
+  it("canReleaseData follows bands and pins", () => {
+    // Given a synced cell inside the retain band
+    engine.sync([sqlCell("c1")])
+    engine.reportRetainBand("c1", true)
+    expect(engine.canReleaseData("c1")).toBe(false)
+
+    // When it leaves the band, release is allowed
+    engine.reportRetainBand("c1", false)
+    expect(engine.canReleaseData("c1")).toBe(true)
+
+    // But not while pinned
+    engine.setFocusedCell("c1")
+    expect(engine.canReleaseData("c1")).toBe(false)
+  })
+})

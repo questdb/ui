@@ -81,13 +81,14 @@ export const pendingChartFetchState = (sql: string): ChartFetchState => {
   }
 }
 
-const errorExecResult = (query: string): QueryExecResult => ({
+const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
   type: "error",
   query,
   columns: [],
   dataset: [],
   count: 0,
-  error: "Query failed",
+  error:
+    cause instanceof Error && cause.message ? cause.message : "Query failed",
 })
 
 export type ChartRefreshEngineOptions = {
@@ -217,7 +218,8 @@ export class ChartRefreshEngine {
     if (this.shouldAutoRefresh(entry)) {
       const interval =
         autoRefreshIntervalMs(entry.autoRefresh) ?? REFRESH_MIN_MS
-      entry.skipNextPollFetch = Date.now() - entry.lastFetchedAt < interval
+      entry.skipNextPollFetch =
+        entry.skipNextPollFetch || Date.now() - entry.lastFetchedAt < interval
       this.updatePoll(entry)
       return
     }
@@ -267,7 +269,7 @@ export class ChartRefreshEngine {
         lastFetchHadError: false,
         classifyBlock: null,
       },
-      visible: this.visibilityByCell.get(cell.id) ?? true,
+      visible: this.visibilityByCell.get(cell.id) ?? false,
       lastFetchedAt: 0,
       classifyCache: new Map(),
       sqlDebounce: null,
@@ -321,11 +323,17 @@ export class ChartRefreshEngine {
   }
 
   private applySql(entry: Entry, sql: string) {
+    entry.inFlight?.abort()
+    entry.inFlight = null
     entry.sql = sql
     entry.classifyCache = new Map()
     entry.lastFetchedAt = 0
     const queries = getQueriesFromText(sql)
-    this.setState(entry, { queries, queriesKey: queries.join("\u0001") })
+    this.setState(entry, {
+      queries,
+      queriesKey: queries.join("\u0001"),
+      fetching: false,
+    })
     this.hydrate(entry)
   }
 
@@ -435,7 +443,7 @@ export class ChartRefreshEngine {
     })
   }
 
-  private async fetchOnce(entry: Entry) {
+  private async fetchOnce(entry: Entry): Promise<number | void> {
     // Supersede any in-flight fetch up front, so a slow earlier response can't
     // land after the query changed — including when it's cleared to empty.
     entry.inFlight?.abort()
@@ -457,9 +465,11 @@ export class ChartRefreshEngine {
     const ac = new AbortController()
     entry.inFlight = ac
     this.setState(entry, { fetching: true })
-    await this.limitFetch(async () => {
+    return this.limitFetch(async () => {
       if (ac.signal.aborted) return
+      const start = performance.now()
       await this.runFetch(entry, ac)
+      return performance.now() - start
     })
   }
 
@@ -516,7 +526,9 @@ export class ChartRefreshEngine {
       }
       const out = await Promise.all(
         queries.map((q) =>
-          deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP).catch(() => null),
+          deps
+            .executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP)
+            .catch((e) => errorExecResult(q, e)),
         ),
       )
       if (ac.signal.aborted) return
@@ -525,7 +537,7 @@ export class ChartRefreshEngine {
         results: resultsEquivalent(entry.state.results, next)
           ? entry.state.results
           : next,
-        lastFetchHadError: out.some((r) => r === null),
+        lastFetchHadError: out.some((r) => r.type === "error"),
         settledKey: queriesKey,
       })
       if (next.length > 0) this.saveSnapshot(entry, next)
@@ -533,10 +545,7 @@ export class ChartRefreshEngine {
       // Mirror EVERY statement (not just chartable ones) so a switch to the grid
       // shows the same tabs a real run would — including errors and empty
       // results — instead of dropping them or leaving stale rows behind.
-      this.mirror(
-        entry,
-        out.map((r, i) => r ?? errorExecResult(queries[i])),
-      )
+      this.mirror(entry, out)
     } finally {
       // Only clear when still the active fetch — a superseded (aborted) run
       // must not flip `fetching` off while its replacement is in flight.

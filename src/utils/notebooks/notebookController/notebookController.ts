@@ -146,7 +146,6 @@ export const createNotebookController = (
         cellId,
         bufferId,
       )
-      const priorResult = cellBefore.result ?? null
 
       if (sql !== undefined && sql !== cellBefore.value) {
         return {
@@ -156,7 +155,7 @@ export const createNotebookController = (
         }
       }
 
-      const { superseded, cellChanged, notStarted, resultCleared } =
+      const { superseded, cellChanged, notStarted, resultCleared, result } =
         await liveActionsRef.current.runCell(cellId, sql, signal, true)
 
       if (superseded || cellChanged || resultCleared) {
@@ -173,11 +172,12 @@ export const createNotebookController = (
         }
       }
 
+      // Summarize the result THIS run produced — never cell.result, which a
+      // draw cell's auto-refresh mirror replaces independently of the run.
       const cell = liveActionsRef.current
         .getCellsSnapshot()
         .find((c) => c.id === cellId)
-      const freshCell =
-        cell?.result && cell.result !== priorResult ? cell : undefined
+      const freshCell = cell && result ? { ...cell, result } : undefined
 
       return summarizeCellResults(freshCell)
     },

@@ -23,6 +23,7 @@ import {
   columnLayoutQueryKey,
   loadNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
+import { MAX_RESERVED_ROWS } from "../notebookUtils"
 import { ShimmerBar, ShimmerSweep } from "./ShimmerBar"
 
 // Mirrors the InlineResultTable chrome stack in result-table/styles.ts.
@@ -220,8 +221,9 @@ export const displayColumnsFor = (
   const ordered = (layout?.columnOrder ?? naturalIds).filter((id) =>
     known.has(id),
   )
+  const orderedSet = new Set(ordered)
   for (const id of naturalIds) {
-    if (!ordered.includes(id)) ordered.push(id)
+    if (!orderedSet.has(id)) ordered.push(id)
   }
   const pinned = (layout?.pinnedColumns ?? []).filter((id) => known.has(id))
   const pinnedSet = new Set(pinned)
@@ -242,16 +244,70 @@ export const displayColumnsFor = (
   })
 }
 
+const GENERIC_COLUMN_COUNT = 4
+// Fill the full reserved bottom slot (RESERVED_RESULT_BOTTOM_HEIGHT) so no
+// blank strip shows under the silhouette.
+const GENERIC_ROW_COUNT = MAX_RESERVED_ROWS
+
+const GenericCell = styled.div<{ $align: "left" | "right" }>`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: ${({ $align }) =>
+    $align === "right" ? "flex-end" : "flex-start"};
+  height: ${ROW_HEIGHT}px;
+  padding: 0 0.6rem;
+  border-right: 1px solid ${color("selection")};
+  border-bottom: 1px solid ${color("selection")};
+  box-sizing: border-box;
+  overflow: hidden;
+`
+
+const GenericHeaderCell = styled(GenericCell)`
+  height: ${HEADER_HEIGHT}px;
+  background: ${color("backgroundDarker")};
+  border-bottom: none;
+`
+
+const genericAlign = (col: number): "left" | "right" =>
+  col === 0 ? "left" : "right"
+
+// The result is not in memory yet (snapshot loading, or released after a far
+// scroll) — real column names/widths are unknown, so a generic silhouette
+// holds the reserved space until the data lands.
+const GenericGridShimmer = () => (
+  <>
+    <HeaderRow>
+      {Array.from({ length: GENERIC_COLUMN_COUNT }, (_, col) => (
+        <GenericHeaderCell key={`g${col}`} $align={genericAlign(col)}>
+          <ValueBar $widthPct={valueWidthPct(0, col, genericAlign(col))} />
+        </GenericHeaderCell>
+      ))}
+    </HeaderRow>
+    {Array.from({ length: GENERIC_ROW_COUNT }, (_, row) => (
+      <BodyRow key={`r${row}`}>
+        {Array.from({ length: GENERIC_COLUMN_COUNT }, (_, col) => (
+          <GenericCell key={`g${col}`} $align={genericAlign(col)}>
+            <ValueBar
+              $widthPct={valueWidthPct(row + 1, col, genericAlign(col))}
+            />
+          </GenericCell>
+        ))}
+      </BodyRow>
+    ))}
+  </>
+)
+
 export const GridShimmer = ({
   result,
   bufferId,
   cellId,
 }: {
-  result: CellResult
+  result?: CellResult
   bufferId: number
   cellId: string
 }) => {
-  const active = activeResultOf(result)
+  const active = result ? activeResultOf(result) : undefined
   const columns = useMemo(
     () => displayColumnsFor(active, bufferId, cellId),
     [active, bufferId, cellId],
@@ -262,7 +318,7 @@ export const GridShimmer = ({
       : 0
   return (
     <Wrapper data-hook="cell-grid-shimmer" aria-hidden="true">
-      {result.results.length > 1 && (
+      {result && result.results.length > 1 && (
         <TabStrip>
           {tabKeysFor(result.results).map((key) => (
             <TabShimmer key={key} />
@@ -272,6 +328,19 @@ export const GridShimmer = ({
       <StatusStrip>
         <StatusBar />
       </StatusStrip>
+      {!result && (
+        <>
+          <ActionsStrip>
+            <QueryBar />
+            <ActionButtons>
+              <ActionButton />
+              <ActionButton />
+              <ActionButton />
+            </ActionButtons>
+          </ActionsStrip>
+          <GenericGridShimmer />
+        </>
+      )}
       {columns.length > 0 && (
         <>
           <ActionsStrip>

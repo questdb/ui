@@ -31,8 +31,10 @@ import {
   insertCell,
   isDoubleView,
   isExpectingResult,
+  releaseCellResultPatch,
   isUnverifiableExecError,
   mergeCellLayout,
+  migrateMarkdownTopHeights,
   MIN_MARKDOWN_HEIGHT_PX,
   modeChangeBottomHeightPatch,
   nextCopyLabel,
@@ -54,6 +56,7 @@ import {
   upsertCellLayout,
 } from "./notebookUtils"
 import type {
+  CellResult,
   NotebookCell,
   NotebookViewState,
   SingleQueryResult,
@@ -1655,7 +1658,7 @@ describe("computeCellGridH", () => {
     ).toBe(4)
   })
   it("respects explicit topHeight and bottomHeight overrides", () => {
-    // 200 + 56 + 300 = 556 → ceil(556/50) = 12
+    // Split chrome 50: 200 + 50 + 300 = 550 → ceil(550/50) = 11
     expect(
       computeCellGridH(
         {
@@ -1668,7 +1671,7 @@ describe("computeCellGridH", () => {
         },
         50,
       ),
-    ).toBe(12)
+    ).toBe(11)
   })
   it("draw cell uses chart default 350 when bottomHeight is unset", () => {
     // 72 + 56 + 350 = 478 → ceil(478/50) = 10
@@ -1683,12 +1686,12 @@ describe("computeCellGridH", () => {
   })
   it("accounts for marginY (inter-row gaps from react-grid-layout)", () => {
     // Same cell as the "respects explicit … overrides" test above
-    // (topHeight=200, bottomHeight=300, chrome=56 → totalPx=556).
-    // With rowHeight=10 and NO margin: 556/10 = 56 rows. With marginY=20,
-    // each row occupies (10+20)=30 px effective, so h = ceil((556+20)/30)
-    // = ceil(576/30) = 20. Rendered px = 20*10 + 19*20 = 200 + 380 = 580,
-    // which fits the 556-px content. Without the marginY term, h would
-    // be 56 → rendered 56*10 + 55*20 = 1660 px (~3× too tall).
+    // (topHeight=200, bottomHeight=300, split chrome=50 → totalPx=550).
+    // With rowHeight=10 and NO margin: 550/10 = 55 rows. With marginY=20,
+    // each row occupies (10+20)=30 px effective, so h = ceil((550+20)/30)
+    // = ceil(570/30) = 19. Rendered px = 19*10 + 18*20 = 190 + 360 = 550,
+    // an exact fit for the 550-px content. Without the marginY term, h
+    // would be 55 → rendered 55*10 + 54*20 = 1630 px (~3× too tall).
     expect(
       computeCellGridH(
         {
@@ -1702,11 +1705,12 @@ describe("computeCellGridH", () => {
         10,
         20,
       ),
-    ).toBe(20)
+    ).toBe(19)
   })
   it("expectingResult reserves the result area when bottomHeight is unset", () => {
-    // RESERVED_RESULT_BOTTOM_HEIGHT = 44 + 36 + 44 + 10*30 = 424.
-    // 72 + 56 + 424 = 552 → ceil(552/50) = 12
+    // RESERVED_RESULT_BOTTOM_HEIGHT = 44 + 36 + 44 + 10*30 = 424; an
+    // expecting cell renders split, so chrome is 50.
+    // 72 + 50 + 424 = 546 → ceil(546/50) = 11
     expect(
       computeCellGridH(
         { id: "x", position: 0, value: "", lastRunStatus: "success" },
@@ -1714,7 +1718,7 @@ describe("computeCellGridH", () => {
         0,
         true,
       ),
-    ).toBe(12)
+    ).toBe(11)
   })
   it("expectingResult uses the cell's own bottomHeight when set", () => {
     // 72 + 56 + 300 = 428 → ceil(428/50) = 9
@@ -1749,6 +1753,43 @@ describe("computeCellGridH", () => {
       ),
     ).toBe(4)
   })
+  it("split cells carry the 6px divider on top of the base chrome", () => {
+    // Base chrome alone would land exactly on 8 rows (72 + 104 + 44 = 220px
+    // = 8×10 + 7×20); the in-flow editor/result divider tips it to 9.
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          topHeight: 72,
+          bottomHeight: 104,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        10,
+        20,
+      ),
+    ).toBe(9)
+  })
+  it("view-maximized cells drop the divider (bottom slot spans both panes)", () => {
+    // The same heights as the split case, minus the 6px divider: 220px lands
+    // exactly on 8 rows again.
+    expect(
+      computeCellGridH(
+        {
+          id: "x",
+          position: 0,
+          value: "",
+          topHeight: 72,
+          bottomHeight: 104,
+          isViewMaximized: true,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+        },
+        10,
+        20,
+      ),
+    ).toBe(8)
+  })
 })
 
 describe("markdown cell grid lattice", () => {
@@ -1761,17 +1802,17 @@ describe("markdown cell grid lattice", () => {
   })
 
   it("snapMarkdownTopHeight snaps content height up to the next lattice point", () => {
-    // Given 10px rows, 20px margins and 42px markdown chrome, on-lattice
-    // content heights are 28, 58, 88, …
+    // Given 10px rows, 20px margins and 44px markdown chrome, on-lattice
+    // content heights are 26, 56, 86, …
     // When the measured content falls between points
     // Then it snaps up to the next one
-    expect(snapMarkdownTopHeight(36)).toBe(58)
-    expect(snapMarkdownTopHeight(59)).toBe(88)
+    expect(snapMarkdownTopHeight(36)).toBe(56)
+    expect(snapMarkdownTopHeight(59)).toBe(86)
   })
 
   it("snapMarkdownTopHeight is idempotent on lattice points", () => {
-    expect(snapMarkdownTopHeight(58)).toBe(58)
-    expect(snapMarkdownTopHeight(88)).toBe(88)
+    expect(snapMarkdownTopHeight(56)).toBe(56)
+    expect(snapMarkdownTopHeight(86)).toBe(86)
   })
 
   it("snapMarkdownTopHeight floors at the markdown minimum", () => {
@@ -1779,31 +1820,65 @@ describe("markdown cell grid lattice", () => {
     expect(snapMarkdownTopHeight(10)).toBe(MIN_MARKDOWN_HEIGHT_PX)
   })
 
-  it("a fresh markdown cell derives an exact 4-row box from its 58px default", () => {
+  it("a fresh markdown cell derives an exact 4-row box from its 56px default", () => {
     // Given a markdown cell with no stored topHeight
-    // When grid h derives from the 58px default + 42px markdown chrome
-    // Then 58 + 42 = 100px = exactly 4 rows (4×10 + 3×20), zero slack
+    // When grid h derives from the 56px default + 44px markdown chrome
+    // Then 56 + 44 = 100px = exactly 4 rows (4×10 + 3×20), zero slack
     expect(computeCellGridH(markdown(), 10, 20)).toBe(4)
   })
 
-  it("uses markdown chrome (42) instead of SQL chrome (56)", () => {
-    // With SQL chrome, 58 + 56 = 114px would round up to 5 rows
-    expect(computeCellGridH(markdown({ topHeight: 58 }), 10, 20)).toBe(4)
+  it("markdown carries the base chrome only — its box lands exactly", () => {
+    // 56 + 44 = 100px = exactly 4 rows; markdown never adds the divider
+    expect(computeCellGridH(markdown({ topHeight: 56 }), 10, 20)).toBe(4)
+  })
+
+  it("migrates old-lattice markdown heights onto the new lattice, box-identical", () => {
+    // Given markdown cells snapped under the old 42px chrome (28, 58, 88)
+    // alongside a current-lattice one and a SQL cell
+    const view: NotebookViewState = {
+      cells: [
+        markdown({ id: "m1", topHeight: 58 }),
+        markdown({ id: "m2", topHeight: 88 }),
+        markdown({ id: "m3", topHeight: 56 }),
+        { id: "s1", position: 0, value: "select 1", topHeight: 58 },
+      ],
+    }
+
+    // When the persisted view is migrated
+    const next = migrateMarkdownTopHeights(view)
+
+    // Then old-lattice heights drop the 2px the header gained — the cell box
+    // (topHeight + chrome) is pixel-identical before and after
+    expect(next.cells.map((c) => c.topHeight)).toEqual([56, 86, 56, 58])
+    // And untouched cells keep their identity
+    expect(next.cells[2]).toBe(view.cells[2])
+    expect(next.cells[3]).toBe(view.cells[3])
+  })
+
+  it("migration returns the same state when every height is on-lattice", () => {
+    // Given a view already on the current lattice
+    const view: NotebookViewState = {
+      cells: [markdown({ topHeight: 56 }), markdown({})],
+    }
+
+    // When migrated
+    // Then the state passes through untouched
+    expect(migrateMarkdownTopHeights(view)).toBe(view)
   })
 
   it("cellHeightPatchForRows back-solves markdown rows with markdown chrome", () => {
     // Given a markdown cell rendered at 4 rows
-    const cell = markdown({ topHeight: 58 })
+    const cell = markdown({ topHeight: 56 })
     // When the user drags the cell to 7 rows (7×10 + 6×20 = 190px box)
     const patch = cellHeightPatchForRows(cell, 7, 10, 20)
-    // Then content = 190 − 42 = 148, pinned like a manual drag
-    expect(patch).toEqual({ topHeight: 148, topResized: true })
+    // Then content = 190 − 44 = 146, pinned like a manual drag
+    expect(patch).toEqual({ topHeight: 146, topResized: true })
   })
 
   it("cellHeightPatchForRows floors a tiny markdown drag at the markdown minimum", () => {
     // Given a markdown cell rendered at 4 rows
-    const cell = markdown({ topHeight: 58 })
-    // When the user drags the cell down to 2 rows (40px box < 42px chrome)
+    const cell = markdown({ topHeight: 56 })
+    // When the user drags the cell down to 2 rows (40px box < 44px chrome)
     const patch = cellHeightPatchForRows(cell, 2, 10, 20)
     // Then the content floors at the markdown minimum, not the SQL 72px
     expect(patch).toEqual({
@@ -1906,39 +1981,60 @@ describe("cellHeightPatchForRows", () => {
   })
 
   it("single-view: grows the editor and pins topResized", () => {
-    // Given a single-view run cell (no bottom slot)
+    // Given a single-view run cell (no bottom slot, base chrome 44)
     const runCell: NotebookCell = { id: "x", position: 0, value: "" }
-    // When a taller height is requested (targetContentPx = 30*10 - 76 = 224)
+    // When a taller height is requested (box 10*10+9*20 = 280,
+    // targetContentPx = 280 - 44 = 236)
     const patch = cellHeightPatchForRows(runCell, 10, 10, 20)
     // Then the editor grows to fill it and is pinned
-    expect(patch).toEqual({ topHeight: 224, topResized: true })
+    expect(patch).toEqual({ topHeight: 236, topResized: true })
   })
 
   it("split double-view: resizes the result pane and pins bottomResized", () => {
-    // Given a double-view cell (has result), not maximized
+    // Given a double-view cell (has result), not maximized — split chrome 50
     const c = withResult({ topHeight: 72, bottomHeight: 100 })
-    // When a taller height is requested (targetContentPx = 30*15 - 76 = 374)
+    // When a taller height is requested (box 15*10+14*20 = 430,
+    // targetContentPx = 430 - 50 = 380)
     const patch = cellHeightPatchForRows(c, 15, 10, 20)
     // Then only the bottom slot grows (editor kept), pinned via bottomResized
-    expect(patch).toEqual({ bottomHeight: 302, bottomResized: true })
+    expect(patch).toEqual({ bottomHeight: 308, bottomResized: true })
   })
 
   it("maximized double-view: scales both panes and pins both", () => {
-    // Given a maximized double-view cell
+    // Given a maximized double-view cell — no editor, no divider, so it
+    // carries the base chrome 44
     const c = withResult({
       topHeight: 72,
       bottomHeight: 100,
       isViewMaximized: true,
     })
-    // When a taller height is requested (targetContentPx = 374, scale ~2.174)
+    // When a taller height is requested (targetContentPx = 430 - 44 = 386,
+    // scale 386/172 ≈ 2.244)
     const patch = cellHeightPatchForRows(c, 15, 10, 20)
     // Then editor and result scale together, both pinned
     expect(patch).toEqual({
-      topHeight: 157,
-      bottomHeight: 217,
+      topHeight: 162,
+      bottomHeight: 224,
       topResized: true,
       bottomResized: true,
     })
+  })
+
+  it("expecting cell: resizes the reserved result pane, not the editor", () => {
+    // Given a run-marked cell whose result is not in memory — it renders
+    // split (editor + reserved shimmer), so a drag must size the bottom slot
+    const expecting: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      topHeight: 72,
+      bottomHeight: 100,
+      lastRunStatus: "success",
+    }
+    // When a taller height is requested (targetContentPx = 430 - 50 = 380)
+    const patch = cellHeightPatchForRows(expecting, 15, 10, 20, true)
+    // Then the reserved pane grows, exactly like a hydrated double-view drag
+    expect(patch).toEqual({ bottomHeight: 308, bottomResized: true })
   })
 })
 
@@ -1949,11 +2045,14 @@ describe("isExpectingResult", () => {
     value: "select 1",
     lastRunStatus: "success" as const,
   }
-  it("true for a hydrating run cell that ran but has no result yet", () => {
-    expect(isExpectingResult(ranCell, true)).toBe(true)
+  it("expects a result for a run-marked cell whose result is not in memory", () => {
+    // Given a cell that ran before but holds no result — before its snapshot
+    // is requested, and while it loads
+    expect(isExpectingResult(ranCell, "unrequested")).toBe(true)
+    expect(isExpectingResult(ranCell, "loading")).toBe(true)
   })
-  it("false once hydration has settled", () => {
-    expect(isExpectingResult(ranCell, false)).toBe(false)
+  it("stops expecting a result once the snapshot is known missing", () => {
+    expect(isExpectingResult(ranCell, "missing")).toBe(false)
   })
   it("false when a result has already landed", () => {
     expect(
@@ -1962,20 +2061,94 @@ describe("isExpectingResult", () => {
           ...ranCell,
           result: { results: [], activeResultIndex: 0, timestamp: 0 },
         },
-        true,
+        "loaded",
       ),
     ).toBe(false)
   })
   it("false for a cell that never ran", () => {
-    expect(isExpectingResult({ id: "x", position: 0, value: "" }, true)).toBe(
-      false,
-    )
-    expect(isExpectingResult({ ...ranCell, lastRunStatus: "none" }, true)).toBe(
+    expect(
+      isExpectingResult({ id: "x", position: 0, value: "" }, "unrequested"),
+    ).toBe(false)
+    expect(
+      isExpectingResult({ ...ranCell, lastRunStatus: "none" }, "unrequested"),
+    ).toBe(false)
+  })
+  it("false for draw cells (they size via the chart default)", () => {
+    expect(isExpectingResult({ ...ranCell, mode: "draw" }, "unrequested")).toBe(
       false,
     )
   })
-  it("false for draw cells (they size via the chart default)", () => {
-    expect(isExpectingResult({ ...ranCell, mode: "draw" }, true)).toBe(false)
+})
+
+describe("releaseCellResultPatch", () => {
+  const threeRowResult: CellResult = {
+    results: [
+      {
+        type: "dql",
+        query: "select 1",
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1], [2], [3]],
+        count: 3,
+      },
+    ],
+    activeResultIndex: 0,
+    timestamp: 0,
+  }
+
+  it("carries the collapsed run status and stamps the rendered bottom height", () => {
+    // Given a first-run-this-session cell: result set, no lastRunStatus and no
+    // stored bottom height yet
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "select 1",
+      result: threeRowResult,
+    }
+
+    // When the result is released from memory
+    const patch = releaseCellResultPatch(cell)
+
+    // Then the run marker survives and the released cell keeps the exact
+    // height its result rendered at, not the reserved fallback
+    expect(patch).toEqual({
+      result: undefined,
+      lastRunStatus: "success",
+      bottomHeight: computeResultBottomHeight(threeRowResult),
+    })
+  })
+
+  it("preserves a stored bottom height instead of stamping", () => {
+    // Given a cell whose bottom height is already recorded
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "select 1",
+      bottomHeight: 300,
+      result: threeRowResult,
+    }
+
+    // When the result is released
+    const patch = releaseCellResultPatch(cell)
+
+    // Then the patch leaves the stored height untouched
+    expect(patch).toEqual({ result: undefined, lastRunStatus: "success" })
+    expect("bottomHeight" in patch).toBe(false)
+  })
+
+  it("keeps the existing run marker when no result is in memory", () => {
+    // Given a cell whose marker came from a prior strip
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "select 1",
+      lastRunStatus: "error",
+    }
+
+    // When released again
+    const patch = releaseCellResultPatch(cell)
+
+    // Then the marker is unchanged and no height is stamped
+    expect(patch).toEqual({ result: undefined, lastRunStatus: "error" })
   })
 })
 
@@ -2770,7 +2943,8 @@ describe("buildAppliedNotebookState", () => {
   it("grid.h differing from the derived height pins it into the cell", () => {
     // Given a single-view run cell (derived height is 5 rows at 10/20)
     const current = state([cell("a", "SELECT 1")])
-    // When apply requests a taller grid.h (targetContentPx = 30*20 - 76 = 524)
+    // When apply requests a taller grid.h (box 20*10+19*20 = 580,
+    // targetContentPx = 580 - 44 = 536)
     const next = buildAppliedNotebookState(current, {
       layoutMode: "grid",
       cells: [
@@ -2778,7 +2952,7 @@ describe("buildAppliedNotebookState", () => {
       ],
     })
     // Then the height is back-solved into the editor and pinned (topResized)
-    expect(next.cells[0].topHeight).toBe(524)
+    expect(next.cells[0].topHeight).toBe(536)
     expect(next.cells[0].topResized).toBe(true)
   })
 

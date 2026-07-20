@@ -593,12 +593,14 @@ describe("createNotebookController — live runCell supersession", () => {
   })
 
   it("summarizes a normally-recorded live run from the cell", async () => {
-    // Given a run that records a fresh result over the prior one.
+    // Given a run that records a fresh result over the prior one and reports
+    // it in the outcome (cell.result alone can be an auto-refresh mirror).
     let current = dmlResult(1)
     const snapshot = () => [cellWith(current)]
     const runCell = () => {
-      current = dmlResult(2)
-      return Promise.resolve({ ok: true, superseded: false })
+      const recorded = dmlResult(2)
+      current = recorded
+      return Promise.resolve({ ok: true, superseded: false, result: recorded })
     }
     const controller = createNotebookController(1, {
       current: liveActions(snapshot, runCell),

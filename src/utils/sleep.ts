@@ -4,9 +4,13 @@ export const sleep = (ms: number, signal?: AbortSignal): Promise<boolean> =>
       resolve(true)
       return
     }
-    const timeoutId = setTimeout(() => resolve(false), ms)
-    signal?.addEventListener("abort", () => {
+    const onAbort = () => {
       clearTimeout(timeoutId)
       resolve(true)
-    })
+    }
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve(false)
+    }, ms)
+    signal?.addEventListener("abort", onAbort, { once: true })
   })

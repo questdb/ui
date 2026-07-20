@@ -67,10 +67,6 @@ export const DrawCanvas: React.FC<Props> = ({
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const fetchState = useChartFetchState(cell.id)
-  const pendingState = useMemo(
-    () => pendingChartFetchState(cell.value),
-    [cell.value],
-  )
   const {
     queries,
     queriesKey,
@@ -78,7 +74,10 @@ export const DrawCanvas: React.FC<Props> = ({
     settledKey,
     lastFetchHadError,
     classifyBlock,
-  } = fetchState ?? pendingState
+  } = useMemo(
+    () => fetchState ?? pendingChartFetchState(cell.value),
+    [fetchState, cell.value],
+  )
 
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 

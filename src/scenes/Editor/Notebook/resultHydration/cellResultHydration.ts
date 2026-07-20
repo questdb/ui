@@ -1,0 +1,249 @@
+import type {
+  CellResult,
+  NotebookCell,
+  SingleQueryResult,
+} from "../../../../store/notebook"
+import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
+
+export type CellResultStatus = "unrequested" | "loading" | "loaded" | "missing"
+
+const IDLE_FALLBACK_MS = 200
+const LOAD_RETRY_DELAY_MS = 500
+const MAX_LOAD_RETRIES = 2
+
+export type CellResultHydrationDeps = {
+  loadSnapshot: (cellId: string) => Promise<NotebookResultSnapshot | undefined>
+  getCell: (cellId: string) => NotebookCell | undefined
+  applyResult: (cellId: string, result: CellResult) => void
+  releaseResult: (cellId: string) => void
+  canRelease: (cellId: string) => boolean
+  scheduleIdle?: (callback: () => void) => void
+}
+
+const defaultScheduleIdle = (callback: () => void) => {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => callback(), { timeout: IDLE_FALLBACK_MS })
+  } else {
+    setTimeout(callback, IDLE_FALLBACK_MS)
+  }
+}
+
+const hasRunMarker = (cell: NotebookCell): boolean =>
+  cell.lastRunStatus != null && cell.lastRunStatus !== "none"
+
+// IndexedDB → memory, per cell, on scroll approach; memory → IndexedDB-only
+// when the cell leaves the retain band. Draw cells are excluded in both
+// directions: the chart engine lazy-loads its own frame, and releasing its
+// mirrored cell.result would desync the engine's lastMirror dedup.
+export class CellResultHydrationEngine {
+  private statuses = new Map<string, CellResultStatus>()
+  private listeners = new Map<string, Set<() => void>>()
+  private anyListeners = new Set<() => void>()
+  private releaseQueue = new Set<string>()
+  private releaseScheduled = false
+  private loadAttempts = new Map<string, number>()
+  private retryTimers = new Set<ReturnType<typeof setTimeout>>()
+  private destroyed = false
+  // Results safe to drop from memory: hydrated from a snapshot, or a live run
+  // whose snapshot save confirmed. Keyed by array identity — a replaced array
+  // fails safe (the cell just never releases).
+  private persisted = new WeakSet<SingleQueryResult[]>()
+  private deps: CellResultHydrationDeps
+  private scheduleIdle: (callback: () => void) => void
+
+  constructor(deps: CellResultHydrationDeps) {
+    this.deps = deps
+    this.scheduleIdle = deps.scheduleIdle ?? defaultScheduleIdle
+  }
+
+  destroy() {
+    this.destroyed = true
+    this.statuses.clear()
+    this.listeners.clear()
+    this.anyListeners.clear()
+    this.releaseQueue.clear()
+    this.retryTimers.forEach((timer) => clearTimeout(timer))
+    this.retryTimers.clear()
+    this.loadAttempts.clear()
+  }
+
+  sync(cells: NotebookCell[]) {
+    const present = new Set(cells.map((cell) => cell.id))
+    for (const cellId of [...this.statuses.keys()]) {
+      if (!present.has(cellId)) {
+        this.statuses.delete(cellId)
+        this.releaseQueue.delete(cellId)
+        this.loadAttempts.delete(cellId)
+      }
+    }
+  }
+
+  statusOf(cellId: string): CellResultStatus {
+    return this.statuses.get(cellId) ?? "unrequested"
+  }
+
+  request(cellId: string) {
+    if (this.destroyed) return
+    const status = this.statusOf(cellId)
+    // "missing" is terminal until forget(): the snapshot is known absent, and
+    // no path writes one for a mounted cell without also landing a live result.
+    // Re-loading on every band entry would flap the reserved geometry.
+    if (status === "loading" || status === "loaded" || status === "missing") {
+      return
+    }
+    const cell = this.deps.getCell(cellId)
+    if (!cell) return
+    if (cell.result != null) {
+      this.setStatus(cellId, "loaded")
+      return
+    }
+    if (cell.mode === "draw" || !hasRunMarker(cell)) return
+    this.setStatus(cellId, "loading")
+    this.deps
+      .loadSnapshot(cellId)
+      .then((snapshot) => this.applyLoaded(cellId, snapshot))
+      .catch(() => {
+        // Transient read failure — a band re-entry re-requests; a cell at rest
+        // on screen gets no new band event, so retry it here (bounded).
+        if (this.statusOf(cellId) !== "loading") return
+        this.setStatus(cellId, "unrequested")
+        this.scheduleLoadRetry(cellId)
+      })
+  }
+
+  noteReleasable(cellId: string) {
+    if (this.destroyed) return
+    this.releaseQueue.add(cellId)
+    this.scheduleNextRelease()
+  }
+
+  notePersisted(cellId: string, results: SingleQueryResult[]) {
+    this.persisted.add(results)
+    if (this.deps.canRelease(cellId)) this.noteReleasable(cellId)
+  }
+
+  forget(cellId: string) {
+    this.releaseQueue.delete(cellId)
+    this.loadAttempts.delete(cellId)
+    const previous = this.statuses.get(cellId)
+    if (previous === undefined) return
+    this.statuses.delete(cellId)
+    this.notify(cellId, previous === "missing")
+  }
+
+  subscribe(cellId: string, listener: () => void): () => void {
+    let set = this.listeners.get(cellId)
+    if (!set) {
+      set = new Set()
+      this.listeners.set(cellId, set)
+    }
+    set.add(listener)
+    return () => {
+      const current = this.listeners.get(cellId)
+      if (!current) return
+      current.delete(listener)
+      if (current.size === 0) this.listeners.delete(cellId)
+    }
+  }
+
+  subscribeAny(listener: () => void): () => void {
+    this.anyListeners.add(listener)
+    return () => {
+      this.anyListeners.delete(listener)
+    }
+  }
+
+  private applyLoaded(
+    cellId: string,
+    snapshot: NotebookResultSnapshot | undefined,
+  ) {
+    if (this.destroyed) return
+    this.loadAttempts.delete(cellId)
+    if (this.statusOf(cellId) !== "loading") return
+    const cell = this.deps.getCell(cellId)
+    if (!cell) {
+      this.forget(cellId)
+      return
+    }
+    if (cell.result != null) {
+      this.setStatus(cellId, "loaded")
+      return
+    }
+    if (this.deps.canRelease(cellId)) {
+      // Scrolled far away while the read was in flight — don't apply.
+      this.setStatus(cellId, "unrequested")
+      return
+    }
+    if (snapshot && snapshot.results.length > 0) {
+      this.persisted.add(snapshot.results)
+      this.deps.applyResult(cellId, {
+        results: snapshot.results,
+        activeResultIndex: snapshot.activeResultIndex ?? 0,
+        timestamp: snapshot.savedAt,
+        ...(snapshot.script ? { script: snapshot.script } : {}),
+      })
+      this.setStatus(cellId, "loaded")
+      return
+    }
+    this.setStatus(cellId, "missing")
+  }
+
+  // A cell resting on screen gets no further band transitions, so a failed
+  // read must retry itself or the shimmer never resolves. Off-screen cells
+  // skip this: their next band entry re-requests anyway.
+  private scheduleLoadRetry(cellId: string) {
+    const attempt = (this.loadAttempts.get(cellId) ?? 0) + 1
+    this.loadAttempts.set(cellId, attempt)
+    if (attempt > MAX_LOAD_RETRIES) return
+    if (this.deps.canRelease(cellId)) return
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timer)
+      this.request(cellId)
+    }, LOAD_RETRY_DELAY_MS * attempt)
+    this.retryTimers.add(timer)
+  }
+
+  private scheduleNextRelease() {
+    if (this.releaseScheduled || this.destroyed) return
+    this.releaseScheduled = true
+    this.scheduleIdle(() => {
+      this.releaseScheduled = false
+      this.releaseNextCell()
+    })
+  }
+
+  // One release per idle tick — each release re-renders a cell, and React 17
+  // does not batch state updates fired outside event handlers.
+  private releaseNextCell() {
+    if (this.destroyed) return
+    for (const cellId of [...this.releaseQueue]) {
+      this.releaseQueue.delete(cellId)
+      if (!this.deps.canRelease(cellId)) continue
+      const cell = this.deps.getCell(cellId)
+      if (!cell || cell.mode === "draw" || cell.result == null) continue
+      if (!this.persisted.has(cell.result.results)) continue
+      this.deps.releaseResult(cellId)
+      this.setStatus(cellId, "unrequested")
+      break
+    }
+    if (this.releaseQueue.size > 0) this.scheduleNextRelease()
+  }
+
+  private setStatus(cellId: string, status: CellResultStatus) {
+    const previous = this.statusOf(cellId)
+    if (previous === status) return
+    this.statuses.set(cellId, status)
+    this.notify(cellId, (previous === "missing") !== (status === "missing"))
+  }
+
+  // Per-cell subscribers see every transition; any-listeners (the grid layout
+  // version) only the known-missing flips — the sole status boundary
+  // isExpectingResult reads — so scroll-driven loading/loaded churn doesn't
+  // invalidate the layout memo.
+  private notify(cellId: string, missingChanged: boolean) {
+    this.listeners.get(cellId)?.forEach((listener) => listener())
+    if (missingChanged) {
+      this.anyListeners.forEach((listener) => listener())
+    }
+  }
+}

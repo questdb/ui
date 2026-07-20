@@ -75,6 +75,7 @@ export const useMonacoCellEditor = ({
   const monacoRef = useRef<Monaco | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
   const viewStateSaveTimeoutRef = useRef<number | null>(null)
+  const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null)
   const contextMenuCleanupRef = useRef<(() => void) | null>(null)
   const cursorQueryDecorationIdsRef = useRef<string[]>([])
   const decoratingRef = useRef(false)
@@ -124,18 +125,28 @@ export const useMonacoCellEditor = ({
   const onSaveViewStateRef = useRef(onSaveViewState)
   onSaveViewStateRef.current = onSaveViewState
 
+  const flushViewStateSave = useCallback(() => {
+    const state =
+      editorRef.current?.saveViewState() ?? pendingViewStateRef.current
+    pendingViewStateRef.current = null
+    if (state) {
+      onSaveViewStateRef.current(state)
+    }
+  }, [])
+
+  // Capture eagerly, notify debounced: by the time a teardown effect runs the
+  // editor is already disposed (saveViewState returns null), so the flush must
+  // read the last state captured while the editor was alive.
   const scheduleViewStateSave = useCallback(() => {
+    pendingViewStateRef.current = editorRef.current?.saveViewState() ?? null
     if (viewStateSaveTimeoutRef.current) {
       window.clearTimeout(viewStateSaveTimeoutRef.current)
     }
     viewStateSaveTimeoutRef.current = window.setTimeout(() => {
       viewStateSaveTimeoutRef.current = null
-      const state = editorRef.current?.saveViewState()
-      if (state) {
-        onSaveViewStateRef.current(state)
-      }
+      flushViewStateSave()
     }, VIEW_STATE_SAVE_DEBOUNCE_MS)
-  }, [])
+  }, [flushViewStateSave])
 
   const triggerValidation = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return
@@ -233,11 +244,12 @@ export const useMonacoCellEditor = ({
   useEffect(() => {
     if (editorMounted) return
     clearPendingTimers()
+    flushViewStateSave()
     contextMenuCleanupRef.current?.()
     contextMenuCleanupRef.current = null
     editorRef.current = null
     monacoRef.current = null
-  }, [editorMounted, clearPendingTimers])
+  }, [editorMounted, clearPendingTimers, flushViewStateSave])
 
   useEffect(() => {
     return () => {
@@ -247,11 +259,8 @@ export const useMonacoCellEditor = ({
       if (editorRef.current && monacoRef.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
         clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
-        const state = editorRef.current.saveViewState()
-        if (state) {
-          onSaveViewStateRef.current(state)
-        }
       }
+      flushViewStateSave()
     }
   }, [])
 

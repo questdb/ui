@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { sleep } from "../utils/sleep"
 
 type AdaptivePollLoopOptions = {
-  fetchFn: () => Promise<void>
+  fetchFn: () => Promise<number | void>
   signal: AbortSignal
   minIntervalMs: number
   maxIntervalMs: number
@@ -32,13 +32,16 @@ export const runAdaptivePollLoop = async ({
       skip = false
     } else {
       const start = performance.now()
+      let measured: number | void = undefined
       try {
-        await fetchFn()
+        measured = await fetchFn()
       } catch {
         // fetchFn handles its own errors; never let one kill the loop
       }
       if (signal.aborted) break
-      samples = [...samples, performance.now() - start].slice(-sampleSize)
+      samples = [...samples, measured ?? performance.now() - start].slice(
+        -sampleSize,
+      )
       const avg = samples.reduce((a, b) => a + b, 0) / samples.length
       nextInterval = Math.min(
         maxIntervalMs,
