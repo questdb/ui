@@ -1,13 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
-import {
-  QuestDBLanguageName,
-  getQueryFromCursor,
-  normalizeQueryText,
-  stripSQLComments,
-} from "../../Monaco/utils"
+import { QuestDBLanguageName, stripSQLComments } from "../../Monaco/utils"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { CellDragHeader } from "./CellDragHeader"
@@ -19,14 +14,11 @@ import { useChartLoading } from "./useChartLoading"
 import { useChartZoomed } from "./useChartZoomed"
 import { useCellToolbarTier } from "./useCellToolbarTier"
 import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
-import { InlineResultTable } from "../result-table"
 import { ResizeHandle } from "../resize"
 import { CellWrapper } from "./CellWrapper"
-import { DrawCanvas } from "../DrawCanvas"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { NotebookCell } from "../../../../store/notebook"
 import { exceedsCellLineLimit } from "../../../../store/notebook"
-import { useCellResize } from "./useCellResize"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
 import { useCellReveal } from "./useCellReveal"
@@ -34,24 +26,14 @@ import {
   emitUserAction,
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
-import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
-import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
-import { eventBus } from "../../../../modules/EventBus"
-import { EventType } from "../../../../modules/EventBus/types"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
-  computeCellHeights,
-  hasAgentVisibleCellHeightChanged,
   isDoubleView,
   isExpectingResult,
   MIN_BOTTOM_HEIGHT_PX,
-  partitionCellHeights,
   resolveCellView,
-  resolveRunAction,
-  scaleCellHeights,
-  topHeightForSql,
 } from "../notebookUtils"
 import {
   useCellContentMode,
@@ -59,15 +41,13 @@ import {
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
-import { GridShimmer } from "../cellVirtualization/GridShimmer"
-import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
-
-// Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
-// content height for an empty editor (one line + padding); the previous
-// `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
-// pasted content (user-confirmed: unbounded).
-const MIN_EDITOR_HEIGHT = 72
+import { useCellRunActions } from "./useCellRunActions"
+import {
+  MIN_EDITOR_HEIGHT,
+  useCellResizeOrchestration,
+} from "./useCellResizeOrchestration"
+import { CellBottomContent } from "./CellBottomContent"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
   overflow: hidden;
@@ -145,18 +125,11 @@ const CellInner: React.FC<Props> = ({
   isRunning,
 }) => {
   const {
-    runCell,
-    reRunResultAt,
     cancelCell,
-    cancelQuery,
-    setActiveResultIndex,
-    setCellMode,
-    clearCellResult,
     setCellChartConfig,
-    setCellViewMaximized,
+    clearCellResult,
     updateCell,
     setFocusedCell,
-    getCellsSnapshot,
   } = useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
@@ -172,9 +145,6 @@ const CellInner: React.FC<Props> = ({
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
-  // A run from the Run toggle spins the Run segment; a run from the refresh
-  // button spins the refresh button instead.
-  const firstRunRef = useRef(false)
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, refreshing: chartRefreshing } =
@@ -185,126 +155,23 @@ const CellInner: React.FC<Props> = ({
   const resultStatus = useCellResultStatus(cell.id)
 
   const contentHeightGetterRef = useRef<() => number | null>(() => null)
+  const getEditorContentHeight = useCallback(
+    () => contentHeightGetterRef.current(),
+    [],
+  )
 
   const validateWithGlobals = useValidateWithGlobals()
-
-  const readResetTopHeight = useCallback(() => {
-    const contentHeight = contentHeightGetterRef.current()
-    return contentHeight != null
-      ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
-      : topHeightForSql(cell.value)
-  }, [cell.value])
-
-  const signalAgentVisibleHeightChange = useCallback(
-    (patch: Partial<NotebookCell>) => {
-      if (hasAgentVisibleCellHeightChanged(cell, patch, layoutMode)) {
-        signalUserEdit(bufferIdForEvents)
-      }
-    },
-    [bufferIdForEvents, cell, layoutMode],
-  )
-
-  const topResize = useCellResize(
-    MIN_EDITOR_HEIGHT,
-    useCallback(
-      (height: number) =>
-        updateCell(cell.id, { topHeight: height, topResized: true }),
-      [cell.id, updateCell],
-    ),
-    // Write Monaco's CURRENT content height directly on reset, rather
-    // than setting `topHeight: undefined` and waiting for the next
-    // `onContentHeightChange` to fill it in. The wait creates a
-    // one-frame flicker where `topHeight` falls back to
-    // DEFAULT_TOP_HEIGHT (72 px) and the bottom slot jumps up.
-    useCallback(() => {
-      updateCell(cell.id, {
-        topHeight: readResetTopHeight(),
-        topResized: false,
-      })
-    }, [cell.id, readResetTopHeight, updateCell]),
-  )
-  const bottomResize = useCellResize(
-    MIN_BOTTOM_HEIGHT_PX,
-    useCallback(
-      (height: number) =>
-        updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
-      [cell.id, updateCell],
-    ),
-    useCallback(
-      () =>
-        updateCell(cell.id, { bottomHeight: undefined, bottomResized: false }),
-      [cell.id, updateCell],
-    ),
-  )
 
   const handleChartConfigChange = (config: ChartConfig) => {
     signalUserEdit(bufferIdForEvents)
     setCellChartConfig(cell.id, config)
   }
 
-  const validatingDrawRef = useRef(false)
-
-  // Returns true only when the cell actually entered draw mode, so a caller can
-  // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
-  // draw was refused by validation.
-  const handleDrawClick = useCallback(async (): Promise<boolean> => {
-    if (isRunning) return false
-    if (isDrawMode) {
-      setCellMode(cell.id, "run")
-      clearCellResult(cell.id)
-      emitUserAction({
-        kind: "user_changed_cell_mode",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-        mode: "run",
-      })
-      return false
-    }
-    if (validatingDrawRef.current) return false
-    validatingDrawRef.current = true
-    try {
-      const decision = await requireAllDQL(cell.value, (s) =>
-        validateWithGlobals(s),
-      )
-      if (!decision.granted) {
-        toast.error(decision.reason)
-        return false
-      }
-      setCellMode(cell.id, "draw")
-      emitUserAction({
-        kind: "user_changed_cell_mode",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-        mode: "draw",
-      })
-      return true
-    } finally {
-      validatingDrawRef.current = false
-    }
-  }, [
-    cell.id,
-    cell.value,
-    isRunning,
-    isDrawMode,
-    setCellMode,
-    clearCellResult,
-    bufferIdForEvents,
-    validateWithGlobals,
-  ])
-
-  const liveTopHeight = topResize.liveHeight
-  const liveBottomHeight = bottomResize.liveHeight
-
   // A run cell that had a persisted result (lastRunStatus is set, known
   // synchronously from the view state) reserves its result area from the FIRST
   // render while the snapshot hydrates; computeCellGridH reserves the same space
   // in the grid item's height (both go through computeCellHeights).
   const expectingResult = isExpectingResult(cell, resultStatus)
-  const { topHeight, bottomHeight } = computeCellHeights(cell, {
-    liveTopHeight,
-    liveBottomHeight,
-    expectingResult,
-  })
   const doubleView = isDoubleView(cell) || expectingResult
   // Compact can't split — one full-height pane: the result fills the cell by
   // default, "View SQL" (isViewMaximized === false) shows the editor instead.
@@ -317,15 +184,29 @@ const CellInner: React.FC<Props> = ({
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
-  const isGridLoading = isRunning && firstRunRef.current
 
-  const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
-    null,
-  )
-  const spotlightEditorRatio =
-    spotlightLiveRatio ??
-    cell.spotlightEditorRatio ??
-    topHeight / (topHeight + bottomHeight)
+  const {
+    topHeight,
+    bottomHeight,
+    spotlightEditorRatio,
+    topResize,
+    bottomResize,
+    middleResizeLive,
+    middleResizeEnd,
+    resetToDefaults,
+    resetBottomArea,
+    maximizedChartResizeLive,
+    maximizedChartResizeEnd,
+  } = useCellResizeOrchestration({
+    cell,
+    layoutMode,
+    isMaximized,
+    showBottomSlot,
+    expectingResult,
+    editorContainerRef,
+    resultRef,
+    getEditorContentHeight,
+  })
 
   // Editor height pipeline (hard-cap model):
   //   - When NOT user-resized: cell.topHeight tracks Monaco's content height
@@ -395,138 +276,16 @@ const CellInner: React.FC<Props> = ({
       editorRef.current?.getContentHeight() ?? null
   }, [editorRef])
 
-  const tryRunSelection = useCallback(async (): Promise<boolean> => {
-    const ed = editorRef.current
-    if (!ed) return false
-    const selection = ed.getSelection()
-    const model = ed.getModel()
-    if (!selection || !model || selection.isEmpty()) return false
-
-    const selectedText = model.getValueInRange(selection)
-    const normalized = normalizeQueryText(selectedText)
-    if (!normalized) return false
-
-    clearHighlight()
-    const { ok } = await runCell(cell.id, normalized)
-    applyHighlight(ok)
-    return true
-  }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
-
-  const emitRanEvent = useCallback(
-    (status: RanStatus) => {
-      emitUserAction({
-        kind: "user_ran_cell",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-        status,
-      })
-    },
-    [bufferIdForEvents, cell.id],
-  )
-
-  const handleRunAll = useCallback(
-    async (ignoreSelection = false) => {
-      if (editorRef.current) {
-        if (!ignoreSelection && (await tryRunSelection())) return
-        clearHighlight()
-      }
-
-      const priorResult =
-        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      const { ok } = await runCell(cell.id)
-      const freshResult =
-        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      emitRanEvent(createRunStatus(priorResult, freshResult, ok))
-    },
-    [
-      cell.id,
-      runCell,
-      tryRunSelection,
-      editorRef,
-      clearHighlight,
-      emitRanEvent,
-      getCellsSnapshot,
-    ],
-  )
-
-  const handleRunSingle = useCallback(async () => {
-    const ed = editorRef.current
-    // Capture the cursor's statement before any await — a reveal in this same
-    // gesture can unmount the editor, and reading it afterwards loses it.
-    const cursorQuery = ed ? getQueryFromCursor(ed)?.query : undefined
-    if (ed && (await tryRunSelection())) return
-    // Cursor first; otherwise reuse the active result tab's query so a single
-    // run never silently expands into running every statement.
-    const activeQuery =
-      cell.result?.results[cell.result.activeResultIndex]?.query
-    const sql = cursorQuery ?? activeQuery
-    if (!sql?.trim()) {
-      await handleRunAll()
-      return
-    }
-    clearHighlight()
-    const priorResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const { ok } = await runCell(cell.id, normalizeQueryText(sql))
-    const freshResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
-  }, [
-    cell.id,
-    cell.result,
-    runCell,
-    tryRunSelection,
-    editorRef,
-    clearHighlight,
-    handleRunAll,
-    emitRanEvent,
-    getCellsSnapshot,
-  ])
-
-  const runResolved = useCallback(
-    (intent: "all" | "single", ignoreSelection = false) => {
-      const plan = resolveRunAction(
-        { mode: cell.mode, result: cell.result },
-        { isCompactTier, showBottomSlot, intent },
-      )
-      if (plan.kind === "noop") return
-      if (plan.kind === "chart") {
-        firstRunRef.current = false
-        eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
-          cellId: cell.id,
-        })
-        return
-      }
-      if (plan.exitDraw) {
-        signalUserEdit(bufferIdForEvents)
-        setCellMode(cell.id, "run")
-      }
-      firstRunRef.current = cell.result == null
-      // Start the run before revealing: under React 17 a reveal fired from a
-      // native key event re-renders synchronously and unmounts the editor, so
-      // the run must read the cursor first.
-      if (plan.kind === "run-all") void handleRunAll(ignoreSelection)
-      else void handleRunSingle()
-      if (plan.reveal) setCellViewMaximized(cell.id, true)
-    },
-    [
-      cell.id,
-      cell.mode,
-      cell.result,
-      bufferIdForEvents,
+  const { runAll, runSingle, handleDrawClick, isGridLoading } =
+    useCellRunActions({
+      cell,
+      isRunning,
       isCompactTier,
       showBottomSlot,
-      setCellViewMaximized,
-      setCellMode,
-      handleRunAll,
-      handleRunSingle,
-    ],
-  )
-  const runAll = useCallback(() => runResolved("all"), [runResolved])
-  const runSingle = useCallback(() => runResolved("single"), [runResolved])
-  // Refresh re-runs the whole cell to reproduce its grid — never a stray
-  // editor selection.
-  const refreshRun = useCallback(() => runResolved("all", true), [runResolved])
+      editorRef,
+      applyHighlight,
+      clearHighlight,
+    })
 
   const isExternalSyncRef = useRef(false)
 
@@ -600,160 +359,6 @@ const CellInner: React.FC<Props> = ({
       scrollbar: { handleMouseWheel: isFocused },
     })
   }, [isFocused, editorRef])
-
-  const middleSum = () => {
-    if (!isMaximized) return topHeight + bottomHeight
-    const editorH =
-      editorContainerRef.current?.getBoundingClientRect().height ?? 0
-    const bottomH = resultRef.current?.getBoundingClientRect().height ?? 0
-    return editorH + bottomH
-  }
-
-  const middleResizeLive = (height: number) => {
-    const { top, bottom } = partitionCellHeights(
-      middleSum(),
-      height,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    if (isMaximized) {
-      setSpotlightLiveRatio(top / (top + bottom))
-      return
-    }
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
-  }
-
-  const middleResizeEnd = (height: number) => {
-    const { top, bottom } = partitionCellHeights(
-      middleSum(),
-      height,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
-      return
-    }
-    signalAgentVisibleHeightChange({
-      topHeight: top,
-      topResized: true,
-      bottomHeight: bottom,
-      bottomResized: true,
-    })
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
-  }
-
-  const resetToDefaults = () => {
-    if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
-      return
-    }
-    signalAgentVisibleHeightChange({
-      topHeight: readResetTopHeight(),
-      topResized: false,
-      bottomHeight: undefined,
-      bottomResized: false,
-    })
-    bottomResize.resetHeight()
-    topResize.resetHeight()
-  }
-
-  const resetBottomArea = useCallback(() => {
-    if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
-      return
-    }
-    if (showBottomSlot) {
-      signalAgentVisibleHeightChange({
-        bottomHeight: undefined,
-        bottomResized: false,
-      })
-      bottomResize.resetHeight()
-    } else {
-      signalAgentVisibleHeightChange({
-        topHeight: readResetTopHeight(),
-        topResized: false,
-      })
-      topResize.resetHeight()
-    }
-  }, [
-    isMaximized,
-    showBottomSlot,
-    bottomResize,
-    topResize,
-    cell.id,
-    readResetTopHeight,
-    signalAgentVisibleHeightChange,
-    updateCell,
-  ])
-
-  // When a chart is maximized the BottomSlot fills the whole cell, so its
-  // measured height IS the cell total — scale top/bottom to that new total
-  // (preserving the split so it's intact when the chart is restored).
-  const maximizedChartResizeLive = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
-  }
-
-  const maximizedChartResizeEnd = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
-  }
-
-  useEffect(() => {
-    const handler = (payload?: { cellId?: string }) => {
-      if (payload?.cellId !== cell.id) return
-      resetBottomArea()
-    }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
-    return () =>
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
-  }, [cell.id, resetBottomArea])
-
-  useEffect(() => {
-    if (!isRunning) firstRunRef.current = false
-  }, [isRunning])
-
-  // The toolbar's "View table" / "Refresh now" (grid) drive a run, and
-  // "View chart" enters draw mode — both routed here so they reuse the same
-  // run / validated-draw logic as the Run / Draw toggle buttons.
-  useEffect(() => {
-    const runHandler = (payload?: { cellId?: string }) => {
-      if (payload?.cellId !== cell.id) return
-      refreshRun()
-    }
-    const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
-      if (payload?.cellId !== cell.id) return
-      void handleDrawClick().then((entered) => {
-        if (entered && payload.maximize) setCellViewMaximized(cell.id, true)
-      })
-    }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
-    return () => {
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
-    }
-  }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
 
   useEffect(() => {
     if (!isFocused && !isMaximized) return
@@ -939,41 +544,15 @@ const CellInner: React.FC<Props> = ({
                 : { height: bottomHeight }
           }
         >
-          {isDrawMode ? (
-            contentMode === "full" ? (
-              <DrawCanvas
-                cell={cell}
-                isFocused={isFocused}
-                onConfigChange={handleChartConfigChange}
-              />
-            ) : (
-              <ChartPlaceholder />
-            )
-          ) : cell.result ? (
-            contentMode === "full" ? (
-              <InlineResultTable
-                result={cell.result}
-                isFocused={isFocused}
-                onTabChange={(index) => setActiveResultIndex(cell.id, index)}
-                onCancelQuery={(index) => {
-                  cancelQuery(cell.id, index)
-                }}
-                bufferId={bufferIdForEvents}
-                cellId={cell.id}
-                isRunning={isRunning}
-                onReRun={(index) => void reRunResultAt(cell.id, index)}
-                onYieldFocus={() => editorRef.current?.focus()}
-              />
-            ) : (
-              <GridShimmer
-                result={cell.result}
-                bufferId={bufferIdForEvents}
-                cellId={cell.id}
-              />
-            )
-          ) : expectingResult ? (
-            <GridShimmer bufferId={bufferIdForEvents} cellId={cell.id} />
-          ) : null}
+          <CellBottomContent
+            cell={cell}
+            contentMode={contentMode}
+            expectingResult={expectingResult}
+            isFocused={isFocused}
+            isRunning={isRunning}
+            onConfigChange={handleChartConfigChange}
+            onYieldFocus={() => editorRef.current?.focus()}
+          />
         </BottomSlot>
       )}
     </CellWrapper>

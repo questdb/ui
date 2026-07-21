@@ -1,17 +1,15 @@
 import type { NotebookCell } from "../../../../store/notebook"
+import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
+import { scheduleFrame, scheduleIdle } from "../notebookScheduling"
 
 export type CellContentMode = "full" | "placeholder"
 
 const DWELL_MS = 100
 const RECENT_EDIT_LIMIT = 5
-const FRAME_FALLBACK_MS = 16
-const IDLE_FALLBACK_MS = 200
 
 export type CellVirtualizationEngineOptions = {
   dwellMs?: number
   recentEditLimit?: number
-  scheduleFrame?: (callback: () => void) => void
-  scheduleIdle?: (callback: () => void) => void
   onCellDataNeeded?: (cellId: string) => void
   onCellDataReleasable?: (cellId: string) => void
 }
@@ -25,22 +23,6 @@ type Entry = {
   candidateSince: number | null
 }
 
-const defaultScheduleFrame = (callback: () => void) => {
-  if (typeof requestAnimationFrame === "function") {
-    requestAnimationFrame(() => callback())
-  } else {
-    setTimeout(callback, FRAME_FALLBACK_MS)
-  }
-}
-
-const defaultScheduleIdle = (callback: () => void) => {
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(() => callback(), { timeout: IDLE_FALLBACK_MS })
-  } else {
-    setTimeout(callback, IDLE_FALLBACK_MS)
-  }
-}
-
 // Full content inside the mount band, placeholder beyond the retain band —
 // the gap is hysteresis. Mounts pace one per frame, nearest first, after a
 // dwell; pinned cells never drop.
@@ -52,22 +34,19 @@ export class CellVirtualizationEngine {
   private maximizedCellId: string | null = null
   private runningCellIds = new Set<string>()
   private recentlyEditedCellIds: string[] = []
+  private lastSyncedCellIds: string[] | null = null
   private revealPinnedCellIds = new Set<string>()
   private mountScheduled = false
   private dropScheduled = false
   private destroyed = false
   private dwellMs: number
   private recentEditLimit: number
-  private scheduleFrame: (callback: () => void) => void
-  private scheduleIdle: (callback: () => void) => void
   private onCellDataNeeded?: (cellId: string) => void
   private onCellDataReleasable?: (cellId: string) => void
 
   constructor(options: CellVirtualizationEngineOptions = {}) {
     this.dwellMs = options.dwellMs ?? DWELL_MS
     this.recentEditLimit = options.recentEditLimit ?? RECENT_EDIT_LIMIT
-    this.scheduleFrame = options.scheduleFrame ?? defaultScheduleFrame
-    this.scheduleIdle = options.scheduleIdle ?? defaultScheduleIdle
     this.onCellDataNeeded = options.onCellDataNeeded
     this.onCellDataReleasable = options.onCellDataReleasable
   }
@@ -80,13 +59,20 @@ export class CellVirtualizationEngine {
     this.runningCellIds.clear()
     this.revealPinnedCellIds.clear()
     this.recentlyEditedCellIds = []
+    this.lastSyncedCellIds = null
   }
 
   sync(cells: NotebookCell[]) {
-    const present = new Set<string>()
-    for (const cell of cells) {
-      if (cell.type === "markdown") continue
-      present.add(cell.id)
+    const sqlCells = cells.filter((cell) => cell.type !== "markdown")
+    const cellIds = sqlCells.map((cell) => cell.id)
+    if (
+      this.lastSyncedCellIds &&
+      shallowArrayEquals(this.lastSyncedCellIds, cellIds)
+    )
+      return
+    this.lastSyncedCellIds = cellIds
+    const present = new Set(cellIds)
+    for (const cell of sqlCells) {
       if (this.entries.has(cell.id)) continue
       const pinned = this.isPinned(cell.id)
       this.entries.set(cell.id, {
@@ -248,7 +234,7 @@ export class CellVirtualizationEngine {
   private scheduleNextMount() {
     if (this.mountScheduled || this.destroyed) return
     this.mountScheduled = true
-    this.scheduleFrame(() => {
+    scheduleFrame(() => {
       this.mountScheduled = false
       this.mountNextCandidate()
     })
@@ -280,7 +266,7 @@ export class CellVirtualizationEngine {
   private scheduleNextDrop() {
     if (this.dropScheduled || this.destroyed) return
     this.dropScheduled = true
-    this.scheduleIdle(() => {
+    scheduleIdle(() => {
       this.dropScheduled = false
       this.dropNextCell()
     })

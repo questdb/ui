@@ -4,7 +4,12 @@ import type { CellResult, NotebookCell } from "../../../../store/notebook"
 import type { AutoRefresh } from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { loadCellSnapshot } from "../../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  loadCellSnapshot,
+  type NotebookResultSnapshot,
+} from "../../../../store/notebookResults"
+import { persistCellSnapshot } from "../persistCellSnapshot"
 import { ChartRefreshEngine, type ChartRefreshDeps } from "./chartRefreshEngine"
 
 vi.mock("../persistCellSnapshot", () => ({
@@ -133,6 +138,155 @@ describe("ChartRefreshEngine", () => {
     expect(cellId).toBe("c1")
     expect(result?.results).toHaveLength(1)
     expect(result?.results[0]).toMatchObject({ type: "dql", query: "select 1" })
+  })
+
+  describe("snapshot persistence", () => {
+    const incrementingResults = () => {
+      let tick = 0
+      return vi.fn((_sql: string) => {
+        tick += 1
+        return Promise.resolve<QueryExecResult>({
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[tick]],
+          count: 1,
+        })
+      })
+    }
+
+    it("persists a snapshot after a successful fetch", async () => {
+      // Given a draw cell whose query returns rows
+      // When it fetches
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then the frame is persisted under the cell's id
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+      const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+      expect(snapshot).toMatchObject({ bufferId: BUFFER_ID, cellId: "c1" })
+      expect(snapshot.results).toHaveLength(1)
+    })
+
+    it("throttles snapshot writes while the chart auto-refreshes", async () => {
+      // Given an auto-refreshing cell whose data changes every tick
+      deps.executeSingle = incrementingResults()
+
+      // When it polls once per second
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // Then ticks inside the 10s throttle window don't re-persist
+      await vi.advanceTimersByTimeAsync(9000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // And the first tick past the window persists again
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    })
+
+    it("does not re-persist an unchanged frame", async () => {
+      // Given an auto-refreshing cell whose query returns identical rows
+      // When it polls well past the throttle window
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(30000)
+
+      // Then only the first frame is persisted — the rest dedupe away
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("clears the persisted snapshot when a fetch yields no chartable rows", async () => {
+      // Given a query that returns an empty result set
+      deps.executeSingle = vi.fn((_sql: string) =>
+        Promise.resolve<QueryExecResult>({
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [],
+          count: 0,
+        }),
+      )
+
+      // When the cell fetches
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then nothing is saved and the stale snapshot is deleted
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
+      expect(deleteCellSnapshot).toHaveBeenCalledWith(BUFFER_ID, "c1")
+    })
+  })
+
+  it("keeps a live-mirrored frame when a slower snapshot read lands after it", async () => {
+    // Given a snapshot read that resolves only after the first live fetch
+    let resolveSnapshot!: (value: NotebookResultSnapshot | undefined) => void
+    vi.mocked(loadCellSnapshot).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSnapshot = resolve
+      }),
+    )
+
+    // When the poll's immediate fetch mirrors live rows first
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+
+    // And the stale snapshot then resolves with older rows for the same query
+    resolveSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "c1",
+      savedAt: 0,
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[999]],
+          count: 1,
+        },
+      ],
+    })
+    await flushAsync()
+
+    // Then the mirror keeps the live frame — the snapshot must not overwrite it
+    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not skip the catch-up fetch after a poll aborted during its start jitter", async () => {
+    // Given a jittered engine whose cell's data was just transferred in
+    const jittered = new ChartRefreshEngine(
+      BUFFER_ID,
+      () => deps as ChartRefreshDeps,
+      { initialFetchJitterMs: 300 },
+    )
+    deps.getCellResult.mockReturnValue({
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+    jittered.setVisible("c1", true)
+    jittered.sync([drawCell("c1", "select 1", "1s")])
+
+    // When the poll is aborted mid-jitter (cell hidden), the data goes stale
+    // off-screen, and the cell is then revealed again
+    jittered.setVisible("c1", false)
+    await vi.advanceTimersByTimeAsync(5000)
+    jittered.setVisible("c1", true)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Then the resumed poll fetches immediately instead of waiting an interval
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    jittered.destroy()
   })
 
   it("transfers a matching existing cell result instead of fetching", async () => {

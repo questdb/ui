@@ -4,10 +4,11 @@ import type {
   SingleQueryResult,
 } from "../../../../store/notebook"
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
+import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
+import { scheduleIdle } from "../notebookScheduling"
 
 export type CellResultStatus = "unrequested" | "loading" | "loaded" | "missing"
 
-const IDLE_FALLBACK_MS = 200
 const LOAD_RETRY_DELAY_MS = 500
 const MAX_LOAD_RETRIES = 2
 
@@ -17,15 +18,6 @@ export type CellResultHydrationDeps = {
   applyResult: (cellId: string, result: CellResult) => void
   releaseResult: (cellId: string) => void
   canRelease: (cellId: string) => boolean
-  scheduleIdle?: (callback: () => void) => void
-}
-
-const defaultScheduleIdle = (callback: () => void) => {
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(() => callback(), { timeout: IDLE_FALLBACK_MS })
-  } else {
-    setTimeout(callback, IDLE_FALLBACK_MS)
-  }
 }
 
 const hasRunMarker = (cell: NotebookCell): boolean =>
@@ -48,13 +40,9 @@ export class CellResultHydrationEngine {
   // whose snapshot save confirmed. Keyed by array identity — a replaced array
   // fails safe (the cell just never releases).
   private persisted = new WeakSet<SingleQueryResult[]>()
-  private deps: CellResultHydrationDeps
-  private scheduleIdle: (callback: () => void) => void
+  private lastSyncedCellIds: string[] | null = null
 
-  constructor(deps: CellResultHydrationDeps) {
-    this.deps = deps
-    this.scheduleIdle = deps.scheduleIdle ?? defaultScheduleIdle
-  }
+  constructor(private deps: CellResultHydrationDeps) {}
 
   destroy() {
     this.destroyed = true
@@ -65,10 +53,18 @@ export class CellResultHydrationEngine {
     this.retryTimers.forEach((timer) => clearTimeout(timer))
     this.retryTimers.clear()
     this.loadAttempts.clear()
+    this.lastSyncedCellIds = null
   }
 
   sync(cells: NotebookCell[]) {
-    const present = new Set(cells.map((cell) => cell.id))
+    const cellIds = cells.map((cell) => cell.id)
+    if (
+      this.lastSyncedCellIds &&
+      shallowArrayEquals(this.lastSyncedCellIds, cellIds)
+    )
+      return
+    this.lastSyncedCellIds = cellIds
+    const present = new Set(cellIds)
     for (const cellId of [...this.statuses.keys()]) {
       if (!present.has(cellId)) {
         this.statuses.delete(cellId)
@@ -122,6 +118,11 @@ export class CellResultHydrationEngine {
     if (this.deps.canRelease(cellId)) this.noteReleasable(cellId)
   }
 
+  noteMissing(cellId: string) {
+    if (this.destroyed) return
+    this.setStatus(cellId, "missing")
+  }
+
   forget(cellId: string) {
     this.releaseQueue.delete(cellId)
     this.loadAttempts.delete(cellId)
@@ -170,7 +171,6 @@ export class CellResultHydrationEngine {
       return
     }
     if (this.deps.canRelease(cellId)) {
-      // Scrolled far away while the read was in flight — don't apply.
       this.setStatus(cellId, "unrequested")
       return
     }
@@ -206,7 +206,7 @@ export class CellResultHydrationEngine {
   private scheduleNextRelease() {
     if (this.releaseScheduled || this.destroyed) return
     this.releaseScheduled = true
-    this.scheduleIdle(() => {
+    scheduleIdle(() => {
       this.releaseScheduled = false
       this.releaseNextCell()
     })

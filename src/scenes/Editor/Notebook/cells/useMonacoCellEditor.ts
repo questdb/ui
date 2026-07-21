@@ -204,6 +204,7 @@ export const useMonacoCellEditor = ({
         decorateCursorQuery()
       })
       decorateCursorQuery()
+      if (editorViewState) scheduleValidation()
 
       ed.addAction({
         id: "notebook-run",
@@ -247,9 +248,13 @@ export const useMonacoCellEditor = ({
     flushViewStateSave()
     contextMenuCleanupRef.current?.()
     contextMenuCleanupRef.current = null
+    if (editorRef.current && monacoRef.current) {
+      clearModelMarkers(monacoRef.current, editorRef.current)
+      clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
+    }
     editorRef.current = null
     monacoRef.current = null
-  }, [editorMounted, clearPendingTimers, flushViewStateSave])
+  }, [editorMounted, cellId, clearPendingTimers, flushViewStateSave])
 
   useEffect(() => {
     return () => {

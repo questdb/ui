@@ -14,7 +14,10 @@ import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { useChartFetchState } from "../chartRefresh/ChartRefreshContext"
-import { pendingChartFetchState } from "../chartRefresh/chartRefreshEngine"
+import {
+  deriveChartLoading,
+  pendingChartFetchState,
+} from "../chartRefresh/chartRefreshEngine"
 import {
   getChartZoom,
   setChartZoom,
@@ -67,6 +70,10 @@ export const DrawCanvas: React.FC<Props> = ({
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const fetchState = useChartFetchState(cell.id)
+  const state = useMemo(
+    () => fetchState ?? pendingChartFetchState(cell.value),
+    [fetchState, cell.value],
+  )
   const {
     queries,
     queriesKey,
@@ -74,10 +81,7 @@ export const DrawCanvas: React.FC<Props> = ({
     settledKey,
     lastFetchHadError,
     classifyBlock,
-  } = useMemo(
-    () => fetchState ?? pendingChartFetchState(cell.value),
-    [fetchState, cell.value],
-  )
+  } = state
 
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 
@@ -117,11 +121,7 @@ export const DrawCanvas: React.FC<Props> = ({
   const settledForCurrentQueries = settledKey === queriesKey
   // Initial load (snapshot hydration or first fetch) with nothing to show yet:
   // a spinner replaces the chart area until data lands.
-  const loading =
-    queries.length > 0 &&
-    classifyBlock === null &&
-    !settledForCurrentQueries &&
-    results.length === 0
+  const { loading } = deriveChartLoading(state)
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`

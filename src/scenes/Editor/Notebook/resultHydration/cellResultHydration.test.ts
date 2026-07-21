@@ -8,6 +8,11 @@ import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { CellVirtualizationEngine } from "../cellVirtualization/cellVirtualizationEngine"
 import { CellResultHydrationEngine } from "./cellResultHydration"
 
+vi.mock("../notebookScheduling", () => ({
+  scheduleFrame: (callback: () => void) => setTimeout(callback, 0),
+  scheduleIdle: (callback: () => void) => setTimeout(callback, 0),
+}))
+
 const dqlResult = (query: string): SingleQueryResult => ({
   type: "dql",
   query,
@@ -102,9 +107,6 @@ describe("CellResultHydrationEngine", () => {
         }
       },
       canRelease: (cellId) => releasableCellIds.has(cellId),
-      scheduleIdle: (callback) => {
-        setTimeout(callback, 0)
-      },
     })
   })
 
@@ -250,6 +252,18 @@ describe("CellResultHydrationEngine", () => {
     engine.forget("c1")
     engine.request("c1")
     expect(loadCounts.get("c1")).toBe(2)
+  })
+
+  it("noteMissing seeds known-missing so a duplicated cell never loads or reserves", () => {
+    // Given a duplicated cell: run marker carried, but no snapshot can exist
+    // under its fresh id
+    seedCell(ranCell("dup"))
+    engine.noteMissing("dup")
+
+    // Then the status is terminal-missing with no read ever started
+    expect(engine.statusOf("dup")).toBe("missing")
+    engine.request("dup")
+    expect(loadCounts.get("dup")).toBeUndefined()
   })
 
   it("skips draw-mode cells and cells that never ran", () => {
@@ -603,18 +617,9 @@ describe("virtualization band → hydration engine wiring", () => {
         }
       },
       canRelease: (cellId) => virtualization.canReleaseData(cellId),
-      scheduleIdle: (callback) => {
-        setTimeout(callback, 0)
-      },
     })
     virtualization = new CellVirtualizationEngine({
       dwellMs: 0,
-      scheduleFrame: (callback) => {
-        setTimeout(callback, 0)
-      },
-      scheduleIdle: (callback) => {
-        setTimeout(callback, 0)
-      },
       onCellDataNeeded: (cellId) => hydration.request(cellId),
       onCellDataReleasable: (cellId) => hydration.noteReleasable(cellId),
     })

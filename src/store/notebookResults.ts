@@ -82,10 +82,12 @@ export const pinNotebookSnapshots = (bufferId: number): (() => void) => {
 // recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
 // keys only — snapshot payloads are never deserialized. One transaction: a save
 // landing between the recency read and the delete must not lose its snapshot.
-export const pruneToRecentNotebooks = (
+export const pruneToRecentNotebooks = async (
   keep: number = MAX_PERSISTED_NOTEBOOKS,
-): Promise<void> =>
-  db.transaction("rw", db.notebook_results, async () => {
+): Promise<void> => {
+  const bufferIds = await db.notebook_results.orderBy("bufferId").uniqueKeys()
+  if (bufferIds.length <= keep) return
+  await db.transaction("rw", db.notebook_results, async () => {
     const latestByBuffer = new Map<number, number>()
     await db.notebook_results
       .orderBy("savedAt")
@@ -103,3 +105,4 @@ export const pruneToRecentNotebooks = (
     if (staleBuffers.length === 0) return
     await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
   })
+}

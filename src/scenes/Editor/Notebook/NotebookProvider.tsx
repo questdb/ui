@@ -297,10 +297,10 @@ export const NotebookProvider: React.FC<{
       }),
     [],
   )
-  useEffect(() => () => resultHydration.destroy(), [resultHydration])
+  useEffect(() => () => resultHydration.destroy(), [])
   useEffect(() => {
     resultHydration.sync(store.cells)
-  }, [resultHydration, store.cells])
+  }, [store.cells])
 
   const execution = useCellExecution({
     bufferId,
@@ -586,12 +586,16 @@ export const NotebookProvider: React.FC<{
   )
 
   const duplicateCell = useCallback(
-    (cellId: string): string =>
-      silently(() =>
-        applyTransition((parts) =>
-          duplicateCellTransition(parts, bufferId, cellId, generateId()),
-        ),
-      ) ?? "",
+    (cellId: string): string => {
+      const newId =
+        silently(() =>
+          applyTransition((parts) =>
+            duplicateCellTransition(parts, bufferId, cellId, generateId()),
+          ),
+        ) ?? ""
+      if (newId) resultHydration.noteMissing(newId)
+      return newId
+    },
     [applyTransition, bufferId],
   )
 

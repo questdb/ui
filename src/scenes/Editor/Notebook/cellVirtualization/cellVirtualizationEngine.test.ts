@@ -5,6 +5,11 @@ import {
   type CellContentMode,
 } from "./cellVirtualizationEngine"
 
+vi.mock("../notebookScheduling", () => ({
+  scheduleFrame: (callback: () => void) => setTimeout(callback, 16),
+  scheduleIdle: (callback: () => void) => setTimeout(callback, 0),
+}))
+
 const FRAME_MS = 16
 const DWELL_MS = 100
 
@@ -49,12 +54,6 @@ describe("CellVirtualizationEngine", () => {
     engine = new CellVirtualizationEngine({
       dwellMs: DWELL_MS,
       recentEditLimit: 2,
-      scheduleFrame: (callback) => {
-        setTimeout(callback, FRAME_MS)
-      },
-      scheduleIdle: (callback) => {
-        setTimeout(callback, 0)
-      },
     })
   })
 
@@ -333,39 +332,6 @@ describe("CellVirtualizationEngine", () => {
     engine.sync([sqlCell("c1")])
     expect(engine.getContentMode("c1")).toBe("placeholder")
   })
-
-  it("drops through the idle timeout when the main thread never goes idle", async () => {
-    // Given a browser whose idle callbacks fire only via their timeout
-    const requestIdleCallback = vi.fn(
-      (callback: () => void, options?: { timeout?: number }) => {
-        setTimeout(callback, options?.timeout ?? 99999)
-        return 1
-      },
-    )
-    vi.stubGlobal("requestIdleCallback", requestIdleCallback)
-    const busyEngine = new CellVirtualizationEngine({
-      dwellMs: DWELL_MS,
-      scheduleFrame: (callback) => {
-        setTimeout(callback, FRAME_MS)
-      },
-    })
-    busyEngine.sync([sqlCell("c1")])
-    busyEngine.reportRetainBand("c1", true)
-    busyEngine.reportMountBand("c1", true, 0)
-    await vi.advanceTimersByTimeAsync(DWELL_MS + FRAME_MS)
-    expect(busyEngine.getContentMode("c1")).toBe("full")
-
-    // When the cell leaves both bands
-    busyEngine.reportMountBand("c1", false, 0)
-    busyEngine.reportRetainBand("c1", false)
-
-    // Then the idle callback was armed with a timeout and the drop lands
-    const [, options] = requestIdleCallback.mock.calls[0]
-    expect(options?.timeout).toBeGreaterThan(0)
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(busyEngine.getContentMode("c1")).toBe("placeholder")
-    busyEngine.destroy()
-  })
 })
 
 describe("CellVirtualizationEngine data callbacks", () => {
@@ -379,12 +345,6 @@ describe("CellVirtualizationEngine data callbacks", () => {
     dataReleasable = []
     engine = new CellVirtualizationEngine({
       dwellMs: DWELL_MS,
-      scheduleFrame: (callback) => {
-        setTimeout(callback, FRAME_MS)
-      },
-      scheduleIdle: (callback) => {
-        setTimeout(callback, 0)
-      },
       onCellDataNeeded: (cellId) => dataNeeded.push(cellId),
       onCellDataReleasable: (cellId) => dataReleasable.push(cellId),
     })

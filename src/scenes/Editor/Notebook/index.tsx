@@ -378,7 +378,9 @@ const GridLayout: React.FC = () => {
   const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
   const resultHydration = useCellResultHydrationEngine()
-  const statusVersion = useResultStatusVersion()
+  // Re-render when a cell's known-missing state flips — the only status
+  // boundary the layout math below reads (via statusOf).
+  useResultStatusVersion()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
   // measureBeforeMount: don't render the grid until the container width is
@@ -415,41 +417,47 @@ const GridLayout: React.FC = () => {
   // shadow that only matters when react-grid-layout consumes it. We
   // recompute every render so a content-driven topHeight or run-driven
   // bottomHeight change immediately resizes the grid cell.
-  const currentLayout = useMemo<LayoutItem[]>(() => {
-    const base = mergeCellLayout(
-      settings.layout && settings.layout.length > 0
-        ? settings.layout
-        : generateDefaultLayout(cells),
-      cells,
-      LAYOUT_OPTS,
-    ) as LayoutItem[]
-    const cellById = new Map(cells.map((c) => [c.id, c]))
-    return base.map((item) => {
-      const cell = cellById.get(item.i)
-      if (!cell) return item
-      const expectingResult = isExpectingResult(
-        cell,
-        resultHydration?.statusOf(cell.id) ?? "unrequested",
-      )
-      const minBottomPx =
-        isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
-      const minTotalPx =
-        minTopHeightFor(cell) +
-        minBottomPx +
-        cellChromePx(cell, expectingResult)
-      const minH = Math.ceil(
-        (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
-      )
-      return {
-        ...item,
-        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
-        minH,
-      }
-    })
-    // statusVersion stands in for the statusOf reads: it bumps exactly when
-    // some cell's known-missing state — the only status input
-    // isExpectingResult uses — changes.
-  }, [settings.layout, cells, resultHydration, statusVersion])
+  const mergedLayout = mergeCellLayout(
+    settings.layout && settings.layout.length > 0
+      ? settings.layout
+      : generateDefaultLayout(cells),
+    cells,
+    LAYOUT_OPTS,
+  ) as LayoutItem[]
+  const cellById = new Map(cells.map((c) => [c.id, c]))
+  const computedLayout = mergedLayout.map((item) => {
+    const cell = cellById.get(item.i)
+    if (!cell) return item
+    const expectingResult = isExpectingResult(
+      cell,
+      resultHydration?.statusOf(cell.id) ?? "unrequested",
+    )
+    const minBottomPx =
+      isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
+    const minTotalPx =
+      minTopHeightFor(cell) + minBottomPx + cellChromePx(cell, expectingResult)
+    const minH = Math.ceil(
+      (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
+    )
+    return {
+      ...item,
+      h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
+      minH,
+    }
+  })
+
+  const layoutKey = computedLayout
+    .map(
+      (item) =>
+        `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
+    )
+    .join("|")
+
+  const currentLayout = useMemo(() => computedLayout, [layoutKey])
+  const gridLayouts = useMemo(
+    () => ({ lg: currentLayout as unknown as Layout }),
+    [currentLayout],
+  )
 
   const mapLayoutXYW = useCallback(
     (rglLayout: Layout): CellLayoutItem[] =>
@@ -585,7 +593,7 @@ const GridLayout: React.FC = () => {
       {gridMeasured && (
         <ResponsiveGridLayout
           width={containerWidth}
-          layouts={{ lg: currentLayout as unknown as Layout }}
+          layouts={gridLayouts}
           breakpoints={GRID_BREAKPOINTS}
           cols={GRID_COLS_MAP}
           rowHeight={ROW_HEIGHT}
@@ -795,6 +803,17 @@ const SeedFallback = styled.div`
   color: ${color("gray2")};
 `
 
+// The LoadingSpinner is an unlabeled SVG, so the polite live region has no text
+// to announce — give the screen reader something to read.
+const VisuallyHidden = styled.span`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+`
+
 const SEED_SPINNER_DELAY_MS = 200
 
 type SeedError = { message: string; retryable: boolean }
@@ -888,6 +907,7 @@ export const Notebook: React.FC = () => {
     return showSeedSpinner ? (
       <SeedFallback role="status" aria-live="polite">
         <LoadingSpinner />
+        <VisuallyHidden>Loading notebook…</VisuallyHidden>
       </SeedFallback>
     ) : null
   }

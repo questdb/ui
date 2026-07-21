@@ -81,6 +81,17 @@ export const pendingChartFetchState = (sql: string): ChartFetchState => {
   }
 }
 
+export const deriveChartLoading = (
+  state: ChartFetchState,
+): { loading: boolean; refreshing: boolean } => {
+  const loading =
+    state.queries.length > 0 &&
+    state.classifyBlock === null &&
+    state.settledKey !== state.queriesKey &&
+    state.results.length === 0
+  return { loading, refreshing: state.fetching && !loading }
+}
+
 const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
   type: "error",
   query,
@@ -96,6 +107,20 @@ export type ChartRefreshEngineOptions = {
   initialFetchJitterMs?: number
 }
 
+type DrawCellSyncKey = Pick<NotebookCell, "id" | "value" | "autoRefresh">
+
+const sameDrawCells = (
+  previous: DrawCellSyncKey[],
+  drawCells: NotebookCell[],
+): boolean =>
+  previous.length === drawCells.length &&
+  drawCells.every(
+    (cell, index) =>
+      previous[index].id === cell.id &&
+      previous[index].value === cell.value &&
+      previous[index].autoRefresh === cell.autoRefresh,
+  )
+
 type Entry = {
   cellId: string
   sql: string
@@ -109,9 +134,6 @@ type Entry = {
   inFlight: AbortController | null
   poll: AbortController | null
   pollKey: string | null
-  // Set when existing data was transferred in, so the poll skips its
-  // otherwise-immediate first fetch (the data is already current).
-  skipNextPollFetch: boolean
   lastSnapshotAt: number
   lastSaved: { sqlHash: string; results: QueryExecResult[] } | null
   // Last results mirrored into cell.result, so the grid shows the chart's
@@ -124,6 +146,7 @@ export class ChartRefreshEngine {
   private entries = new Map<string, Entry>()
   private listeners = new Map<string, Set<() => void>>()
   private visibilityByCell = new Map<string, boolean>()
+  private lastSyncedDrawCells: DrawCellSyncKey[] | null = null
   private documentHidden = false
   private limitFetch: <T>(task: () => Promise<T>) => Promise<T>
   private initialFetchJitterMs: number
@@ -181,12 +204,23 @@ export class ChartRefreshEngine {
     }
     for (const cellId of [...this.entries.keys()]) this.removeEntry(cellId)
     this.visibilityByCell.clear()
+    this.lastSyncedDrawCells = null
   }
 
   sync(cells: NotebookCell[]) {
+    const drawCells = cells.filter((cell) => cell.mode === "draw")
+    if (
+      this.lastSyncedDrawCells &&
+      sameDrawCells(this.lastSyncedDrawCells, drawCells)
+    )
+      return
+    this.lastSyncedDrawCells = drawCells.map(({ id, value, autoRefresh }) => ({
+      id,
+      value,
+      autoRefresh,
+    }))
     const present = new Set<string>()
-    for (const cell of cells) {
-      if (cell.mode !== "draw") continue
+    for (const cell of drawCells) {
       present.add(cell.id)
       const entry = this.entries.get(cell.id)
       if (entry) this.updateEntry(entry, cell)
@@ -216,10 +250,6 @@ export class ChartRefreshEngine {
 
   private resume(entry: Entry) {
     if (this.shouldAutoRefresh(entry)) {
-      const interval =
-        autoRefreshIntervalMs(entry.autoRefresh) ?? REFRESH_MIN_MS
-      entry.skipNextPollFetch =
-        entry.skipNextPollFetch || Date.now() - entry.lastFetchedAt < interval
       this.updatePoll(entry)
       return
     }
@@ -277,7 +307,6 @@ export class ChartRefreshEngine {
       inFlight: null,
       poll: null,
       pollKey: null,
-      skipNextPollFetch: false,
       lastSnapshotAt: 0,
       lastSaved: null,
       lastMirror: [],
@@ -311,8 +340,10 @@ export class ChartRefreshEngine {
     if (!entry) return
     if (entry.sqlDebounce) clearTimeout(entry.sqlDebounce)
     entry.inFlight?.abort()
+    entry.inFlight = null
     entry.poll?.abort()
     this.entries.delete(cellId)
+    this.visibilityByCell.delete(cellId)
     // The toolbar must not be stranded spinning after the entry is gone.
     eventBus.publish(EventType.NOTEBOOK_CELL_CHART_LOADING, {
       cellId,
@@ -357,7 +388,7 @@ export class ChartRefreshEngine {
           entry.state.results.length > 0 ? entry.state.results : transferred,
         settledKey: queriesKey,
       })
-      entry.skipNextPollFetch = true
+      entry.lastFetchedAt = Date.now()
       this.updatePoll(entry)
       return
     }
@@ -378,13 +409,15 @@ export class ChartRefreshEngine {
       if (resultMatchesQueries(snapResult, queries)) {
         const hydrated = successResults(snapResult.results.map(toExecResult))
         if (hydrated.length > 0) {
-          // Don't clobber live data that may already have landed.
+          // Don't clobber live data that may already have landed — mirror
+          // included: a poll fetch racing this read may have mirrored fresher
+          // rows into cell.result while the snapshot was still loading.
           if (entry.state.results.length === 0) {
             this.setState(entry, { results: hydrated, settledKey: queriesKey })
+            // Seed cell.result too, so a switch to the grid shows this frame
+            // instead of an empty cell (cell.result is stripped on reload).
+            this.mirror(entry, hydrated)
           }
-          // Seed cell.result too, so a switch to the grid shows this frame
-          // instead of an empty cell (cell.result is stripped on reload).
-          this.mirror(entry, hydrated)
           return
         }
       }
@@ -432,8 +465,8 @@ export class ChartRefreshEngine {
       if (aborted) return
     }
     const fixed = autoRefreshIntervalMs(entry.autoRefresh)
-    const skipInitialFetch = entry.skipNextPollFetch
-    entry.skipNextPollFetch = false
+    const skipInitialFetch =
+      Date.now() - entry.lastFetchedAt < (fixed ?? REFRESH_MIN_MS)
     await runAdaptivePollLoop({
       fetchFn: () => this.fetchOnce(entry),
       signal: abort.signal,
@@ -624,18 +657,10 @@ export class ChartRefreshEngine {
     this.listeners.get(cellId)?.forEach((listener) => listener())
   }
 
-  // Surface fetch state to the cell toolbar. `loading` is the first-time draw
-  // (no data yet) — the view toggle spins for it. `refreshing` is a re-fetch
-  // over existing data (auto-poll or manual refresh) — the refresh button
-  // spins for it.
+  // Surface fetch state to the cell toolbar. The view toggle spins on
+  // `loading`, the refresh button on `refreshing` — both from deriveChartLoading.
   private publishLoading(entry: Entry) {
-    const s = entry.state
-    const loading =
-      s.queries.length > 0 &&
-      s.classifyBlock === null &&
-      s.settledKey !== s.queriesKey &&
-      s.results.length === 0
-    const refreshing = s.fetching && !loading
+    const { loading, refreshing } = deriveChartLoading(entry.state)
     const last = entry.lastPublished
     if (last && last.loading === loading && last.refreshing === refreshing)
       return
