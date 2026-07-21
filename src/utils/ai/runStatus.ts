@@ -37,12 +37,16 @@ export const getCellRunStatus = (
           results: ReadonlyArray<{ type: string; error?: string }>
         } | null
         lastRunStatus?: RunStatus
+        lastRunError?: string
       }
     | null
     | undefined,
 ): { status: RunStatus; error?: string } => {
   if (cell?.result) return deriveRunStatusFromResults(cell.result.results)
-  return { status: cell?.lastRunStatus ?? "none" }
+  return {
+    status: cell?.lastRunStatus ?? "none",
+    ...(cell?.lastRunError ? { error: cell.lastRunError } : {}),
+  }
 }
 
 export const createRunStatus = (

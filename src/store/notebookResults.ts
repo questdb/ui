@@ -78,6 +78,10 @@ export const pinNotebookSnapshots = (bufferId: number): (() => void) => {
   return () => pinnedBufferIds.delete(bufferId)
 }
 
+export const unpinNotebookSnapshots = (bufferId: number): void => {
+  pinnedBufferIds.delete(bufferId)
+}
+
 // Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
 // recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
 // keys only — snapshot payloads are never deserialized. One transaction: a save

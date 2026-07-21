@@ -190,6 +190,7 @@ export const useCellExecution = ({
               const cancelled: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
+                reason: "user",
               }
               finalResults[j] = cancelled
               updateCellResult(cellId, j, cancelled)
@@ -228,6 +229,7 @@ export const useCellExecution = ({
               const cancelled: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
+                reason: "priorFailure",
               }
               finalResults[j] = cancelled
               updateCellResult(cellId, j, cancelled)

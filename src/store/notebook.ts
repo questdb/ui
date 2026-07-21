@@ -54,6 +54,7 @@ export type NotebookCell = {
   autoRefresh?: AutoRefresh
   isViewMaximized?: boolean
   lastRunStatus?: RunStatus
+  lastRunError?: string
 }
 
 export type DqlQueryResult = {
@@ -80,8 +81,16 @@ export type ErrorQueryResult = {
 }
 
 export type TransientQueryResult = {
-  type: "running" | "queued" | "cancelled"
+  type: "running" | "queued"
   query: string
+}
+
+export type CancelReason = "user" | "priorFailure"
+
+export type CancelledQueryResult = {
+  type: "cancelled"
+  query: string
+  reason?: CancelReason
 }
 
 export type SingleQueryResult =
@@ -89,6 +98,7 @@ export type SingleQueryResult =
   | DdlDmlQueryResult
   | ErrorQueryResult
   | TransientQueryResult
+  | CancelledQueryResult
 
 export type CellResult = {
   results: SingleQueryResult[]

@@ -103,14 +103,19 @@ export const deriveChartLoading = (
   return { loading, refreshing: state.fetching && !loading }
 }
 
+const errorMessage = (cause: unknown): string => {
+  if (typeof cause === "string" && cause) return cause
+  if (cause instanceof Error && cause.message) return cause.message
+  return "Query failed"
+}
+
 const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
   type: "error",
   query,
   columns: [],
   dataset: [],
   count: 0,
-  error:
-    cause instanceof Error && cause.message ? cause.message : "Query failed",
+  error: errorMessage(cause),
 })
 
 export type ChartRefreshEngineOptions = {
@@ -139,7 +144,7 @@ type Entry = {
   visible: boolean
   lastFetchedAt: number
   state: ChartFetchState
-  classifyCache: Map<string, "DQL" | "DDL_DML" | "ERROR">
+  classifyCache: Map<string, "DQL" | "DDL_DML">
   sqlDebounce: ReturnType<typeof setTimeout> | null
   pendingSql: string | null
   inFlight: AbortController | null
@@ -434,16 +439,18 @@ export class ChartRefreshEngine {
         timestamp: snap.savedAt,
       }
       if (resultMatchesQueries(snapResult, queries)) {
-        const hydrated = successResults(snapResult.results.map(toExecResult))
+        const hydratedAll = snapResult.results.map(toExecResult)
+        const hydrated = successResults(hydratedAll)
         if (hydrated.length > 0) {
           // Don't clobber live data that may already have landed — mirror
           // included: a poll fetch racing this read may have mirrored fresher
           // rows into cell.result while the snapshot was still loading.
           if (entry.state.results.length === 0) {
             this.setState(entry, { results: hydrated, settledKey: queriesKey })
-            // Seed cell.result too, so a switch to the grid shows this frame
-            // instead of an empty cell (cell.result is stripped on reload).
-            this.mirror(entry, hydrated)
+            // Seed cell.result with EVERY statement, not just the chartable
+            // ones, so a switch to the grid shows the same tabs a real run
+            // would — matching runFetch's mirror(out)
+            this.mirror(entry, hydratedAll)
           }
           return
         }
@@ -545,13 +552,17 @@ export class ChartRefreshEngine {
     const { queries, queriesKey } = entry.state
     try {
       // Runtime backstop: a user typing DDL into an already-draw cell would
-      // otherwise reach executeSingle on the next poll tick.
+      // otherwise reach executeSingle on the next poll tick. A query failing
+      // validation is neither cached nor executed — re-validating it every
+      // tick means an INSERT whose missing table appears later classifies as
+      // a write and gets blocked, instead of silently running.
+      const validationErrors = new Map<string, string>()
       try {
         await Promise.all(
           queries.map(async (q) => {
             if (entry.classifyCache.has(q)) return
             const res = await deps.validateWithGlobals(q, ac.signal)
-            if ("error" in res) entry.classifyCache.set(q, "ERROR")
+            if ("error" in res) validationErrors.set(q, res.error)
             else if ("columns" in res) entry.classifyCache.set(q, "DQL")
             else entry.classifyCache.set(q, "DDL_DML")
           }),
@@ -593,11 +604,14 @@ export class ChartRefreshEngine {
       }
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
-        queries.map((q) =>
-          deps
+        queries.map((q) => {
+          const validationError = validationErrors.get(q)
+          if (validationError !== undefined)
+            return Promise.resolve(errorExecResult(q, validationError))
+          return deps
             .executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP)
-            .catch((e) => errorExecResult(q, e)),
-        ),
+            .catch((e) => errorExecResult(q, e))
+        }),
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
       if (ac.signal.aborted) return

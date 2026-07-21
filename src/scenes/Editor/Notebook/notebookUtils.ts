@@ -427,11 +427,24 @@ export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
 const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
   cell.result ? collapseResultToRunStatus(cell.result) : cell.lastRunStatus
 
+// The error string to carry alongside lastRunStatus when the result blob is
+// dropped. Derived from the live result when present (so it always matches the
+// carried status and a since-fixed cell clears its stale error), else the
+// already-carried lastRunError.
+const carriedRunError = (cell: NotebookCell): string | undefined => {
+  if (cell.result) {
+    const errored = cell.result.results.find((r) => r.type === "error")
+    return errored?.type === "error" ? errored.error : undefined
+  }
+  return cell.lastRunError
+}
+
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
   cells.map((cell) => ({
     ...cell,
     result: undefined,
     lastRunStatus: carriedRunStatus(cell),
+    lastRunError: carriedRunError(cell),
   }))
 
 export const buildPersistPayload = (
@@ -593,6 +606,7 @@ export const duplicateCellAt = (
     position: idx + 1,
     result: null,
     lastRunStatus: carriedRunStatus(original),
+    lastRunError: carriedRunError(original),
   }
   const next = [...cells]
   next.splice(idx + 1, 0, copy)
@@ -630,7 +644,7 @@ export const cancelAllInCell = (
         ...c.result,
         results: c.result.results.map((r) =>
           r.type === "running" || r.type === "queued"
-            ? { type: "cancelled", query: r.query }
+            ? { type: "cancelled", query: r.query, reason: "user" }
             : r,
         ),
       },
@@ -647,7 +661,7 @@ export const cancelOneInCell = (
     const results = [...c.result.results]
     const target = results[index]
     if (target?.type !== "running") return c
-    results[index] = { type: "cancelled", query: target.query }
+    results[index] = { type: "cancelled", query: target.query, reason: "user" }
     return { ...c, result: { ...c.result, results } }
   })
 
@@ -719,6 +733,7 @@ export const cloneNotebookViewState = (
       id,
       result: undefined,
       lastRunStatus: carriedRunStatus(cell),
+      lastRunError: carriedRunError(cell),
     }
   })
 
@@ -1102,9 +1117,13 @@ export const isExpectingResult = (
 // every release/re-hydrate cycle.
 export const releaseCellResultPatch = (
   cell: NotebookCell,
-): Pick<NotebookCell, "result" | "lastRunStatus" | "bottomHeight"> => ({
+): Pick<
+  NotebookCell,
+  "result" | "lastRunStatus" | "lastRunError" | "bottomHeight"
+> => ({
   result: undefined,
   lastRunStatus: carriedRunStatus(cell),
+  lastRunError: carriedRunError(cell),
   ...(cell.bottomHeight == null && cell.result != null
     ? { bottomHeight: computeResultBottomHeight(cell.result) }
     : {}),

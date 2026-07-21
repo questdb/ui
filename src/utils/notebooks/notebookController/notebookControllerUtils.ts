@@ -7,6 +7,10 @@ import {
 } from "../notebookDexieView"
 import { forgetHeadlessRuns } from "../notebookHeadlessRun"
 import { forgetBufferSeq } from "../notebookAIBridge"
+import {
+  pinNotebookSnapshots,
+  unpinNotebookSnapshots,
+} from "../../../store/notebookResults"
 import type { NotebookController } from "./notebookController"
 import {
   claimLive,
@@ -66,6 +70,7 @@ export const beginNotebookMount = async (
   bufferId: number,
 ): Promise<NotebookViewState | NotebookToolError> => {
   const epoch = claimMounting(bufferId)
+  pinNotebookSnapshots(bufferId)
   try {
     return await enqueueBufferTask(bufferId, () => readNotebookView(bufferId))
   } catch (error) {
@@ -82,6 +87,7 @@ export const beginNotebookMount = async (
 // before the seed resolved). A no-op once registerController has set the buffer live.
 export const cancelNotebookMount = (bufferId: number): void => {
   if (releaseMounting(bufferId)) {
+    unpinNotebookSnapshots(bufferId)
     rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
   }
 }

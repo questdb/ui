@@ -170,6 +170,7 @@ const executeCellQueries = async (args: {
           results[j] = {
             type: "cancelled",
             query: queries[j],
+            reason: "user",
           }
         }
         break
@@ -194,6 +195,7 @@ const executeCellQueries = async (args: {
           results[j] = {
             type: "cancelled",
             query: queries[j],
+            reason: "priorFailure",
           }
         }
         break

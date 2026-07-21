@@ -520,6 +520,67 @@ describe("ChartRefreshEngine", () => {
     expect(state?.settledKey).toBe(state?.queriesKey)
   })
 
+  it("never executes a query that fails validation, and blocks it once it resolves to a write", async () => {
+    // Given a polling draw cell whose INSERT fails validation because its
+    // target table does not exist yet (reachable via edit-in-draw or the
+    // agent path, which skip the UI's all-DQL gate)
+    deps.validateWithGlobals.mockResolvedValue({
+      query: "insert into t select 1",
+      position: 0,
+      error: "table does not exist [table=t]",
+    })
+
+    // When the engine syncs it
+    syncOnScreen([drawCell("c1", "insert into t select 1", "1s")])
+    await flushAsync()
+
+    // Then the query never executes and the validation error reaches the grid
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
+    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
+    expect(result?.results[0]).toMatchObject({
+      type: "error",
+      error: "table does not exist [table=t]",
+    })
+
+    // When the table appears and the query now classifies as a write
+    deps.validateWithGlobals.mockResolvedValue({ queryType: "insert" })
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Then the next tick blocks the write instead of silently running it
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(engine.getState("c1")?.classifyBlock).toEqual({
+      kind: "write",
+      queryType: "insert",
+    })
+  })
+
+  it("re-validates an erroring query each tick until it charts as DQL", async () => {
+    // Given a polling draw cell whose query fails validation at first
+    deps.validateWithGlobals.mockResolvedValueOnce({
+      query: "select * from t",
+      position: 0,
+      error: "table does not exist [table=t]",
+    })
+
+    // When the engine syncs it
+    syncOnScreen([drawCell("c1", "select * from t", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(deps.validateWithGlobals).toHaveBeenCalledTimes(1)
+
+    // Then the next tick re-validates, classifies DQL and executes
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.validateWithGlobals).toHaveBeenCalledTimes(2)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(engine.getState("c1")?.results).toHaveLength(1)
+
+    // And the settled DQL class is cached — later ticks skip validation
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deps.validateWithGlobals).toHaveBeenCalledTimes(2)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
   it("blocks write queries from executing", async () => {
     // Given a cell whose SQL classifies as a write
     deps.validateWithGlobals.mockResolvedValue({ queryType: "update" })
