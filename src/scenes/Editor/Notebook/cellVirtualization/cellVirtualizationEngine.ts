@@ -135,6 +135,17 @@ export class CellVirtualizationEngine {
     this.setMode(entry, "full")
   }
 
+  isInBand(cellId: string): boolean {
+    const entry = this.entries.get(cellId)
+    if (!entry) return true
+    return entry.inMountBand || entry.inRetainBand
+  }
+
+  releaseRevealPin(cellId: string) {
+    if (!this.revealPinnedCellIds.delete(cellId)) return
+    this.requestDrop(cellId)
+  }
+
   setFocusedCell(cellId: string | null) {
     if (this.focusedCellId === cellId) return
     const previous = this.focusedCellId

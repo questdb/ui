@@ -380,7 +380,7 @@ const GridLayout: React.FC = () => {
   const resultHydration = useCellResultHydrationEngine()
   // Re-render when a cell's known-missing state flips — the only status
   // boundary the layout math below reads (via statusOf).
-  useResultStatusVersion()
+  const resultStatusVersion = useResultStatusVersion()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
   // measureBeforeMount: don't render the grid until the container width is
@@ -414,44 +414,50 @@ const GridLayout: React.FC = () => {
 
   // Derive each cell's grid h from topHeight + bottomHeight + chrome.
   // The h value in settings.layout is ignored on read — it's a stale
-  // shadow that only matters when react-grid-layout consumes it. We
-  // recompute every render so a content-driven topHeight or run-driven
-  // bottomHeight change immediately resizes the grid cell.
-  const mergedLayout = mergeCellLayout(
-    settings.layout && settings.layout.length > 0
-      ? settings.layout
-      : generateDefaultLayout(cells),
-    cells,
-    LAYOUT_OPTS,
-  ) as LayoutItem[]
-  const cellById = new Map(cells.map((c) => [c.id, c]))
-  const computedLayout = mergedLayout.map((item) => {
-    const cell = cellById.get(item.i)
-    if (!cell) return item
-    const expectingResult = isExpectingResult(
-      cell,
-      resultHydration?.statusOf(cell.id) ?? "unrequested",
-    )
-    const minBottomPx =
-      isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
-    const minTotalPx =
-      minTopHeightFor(cell) + minBottomPx + cellChromePx(cell, expectingResult)
-    const minH = Math.ceil(
-      (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
-    )
+  // shadow that only matters when react-grid-layout consumes it. The
+  // memo recomputes when the layout, the cells or a statusOf boundary
+  // (resultStatusVersion) changes
+  const { computedLayout, layoutKey } = useMemo(() => {
+    const mergedLayout = mergeCellLayout(
+      settings.layout && settings.layout.length > 0
+        ? settings.layout
+        : generateDefaultLayout(cells),
+      cells,
+      LAYOUT_OPTS,
+    ) as LayoutItem[]
+    const cellById = new Map(cells.map((c) => [c.id, c]))
+    const computed = mergedLayout.map((item) => {
+      const cell = cellById.get(item.i)
+      if (!cell) return item
+      const expectingResult = isExpectingResult(
+        cell,
+        resultHydration?.statusOf(cell.id) ?? "unrequested",
+      )
+      const minBottomPx =
+        isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
+      const minTotalPx =
+        minTopHeightFor(cell) +
+        minBottomPx +
+        cellChromePx(cell, expectingResult)
+      const minH = Math.ceil(
+        (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
+      )
+      return {
+        ...item,
+        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
+        minH,
+      }
+    })
     return {
-      ...item,
-      h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
-      minH,
+      computedLayout: computed,
+      layoutKey: computed
+        .map(
+          (item) =>
+            `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
+        )
+        .join("|"),
     }
-  })
-
-  const layoutKey = computedLayout
-    .map(
-      (item) =>
-        `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
-    )
-    .join("|")
+  }, [settings.layout, cells, resultHydration, resultStatusVersion])
 
   const currentLayout = useMemo(() => computedLayout, [layoutKey])
   const gridLayouts = useMemo(
@@ -460,9 +466,10 @@ const GridLayout: React.FC = () => {
   )
 
   const mapLayoutXYW = useCallback(
-    (rglLayout: Layout): CellLayoutItem[] =>
-      [...rglLayout]
-        .filter((item: LayoutItem) => cells.some((c) => c.id === item.i))
+    (rglLayout: Layout): CellLayoutItem[] => {
+      const cellIds = new Set(cells.map((c) => c.id))
+      return [...rglLayout]
+        .filter((item: LayoutItem) => cellIds.has(item.i))
         .map((item: LayoutItem) => ({
           i: item.i,
           x: item.x,
@@ -472,7 +479,8 @@ const GridLayout: React.FC = () => {
           // on next render by computeCellGridH anyway. Keeping it here
           // means we don't have to special-case the persisted shape.
           h: item.h,
-        })),
+        }))
+    },
     [cells],
   )
 
@@ -740,8 +748,8 @@ const NotebookContent: React.FC = () => {
     ),
     onUnrooted: useCallback(
       (cellIds) => {
+        chartEngine?.setOnlyVisible(cellIds)
         for (const cellId of cellIds) {
-          chartEngine?.setVisible(cellId, true)
           virtualizationEngine?.ensureFullContent(cellId)
         }
       },

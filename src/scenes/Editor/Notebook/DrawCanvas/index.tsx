@@ -47,6 +47,16 @@ const EmptyState = styled.div`
   font-size: ${({ theme }) => theme.fontSize.sm};
 `
 
+// The loading spinner is an unlabeled SVG; give its live region text to read.
+const VisuallyHidden = styled.span`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+`
+
 type Props = {
   cell: NotebookCell
   isFocused: boolean
@@ -82,8 +92,6 @@ export const DrawCanvas: React.FC<Props> = ({
     lastFetchHadError,
     classifyBlock,
   } = state
-
-  const isZoomed = zoomStart > 0 || zoomEnd < 100
 
   const handleZoomChange = useCallback(
     (start: number, end: number) => {
@@ -162,21 +170,15 @@ export const DrawCanvas: React.FC<Props> = ({
     }
   }, [cell.id, openSettings, handleResetZoom])
 
-  useEffect(() => {
-    eventBus.publish(EventType.NOTEBOOK_CELL_CHART_ZOOM, {
-      cellId: cell.id,
-      zoomed: isZoomed,
-    })
-  }, [cell.id, isZoomed])
-
   return (
     <Wrapper>
       {loading ? (
-        <EmptyState>
+        <EmptyState role="status">
           <CircleNotchSpinner size={24} />
+          <VisuallyHidden>Loading chart data</VisuallyHidden>
         </EmptyState>
       ) : empty ? (
-        <EmptyState>{emptyMessage}</EmptyState>
+        <EmptyState role="status">{emptyMessage}</EmptyState>
       ) : (
         <Canvas>
           <ChartRenderer

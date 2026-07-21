@@ -35,8 +35,11 @@ import {
 // a behavior change can never land on one surface and not the other.
 //
 // Side effects are returned as data, never performed here:
-//   - `cleanup.cellIds` — snapshots/layouts each shell drops after its commit.
-//   - `touchedCellId`    — the cell an agent-edit notification should point at.
+//   - `cleanup.cellIds`    — snapshots/layouts each shell drops after its commit.
+//   - `cancelRuns.cellIds` — cells whose in-flight run the mounted shell aborts
+//                            (the run would keep writing cell.result after the
+//                            chart engine takes ownership).
+//   - `touchedCellId`      — the cell an agent-edit notification should point at.
 //
 // Identity contract: untouched cells keep object identity (the composed
 // notebookUtils helpers guarantee it), and `parts.settings` is returned by
@@ -48,6 +51,7 @@ export type NotebookTransitionResult<T = void> = {
   result: T
   touchedCellId?: string
   cleanup?: { cellIds: string[] }
+  cancelRuns?: { cellIds: string[] }
 }
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
@@ -254,6 +258,7 @@ export const setCellModeTransition = (
   mode: CellMode,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  const entersDraw = mode === "draw" && cell.mode !== "draw"
   return {
     parts: {
       ...parts,
@@ -264,6 +269,7 @@ export const setCellModeTransition = (
     },
     result: undefined,
     touchedCellId: cellId,
+    ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
   }
 }
 

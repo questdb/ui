@@ -1,5 +1,6 @@
 const CELL_SELECTOR = "[data-notebook-cell][data-cell-id]"
 const SCROLL_CONTAINER_SELECTOR = "#notebook-scroll-container"
+const NOTEBOOK_ROOT_SELECTOR = "[data-notebook-root]"
 
 export type MountedCellNodes = {
   nodes: HTMLElement[]
@@ -15,11 +16,22 @@ let current: MountedCellNodes | null = null
 let observed = new Set<HTMLElement>()
 let scrollContainer: Element | null = null
 let mutations: MutationObserver | null = null
+let observedRoot: Node | null = null
 let rafId = 0
+
+const observeNotebookRoot = () => {
+  if (!mutations) return
+  const root = document.querySelector(NOTEBOOK_ROOT_SELECTOR) ?? document.body
+  if (observedRoot === root) return
+  observedRoot = root
+  mutations.disconnect()
+  mutations.observe(root, { childList: true, subtree: true })
+}
 
 const scan = () => {
   rafId = 0
   if (!mutations) return
+  observeNotebookRoot()
   const previousContainer = scrollContainer
   scrollContainer = document.querySelector(SCROLL_CONTAINER_SELECTOR)
   const nodes = Array.from(
@@ -60,13 +72,13 @@ const start = () => {
   mutations = new MutationObserver((records) => {
     if (mayChangeCellSet(records)) scheduleScan()
   })
-  mutations.observe(document.body, { childList: true, subtree: true })
   scan()
 }
 
 const stop = () => {
   mutations?.disconnect()
   mutations = null
+  observedRoot = null
   if (rafId) cancelAnimationFrame(rafId)
   rafId = 0
   current = null

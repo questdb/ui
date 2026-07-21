@@ -54,6 +54,7 @@ import {
   loadCellSnapshot,
   loadSnapshotCellIds,
   pinNotebookSnapshots,
+  pruneToRecentNotebooks,
 } from "../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import type { QueryKey } from "../../../store/Query/types"
@@ -246,9 +247,11 @@ export const NotebookProvider: React.FC<{
 
   const { hydrateCells, cellsRef } = store
 
-  // While this notebook is open, released results live ONLY in IndexedDB —
-  // exempt them from the cross-notebook recency prune.
-  useEffect(() => pinNotebookSnapshots(bufferId), [bufferId])
+  useEffect(() => {
+    const unpin = pinNotebookSnapshots(bufferId)
+    void pruneToRecentNotebooks()
+    return unpin
+  }, [bufferId])
 
   // Snapshots for cells that no longer exist (out-of-band divergence, e.g. an
   // applied external state) — index-only read, payloads untouched. Cell-delete
@@ -336,10 +339,8 @@ export const NotebookProvider: React.FC<{
     [persistImmediately, store.cellsRef],
   )
 
-  const cancelCell = useCallback(
+  const releaseCellExecution = useCallback(
     (cellId: string) => {
-      execution.cancelCell(cellId)
-
       const queryKey = activeCellQueryKeysRef.current.get(cellId)
       if (queryKey) {
         activeCellQueryKeysRef.current.delete(cellId)
@@ -349,7 +350,23 @@ export const NotebookProvider: React.FC<{
         )
       }
     },
-    [bufferId, execution, questExecution],
+    [bufferId, questExecution],
+  )
+
+  const cancelCell = useCallback(
+    (cellId: string) => {
+      execution.cancelCell(cellId)
+      releaseCellExecution(cellId)
+    },
+    [execution, releaseCellExecution],
+  )
+
+  const abortCellRun = useCallback(
+    (cellId: string) => {
+      execution.abortCellRun(cellId)
+      releaseCellExecution(cellId)
+    },
+    [execution, releaseCellExecution],
   )
 
   const applyTransition = useCallback(
@@ -384,9 +401,13 @@ export const NotebookProvider: React.FC<{
           clearChartZoom(cellId)
         }
       }
+      // For run->draw transitions, abort the in-flight run
+      if (out.cancelRuns) {
+        for (const cellId of out.cancelRuns.cellIds) abortCellRun(cellId)
+      }
       return out.result
     },
-    [store, persistImmediately, bufferId, cancelCell],
+    [store, persistImmediately, bufferId, cancelCell, abortCellRun],
   )
 
   const setMaximizedCellId = useCallback(

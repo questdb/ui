@@ -302,6 +302,31 @@ describe("CellVirtualizationEngine", () => {
     expect(engine.getContentMode("c1")).toBe("placeholder")
   })
 
+  it("releases the reveal pin of an out-of-band cell so it can drop", async () => {
+    // Given a cell revealed while far outside both bands (e.g. focus tabbed in)
+    engine.sync([sqlCell("c1")])
+    engine.ensureFullContent("c1")
+    expect(engine.getContentMode("c1")).toBe("full")
+    expect(engine.isInBand("c1")).toBe(false)
+
+    // When the pin is released (focus left the cell)
+    engine.releaseRevealPin("c1")
+    await vi.advanceTimersByTimeAsync(1)
+
+    // Then the cell drops back to a placeholder
+    expect(engine.getContentMode("c1")).toBe("placeholder")
+  })
+
+  it("reports band membership for in-band and out-of-band cells", () => {
+    // Given a synced cell inside the retain band only
+    engine.sync([sqlCell("c1"), sqlCell("c2")])
+    engine.reportRetainBand("c1", true)
+
+    // Then only that cell counts as in-band
+    expect(engine.isInBand("c1")).toBe(true)
+    expect(engine.isInBand("c2")).toBe(false)
+  })
+
   it("notifies subscribers on every mode change", async () => {
     // Given a subscriber on a synced cell
     engine.sync([sqlCell("c1")])

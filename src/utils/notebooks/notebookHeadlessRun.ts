@@ -33,6 +33,7 @@ import {
   USER_CHANGED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
+import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import {
   commitView,
   partsOf,
@@ -331,7 +332,11 @@ export const runHeadlessCell = async (
           cellId,
           results: ranResult.results,
           savedAt: Date.now(),
+          activeResultIndex: ranResult.activeResultIndex,
+          ...(ranResult.script ? { script: ranResult.script } : {}),
         })
+        // Headless saves land on unmounted buffers
+        void pruneToRecentNotebooks()
         return { committed: true, snapshotSaved }
       },
     )

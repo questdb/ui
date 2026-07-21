@@ -1,6 +1,5 @@
 import { toast } from "../../../components/Toast"
 import {
-  pruneToRecentNotebooks,
   saveCellSnapshot,
   type NotebookResultSnapshot,
 } from "../../../store/notebookResults"
@@ -15,19 +14,21 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 // a false here means only the offline result-rows snapshot was lost, which it
 // surfaces to the agent as a soft success (RESULT_NOT_SAVED_RUN_NOTE), not as a
 // "not recorded" outcome.
+//
+// Deliberately save-only: the cross-notebook recency prune runs where a NEW
+// notebook can actually enter the table — notebook open (NotebookProvider) and
+// the headless run commit — not on every frame a live chart persists.
 export const persistCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): Promise<boolean> =>
-  saveCellSnapshot(snapshot)
-    .then(() => pruneToRecentNotebooks())
-    .then(
-      () => true,
-      (error) => {
-        console.error("Failed to persist notebook cell result", error)
-        toast.error(
-          "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
-          { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
-        )
-        return false
-      },
-    )
+  saveCellSnapshot(snapshot).then(
+    () => true,
+    (error) => {
+      console.error("Failed to persist notebook cell result", error)
+      toast.error(
+        "Couldn't save this cell's result for offline restore. It may be lost on reload or your browser storage might be full.",
+        { toastId: SNAPSHOT_SAVE_ERROR_TOAST_ID },
+      )
+      return false
+    },
+  )

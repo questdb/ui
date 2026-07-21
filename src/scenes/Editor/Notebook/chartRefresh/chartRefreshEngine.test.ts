@@ -10,7 +10,11 @@ import {
   type NotebookResultSnapshot,
 } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
-import { ChartRefreshEngine, type ChartRefreshDeps } from "./chartRefreshEngine"
+import {
+  ChartRefreshEngine,
+  deriveChartLoading,
+  type ChartRefreshDeps,
+} from "./chartRefreshEngine"
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
@@ -195,6 +199,72 @@ describe("ChartRefreshEngine", () => {
 
       // Then only the first frame is persisted — the rest dedupe away
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("persists the full frame with tabs and summary, like a run would", async () => {
+      // Given a two-statement script where the second statement errors
+      deps.executeSingle = vi.fn((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve<QueryExecResult>({
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve(dqlResult(sql)),
+      )
+
+      // When the chart fetches
+      syncOnScreen([drawCell("c1", "select 1; select 2", false)])
+      await flushAsync()
+
+      // Then the snapshot keeps every statement — error tab included — plus
+      // the script summary and tab index a run-mode save would have written,
+      // so a reload in run mode restores an undegraded grid
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+      const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+      expect(snapshot.results.map((r) => r.type)).toEqual(["dql", "error"])
+      expect(snapshot.activeResultIndex).toBe(0)
+      expect(snapshot.script).toMatchObject({ successCount: 1, failedCount: 1 })
+    })
+
+    it("saves a throttled final frame once the window reopens, even if polling stopped", async () => {
+      // Given an auto-refreshing cell whose data changes every tick
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When a changed frame lands inside the throttle window and the cell
+      // then scrolls out of view (polling pauses, no further ticks retry)
+      await vi.advanceTimersByTimeAsync(1000)
+      engine.setVisible("c1", false)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // Then the blocked frame persists when the throttle window reopens
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    })
+
+    it("drops a pending throttled frame when the SQL changes", async () => {
+      // Given an auto-refreshing cell with a changed frame blocked by the throttle
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the SQL changes before the throttle window reopens
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+
+      // Then the old SQL's blocked frame never persists under the new SQL
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
     })
 
     it("clears the persisted snapshot when a fetch yields no chartable rows", async () => {
@@ -411,6 +481,45 @@ describe("ChartRefreshEngine", () => {
     )
   })
 
+  it("drops the previous query's frame when the new query's fetch starts", async () => {
+    // Given a settled draw cell showing the old query's rows
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(engine.getState("c1")?.results).toHaveLength(1)
+
+    // When the SQL changes and the new query's fetch begins but hasn't landed
+    deps.executeSingle = vi.fn(
+      (_sql: string) => new Promise<QueryExecResult>(() => undefined),
+    )
+    engine.sync([drawCell("c1", "select 2", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the old frame is gone while the new query is in flight — the chart
+    // must not present the previous query's data as the new one's
+    expect(engine.getState("c1")?.results).toHaveLength(0)
+    expect(engine.getState("c1")?.fetching).toBe(true)
+  })
+
+  it("keeps the frame and skips refetching on a formatting-only SQL change", async () => {
+    // Given a settled draw cell showing results
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(engine.getState("c1")?.results).toHaveLength(1)
+
+    // When the SQL only gains whitespace and a trailing semicolon
+    engine.sync([drawCell("c1", "select 1;\n", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the displayed frame survives without a refetch
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    const state = engine.getState("c1")
+    expect(state?.results).toHaveLength(1)
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
   it("blocks write queries from executing", async () => {
     // Given a cell whose SQL classifies as a write
     deps.validateWithGlobals.mockResolvedValue({ queryType: "update" })
@@ -480,6 +589,25 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(1000)
     expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("pauses every chart except the listed ones when the view unroots", async () => {
+    // Given two visible polling charts
+    syncOnScreen([
+      drawCell("c1", "select 1", "1s"),
+      drawCell("c2", "select 2", "1s"),
+    ])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+    // When only c1 stays in the DOM (a cell is maximized)
+    engine.setOnlyVisible(["c1"])
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Then only c1 keeps polling
+    const laterCalls = deps.executeSingle.mock.calls.slice(2)
+    expect(laterCalls.length).toBeGreaterThan(0)
+    expect(laterCalls.every(([sql]) => sql === "select 1")).toBe(true)
   })
 
   it("pauses polling when the cell scrolls out of view", async () => {
@@ -609,30 +737,28 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
-  it("publishes loading state for the cell toolbar", async () => {
-    // Given a listener on the chart loading event
-    const events: Array<{ loading: boolean; refreshing: boolean }> = []
-    const handler = (payload?: {
-      cellId?: string
-      loading?: boolean
-      refreshing?: boolean
-    }) => {
-      if (payload?.cellId === "c1")
-        events.push({
-          loading: !!payload.loading,
-          refreshing: !!payload.refreshing,
-        })
+  it("exposes loading state for the cell toolbar via its subscription", async () => {
+    // Given a subscriber deriving loading from the engine's state, as the
+    // toolbar's useChartLoading does
+    const states: Array<{ loading: boolean; refreshing: boolean }> = []
+    const listener = () => {
+      const state = engine.getState("c1")
+      states.push(
+        state
+          ? deriveChartLoading(state)
+          : { loading: false, refreshing: false },
+      )
     }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_CHART_LOADING, handler)
+    engine.subscribe("c1", listener)
 
     // When a draw cell fetches for the first time
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
-    eventBus.unsubscribe(EventType.NOTEBOOK_CELL_CHART_LOADING, handler)
+    engine.unsubscribe("c1", listener)
 
     // Then it reports loading during the fetch and idle after it settles
-    expect(events[0]).toEqual({ loading: true, refreshing: false })
-    expect(events[events.length - 1]).toEqual({
+    expect(states[0]).toEqual({ loading: true, refreshing: false })
+    expect(states[states.length - 1]).toEqual({
       loading: false,
       refreshing: false,
     })

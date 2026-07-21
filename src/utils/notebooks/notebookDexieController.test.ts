@@ -40,7 +40,6 @@ import { commitView, partsOf } from "./notebookDexieView"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
-import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import type { Client } from "../questdb/client"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -1153,20 +1152,34 @@ describe("createDexieNotebookController — field preservation", () => {
 })
 
 describe("createDexieNotebookController — persisted snapshot cap", () => {
-  it("never keeps results for more than 10 notebooks", async () => {
-    // Given snapshots persisted for 11 different notebooks
-    for (let bufferId = 1; bufferId <= 11; bufferId++) {
-      await persistCellSnapshot({
+  it("a headless run commit evicts results beyond the 10 most recent notebooks", async () => {
+    // Given 11 other notebooks already holding persisted results
+    for (let bufferId = 101; bufferId <= 111; bufferId++) {
+      await saveCellSnapshot({
         bufferId,
         cellId: "c",
         results: [],
         savedAt: bufferId,
       })
     }
-    // Then only the 10 most recent notebooks keep persisted results
-    const rows = await db.notebook_results.toArray()
-    const notebooks = new Set(rows.map((r) => r.bufferId))
-    expect(notebooks.size).toBe(10)
-    expect(notebooks.has(1)).toBe(false)
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const { quest, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+
+    // When a headless run commits this notebook's snapshot
+    const pending = controller.runCell("a")
+    await vi.waitFor(() => respondNext(dqlResult))
+    await pending
+
+    // Then only the 10 most recent notebooks keep results — this one included,
+    // the oldest evicted
+    await vi.waitFor(async () => {
+      const rows = await db.notebook_results.toArray()
+      const notebooks = new Set(rows.map((r) => r.bufferId))
+      expect(notebooks.size).toBe(10)
+      expect(notebooks.has(BUFFER_ID)).toBe(true)
+      expect(notebooks.has(101)).toBe(false)
+      expect(notebooks.has(102)).toBe(false)
+    })
   })
 })

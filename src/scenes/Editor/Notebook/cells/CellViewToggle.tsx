@@ -13,6 +13,7 @@ import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
 import type { CellView } from "../notebookUtils"
 
 const Container = styled.div`
@@ -141,6 +142,7 @@ export const CellViewToggle: React.FC<Props> = ({
   }
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()
+    clearChartZoom(cellId)
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
   }
 

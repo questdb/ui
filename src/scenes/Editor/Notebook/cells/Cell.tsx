@@ -384,9 +384,22 @@ const CellInner: React.FC<Props> = ({
       $maximized={isMaximized}
       $gridMode={layoutMode === "grid" && !isMaximized}
       {...wrapperHandlers}
+      // Any focus landing in the cell pins it (keyboard/SR users reach grid
+      // and chart controls without mousedown or Monaco focus), so the focused
+      // subtree can't virtualize away beneath them.
       onFocusCapture={() => {
+        setFocusedCell(cell.id)
         if (contentMode !== "full")
           virtualizationEngine?.ensureFullContent(cell.id)
+      }}
+      // Focus moved to another element outside an out-of-band cell: release
+      // its pins so it can virtualize away
+      onBlurCapture={(e) => {
+        const next = e.relatedTarget as Node | null
+        if (!next || e.currentTarget.contains(next)) return
+        if (virtualizationEngine?.isInBand(cell.id) ?? true) return
+        virtualizationEngine?.releaseRevealPin(cell.id)
+        if (isFocused) setFocusedCell(null)
       }}
     >
       {contentMode === "placeholder" && (

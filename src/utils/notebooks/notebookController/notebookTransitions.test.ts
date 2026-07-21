@@ -6,6 +6,7 @@ import {
   applyNotebookStateTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  setCellModeTransition,
   updateCellTransition,
 } from "./notebookTransitions"
 import type { ViewParts } from "../notebookDexieView"
@@ -136,6 +137,29 @@ describe("deleteCellTransition", () => {
     expect(() => deleteCellTransition(parts, BUFFER_ID, "a")).toThrow(
       NotebookToolError,
     )
+  })
+})
+
+describe("setCellModeTransition", () => {
+  it("asks the shell to cancel the cell's run when it enters draw mode", () => {
+    // Given a run-mode cell (a run may be in flight)
+    const parts = partsOf([cell("a", "select 1", { mode: "run" })])
+    // When the cell switches to draw
+    const out = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
+    // Then the shell is told to abort its in-flight run — the chart engine
+    // owns the cell's result from here
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
+  })
+
+  it("does not cancel runs when leaving draw mode or staying in it", () => {
+    // Given a draw-mode cell
+    const parts = partsOf([cell("a", "select 1", { mode: "draw" })])
+    // When it switches back to run, or is re-set to draw
+    const toRun = setCellModeTransition(parts, BUFFER_ID, "a", "run")
+    const stillDraw = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
+    // Then neither carries a cancel request
+    expect(toRun.cancelRuns).toBeUndefined()
+    expect(stillDraw.cancelRuns).toBeUndefined()
   })
 })
 

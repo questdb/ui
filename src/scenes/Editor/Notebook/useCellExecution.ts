@@ -472,25 +472,34 @@ export const useCellExecution = ({
     [cellsRef, executeSingle, updateCellResult, persistSnapshot],
   )
 
+  // Silently discard an in-flight run: no cancelled markers, no snapshot
+  // delete. For ownership hand-offs (run→draw) where the chart engine takes
+  // over and the run must simply stop writing.
+  const abortCellRun = useCallback((cellId: string) => {
+    const controllers = abortControllersRef.current.get(cellId)
+    if (!controllers) return
+    // Supersede the in-flight run so its late resolution can't write back
+    supersedeCellRun(runGenerationRef, cellId)
+    controllers.forEach((ac) => ac.abort())
+    clearRunningCell(
+      abortControllersRef,
+      autoFocusRef,
+      setRunningCellIds,
+      cellId,
+    )
+  }, [])
+
   const cancelCell = useCallback(
     (cellId: string) => {
-      const controllers = abortControllersRef.current.get(cellId)
-      if (!controllers) return
-      // Supersede the in-flight run so its late resolution can't write back
-      supersedeCellRun(runGenerationRef, cellId)
-      controllers.forEach((ac) => ac.abort())
-      clearRunningCell(
-        abortControllersRef,
-        autoFocusRef,
-        setRunningCellIds,
-        cellId,
-      )
+      const hadRun = abortControllersRef.current.has(cellId)
+      abortCellRun(cellId)
+      if (!hadRun) return
       markCancelledAll(cellId)
       // The prior snapshot holds rows for a now-cancelled run; drop it so a
       // reload shows the cancelled status, not stale success rows.
       void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
     },
-    [bufferId, markCancelledAll],
+    [abortCellRun, bufferId, markCancelledAll],
   )
 
   const cancelQuery = useCallback(
@@ -539,6 +548,7 @@ export const useCellExecution = ({
     runningCellIds,
     runCell,
     reRunResultAt,
+    abortCellRun,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,
