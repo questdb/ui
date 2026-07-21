@@ -302,6 +302,21 @@ describe("CellVirtualizationEngine", () => {
     expect(engine.getContentMode("c1")).toBe("placeholder")
   })
 
+  it("notifies an existing subscriber when sync creates its entry born full", () => {
+    // Given a cell focused before sync, whose component already subscribed
+    // against the default placeholder (child effects run before the provider's)
+    engine.setFocusedCell("c1")
+    const listener = vi.fn()
+    engine.subscribe("c1", listener)
+
+    // When sync creates the entry, born full through the focus pin
+    engine.sync([sqlCell("c1")])
+
+    // Then the subscriber hears about it and reads the real mode
+    expect(listener).toHaveBeenCalled()
+    expect(engine.getContentMode("c1")).toBe("full")
+  })
+
   it("releases the reveal pin of an out-of-band cell so it can drop", async () => {
     // Given a cell revealed while far outside both bands (e.g. focus tabbed in)
     engine.sync([sqlCell("c1")])

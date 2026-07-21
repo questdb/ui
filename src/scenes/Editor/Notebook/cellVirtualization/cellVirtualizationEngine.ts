@@ -84,6 +84,10 @@ export class CellVirtualizationEngine {
         candidateSince: null,
       })
       if (pinned) this.onCellDataNeeded?.(cell.id)
+      // A cell rendered before this sync subscribed against the default
+      // placeholder — a pinned entry is born full, so creation must notify
+      // just like removal does, or that cell never learns its real mode.
+      this.notify(cell.id)
     }
     for (const cellId of [...this.entries.keys()]) {
       if (!present.has(cellId)) this.removeEntry(cellId)
