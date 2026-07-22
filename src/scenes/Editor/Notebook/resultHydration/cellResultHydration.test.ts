@@ -266,19 +266,31 @@ describe("CellResultHydrationEngine", () => {
     expect(loadCounts.get("dup")).toBeUndefined()
   })
 
-  it("skips draw-mode cells and cells that never ran", () => {
-    // Given a draw cell and a never-run cell
-    seedCell({ ...ranCell("draw"), mode: "draw" })
+  it("skips run cells that never ran", () => {
+    // Given a run cell without a run marker
     seedCell({ id: "fresh", position: 0, value: "" })
 
-    // When their data is requested
-    engine.request("draw")
+    // When its data is requested
     engine.request("fresh")
 
-    // Then no snapshot read starts for either
+    // Then no snapshot read starts
     expect(pendingLoads.size).toBe(0)
-    expect(engine.statusOf("draw")).toBe("unrequested")
     expect(engine.statusOf("fresh")).toBe("unrequested")
+  })
+
+  it("loads a draw cell's snapshot even without a run marker", async () => {
+    // Given a draw cell that has never run but has a chart snapshot
+    seedCell({ id: "draw", position: 0, value: "select 1", mode: "draw" })
+    snapshots.set("draw", snapshot("draw", [dqlResult("select 1")]))
+
+    // When its data is requested
+    engine.request("draw")
+    await resolveLoad("draw")
+
+    // Then the snapshot hydrates like a run cell's would
+    expect(engine.statusOf("draw")).toBe("loaded")
+    expect(applied).toHaveLength(1)
+    expect(applied[0][0]).toBe("draw")
   })
 
   it("retries a failed read for a cell still on screen and hydrates on success", async () => {
@@ -312,8 +324,10 @@ describe("CellResultHydrationEngine", () => {
     // When the retry budget is exhausted
     await vi.advanceTimersByTimeAsync(10_000)
 
-    // Then no further self-scheduled read runs
+    // Then no further self-scheduled read runs and the failure is terminal —
+    // a waiter watching the status stops hanging
     expect(loadCounts.get("c1")).toBe(3)
+    expect(engine.statusOf("c1")).toBe("failed")
 
     // But an explicit band re-entry still requests fresh
     engine.request("c1")
@@ -330,9 +344,12 @@ describe("CellResultHydrationEngine", () => {
     // When time passes
     await vi.advanceTimersByTimeAsync(10_000)
 
-    // Then no retry runs — the next band entry re-requests instead
+    // Then no retry runs — the failure is terminal until a band re-entry
+    // re-requests
     expect(loadCounts.get("c1")).toBe(1)
-    expect(engine.statusOf("c1")).toBe("unrequested")
+    expect(engine.statusOf("c1")).toBe("failed")
+    engine.request("c1")
+    expect(loadCounts.get("c1")).toBe(2)
   })
 
   it("applies nothing when destroyed mid-flight and cancels pending retries", async () => {
@@ -435,8 +452,8 @@ describe("CellResultHydrationEngine", () => {
     expect(released).toEqual(["c1", "c2"])
   })
 
-  it("never releases a draw cell's mirrored result", async () => {
-    // Given a scrolled-away draw cell whose snapshot save confirmed
+  it("releases a draw cell's frame once its snapshot save confirmed", async () => {
+    // Given a scrolled-away draw cell whose frame was persisted
     const live: CellResult = {
       results: [dqlResult("select 1")],
       activeResultIndex: 0,
@@ -449,9 +466,32 @@ describe("CellResultHydrationEngine", () => {
     engine.notePersisted("draw", live.results)
     await vi.advanceTimersByTimeAsync(1)
 
-    // Then the chart's mirrored result stays in memory
+    // Then the chart's frame is released like a run result would be
+    expect(released).toEqual(["draw"])
+  })
+
+  it("keeps a draw cell's frame that changed after the last confirmed save", async () => {
+    // Given a draw cell whose persisted frame was replaced by a newer one
+    const saved: CellResult = {
+      results: [dqlResult("select 1")],
+      activeResultIndex: 0,
+      timestamp: 2000,
+    }
+    const newer: CellResult = {
+      results: [dqlResult("select 1")],
+      activeResultIndex: 0,
+      timestamp: 3000,
+    }
+    seedCell({ ...ranCell("draw"), mode: "draw", result: newer })
+    releasableCellIds.add("draw")
+
+    // When only the OLD frame's save confirmed
+    engine.notePersisted("draw", saved.results)
+    await vi.advanceTimersByTimeAsync(1)
+
+    // Then the newer, unsaved frame stays in memory
     expect(released).toEqual([])
-    expect(cells.get("draw")!.result).toBe(live)
+    expect(cells.get("draw")!.result).toBe(newer)
   })
 
   it("re-checks releasability at idle time and keeps a cell that re-entered the band", async () => {

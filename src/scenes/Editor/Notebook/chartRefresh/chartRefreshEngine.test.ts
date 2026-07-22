@@ -1,27 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
-import type { CellResult, NotebookCell } from "../../../../store/notebook"
-import type { AutoRefresh } from "../../../../store/notebook"
+import type {
+  AutoRefresh,
+  CellResult,
+  NotebookCell,
+  SingleQueryResult,
+} from "../../../../store/notebook"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import {
-  deleteCellSnapshot,
-  loadCellSnapshot,
-  type NotebookResultSnapshot,
-} from "../../../../store/notebookResults"
+import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
+import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import {
   ChartRefreshEngine,
   deriveChartLoading,
   type ChartRefreshDeps,
 } from "./chartRefreshEngine"
+import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
 }))
 
 vi.mock("../../../../store/notebookResults", () => ({
-  loadCellSnapshot: vi.fn().mockResolvedValue(undefined),
   deleteCellSnapshot: vi.fn().mockResolvedValue(undefined),
 }))
 
@@ -38,6 +39,21 @@ const dqlResult = (query: string): QueryExecResult => ({
   count: 1,
 })
 
+const dqlCellResult = (query: string, timestamp = 0): CellResult => ({
+  results: [
+    {
+      type: "dql",
+      query,
+      columns: [{ name: "x", type: "INT" }],
+      dataset: [[1]],
+      count: 1,
+      timestamp: 0,
+    },
+  ],
+  activeResultIndex: 0,
+  timestamp,
+})
+
 const drawCell = (
   id: string,
   value: string,
@@ -52,12 +68,72 @@ const drawCell = (
 
 const dqlValidation = { query: "q", columns: [], timestamp: 0 }
 
-const makeDeps = () => ({
-  executeSingle: vi.fn((sql: string) => Promise.resolve(dqlResult(sql))),
-  validateWithGlobals: vi.fn().mockResolvedValue(dqlValidation),
-  mirrorCellResult: vi.fn<[string, CellResult | undefined], void>(),
-  getCellResult: vi.fn((): CellResult | undefined => undefined),
-})
+// Backs getCellResult with whatever setCellResult last wrote — the engine
+// dedups against the CURRENT cell result, so a fake returning undefined would
+// silently disable dedup and over-count writes. The load fakes stand in for
+// the hydration engine: requestResultLoad settles "missing" synchronously by
+// default; tests that model a snapshot load override it to "loading" and
+// settle through settleLoad.
+const makeDeps = () => {
+  const cellResults = new Map<string, CellResult | undefined>()
+  const loadStatuses = new Map<string, CellResultStatus>()
+  const loadListeners = new Map<string, Set<() => void>>()
+  const deps = {
+    executeSingle: vi.fn((sql: string) => Promise.resolve(dqlResult(sql))),
+    validateWithGlobals: vi.fn().mockResolvedValue(dqlValidation),
+    setCellResult: vi.fn((cellId: string, result: CellResult | undefined) => {
+      cellResults.set(cellId, result)
+    }),
+    getCellResult: vi.fn((cellId: string) => cellResults.get(cellId)),
+    resultLoadStatus: vi.fn(
+      (cellId: string): CellResultStatus =>
+        loadStatuses.get(cellId) ?? "unrequested",
+    ),
+    subscribeResultLoad: vi.fn((cellId: string, listener: () => void) => {
+      let set = loadListeners.get(cellId)
+      if (!set) {
+        set = new Set()
+        loadListeners.set(cellId, set)
+      }
+      set.add(listener)
+      return () => {
+        loadListeners.get(cellId)?.delete(listener)
+      }
+    }),
+    requestResultLoad: vi.fn((cellId: string) => {
+      loadStatuses.set(cellId, "missing")
+    }),
+    noteResultMissing: vi.fn((cellId: string) => {
+      loadStatuses.set(cellId, "missing")
+    }),
+    onSnapshotPersisted: vi.fn<[string, SingleQueryResult[]], void>(),
+  }
+  const beginLoadOnRequest = () => {
+    deps.requestResultLoad.mockImplementation((cellId: string) => {
+      loadStatuses.set(cellId, "loading")
+    })
+  }
+  const settleLoad = (
+    cellId: string,
+    outcome: CellResult | "missing" | "failed",
+  ) => {
+    if (outcome === "missing" || outcome === "failed") {
+      loadStatuses.set(cellId, outcome)
+    } else {
+      cellResults.set(cellId, outcome)
+      loadStatuses.set(cellId, "loaded")
+    }
+    loadListeners.get(cellId)?.forEach((listener) => listener())
+  }
+  return {
+    deps,
+    cellResults,
+    loadStatuses,
+    loadListeners,
+    beginLoadOnRequest,
+    settleLoad,
+  }
+}
 
 const flushAsync = async () => {
   await vi.advanceTimersByTimeAsync(0)
@@ -73,7 +149,9 @@ const setDocumentHidden = (hidden: boolean) => {
 }
 
 describe("ChartRefreshEngine", () => {
-  let deps: ReturnType<typeof makeDeps>
+  let harness: ReturnType<typeof makeDeps>
+  let deps: ReturnType<typeof makeDeps>["deps"]
+  let cellResults: ReturnType<typeof makeDeps>["cellResults"]
   let engine: ChartRefreshEngine
 
   // Entries start hidden until an observer reports them (no init-load fetch
@@ -87,10 +165,9 @@ describe("ChartRefreshEngine", () => {
     vi.useFakeTimers()
     fakeDocument.hidden = false
     ;(globalThis as { document?: unknown }).document = fakeDocument
-    // clearAllMocks keeps implementations; reset the module mock explicitly so
-    // one test's snapshot fixture can't hydrate another test's cells.
-    vi.mocked(loadCellSnapshot).mockResolvedValue(undefined)
-    deps = makeDeps()
+    harness = makeDeps()
+    deps = harness.deps
+    cellResults = harness.cellResults
     // Jitter off: tests assert exact fetch timing.
     engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
       initialFetchJitterMs: 0,
@@ -121,7 +198,6 @@ describe("ChartRefreshEngine", () => {
       10_000,
     )
     const state = engine.getState("c1")
-    expect(state?.results).toHaveLength(1)
     expect(state?.settledKey).toBe(state?.queriesKey)
 
     // And no further fetches happen over time
@@ -129,19 +205,48 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
-  it("mirrors fetched results into the cell result", async () => {
+  it("writes fetched results into the cell result", async () => {
     // Given a draw cell whose query succeeds
     syncOnScreen([drawCell("c1", "select 1", false)])
 
     // When the fetch completes
     await flushAsync()
 
-    // Then every statement is mirrored so the grid shows the chart's data
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
-    const [cellId, result] = deps.mirrorCellResult.mock.calls[0]
-    expect(cellId).toBe("c1")
+    // Then every statement lands in cell.result so the grid shows the same data
+    expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+    const result = cellResults.get("c1")
     expect(result?.results).toHaveLength(1)
     expect(result?.results[0]).toMatchObject({ type: "dql", query: "select 1" })
+  })
+
+  it("skips the cell write when a poll tick returns an identical frame", async () => {
+    // Given a polling cell whose query returns the same rows every tick
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+
+    // When several ticks pass
+    await vi.advanceTimersByTimeAsync(3000)
+
+    // Then the unchanged frames never re-write the cell
+    expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+    expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+  })
+
+  it("re-writes an identical frame after the result was released from memory", async () => {
+    // Given a polling cell that settled a frame
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+
+    // When the hydration engine releases cell.result and the next tick
+    // returns the same rows
+    cellResults.delete("c1")
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // Then the frame is written again — the chart must not stay empty
+    expect(deps.setCellResult).toHaveBeenCalledTimes(2)
+    expect(cellResults.get("c1")?.results).toHaveLength(1)
   })
 
   describe("snapshot persistence", () => {
@@ -170,6 +275,50 @@ describe("ChartRefreshEngine", () => {
       const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
       expect(snapshot).toMatchObject({ bufferId: BUFFER_ID, cellId: "c1" })
       expect(snapshot.results).toHaveLength(1)
+    })
+
+    it("notifies the persisted frame with the exact array held by the cell", async () => {
+      // Given a draw cell whose fetch persists
+      // When the save confirms
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then onSnapshotPersisted receives the same array instance that sits in
+      // cell.result, so the hydration engine can mark it releasable
+      expect(deps.onSnapshotPersisted).toHaveBeenCalledTimes(1)
+      const [cellId, results] = deps.onSnapshotPersisted.mock.calls[0]
+      expect(cellId).toBe("c1")
+      expect(results).toBe(cellResults.get("c1")?.results)
+    })
+
+    it("does not notify when the save fails", async () => {
+      // Given a save that fails
+      vi.mocked(persistCellSnapshot).mockResolvedValueOnce(false)
+
+      // When the cell fetches
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then the frame is not reported as persisted
+      expect(deps.onSnapshotPersisted).not.toHaveBeenCalled()
+    })
+
+    it("re-persists an identical frame after a failed save", async () => {
+      // Given a polling cell whose first save fails
+      vi.mocked(persistCellSnapshot).mockResolvedValueOnce(false)
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When later ticks return the identical frame
+      await vi.advanceTimersByTimeAsync(11_000)
+
+      // Then the frame is saved again once the throttle window reopens —
+      // identical data does not excuse a failed persist
+      expect(
+        vi.mocked(persistCellSnapshot).mock.calls.length,
+      ).toBeGreaterThanOrEqual(2)
+      expect(deps.onSnapshotPersisted).toHaveBeenCalled()
     })
 
     it("throttles snapshot writes while the chart auto-refreshes", async () => {
@@ -287,111 +436,271 @@ describe("ChartRefreshEngine", () => {
       expect(persistCellSnapshot).not.toHaveBeenCalled()
       expect(deleteCellSnapshot).toHaveBeenCalledWith(BUFFER_ID, "c1")
     })
+
+    it("retries a failed snapshot delete on the next rowless frame", async () => {
+      // Given a polling chart whose first snapshot delete will fail
+      vi.mocked(deleteCellSnapshot).mockRejectedValueOnce(new Error("locked"))
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the query starts returning no rows
+      deps.executeSingle = vi.fn((sql: string) =>
+        Promise.resolve<QueryExecResult>({
+          type: "dql",
+          query: sql,
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [],
+          count: 0,
+        }),
+      )
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deleteCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // And the identical rowless frame arrives on the next tick
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Then the delete is retried — old rows must not survive on disk to be
+      // resurrected on reload
+      expect(
+        vi.mocked(deleteCellSnapshot).mock.calls.length,
+      ).toBeGreaterThanOrEqual(2)
+
+      // And once a delete confirms, further rowless ticks stop re-deleting
+      const settledCount = vi.mocked(deleteCellSnapshot).mock.calls.length
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(deleteCellSnapshot).toHaveBeenCalledTimes(settledCount)
+    })
+
+    it("persists the throttle-blocked final frame when the cell leaves draw mode", async () => {
+      // Given a polling chart with a changed frame blocked by the throttle
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the user switches the cell to the grid
+      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+      await flushAsync()
+
+      // Then the final frame persists immediately with the exact array the
+      // cell holds, so the grid can release it and a reload restores it
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      const snapshot = vi.mocked(persistCellSnapshot).mock.calls[1][0]
+      expect(snapshot.results).toBe(cellResults.get("c1")?.results)
+      expect(deps.onSnapshotPersisted).toHaveBeenCalledTimes(2)
+    })
+
+    it("drops the throttle-blocked frame when the cell is deleted", async () => {
+      // Given a polling chart with a changed frame blocked by the throttle
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the cell is deleted outright
+      engine.sync([])
+      await vi.advanceTimersByTimeAsync(15_000)
+
+      // Then the blocked frame never persists — no orphan record
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
   })
 
-  it("keeps a live-mirrored frame when a slower snapshot read lands after it", async () => {
-    // Given a snapshot read that resolves only after the first live fetch
-    let resolveSnapshot!: (value: NotebookResultSnapshot | undefined) => void
-    vi.mocked(loadCellSnapshot).mockReturnValue(
-      new Promise((resolve) => {
-        resolveSnapshot = resolve
-      }),
-    )
+  describe("settling from existing data", () => {
+    it("settles on a matching cell result with rows instead of fetching", async () => {
+      // Given a cell result produced by the exact same query (grid → chart)
+      cellResults.set("c1", dqlCellResult("select 1"))
 
-    // When the poll's immediate fetch mirrors live rows first
-    syncOnScreen([drawCell("c1", "select 1", "1s")])
-    await flushAsync()
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+      // When the engine syncs the draw cell with auto-refresh off
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
 
-    // And the stale snapshot then resolves with older rows for the same query
-    resolveSnapshot({
-      bufferId: BUFFER_ID,
-      cellId: "c1",
-      savedAt: 0,
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[999]],
-          count: 1,
-        },
-      ],
+      // Then the data settles without a fetch or a re-write
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      const state = engine.getState("c1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
     })
-    await flushAsync()
 
-    // Then the mirror keeps the live frame — the snapshot must not overwrite it
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+    it("fetches when the result holds running leftovers from an aborted run", async () => {
+      // Given a run → draw switch that left transient entries behind
+      cellResults.set("c1", {
+        results: [{ type: "running", query: "select 1" }],
+        activeResultIndex: 0,
+        timestamp: 0,
+      })
+
+      // When the engine syncs the draw cell
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then it fetches fresh data instead of settling on the transient
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(cellResults.get("c1")?.results[0]).toMatchObject({ type: "dql" })
+    })
+
+    it("fetches when the matching result has no chartable rows", async () => {
+      // Given an adopted result whose only statement errored
+      cellResults.set("c1", {
+        results: [{ type: "error", query: "select 1", error: "boom" }],
+        activeResultIndex: 0,
+        timestamp: 0,
+      })
+
+      // When the engine syncs the draw cell
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then it fetches instead of settling on a rowless frame
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps an engine-settled error frame without refetching on reveal", async () => {
+      // Given a fetch that settled with a server-side error
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve({
+          type: "error",
+          query: sql,
+          columns: [],
+          dataset: [],
+          count: 0,
+          error: "table does not exist",
+        } as QueryExecResult),
+      )
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the cell is hidden and revealed again
+      engine.setVisible("c1", false)
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then the settled error frame stands — no refetch loop
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("waits for an in-flight result load and settles on the loaded frame", async () => {
+      // Given a snapshot load that starts when the engine asks for data
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // When the load settles with a matching frame
+      harness.settleLoad("c1", dqlCellResult("select 1"))
+      await flushAsync()
+
+      // Then the chart settles on it without fetching
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      const state = engine.getState("c1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
+    })
+
+    it("fetches after a result load settles missing", async () => {
+      // Given a snapshot load in flight
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // When the load finds no snapshot
+      harness.settleLoad("c1", "missing")
+      await flushAsync()
+
+      // Then the engine falls back to a live fetch
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("fetches after a result load fails", async () => {
+      // Given a snapshot load in flight
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // When the load exhausts its retries
+      harness.settleLoad("c1", "failed")
+      await flushAsync()
+
+      // Then the engine falls back to a live fetch instead of hanging
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("fetches when the loaded snapshot is truncated", async () => {
+      // Given a load that restores a byte-capped frame
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // When the truncated frame lands
+      harness.settleLoad("c1", {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [{ name: "x", type: "INT" }],
+            dataset: [[1]],
+            count: 5000,
+            timestamp: 0,
+            truncated: true,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      })
+      await flushAsync()
+
+      // Then the partial rows don't settle the chart — it refetches the frame
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("unsubscribes a pending load wait on destroy", async () => {
+      // Given an engine waiting on a result load
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(harness.loadListeners.get("c1")?.size).toBe(1)
+
+      // When the engine is destroyed mid-wait
+      engine.destroy()
+
+      // Then the listener is gone and a late settle reaches nothing
+      expect(harness.loadListeners.get("c1")?.size).toBe(0)
+      harness.settleLoad("c1", dqlCellResult("select 1"))
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
   })
 
-  it("does not resurrect a stale snapshot over a live fetch that settled with an error", async () => {
-    // Given a snapshot read that resolves only after the first live fetch,
-    // and a query that now fails
-    let resolveSnapshot!: (value: NotebookResultSnapshot | undefined) => void
-    vi.mocked(loadCellSnapshot).mockReturnValue(
-      new Promise((resolve) => {
-        resolveSnapshot = resolve
-      }),
-    )
-    deps.executeSingle.mockResolvedValue({
-      type: "error",
-      query: "select 1",
-      columns: [],
-      dataset: [],
-      count: 0,
-      error: "table does not exist",
-    })
-
-    // When the poll's immediate fetch settles the error frame first
-    syncOnScreen([drawCell("c1", "select 1", "1s")])
+  it("clears result, load status and snapshot when the SQL becomes empty", async () => {
+    // Given a settled draw cell with a frame and a snapshot
+    syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
-    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
-    expect(engine.getState("c1")?.results).toHaveLength(0)
+    expect(cellResults.get("c1")).toBeDefined()
 
-    // And the stale snapshot then resolves with old successful rows
-    resolveSnapshot({
-      bufferId: BUFFER_ID,
-      cellId: "c1",
-      savedAt: 0,
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[999]],
-          count: 1,
-        },
-      ],
-    })
+    // When the SQL is cleared
+    engine.sync([drawCell("c1", "", false)])
+    await vi.advanceTimersByTimeAsync(301)
     await flushAsync()
 
-    // Then the settled error frame stands — old rows must not mask a current
-    // failure, and no second mirror fires
-    expect(engine.getState("c1")?.results).toHaveLength(0)
-    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+    // Then memory, hydration status and disk are invalidated together, so an
+    // in-flight snapshot read cannot resurrect the cleared rows
+    expect(cellResults.get("c1")).toBeUndefined()
+    expect(deps.noteResultMissing).toHaveBeenCalledWith("c1")
+    expect(deleteCellSnapshot).toHaveBeenCalledWith(BUFFER_ID, "c1")
   })
 
   it("does not skip the catch-up fetch after a poll aborted during its start jitter", async () => {
-    // Given a jittered engine whose cell's data was just transferred in
+    // Given a jittered engine whose cell holds an old settled frame
     const jittered = new ChartRefreshEngine(
       BUFFER_ID,
       () => deps as ChartRefreshDeps,
       { initialFetchJitterMs: 300 },
     )
-    deps.getCellResult.mockReturnValue({
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
+    cellResults.set("c1", dqlCellResult("select 1"))
     jittered.setVisible("c1", true)
     jittered.sync([drawCell("c1", "select 1", "1s")])
 
@@ -405,33 +714,6 @@ describe("ChartRefreshEngine", () => {
     // Then the resumed poll fetches immediately instead of waiting an interval
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     jittered.destroy()
-  })
-
-  it("transfers a matching existing cell result instead of fetching", async () => {
-    // Given a cell result produced by the exact same query (grid → chart toggle)
-    deps.getCellResult.mockReturnValue({
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-
-    // When the engine syncs the draw cell with auto-refresh off
-    syncOnScreen([drawCell("c1", "select 1", false)])
-    await flushAsync()
-
-    // Then the data is transferred without a fetch
-    expect(deps.executeSingle).not.toHaveBeenCalled()
-    const state = engine.getState("c1")
-    expect(state?.results).toHaveLength(1)
-    expect(state?.settledKey).toBe(state?.queriesKey)
   })
 
   it("polls on a fixed interval without any mounted component", async () => {
@@ -449,31 +731,65 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(3)
   })
 
-  it("skips the poll's immediate first fetch when data was transferred in", async () => {
-    // Given transferable data and a fixed 1s interval
-    deps.getCellResult.mockReturnValue({
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
+  it("skips the poll's immediate first fetch when a fresh result was adopted", async () => {
+    // Given a just-run grid result and a fixed 1s interval
+    cellResults.set("c1", dqlCellResult("select 1", Date.now()))
 
     // When the engine syncs the cell
     syncOnScreen([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
-    // Then the transferred frame serves as the first tick, and the poll only
+    // Then the adopted frame serves as the first tick, and the poll only
     // fetches after one full interval
     expect(deps.executeSingle).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1000)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("polls immediately when the adopted result is old", async () => {
+    // Given a stale settled frame (a snapshot from a previous session)
+    cellResults.set("c1", dqlCellResult("select 1", 0))
+
+    // When the engine syncs the polling cell
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then the poll refreshes the old frame right away
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps polling after a chart → grid → chart toggle without new observer events", async () => {
+    // Given a visible polling chart
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When the user switches to the grid and back — the cell never leaves the
+    // viewport, so the visibility observer reports nothing new
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then the recreated entry still counts as visible and the poll resumes
+    const callsAtReturn = deps.executeSingle.mock.calls.length
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(callsAtReturn)
+  })
+
+  it("drops the visibility record only when the cell is deleted", async () => {
+    // Given a visible polling chart
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // When the cell is deleted and later a NEW cell reuses nothing of it
+    engine.sync([])
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then the recreated entry starts hidden until an observer reports it
+    const calls = deps.executeSingle.mock.calls.length
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(deps.executeSingle.mock.calls.length).toBe(calls)
   })
 
   it("stops polling when the cell leaves draw mode", async () => {
@@ -529,11 +845,12 @@ describe("ChartRefreshEngine", () => {
     )
   })
 
-  it("drops the previous query's frame when the new query's fetch starts", async () => {
+  it("keeps the old frame in the cell while the new query fetches", async () => {
     // Given a settled draw cell showing the old query's rows
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
-    expect(engine.getState("c1")?.results).toHaveLength(1)
+    const oldFrame = cellResults.get("c1")
+    expect(oldFrame?.results[0]).toMatchObject({ query: "select 1" })
 
     // When the SQL changes and the new query's fetch begins but hasn't landed
     deps.executeSingle = vi.fn(
@@ -543,10 +860,13 @@ describe("ChartRefreshEngine", () => {
     await vi.advanceTimersByTimeAsync(301)
     await flushAsync()
 
-    // Then the old frame is gone while the new query is in flight — the chart
-    // must not present the previous query's data as the new one's
-    expect(engine.getState("c1")?.results).toHaveLength(0)
+    // Then the grid keeps the old rows (the chart gates them out as stale)
+    // and the engine reports the fetch in flight
+    expect(cellResults.get("c1")).toBe(oldFrame)
     expect(engine.getState("c1")?.fetching).toBe(true)
+    expect(toChartResult(cellResults.get("c1"), ["select 2"]).kind).toBe(
+      "stale",
+    )
   })
 
   it("keeps the frame and skips refetching on a formatting-only SQL change", async () => {
@@ -554,7 +874,7 @@ describe("ChartRefreshEngine", () => {
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
-    expect(engine.getState("c1")?.results).toHaveLength(1)
+    const frame = cellResults.get("c1")
 
     // When the SQL only gains whitespace and a trailing semicolon
     engine.sync([drawCell("c1", "select 1;\n", false)])
@@ -563,8 +883,8 @@ describe("ChartRefreshEngine", () => {
 
     // Then the displayed frame survives without a refetch
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(cellResults.get("c1")).toBe(frame)
     const state = engine.getState("c1")
-    expect(state?.results).toHaveLength(1)
     expect(state?.settledKey).toBe(state?.queriesKey)
   })
 
@@ -582,11 +902,9 @@ describe("ChartRefreshEngine", () => {
     syncOnScreen([drawCell("c1", "insert into t select 1", "1s")])
     await flushAsync()
 
-    // Then the query never executes and the validation error reaches the grid
+    // Then the query never executes and the validation error reaches the cell
     expect(deps.executeSingle).not.toHaveBeenCalled()
-    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
-    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
-    expect(result?.results[0]).toMatchObject({
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({
       type: "error",
       error: "table does not exist [table=t]",
     })
@@ -595,12 +913,15 @@ describe("ChartRefreshEngine", () => {
     deps.validateWithGlobals.mockResolvedValue({ queryType: "insert" })
     await vi.advanceTimersByTimeAsync(1000)
 
-    // Then the next tick blocks the write instead of silently running it
+    // Then the next tick blocks the write instead of silently running it,
+    // and the stale error rows are dropped from the cell
     expect(deps.executeSingle).not.toHaveBeenCalled()
     expect(engine.getState("c1")?.classifyBlock).toEqual({
       kind: "write",
       queryType: "insert",
     })
+    expect(cellResults.get("c1")).toBeUndefined()
+    expect(deps.noteResultMissing).toHaveBeenCalledWith("c1")
   })
 
   it("re-validates an erroring query each tick until it charts as DQL", async () => {
@@ -621,7 +942,7 @@ describe("ChartRefreshEngine", () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(deps.validateWithGlobals).toHaveBeenCalledTimes(2)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
-    expect(engine.getState("c1")?.results).toHaveLength(1)
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({ type: "dql" })
 
     // And the settled DQL class is cached — later ticks skip validation
     await vi.advanceTimersByTimeAsync(1000)
@@ -643,33 +964,6 @@ describe("ChartRefreshEngine", () => {
     expect(state?.classifyBlock).toEqual({ kind: "write", queryType: "update" })
   })
 
-  it("hydrates from a persisted snapshot matching the current SQL", async () => {
-    // Given a persisted snapshot produced by the same query
-    vi.mocked(loadCellSnapshot).mockResolvedValue({
-      bufferId: BUFFER_ID,
-      cellId: "c1",
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-      savedAt: 123,
-    })
-
-    // When the engine syncs the cell with auto-refresh off
-    syncOnScreen([drawCell("c1", "select 1", false)])
-    await flushAsync()
-
-    // Then the snapshot renders without a fetch and is mirrored for the grid
-    expect(deps.executeSingle).not.toHaveBeenCalled()
-    expect(engine.getState("c1")?.results).toHaveLength(1)
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
-  })
-
   it("does not poll a cell that is hidden before it enters draw mode", async () => {
     // Given the observer reported the cell offscreen before it became a chart
     engine.setVisible("c1", false)
@@ -683,80 +977,54 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).not.toHaveBeenCalled()
   })
 
-  it("does not read the snapshot or mirror for a draw cell outside the bands", async () => {
-    // Given a persisted snapshot for a cell no observer has reported yet
-    vi.mocked(loadCellSnapshot).mockResolvedValue({
-      bufferId: BUFFER_ID,
-      cellId: "c1",
-      savedAt: 0,
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-    })
-
-    // When the engine syncs the hidden draw cell
+  it("asks for no data at all for a draw cell outside the bands", async () => {
+    // Given a hidden draw cell no observer has reported yet
+    // When the engine syncs it
     engine.sync([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
-    // Then no IndexedDB read, no cell mirror, and no fetch happen off-band
-    expect(loadCellSnapshot).not.toHaveBeenCalled()
-    expect(deps.mirrorCellResult).not.toHaveBeenCalled()
+    // Then no result load, no cell write, and no fetch happen off-band
+    expect(deps.requestResultLoad).not.toHaveBeenCalled()
+    expect(deps.setCellResult).not.toHaveBeenCalled()
     expect(deps.executeSingle).not.toHaveBeenCalled()
   })
 
-  it("hydrates from the snapshot when the retain band requests it", async () => {
-    // Given a hidden draw cell with a matching persisted snapshot
-    vi.mocked(loadCellSnapshot).mockResolvedValue({
-      bufferId: BUFFER_ID,
-      cellId: "c1",
-      savedAt: 0,
-      results: [
-        {
-          type: "dql",
-          query: "select 1",
-          columns: [{ name: "x", type: "INT" }],
-          dataset: [[1]],
-          count: 1,
-        },
-      ],
-    })
+  it("requests the result load when the retain band asks, without fetching", async () => {
+    // Given a hidden draw cell whose snapshot loads asynchronously
+    harness.beginLoadOnRequest()
     engine.sync([drawCell("c1", "select 1", "1s")])
 
     // When the retain band reports the cell approaching
     engine.requestHydrate("c1")
     await flushAsync()
+    harness.settleLoad("c1", dqlCellResult("select 1"))
+    await flushAsync()
 
-    // Then the snapshot lands in engine state and mirrors into the cell,
-    // still without any live fetch (the cell stays outside the mount band)
-    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
-    expect(engine.getState("c1")?.results).toHaveLength(1)
-    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+    // Then the loaded frame settles without any live fetch (the cell stays
+    // outside the mount band)
+    expect(deps.requestResultLoad).toHaveBeenCalledTimes(1)
     expect(deps.executeSingle).not.toHaveBeenCalled()
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
 
-    // And a repeated band report does not re-read
+    // And a repeated band report does not re-request
     engine.requestHydrate("c1")
     await flushAsync()
-    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(deps.requestResultLoad).toHaveBeenCalledTimes(1)
   })
 
-  it("hydrates on reveal when no retain-band request ever fired", async () => {
+  it("falls through to the fetch on reveal when no snapshot exists", async () => {
     // Given a draw cell born hidden inside the retain band
     engine.sync([drawCell("c1", "select 1", false)])
     await flushAsync()
-    expect(loadCellSnapshot).not.toHaveBeenCalled()
+    expect(deps.requestResultLoad).not.toHaveBeenCalled()
 
     // When the cell reaches the mount band directly
     engine.setVisible("c1", true)
     await flushAsync()
 
-    // Then hydration runs and, with no snapshot, falls through to the fetch
-    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
+    // Then the load is requested and, with no snapshot, the fetch runs
+    expect(deps.requestResultLoad).toHaveBeenCalledTimes(1)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
@@ -808,7 +1076,7 @@ describe("ChartRefreshEngine", () => {
     // Then polling stops while its data stays intact
     await vi.advanceTimersByTimeAsync(10_000)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
-    expect(engine.getState("c1")?.results).toHaveLength(1)
+    expect(cellResults.get("c1")?.results).toHaveLength(1)
   })
 
   it("skips the reveal catch-up when the data is still fresh", async () => {
@@ -876,6 +1144,105 @@ describe("ChartRefreshEngine", () => {
     )
   })
 
+  it("refetches immediately on reveal after its result was released mid-interval", async () => {
+    // Given a fixed-interval cell that fetched moments ago
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When it hides, its result is released, and it is revealed within the
+    // interval
+    engine.setVisible("c1", false)
+    cellResults.delete("c1")
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the fetch runs now — the pre-release lastFetchedAt must not make
+    // the poll sleep out the interval over an empty chart
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("refetches immediately when a mid-interval reveal's snapshot load settles missing", async () => {
+    // Given a fixed-interval cell that fetched moments ago
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // When it hides, its result is released, and the reveal finds a snapshot
+    // load in flight
+    engine.setVisible("c1", false)
+    cellResults.delete("c1")
+    harness.loadStatuses.set("c1", "unrequested")
+    harness.beginLoadOnRequest()
+    engine.setVisible("c1", true)
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+    // And the load settles with nothing usable
+    harness.settleLoad("c1", "missing")
+    await flushAsync()
+
+    // Then the refetch runs now instead of waiting out the sleeping poll
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
+  it("stays loading while fetching with no usable frame, but not over a settled empty frame", () => {
+    // Given a settled key that matches while a fetch is in flight
+    const state = {
+      queries: ["select 1"],
+      queriesKey: "select 1",
+      fetching: true,
+      settledKey: "select 1",
+      classifyBlock: null,
+    }
+
+    // Then the recovery fetch after a failed restore shows the spinner
+    expect(deriveChartLoading(state, { kind: "missing" }, false).loading).toBe(
+      true,
+    )
+
+    // And a genuinely empty settled frame keeps "No data" without flicker
+    expect(
+      deriveChartLoading(
+        state,
+        { kind: "settled", results: [], hadError: false, timestamp: 0 },
+        false,
+      ).loading,
+    ).toBe(false)
+  })
+
+  it("refetches on reveal when the settled frame was replaced by a truncated one", async () => {
+    // Given a settled auto-refresh-off cell released and re-hydrated with a
+    // byte-capped snapshot (the >2MB flow)
+    syncOnScreen([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    engine.setVisible("c1", false)
+    cellResults.set("c1", {
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 5000,
+          timestamp: 0,
+          truncated: true,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+
+    // When the cell is revealed again
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then the truncated frame does not satisfy the settled key — the full
+    // frame refetches instead of leaving the chart empty forever
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+  })
+
   it("bounds concurrent fetches across cells", async () => {
     // Given an engine capped at one in-flight fetch and a slow first query
     engine.destroy()
@@ -924,15 +1291,21 @@ describe("ChartRefreshEngine", () => {
   })
 
   it("exposes loading state for the cell toolbar via its subscription", async () => {
-    // Given a subscriber deriving loading from the engine's state, as the
-    // toolbar's useChartLoading does
+    // Given a subscriber deriving loading from the engine's state and the
+    // cell's result, as the toolbar's useChartLoading does
     const states: Array<{ loading: boolean; refreshing: boolean }> = []
     const listener = () => {
       const state = engine.getState("c1")
+      if (!state) {
+        states.push({ loading: false, refreshing: false })
+        return
+      }
       states.push(
-        state
-          ? deriveChartLoading(state)
-          : { loading: false, refreshing: false },
+        deriveChartLoading(
+          state,
+          toChartResult(cellResults.get("c1"), state.queries),
+          false,
+        ),
       )
     }
     engine.subscribe("c1", listener)
@@ -987,12 +1360,12 @@ describe("ChartRefreshEngine", () => {
     releaseFirst(dqlResult("select 1"))
     await flushAsync()
 
-    // Then the old query's frame reaches neither the state nor the grid mirror
-    expect(engine.getState("c1")?.results[0]?.query).toBe("select 2")
-    const mirrored = deps.mirrorCellResult.mock.calls.map(
+    // Then the old query's frame never reaches the cell
+    expect(cellResults.get("c1")?.results[0]?.query).toBe("select 2")
+    const writtenQueries = deps.setCellResult.mock.calls.map(
       ([, result]) => result?.results[0]?.query,
     )
-    expect(mirrored).not.toContain("select 1")
+    expect(writtenQueries).not.toContain("select 1")
   })
 
   it("pauses polling while the document is hidden and catches up on return", async () => {
@@ -1018,7 +1391,7 @@ describe("ChartRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(3)
   })
 
-  it("flags a fetch whose query returns a server-side error", async () => {
+  it("lands a fetch whose query returns a server-side error in the cell", async () => {
     // Given a query that executes into an error result
     deps.executeSingle.mockImplementation((sql: string) =>
       Promise.resolve({
@@ -1035,13 +1408,13 @@ describe("ChartRefreshEngine", () => {
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
 
-    // Then the failure is flagged and the real message reaches the grid mirror
-    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
-    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
-    expect(result?.results[0]).toMatchObject({
+    // Then the real message reaches the cell for both grid tab and chart
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({
       type: "error",
       error: "table does not exist",
     })
+    const chartResult = toChartResult(cellResults.get("c1"), ["select 1"])
+    expect(chartResult).toMatchObject({ kind: "settled", hadError: true })
   })
 
   it("preserves the thrown error's message when a fetch rejects", async () => {
@@ -1054,10 +1427,8 @@ describe("ChartRefreshEngine", () => {
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
 
-    // Then the rejection is flagged and its message survives to the mirror
-    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
-    const [, result] = deps.mirrorCellResult.mock.calls.at(-1)!
-    expect(result?.results[0]).toMatchObject({
+    // Then the rejection's message survives into the cell result
+    expect(cellResults.get("c1")?.results[0]).toMatchObject({
       type: "error",
       error: "network down",
     })

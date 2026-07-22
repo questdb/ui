@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import styled from "styled-components"
+import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import { buildEchartsOption } from "../CellChart/buildEchartsOption"
@@ -8,7 +9,7 @@ import {
   type ChartRendererHandle,
 } from "../CellChart/ChartRenderer"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
-import { resolveDraw } from "./drawCanvasUtils"
+import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { toast } from "../../../../components/Toast"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
@@ -18,10 +19,13 @@ import {
   deriveChartLoading,
   pendingChartFetchState,
 } from "../chartRefresh/chartRefreshEngine"
+import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import {
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
+
+const NO_RESULTS: QueryExecResult[] = []
 
 const Wrapper = styled.div`
   display: flex;
@@ -80,18 +84,19 @@ export const DrawCanvas: React.FC<Props> = ({
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const fetchState = useChartFetchState(cell.id)
+  const resultStatus = useCellResultStatus(cell.id)
   const state = useMemo(
     () => fetchState ?? pendingChartFetchState(cell.value),
     [fetchState, cell.value],
   )
-  const {
-    queries,
-    queriesKey,
-    results,
-    settledKey,
-    lastFetchHadError,
-    classifyBlock,
-  } = state
+  const { queries, queriesKey, settledKey, classifyBlock } = state
+  const chartResult = useMemo(
+    () => toChartResult(cell.result, queries),
+    [cell.result, queries],
+  )
+  const results =
+    chartResult.kind === "settled" ? chartResult.results : NO_RESULTS
+  const hadError = chartResult.kind === "settled" && chartResult.hadError
 
   const handleZoomChange = useCallback(
     (start: number, end: number) => {
@@ -129,7 +134,11 @@ export const DrawCanvas: React.FC<Props> = ({
   const settledForCurrentQueries = settledKey === queriesKey
   // Initial load (snapshot hydration or first fetch) with nothing to show yet:
   // a spinner replaces the chart area until data lands.
-  const { loading } = deriveChartLoading(state)
+  const { loading } = deriveChartLoading(
+    state,
+    chartResult,
+    resultStatus === "loading",
+  )
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
@@ -139,7 +148,7 @@ export const DrawCanvas: React.FC<Props> = ({
     emptyMessage = "Type a query to draw."
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
-  } else if (lastFetchHadError) {
+  } else if (hadError) {
     emptyMessage = "Query failed: check the SQL editor for the error."
   } else {
     emptyMessage = "No data to plot."

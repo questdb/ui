@@ -115,10 +115,10 @@ export const CellViewToggle: React.FC<Props> = ({
   const bufferId = useNotebookBufferId()
 
   // Clicking the active segment toggles it off, wiping the result back to the
-  // empty "none" state. Switching between grid and chart transfers the existing
-  // data to the other representation instead of re-querying: NOTEBOOK_CELL_DRAW
-  // enters draw, where the chart seeds from cell.result; switching to the table
-  // just flips the mode back, where the grid shows the chart's mirrored result.
+  // empty "none" state. Switching between grid and chart re-renders the same
+  // cell.result instead of re-querying: NOTEBOOK_CELL_DRAW enters draw, where
+  // the chart settles on cell.result; switching to the table just flips the
+  // mode back, where the grid shows the chart's last frame.
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isRunning) return

@@ -108,7 +108,6 @@ export type NotebookActions = {
   setActiveResultIndex: (cellId: string, index: number) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
-  mirrorCellResult: (cellId: string, result: CellResult | undefined) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
   setCellRefresh: (cellId: string, value: AutoRefresh) => void
   setCellViewMaximized: (cellId: string, value: boolean) => void
@@ -137,7 +136,6 @@ const NOOP_ACTIONS: NotebookActions = {
   setActiveResultIndex: () => undefined,
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
-  mirrorCellResult: () => undefined,
   setCellChartConfig: () => undefined,
   setCellRefresh: () => undefined,
   setCellViewMaximized: () => undefined,
@@ -474,7 +472,7 @@ export const NotebookProvider: React.FC<{
     [store, bufferId, resultHydration],
   )
 
-  const mirrorCellResult = useCallback(
+  const setCellResult = useCallback(
     (cellId: string, result: CellResult | undefined) => {
       hydrateCells((prev) =>
         prev.map((c) => (c.id === cellId ? { ...c, result } : c)),
@@ -494,9 +492,16 @@ export const NotebookProvider: React.FC<{
     deps: {
       executeSingle,
       validateWithGlobals,
-      mirrorCellResult,
+      setCellResult,
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
+      resultLoadStatus: (cellId) => resultHydration.statusOf(cellId),
+      subscribeResultLoad: (cellId, listener) =>
+        resultHydration.subscribe(cellId, listener),
+      requestResultLoad: (cellId) => resultHydration.request(cellId),
+      noteResultMissing: (cellId) => resultHydration.noteMissing(cellId),
+      onSnapshotPersisted: (cellId, results) =>
+        resultHydration.notePersisted(cellId, results),
     },
   })
 
@@ -681,7 +686,6 @@ export const NotebookProvider: React.FC<{
     setActiveResultIndex: execution.setActiveResultIndex,
     setCellMode,
     clearCellResult,
-    mirrorCellResult,
     setCellChartConfig: store.setCellChartConfig,
     setCellRefresh: store.setCellRefresh,
     setCellViewMaximized,

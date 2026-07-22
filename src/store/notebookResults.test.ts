@@ -164,6 +164,23 @@ describe("notebookResults", () => {
     expect(await loadSnapshotCellIds(2)).toHaveLength(1)
   })
 
+  it("keeps a pinned notebook on top of the passive budget, not in it", async () => {
+    // Given the newest notebook is open (pinned) and two passive ones exist
+    await saveCellSnapshot(snap(1, "c1", 10))
+    await saveCellSnapshot(snap(2, "c1", 20))
+    await saveCellSnapshot(snap(3, "c1", 30))
+    const unpin = pinNotebookSnapshots(3)
+
+    // When the prune runs with a budget of two
+    await pruneToRecentNotebooks(2)
+
+    // Then both passive notebooks survive — the pinned one takes no slot
+    expect(await loadSnapshotCellIds(1)).toEqual(["c1"])
+    expect(await loadSnapshotCellIds(2)).toEqual(["c1"])
+    expect(await loadSnapshotCellIds(3)).toEqual(["c1"])
+    unpin()
+  })
+
   it("never prunes a pinned (open) notebook's snapshots", async () => {
     // Given the oldest notebook is open (pinned) while newer ones save
     await saveCellSnapshot(snap(1, "c1", 10))

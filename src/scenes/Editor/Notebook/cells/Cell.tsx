@@ -143,7 +143,7 @@ const CellInner: React.FC<Props> = ({
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, refreshing: chartRefreshing } =
-    useChartLoading(cell.id)
+    useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()

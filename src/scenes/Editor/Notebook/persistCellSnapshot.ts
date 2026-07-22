@@ -3,6 +3,7 @@ import {
   saveCellSnapshot,
   type NotebookResultSnapshot,
 } from "../../../store/notebookResults"
+import { capResultBytes, NOTEBOOK_BYTE_CAP } from "./notebookUtils"
 
 // Stable id so a storage failure that repeats across many cells (e.g. the disk
 // quota is exhausted) collapses into a single toast instead of flooding.
@@ -21,7 +22,10 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 export const persistCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): Promise<boolean> =>
-  saveCellSnapshot(snapshot).then(
+  saveCellSnapshot({
+    ...snapshot,
+    results: snapshot.results.map((r) => capResultBytes(r, NOTEBOOK_BYTE_CAP)),
+  }).then(
     () => true,
     (error) => {
       console.error("Failed to persist notebook cell result", error)

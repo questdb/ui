@@ -17,9 +17,7 @@ export type NotebookResultSnapshot = {
   script?: CellResult["script"]
 }
 
-// Only the N most-recently-saved notebooks keep persisted results; older ones
-// are evicted so IndexedDB can't grow unbounded across many notebooks.
-export const MAX_PERSISTED_NOTEBOOKS = 10
+export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 
 export const saveCellSnapshot = async (
   snapshot: NotebookResultSnapshot,
@@ -82,15 +80,8 @@ export const unpinNotebookSnapshots = (bufferId: number): void => {
   pinnedBufferIds.delete(bufferId)
 }
 
-// Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
-// recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
-// keys only — snapshot payloads are never deserialized. One transaction: a save
-// landing between the recency read and the delete must not lose its snapshot,
-// and a failure rolls every delete back. Never rejects — pruning is
-// best-effort housekeeping; a failure only means over-retention until the next
-// prune trigger (notebook open / headless run commit) retries it.
 export const pruneToRecentNotebooks = async (
-  keep: number = MAX_PERSISTED_NOTEBOOKS,
+  keep: number = MAX_PERSISTED_PASSIVE_NOTEBOOKS,
 ): Promise<void> => {
   try {
     const bufferIds = await db.notebook_results.orderBy("bufferId").uniqueKeys()
@@ -106,10 +97,10 @@ export const pruneToRecentNotebooks = async (
         })
       if (latestByBuffer.size <= keep) return
       const staleBuffers = Array.from(latestByBuffer.entries())
+        .filter(([bufferId]) => !pinnedBufferIds.has(bufferId))
         .sort((a, b) => b[1] - a[1]) // newest first
-        .slice(keep) // everything past the `keep` newest
+        .slice(keep) // everything past the `keep` newest passive
         .map(([bufferId]) => bufferId)
-        .filter((bufferId) => !pinnedBufferIds.has(bufferId))
       if (staleBuffers.length === 0) return
       await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
     })

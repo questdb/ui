@@ -356,7 +356,7 @@ export type CellRunOutcome = {
   resultCleared?: boolean
   // The result THIS run produced, set only when it committed. Consumers that
   // report the run's output must read this instead of cell.result — a draw
-  // cell's auto-refresh mirror replaces cell.result independently of the run.
+  // cell's auto-refresh replaces cell.result independently of the run.
   result?: CellResult
 }
 
@@ -1102,7 +1102,7 @@ export const releaseCellResultPatch = (
   result: undefined,
   lastRunStatus: carriedRunStatus(cell),
   lastRunError: carriedRunError(cell),
-  ...(cell.bottomHeight == null && cell.result != null
+  ...(cell.mode !== "draw" && cell.bottomHeight == null && cell.result != null
     ? { bottomHeight: computeResultBottomHeight(cell.result) }
     : {}),
 })

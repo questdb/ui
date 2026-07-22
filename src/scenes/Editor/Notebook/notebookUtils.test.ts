@@ -2130,6 +2130,24 @@ describe("releaseCellResultPatch", () => {
     // Then the marker is unchanged and no height is stamped
     expect(patch).toEqual({ result: undefined, lastRunStatus: "error" })
   })
+
+  it("never stamps a grid height on a draw cell", () => {
+    // Given a draw cell holding the chart's frame and no stored height
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "select 1",
+      mode: "draw",
+      result: threeRowResult,
+    }
+
+    // When the result is released from memory
+    const patch = releaseCellResultPatch(cell)
+
+    // Then the chart keeps its own height — a grid-derived stamp would
+    // shrink it on re-hydration
+    expect("bottomHeight" in patch).toBe(false)
+  })
 })
 
 describe("buildAppliedLayout", () => {

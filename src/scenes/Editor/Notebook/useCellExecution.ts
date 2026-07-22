@@ -11,10 +11,8 @@ import { EventType } from "../../../modules/EventBus/types"
 import { getQueriesFromText } from "../Monaco/utils"
 import {
   buildInitialScriptResults,
-  capResultBytes,
   type CellRunOutcome,
   hasPendingResult,
-  NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
   singleResultFromExec,
@@ -216,12 +214,9 @@ export const useCellExecution = ({
           if (!isCurrentRun()) {
             return { ok: failedCount === 0, superseded: true }
           }
-          const capped = capResultBytes(
-            singleResultFromExec(result, sql),
-            NOTEBOOK_BYTE_CAP,
-          )
-          finalResults[i] = capped
-          updateCellResult(cellId, i, capped)
+          const landed = singleResultFromExec(result, sql)
+          finalResults[i] = landed
+          updateCellResult(cellId, i, landed)
           publishSchemaIfMutating(result)
 
           if (result.type === "error") {
@@ -409,12 +404,7 @@ export const useCellExecution = ({
           }
         }
         const cellResult: CellResult = {
-          results: [
-            capResultBytes(
-              singleResultFromExec(execResult, queryText),
-              NOTEBOOK_BYTE_CAP,
-            ),
-          ],
+          results: [singleResultFromExec(execResult, queryText)],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
@@ -461,14 +451,7 @@ export const useCellExecution = ({
       publishSchemaIfMutating(execResult)
       const liveCell = cellsRef.current.find((c) => c.id === cellId)
       if (!liveCell?.result) return execResult.type !== "error"
-      updateCellResult(
-        cellId,
-        index,
-        capResultBytes(
-          singleResultFromExec(execResult, sql),
-          NOTEBOOK_BYTE_CAP,
-        ),
-      )
+      updateCellResult(cellId, index, singleResultFromExec(execResult, sql))
       persistSnapshot(cellId)
       return execResult.type !== "error"
     },

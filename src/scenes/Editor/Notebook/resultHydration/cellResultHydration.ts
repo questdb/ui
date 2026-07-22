@@ -7,7 +7,12 @@ import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { scheduleIdle } from "../notebookScheduling"
 
-export type CellResultStatus = "unrequested" | "loading" | "loaded" | "missing"
+export type CellResultStatus =
+  | "unrequested"
+  | "loading"
+  | "loaded"
+  | "missing"
+  | "failed"
 
 const LOAD_RETRY_DELAY_MS = 500
 const MAX_LOAD_RETRIES = 2
@@ -24,9 +29,7 @@ const hasRunMarker = (cell: NotebookCell): boolean =>
   cell.lastRunStatus != null && cell.lastRunStatus !== "none"
 
 // IndexedDB → memory, per cell, on scroll approach; memory → IndexedDB-only
-// when the cell leaves the retain band. Draw cells are excluded in both
-// directions: the chart engine lazy-loads its own frame, and releasing its
-// mirrored cell.result would desync the engine's lastMirror dedup.
+// when the cell leaves the retain band.
 export class CellResultHydrationEngine {
   private statuses = new Map<string, CellResultStatus>()
   private listeners = new Map<string, Set<() => void>>()
@@ -93,7 +96,7 @@ export class CellResultHydrationEngine {
       this.setStatus(cellId, "loaded")
       return
     }
-    if (cell.mode === "draw" || !hasRunMarker(cell)) return
+    if (cell.mode !== "draw" && !hasRunMarker(cell)) return
     this.setStatus(cellId, "loading")
     this.deps
       .loadSnapshot(cellId)
@@ -194,8 +197,10 @@ export class CellResultHydrationEngine {
   private scheduleLoadRetry(cellId: string) {
     const attempt = (this.loadAttempts.get(cellId) ?? 0) + 1
     this.loadAttempts.set(cellId, attempt)
-    if (attempt > MAX_LOAD_RETRIES) return
-    if (this.deps.canRelease(cellId)) return
+    if (attempt > MAX_LOAD_RETRIES || this.deps.canRelease(cellId)) {
+      this.setStatus(cellId, "failed")
+      return
+    }
     const timer = setTimeout(() => {
       this.retryTimers.delete(timer)
       this.request(cellId)
@@ -220,7 +225,7 @@ export class CellResultHydrationEngine {
       this.releaseQueue.delete(cellId)
       if (!this.deps.canRelease(cellId)) continue
       const cell = this.deps.getCell(cellId)
-      if (!cell || cell.mode === "draw" || cell.result == null) continue
+      if (!cell || cell.result == null) continue
       if (!this.persisted.has(cell.result.results)) continue
       this.deps.releaseResult(cellId)
       this.setStatus(cellId, "unrequested")

@@ -6,6 +6,7 @@ import type {
   AutoRefresh,
   CellResult,
   NotebookCell,
+  SingleQueryResult,
 } from "../../../../store/notebook"
 import type { ValidateQueryResult } from "../../../../utils/questdb/types"
 import { eventBus } from "../../../../modules/EventBus"
@@ -13,22 +14,19 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
-  capResultBytes,
-  NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ROW_CAP,
   singleResultFromExec,
   sqlHash,
 } from "../notebookUtils"
 import {
-  resultMatchesQueries,
+  type ChartResult,
   resultsEquivalent,
   successResults,
+  toChartResult,
   toExecResult,
 } from "../DrawCanvas/drawCanvasUtils"
-import {
-  deleteCellSnapshot,
-  loadCellSnapshot,
-} from "../../../../store/notebookResults"
+import type { CellResultStatus } from "../resultHydration/cellResultHydration"
+import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 
 const REFRESH_MIN_MS = 2000
@@ -47,10 +45,8 @@ export type ChartClassifyBlock =
 export type ChartFetchState = {
   queries: string[]
   queriesKey: string
-  results: QueryExecResult[]
   fetching: boolean
   settledKey: string | null
-  lastFetchHadError: boolean
   classifyBlock: ChartClassifyBlock | null
 }
 
@@ -64,8 +60,13 @@ export type ChartRefreshDeps = {
     sql: string,
     signal?: AbortSignal,
   ) => Promise<ValidateQueryResult>
-  mirrorCellResult: (cellId: string, result: CellResult | undefined) => void
+  setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
+  resultLoadStatus: (cellId: string) => CellResultStatus
+  subscribeResultLoad: (cellId: string, listener: () => void) => () => void
+  requestResultLoad: (cellId: string) => void
+  noteResultMissing: (cellId: string) => void
+  onSnapshotPersisted: (cellId: string, results: SingleQueryResult[]) => void
 }
 
 const QUERIES_KEY_SEPARATOR = "\u0001"
@@ -84,22 +85,26 @@ export const pendingChartFetchState = (sql: string): ChartFetchState => {
   return {
     queries,
     queriesKey: joinQueriesKey(queries),
-    results: [],
     fetching: false,
     settledKey: null,
-    lastFetchHadError: false,
     classifyBlock: null,
   }
 }
 
 export const deriveChartLoading = (
   state: ChartFetchState,
+  chartResult: ChartResult,
+  resultLoading: boolean,
 ): { loading: boolean; refreshing: boolean } => {
+  const hasData =
+    chartResult.kind === "settled" && chartResult.results.length > 0
   const loading =
     state.queries.length > 0 &&
     state.classifyBlock === null &&
-    state.settledKey !== state.queriesKey &&
-    state.results.length === 0
+    !hasData &&
+    (state.settledKey !== state.queriesKey ||
+      resultLoading ||
+      (state.fetching && chartResult.kind !== "settled"))
   return { loading, refreshing: state.fetching && !loading }
 }
 
@@ -142,7 +147,7 @@ type Entry = {
   sql: string
   autoRefresh: AutoRefresh
   visible: boolean
-  hydrateAttempted: boolean
+  ensureAttempted: boolean
   lastFetchedAt: number
   state: ChartFetchState
   classifyCache: Map<string, "DQL" | "DDL_DML">
@@ -151,13 +156,11 @@ type Entry = {
   inFlight: AbortController | null
   poll: AbortController | null
   pollKey: string | null
+  resultLoadUnsubscribe: (() => void) | null
   lastSnapshotAt: number
-  lastSaved: { sqlHash: string; results: QueryExecResult[] } | null
-  pendingSnapshot: { results: QueryExecResult[]; durationMs: number } | null
+  lastPersisted: { sqlHash: string; results: SingleQueryResult[] } | null
+  pendingSnapshot: { results: SingleQueryResult[]; durationMs: number } | null
   snapshotTimer: ReturnType<typeof setTimeout> | null
-  // Last results mirrored into cell.result, so the grid shows the chart's
-  // current data on switch-back; guards against redundant cell writes.
-  lastMirror: QueryExecResult[]
 }
 
 export class ChartRefreshEngine {
@@ -220,7 +223,9 @@ export class ChartRefreshEngine {
         this.documentVisibilityHandler,
       )
     }
-    for (const cellId of [...this.entries.keys()]) this.removeEntry(cellId)
+    for (const cellId of [...this.entries.keys()]) {
+      this.removeEntry(cellId, false)
+    }
     this.visibilityByCell.clear()
     this.lastSyncedDrawCells = null
   }
@@ -244,8 +249,15 @@ export class ChartRefreshEngine {
       if (entry) this.updateEntry(entry, cell)
       else this.createEntry(cell)
     }
+    const cellIds = new Set(cells.map((cell) => cell.id))
     for (const cellId of [...this.entries.keys()]) {
-      if (!present.has(cellId)) this.removeEntry(cellId)
+      if (!present.has(cellId)) this.removeEntry(cellId, !cellIds.has(cellId))
+    }
+    // Visibility follows the CELL, not the entry: a chart→grid→chart toggle
+    // recreates the entry while the cell never leaves the viewport, so the
+    // observer won't re-report it. Only a deleted cell drops its record.
+    for (const cellId of [...this.visibilityByCell.keys()]) {
+      if (!cellIds.has(cellId)) this.visibilityByCell.delete(cellId)
     }
   }
 
@@ -276,28 +288,12 @@ export class ChartRefreshEngine {
 
   requestHydrate(cellId: string) {
     const entry = this.entries.get(cellId)
-    if (!entry || entry.hydrateAttempted) return
-    this.hydrate(entry)
+    if (!entry || entry.ensureAttempted) return
+    this.ensureData(entry)
   }
 
   private resume(entry: Entry) {
-    if (!entry.hydrateAttempted) {
-      this.hydrate(entry)
-      return
-    }
-    if (this.shouldAutoRefresh(entry)) {
-      this.updatePoll(entry)
-      return
-    }
-    // Auto-refresh is off and the CURRENT queries have never settled — the
-    // deferred initial fetch, or the catch-up for SQL that changed while the
-    // cell was hidden (settledKey then still holds the old queries' key).
-    if (
-      entry.state.settledKey !== entry.state.queriesKey &&
-      entry.state.queries.length > 0
-    ) {
-      void this.fetchOnce(entry)
-    }
+    this.ensureData(entry)
   }
 
   getState(cellId: string): ChartFetchState | undefined {
@@ -321,22 +317,13 @@ export class ChartRefreshEngine {
   }
 
   private createEntry(cell: NotebookCell) {
-    const queries = getQueriesFromText(cell.value)
     const entry: Entry = {
       cellId: cell.id,
       sql: cell.value,
       autoRefresh: cell.autoRefresh ?? true,
-      state: {
-        queries,
-        queriesKey: joinQueriesKey(queries),
-        results: [],
-        fetching: false,
-        settledKey: null,
-        lastFetchHadError: false,
-        classifyBlock: null,
-      },
+      state: pendingChartFetchState(cell.value),
       visible: this.visibilityByCell.get(cell.id) ?? false,
-      hydrateAttempted: false,
+      ensureAttempted: false,
       lastFetchedAt: 0,
       classifyCache: new Map(),
       sqlDebounce: null,
@@ -344,14 +331,14 @@ export class ChartRefreshEngine {
       inFlight: null,
       poll: null,
       pollKey: null,
+      resultLoadUnsubscribe: null,
       lastSnapshotAt: 0,
-      lastSaved: null,
+      lastPersisted: null,
       pendingSnapshot: null,
       snapshotTimer: null,
-      lastMirror: [],
     }
     this.entries.set(cell.id, entry)
-    if (entry.visible) this.hydrate(entry)
+    if (entry.visible) this.ensureData(entry)
   }
 
   private updateEntry(entry: Entry, cell: NotebookCell) {
@@ -372,16 +359,21 @@ export class ChartRefreshEngine {
     }, SQL_DEBOUNCE_MS)
   }
 
-  private removeEntry(cellId: string) {
+  private removeEntry(cellId: string, cellDeleted: boolean) {
     const entry = this.entries.get(cellId)
     if (!entry) return
     if (entry.sqlDebounce) clearTimeout(entry.sqlDebounce)
+    const pending = entry.pendingSnapshot
     this.dropPendingSnapshot(entry)
+    if (!cellDeleted && pending) {
+      entry.lastSnapshotAt = 0
+      this.queueSnapshot(entry, pending.results, pending.durationMs)
+    }
+    this.stopResultLoadWait(entry)
     entry.inFlight?.abort()
     entry.inFlight = null
     entry.poll?.abort()
     this.entries.delete(cellId)
-    this.visibilityByCell.delete(cellId)
     // Subscribers re-derive from the now-missing state and settle on idle, so
     // the toolbar is not stranded spinning after the entry is gone.
     this.notify(cellId)
@@ -390,6 +382,7 @@ export class ChartRefreshEngine {
   private applySql(entry: Entry, sql: string) {
     entry.inFlight?.abort()
     entry.inFlight = null
+    this.stopResultLoadWait(entry)
     entry.sql = sql
     entry.classifyCache = new Map()
     entry.lastFetchedAt = 0
@@ -409,86 +402,83 @@ export class ChartRefreshEngine {
       fetching: false,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
-    if (entry.visible) this.hydrate(entry)
-    else entry.hydrateAttempted = false
+    if (entry.visible) this.ensureData(entry)
+    else entry.ensureAttempted = false
   }
 
-  // Populate the entry from existing data instead of re-querying:
-  //   1. cell.result — the just-run grid, or the chart's own mirrored frame.
-  //      Transfers the data when toggling grid↔chart (no spinner, no re-run).
-  //   2. the persisted snapshot — survives reload (cell.result is stripped).
-  // autoRefresh-off cells then stay on that frame; autoRefresh-on cells let the
-  // poll refresh in the background. Falls back to a live fetch when neither has
-  // chartable rows. Only data produced by the CURRENT queries is used — a
-  // result left over from edited-but-not-rerun SQL is stale and must re-fetch.
+  // Settle from the data already in cell.result — the just-run grid, the
+  // engine's own last frame, or a snapshot the hydration engine restored —
+  // instead of re-querying. Waits for an in-flight snapshot load; falls back
+  // to a live fetch when nothing usable exists for the CURRENT queries.
   //
   // Never runs for a cell outside the bands: creation and applySql defer it
   // until the retain band (requestHydrate) or a reveal (resume) asks — the
   // same mount/retain contract run-cell results follow.
-  private hydrate(entry: Entry) {
-    entry.hydrateAttempted = true
-    const { queries, queriesKey } = entry.state
-    const existing = this.getDeps().getCellResult(entry.cellId)
-    const transferred = resultMatchesQueries(existing, queries)
-      ? successResults(existing.results.map(toExecResult))
-      : []
-    if (transferred.length > 0) {
-      this.setState(entry, {
-        results:
-          entry.state.results.length > 0 ? entry.state.results : transferred,
-        settledKey: queriesKey,
-      })
-      entry.lastFetchedAt = Date.now()
+  private ensureData(entry: Entry) {
+    entry.ensureAttempted = true
+    this.stopResultLoadWait(entry)
+    const { queries, queriesKey, settledKey, classifyBlock } = entry.state
+    if (queries.length === 0) {
+      if (settledKey !== queriesKey) void this.fetchOnce(entry)
       this.updatePoll(entry)
       return
     }
-    const sqlAtStart = entry.sql
-    void (async () => {
-      // Best-effort: a failed read falls through to a live fetch instead of
-      // leaving the chart on its loading spinner forever.
-      const snap = await loadCellSnapshot(this.bufferId, entry.cellId).catch(
-        () => undefined,
-      )
-      if (this.entries.get(entry.cellId) !== entry || entry.sql !== sqlAtStart)
-        return
-      const snapResult = snap && {
-        results: snap.results,
-        activeResultIndex: 0,
-        timestamp: snap.savedAt,
-      }
-      if (resultMatchesQueries(snapResult, queries)) {
-        const hydratedAll = snapResult.results.map(toExecResult)
-        const hydrated = successResults(hydratedAll)
-        if (hydrated.length > 0) {
-          // Don't clobber live data that may already have landed — mirror
-          // included: a poll fetch racing this read may have mirrored fresher
-          // rows into cell.result while the snapshot was still loading. The
-          // settledKey check covers settles that leave no rows (error, empty,
-          // classify-block): those frames are the current truth, and old
-          // snapshot rows must not mask them.
+    if (classifyBlock !== null && settledKey === queriesKey) {
+      this.updatePoll(entry)
+      return
+    }
+    const chartResult = toChartResult(
+      this.getDeps().getCellResult(entry.cellId),
+      queries,
+    )
+    if (
+      chartResult.kind === "settled" &&
+      (chartResult.results.length > 0 || settledKey === queriesKey)
+    ) {
+      this.setState(entry, { settledKey: queriesKey })
+      entry.lastFetchedAt = chartResult.timestamp
+      this.updatePoll(entry)
+      return
+    }
+    if (this.getDeps().resultLoadStatus(entry.cellId) === "unrequested") {
+      this.getDeps().requestResultLoad(entry.cellId)
+    }
+    if (this.getDeps().resultLoadStatus(entry.cellId) === "loading") {
+      entry.resultLoadUnsubscribe = this.getDeps().subscribeResultLoad(
+        entry.cellId,
+        () => {
+          const status = this.getDeps().resultLoadStatus(entry.cellId)
           if (
-            entry.state.results.length === 0 &&
-            entry.state.settledKey !== queriesKey
-          ) {
-            this.setState(entry, { results: hydrated, settledKey: queriesKey })
-            // Seed cell.result with EVERY statement, not just the chartable
-            // ones, so a switch to the grid shows the same tabs a real run
-            // would — matching runFetch's mirror(out)
-            this.mirror(entry, hydratedAll)
-          }
-          return
-        }
-      }
-      if (entry.state.settledKey === entry.state.queriesKey) return
-      if (
-        !this.shouldAutoRefresh(entry) &&
-        entry.visible &&
-        !this.documentHidden
-      ) {
-        void this.fetchOnce(entry)
-      }
-    })()
+            status !== "loaded" &&
+            status !== "missing" &&
+            status !== "failed"
+          )
+            return
+          this.stopResultLoadWait(entry)
+          this.ensureData(entry)
+        },
+      )
+      this.updatePoll(entry)
+      return
+    }
+    if (this.shouldPoll(entry)) {
+      // No usable data at this point — a poll still sleeping on a pre-release
+      // lastFetchedAt must not defer the refetch, so restart the loop with an
+      // immediate first tick.
+      entry.lastFetchedAt = 0
+      entry.poll?.abort()
+      entry.poll = null
+      entry.pollKey = null
+      this.updatePoll(entry)
+      return
+    }
+    if (entry.visible && !this.documentHidden) void this.fetchOnce(entry)
     this.updatePoll(entry)
+  }
+
+  private stopResultLoadWait(entry: Entry) {
+    entry.resultLoadUnsubscribe?.()
+    entry.resultLoadUnsubscribe = null
   }
 
   private shouldAutoRefresh(entry: Entry): boolean {
@@ -540,29 +530,20 @@ export class ChartRefreshEngine {
     // land after the query changed — including when it's cleared to empty.
     entry.inFlight?.abort()
     entry.inFlight = null
+    this.stopResultLoadWait(entry)
     const { queries, queriesKey } = entry.state
     if (queries.length === 0) {
       this.setState(entry, {
-        results: [],
         fetching: false,
         settledKey: queriesKey,
-        lastFetchHadError: false,
         classifyBlock: null,
       })
-      // No query → drop the grid mirror and the saved frame too.
-      this.mirror(entry, [])
-      this.clearSnapshot(entry)
+      this.clearCellData(entry)
       return
     }
     const ac = new AbortController()
     entry.inFlight = ac
-    this.setState(entry, {
-      fetching: true,
-      ...(entry.state.results.length > 0 &&
-      entry.state.settledKey !== queriesKey
-        ? { results: [] }
-        : {}),
-    })
+    this.setState(entry, { fetching: true })
     return this.limitFetch(async () => {
       if (ac.signal.aborted) return
       const start = performance.now()
@@ -615,12 +596,10 @@ export class ChartRefreshEngine {
             : "write"
         this.setState(entry, {
           classifyBlock: { kind: "write", queryType },
-          results: [],
-          lastFetchHadError: false,
           settledKey: queriesKey,
         })
         // The cell now holds a write — drop any stale rows the grid would show.
-        this.mirror(entry, [])
+        this.clearCellData(entry)
         return
       }
       if (entry.state.classifyBlock !== null) {
@@ -639,32 +618,46 @@ export class ChartRefreshEngine {
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
       if (ac.signal.aborted) return
-      // One deep comparison per tick: a frame identical to the last mirrored
-      // one implies results, snapshot and mirror are all already current, so
-      // the unchanged-frame path skips their per-target re-comparisons.
-      const outUnchanged =
-        entry.lastMirror.length > 0 && resultsEquivalent(entry.lastMirror, out)
-      if (outUnchanged) {
-        this.setState(entry, {
-          lastFetchHadError: out.some((r) => r.type === "error"),
-          settledKey: queriesKey,
-        })
+      // Compare against the CURRENT cell.result, not a retained copy — the
+      // hydration engine may have released or replaced it since the last tick,
+      // and an unchanged frame must still be re-written in that case.
+      const currentSqlHash = sqlHash(entry.sql)
+      const current = this.getDeps().getCellResult(entry.cellId)
+      if (
+        current != null &&
+        resultsEquivalent(current.results.map(toExecResult), out)
+      ) {
+        this.setState(entry, { settledKey: queriesKey })
+        if (successResults(out).length === 0) {
+          this.clearSnapshot(entry)
+          return
+        }
+        const persisted =
+          entry.lastPersisted !== null &&
+          entry.lastPersisted.sqlHash === currentSqlHash &&
+          entry.lastPersisted.results === current.results
+        if (!persisted) {
+          this.queueSnapshot(entry, current.results, fetchDurationMs)
+        }
         return
       }
-      const next = successResults(out)
-      this.setState(entry, {
-        results: resultsEquivalent(entry.state.results, next)
-          ? entry.state.results
-          : next,
-        lastFetchHadError: out.some((r) => r.type === "error"),
-        settledKey: queriesKey,
-      })
-      if (next.length > 0) this.saveSnapshot(entry, out, fetchDurationMs)
-      else this.clearSnapshot(entry)
-      // Mirror EVERY statement (not just chartable ones) so a switch to the grid
+      // Write EVERY statement (not just chartable ones) so a switch to the grid
       // shows the same tabs a real run would — including errors and empty
-      // results — instead of dropping them or leaving stale rows behind.
-      this.mirror(entry, out)
+      // results — instead of dropping them or leaving stale rows behind. The
+      // result lands before settledKey flips: React 17 renders the two updates
+      // separately, and a settled state without data would flash "No data".
+      const written = out.map((r) => singleResultFromExec(r, r.query))
+      this.getDeps().setCellResult(entry.cellId, {
+        results: written,
+        activeResultIndex: 0,
+        timestamp: Date.now(),
+      })
+      this.setState(entry, { settledKey: queriesKey })
+      if (successResults(out).length > 0) {
+        this.queueSnapshot(entry, written, fetchDurationMs)
+      } else {
+        this.clearSnapshot(entry)
+      }
     } finally {
       // Only clear when still the active fetch — a superseded (aborted) run
       // must not flip `fetching` off while its replacement is in flight.
@@ -676,57 +669,32 @@ export class ChartRefreshEngine {
     }
   }
 
-  private mirror(entry: Entry, next: QueryExecResult[]) {
-    if (resultsEquivalent(entry.lastMirror, next)) return
-    entry.lastMirror = next
-    this.getDeps().mirrorCellResult(
-      entry.cellId,
-      next.length === 0
-        ? undefined
-        : {
-            results: next.map((r) =>
-              capResultBytes(
-                singleResultFromExec(r, r.query),
-                NOTEBOOK_BYTE_CAP,
-              ),
-            ),
-            activeResultIndex: 0,
-            timestamp: Date.now(),
-          },
-    )
+  private clearCellData(entry: Entry) {
+    this.getDeps().setCellResult(entry.cellId, undefined)
+    this.getDeps().noteResultMissing(entry.cellId)
+    this.clearSnapshot(entry)
   }
 
-  // Persist a bounded, throttled copy of the chart's frame — shared with run
-  // mode (one snapshot per cell) so the chart survives reload without re-fetch.
-  // Frames identical to the last saved one are skipped; a changed frame blocked
-  // by the throttle is kept pending and saved when the window reopens, so the
-  // final frame persists even when polling stops before the next tick.
-  private saveSnapshot(
+  // Persist a throttled copy of the chart's frame — shared with run mode (one
+  // snapshot per cell) so the chart survives reload without re-fetch. A frame
+  // blocked by the throttle is kept pending and saved when the window reopens,
+  // so the final frame persists even when polling stops before the next tick.
+  private queueSnapshot(
     entry: Entry,
-    execResults: QueryExecResult[],
+    results: SingleQueryResult[],
     durationMs: number,
   ) {
-    const currentSqlHash = sqlHash(entry.sql)
-    const last = entry.lastSaved
-    if (
-      last &&
-      last.sqlHash === currentSqlHash &&
-      resultsEquivalent(last.results, execResults)
-    ) {
-      this.dropPendingSnapshot(entry)
-      return
-    }
     const now = Date.now()
     const throttledForMs = SNAPSHOT_THROTTLE_MS - (now - entry.lastSnapshotAt)
     if (throttledForMs > 0) {
-      entry.pendingSnapshot = { results: execResults, durationMs }
+      entry.pendingSnapshot = { results, durationMs }
       if (!entry.snapshotTimer) {
         entry.snapshotTimer = setTimeout(() => {
           entry.snapshotTimer = null
           const pending = entry.pendingSnapshot
           entry.pendingSnapshot = null
           if (pending && this.entries.get(entry.cellId) === entry) {
-            this.saveSnapshot(entry, pending.results, pending.durationMs)
+            this.queueSnapshot(entry, pending.results, pending.durationMs)
           }
         }, throttledForMs)
       }
@@ -734,37 +702,42 @@ export class ChartRefreshEngine {
     }
     this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = now
-    entry.lastSaved = { sqlHash: currentSqlHash, results: execResults }
-    const results = execResults.map((r) =>
-      capResultBytes(singleResultFromExec(r, r.query), NOTEBOOK_BYTE_CAP),
-    )
-    const failedCount = execResults.filter((r) => r.type === "error").length
+    const persistedSqlHash = sqlHash(entry.sql)
+    const failedCount = results.filter((r) => r.type === "error").length
     void persistCellSnapshot({
       bufferId: this.bufferId,
       cellId: entry.cellId,
       results,
       savedAt: now,
       activeResultIndex: 0,
-      ...(execResults.length > 1
+      ...(results.length > 1
         ? {
             script: {
-              successCount: execResults.length - failedCount,
+              successCount: results.length - failedCount,
               failedCount,
               durationMs,
             },
           }
         : {}),
+    }).then((saved) => {
+      if (!saved) return
+      entry.lastPersisted = { sqlHash: persistedSqlHash, results }
+      this.getDeps().onSnapshotPersisted(entry.cellId, results)
     })
   }
 
   private clearSnapshot(entry: Entry) {
     this.dropPendingSnapshot(entry)
-    const currentSqlHash = sqlHash(entry.sql)
-    const last = entry.lastSaved
-    if (last && last.sqlHash === currentSqlHash && last.results.length === 0)
+    const clearedSqlHash = sqlHash(entry.sql)
+    const last = entry.lastPersisted
+    if (last && last.sqlHash === clearedSqlHash && last.results.length === 0)
       return
-    entry.lastSaved = { sqlHash: currentSqlHash, results: [] }
-    void deleteCellSnapshot(this.bufferId, entry.cellId)
+    void deleteCellSnapshot(this.bufferId, entry.cellId).then(
+      () => {
+        entry.lastPersisted = { sqlHash: clearedSqlHash, results: [] }
+      },
+      () => undefined,
+    )
   }
 
   private dropPendingSnapshot(entry: Entry) {
