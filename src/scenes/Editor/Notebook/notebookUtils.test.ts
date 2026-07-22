@@ -14,8 +14,6 @@ import {
   buildInitialScriptResults,
   buildPersistPayload,
   capResultBytes,
-  cancelAllInCell,
-  cancelOneInCell,
   cellHeightPatchForRows,
   cellToolbarMenuFlags,
   cellToolbarTier,
@@ -660,71 +658,6 @@ describe("setResultAt", () => {
   })
 })
 
-describe("cancelAllInCell", () => {
-  it("flips running and queued results to cancelled, leaves terminal types alone", () => {
-    const c = cell("a", "", {
-      results: [
-        { type: "dql", query: "q1", columns: [], dataset: [[1]], count: 1 },
-        { type: "running", query: "q2" },
-        { type: "queued", query: "q3" },
-        { type: "error", query: "q4", error: "nope" },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    const out = cancelAllInCell([c], "a")
-    const results = out[0].result!.results
-    expect(results.map((r) => r.type)).toEqual([
-      "dql",
-      "cancelled",
-      "cancelled",
-      "error",
-    ])
-    expect(results[1].query).toBe("q2")
-    expect(results[2].query).toBe("q3")
-  })
-
-  it("is a no-op for cells without a result", () => {
-    const cells: NotebookCell[] = [cell("a")]
-    expect(cancelAllInCell(cells, "a")).toEqual(cells)
-  })
-})
-
-describe("cancelOneInCell", () => {
-  it("marks only the running result at the given index as cancelled", () => {
-    const c = cell("a", "", {
-      results: [
-        { type: "running", query: "q1" },
-        { type: "running", query: "q2" },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    const out = cancelOneInCell([c], "a", 0)
-    const results = out[0].result!.results
-    expect(results[0].type).toBe("cancelled")
-    expect(results[1].type).toBe("running")
-  })
-
-  it("is a no-op when the result isn't running (queued, dql, error)", () => {
-    const c = cell("a", "", {
-      results: [{ type: "queued", query: "q1" }],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    expect(cancelOneInCell([c], "a", 0)).toEqual([c])
-  })
-
-  it("is a no-op at an out-of-range index", () => {
-    const c = cell("a", "", {
-      results: [{ type: "running", query: "q" }],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    expect(cancelOneInCell([c], "a", 5)).toEqual([c])
-  })
-})
-
 describe("buildInitialScriptResults", () => {
   it("marks the first as running and the rest queued", () => {
     expect(buildInitialScriptResults(["q1", "q2", "q3"])).toEqual([
@@ -874,6 +807,53 @@ describe("buildAppliedCells", () => {
     expect(diff.updated).toEqual(["a", "b"])
     expect(diff.added).toEqual([])
     expect(diff.deleted).toEqual([])
+  })
+
+  it("reports resultsCleared only for run cells whose value changed", () => {
+    // Given a run cell, an untouched run cell, and a never-run cell
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x", result: dql("x") },
+      { id: "b", position: 1, value: "y", result: dql("y") },
+      { id: "c", position: 2, value: "z" },
+    ]
+    // When an apply rewrites the SQL of "a" and "c"
+    const { resultsCleared } = buildAppliedCells(prev, {
+      cells: [
+        { id: "a", value: "x2" },
+        { id: "b", value: "y" },
+        { id: "c", value: "z2" },
+      ],
+    })
+    // Then only the run cell with replaced SQL needs its snapshot deleted
+    expect(resultsCleared).toEqual(["a"])
+  })
+
+  it("reports resultsCleared for a released cell whose result lives only on disk", () => {
+    // Given a cell released by virtualization: no in-memory result, only a run
+    // marker pointing at a persisted snapshot
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x", lastRunStatus: "success" },
+    ]
+    // When an apply replaces its SQL
+    const { resultsCleared } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "x2" }],
+    })
+    // Then the orphaned snapshot is flagged — hydration would otherwise
+    // resurrect the old SQL's rows under the new SQL
+    expect(resultsCleared).toEqual(["a"])
+  })
+
+  it("reports resultsCleared when a run cell is converted to markdown", () => {
+    // Given a run cell with a live result
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x", result: dql("x") },
+    ]
+    // When the apply converts it to markdown without touching the text
+    const { resultsCleared } = buildAppliedCells(prev, {
+      cells: [{ id: "a", value: "x", type: "markdown" }],
+    })
+    // Then its snapshot is flagged along with the dropped result
+    expect(resultsCleared).toEqual(["a"])
   })
 
   it("preserves run history as lastRunStatus when a value change drops the result", () => {

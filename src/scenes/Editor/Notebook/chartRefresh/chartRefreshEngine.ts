@@ -142,6 +142,7 @@ type Entry = {
   sql: string
   autoRefresh: AutoRefresh
   visible: boolean
+  hydrateAttempted: boolean
   lastFetchedAt: number
   state: ChartFetchState
   classifyCache: Map<string, "DQL" | "DDL_DML">
@@ -273,7 +274,17 @@ export class ChartRefreshEngine {
     for (const cellId of cellIds) this.setVisible(cellId, true)
   }
 
+  requestHydrate(cellId: string) {
+    const entry = this.entries.get(cellId)
+    if (!entry || entry.hydrateAttempted) return
+    this.hydrate(entry)
+  }
+
   private resume(entry: Entry) {
+    if (!entry.hydrateAttempted) {
+      this.hydrate(entry)
+      return
+    }
     if (this.shouldAutoRefresh(entry)) {
       this.updatePoll(entry)
       return
@@ -325,6 +336,7 @@ export class ChartRefreshEngine {
         classifyBlock: null,
       },
       visible: this.visibilityByCell.get(cell.id) ?? false,
+      hydrateAttempted: false,
       lastFetchedAt: 0,
       classifyCache: new Map(),
       sqlDebounce: null,
@@ -339,7 +351,7 @@ export class ChartRefreshEngine {
       lastMirror: [],
     }
     this.entries.set(cell.id, entry)
-    this.hydrate(entry)
+    if (entry.visible) this.hydrate(entry)
   }
 
   private updateEntry(entry: Entry, cell: NotebookCell) {
@@ -397,7 +409,8 @@ export class ChartRefreshEngine {
       fetching: false,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
-    this.hydrate(entry)
+    if (entry.visible) this.hydrate(entry)
+    else entry.hydrateAttempted = false
   }
 
   // Populate the entry from existing data instead of re-querying:
@@ -408,7 +421,12 @@ export class ChartRefreshEngine {
   // poll refresh in the background. Falls back to a live fetch when neither has
   // chartable rows. Only data produced by the CURRENT queries is used — a
   // result left over from edited-but-not-rerun SQL is stale and must re-fetch.
+  //
+  // Never runs for a cell outside the bands: creation and applySql defer it
+  // until the retain band (requestHydrate) or a reveal (resume) asks — the
+  // same mount/retain contract run-cell results follow.
   private hydrate(entry: Entry) {
+    entry.hydrateAttempted = true
     const { queries, queriesKey } = entry.state
     const existing = this.getDeps().getCellResult(entry.cellId)
     const transferred = resultMatchesQueries(existing, queries)
@@ -444,8 +462,14 @@ export class ChartRefreshEngine {
         if (hydrated.length > 0) {
           // Don't clobber live data that may already have landed — mirror
           // included: a poll fetch racing this read may have mirrored fresher
-          // rows into cell.result while the snapshot was still loading.
-          if (entry.state.results.length === 0) {
+          // rows into cell.result while the snapshot was still loading. The
+          // settledKey check covers settles that leave no rows (error, empty,
+          // classify-block): those frames are the current truth, and old
+          // snapshot rows must not mask them.
+          if (
+            entry.state.results.length === 0 &&
+            entry.state.settledKey !== queriesKey
+          ) {
             this.setState(entry, { results: hydrated, settledKey: queriesKey })
             // Seed cell.result with EVERY statement, not just the chartable
             // ones, so a switch to the grid shows the same tabs a real run

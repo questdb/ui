@@ -312,8 +312,6 @@ export const NotebookProvider: React.FC<{
     updateCellResult: store.updateCellResult,
     updateCell: store.updateCell,
     updateCells: store.updateCells,
-    markCancelledAll: store.markCancelledAll,
-    markCancelledOne: store.markCancelledOne,
     setScriptSummary: store.setScriptSummary,
     onSnapshotPersisted: (cellId, results) =>
       resultHydration.notePersisted(cellId, results),
@@ -405,9 +403,23 @@ export const NotebookProvider: React.FC<{
       if (out.cancelRuns) {
         for (const cellId of out.cancelRuns.cellIds) abortCellRun(cellId)
       }
+      // noteMissing collapses the cell's reserved result area immediately
+      if (out.deleteSnapshots) {
+        for (const cellId of out.deleteSnapshots.cellIds) {
+          void deleteCellSnapshot(bufferId, cellId)
+          resultHydration.noteMissing(cellId)
+        }
+      }
       return out.result
     },
-    [store, persistImmediately, bufferId, cancelCell, abortCellRun],
+    [
+      store,
+      persistImmediately,
+      bufferId,
+      cancelCell,
+      abortCellRun,
+      resultHydration,
+    ],
   )
 
   const setMaximizedCellId = useCallback(
@@ -494,7 +506,10 @@ export const NotebookProvider: React.FC<{
     focusedCellId,
     maximizedCellId,
     runningCellIds: execution.runningCellIds,
-    onCellDataNeeded: (cellId) => resultHydration.request(cellId),
+    onCellDataNeeded: (cellId) => {
+      resultHydration.request(cellId)
+      chartRefreshEngine.requestHydrate(cellId)
+    },
     onCellDataReleasable: (cellId) => resultHydration.noteReleasable(cellId),
   })
   virtualizationEngineRef.current = cellVirtualizationEngine

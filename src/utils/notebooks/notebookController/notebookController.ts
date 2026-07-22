@@ -255,6 +255,11 @@ export const createDexieNotebookController = (
             clearChartZoom(cellId)
           }
         }
+        if (out.deleteSnapshots) {
+          for (const cellId of out.deleteSnapshots.cellIds) {
+            void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
+          }
+        }
         return out
       },
     )

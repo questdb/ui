@@ -39,6 +39,10 @@ import {
 //   - `cancelRuns.cellIds` — cells whose in-flight run the mounted shell aborts
 //                            (the run would keep writing cell.result after the
 //                            chart engine takes ownership).
+//   - `deleteSnapshots.cellIds` — cells that survive the transition but whose
+//                            persisted result no longer matches their SQL;
+//                            each shell deletes the snapshot so hydration
+//                            cannot resurrect the old SQL's rows.
 //   - `touchedCellId`      — the cell an agent-edit notification should point at.
 //
 // Identity contract: untouched cells keep object identity (the composed
@@ -52,6 +56,7 @@ export type NotebookTransitionResult<T = void> = {
   touchedCellId?: string
   cleanup?: { cellIds: string[] }
   cancelRuns?: { cellIds: string[] }
+  deleteSnapshots?: { cellIds: string[] }
 }
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
@@ -345,5 +350,8 @@ export const applyNotebookStateTransition = (
     },
     result: { applied: next.diff },
     cleanup: { cellIds: next.diff.deleted },
+    ...(next.resultsCleared.length > 0
+      ? { deleteSnapshots: { cellIds: next.resultsCleared } }
+      : {}),
   }
 }

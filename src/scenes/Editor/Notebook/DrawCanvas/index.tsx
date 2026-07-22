@@ -140,7 +140,7 @@ export const DrawCanvas: React.FC<Props> = ({
   } else if (!settledForCurrentQueries) {
     emptyMessage = "Drawing…"
   } else if (lastFetchHadError) {
-    emptyMessage = "Query failed — check the SQL editor for the error."
+    emptyMessage = "Query failed: check the SQL editor for the error."
   } else {
     emptyMessage = "No data to plot."
   }

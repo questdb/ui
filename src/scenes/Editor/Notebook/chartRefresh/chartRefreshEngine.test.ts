@@ -324,6 +324,54 @@ describe("ChartRefreshEngine", () => {
     expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
   })
 
+  it("does not resurrect a stale snapshot over a live fetch that settled with an error", async () => {
+    // Given a snapshot read that resolves only after the first live fetch,
+    // and a query that now fails
+    let resolveSnapshot!: (value: NotebookResultSnapshot | undefined) => void
+    vi.mocked(loadCellSnapshot).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSnapshot = resolve
+      }),
+    )
+    deps.executeSingle.mockResolvedValue({
+      type: "error",
+      query: "select 1",
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: "table does not exist",
+    })
+
+    // When the poll's immediate fetch settles the error frame first
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
+    expect(engine.getState("c1")?.results).toHaveLength(0)
+
+    // And the stale snapshot then resolves with old successful rows
+    resolveSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "c1",
+      savedAt: 0,
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[999]],
+          count: 1,
+        },
+      ],
+    })
+    await flushAsync()
+
+    // Then the settled error frame stands — old rows must not mask a current
+    // failure, and no second mirror fires
+    expect(engine.getState("c1")?.results).toHaveLength(0)
+    expect(engine.getState("c1")?.lastFetchHadError).toBe(true)
+    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+  })
+
   it("does not skip the catch-up fetch after a poll aborted during its start jitter", async () => {
     // Given a jittered engine whose cell's data was just transferred in
     const jittered = new ChartRefreshEngine(
@@ -633,6 +681,83 @@ describe("ChartRefreshEngine", () => {
     // Then no fetch happens no matter how much time passes
     await vi.advanceTimersByTimeAsync(10_000)
     expect(deps.executeSingle).not.toHaveBeenCalled()
+  })
+
+  it("does not read the snapshot or mirror for a draw cell outside the bands", async () => {
+    // Given a persisted snapshot for a cell no observer has reported yet
+    vi.mocked(loadCellSnapshot).mockResolvedValue({
+      bufferId: BUFFER_ID,
+      cellId: "c1",
+      savedAt: 0,
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+    })
+
+    // When the engine syncs the hidden draw cell
+    engine.sync([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+
+    // Then no IndexedDB read, no cell mirror, and no fetch happen off-band
+    expect(loadCellSnapshot).not.toHaveBeenCalled()
+    expect(deps.mirrorCellResult).not.toHaveBeenCalled()
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+  })
+
+  it("hydrates from the snapshot when the retain band requests it", async () => {
+    // Given a hidden draw cell with a matching persisted snapshot
+    vi.mocked(loadCellSnapshot).mockResolvedValue({
+      bufferId: BUFFER_ID,
+      cellId: "c1",
+      savedAt: 0,
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+    })
+    engine.sync([drawCell("c1", "select 1", "1s")])
+
+    // When the retain band reports the cell approaching
+    engine.requestHydrate("c1")
+    await flushAsync()
+
+    // Then the snapshot lands in engine state and mirrors into the cell,
+    // still without any live fetch (the cell stays outside the mount band)
+    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(engine.getState("c1")?.results).toHaveLength(1)
+    expect(deps.mirrorCellResult).toHaveBeenCalledTimes(1)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+
+    // And a repeated band report does not re-read
+    engine.requestHydrate("c1")
+    await flushAsync()
+    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it("hydrates on reveal when no retain-band request ever fired", async () => {
+    // Given a draw cell born hidden inside the retain band
+    engine.sync([drawCell("c1", "select 1", false)])
+    await flushAsync()
+    expect(loadCellSnapshot).not.toHaveBeenCalled()
+
+    // When the cell reaches the mount band directly
+    engine.setVisible("c1", true)
+    await flushAsync()
+
+    // Then hydration runs and, with no snapshot, falls through to the fetch
+    expect(loadCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
   })
 
   it("catches up immediately on reveal when the cell never fetched", async () => {

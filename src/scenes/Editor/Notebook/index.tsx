@@ -801,6 +801,14 @@ const NotebookContent: React.FC = () => {
   )
 }
 
+const NotebookArea = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+`
+
 const SeedFallback = styled.div`
   display: flex;
   flex-direction: column;
@@ -808,6 +816,7 @@ const SeedFallback = styled.div`
   justify-content: center;
   gap: 1.6rem;
   height: 100%;
+  width: 100%;
   color: ${color("gray2")};
 `
 
@@ -891,38 +900,54 @@ export const Notebook: React.FC = () => {
   }
 
   if (archived) {
-    return previewSeed ? (
-      <NotebookProvider initialState={previewSeed} bufferId={bufferId} preview>
-        <NotebookContent />
-      </NotebookProvider>
-    ) : null
+    return (
+      <NotebookArea>
+        {previewSeed && (
+          <NotebookProvider
+            initialState={previewSeed}
+            bufferId={bufferId}
+            preview
+          >
+            <NotebookContent />
+          </NotebookProvider>
+        )}
+      </NotebookArea>
+    )
   }
 
   if (seedError) {
     return (
-      <SeedFallback role="alert" aria-live="assertive" aria-atomic="true">
-        <span>{seedError.message}</span>
-        {seedError.retryable && (
-          <Button skin="secondary" onClick={retrySeed}>
-            Retry
-          </Button>
-        )}
-      </SeedFallback>
+      <NotebookArea>
+        <SeedFallback role="alert" aria-live="assertive" aria-atomic="true">
+          <span>{seedError.message}</span>
+          {seedError.retryable && (
+            <Button skin="secondary" onClick={retrySeed}>
+              Retry
+            </Button>
+          )}
+        </SeedFallback>
+      </NotebookArea>
     )
   }
 
   if (!seed) {
-    return showSeedSpinner ? (
-      <SeedFallback role="status" aria-live="polite">
-        <LoadingSpinner />
-        <VisuallyHidden>Loading notebook…</VisuallyHidden>
-      </SeedFallback>
-    ) : null
+    return (
+      <NotebookArea>
+        {showSeedSpinner && (
+          <SeedFallback role="status" aria-live="polite">
+            <LoadingSpinner />
+            <VisuallyHidden>Loading notebook…</VisuallyHidden>
+          </SeedFallback>
+        )}
+      </NotebookArea>
+    )
   }
 
   return (
-    <NotebookProvider initialState={seed} bufferId={bufferId}>
-      <NotebookContent />
-    </NotebookProvider>
+    <NotebookArea>
+      <NotebookProvider initialState={seed} bufferId={bufferId}>
+        <NotebookContent />
+      </NotebookProvider>
+    </NotebookArea>
   )
 }

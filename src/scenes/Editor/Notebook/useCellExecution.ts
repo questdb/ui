@@ -20,10 +20,7 @@ import {
   singleResultFromExec,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
-import {
-  deleteCellSnapshot,
-  updateCellSnapshotActiveIndex,
-} from "../../../store/notebookResults"
+import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 
 const publishSchemaIfMutating = (exec: QueryExecResult): void => {
   if (exec.type === "ddl" || exec.type === "dml") {
@@ -82,8 +79,6 @@ type Options = {
   ) => void
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   updateCells: (updater: (prev: NotebookCell[]) => NotebookCell[]) => void
-  markCancelledAll: (cellId: string) => void
-  markCancelledOne: (cellId: string, index: number) => void
   setScriptSummary: (
     cellId: string,
     summary: { successCount: number; failedCount: number; durationMs: number },
@@ -98,8 +93,6 @@ export const useCellExecution = ({
   updateCellResult,
   updateCell,
   updateCells,
-  markCancelledAll,
-  markCancelledOne,
   setScriptSummary,
   onSnapshotPersisted,
 }: Options) => {
@@ -186,14 +179,22 @@ export const useCellExecution = ({
         for (let i = 0; i < queries.length; i++) {
           const perQuery = controllers[i]
           if (perQuery.signal.aborted) {
-            for (let j = i; j < queries.length; j++) {
-              const cancelled: SingleQueryResult = {
+            failedCount++
+            const interrupted: SingleQueryResult = {
+              type: "error",
+              query: queries[i],
+              error: "Cancelled by user",
+            }
+            finalResults[i] = interrupted
+            updateCellResult(cellId, i, interrupted)
+            for (let j = i + 1; j < queries.length; j++) {
+              const skipped: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
-                reason: "user",
+                reason: "priorFailure",
               }
-              finalResults[j] = cancelled
-              updateCellResult(cellId, j, cancelled)
+              finalResults[j] = skipped
+              updateCellResult(cellId, j, skipped)
             }
             break
           }
@@ -491,27 +492,28 @@ export const useCellExecution = ({
     )
   }, [])
 
-  const cancelCell = useCallback(
-    (cellId: string) => {
-      const hadRun = abortControllersRef.current.has(cellId)
-      abortCellRun(cellId)
-      if (!hadRun) return
-      markCancelledAll(cellId)
-      // The prior snapshot holds rows for a now-cancelled run; drop it so a
-      // reload shows the cancelled status, not stale success rows.
-      void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
-    },
-    [abortCellRun, bufferId, markCancelledAll],
-  )
+  const cancelCell = useCallback((cellId: string) => {
+    const controllers = abortControllersRef.current.get(cellId)
+    if (!controllers) return
+    controllers.forEach((ac) => ac.abort())
+  }, [])
 
   const cancelQuery = useCallback(
     (cellId: string, index: number) => {
       const controllers = abortControllersRef.current.get(cellId)
       if (!controllers || !controllers[index]) return
       controllers[index].abort()
-      markCancelledOne(cellId, index)
+      const target = cellsRef.current.find((c) => c.id === cellId)?.result
+        ?.results[index]
+      if (target?.type === "running") {
+        updateCellResult(cellId, index, {
+          type: "error",
+          query: target.query,
+          error: "Cancelled by user",
+        })
+      }
     },
-    [markCancelledOne],
+    [cellsRef, updateCellResult],
   )
 
   const setActiveResultIndex = useCallback(

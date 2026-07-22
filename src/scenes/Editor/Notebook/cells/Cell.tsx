@@ -124,13 +124,8 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const {
-    cancelCell,
-    setCellChartConfig,
-    clearCellResult,
-    updateCell,
-    setFocusedCell,
-  } = useNotebookActions()
+  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
+    useNotebookActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const bufferIdForEvents = useNotebookBufferId()
@@ -443,7 +438,6 @@ const CellInner: React.FC<Props> = ({
                 signalUserEdit(bufferIdForEvents)
                 clearCellResult(cell.id)
               }}
-              onCancel={() => cancelCell(cell.id)}
               onDraw={() => void handleDrawClick()}
             />
           ) : toolbarTier === "expanded" ? (

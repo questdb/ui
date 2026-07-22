@@ -1,12 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
-import {
-  attachScriptSummary,
-  cancelAllInCell,
-  cancelOneInCell,
-  setResultAt,
-} from "./notebookUtils"
+import { attachScriptSummary, setResultAt } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
 
 type Options = {
@@ -71,17 +66,6 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [updateCells],
   )
 
-  const markCancelledAll = useCallback(
-    (cellId: string) => updateCells((prev) => cancelAllInCell(prev, cellId)),
-    [updateCells],
-  )
-
-  const markCancelledOne = useCallback(
-    (cellId: string, index: number) =>
-      updateCells((prev) => cancelOneInCell(prev, cellId, index)),
-    [updateCells],
-  )
-
   const setScriptSummary = useCallback(
     (
       cellId: string,
@@ -113,8 +97,6 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     hydrateCells,
     updateCell,
     updateCellResult,
-    markCancelledAll,
-    markCancelledOne,
     setScriptSummary,
     setCellChartConfig,
     setCellRefresh,

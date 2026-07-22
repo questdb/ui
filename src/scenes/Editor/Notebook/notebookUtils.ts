@@ -632,39 +632,6 @@ export const setResultAt = (
     return { ...c, result: nextCellResult }
   })
 
-export const cancelAllInCell = (
-  cells: NotebookCell[],
-  cellId: string,
-): NotebookCell[] =>
-  cells.map((c) => {
-    if (c.id !== cellId || !c.result) return c
-    return {
-      ...c,
-      result: {
-        ...c.result,
-        results: c.result.results.map((r) =>
-          r.type === "running" || r.type === "queued"
-            ? { type: "cancelled", query: r.query, reason: "user" }
-            : r,
-        ),
-      },
-    }
-  })
-
-export const cancelOneInCell = (
-  cells: NotebookCell[],
-  cellId: string,
-  index: number,
-): NotebookCell[] =>
-  cells.map((c) => {
-    if (c.id !== cellId || !c.result) return c
-    const results = [...c.result.results]
-    const target = results[index]
-    if (target?.type !== "running") return c
-    results[index] = { type: "cancelled", query: target.query, reason: "user" }
-    return { ...c, result: { ...c.result, results } }
-  })
-
 export const buildInitialScriptResults = (
   queries: string[],
 ): SingleQueryResult[] =>
@@ -787,11 +754,16 @@ const normalizeChartConfig = (
 export const buildAppliedCells = (
   prev: NotebookCell[],
   request: ApplyRequest,
-): { nextCells: NotebookCell[]; diff: AppliedDiff } => {
+): {
+  nextCells: NotebookCell[]
+  diff: AppliedDiff
+  resultsCleared: string[]
+} => {
   const prevById = new Map(prev.map((c) => [c.id, c]))
   const seenIds = new Set<string>()
   const added: string[] = []
   const updated: string[] = []
+  const resultsCleared: string[] = []
 
   const nextCells: NotebookCell[] = request.cells.map((req, index) => {
     const requestedId =
@@ -949,6 +921,12 @@ export const buildAppliedCells = (
         if (carried === "error") delete next.lastRunStatus
         else if (carried !== undefined) next.lastRunStatus = carried
       }
+      const hadRunResult =
+        existing.result != null ||
+        (existing.lastRunStatus != null && existing.lastRunStatus !== "none")
+      if (hadRunResult && (valueChanged || resolvedType === "markdown")) {
+        resultsCleared.push(existing.id)
+      }
       if (resolvedMode !== undefined) next.mode = resolvedMode
       else delete next.mode
       if (chartConfig !== undefined) next.chartConfig = chartConfig
@@ -1025,7 +1003,7 @@ export const buildAppliedCells = (
 
   const deleted = prev.filter((c) => !seenIds.has(c.id)).map((c) => c.id)
 
-  return { nextCells, diff: { added, updated, deleted } }
+  return { nextCells, diff: { added, updated, deleted }, resultsCleared }
 }
 
 // === Cell sizing model ======================================================
@@ -1526,8 +1504,11 @@ export type NotebookDocumentState = {
 export const buildAppliedNotebookState = (
   current: NotebookDocumentState,
   request: ApplyRequest,
-): NotebookDocumentState & { diff: AppliedDiff } => {
-  const { nextCells, diff } = buildAppliedCells(current.cells, request)
+): NotebookDocumentState & { diff: AppliedDiff; resultsCleared: string[] } => {
+  const { nextCells, diff, resultsCleared } = buildAppliedCells(
+    current.cells,
+    request,
+  )
   const targetLayoutMode =
     request.layoutMode === undefined || request.layoutMode === null
       ? current.settings.layoutMode
@@ -1593,6 +1574,7 @@ export const buildAppliedNotebookState = (
     settings: nextSettings,
     maximizedCellId: nextMaximizedCellId,
     diff,
+    resultsCleared,
   }
 }
 

@@ -51,6 +51,36 @@ describe("applyNotebookStateTransition", () => {
     expect(out.result.applied.deleted).toEqual(["b", "c"])
   })
 
+  it("flags a value-changed run cell in deleteSnapshots, separate from cleanup", () => {
+    // Given a run cell with persisted run history and an untouched sibling
+    const parts = partsOf([
+      cell("a", "SELECT 1", { lastRunStatus: "success" }),
+      cell("b", "SELECT 2"),
+    ])
+    // When an apply rewrites "a" and keeps "b"
+    const out = applyNotebookStateTransition(parts, {
+      cells: [
+        { id: "a", value: "SELECT 99" },
+        { id: "b", preserveValue: true },
+      ],
+    })
+    // Then the surviving cell's stale snapshot travels in deleteSnapshots —
+    // not cleanup, which would also drop its layout and cancel its run
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+    expect(out.cleanup?.cellIds).toEqual([])
+  })
+
+  it("omits deleteSnapshots when no run cell's value changed", () => {
+    // Given a run cell whose value the apply preserves
+    const parts = partsOf([cell("a", "SELECT 1", { lastRunStatus: "success" })])
+    // When the apply keeps it verbatim
+    const out = applyNotebookStateTransition(parts, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then no snapshot deletion is requested
+    expect(out.deleteSnapshots).toBeUndefined()
+  })
+
   it("returns the applied diff nested under { applied: { added, updated, deleted } }", () => {
     // Given a one-cell notebook
     const parts = partsOf([cell("a", "SELECT 1")])
