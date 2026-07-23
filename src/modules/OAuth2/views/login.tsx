@@ -12,6 +12,7 @@ import { getSSOUserNameWithClientID } from "../utils"
 import { RawDqlResult } from "utils/questdb/types"
 import { LoadingSpinner } from "../../../components/LoadingSpinner"
 import { Box } from "../../../components/Box"
+import { LoginBackground } from "./loginBackground"
 
 const LoginContainer = styled.div`
   width: 100%;
@@ -21,18 +22,6 @@ const LoginContainer = styled.div`
   align-items: center;
   background: ${({ theme }) => theme.color.loginBackground};
   overflow-y: auto;
-`
-
-const LoginBackground = styled.img`
-  position: absolute;
-  top: 1%;
-  left: 0;
-  width: 100%;
-  max-height: 100vh;
-  object-fit: cover;
-  z-index: 0;
-  pointer-events: none;
-  user-select: none;
 `
 
 const LogoContainer = styled.div`
@@ -397,11 +386,7 @@ export const Login = ({
   return settings["acl.basic.auth.realm.enabled"] ? null : (
     <>
       <LoginContainer data-hook="auth-login">
-        <LoginBackground
-          src="assets/login-background.svg"
-          aria-hidden="true"
-          alt=""
-        />
+        <LoginBackground />
         {(redirectErrorTitle || redirectErrorMessage) && (
           <RedirectErrorContainer>
             <PlugsContainer>

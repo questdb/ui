@@ -44,16 +44,27 @@ describe("buildResultPageMarkdown", () => {
   })
 
   it("renders a QUERY PLAN result as a fenced code block", () => {
-    // Given a single QUERY PLAN column with two plan lines
+    // Given a query plan containing structural indentation, raw operators, and
+    // entity-looking SQL literals
     const columns = [col("QUERY PLAN", "STRING")]
-    const rows = [["Async JIT Filter"], ["    Row forward scan"]]
+    const rows = [
+      ["Async JIT Filter"],
+      ["    filter: x < y"],
+      ["    functions: ['&nbsp;','&lt;','&gt;']"],
+    ]
 
     // When building the markdown
     const md = buildResultPageMarkdown(columns, rows)
 
-    // Then it is a fenced block, one line per row, no table pipes
+    // Then every plan line is preserved verbatim in the fenced block
     expect(md).toBe(
-      ["```", "Async JIT Filter", "    Row forward scan", "```"].join("\n"),
+      [
+        "```",
+        "Async JIT Filter",
+        "    filter: x < y",
+        "    functions: ['&nbsp;','&lt;','&gt;']",
+        "```",
+      ].join("\n"),
     )
   })
 
@@ -69,17 +80,17 @@ describe("buildResultPageMarkdown", () => {
     expect(md).toBe(["| a | b |", "| - | - |"].join("\n"))
   })
 
-  it("unescapes HTML entities so exported text matches the grid", () => {
-    // Given a string column whose value carries HTML entities
+  it("preserves HTML entity-looking text", () => {
+    // Given a string column whose value contains entity-looking text
     const columns = [col("note", "VARCHAR")]
     const rows = [["price&gt;100"]]
 
     // When building the markdown
     const md = buildResultPageMarkdown(columns, rows)
 
-    // Then the cell is unescaped, matching what the grid displays
+    // Then the cell is preserved exactly as returned by the server
     expect(md).toBe(
-      ["| note      |", "| --------- |", "| price>100 |"].join("\n"),
+      ["| note         |", "| ------------ |", "| price&gt;100 |"].join("\n"),
     )
   })
 

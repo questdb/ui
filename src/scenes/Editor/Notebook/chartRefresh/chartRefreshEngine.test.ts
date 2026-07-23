@@ -1335,7 +1335,9 @@ describe("ChartRefreshEngine", () => {
   })
 
   it("spreads a loop's first fetch by the configured jitter", async () => {
-    // Given an engine with 300ms of initial jitter
+    // Given an engine with 300ms of initial jitter and a fixed random draw,
+    // so the jitter is a deterministic 150ms
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
     engine.destroy()
     engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
       initialFetchJitterMs: 300,
@@ -1348,8 +1350,11 @@ describe("ChartRefreshEngine", () => {
 
     // Then the first fetch waits for the jitter window instead of firing at t=0
     expect(deps.executeSingle).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(300)
+    await vi.advanceTimersByTimeAsync(149)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    random.mockRestore()
   })
 
   it("exposes loading state for the cell toolbar via its subscription", async () => {
