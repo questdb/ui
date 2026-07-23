@@ -487,6 +487,7 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       getCellsSnapshot: () => prevCells,
       getSettings: () => ({}),
       getMaximizedCellId: () => currentMaximizedId,
+      flushChartSnapshots: () => Promise.resolve(),
     }
     return { live, applied }
   }
@@ -549,6 +550,7 @@ describe("createNotebookController — live runCell supersession", () => {
     getCellsSnapshot: snapshot,
     getSettings: () => ({}),
     getMaximizedCellId: () => null,
+    flushChartSnapshots: () => Promise.resolve(),
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({
@@ -590,6 +592,40 @@ describe("createNotebookController — live runCell supersession", () => {
     expect(summary.unverified).toBe(true)
     expect(summary.note).toBe(SUPERSEDED_RUN_NOTE)
     expect(summary.results).toEqual([])
+  })
+
+  it("summarizes the outcome's result even when cell.result has diverged", async () => {
+    // Given a run whose recorded result is immediately replaced in the cell by
+    // an independent write (as a draw auto-refresh frame would), while the
+    // outcome still carries the run's own result.
+    const recorded = dmlResult(2)
+    const refreshMirror: CellResult = {
+      results: [
+        {
+          type: "error",
+          query: "INSERT INTO t VALUES (1)",
+          error: "mirror frame",
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 3,
+    }
+    let current = dmlResult(1)
+    const snapshot = () => [cellWith(current)]
+    const runCell = () => {
+      current = refreshMirror
+      return Promise.resolve({ ok: true, superseded: false, result: recorded })
+    }
+    const controller = createNotebookController(1, {
+      current: liveActions(snapshot, runCell),
+    })
+
+    // When the run completes.
+    const summary = await controller.runCell(cellId)
+
+    // Then the summary reflects the outcome's result, not the cell's mirror.
+    expect(summary.success).toBe(true)
+    expect(summary.results).toEqual(["success"])
   })
 
   it("summarizes a normally-recorded live run from the cell", async () => {

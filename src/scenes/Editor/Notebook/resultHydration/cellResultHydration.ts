@@ -6,6 +6,7 @@ import type {
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { scheduleIdle } from "../notebookScheduling"
+import { PerKeyListeners } from "../perKeyListeners"
 
 export type CellResultStatus =
   | "unrequested"
@@ -25,14 +26,14 @@ export type CellResultHydrationDeps = {
   canRelease: (cellId: string) => boolean
 }
 
-const hasRunMarker = (cell: NotebookCell): boolean =>
+export const hasRunMarker = (cell: NotebookCell): boolean =>
   cell.lastRunStatus != null && cell.lastRunStatus !== "none"
 
 // IndexedDB → memory, per cell, on scroll approach; memory → IndexedDB-only
 // when the cell leaves the retain band.
 export class CellResultHydrationEngine {
   private statuses = new Map<string, CellResultStatus>()
-  private listeners = new Map<string, Set<() => void>>()
+  private listeners = new PerKeyListeners()
   private anyListeners = new Set<() => void>()
   private releaseQueue = new Set<string>()
   private releaseScheduled = false
@@ -136,18 +137,7 @@ export class CellResultHydrationEngine {
   }
 
   subscribe(cellId: string, listener: () => void): () => void {
-    let set = this.listeners.get(cellId)
-    if (!set) {
-      set = new Set()
-      this.listeners.set(cellId, set)
-    }
-    set.add(listener)
-    return () => {
-      const current = this.listeners.get(cellId)
-      if (!current) return
-      current.delete(listener)
-      if (current.size === 0) this.listeners.delete(cellId)
-    }
+    return this.listeners.subscribe(cellId, listener)
   }
 
   subscribeAny(listener: () => void): () => void {
@@ -246,7 +236,7 @@ export class CellResultHydrationEngine {
   // isExpectingResult reads — so scroll-driven loading/loaded churn doesn't
   // invalidate the layout memo.
   private notify(cellId: string, missingChanged: boolean) {
-    this.listeners.get(cellId)?.forEach((listener) => listener())
+    this.listeners.notify(cellId)
     if (missingChanged) {
       this.anyListeners.forEach((listener) => listener())
     }

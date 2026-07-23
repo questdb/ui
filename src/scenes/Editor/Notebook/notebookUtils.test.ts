@@ -18,6 +18,7 @@ import {
   cellToolbarMenuFlags,
   cellToolbarTier,
   cloneNotebookViewState,
+  cloneNotebookViewStateWithCellIdMap,
   computeAgentCellGridH,
   computeCellGridH,
   computeCellHeights,
@@ -36,6 +37,7 @@ import {
   MIN_MARKDOWN_HEIGHT_PX,
   modeChangeBottomHeightPatch,
   nextCopyLabel,
+  snapshotResultsMatchQueries,
   nextGridSeedPosition,
   partitionCellHeights,
   topHeightForSql,
@@ -64,6 +66,7 @@ import {
   MAX_NOTEBOOK_CELLS,
 } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
+import { getCellRunStatus } from "../../../utils/ai/runStatus"
 
 const cell = (
   id: string,
@@ -2150,6 +2153,127 @@ describe("releaseCellResultPatch", () => {
   })
 })
 
+// Every path that drops the result blob must carry the error string with the
+// status, so the agent still reads WHY the last run failed after the rows are
+// gone — and a fixed or rewritten cell must not resurrect a stale error.
+describe("lastRunError carry chain", () => {
+  const errored = (id: string): NotebookCell => ({
+    id,
+    position: 0,
+    value: "select boom",
+    result: {
+      results: [
+        { type: "error", query: "select boom", error: "table does not exist" },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    },
+  })
+
+  it("stripCellResults carries the error alongside the status", () => {
+    // Given an errored cell persisted (result blob stripped)
+    const [out] = stripCellResults([errored("a")])
+
+    // Then the error string travels with the error marker
+    expect(out.lastRunStatus).toBe("error")
+    expect(out.lastRunError).toBe("table does not exist")
+  })
+
+  it("stripCellResults clears a stale carried error once the cell succeeds", () => {
+    // Given a cell re-run to success while still carrying an old error marker
+    const fixed: NotebookCell = {
+      ...cell("a", "select 1", {
+        results: [
+          {
+            type: "dql",
+            query: "select 1",
+            columns: [],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      }),
+      lastRunError: "table does not exist",
+    }
+
+    // When it is stripped for persistence
+    const [out] = stripCellResults([fixed])
+
+    // Then the stale error does not survive next to a success marker
+    expect(out.lastRunStatus).toBe("success")
+    expect(out.lastRunError).toBeUndefined()
+  })
+
+  it("duplicateCellAt copies the carried error onto the duplicate", () => {
+    // When an errored cell is duplicated (the copy gets no result blob)
+    const out = duplicateCellAt([errored("a")], "a", "new-id")
+
+    // Then the duplicate reports the same failure
+    expect(out[1].id).toBe("new-id")
+    expect(out[1].lastRunStatus).toBe("error")
+    expect(out[1].lastRunError).toBe("table does not exist")
+  })
+
+  it("cloneNotebookViewState carries the error into the cloned cells", () => {
+    // When a notebook with an errored cell is cloned
+    const clone = cloneNotebookViewState({ cells: [errored("a")] }, () => "n1")
+
+    // Then the clone keeps the failure marker and its message
+    expect(clone.cells[0].lastRunStatus).toBe("error")
+    expect(clone.cells[0].lastRunError).toBe("table does not exist")
+  })
+
+  it("releaseCellResultPatch carries the error when the result leaves memory", () => {
+    // When an errored result is released to IndexedDB-only
+    const patch = releaseCellResultPatch(errored("a"))
+
+    // Then the failure marker and message survive the release
+    expect(patch.lastRunStatus).toBe("error")
+    expect(patch.lastRunError).toBe("table does not exist")
+  })
+
+  it("getCellRunStatus surfaces the carried error after a strip", () => {
+    // Given an errored cell whose result blob was stripped
+    const [stripped] = stripCellResults([errored("a")])
+
+    // Then the agent-facing status still reports the error message
+    expect(getCellRunStatus(stripped)).toEqual({
+      status: "error",
+      error: "table does not exist",
+    })
+  })
+
+  it("buildAppliedCells drops the stale carried error when the value changes", () => {
+    // Given a stripped errored cell carrying status + error markers
+    const [stripped] = stripCellResults([errored("a")])
+
+    // When apply rewrites the SQL
+    const { nextCells } = buildAppliedCells([stripped], {
+      cells: [{ id: "a", value: "select fixed" }],
+    })
+
+    // Then neither the stale status nor its error attaches to the new SQL
+    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    expect(nextCells[0].lastRunError).toBeUndefined()
+  })
+
+  it("buildAppliedCells drops run markers when a cell turns markdown", () => {
+    // Given a stripped errored cell converted to prose
+    const [stripped] = stripCellResults([errored("a")])
+
+    // When apply converts it to markdown
+    const { nextCells } = buildAppliedCells([stripped], {
+      cells: [{ id: "a", value: stripped.value, type: "markdown" }],
+    })
+
+    // Then no run markers remain on the markdown cell
+    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    expect(nextCells[0].lastRunError).toBeUndefined()
+  })
+})
+
 describe("buildAppliedLayout", () => {
   it("uses request.grid when provided, otherwise derives h from topHeight + bottomHeight", () => {
     const cells: NotebookCell[] = [
@@ -2270,6 +2394,29 @@ describe("cloneNotebookViewState", () => {
     },
   })
 
+  it("returns the old-to-new cell id mapping used by snapshot copies", () => {
+    // Given a notebook whose cells and layout refer to the original ids
+    const src = source()
+
+    // When the notebook is cloned
+    const { notebookViewState, cellIdMap } =
+      cloneNotebookViewStateWithCellIdMap(src, seqIds())
+
+    // Then every structural reference and snapshot mapping use the same ids
+    expect(Array.from(cellIdMap.entries())).toEqual([
+      ["a", "new-0"],
+      ["b", "new-1"],
+    ])
+    expect(notebookViewState.cells.map((cell) => cell.id)).toEqual([
+      "new-0",
+      "new-1",
+    ])
+    expect(notebookViewState.settings?.layout?.map((item) => item.i)).toEqual([
+      "new-0",
+      "new-1",
+    ])
+  })
+
   it("regenerates every cell id and preserves order/position/count", () => {
     const src = source()
     const out = cloneNotebookViewState(src, seqIds())
@@ -2373,6 +2520,54 @@ describe("nextCopyLabel", () => {
     expect(nextCopyLabel("my (draft) notebook")).toBe(
       "my (draft) notebook (copy)",
     )
+  })
+})
+
+describe("snapshotResultsMatchQueries", () => {
+  const dql = (query: string): SingleQueryResult => ({
+    type: "dql",
+    query,
+    columns: [],
+    dataset: [],
+    count: 0,
+  })
+
+  it("matches when results line up 1-1 with the queries, ignoring whitespace and trailing semicolons", () => {
+    // Given a snapshot whose result queries match the cell's statements modulo formatting
+    const results = [dql("SELECT 1"), dql("SELECT 2")]
+
+    // When compared to the cell's current queries
+    // Then it faithfully represents the cell
+    expect(
+      snapshotResultsMatchQueries(results, ["  SELECT 1 ;", "SELECT 2"]),
+    ).toBe(true)
+  })
+
+  it("rejects a snapshot whose result count differs from the query count", () => {
+    // Given a snapshot with fewer results than the cell now has queries
+    const results = [dql("SELECT 1")]
+
+    // When compared to a two-statement cell
+    // Then it must not be carried into the duplicate
+    expect(snapshotResultsMatchQueries(results, ["SELECT 1", "SELECT 2"])).toBe(
+      false,
+    )
+  })
+
+  it("rejects a snapshot whose query text has since diverged", () => {
+    // Given a snapshot taken before the cell's SQL was edited
+    const results = [dql("SELECT 1")]
+
+    // When compared to the edited query
+    // Then the stale rows are skipped
+    expect(snapshotResultsMatchQueries(results, ["SELECT 2"])).toBe(false)
+  })
+
+  it("rejects an empty snapshot", () => {
+    // Given a cell with no queries and a snapshot with no results
+    // When compared
+    // Then there is nothing to present
+    expect(snapshotResultsMatchQueries([], [])).toBe(false)
   })
 })
 

@@ -102,8 +102,8 @@ export const useCellExecution = ({
 
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
-  // Persist a faithful, already-capped copy of the cell's result so it survives
-  // tab-switch / reload. One record per cell, restored by cell id alone.
+  // Persist a byte-capped copy of the cell's result so it survives tab-switch /
+  // reload. One record per cell, restored by cell id alone.
   const persistSnapshot = useCallback(
     (cellId: string, explicitResult?: CellResult) => {
       const cell = cellsRef.current.find((c) => c.id === cellId)

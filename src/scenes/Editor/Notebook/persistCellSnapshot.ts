@@ -16,9 +16,18 @@ const SNAPSHOT_SAVE_ERROR_TOAST_ID = "notebook-snapshot-save-error"
 // surfaces to the agent as a soft success (RESULT_NOT_SAVED_RUN_NOTE), not as a
 // "not recorded" outcome.
 //
+// DELIBERATE — not a bug: a byte-capped save marks the
+// copy `truncated` and keeps `count` at the server value, so a release/
+// re-hydrate cycle serves the capped prefix behind the same "X of Y rows
+// (truncated)" indicator as the fetch row cap; draw mode rejects truncated
+// frames and refetches. Oversized rows can be afforded neither in memory
+// forever (releasing off-screen results is the point of virtualization) nor
+// in full on disk. The capped snapshot is the best-effort middle ground, and
+// a re-run recovers the full set.
+//
 // Deliberately save-only: the cross-notebook recency prune runs where a NEW
-// notebook can actually enter the table — notebook open (NotebookProvider) and
-// the headless run commit — not on every frame a live chart persists.
+// notebook can actually enter the table — notebook open, duplication, and the
+// headless run commit — not on every frame a live chart persists.
 export const persistCellSnapshot = (
   snapshot: NotebookResultSnapshot,
 ): Promise<boolean> =>

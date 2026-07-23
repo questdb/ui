@@ -820,9 +820,7 @@ const SeedFallback = styled.div`
   color: ${color("gray2")};
 `
 
-// The LoadingSpinner is an unlabeled SVG, so the polite live region has no text
-// to announce — give the screen reader something to read.
-const VisuallyHidden = styled.span`
+const VisuallyHiddenStatus = styled.span`
   position: absolute;
   width: 1px;
   height: 1px;
@@ -933,10 +931,12 @@ export const Notebook: React.FC = () => {
   if (!seed) {
     return (
       <NotebookArea>
+        <VisuallyHiddenStatus role="status">
+          {showSeedSpinner ? "Loading notebook…" : ""}
+        </VisuallyHiddenStatus>
         {showSeedSpinner && (
-          <SeedFallback role="status" aria-live="polite">
+          <SeedFallback aria-hidden="true">
             <LoadingSpinner />
-            <VisuallyHidden>Loading notebook…</VisuallyHidden>
           </SeedFallback>
         )}
       </NotebookArea>

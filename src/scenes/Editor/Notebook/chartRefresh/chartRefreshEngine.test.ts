@@ -85,6 +85,7 @@ const makeDeps = () => {
       cellResults.set(cellId, result)
     }),
     getCellResult: vi.fn((cellId: string) => cellResults.get(cellId)),
+    isDrawCell: vi.fn(() => true),
     resultLoadStatus: vi.fn(
       (cellId: string): CellResultStatus =>
         loadStatuses.get(cellId) ?? "unrequested",
@@ -397,6 +398,30 @@ describe("ChartRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
     })
 
+    it("flushes a throttled frame to storage on demand", async () => {
+      // Given a changed frame blocked by the throttle after polling paused
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1000)
+      engine.setVisible("c1", false)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When a flush is requested before the throttle window reopens
+      await engine.flushPendingSnapshots()
+
+      // Then the latest frame is written now, not after the remaining window
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      const flushed = vi.mocked(persistCellSnapshot).mock.calls[1][0].results[0]
+      if (flushed.type !== "dql") throw new Error("expected dql")
+      expect(flushed.dataset).toEqual([[2]])
+
+      // And the reopening window has nothing left to persist
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    })
+
     it("drops a pending throttled frame when the SQL changes", async () => {
       // Given an auto-refreshing cell with a changed frame blocked by the throttle
       deps.executeSingle = incrementingResults()
@@ -472,7 +497,7 @@ describe("ChartRefreshEngine", () => {
       expect(deleteCellSnapshot).toHaveBeenCalledTimes(settledCount)
     })
 
-    it("persists the throttle-blocked final frame when the cell leaves draw mode", async () => {
+    it("drops the throttle-blocked frame when the cell leaves draw mode", async () => {
       // Given a polling chart with a changed frame blocked by the throttle
       deps.executeSingle = incrementingResults()
       syncOnScreen([drawCell("c1", "select 1", "1s")])
@@ -480,16 +505,53 @@ describe("ChartRefreshEngine", () => {
       await vi.advanceTimersByTimeAsync(1000)
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
-      // When the user switches the cell to the grid
+      // When the user switches the cell back to run mode
       engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
-      await flushAsync()
+      await vi.advanceTimersByTimeAsync(15_000)
 
-      // Then the final frame persists immediately with the exact array the
-      // cell holds, so the grid can release it and a reload restores it
+      // Then the blocked frame never persists — saving it would resurrect the
+      // snapshot the toggle-off just deleted
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("persists the throttle-blocked final frame on engine teardown", async () => {
+      // Given a polling chart with a changed frame blocked by the throttle
+      deps.executeSingle = incrementingResults()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the notebook unmounts mid-throttle
+      engine.destroy()
+
+      // Then the final frame persists so a reload restores the latest data
       expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
       const snapshot = vi.mocked(persistCellSnapshot).mock.calls[1][0]
       expect(snapshot.results).toBe(cellResults.get("c1")?.results)
-      expect(deps.onSnapshotPersisted).toHaveBeenCalledTimes(2)
+    })
+
+    it("discards a fetch that resolves after the cell left draw mode", async () => {
+      // Given a draw cell whose fetch response is still in flight
+      let resolveFetch: () => void = () => {}
+      deps.executeSingle = vi.fn(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            resolveFetch = () => resolve(dqlResult(sql))
+          }),
+      )
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // When the cell exits draw mode before the response lands (the engine's
+      // teardown effect has not run yet, so nothing aborted the fetch)
+      deps.isDrawCell.mockReturnValue(false)
+      resolveFetch()
+      await flushAsync()
+
+      // Then no chart rows land in the run-mode cell and nothing persists
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(persistCellSnapshot).not.toHaveBeenCalled()
     })
 
     it("drops the throttle-blocked frame when the cell is deleted", async () => {
@@ -1308,12 +1370,12 @@ describe("ChartRefreshEngine", () => {
         ),
       )
     }
-    engine.subscribe("c1", listener)
+    const unsubscribe = engine.subscribe("c1", listener)
 
     // When a draw cell fetches for the first time
     syncOnScreen([drawCell("c1", "select 1", false)])
     await flushAsync()
-    engine.unsubscribe("c1", listener)
+    unsubscribe()
 
     // Then it reports loading during the fetch and idle after it settles
     expect(states[0]).toEqual({ loading: true, refreshing: false })

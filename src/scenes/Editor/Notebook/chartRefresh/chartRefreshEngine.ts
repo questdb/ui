@@ -28,6 +28,7 @@ import {
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
+import { PerKeyListeners } from "../perKeyListeners"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -62,6 +63,7 @@ export type ChartRefreshDeps = {
   ) => Promise<ValidateQueryResult>
   setCellResult: (cellId: string, result: CellResult | undefined) => void
   getCellResult: (cellId: string) => CellResult | null | undefined
+  isDrawCell: (cellId: string) => boolean
   resultLoadStatus: (cellId: string) => CellResultStatus
   subscribeResultLoad: (cellId: string, listener: () => void) => () => void
   requestResultLoad: (cellId: string) => void
@@ -158,14 +160,15 @@ type Entry = {
   pollKey: string | null
   resultLoadUnsubscribe: (() => void) | null
   lastSnapshotAt: number
-  lastPersisted: { sqlHash: string; results: SingleQueryResult[] } | null
+  persistedResults: WeakMap<SingleQueryResult[], string>
+  lastClearedSqlHash: string | null
   pendingSnapshot: { results: SingleQueryResult[]; durationMs: number } | null
   snapshotTimer: ReturnType<typeof setTimeout> | null
 }
 
 export class ChartRefreshEngine {
   private entries = new Map<string, Entry>()
-  private listeners = new Map<string, Set<() => void>>()
+  private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
   private lastSyncedDrawCells: DrawCellSyncKey[] | null = null
   private documentHidden = false
@@ -224,7 +227,7 @@ export class ChartRefreshEngine {
       )
     }
     for (const cellId of [...this.entries.keys()]) {
-      this.removeEntry(cellId, false)
+      this.removeEntry(cellId, "teardown")
     }
     this.visibilityByCell.clear()
     this.lastSyncedDrawCells = null
@@ -251,7 +254,12 @@ export class ChartRefreshEngine {
     }
     const cellIds = new Set(cells.map((cell) => cell.id))
     for (const cellId of [...this.entries.keys()]) {
-      if (!present.has(cellId)) this.removeEntry(cellId, !cellIds.has(cellId))
+      if (!present.has(cellId)) {
+        this.removeEntry(
+          cellId,
+          cellIds.has(cellId) ? "modeExited" : "cellDeleted",
+        )
+      }
     }
     // Visibility follows the CELL, not the entry: a chart→grid→chart toggle
     // recreates the entry while the cell never leaves the viewport, so the
@@ -300,20 +308,8 @@ export class ChartRefreshEngine {
     return this.entries.get(cellId)?.state
   }
 
-  subscribe(cellId: string, listener: () => void) {
-    let set = this.listeners.get(cellId)
-    if (!set) {
-      set = new Set()
-      this.listeners.set(cellId, set)
-    }
-    set.add(listener)
-  }
-
-  unsubscribe(cellId: string, listener: () => void) {
-    const set = this.listeners.get(cellId)
-    if (!set) return
-    set.delete(listener)
-    if (set.size === 0) this.listeners.delete(cellId)
+  subscribe(cellId: string, listener: () => void): () => void {
+    return this.listeners.subscribe(cellId, listener)
   }
 
   private createEntry(cell: NotebookCell) {
@@ -333,7 +329,8 @@ export class ChartRefreshEngine {
       pollKey: null,
       resultLoadUnsubscribe: null,
       lastSnapshotAt: 0,
-      lastPersisted: null,
+      persistedResults: new WeakMap(),
+      lastClearedSqlHash: null,
       pendingSnapshot: null,
       snapshotTimer: null,
     }
@@ -359,13 +356,16 @@ export class ChartRefreshEngine {
     }, SQL_DEBOUNCE_MS)
   }
 
-  private removeEntry(cellId: string, cellDeleted: boolean) {
+  private removeEntry(
+    cellId: string,
+    reason: "cellDeleted" | "modeExited" | "teardown",
+  ) {
     const entry = this.entries.get(cellId)
     if (!entry) return
     if (entry.sqlDebounce) clearTimeout(entry.sqlDebounce)
     const pending = entry.pendingSnapshot
     this.dropPendingSnapshot(entry)
-    if (!cellDeleted && pending) {
+    if (reason === "teardown" && pending) {
       entry.lastSnapshotAt = 0
       this.queueSnapshot(entry, pending.results, pending.durationMs)
     }
@@ -581,7 +581,7 @@ export class ChartRefreshEngine {
         })
         return
       }
-      if (ac.signal.aborted) return
+      if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
       const offender = queries
         .map((q) => ({ q, klass: entry.classifyCache.get(q) }))
         .find((x) => x.klass === "DDL_DML")
@@ -617,7 +617,7 @@ export class ChartRefreshEngine {
         }),
       )
       const fetchDurationMs = Date.now() - fetchStartedAt
-      if (ac.signal.aborted) return
+      if (ac.signal.aborted || !deps.isDrawCell(entry.cellId)) return
       // Compare against the CURRENT cell.result, not a retained copy — the
       // hydration engine may have released or replaced it since the last tick,
       // and an unchanged frame must still be re-written in that case.
@@ -633,9 +633,7 @@ export class ChartRefreshEngine {
           return
         }
         const persisted =
-          entry.lastPersisted !== null &&
-          entry.lastPersisted.sqlHash === currentSqlHash &&
-          entry.lastPersisted.results === current.results
+          entry.persistedResults.get(current.results) === currentSqlHash
         if (!persisted) {
           this.queueSnapshot(entry, current.results, fetchDurationMs)
         }
@@ -700,15 +698,23 @@ export class ChartRefreshEngine {
       }
       return
     }
-    this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = now
+    void this.persistSnapshot(entry, results, durationMs)
+  }
+
+  private persistSnapshot(
+    entry: Entry,
+    results: SingleQueryResult[],
+    durationMs: number,
+  ): Promise<void> {
+    this.dropPendingSnapshot(entry)
     const persistedSqlHash = sqlHash(entry.sql)
     const failedCount = results.filter((r) => r.type === "error").length
-    void persistCellSnapshot({
+    return persistCellSnapshot({
       bufferId: this.bufferId,
       cellId: entry.cellId,
       results,
-      savedAt: now,
+      savedAt: Date.now(),
       activeResultIndex: 0,
       ...(results.length > 1
         ? {
@@ -721,20 +727,32 @@ export class ChartRefreshEngine {
         : {}),
     }).then((saved) => {
       if (!saved) return
-      entry.lastPersisted = { sqlHash: persistedSqlHash, results }
+      entry.persistedResults.set(results, persistedSqlHash)
+      entry.lastClearedSqlHash = null
       this.getDeps().onSnapshotPersisted(entry.cellId, results)
     })
+  }
+
+  async flushPendingSnapshots(): Promise<void> {
+    const writes: Promise<void>[] = []
+    for (const entry of this.entries.values()) {
+      const pending = entry.pendingSnapshot
+      if (!pending) continue
+      entry.lastSnapshotAt = Date.now()
+      writes.push(
+        this.persistSnapshot(entry, pending.results, pending.durationMs),
+      )
+    }
+    await Promise.all(writes)
   }
 
   private clearSnapshot(entry: Entry) {
     this.dropPendingSnapshot(entry)
     const clearedSqlHash = sqlHash(entry.sql)
-    const last = entry.lastPersisted
-    if (last && last.sqlHash === clearedSqlHash && last.results.length === 0)
-      return
+    if (entry.lastClearedSqlHash === clearedSqlHash) return
     void deleteCellSnapshot(this.bufferId, entry.cellId).then(
       () => {
-        entry.lastPersisted = { sqlHash: clearedSqlHash, results: [] }
+        entry.lastClearedSqlHash = clearedSqlHash
       },
       () => undefined,
     )
@@ -754,6 +772,6 @@ export class ChartRefreshEngine {
   }
 
   private notify(cellId: string) {
-    this.listeners.get(cellId)?.forEach((listener) => listener())
+    this.listeners.notify(cellId)
   }
 }

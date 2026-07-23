@@ -26,7 +26,7 @@ import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
-import { getQueriesFromText } from "../Monaco/utils"
+import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -687,10 +687,24 @@ export const nextCopyLabel = (label: string): string => {
   return `${match[1]} (copy ${n + 1})`
 }
 
-export const cloneNotebookViewState = (
+export const snapshotResultsMatchQueries = (
+  results: SingleQueryResult[],
+  queries: string[],
+): boolean =>
+  results.length > 0 &&
+  results.length === queries.length &&
+  results.every(
+    (result, index) =>
+      normalizeQueryText(result.query) === normalizeQueryText(queries[index]),
+  )
+
+export const cloneNotebookViewStateWithCellIdMap = (
   source: NotebookViewState,
   newId: () => string = generateId,
-): NotebookViewState => {
+): {
+  notebookViewState: NotebookViewState
+  cellIdMap: ReadonlyMap<string, string>
+} => {
   const idMap = new Map<string, string>()
   const cells: NotebookCell[] = source.cells.map((cell) => {
     const id = newId()
@@ -726,8 +740,14 @@ export const cloneNotebookViewState = (
     next.focusedCellId = idMap.get(source.focusedCellId)
   }
 
-  return next
+  return { notebookViewState: next, cellIdMap: idMap }
 }
+
+export const cloneNotebookViewState = (
+  source: NotebookViewState,
+  newId: () => string = generateId,
+): NotebookViewState =>
+  cloneNotebookViewStateWithCellIdMap(source, newId).notebookViewState
 
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
@@ -918,6 +938,7 @@ export const buildAppliedCells = (
         // value edit — but an error belonged to the SQL just replaced, so
         // carrying it forward would resurrect a stale error on the fixed cell.
         const carried = carriedRunStatus(existing)
+        delete next.lastRunError
         if (carried === "error") delete next.lastRunStatus
         else if (carried !== undefined) next.lastRunStatus = carried
       }
@@ -945,6 +966,7 @@ export const buildAppliedCells = (
         delete next.isViewMaximized
         delete next.bottomHeight
         delete next.lastRunStatus
+        delete next.lastRunError
       } else {
         delete next.type
         if (valueChanged && !existing.topResized) {

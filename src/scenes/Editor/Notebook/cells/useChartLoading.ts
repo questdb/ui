@@ -50,8 +50,7 @@ export const useChartLoading = (cell: NotebookCell): ChartLoadingState => {
       )
     }
     apply()
-    engine.subscribe(cell.id, apply)
-    return () => engine.unsubscribe(cell.id, apply)
+    return engine.subscribe(cell.id, apply)
   }, [cell.id, result, engine, resultLoading])
 
   return state

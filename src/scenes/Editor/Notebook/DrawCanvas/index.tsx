@@ -51,8 +51,10 @@ const EmptyState = styled.div`
   font-size: ${({ theme }) => theme.fontSize.sm};
 `
 
-// The loading spinner is an unlabeled SVG; give its live region text to read.
-const VisuallyHidden = styled.span`
+// Announces loading/empty transitions. Stays mounted with only its text
+// changing — inserting an already-populated live region announces
+// inconsistently across screen readers.
+const VisuallyHiddenStatus = styled.span`
   position: absolute;
   width: 1px;
   height: 1px;
@@ -181,13 +183,15 @@ export const DrawCanvas: React.FC<Props> = ({
 
   return (
     <Wrapper>
+      <VisuallyHiddenStatus role="status">
+        {loading ? "Loading chart data" : empty ? emptyMessage : ""}
+      </VisuallyHiddenStatus>
       {loading ? (
-        <EmptyState role="status">
+        <EmptyState aria-hidden="true">
           <CircleNotchSpinner size={24} />
-          <VisuallyHidden>Loading chart data</VisuallyHidden>
         </EmptyState>
       ) : empty ? (
-        <EmptyState role="status">{emptyMessage}</EmptyState>
+        <EmptyState aria-hidden="true">{emptyMessage}</EmptyState>
       ) : (
         <Canvas>
           <ChartRenderer

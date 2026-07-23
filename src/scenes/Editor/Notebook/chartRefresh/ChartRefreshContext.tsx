@@ -62,8 +62,7 @@ export const useChartFetchState = (
     // Catch up on anything published between render and subscription.
     setState(engine.getState(cellId))
 
-    engine.subscribe(cellId, listener)
-    return () => engine.unsubscribe(cellId, listener)
+    return engine.subscribe(cellId, listener)
   }, [engine, cellId])
 
   return state

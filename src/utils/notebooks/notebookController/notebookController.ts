@@ -69,6 +69,7 @@ export type NotebookController = {
     signal?: AbortSignal,
     sql?: string,
   ) => Promise<RunCellSummary>
+  flushChartSnapshots?: () => Promise<void>
 }
 
 // The subset of the live provider's actions the live controller composes over.
@@ -87,6 +88,7 @@ export type NotebookControllerActions = {
   getCellsSnapshot: () => NotebookCell[]
   getSettings: () => NotebookSettings
   getMaximizedCellId: () => string | null
+  flushChartSnapshots: () => Promise<void>
 }
 
 // Wire shape accepted by `applyNotebookState`. The fields are camelCase here
@@ -181,6 +183,7 @@ export const createNotebookController = (
 
       return summarizeCellResults(freshCell)
     },
+    flushChartSnapshots: () => liveActionsRef.current.flushChartSnapshots(),
   }
 }
 

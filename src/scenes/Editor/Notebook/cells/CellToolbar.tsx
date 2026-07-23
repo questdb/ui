@@ -220,8 +220,8 @@ export const CellToolbar: React.FC<Props> = ({
     moveCellDown(cellId)
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
-  const handleDuplicate = () => {
-    const newCellId = duplicateCell(cellId)
+  const handleDuplicate = async () => {
+    const newCellId = await duplicateCell(cellId)
     if (newCellId) {
       setFocusedCell(newCellId)
       emitUserAction({

@@ -64,11 +64,45 @@ export const deleteNotebookSnapshots = async (
   await db.notebook_results.where("bufferId").equals(bufferId).delete()
 }
 
+export const copyNotebookSnapshots = (
+  sourceBufferId: number,
+  targetBufferId: number,
+  cellIdMap: ReadonlyMap<string, string>,
+  shouldCopySnapshot: (snapshot: NotebookResultSnapshot) => boolean,
+): Promise<number> =>
+  db.transaction("rw", db.notebook_results, async () => {
+    const savedAt = Date.now()
+    const sourceKeys = await db.notebook_results
+      .where("bufferId")
+      .equals(sourceBufferId)
+      .primaryKeys()
+    let copied = 0
+    for (const sourceKey of sourceKeys) {
+      const cellId = cellIdMap.get(sourceKey[1])
+      if (cellId === undefined) continue
+      const snapshot = await db.notebook_results.get(sourceKey)
+      if (!snapshot || !shouldCopySnapshot(snapshot)) continue
+      await db.notebook_results.put({
+        ...snapshot,
+        bufferId: targetBufferId,
+        cellId,
+        savedAt,
+      })
+      copied += 1
+    }
+    return copied
+  })
+
 // An open notebook releases its results to IndexedDB-only as cells leave the
 // retain band, so its snapshots are the ONLY copy of data the user can scroll
 // back to. Pinned notebooks are exempt from recency eviction until unpinned on
 // unmount — otherwise saves in 10 other notebooks (e.g. agent background runs)
 // would silently destroy an open notebook's released results.
+//
+// SINGLE-TAB ASSUMPTION: pins live in this tab's memory while notebook_results
+// is shared across same-origin tabs, so a prune fired from another tab cannot
+// see them and may delete this tab's released snapshots. The web console does
+// not handle multi-tab conflicts anywhere; this store follows that contract.
 const pinnedBufferIds = new Set<number>()
 
 export const pinNotebookSnapshots = (bufferId: number): (() => void) => {

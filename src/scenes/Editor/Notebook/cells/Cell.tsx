@@ -387,13 +387,15 @@ const CellInner: React.FC<Props> = ({
         if (contentMode !== "full")
           virtualizationEngine?.ensureFullContent(cell.id)
       }}
-      // Focus moved to another element outside an out-of-band cell: release
-      // its pins so it can virtualize away
+      // Focus moved outside the cell: always release the reveal pin (its drop
+      // request no-ops while in-band, and mount-band entry is the only other
+      // path that clears it), but only an out-of-band cell loses its focused
+      // state so it can virtualize away.
       onBlurCapture={(e) => {
         const next = e.relatedTarget as Node | null
         if (!next || e.currentTarget.contains(next)) return
-        if (virtualizationEngine?.isInBand(cell.id) ?? true) return
         virtualizationEngine?.releaseRevealPin(cell.id)
+        if (virtualizationEngine?.isInBand(cell.id) ?? true) return
         if (isFocused) setFocusedCell(null)
       }}
     >

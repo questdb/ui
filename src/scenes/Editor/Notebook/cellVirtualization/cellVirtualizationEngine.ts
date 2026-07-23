@@ -1,6 +1,7 @@
 import type { NotebookCell } from "../../../../store/notebook"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { scheduleFrame, scheduleIdle } from "../notebookScheduling"
+import { PerKeyListeners } from "../perKeyListeners"
 
 export type CellContentMode = "full" | "placeholder"
 
@@ -28,7 +29,7 @@ type Entry = {
 // dwell; pinned cells never drop.
 export class CellVirtualizationEngine {
   private entries = new Map<string, Entry>()
-  private listeners = new Map<string, Set<() => void>>()
+  private listeners = new PerKeyListeners()
   private pendingDrops = new Set<string>()
   private focusedCellId: string | null = null
   private maximizedCellId: string | null = null
@@ -189,18 +190,7 @@ export class CellVirtualizationEngine {
   }
 
   subscribe(cellId: string, listener: () => void): () => void {
-    let set = this.listeners.get(cellId)
-    if (!set) {
-      set = new Set()
-      this.listeners.set(cellId, set)
-    }
-    set.add(listener)
-    return () => {
-      const current = this.listeners.get(cellId)
-      if (!current) return
-      current.delete(listener)
-      if (current.size === 0) this.listeners.delete(cellId)
-    }
+    return this.listeners.subscribe(cellId, listener)
   }
 
   private isPinned(cellId: string): boolean {
@@ -312,6 +302,6 @@ export class CellVirtualizationEngine {
   }
 
   private notify(cellId: string) {
-    this.listeners.get(cellId)?.forEach((listener) => listener())
+    this.listeners.notify(cellId)
   }
 }

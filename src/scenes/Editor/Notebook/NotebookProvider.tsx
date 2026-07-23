@@ -46,10 +46,13 @@ import {
   computeResultBottomHeight,
   generateId,
   releaseCellResultPatch,
+  snapshotResultsMatchQueries,
 } from "./notebookUtils"
+import { getQueriesFromText } from "../Monaco/utils"
 import { silently } from "../../../utils/notebooks/notebookToolError"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
+  copyNotebookSnapshots,
   deleteCellSnapshot,
   loadCellSnapshot,
   loadSnapshotCellIds,
@@ -72,7 +75,10 @@ import {
   clearChartZooms,
 } from "./cellVirtualization/chartZoomStore"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
-import { CellResultHydrationEngine } from "./resultHydration/cellResultHydration"
+import {
+  CellResultHydrationEngine,
+  hasRunMarker,
+} from "./resultHydration/cellResultHydration"
 import { CellResultHydrationProvider } from "./resultHydration/CellResultHydrationContext"
 import { resetChartEntryAnimation } from "./CellChart/chartEntryAnimation"
 
@@ -95,7 +101,7 @@ export type NotebookActions = {
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   moveCellUp: (cellId: string) => void
   moveCellDown: (cellId: string) => void
-  duplicateCell: (cellId: string) => string
+  duplicateCell: (cellId: string) => Promise<string>
   runCell: (
     cellId: string,
     sql?: string,
@@ -128,7 +134,7 @@ const NOOP_ACTIONS: NotebookActions = {
   updateCell: () => undefined,
   moveCellUp: () => undefined,
   moveCellDown: () => undefined,
-  duplicateCell: () => "",
+  duplicateCell: () => Promise.resolve(""),
   runCell: () => Promise.resolve({ ok: false, superseded: false }),
   reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
@@ -148,6 +154,7 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   ...NOOP_ACTIONS,
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
+  flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
     run({
       cells: [],
@@ -251,25 +258,6 @@ export const NotebookProvider: React.FC<{
     return unpin
   }, [bufferId])
 
-  // Snapshots for cells that no longer exist (out-of-band divergence, e.g. an
-  // applied external state) — index-only read, payloads untouched. Cell-delete
-  // transitions clean up their own snapshots.
-  useEffect(() => {
-    let cancelled = false
-    loadSnapshotCellIds(bufferId)
-      .then((snapshotCellIds) => {
-        if (cancelled) return
-        const liveCellIds = new Set(cellsRef.current.map((c) => c.id))
-        snapshotCellIds
-          .filter((cellId) => !liveCellIds.has(cellId))
-          .forEach((cellId) => void deleteCellSnapshot(bufferId, cellId))
-      })
-      .catch(() => undefined)
-    return () => {
-      cancelled = true
-    }
-  }, [bufferId, cellsRef])
-
   // Results hydrate per cell on scroll approach and release back to
   // IndexedDB-only when the cell leaves the retain band. The virtualization
   // engine drives both directions; the ref breaks the construction cycle.
@@ -302,6 +290,40 @@ export const NotebookProvider: React.FC<{
   useEffect(() => {
     resultHydration.sync(store.cells)
   }, [store.cells])
+
+  // Reconcile live cells against the persisted snapshot index on mount:
+  //   - snapshots whose cell no longer exists (out-of-band divergence, e.g. an
+  //     applied external state) are deleted — index-only read, payloads
+  //     untouched; cell-delete transitions clean up their own snapshots.
+  //   - a run-marked, resultless cell with no snapshot (e.g. a duplicate whose
+  //     stale source snapshot was skipped) is marked missing now, so its
+  //     reserved result pane collapses on mount instead of shimmering until it
+  //     independently enters the hydration band.
+  useEffect(() => {
+    let cancelled = false
+    loadSnapshotCellIds(bufferId)
+      .then((snapshotCellIds) => {
+        if (cancelled) return
+        const snapshotIds = new Set(snapshotCellIds)
+        const cells = cellsRef.current
+        const liveCellIds = new Set(cells.map((c) => c.id))
+        snapshotCellIds
+          .filter((cellId) => !liveCellIds.has(cellId))
+          .forEach((cellId) => void deleteCellSnapshot(bufferId, cellId))
+        cells
+          .filter(
+            (cell) =>
+              cell.result == null &&
+              hasRunMarker(cell) &&
+              !snapshotIds.has(cell.id),
+          )
+          .forEach((cell) => resultHydration.noteMissing(cell.id))
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [bufferId, cellsRef])
 
   const execution = useCellExecution({
     bufferId,
@@ -495,6 +517,8 @@ export const NotebookProvider: React.FC<{
       setCellResult,
       getCellResult: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
+      isDrawCell: (cellId) =>
+        store.cellsRef.current.find((c) => c.id === cellId)?.mode === "draw",
       resultLoadStatus: (cellId) => resultHydration.statusOf(cellId),
       subscribeResultLoad: (cellId, listener) =>
         resultHydration.subscribe(cellId, listener),
@@ -627,17 +651,53 @@ export const NotebookProvider: React.FC<{
   )
 
   const duplicateCell = useCallback(
-    (cellId: string): string => {
-      const newId =
+    async (cellId: string): Promise<string> => {
+      const source = cellsRef.current.find((c) => c.id === cellId)
+      const newId = generateId()
+      const queries = getQueriesFromText(source?.value ?? "")
+      let snapshotsCopied = 0
+      if (source) {
+        await chartRefreshEngine.flushPendingSnapshots().catch(() => undefined)
+        try {
+          snapshotsCopied = await copyNotebookSnapshots(
+            bufferId,
+            bufferId,
+            new Map([[cellId, newId]]),
+            (snapshot) =>
+              snapshotResultsMatchQueries(snapshot.results, queries),
+          )
+        } catch {
+          // A failed copy must not block the duplicate; the cell is still
+          // created, just without a carried result.
+          snapshotsCopied = 0
+        }
+      }
+      // The transition clones the source's CURRENT state, so ANY change to the
+      // cell while the copy ran — an edited query, a rerun or chart refresh, a
+      // cleared result, a mode switch — leaves the carried snapshot mismatched.
+      if (
+        snapshotsCopied > 0 &&
+        cellsRef.current.find((c) => c.id === cellId) !== source
+      ) {
+        await deleteCellSnapshot(bufferId, newId).catch(() => undefined)
+        snapshotsCopied = 0
+      }
+      const applied =
         silently(() =>
           applyTransition((parts) =>
-            duplicateCellTransition(parts, bufferId, cellId, generateId()),
+            duplicateCellTransition(parts, bufferId, cellId, newId),
           ),
         ) ?? ""
-      if (newId) resultHydration.noteMissing(newId)
-      return newId
+      if (!applied) {
+        if (snapshotsCopied > 0) {
+          await deleteCellSnapshot(bufferId, newId).catch(() => undefined)
+        }
+        return ""
+      }
+      if (snapshotsCopied === 0) resultHydration.noteMissing(newId)
+      return applied
     },
-    [applyTransition, bufferId],
+    [applyTransition, bufferId, cellsRef, resultHydration, chartRefreshEngine],
   )
 
   const moveCellUp = useCallback(
@@ -694,6 +754,7 @@ export const NotebookProvider: React.FC<{
     getCellsSnapshot: () => store.cellsRef.current.slice(),
     getSettings: () => ({ ...settingsRef.current }),
     getMaximizedCellId: () => maximizedCellIdRef.current,
+    flushChartSnapshots: () => chartRefreshEngine.flushPendingSnapshots(),
     applyTransition,
   }
 
