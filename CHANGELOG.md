@@ -17,6 +17,24 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.1 - 2026.07.23
+### Added
+- notebooks onboarding modal and in-notebook MCP promo [#585](https://github.com/questdb/ui/pull/585)
+- agent background edits on notebooks [#586](https://github.com/questdb/ui/pull/586)
+
+### Changed
+- redesign notebook cell toolbar with view toggles and auto-refresh intervals [#581](https://github.com/questdb/ui/pull/581)
+- virtualize charts, grids and editors, lazy-hydrate notebook cells [#589](https://github.com/questdb/ui/pull/589)
+- bump sql-parser to 0.1.16 [#590](https://github.com/questdb/ui/pull/590)
+
+### Removed
+- login-background.svg to reduce the package size [#591](https://github.com/questdb/ui/pull/591)
+
+### Fixed
+- recognize the TO REMOTE storage policy stage across the console [#583](https://github.com/questdb/ui/pull/583)
+- preserve query result text [#588](https://github.com/questdb/ui/pull/588)
+
+
 ## 2.0.0 - 2026.06.23
 ### Added
 - notebooks with coding agents integration [#561](https://github.com/questdb/ui/pull/561)
