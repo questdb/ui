@@ -3,7 +3,10 @@ import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 
-export const MAX_NOTEBOOK_CELLS = 50
+// Virtualization + lazy hydration bound render and memory cost; the cap guards
+// notebook data size and the wrapper DOM / grid-layout work that still scales
+// with cell count.
+export const MAX_NOTEBOOK_CELLS = 200
 
 export const MAX_CELL_LINES = 99_999
 
@@ -51,6 +54,7 @@ export type NotebookCell = {
   autoRefresh?: AutoRefresh
   isViewMaximized?: boolean
   lastRunStatus?: RunStatus
+  lastRunError?: string
 }
 
 export type DqlQueryResult = {
@@ -77,8 +81,16 @@ export type ErrorQueryResult = {
 }
 
 export type TransientQueryResult = {
-  type: "running" | "queued" | "cancelled"
+  type: "running" | "queued"
   query: string
+}
+
+export type CancelReason = "user" | "priorFailure"
+
+export type CancelledQueryResult = {
+  type: "cancelled"
+  query: string
+  reason?: CancelReason
 }
 
 export type SingleQueryResult =
@@ -86,6 +98,7 @@ export type SingleQueryResult =
   | DdlDmlQueryResult
   | ErrorQueryResult
   | TransientQueryResult
+  | CancelledQueryResult
 
 export type CellResult = {
   results: SingleQueryResult[]

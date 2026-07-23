@@ -10,6 +10,7 @@ import {
   SquaresFourIcon,
 } from "@phosphor-icons/react"
 import { CopyAlt } from "@styled-icons/boxicons-regular"
+import { Spinner } from "./cells/Spinner"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -174,6 +175,9 @@ export const NotebookToolbar: React.FC = () => {
     buffers.find((b) => b.id === activeBuffer.id)?.label ??
     activeBuffer.label ??
     ""
+  const isArchived =
+    buffers.find((b) => b.id === activeBuffer.id)?.archived ??
+    !!activeBuffer.archived
   const aiTooltip = !canUse
     ? "AI Assistant is not configured"
     : isOperationInProgress
@@ -181,8 +185,10 @@ export const NotebookToolbar: React.FC = () => {
       : "Build with AI"
 
   const [isRenaming, setIsRenaming] = useState(false)
+  const [isDuplicating, setIsDuplicating] = useState(false)
   const [draftName, setDraftName] = useState("")
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const isMountedRef = useRef(true)
   // Set when the rename is cancelled (Escape) so the resulting blur discards.
   const cancelRenameRef = useRef(false)
   // The buffer being renamed, captured at start: the active buffer can change
@@ -196,6 +202,13 @@ export const NotebookToolbar: React.FC = () => {
       nameInputRef.current?.select()
     }
   }, [isRenaming])
+
+  useEffect(
+    () => () => {
+      isMountedRef.current = false
+    },
+    [],
+  )
 
   const startRename = () => {
     if (typeof activeBuffer.id !== "number") return
@@ -247,9 +260,15 @@ export const NotebookToolbar: React.FC = () => {
     void openNotebookChat(activeBuffer.id)
   }
 
-  const handleDuplicate = () => {
-    if (typeof activeBuffer.id !== "number") return
-    void duplicateNotebook(activeBuffer.id)
+  const handleDuplicate = async () => {
+    if (typeof activeBuffer.id !== "number" || isArchived || isDuplicating)
+      return
+    setIsDuplicating(true)
+    try {
+      await duplicateNotebook(activeBuffer.id)
+    } finally {
+      if (isMountedRef.current) setIsDuplicating(false)
+    }
   }
 
   const handleExport = () => {
@@ -307,11 +326,16 @@ export const NotebookToolbar: React.FC = () => {
         <TooltipButton tooltip="Duplicate notebook">
           <Button
             skin="secondary"
-            disabled={!hasBuffer}
-            onClick={handleDuplicate}
+            disabled={!hasBuffer || isArchived || isDuplicating}
+            onClick={() => void handleDuplicate()}
             aria-label="Duplicate notebook"
+            aria-busy={isDuplicating}
           >
-            <CopyAlt size={18} />
+            {isDuplicating ? (
+              <Spinner size={18} style={{ opacity: 0.5 }} />
+            ) : (
+              <CopyAlt size={18} />
+            )}
           </Button>
         </TooltipButton>
         <TooltipButton tooltip="Export notebook">

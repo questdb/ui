@@ -1,6 +1,7 @@
 import { parse, tokenize } from "@questdb/sql-parser"
 import type { CstNode, IToken } from "@chevrotain/types"
 import type { NotebookVariable } from "../../../store/notebook"
+import type { Client } from "../../../utils/questdb/client"
 
 const NAME_RE = /^[a-zA-Z\u0080-\uFFFF_][a-zA-Z0-9\u0080-\uFFFF_]*$/
 
@@ -214,6 +215,31 @@ export const mapWireErrorPosition = (
   }
   return { kind: "shifted", position: wirePosition - range.delta }
 }
+
+export const createValidateWithGlobals =
+  (
+    quest: Pick<Client, "validateQuery">,
+    getVariables: () => NotebookVariable[] | undefined,
+  ) =>
+  async (sql: string, signal?: AbortSignal) => {
+    const variables = normalizeVariables(getVariables())
+    const prepared =
+      variables.length > 0
+        ? prependGlobalsDeclare(sql, variables)
+        : { sql, insertedRange: null }
+    const result = await quest.validateQuery(prepared.sql, signal)
+    if (!("error" in result) || !prepared.insertedRange) return result
+    const mapped = mapWireErrorPosition(prepared.insertedRange, result.position)
+    if (mapped.kind === "passthrough") return result
+    if (mapped.kind === "inDeclareBlock") {
+      return {
+        ...result,
+        position: mapped.position,
+        error: `${result.error} (in DECLARE block)`,
+      }
+    }
+    return { ...result, position: mapped.position }
+  }
 
 const NO_OP = (sql: string): PreparedSql => ({ sql, insertedRange: null })
 

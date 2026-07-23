@@ -1,7 +1,18 @@
-import React, { useEffect, useImperativeHandle, useMemo, useRef } from "react"
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react"
 import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption } from "echarts"
 import { echarts, QUESTDB_THEME } from "./echartsSetup"
+import { useNotebookBufferId } from "../NotebookProvider"
+import {
+  settleChartEntryAnimation,
+  shouldAnimateChartEntry,
+} from "./chartEntryAnimation"
 
 export type ChartRendererHandle = {
   resetZoom: () => void
@@ -12,6 +23,7 @@ type Props = {
   height?: number | string
   onZoomChange?: (start: number, end: number) => void
   isFocused?: boolean
+  zoomWindow: { start: number; end: number }
 }
 
 // Structural fingerprint — we remount on changes here so stale series from
@@ -59,11 +71,21 @@ type DataZoomEvent = {
 
 export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
   function ChartRenderer(
-    { option, height = "100%", onZoomChange, isFocused = true },
+    { option, height = "100%", onZoomChange, isFocused = true, zoomWindow },
     ref,
   ) {
+    const bufferId = useNotebookBufferId()
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
+    const zoomWindowRef = useRef(zoomWindow)
+    // Decided once per mount: a chart mounting into an already-settled
+    // notebook (scroll remount) skips the entry animation.
+    const animateEntryRef = useRef(shouldAnimateChartEntry(bufferId))
+    const firstInstanceDoneRef = useRef(false)
+
+    useEffect(() => {
+      zoomWindowRef.current = zoomWindow
+    }, [zoomWindow])
 
     // Capture-phase wheel listener must intercept BEFORE ECharts' inner
     // listeners so the page scrolls instead of ECharts preventDefaulting.
@@ -123,7 +145,39 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [],
     )
 
+    const handleChartReady = useCallback<
+      NonNullable<React.ComponentProps<typeof ReactECharts>["onChartReady"]>
+    >(
+      (instance) => {
+        firstInstanceDoneRef.current = true
+        const zoom = zoomWindowRef.current
+        if (zoom.start > 0 || zoom.end < 100) {
+          instance.dispatchAction({
+            type: "dataZoom",
+            start: zoom.start,
+            end: zoom.end,
+          })
+        }
+        if (animateEntryRef.current) {
+          const onFinished = () => {
+            instance.off("finished", onFinished)
+            settleChartEntryAnimation(bufferId)
+          }
+          instance.on("finished", onFinished)
+        }
+      },
+      [bufferId],
+    )
+
     const key = useMemo(() => structuralKey(option), [option])
+
+    const suppressEntryAnimation =
+      !animateEntryRef.current && !firstInstanceDoneRef.current
+    const renderOption = useMemo(
+      () =>
+        suppressEntryAnimation ? { ...option, animationDuration: 0 } : option,
+      [option, suppressEntryAnimation],
+    )
 
     const events = useMemo(() => {
       if (!onZoomChange) return undefined
@@ -153,12 +207,13 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           key={key}
           ref={reactEchartsRef}
           echarts={echarts}
-          option={option}
+          option={renderOption}
           theme={QUESTDB_THEME}
           notMerge={false}
           lazyUpdate
           autoResize={false}
           onEvents={events}
+          onChartReady={handleChartReady}
           style={{ height: "100%", width: "100%" }}
           opts={{ renderer: "canvas" }}
         />

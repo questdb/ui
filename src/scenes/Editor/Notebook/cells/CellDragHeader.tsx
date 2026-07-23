@@ -10,11 +10,17 @@ import type { NotebookCell } from "../../../../store/notebook"
 // double-click-to-expand-width target, and the mount point for CellToolbar.
 // Shared by SQL cells (RunBar) and markdown cells so the drag/expand/toolbar
 // contract the grid relies on lives in one place.
+// Fixed height: the right-slot content swaps between the neutral Run/Draw
+// toggles and the view toggle (e.g. when a result hydrates or releases), and
+// a content-driven height would shift the whole cell's geometry on every
+// swap. CELL_BASE_CHROME_PX builds on this 42px.
 const HeaderBar = styled.div`
+  height: 4.2rem;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 1rem;
+  padding: 0 1rem;
   background: ${({ theme }) => theme.color.backgroundDarker};
   cursor: grab;
 

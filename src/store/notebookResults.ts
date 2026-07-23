@@ -1,20 +1,23 @@
 import { db } from "./db"
-import type { SingleQueryResult } from "./notebook"
+import type { CellResult, SingleQueryResult } from "./notebook"
 
 // A persisted, bounded copy of a cell's last run/draw result. One record per
 // cell (mode-agnostic: both the run grid and the draw chart render the same
 // rows). `results` is a faithful copy of the live `cell.result.results`, already
 // capped at the notebook row/byte limits before it is saved.
+// `activeResultIndex` and `script` restore the tab the user was viewing and the
+// script summary; records written before these fields existed omit them, so
+// readers must default (index 0, no summary).
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
   results: SingleQueryResult[]
   savedAt: number
+  activeResultIndex?: number
+  script?: CellResult["script"]
 }
 
-// Only the N most-recently-saved notebooks keep persisted results; older ones
-// are evicted so IndexedDB can't grow unbounded across many notebooks.
-export const MAX_PERSISTED_NOTEBOOKS = 10
+export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 
 export const saveCellSnapshot = async (
   snapshot: NotebookResultSnapshot,
@@ -22,10 +25,25 @@ export const saveCellSnapshot = async (
   await db.notebook_results.put(snapshot)
 }
 
-export const loadNotebookSnapshots = (
+// Records the result tab the user switched to, so a release/re-hydrate cycle
+// (or a reload) restores the tab they were viewing. No-op when the cell has no
+// snapshot yet.
+export const updateCellSnapshotActiveIndex = (
   bufferId: number,
-): Promise<NotebookResultSnapshot[]> =>
-  db.notebook_results.where("bufferId").equals(bufferId).toArray()
+  cellId: string,
+  activeResultIndex: number,
+): Promise<void> =>
+  db.notebook_results
+    .update([bufferId, cellId], { activeResultIndex })
+    .then(() => undefined)
+
+// Index-only read: snapshot payloads are never deserialized.
+export const loadSnapshotCellIds = (bufferId: number): Promise<string[]> =>
+  db.notebook_results
+    .where("bufferId")
+    .equals(bufferId)
+    .primaryKeys()
+    .then((keys) => keys.map(([, cellId]) => cellId))
 
 export const loadCellSnapshot = (
   bufferId: number,
@@ -46,26 +64,88 @@ export const deleteNotebookSnapshots = async (
   await db.notebook_results.where("bufferId").equals(bufferId).delete()
 }
 
-// Keep snapshots only for the `keep` most-recently-saved notebooks; a notebook's
-// recency is the latest `savedAt` among its cells. Iterates the `savedAt` index
-// keys only — snapshot payloads are never deserialized. One transaction: a save
-// landing between the recency read and the delete must not lose its snapshot.
-export const pruneToRecentNotebooks = (
-  keep: number = MAX_PERSISTED_NOTEBOOKS,
-): Promise<void> =>
+export const copyNotebookSnapshots = (
+  sourceBufferId: number,
+  targetBufferId: number,
+  cellIdMap: ReadonlyMap<string, string>,
+  shouldCopySnapshot: (snapshot: NotebookResultSnapshot) => boolean,
+): Promise<number> =>
   db.transaction("rw", db.notebook_results, async () => {
-    const latestByBuffer = new Map<number, number>()
-    await db.notebook_results
-      .orderBy("savedAt")
-      .eachKey((savedAt, { primaryKey }) => {
-        // Ascending key order: the last write per buffer is its latest savedAt.
-        const [bufferId] = primaryKey
-        latestByBuffer.set(bufferId, savedAt as number)
+    const savedAt = Date.now()
+    const sourceKeys = await db.notebook_results
+      .where("bufferId")
+      .equals(sourceBufferId)
+      .primaryKeys()
+    let copied = 0
+    for (const sourceKey of sourceKeys) {
+      const cellId = cellIdMap.get(sourceKey[1])
+      if (cellId === undefined) continue
+      const snapshot = await db.notebook_results.get(sourceKey)
+      if (!snapshot || !shouldCopySnapshot(snapshot)) continue
+      await db.notebook_results.put({
+        ...snapshot,
+        bufferId: targetBufferId,
+        cellId,
+        savedAt,
       })
-    if (latestByBuffer.size <= keep) return
-    const staleBuffers = Array.from(latestByBuffer.entries())
-      .sort((a, b) => b[1] - a[1]) // newest first
-      .slice(keep) // everything past the `keep` newest
-      .map(([bufferId]) => bufferId)
-    await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
+      copied += 1
+    }
+    return copied
   })
+
+// An open notebook releases its results to IndexedDB-only as cells leave the
+// retain band, so its snapshots are the ONLY copy of data the user can scroll
+// back to. Pinned notebooks are exempt from recency eviction until every pin is
+// released — otherwise saves in 10 other notebooks (e.g. agent background runs)
+// would silently destroy an open notebook's released results.
+//
+// Pins are reference-counted so overlapping holders — the mount bridge and the
+// provider it hands off to — never unpin each other. Each acquire returns an
+// idempotent release; the buffer stays pinned until the count reaches zero.
+//
+// SINGLE-TAB ASSUMPTION: pins live in this tab's memory while notebook_results
+// is shared across same-origin tabs, so a prune fired from another tab cannot
+// see them and may delete this tab's released snapshots. The web console does
+// not handle multi-tab conflicts anywhere; this store follows that contract.
+const pinCounts = new Map<number, number>()
+
+export const pinNotebookSnapshots = (bufferId: number): (() => void) => {
+  pinCounts.set(bufferId, (pinCounts.get(bufferId) ?? 0) + 1)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const remaining = (pinCounts.get(bufferId) ?? 1) - 1
+    if (remaining > 0) pinCounts.set(bufferId, remaining)
+    else pinCounts.delete(bufferId)
+  }
+}
+
+export const pruneToRecentNotebooks = async (
+  keep: number = MAX_PERSISTED_PASSIVE_NOTEBOOKS,
+): Promise<void> => {
+  try {
+    const bufferIds = await db.notebook_results.orderBy("bufferId").uniqueKeys()
+    if (bufferIds.length <= keep) return
+    await db.transaction("rw", db.notebook_results, async () => {
+      const latestByBuffer = new Map<number, number>()
+      await db.notebook_results
+        .orderBy("savedAt")
+        .eachKey((savedAt, { primaryKey }) => {
+          // Ascending key order: the last write per buffer is its latest savedAt.
+          const [bufferId] = primaryKey
+          latestByBuffer.set(bufferId, savedAt as number)
+        })
+      if (latestByBuffer.size <= keep) return
+      const staleBuffers = Array.from(latestByBuffer.entries())
+        .filter(([bufferId]) => !pinCounts.has(bufferId))
+        .sort((a, b) => b[1] - a[1]) // newest first
+        .slice(keep) // everything past the `keep` newest passive
+        .map(([bufferId]) => bufferId)
+      if (staleBuffers.length === 0) return
+      await db.notebook_results.where("bufferId").anyOf(staleBuffers).delete()
+    })
+  } catch (error) {
+    console.warn("Failed to prune notebook result snapshots", error)
+  }
+}

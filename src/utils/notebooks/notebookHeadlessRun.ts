@@ -15,12 +15,10 @@ import { executeSingleRaw } from "../executeSingleRaw"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
   buildInitialScriptResults,
-  capResultBytes,
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
   CELL_DELETED_MID_RUN_NOTE,
   MOUNTED_MID_RUN_NOTE,
-  NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
   NOTEBOOK_DELETED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
@@ -33,6 +31,7 @@ import {
   USER_CHANGED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
+import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import {
   commitView,
   partsOf,
@@ -169,6 +168,7 @@ const executeCellQueries = async (args: {
           results[j] = {
             type: "cancelled",
             query: queries[j],
+            reason: "user",
           }
         }
         break
@@ -183,16 +183,14 @@ const executeCellQueries = async (args: {
       if (exec.type === "ddl" || exec.type === "dml") {
         eventBus.publish(EventType.MSG_QUERY_SCHEMA)
       }
-      results[i] = capResultBytes(
-        singleResultFromExec(exec, queries[i]),
-        NOTEBOOK_BYTE_CAP,
-      )
+      results[i] = singleResultFromExec(exec, queries[i])
       if (exec.type === "error") {
         failedCount++
         for (let j = i + 1; j < queries.length; j++) {
           results[j] = {
             type: "cancelled",
             query: queries[j],
+            reason: "priorFailure",
           }
         }
         break
@@ -331,7 +329,11 @@ export const runHeadlessCell = async (
           cellId,
           results: ranResult.results,
           savedAt: Date.now(),
+          activeResultIndex: ranResult.activeResultIndex,
+          ...(ranResult.script ? { script: ranResult.script } : {}),
         })
+        // Headless saves land on unmounted buffers
+        void pruneToRecentNotebooks()
         return { committed: true, snapshotSaved }
       },
     )
