@@ -22,11 +22,11 @@
  *
  ******************************************************************************/
 import { copyToClipboard } from "../../utils/copyToClipboard"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import { toast } from "../../components"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { buildResultPageMarkdown } from "../../components/ResultGrid/resultPageMarkdown"
+import { toSingleLineDisplay } from "../../components/ResultGrid/inlineGridUtils"
 
 const hashString = (str) => {
   let hash = 0
@@ -1107,7 +1107,7 @@ export function grid(rootElement, _paginationFn, id) {
     if (cellData !== null) {
       const layoutEntry = getLayoutEntry()
       const columnWidth = layoutEntry.deviants[column.name] ?? null
-      cell.textContent = unescapeHtml(
+      cell.textContent = toSingleLineDisplay(
         getDisplayedCellValue(column, cellData, columnWidth),
       )
 
