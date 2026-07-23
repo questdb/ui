@@ -1337,37 +1337,6 @@ export const snapMarkdownTopHeight = (px: number): number => {
   return rows * step - NOTEBOOK_GRID_MARGIN_Y - CELL_BASE_CHROME_PX
 }
 
-// The fixed 42px drag header replaced a content-driven 40px one, growing
-// markdown chrome from 42 to 44px and re-anchoring the height lattice.
-// Persisted topHeights snapped on the old lattice (28, 58, 88, …) drop the
-// 2px the header gained, keeping the cell box (topHeight + chrome)
-// pixel-identical; anything off-lattice snaps up as usual. Idempotent on
-// current-lattice values.
-const MARKDOWN_HEADER_GROWTH_PX = 2
-
-const migratedMarkdownTopHeight = (cell: NotebookCell): number | undefined =>
-  cell.type === "markdown" && cell.topHeight != null
-    ? snapMarkdownTopHeight(cell.topHeight - MARKDOWN_HEADER_GROWTH_PX)
-    : undefined
-
-export const migrateMarkdownTopHeights = (
-  view: NotebookViewState,
-): NotebookViewState => {
-  const needsMigration = (cell: NotebookCell): boolean => {
-    const next = migratedMarkdownTopHeight(cell)
-    return next !== undefined && next !== cell.topHeight
-  }
-  if (!view.cells.some(needsMigration)) return view
-  return {
-    ...view,
-    cells: view.cells.map((cell) =>
-      needsMigration(cell)
-        ? { ...cell, topHeight: migratedMarkdownTopHeight(cell) }
-        : cell,
-    ),
-  }
-}
-
 // Hydration status isn't knowable headlessly; "unrequested" (reserved space)
 // matches what the notebook renders for a run-marked cell before its snapshot
 // loads, so agent-visible heights agree with the screen.

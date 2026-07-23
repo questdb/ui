@@ -33,7 +33,6 @@ import {
   releaseCellResultPatch,
   isUnverifiableExecError,
   mergeCellLayout,
-  migrateMarkdownTopHeights,
   MIN_MARKDOWN_HEIGHT_PX,
   modeChangeBottomHeightPatch,
   nextCopyLabel,
@@ -1813,40 +1812,6 @@ describe("markdown cell grid lattice", () => {
   it("markdown carries the base chrome only — its box lands exactly", () => {
     // 56 + 44 = 100px = exactly 4 rows; markdown never adds the divider
     expect(computeCellGridH(markdown({ topHeight: 56 }), 10, 20)).toBe(4)
-  })
-
-  it("migrates old-lattice markdown heights onto the new lattice, box-identical", () => {
-    // Given markdown cells snapped under the old 42px chrome (28, 58, 88)
-    // alongside a current-lattice one and a SQL cell
-    const view: NotebookViewState = {
-      cells: [
-        markdown({ id: "m1", topHeight: 58 }),
-        markdown({ id: "m2", topHeight: 88 }),
-        markdown({ id: "m3", topHeight: 56 }),
-        { id: "s1", position: 0, value: "select 1", topHeight: 58 },
-      ],
-    }
-
-    // When the persisted view is migrated
-    const next = migrateMarkdownTopHeights(view)
-
-    // Then old-lattice heights drop the 2px the header gained — the cell box
-    // (topHeight + chrome) is pixel-identical before and after
-    expect(next.cells.map((c) => c.topHeight)).toEqual([56, 86, 56, 58])
-    // And untouched cells keep their identity
-    expect(next.cells[2]).toBe(view.cells[2])
-    expect(next.cells[3]).toBe(view.cells[3])
-  })
-
-  it("migration returns the same state when every height is on-lattice", () => {
-    // Given a view already on the current lattice
-    const view: NotebookViewState = {
-      cells: [markdown({ topHeight: 56 }), markdown({})],
-    }
-
-    // When migrated
-    // Then the state passes through untouched
-    expect(migrateMarkdownTopHeights(view)).toBe(view)
   })
 
   it("cellHeightPatchForRows back-solves markdown rows with markdown chrome", () => {

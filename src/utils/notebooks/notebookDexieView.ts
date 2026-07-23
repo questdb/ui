@@ -14,10 +14,7 @@ import type {
   NotebookViewState,
 } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
-import {
-  buildPersistPayload,
-  migrateMarkdownTopHeights,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
 // and the cell guards shared by the Dexie controller and the headless run
@@ -29,12 +26,8 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
-export const migratePersistedNotebookView = (
-  view: NotebookViewState,
-): NotebookViewState =>
-  dropLegacyChartConfigs(
-    migrateLegacyCellNames(migrateMarkdownTopHeights(view)),
-  )
+export const migratePersistedNotebookView = (view: NotebookViewState) =>
+  dropLegacyChartConfigs(migrateLegacyCellNames(view))
 
 export const readNotebookBufferMeta = async (
   bufferId: number,
