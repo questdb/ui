@@ -19,7 +19,6 @@ import {
 } from "@tanstack/react-table"
 
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import type {
   CellValue,
   ResultGridDataSource,
@@ -35,6 +34,7 @@ import {
   formatCellValue,
   formatColumnType,
   WIDTH_SAMPLE_ROWS,
+  toSingleLineDisplay,
 } from "./inlineGridUtils"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
 import {
@@ -112,7 +112,7 @@ const GridCell = React.memo(function GridCell({
   const colType = col?.type ?? ""
   const align = isLeftAligned(colType) ? "left" : "right"
   const displayValue = loaded
-    ? unescapeHtml(formatCellValue(rawValue, col, colWidth))
+    ? toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
     : ""
   return (
     <Cell

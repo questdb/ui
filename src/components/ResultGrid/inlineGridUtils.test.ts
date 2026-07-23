@@ -6,6 +6,7 @@ import {
   formatCellValueForCopy,
   formatColumnType,
   isLeftAligned,
+  toSingleLineDisplay,
 } from "./inlineGridUtils"
 import type { ColumnDefinition } from "../../utils/questdb/types"
 
@@ -185,14 +186,41 @@ describe("formatCellValueForCopy", () => {
     expect(out).toBe("ARRAY[1.0,2.0]")
   })
 
-  it("unescapes HTML entities so copy matches the displayed text", () => {
-    // Given a string value carrying HTML entities, as the grid displays it
-    // unescaped
+  it("preserves HTML entity-looking text", () => {
+    // Given a string value containing entity-looking text
     // When formatting it for copy
     const out = formatCellValueForCopy("a&amp;b&lt;c&gt;d", col("x", "VARCHAR"))
 
-    // Then the copied text is unescaped, matching the cell
-    expect(out).toBe("a&b<c>d")
+    // Then the copied text is preserved exactly as returned by the server
+    expect(out).toBe("a&amp;b&lt;c&gt;d")
+  })
+
+  it("preserves embedded line breaks so copy keeps the raw value", () => {
+    const out = formatCellValueForCopy(
+      "line1\nline2\r\nline3",
+      col("x", "VARCHAR"),
+    )
+
+    expect(out).toBe("line1\nline2\r\nline3")
+  })
+})
+
+describe("toSingleLineDisplay", () => {
+  it("collapses line breaks to a single space so cells render on one line", () => {
+    expect(toSingleLineDisplay("line1\nline2")).toBe("line1 line2")
+    expect(toSingleLineDisplay("line1\r\nline2")).toBe("line1 line2")
+    expect(toSingleLineDisplay("line1\rline2")).toBe("line1 line2")
+    expect(toSingleLineDisplay("a\n\n\nb")).toBe("a b")
+  })
+
+  it("preserves leading and interior spaces (rendered via white-space: pre)", () => {
+    expect(toSingleLineDisplay("    indented")).toBe("    indented")
+    expect(toSingleLineDisplay("a    b")).toBe("a    b")
+  })
+
+  it("leaves values without line breaks untouched", () => {
+    expect(toSingleLineDisplay("a&amp;b<c>d")).toBe("a&amp;b<c>d")
+    expect(toSingleLineDisplay("")).toBe("")
   })
 })
 
