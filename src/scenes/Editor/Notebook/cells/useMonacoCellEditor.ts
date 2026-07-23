@@ -11,6 +11,28 @@ import {
 } from "../../Monaco/utils"
 
 const VALIDATION_DEBOUNCE_MS = 300
+const VIEW_STATE_SAVE_DEBOUNCE_MS = 300
+const EAGER_TOKENIZE_MAX_LINES = 300
+
+// Monaco colorizes async and runs seconds behind during a mount storm;
+// tokenizing the small SQL model at mount (~1-2ms) makes the first paint
+// colored. `forceTokenization` is internal API — degrades to async if dropped.
+const forceEagerTokenization = (ed: editor.IStandaloneCodeEditor) => {
+  const model = ed.getModel()
+  if (!model) return
+  const tokenization = (
+    model as unknown as {
+      tokenization?: { forceTokenization?: (lineNumber: number) => void }
+    }
+  ).tokenization
+  try {
+    tokenization?.forceTokenization?.(
+      Math.min(model.getLineCount(), EAGER_TOKENIZE_MAX_LINES),
+    )
+  } catch {
+    // fall back to Monaco's scheduled tokenization
+  }
+}
 
 type ValidateFn = (
   sql: string,
@@ -19,6 +41,7 @@ type ValidateFn = (
 
 export type UseMonacoCellEditorOptions = {
   cellId: string
+  editorMounted: boolean
   editorViewState?: editor.ICodeEditorViewState
   quest: QuestDB.Client
   onFocus: () => void
@@ -38,6 +61,7 @@ export type UseMonacoCellEditorOptions = {
 
 export const useMonacoCellEditor = ({
   cellId,
+  editorMounted,
   editorViewState,
   quest,
   onFocus,
@@ -50,6 +74,8 @@ export const useMonacoCellEditor = ({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
+  const viewStateSaveTimeoutRef = useRef<number | null>(null)
+  const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null)
   const contextMenuCleanupRef = useRef<(() => void) | null>(null)
   const cursorQueryDecorationIdsRef = useRef<string[]>([])
   const decoratingRef = useRef(false)
@@ -96,6 +122,31 @@ export const useMonacoCellEditor = ({
   onContentHeightChangeRef.current = onContentHeightChange
   const validateRef = useRef<ValidateFn | undefined>(validate)
   validateRef.current = validate
+  const onSaveViewStateRef = useRef(onSaveViewState)
+  onSaveViewStateRef.current = onSaveViewState
+
+  const flushViewStateSave = useCallback(() => {
+    const state =
+      editorRef.current?.saveViewState() ?? pendingViewStateRef.current
+    pendingViewStateRef.current = null
+    if (state) {
+      onSaveViewStateRef.current(state)
+    }
+  }, [])
+
+  // Capture eagerly, notify debounced: by the time a teardown effect runs the
+  // editor is already disposed (saveViewState returns null), so the flush must
+  // read the last state captured while the editor was alive.
+  const scheduleViewStateSave = useCallback(() => {
+    pendingViewStateRef.current = editorRef.current?.saveViewState() ?? null
+    if (viewStateSaveTimeoutRef.current) {
+      window.clearTimeout(viewStateSaveTimeoutRef.current)
+    }
+    viewStateSaveTimeoutRef.current = window.setTimeout(() => {
+      viewStateSaveTimeoutRef.current = null
+      flushViewStateSave()
+    }, VIEW_STATE_SAVE_DEBOUNCE_MS)
+  }, [flushViewStateSave])
 
   const triggerValidation = useCallback(() => {
     if (!monacoRef.current || !editorRef.current) return
@@ -130,6 +181,8 @@ export const useMonacoCellEditor = ({
         ed.restoreViewState(editorViewState)
       }
 
+      forceEagerTokenization(ed)
+
       const reportHeight = () => {
         onContentHeightChangeRef.current?.(ed.getContentHeight())
       }
@@ -143,12 +196,15 @@ export const useMonacoCellEditor = ({
       ed.onDidChangeCursorPosition(() => {
         scheduleValidation()
         decorateCursorQuery()
+        scheduleViewStateSave()
       })
+      ed.onDidScrollChange(scheduleViewStateSave)
       ed.onDidChangeModelContent(() => {
         scheduleValidation()
         decorateCursorQuery()
       })
       decorateCursorQuery()
+      if (editorViewState) scheduleValidation()
 
       ed.addAction({
         id: "notebook-run",
@@ -166,24 +222,50 @@ export const useMonacoCellEditor = ({
         run: () => void onRunAllRef.current(),
       })
     },
-    [editorViewState, onFocus, scheduleValidation, decorateCursorQuery],
+    [
+      editorViewState,
+      onFocus,
+      scheduleValidation,
+      decorateCursorQuery,
+      scheduleViewStateSave,
+    ],
   )
+
+  const clearPendingTimers = useCallback(() => {
+    if (validationTimeoutRef.current) {
+      window.clearTimeout(validationTimeoutRef.current)
+      validationTimeoutRef.current = null
+    }
+    if (viewStateSaveTimeoutRef.current) {
+      window.clearTimeout(viewStateSaveTimeoutRef.current)
+      viewStateSaveTimeoutRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (editorMounted) return
+    clearPendingTimers()
+    flushViewStateSave()
+    contextMenuCleanupRef.current?.()
+    contextMenuCleanupRef.current = null
+    if (editorRef.current && monacoRef.current) {
+      clearModelMarkers(monacoRef.current, editorRef.current)
+      clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
+    }
+    editorRef.current = null
+    monacoRef.current = null
+  }, [editorMounted, cellId, clearPendingTimers, flushViewStateSave])
 
   useEffect(() => {
     return () => {
-      if (validationTimeoutRef.current) {
-        window.clearTimeout(validationTimeoutRef.current)
-      }
+      clearPendingTimers()
       contextMenuCleanupRef.current?.()
       contextMenuCleanupRef.current = null
       if (editorRef.current && monacoRef.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
         clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
-        const state = editorRef.current.saveViewState()
-        if (state) {
-          onSaveViewState(state)
-        }
       }
+      flushViewStateSave()
     }
   }, [])
 

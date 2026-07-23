@@ -16,6 +16,7 @@ import {
   SUPERSEDED_RUN_NOTE,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
+import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
 import { deleteCellSnapshot } from "../../../store/notebookResults"
 import { NotebookToolError } from "../notebookToolError"
 import { enqueueBufferTask } from "../notebookBufferQueue"
@@ -68,6 +69,7 @@ export type NotebookController = {
     signal?: AbortSignal,
     sql?: string,
   ) => Promise<RunCellSummary>
+  flushChartSnapshots?: () => Promise<void>
 }
 
 // The subset of the live provider's actions the live controller composes over.
@@ -86,6 +88,7 @@ export type NotebookControllerActions = {
   getCellsSnapshot: () => NotebookCell[]
   getSettings: () => NotebookSettings
   getMaximizedCellId: () => string | null
+  flushChartSnapshots: () => Promise<void>
 }
 
 // Wire shape accepted by `applyNotebookState`. The fields are camelCase here
@@ -145,7 +148,6 @@ export const createNotebookController = (
         cellId,
         bufferId,
       )
-      const priorResult = cellBefore.result ?? null
 
       if (sql !== undefined && sql !== cellBefore.value) {
         return {
@@ -155,7 +157,7 @@ export const createNotebookController = (
         }
       }
 
-      const { superseded, cellChanged, notStarted, resultCleared } =
+      const { superseded, cellChanged, notStarted, resultCleared, result } =
         await liveActionsRef.current.runCell(cellId, sql, signal, true)
 
       if (superseded || cellChanged || resultCleared) {
@@ -172,14 +174,16 @@ export const createNotebookController = (
         }
       }
 
+      // Summarize the result THIS run produced — never cell.result, which a
+      // draw cell's auto-refresh replaces independently of the run.
       const cell = liveActionsRef.current
         .getCellsSnapshot()
         .find((c) => c.id === cellId)
-      const freshCell =
-        cell?.result && cell.result !== priorResult ? cell : undefined
+      const freshCell = cell && result ? { ...cell, result } : undefined
 
       return summarizeCellResults(freshCell)
     },
+    flushChartSnapshots: () => liveActionsRef.current.flushChartSnapshots(),
   }
 }
 
@@ -251,6 +255,12 @@ export const createDexieNotebookController = (
           for (const cellId of out.cleanup.cellIds) {
             void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
             removeNotebookCellLayouts(bufferId, cellId)
+            clearChartZoom(cellId)
+          }
+        }
+        if (out.deleteSnapshots) {
+          for (const cellId of out.deleteSnapshots.cellIds) {
+            void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
           }
         }
         return out

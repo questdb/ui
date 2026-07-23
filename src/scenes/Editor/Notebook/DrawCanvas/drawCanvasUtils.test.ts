@@ -4,6 +4,7 @@ import {
   resultMatchesQueries,
   resultsEquivalent,
   successResults,
+  toChartResult,
   toExecResult,
 } from "./drawCanvasUtils"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
@@ -336,5 +337,91 @@ describe("toExecResult", () => {
     const execs = entries.map(toExecResult)
     expect(execs.every((e) => e.dataset.length === 0)).toBe(true)
     expect(successResults(execs)).toHaveLength(0)
+  })
+})
+
+describe("toChartResult", () => {
+  const settledResult = (query: string): CellResult => ({
+    results: [
+      {
+        type: "dql",
+        query,
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+      },
+    ],
+    activeResultIndex: 0,
+    timestamp: 42,
+  })
+
+  it("reports missing when the cell has no result", () => {
+    expect(toChartResult(undefined, ["select 1"])).toEqual({ kind: "missing" })
+  })
+
+  it("reports stale for a result produced by different queries", () => {
+    expect(toChartResult(settledResult("select 2"), ["select 1"])).toEqual({
+      kind: "stale",
+    })
+  })
+
+  it("reports stale for a truncated result", () => {
+    const truncated: CellResult = {
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 5000,
+          truncated: true,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 42,
+    }
+    expect(toChartResult(truncated, ["select 1"])).toEqual({ kind: "stale" })
+  })
+
+  it("reports pending while a run's transient entries remain", () => {
+    const running: CellResult = {
+      results: [{ type: "running", query: "select 1" }],
+      activeResultIndex: 0,
+      timestamp: 42,
+    }
+    expect(toChartResult(running, ["select 1"])).toEqual({ kind: "pending" })
+  })
+
+  it("settles a matching result with its chartable rows and timestamp", () => {
+    const settled = toChartResult(settledResult("select 1"), ["select 1"])
+    expect(settled.kind).toBe("settled")
+    if (settled.kind === "settled") {
+      expect(settled.results).toHaveLength(1)
+      expect(settled.hadError).toBe(false)
+      expect(settled.timestamp).toBe(42)
+    }
+  })
+
+  it("settles a mixed frame with hadError and only the chartable statements", () => {
+    const mixed: CellResult = {
+      results: [
+        {
+          type: "dql",
+          query: "select 1",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+        { type: "error", query: "select 2", error: "boom" },
+      ],
+      activeResultIndex: 0,
+      timestamp: 42,
+    }
+    const settled = toChartResult(mixed, ["select 1", "select 2"])
+    expect(settled.kind).toBe("settled")
+    if (settled.kind === "settled") {
+      expect(settled.results).toHaveLength(1)
+      expect(settled.hadError).toBe(true)
+    }
   })
 })

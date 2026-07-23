@@ -19,13 +19,21 @@ import {
 } from "@tanstack/react-table"
 
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import type { CellValue, ResultGridDataSource, ResultGridRow } from "./types"
+import type {
+  CellValue,
+  ResultGridDataSource,
+  ResultGridRow,
+  ResultGridViewport,
+} from "./types"
 import {
   clampColumnWidths,
+  columnId,
+  COLUMN_ID_PREFIX,
   sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
   formatColumnType,
+  WIDTH_SAMPLE_ROWS,
   toSingleLineDisplay,
 } from "./inlineGridUtils"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
@@ -66,10 +74,7 @@ declare module "@tanstack/react-table" {
   }
 }
 
-const WIDTH_SAMPLE_ROWS = 1000
 const FREEZE_HANDLE_EDGE_INSET = 4
-const COLUMN_ID_PREFIX = "col_"
-const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
 type GridCellProps = {
   rowIndex: number
@@ -148,6 +153,8 @@ type Props = {
   onColumnOrderCommit?: (order: string[]) => void
   initialPinnedColumns?: string[]
   onPinnedColumnsCommit?: (pinnedLeft: string[]) => void
+  initialViewport?: ResultGridViewport
+  onViewportSave?: (viewport: ResultGridViewport) => void
   onYieldFocus?: () => void
   onResetLayout?: () => void
   onSelectionChange?: (hasSelection: boolean) => void
@@ -210,6 +217,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onColumnOrderCommit,
       initialPinnedColumns,
       onPinnedColumnsCommit,
+      initialViewport,
+      onViewportSave,
       onYieldFocus,
       onResetLayout,
       onSelectionChange,
@@ -229,6 +238,18 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
+
+    useLayoutEffect(
+      () => () => {
+        const viewport = scrollRef.current
+        if (!viewport) return
+        onViewportSave?.({
+          scrollTop: viewport.scrollTop,
+          scrollLeft: viewport.scrollLeft,
+        })
+      },
+      [onViewportSave],
+    )
 
     const containerWidth = useContainerWidth(gridRef)
     const { scrolledDown, shadowLeft, handleScroll } =
@@ -526,6 +547,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       count: virtualRowCount,
       getScrollElement: () => scrollRef.current,
       estimateSize: () => ROW_HEIGHT,
+      initialOffset: initialViewport?.scrollTop ?? 0,
       overscan: 3,
     })
 
@@ -534,6 +556,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       count: headers.length,
       getScrollElement: () => scrollRef.current,
       estimateSize: (index) => headers[index]?.getSize() ?? 100,
+      initialOffset: initialViewport?.scrollLeft ?? 0,
       overscan: 2,
     })
 

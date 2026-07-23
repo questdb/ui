@@ -1,4 +1,58 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { runAdaptivePollLoop } from "./useAdaptivePoll"
+
+describe("runAdaptivePollLoop", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("samples the duration the fetch reports instead of wall-clock time", async () => {
+    // Given a fetch that resolves instantly but reports a 1s query duration
+    // (a queued fetch — wall clock here would sample ~0ms)
+    const controller = new AbortController()
+    const intervals: number[] = []
+    const loop = runAdaptivePollLoop({
+      fetchFn: () => Promise.resolve(1000),
+      signal: controller.signal,
+      minIntervalMs: 100,
+      maxIntervalMs: 60_000,
+      onIntervalChange: (interval) => intervals.push(interval),
+    })
+
+    // When the first fetch completes
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Then the next interval derives from the reported duration (1000 × 2)
+    expect(intervals[0]).toBe(2000)
+    controller.abort()
+    await loop
+  })
+
+  it("falls back to wall-clock timing when the fetch reports nothing", async () => {
+    // Given an instant fetch with no duration sample
+    const controller = new AbortController()
+    const intervals: number[] = []
+    const loop = runAdaptivePollLoop({
+      fetchFn: () => Promise.resolve(),
+      signal: controller.signal,
+      minIntervalMs: 100,
+      maxIntervalMs: 60_000,
+      onIntervalChange: (interval) => intervals.push(interval),
+    })
+
+    // When the first fetch completes
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Then the near-zero wall clock clamps to the minimum interval
+    expect(intervals[0]).toBe(100)
+    controller.abort()
+    await loop
+  })
+})
 
 describe("useAdaptivePoll core logic", () => {
   describe("calculateInterval algorithm", () => {

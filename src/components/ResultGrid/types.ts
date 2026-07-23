@@ -8,6 +8,11 @@ export type CellValue = boolean | string | number | null
 
 export type ResultGridRow = CellValue[]
 
+export type ResultGridViewport = {
+  scrollTop: number
+  scrollLeft: number
+}
+
 export type ColumnLayout = {
   columnSizing?: Record<string, number>
   columnOrder?: string[]
