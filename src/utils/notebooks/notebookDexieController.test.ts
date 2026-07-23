@@ -28,7 +28,11 @@ import {
   releaseLive,
   releaseMounting,
 } from "./notebookController/bufferOwnership"
-import { releaseArchivedBuffer } from "./notebookController"
+import {
+  beginNotebookMount,
+  cancelNotebookMount,
+  releaseArchivedBuffer,
+} from "./notebookController"
 import {
   __resetNotebookBufferQueuesForTests,
   enqueueBufferTask,
@@ -39,7 +43,11 @@ import { NotebookToolError } from "./notebookToolError"
 import { commitView, partsOf } from "./notebookDexieView"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
-import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
+import {
+  loadCellSnapshot,
+  pruneToRecentNotebooks,
+  saveCellSnapshot,
+} from "../../store/notebookResults"
 import type { Client } from "../questdb/client"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -900,6 +908,49 @@ describe("createDexieNotebookController — runCell", () => {
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/opened this notebook/)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("releases the snapshot pin when a pending mount is archived", async () => {
+    // Given a notebook whose seed read is still queued behind a blocker, so the
+    // mount holds its snapshot pin but has not yet handed off to a provider
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [],
+      savedAt: 100,
+    })
+    let releaseSeed!: () => void
+    const seedGate = new Promise<void>((resolve) => {
+      releaseSeed = resolve
+    })
+    const blocker = enqueueBufferTask(BUFFER_ID, () => seedGate)
+    const mount = beginNotebookMount(BUFFER_ID)
+
+    // When the tab is archived mid-read and the passive-effect cleanup then runs
+    // after the archive has already dropped the mounting claim
+    releaseArchivedBuffer(BUFFER_ID)
+    cancelNotebookMount(BUFFER_ID)
+    releaseSeed()
+    await blocker
+    await mount
+
+    // Then the archived buffer is no longer pinned and prunes like any passive
+    // notebook once newer ones exceed the budget
+    await saveCellSnapshot({
+      bufferId: 2,
+      cellId: "a",
+      results: [],
+      savedAt: 200,
+    })
+    await saveCellSnapshot({
+      bufferId: 3,
+      cellId: "a",
+      results: [],
+      savedAt: 300,
+    })
+    await pruneToRecentNotebooks(2)
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 

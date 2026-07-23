@@ -6,6 +6,7 @@ export type {
   DqlQueryResult,
   ResultGridDataSource,
   ResultGridRow,
+  ResultGridViewport,
 } from "./types"
 export { inMemoryDataSource } from "./types"
 

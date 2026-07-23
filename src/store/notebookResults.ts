@@ -95,23 +95,30 @@ export const copyNotebookSnapshots = (
 
 // An open notebook releases its results to IndexedDB-only as cells leave the
 // retain band, so its snapshots are the ONLY copy of data the user can scroll
-// back to. Pinned notebooks are exempt from recency eviction until unpinned on
-// unmount — otherwise saves in 10 other notebooks (e.g. agent background runs)
+// back to. Pinned notebooks are exempt from recency eviction until every pin is
+// released — otherwise saves in 10 other notebooks (e.g. agent background runs)
 // would silently destroy an open notebook's released results.
+//
+// Pins are reference-counted so overlapping holders — the mount bridge and the
+// provider it hands off to — never unpin each other. Each acquire returns an
+// idempotent release; the buffer stays pinned until the count reaches zero.
 //
 // SINGLE-TAB ASSUMPTION: pins live in this tab's memory while notebook_results
 // is shared across same-origin tabs, so a prune fired from another tab cannot
 // see them and may delete this tab's released snapshots. The web console does
 // not handle multi-tab conflicts anywhere; this store follows that contract.
-const pinnedBufferIds = new Set<number>()
+const pinCounts = new Map<number, number>()
 
 export const pinNotebookSnapshots = (bufferId: number): (() => void) => {
-  pinnedBufferIds.add(bufferId)
-  return () => pinnedBufferIds.delete(bufferId)
-}
-
-export const unpinNotebookSnapshots = (bufferId: number): void => {
-  pinnedBufferIds.delete(bufferId)
+  pinCounts.set(bufferId, (pinCounts.get(bufferId) ?? 0) + 1)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const remaining = (pinCounts.get(bufferId) ?? 1) - 1
+    if (remaining > 0) pinCounts.set(bufferId, remaining)
+    else pinCounts.delete(bufferId)
+  }
 }
 
 export const pruneToRecentNotebooks = async (
@@ -131,7 +138,7 @@ export const pruneToRecentNotebooks = async (
         })
       if (latestByBuffer.size <= keep) return
       const staleBuffers = Array.from(latestByBuffer.entries())
-        .filter(([bufferId]) => !pinnedBufferIds.has(bufferId))
+        .filter(([bufferId]) => !pinCounts.has(bufferId))
         .sort((a, b) => b[1] - a[1]) // newest first
         .slice(keep) // everything past the `keep` newest passive
         .map(([bufferId]) => bufferId)

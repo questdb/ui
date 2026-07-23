@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useEffect, useMemo } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
@@ -7,6 +7,7 @@ import { DrawCanvas } from "../DrawCanvas"
 import { InlineResultTable } from "../result-table"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
+import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
 
 type Props = {
   cell: NotebookCell
@@ -30,6 +31,21 @@ export const CellBottomContent: React.FC<Props> = ({
   const { setActiveResultIndex, cancelQuery, reRunResultAt } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const viewportStore = useMemo(() => createResultGridViewportStore(), [])
+  const resultTimestamp = cell.result?.timestamp
+
+  useEffect(() => {
+    if (resultTimestamp !== undefined) {
+      viewportStore.replaceResult(resultTimestamp)
+    }
+  }, [viewportStore, resultTimestamp])
+
+  useEffect(
+    () => () => {
+      viewportStore.clear()
+    },
+    [viewportStore],
+  )
 
   if (cell.mode === "draw") {
     return contentMode === "full" ? (
@@ -56,6 +72,7 @@ export const CellBottomContent: React.FC<Props> = ({
         isRunning={isRunning}
         onReRun={(index) => void reRunResultAt(cell.id, index)}
         onYieldFocus={onYieldFocus}
+        viewportStore={viewportStore}
       />
     ) : (
       <GridShimmer result={cell.result} bufferId={bufferId} cellId={cell.id} />

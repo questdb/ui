@@ -1,8 +1,9 @@
-import React, { useMemo, useRef, useState } from "react"
+import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
   ResultGrid,
   inMemoryDataSource,
   type ResultGridHandle,
+  type ResultGridViewport,
 } from "../../../../components/ResultGrid"
 import type { DqlQueryResult } from "../../../../store/notebook"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
@@ -14,21 +15,39 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
+import type { ResultGridViewportStore } from "./resultGridViewportStore"
 
 type Props = {
   data: DqlQueryResult
-  runToken?: number
-  isFocused?: boolean
-  bufferId?: number
+  runToken: number
+  isFocused: boolean
+  bufferId: number
   cellId: string
-  isRunning?: boolean
-  onReRun?: () => void
-  onYieldFocus?: () => void
+  isRunning: boolean
+  onReRun: () => void
+  onYieldFocus: () => void
+  viewportStore: ResultGridViewportStore
 }
 
-// Owns the grid ref and the per-result action state (selection enables
-// move-to-front, pinned count drives the freeze toggle). Mounted keyed by query
-// in InlineResultTable, so this state resets on result change without an effect.
+const useInitialGridState = ({
+  bufferId,
+  cellId,
+  data,
+  runToken,
+  viewportStore,
+}: Pick<
+  Props,
+  "bufferId" | "cellId" | "data" | "runToken" | "viewportStore"
+>) =>
+  useMemo(() => {
+    const queryKey = columnLayoutQueryKey(data.query)
+    return {
+      queryKey,
+      columnLayout: loadNotebookColumnLayout(bufferId, cellId, queryKey),
+      viewport: viewportStore.load(queryKey, runToken),
+    }
+  }, [bufferId, cellId, data.query, runToken, viewportStore])
+
 export const ResultGridPanel: React.FC<Props> = ({
   data,
   runToken,
@@ -38,22 +57,28 @@ export const ResultGridPanel: React.FC<Props> = ({
   isRunning,
   onReRun,
   onYieldFocus,
+  viewportStore,
 }) => {
+  const { queryKey, columnLayout, viewport } = useInitialGridState({
+    bufferId,
+    cellId,
+    data,
+    runToken,
+    viewportStore,
+  })
+  const [hasSelection, setHasSelection] = useState(false)
+  const [pinnedCount, setPinnedCount] = useState(
+    columnLayout?.pinnedColumns?.length ?? 0,
+  )
   const gridRef = useRef<ResultGridHandle | null>(null)
-
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
     [data],
   )
-  const queryKey = useMemo(() => columnLayoutQueryKey(data.query), [data.query])
-  const initialLayout = useMemo(
-    () => loadNotebookColumnLayout(bufferId, cellId, queryKey),
-    [bufferId, cellId, queryKey],
-  )
-
-  const [hasSelection, setHasSelection] = useState(false)
-  const [pinnedCount, setPinnedCount] = useState(
-    initialLayout?.pinnedColumns?.length ?? 0,
+  const saveViewport = useCallback(
+    (nextViewport: ResultGridViewport) =>
+      viewportStore.save(queryKey, runToken, nextViewport),
+    [viewportStore, queryKey, runToken],
   )
 
   return (
@@ -71,9 +96,11 @@ export const ResultGridPanel: React.FC<Props> = ({
         dataSource={dataSource}
         runToken={runToken}
         isFocused={isFocused}
-        initialColumnSizing={initialLayout?.columnSizing}
-        initialColumnOrder={initialLayout?.columnOrder}
-        initialPinnedColumns={initialLayout?.pinnedColumns}
+        initialColumnSizing={columnLayout?.columnSizing}
+        initialColumnOrder={columnLayout?.columnOrder}
+        initialPinnedColumns={columnLayout?.pinnedColumns}
+        initialViewport={viewport ?? undefined}
+        onViewportSave={saveViewport}
         onColumnSizingCommit={(sizing) =>
           saveNotebookColumnLayout(bufferId, cellId, queryKey, {
             columnSizing: sizing,
