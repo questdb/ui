@@ -11,16 +11,14 @@ import { EventType } from "../../../modules/EventBus/types"
 import { getQueriesFromText } from "../Monaco/utils"
 import {
   buildInitialScriptResults,
-  capResultBytes,
   type CellRunOutcome,
   hasPendingResult,
-  NOTEBOOK_BYTE_CAP,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
   singleResultFromExec,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
-import { deleteCellSnapshot } from "../../../store/notebookResults"
+import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 
 const publishSchemaIfMutating = (exec: QueryExecResult): void => {
   if (exec.type === "ddl" || exec.type === "dml") {
@@ -79,12 +77,11 @@ type Options = {
   ) => void
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
   updateCells: (updater: (prev: NotebookCell[]) => NotebookCell[]) => void
-  markCancelledAll: (cellId: string) => void
-  markCancelledOne: (cellId: string, index: number) => void
   setScriptSummary: (
     cellId: string,
     summary: { successCount: number; failedCount: number; durationMs: number },
   ) => void
+  onSnapshotPersisted: (cellId: string, results: SingleQueryResult[]) => void
 }
 
 export const useCellExecution = ({
@@ -94,9 +91,8 @@ export const useCellExecution = ({
   updateCellResult,
   updateCell,
   updateCells,
-  markCancelledAll,
-  markCancelledOne,
   setScriptSummary,
+  onSnapshotPersisted,
 }: Options) => {
   const [runningCellIds, setRunningCellIds] = useState<Set<string>>(new Set())
 
@@ -106,8 +102,8 @@ export const useCellExecution = ({
 
   const autoFocusRef = useRef<Map<string, boolean>>(new Map())
 
-  // Persist a faithful, already-capped copy of the cell's result so it survives
-  // tab-switch / reload. One record per cell, restored by cell id alone.
+  // Persist a byte-capped copy of the cell's result so it survives tab-switch /
+  // reload. One record per cell, restored by cell id alone.
   const persistSnapshot = useCallback(
     (cellId: string, explicitResult?: CellResult) => {
       const cell = cellsRef.current.find((c) => c.id === cellId)
@@ -119,9 +115,13 @@ export const useCellExecution = ({
         cellId,
         results: result.results,
         savedAt: Date.now(),
+        activeResultIndex: result.activeResultIndex,
+        ...(result.script ? { script: result.script } : {}),
+      }).then((saved) => {
+        if (saved) onSnapshotPersisted(cellId, result.results)
       })
     },
-    [bufferId, cellsRef],
+    [bufferId, cellsRef, onSnapshotPersisted],
   )
 
   const runScript = useCallback(
@@ -177,13 +177,22 @@ export const useCellExecution = ({
         for (let i = 0; i < queries.length; i++) {
           const perQuery = controllers[i]
           if (perQuery.signal.aborted) {
-            for (let j = i; j < queries.length; j++) {
-              const cancelled: SingleQueryResult = {
+            failedCount++
+            const interrupted: SingleQueryResult = {
+              type: "error",
+              query: queries[i],
+              error: "Cancelled by user",
+            }
+            finalResults[i] = interrupted
+            updateCellResult(cellId, i, interrupted)
+            for (let j = i + 1; j < queries.length; j++) {
+              const skipped: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
+                reason: "priorFailure",
               }
-              finalResults[j] = cancelled
-              updateCellResult(cellId, j, cancelled)
+              finalResults[j] = skipped
+              updateCellResult(cellId, j, skipped)
             }
             break
           }
@@ -205,12 +214,9 @@ export const useCellExecution = ({
           if (!isCurrentRun()) {
             return { ok: failedCount === 0, superseded: true }
           }
-          const capped = capResultBytes(
-            singleResultFromExec(result, sql),
-            NOTEBOOK_BYTE_CAP,
-          )
-          finalResults[i] = capped
-          updateCellResult(cellId, i, capped)
+          const landed = singleResultFromExec(result, sql)
+          finalResults[i] = landed
+          updateCellResult(cellId, i, landed)
           publishSchemaIfMutating(result)
 
           if (result.type === "error") {
@@ -219,6 +225,7 @@ export const useCellExecution = ({
               const cancelled: SingleQueryResult = {
                 type: "cancelled",
                 query: queries[j],
+                reason: "priorFailure",
               }
               finalResults[j] = cancelled
               updateCellResult(cellId, j, cancelled)
@@ -283,7 +290,15 @@ export const useCellExecution = ({
         }
       }
 
-      return { ok: failedCount === 0, superseded: false }
+      return {
+        ok: failedCount === 0,
+        superseded: false,
+        result: {
+          results: finalResults,
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        },
+      }
     },
     [
       cellsRef,
@@ -389,18 +404,17 @@ export const useCellExecution = ({
           }
         }
         const cellResult: CellResult = {
-          results: [
-            capResultBytes(
-              singleResultFromExec(execResult, queryText),
-              NOTEBOOK_BYTE_CAP,
-            ),
-          ],
+          results: [singleResultFromExec(execResult, queryText)],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
         updateCell(cellId, { result: cellResult })
         persistSnapshot(cellId, cellResult)
-        return { ok: execResult.type !== "error", superseded: false }
+        return {
+          ok: execResult.type !== "error",
+          superseded: false,
+          result: cellResult,
+        }
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -437,49 +451,52 @@ export const useCellExecution = ({
       publishSchemaIfMutating(execResult)
       const liveCell = cellsRef.current.find((c) => c.id === cellId)
       if (!liveCell?.result) return execResult.type !== "error"
-      updateCellResult(
-        cellId,
-        index,
-        capResultBytes(
-          singleResultFromExec(execResult, sql),
-          NOTEBOOK_BYTE_CAP,
-        ),
-      )
+      updateCellResult(cellId, index, singleResultFromExec(execResult, sql))
       persistSnapshot(cellId)
       return execResult.type !== "error"
     },
     [cellsRef, executeSingle, updateCellResult, persistSnapshot],
   )
 
-  const cancelCell = useCallback(
-    (cellId: string) => {
-      const controllers = abortControllersRef.current.get(cellId)
-      if (!controllers) return
-      // Supersede the in-flight run so its late resolution can't write back
-      supersedeCellRun(runGenerationRef, cellId)
-      controllers.forEach((ac) => ac.abort())
-      clearRunningCell(
-        abortControllersRef,
-        autoFocusRef,
-        setRunningCellIds,
-        cellId,
-      )
-      markCancelledAll(cellId)
-      // The prior snapshot holds rows for a now-cancelled run; drop it so a
-      // reload shows the cancelled status, not stale success rows.
-      void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
-    },
-    [bufferId, markCancelledAll],
-  )
+  // Silently discard an in-flight run: no cancelled markers, no snapshot
+  // delete. For ownership hand-offs (run→draw) where the chart engine takes
+  // over and the run must simply stop writing.
+  const abortCellRun = useCallback((cellId: string) => {
+    const controllers = abortControllersRef.current.get(cellId)
+    if (!controllers) return
+    // Supersede the in-flight run so its late resolution can't write back
+    supersedeCellRun(runGenerationRef, cellId)
+    controllers.forEach((ac) => ac.abort())
+    clearRunningCell(
+      abortControllersRef,
+      autoFocusRef,
+      setRunningCellIds,
+      cellId,
+    )
+  }, [])
+
+  const cancelCell = useCallback((cellId: string) => {
+    const controllers = abortControllersRef.current.get(cellId)
+    if (!controllers) return
+    controllers.forEach((ac) => ac.abort())
+  }, [])
 
   const cancelQuery = useCallback(
     (cellId: string, index: number) => {
       const controllers = abortControllersRef.current.get(cellId)
       if (!controllers || !controllers[index]) return
       controllers[index].abort()
-      markCancelledOne(cellId, index)
+      const target = cellsRef.current.find((c) => c.id === cellId)?.result
+        ?.results[index]
+      if (target?.type === "running") {
+        updateCellResult(cellId, index, {
+          type: "error",
+          query: target.query,
+          error: "Cancelled by user",
+        })
+      }
     },
-    [markCancelledOne],
+    [cellsRef, updateCellResult],
   )
 
   const setActiveResultIndex = useCallback(
@@ -491,8 +508,13 @@ export const useCellExecution = ({
           return { ...c, result: { ...c.result, activeResultIndex: index } }
         }),
       )
+      // Keep the snapshot on the tab the user is viewing, so a release or a
+      // reload restores this tab instead of snapping back to the first.
+      void updateCellSnapshotActiveIndex(bufferId, cellId, index).catch(
+        () => undefined,
+      )
     },
-    [updateCells],
+    [updateCells, bufferId],
   )
 
   useEffect(() => {
@@ -513,6 +535,7 @@ export const useCellExecution = ({
     runningCellIds,
     runCell,
     reRunResultAt,
+    abortCellRun,
     cancelCell,
     cancelQuery,
     setActiveResultIndex,

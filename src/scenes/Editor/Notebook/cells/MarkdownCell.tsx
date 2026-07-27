@@ -212,9 +212,8 @@ type Props = {
   isFocused: boolean
   isMaximized: boolean
   // Accepted for parity with <Cell/> so markdown can be a drop-in in the
-  // render loop; markdown never runs, so these are unused.
+  // render loop; markdown never runs, so this is unused.
   isRunning?: boolean
-  isHydrating?: boolean
 }
 
 const MarkdownCellInner: React.FC<Props> = ({

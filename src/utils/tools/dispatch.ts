@@ -37,6 +37,7 @@ import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
   isAutoRefresh,
   isUnverifiableExecError,
+  snapshotResultsMatchQueries,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
@@ -82,6 +83,10 @@ import {
   summarizeCells,
 } from "../ai/notebookSnapshot"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  copyNotebookSnapshots,
+  deleteCellSnapshot,
+} from "../../store/notebookResults"
 
 // Runs a transition on the bound notebook (live or passive) — the one path
 // every mutation takes. The transition validates and throws typed errors
@@ -698,14 +703,56 @@ export const dispatchTool = async (
         const { buffer_id, cell_id } =
           (input as { buffer_id: number; cell_id: string }) || {}
         setStatus(AIOperationStatus.AddingCell, { cellId: cell_id })
-        return routeNotebookTool(async () => ({
-          cellId: await runTransition(
+        return routeNotebookTool(async () => {
+          const seqBeforeRead = captureReadSeq(buffer_id)
+          const { cells, controller } = await withBoundNotebookReadOnly(
             buffer_id,
-            (parts) =>
-              duplicateCellTransition(parts, buffer_id, cell_id, generateId()),
+            (view, ctrl) =>
+              Promise.resolve({ cells: view.cells, controller: ctrl }),
             signal,
-          ),
-        }))
+          )
+          const sourceCell = cells.find((cell) => cell.id === cell_id)
+          const newId = generateId()
+          const queries = getQueriesFromText(sourceCell?.value ?? "")
+          let snapshotsCopied = 0
+          if (sourceCell) {
+            try {
+              await controller?.flushChartSnapshots?.()
+            } catch {
+              // best-effort — the copy proceeds with the last persisted frame
+            }
+            try {
+              snapshotsCopied = await copyNotebookSnapshots(
+                buffer_id,
+                buffer_id,
+                new Map([[cell_id, newId]]),
+                (snapshot) =>
+                  snapshotResultsMatchQueries(snapshot.results, queries),
+              )
+            } catch {
+              // A copy failure (e.g. IndexedDB quota) must not block the
+              // duplicate; the cell is still created, just without a result.
+              snapshotsCopied = 0
+            }
+          }
+
+          try {
+            return {
+              cellId: await runTransition(
+                buffer_id,
+                (parts) =>
+                  duplicateCellTransition(parts, buffer_id, cell_id, newId),
+                signal,
+                seqBeforeRead,
+              ),
+            }
+          } catch (error) {
+            if (snapshotsCopied > 0) {
+              await deleteCellSnapshot(buffer_id, newId).catch(() => undefined)
+            }
+            throw error
+          }
+        })
       }
       case "run_cell": {
         const { buffer_id, cell_id } =

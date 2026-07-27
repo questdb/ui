@@ -7,6 +7,7 @@ import {
 } from "../notebookDexieView"
 import { forgetHeadlessRuns } from "../notebookHeadlessRun"
 import { forgetBufferSeq } from "../notebookAIBridge"
+import { pinNotebookSnapshots } from "../../../store/notebookResults"
 import type { NotebookController } from "./notebookController"
 import {
   claimLive,
@@ -32,6 +33,19 @@ type Waiter = {
 
 const controllers = new Map<number, NotebookController>()
 const waiters = new Map<number, Waiter[]>()
+
+// The snapshot pin a mount holds from claim until it either hands off to the
+// mounted provider or is abandoned. Keyed by buffer so every exit path releases
+// the exact pin, and idempotent so an archive that races the passive-effect
+// cleanup can't leave the buffer permanently exempt from pruning.
+const mountPinReleases = new Map<number, () => void>()
+
+const releaseMountPin = (bufferId: number): void => {
+  const release = mountPinReleases.get(bufferId)
+  if (!release) return
+  mountPinReleases.delete(bufferId)
+  release()
+}
 
 // Thrown into pending waiters when a claim is released without a controller —
 // withBoundNotebook catches it and falls back to the Dexie route.
@@ -66,6 +80,8 @@ export const beginNotebookMount = async (
   bufferId: number,
 ): Promise<NotebookViewState | NotebookToolError> => {
   const epoch = claimMounting(bufferId)
+  releaseMountPin(bufferId)
+  mountPinReleases.set(bufferId, pinNotebookSnapshots(bufferId))
   try {
     return await enqueueBufferTask(bufferId, () => readNotebookView(bufferId))
   } catch (error) {
@@ -81,12 +97,14 @@ export const beginNotebookMount = async (
 // Releases a claim that never became a mounted provider (tab switched away
 // before the seed resolved). A no-op once registerController has set the buffer live.
 export const cancelNotebookMount = (bufferId: number): void => {
+  releaseMountPin(bufferId)
   if (releaseMounting(bufferId)) {
     rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
   }
 }
 
 export const forgetBuffer = (bufferId: number): void => {
+  releaseMountPin(bufferId)
   forgetBufferSeq(bufferId)
   forgetBufferOwnership(bufferId)
   rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
@@ -95,6 +113,7 @@ export const forgetBuffer = (bufferId: number): void => {
 }
 
 export const releaseArchivedBuffer = (bufferId: number): void => {
+  releaseMountPin(bufferId)
   releaseBufferEpoch(bufferId)
   rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
   cancelPendingSearchPublish(bufferId)
@@ -103,6 +122,8 @@ export const releaseArchivedBuffer = (bufferId: number): void => {
 export const registerController = (controller: NotebookController): void => {
   controllers.set(controller.bufferId, controller)
   claimLive(controller.bufferId)
+  // The mounted provider now holds its own pin, so drop the mount bridge's.
+  releaseMountPin(controller.bufferId)
   const pending = waiters.get(controller.bufferId)
   if (pending && pending.length > 0) {
     for (const w of pending) {
@@ -178,6 +199,8 @@ export const __resetNotebookControllerForTests = (): void => {
       w.reject(new Error("Controller reset"))
     }
   }
+  for (const release of mountPinReleases.values()) release()
+  mountPinReleases.clear()
   controllers.clear()
   waiters.clear()
   __resetBufferOwnershipForTests()

@@ -16,8 +16,17 @@ import {
   type RunCellSummary,
 } from "../notebooks/notebookController"
 import type { ViewParts } from "../notebooks/notebookDexieView"
-import type { NotebookCell, NotebookSettings } from "../../store/notebook"
+import type {
+  NotebookCell,
+  NotebookSettings,
+  SingleQueryResult,
+} from "../../store/notebook"
 import { db } from "../../store/db"
+import {
+  loadCellSnapshot,
+  loadSnapshotCellIds,
+  saveCellSnapshot,
+} from "../../store/notebookResults"
 import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
@@ -139,6 +148,7 @@ beforeEach(async () => {
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
   await db.buffers.clear()
+  await db.notebook_results.clear()
   // A backing Dexie row so buildSnapshot (get_notebook_state) can read meta.
   await db.buffers.put({
     id: 1,
@@ -183,6 +193,96 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const parsed = JSON.parse(res.content) as { cellId: string }
     expect(typeof parsed.cellId).toBe("string")
     expect(cellById(state, parsed.cellId)?.value).toBe("SELECT 1")
+  })
+
+  it("duplicate_cell copies the source snapshot under the new cell id", async () => {
+    // Given a run cell whose result is stored outside the notebook state
+    const results: SingleQueryResult[] = [
+      {
+        type: "dql",
+        query: "SELECT 1",
+        columns: [],
+        dataset: [],
+        count: 0,
+      },
+    ]
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "source",
+      results,
+      savedAt: 100,
+      activeResultIndex: 0,
+    })
+    const { state } = mountLive(1, [
+      cell("source", "SELECT 1", { lastRunStatus: "success" }),
+    ])
+
+    // When the agent duplicates the cell
+    const response = await dispatchTool(
+      "duplicate_cell",
+      { buffer_id: 1, cell_id: "source" },
+      makeClient(),
+      noopStatus,
+    )
+    const { cellId } = JSON.parse(response.content) as { cellId: string }
+
+    // Then the new cell gets an independent snapshot under its fresh id,
+    // stamped with a fresh savedAt so recency pruning treats the copy as current
+    expect(cellIds(state)).toEqual(["source", cellId])
+    const copied = await loadCellSnapshot(1, cellId)
+    const { savedAt, ...restOfCopied } = copied!
+    expect(restOfCopied).toEqual({
+      bufferId: 1,
+      cellId,
+      results,
+      activeResultIndex: 0,
+    })
+    expect(savedAt).toBeGreaterThan(100)
+
+    // And the source snapshot is left untouched
+    expect(await loadCellSnapshot(1, "source")).toEqual({
+      bufferId: 1,
+      cellId: "source",
+      results,
+      savedAt: 100,
+      activeResultIndex: 0,
+    })
+  })
+
+  it("duplicate_cell removes its copied snapshot when the notebook changes during the read", async () => {
+    // Given a source snapshot and a user edit racing the agent's notebook read
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "source",
+      results: [
+        {
+          type: "dql",
+          query: "SELECT 1",
+          columns: [],
+          dataset: [],
+          count: 0,
+        },
+      ],
+      savedAt: 100,
+    })
+    const { state } = mountLive(
+      1,
+      [cell("source", "SELECT 1", { lastRunStatus: "success" })],
+      { onRead: () => signalUserEdit(1) },
+    )
+
+    // When the agent tries to duplicate the stale read
+    const response = await dispatchTool(
+      "duplicate_cell",
+      { buffer_id: 1, cell_id: "source" },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then neither a cell nor an orphan snapshot is left behind
+    expect(response.is_error).toBe(true)
+    expect(cellIds(state)).toEqual(["source"])
+    expect(await loadSnapshotCellIds(1)).toEqual(["source"])
   })
 
   it("add_cell with run:true chains runCell and reports per-query status", async () => {

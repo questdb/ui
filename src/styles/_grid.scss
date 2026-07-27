@@ -56,12 +56,12 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
   color: #939393;
 }
 
-.qg-header-row,
-.qg-r {
+.qg-header-row {
   white-space: nowrap;
 }
 
 .qg-r {
+  white-space: pre;
   display: flex;
   border-bottom: 1px solid #44475a;
   position: absolute;

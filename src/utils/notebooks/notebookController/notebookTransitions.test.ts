@@ -6,10 +6,12 @@ import {
   applyNotebookStateTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  setCellModeTransition,
   updateCellTransition,
 } from "./notebookTransitions"
 import type { ViewParts } from "../notebookDexieView"
 import { NotebookToolError } from "../notebookToolError"
+import { topHeightForSql } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   MAX_CELL_LINES,
   MAX_NOTEBOOK_CELLS,
@@ -47,6 +49,36 @@ describe("applyNotebookStateTransition", () => {
     // snapshots/layouts after it commits, and the diff names them deleted
     expect(out.cleanup?.cellIds).toEqual(["b", "c"])
     expect(out.result.applied.deleted).toEqual(["b", "c"])
+  })
+
+  it("flags a value-changed run cell in deleteSnapshots, separate from cleanup", () => {
+    // Given a run cell with persisted run history and an untouched sibling
+    const parts = partsOf([
+      cell("a", "SELECT 1", { lastRunStatus: "success" }),
+      cell("b", "SELECT 2"),
+    ])
+    // When an apply rewrites "a" and keeps "b"
+    const out = applyNotebookStateTransition(parts, {
+      cells: [
+        { id: "a", value: "SELECT 99" },
+        { id: "b", preserveValue: true },
+      ],
+    })
+    // Then the surviving cell's stale snapshot travels in deleteSnapshots —
+    // not cleanup, which would also drop its layout and cancel its run
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+    expect(out.cleanup?.cellIds).toEqual([])
+  })
+
+  it("omits deleteSnapshots when no run cell's value changed", () => {
+    // Given a run cell whose value the apply preserves
+    const parts = partsOf([cell("a", "SELECT 1", { lastRunStatus: "success" })])
+    // When the apply keeps it verbatim
+    const out = applyNotebookStateTransition(parts, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then no snapshot deletion is requested
+    expect(out.deleteSnapshots).toBeUndefined()
   })
 
   it("returns the applied diff nested under { applied: { added, updated, deleted } }", () => {
@@ -138,6 +170,29 @@ describe("deleteCellTransition", () => {
   })
 })
 
+describe("setCellModeTransition", () => {
+  it("asks the shell to cancel the cell's run when it enters draw mode", () => {
+    // Given a run-mode cell (a run may be in flight)
+    const parts = partsOf([cell("a", "select 1", { mode: "run" })])
+    // When the cell switches to draw
+    const out = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
+    // Then the shell is told to abort its in-flight run — the chart engine
+    // owns the cell's result from here
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
+  })
+
+  it("does not cancel runs when leaving draw mode or staying in it", () => {
+    // Given a draw-mode cell
+    const parts = partsOf([cell("a", "select 1", { mode: "draw" })])
+    // When it switches back to run, or is re-set to draw
+    const toRun = setCellModeTransition(parts, BUFFER_ID, "a", "run")
+    const stillDraw = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
+    // Then neither carries a cancel request
+    expect(toRun.cancelRuns).toBeUndefined()
+    expect(stillDraw.cancelRuns).toBeUndefined()
+  })
+})
+
 describe("transition validation guards", () => {
   const overLineLimit = Array(MAX_CELL_LINES + 1)
     .fill("x")
@@ -219,6 +274,41 @@ describe("transition validation guards", () => {
         }),
       ),
     ).toBe("unknown_cell")
+  })
+
+  it("updateCell stamps topHeight from a changed SQL value", () => {
+    // Given a three-line SQL edit to a plain cell
+    const value = "SELECT 1\nFROM trades\nLIMIT 10"
+    const out = updateCellTransition(partsOf([cell("a")]), BUFFER_ID, "a", {
+      value,
+    })
+
+    // Then the patched cell carries the stamped editor height
+    expect(out.parts.cells[0].topHeight).toBe(topHeightForSql(value))
+  })
+
+  it("updateCell leaves a user-resized topHeight pinned on value edits", () => {
+    // Given a cell the user resized to a hard cap
+    const resized = cell("a", "SELECT 1", { topHeight: 300, topResized: true })
+
+    // When its SQL changes
+    const out = updateCellTransition(partsOf([resized]), BUFFER_ID, "a", {
+      value: "SELECT 2",
+    })
+
+    // Then the user's height stays
+    expect(out.parts.cells[0].topHeight).toBe(300)
+  })
+
+  it("updateCell does not stamp topHeight on markdown value edits", () => {
+    // Given a markdown cell edit (markdown heights are measured, not stamped)
+    const md = cell("a", "# one", { type: "markdown" })
+    const out = updateCellTransition(partsOf([md]), BUFFER_ID, "a", {
+      value: "# one\ntwo\nthree",
+    })
+
+    // Then no height is stamped
+    expect(out.parts.cells[0].topHeight).toBeUndefined()
   })
 
   it("deleteCell throws unknown_cell for a missing id", () => {

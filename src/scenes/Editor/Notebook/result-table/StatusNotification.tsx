@@ -16,7 +16,9 @@ const liveRegionMessage = (result: SingleQueryResult): string => {
     case "queued":
       return "Query queued"
     case "cancelled":
-      return "Query cancelled by user"
+      return result.reason === "priorFailure"
+        ? "Query skipped: a previous query failed"
+        : "Query cancelled by user"
     case "error":
       return `Query failed: ${result.error}`
     case "dql":
@@ -88,11 +90,17 @@ export const StatusNotification: React.FC<Props> = ({
         type={NotificationType.INFO}
       />
     )
-  } else if (isCancelled) {
+  } else if (activeResult.type === "cancelled") {
     body = (
       <Notification
         {...baseProps}
-        content={<span>Cancelled by user</span>}
+        content={
+          <span>
+            {activeResult.reason === "priorFailure"
+              ? "Skipped: a previous query failed"
+              : "Cancelled by user"}
+          </span>
+        }
         type={NotificationType.ERROR}
       />
     )

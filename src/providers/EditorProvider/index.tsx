@@ -19,11 +19,13 @@ import {
   normalizeQueryText,
   parseQueryKey,
   createQueryKey,
+  getQueriesFromText,
 } from "../../scenes/Editor/Monaco/utils"
 import { useSchemaCompletionProvider } from "../../scenes/Editor/Monaco/questdb-sql/useSchemaCompletionProvider"
 import {
-  cloneNotebookViewState,
+  cloneNotebookViewStateWithCellIdMap,
   nextCopyLabel,
+  snapshotResultsMatchQueries,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
@@ -38,7 +40,11 @@ import {
 } from "../../store/buffers"
 import { toast } from "../../components/Toast"
 import { db } from "../../store/db"
-import { deleteNotebookSnapshots } from "../../store/notebookResults"
+import {
+  copyNotebookSnapshots,
+  deleteNotebookSnapshots,
+  pruneToRecentNotebooks,
+} from "../../store/notebookResults"
 import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -48,12 +54,15 @@ import {
   releaseArchivedBuffer,
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
+import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
 
 import { useLiveQuery } from "dexie-react-hooks"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 export const MAX_TABS = 100
+
+const SNAPSHOT_COPY_ERROR_TOAST_ID = "notebook-snapshot-copy-error"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -629,21 +638,57 @@ export const EditorProvider: React.FC = ({ children }) => {
     const sourceView = source?.notebookViewState
     if (!sourceView) return undefined
 
-    const view = await withBoundNotebookReadOnly(
+    const { view, controller } = await withBoundNotebookReadOnly(
       id,
-      (v) => Promise.resolve(v),
+      (v, ctrl) => Promise.resolve({ view: v, controller: ctrl }),
       signal,
     ).catch((error) => {
       if (signal?.aborted) throw error
-      return sourceView
+      return { view: sourceView, controller: undefined }
     })
-    return addBuffer(
+    // Persist any throttled live chart frame so the copy carries the frame the
+    // source currently shows, not the last one on disk.
+    try {
+      await controller?.flushChartSnapshots?.()
+    } catch {
+      // Best-effort — a flush failure must never block the duplicate
+    }
+    const { notebookViewState, cellIdMap } =
+      cloneNotebookViewStateWithCellIdMap(view)
+    const sourceQueries = new Map(
+      view.cells.map((cell) => [cell.id, getQueriesFromText(cell.value)]),
+    )
+    const duplicate = await addBuffer(
       {
         label: nextCopyLabel(source.label),
-        notebookViewState: cloneNotebookViewState(view),
+        notebookViewState,
       },
-      { afterBufferId: id, activate, signal },
+      { afterBufferId: id, activate: false, signal },
     )
+    if (!duplicate?.id) return undefined
+    const duplicateId = duplicate.id
+
+    const resultsCopied = enqueueBufferTask(duplicateId, async () => {
+      try {
+        await copyNotebookSnapshots(id, duplicateId, cellIdMap, (snapshot) => {
+          const queries = sourceQueries.get(snapshot.cellId)
+          return (
+            queries !== undefined &&
+            snapshotResultsMatchQueries(snapshot.results, queries)
+          )
+        })
+      } catch (error) {
+        console.error("Failed to copy notebook result snapshots", error)
+        toast.error(
+          "The notebook was duplicated, but its saved results could not be copied.",
+          { toastId: SNAPSHOT_COPY_ERROR_TOAST_ID },
+        )
+      }
+    })
+
+    if (activate) await setActiveBuffer(duplicate, { focus: true })
+    else void resultsCopied.then(() => pruneToRecentNotebooks())
+    return duplicate
   }
 
   const deleteBuffer: EditorContext["deleteBuffer"] = async (

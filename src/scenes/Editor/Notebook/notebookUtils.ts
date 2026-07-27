@@ -25,7 +25,8 @@ import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
-import { getQueriesFromText } from "../Monaco/utils"
+import type { CellResultStatus } from "./resultHydration/cellResultHydration"
+import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -353,6 +354,10 @@ export type CellRunOutcome = {
   cellChanged?: boolean
   notStarted?: boolean
   resultCleared?: boolean
+  // The result THIS run produced, set only when it committed. Consumers that
+  // report the run's output must read this instead of cell.result — a draw
+  // cell's auto-refresh replaces cell.result independently of the run.
+  result?: CellResult
 }
 
 export type RunCompletionDecision = "commit" | "cell_changed" | "result_cleared"
@@ -422,11 +427,24 @@ export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
 const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
   cell.result ? collapseResultToRunStatus(cell.result) : cell.lastRunStatus
 
+// The error string to carry alongside lastRunStatus when the result blob is
+// dropped. Derived from the live result when present (so it always matches the
+// carried status and a since-fixed cell clears its stale error), else the
+// already-carried lastRunError.
+const carriedRunError = (cell: NotebookCell): string | undefined => {
+  if (cell.result) {
+    const errored = cell.result.results.find((r) => r.type === "error")
+    return errored?.type === "error" ? errored.error : undefined
+  }
+  return cell.lastRunError
+}
+
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
   cells.map((cell) => ({
     ...cell,
     result: undefined,
     lastRunStatus: carriedRunStatus(cell),
+    lastRunError: carriedRunError(cell),
   }))
 
 export const buildPersistPayload = (
@@ -531,8 +549,12 @@ export const insertCell = (
   if (override?.id) patch.id = override.id
   if (override?.value !== undefined) patch.value = override.value
   if (override?.type) patch.type = override.type
-  const newCell: NotebookCell =
+  const created: NotebookCell =
     Object.keys(patch).length > 0 ? { ...base, ...patch } : base
+  const newCell: NotebookCell =
+    created.type === "markdown" || created.topHeight !== undefined
+      ? created
+      : { ...created, topHeight: topHeightForSql(created.value) }
   const next = [...cells]
   next.splice(insertIndex, 0, newCell)
   return reindex(next)
@@ -584,6 +606,7 @@ export const duplicateCellAt = (
     position: idx + 1,
     result: null,
     lastRunStatus: carriedRunStatus(original),
+    lastRunError: carriedRunError(original),
   }
   const next = [...cells]
   next.splice(idx + 1, 0, copy)
@@ -607,39 +630,6 @@ export const setResultAt = (
       ...(activeIndex !== undefined && { activeResultIndex: activeIndex }),
     }
     return { ...c, result: nextCellResult }
-  })
-
-export const cancelAllInCell = (
-  cells: NotebookCell[],
-  cellId: string,
-): NotebookCell[] =>
-  cells.map((c) => {
-    if (c.id !== cellId || !c.result) return c
-    return {
-      ...c,
-      result: {
-        ...c.result,
-        results: c.result.results.map((r) =>
-          r.type === "running" || r.type === "queued"
-            ? { type: "cancelled", query: r.query }
-            : r,
-        ),
-      },
-    }
-  })
-
-export const cancelOneInCell = (
-  cells: NotebookCell[],
-  cellId: string,
-  index: number,
-): NotebookCell[] =>
-  cells.map((c) => {
-    if (c.id !== cellId || !c.result) return c
-    const results = [...c.result.results]
-    const target = results[index]
-    if (target?.type !== "running") return c
-    results[index] = { type: "cancelled", query: target.query }
-    return { ...c, result: { ...c.result, results } }
   })
 
 export const buildInitialScriptResults = (
@@ -697,10 +687,24 @@ export const nextCopyLabel = (label: string): string => {
   return `${match[1]} (copy ${n + 1})`
 }
 
-export const cloneNotebookViewState = (
+export const snapshotResultsMatchQueries = (
+  results: SingleQueryResult[],
+  queries: string[],
+): boolean =>
+  results.length > 0 &&
+  results.length === queries.length &&
+  results.every(
+    (result, index) =>
+      normalizeQueryText(result.query) === normalizeQueryText(queries[index]),
+  )
+
+export const cloneNotebookViewStateWithCellIdMap = (
   source: NotebookViewState,
   newId: () => string = generateId,
-): NotebookViewState => {
+): {
+  notebookViewState: NotebookViewState
+  cellIdMap: ReadonlyMap<string, string>
+} => {
   const idMap = new Map<string, string>()
   const cells: NotebookCell[] = source.cells.map((cell) => {
     const id = newId()
@@ -710,6 +714,7 @@ export const cloneNotebookViewState = (
       id,
       result: undefined,
       lastRunStatus: carriedRunStatus(cell),
+      lastRunError: carriedRunError(cell),
     }
   })
 
@@ -735,8 +740,14 @@ export const cloneNotebookViewState = (
     next.focusedCellId = idMap.get(source.focusedCellId)
   }
 
-  return next
+  return { notebookViewState: next, cellIdMap: idMap }
 }
+
+export const cloneNotebookViewState = (
+  source: NotebookViewState,
+  newId: () => string = generateId,
+): NotebookViewState =>
+  cloneNotebookViewStateWithCellIdMap(source, newId).notebookViewState
 
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
@@ -763,11 +774,16 @@ const normalizeChartConfig = (
 export const buildAppliedCells = (
   prev: NotebookCell[],
   request: ApplyRequest,
-): { nextCells: NotebookCell[]; diff: AppliedDiff } => {
+): {
+  nextCells: NotebookCell[]
+  diff: AppliedDiff
+  resultsCleared: string[]
+} => {
   const prevById = new Map(prev.map((c) => [c.id, c]))
   const seenIds = new Set<string>()
   const added: string[] = []
   const updated: string[] = []
+  const resultsCleared: string[] = []
 
   const nextCells: NotebookCell[] = request.cells.map((req, index) => {
     const requestedId =
@@ -922,8 +938,15 @@ export const buildAppliedCells = (
         // value edit — but an error belonged to the SQL just replaced, so
         // carrying it forward would resurrect a stale error on the fixed cell.
         const carried = carriedRunStatus(existing)
+        delete next.lastRunError
         if (carried === "error") delete next.lastRunStatus
         else if (carried !== undefined) next.lastRunStatus = carried
+      }
+      const hadRunResult =
+        existing.result != null ||
+        (existing.lastRunStatus != null && existing.lastRunStatus !== "none")
+      if (hadRunResult && (valueChanged || resolvedType === "markdown")) {
+        resultsCleared.push(existing.id)
       }
       if (resolvedMode !== undefined) next.mode = resolvedMode
       else delete next.mode
@@ -943,8 +966,18 @@ export const buildAppliedCells = (
         delete next.isViewMaximized
         delete next.bottomHeight
         delete next.lastRunStatus
+        delete next.lastRunError
       } else {
         delete next.type
+        if (valueChanged && !existing.topResized) {
+          const estimated = topHeightForSql(value)
+          if (
+            existing.topHeight == null ||
+            estimated !== topHeightForSql(existing.value)
+          ) {
+            next.topHeight = estimated
+          }
+        }
       }
       if (resolvedName !== undefined) next.name = resolvedName
       else delete next.name
@@ -962,6 +995,7 @@ export const buildAppliedCells = (
       created.type = "markdown"
       return created
     }
+    created.topHeight = topHeightForSql(value)
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
@@ -991,7 +1025,7 @@ export const buildAppliedCells = (
 
   const deleted = prev.filter((c) => !seenIds.has(c.id)).map((c) => c.id)
 
-  return { nextCells, diff: { added, updated, deleted } }
+  return { nextCells, diff: { added, updated, deleted }, resultsCleared }
 }
 
 // === Cell sizing model ======================================================
@@ -1007,31 +1041,38 @@ export const buildAppliedCells = (
 // is *derived* from topHeight + bottomHeight on every render.
 // ============================================================================
 
-// Approximate fixed chrome around the editor in a cell, in pixels.
-// Breakdown:
-//   - RunBar: 40 px (1rem vertical padding + ~24 px button glyph)
-//   - CellWrapper top/bottom border: 2 px
-//   - Inner-top ResizeHandle (only when double-view): 10 px
-//   - Safety margin for sub-pixel rounding, grid row bottom-border,
-//     and any single-pixel adornments inside the result panel: 4 px
-// Stays a single conservative constant rather than state-aware: the
-// extra ~14 px in single-view is at most a half-row of trailing
-// whitespace at our 10 px grid granularity — invisible — but avoids
-// the "row cut by 2-3 px" symptom in double-view cells.
-export const CELL_CHROME_PX = 56
+// Exact fixed chrome every cell carries, in pixels:
+//   - Drag header: 42 px (HeaderBar's FIXED height — its right slot swaps
+//     between the neutral Run/Draw toggles and the view toggle without
+//     changing cell geometry)
+//   - CellWrapper top + bottom border: 1 px each
+export const CELL_BASE_CHROME_PX = 44
+
+// The in-flow editor/result divider (the split ResizeHandle's $doubleView
+// variant) — rendered only when the editor and a bottom slot are both visible.
+export const SPLIT_HANDLE_PX = 6
 
 // Default editor height for a newly-created cell, before any content arrives.
 // Matches MIN_EDITOR_HEIGHT used by Monaco; kept here so layout math doesn't
 // need to import Cell.tsx constants.
 export const DEFAULT_TOP_HEIGHT = 72
 
-// Markdown cells carry less chrome than SQL cells (a 40px drag header plus
-// 2px of wrapper borders) and keep their heights on the grid-row lattice
-// (58, 88, 118, …) so the derived cell box is always exact — see
-// snapMarkdownTopHeight.
-export const MARKDOWN_CELL_CHROME_PX = 42
-export const MARKDOWN_DEFAULT_TOP_HEIGHT = 58
-export const MIN_MARKDOWN_HEIGHT_PX = 28
+export const CELL_EDITOR_LINE_HEIGHT = 24
+export const CELL_EDITOR_PADDING = { top: 4, bottom: 4 }
+
+export const topHeightForSql = (value: string): number =>
+  Math.max(
+    DEFAULT_TOP_HEIGHT,
+    value.split("\n").length * CELL_EDITOR_LINE_HEIGHT +
+      CELL_EDITOR_PADDING.top +
+      CELL_EDITOR_PADDING.bottom,
+  )
+
+// Markdown cells carry the base chrome only (they never split) and keep their
+// heights on the grid-row lattice (26, 56, 86, …) so the derived cell box is
+// always exact — see snapMarkdownTopHeight.
+export const MARKDOWN_DEFAULT_TOP_HEIGHT = 56
+export const MIN_MARKDOWN_HEIGHT_PX = 26
 
 // Default chart height for draw mode (experimental — per user spec).
 export const DEFAULT_CHART_BOTTOM_HEIGHT = 350
@@ -1044,7 +1085,7 @@ export const MIN_BOTTOM_HEIGHT_PX = 100
 const TAB_BAR_PX = 40 // TabBarWrapper height = 4rem
 const NOTIFICATION_PX = 44 // StatusNotification (compact=true → 4rem + 1-2 px borders)
 const RESULT_ACTIONS_BAR_PX = 36 // ResultActionsBar height = 3.6rem (shown with the grid)
-const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
+export const MAX_RESERVED_ROWS = 10 // cap for "tight-fit" single-query results
 
 // Height to reserve for a run cell's result area while its snapshot hydrates —
 // the same max single-statement grid height `computeResultBottomHeight` settles
@@ -1056,15 +1097,37 @@ export const RESERVED_RESULT_BOTTOM_HEIGHT =
   HEADER_HEIGHT +
   MAX_RESERVED_ROWS * ROW_HEIGHT
 
+// A run-marked cell reserves its result area whenever the result is not in
+// memory — before its snapshot is requested, while it loads, and after a far
+// scroll released it. It collapses only once its own snapshot load proved
+// there is nothing to restore.
 export const isExpectingResult = (
   cell: NotebookCell,
-  isHydrating: boolean,
+  resultStatus: CellResultStatus,
 ): boolean =>
-  isHydrating &&
   cell.mode !== "draw" &&
   cell.lastRunStatus != null &&
   cell.lastRunStatus !== "none" &&
-  cell.result == null
+  cell.result == null &&
+  resultStatus !== "missing"
+
+// Stamps the derived bottom height when none is stored, so the released cell
+// keeps the exact geometry its result rendered at — the expecting-result path
+// would otherwise fall back to RESERVED_RESULT_BOTTOM_HEIGHT and jitter on
+// every release/re-hydrate cycle.
+export const releaseCellResultPatch = (
+  cell: NotebookCell,
+): Pick<
+  NotebookCell,
+  "result" | "lastRunStatus" | "lastRunError" | "bottomHeight"
+> => ({
+  result: undefined,
+  lastRunStatus: carriedRunStatus(cell),
+  lastRunError: carriedRunError(cell),
+  ...(cell.mode !== "draw" && cell.bottomHeight == null && cell.result != null
+    ? { bottomHeight: computeResultBottomHeight(cell.result) }
+    : {}),
+})
 
 const isDqlWithColumns = (r: SingleQueryResult): boolean =>
   r.type === "dql" && r.columns.length > 0
@@ -1192,8 +1255,19 @@ export const patchCellRunResult = (
     return next
   })
 
-export const cellChromePx = (cell: NotebookCell): number =>
-  cell.type === "markdown" ? MARKDOWN_CELL_CHROME_PX : CELL_CHROME_PX
+// Exact per-state chrome. Split cells (editor above, result/chart or its
+// reserved shimmer below) add the in-flow divider; a view-maximized cell hides
+// both the editor and the divider — its bottom slot spans topHeight +
+// bottomHeight — so it carries the base chrome only, like markdown.
+export const cellChromePx = (
+  cell: NotebookCell,
+  expectingResult: boolean = false,
+): number => {
+  if (cell.type === "markdown") return CELL_BASE_CHROME_PX
+  const split =
+    (isDoubleView(cell) || expectingResult) && cell.isViewMaximized !== true
+  return split ? CELL_BASE_CHROME_PX + SPLIT_HANDLE_PX : CELL_BASE_CHROME_PX
+}
 
 export const minTopHeightFor = (cell: NotebookCell): number =>
   cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
@@ -1252,19 +1326,27 @@ export const computeCellGridH = (
   const { topHeight, bottomHeight } = computeCellHeights(cell, {
     expectingResult,
   })
-  const totalPx = cellChromePx(cell) + topHeight + bottomHeight
+  const totalPx = cellChromePx(cell, expectingResult) + topHeight + bottomHeight
   return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
 }
 
 export const snapMarkdownTopHeight = (px: number): number => {
   const step = NOTEBOOK_GRID_ROW_HEIGHT + NOTEBOOK_GRID_MARGIN_Y
-  const totalPx = Math.max(px, MIN_MARKDOWN_HEIGHT_PX) + MARKDOWN_CELL_CHROME_PX
+  const totalPx = Math.max(px, MIN_MARKDOWN_HEIGHT_PX) + CELL_BASE_CHROME_PX
   const rows = Math.ceil((totalPx + NOTEBOOK_GRID_MARGIN_Y) / step)
-  return rows * step - NOTEBOOK_GRID_MARGIN_Y - MARKDOWN_CELL_CHROME_PX
+  return rows * step - NOTEBOOK_GRID_MARGIN_Y - CELL_BASE_CHROME_PX
 }
 
+// Hydration status isn't knowable headlessly; "unrequested" (reserved space)
+// matches what the notebook renders for a run-marked cell before its snapshot
+// loads, so agent-visible heights agree with the screen.
 export const computeAgentCellGridH = (cell: NotebookCell): number =>
-  computeCellGridH(cell, NOTEBOOK_GRID_ROW_HEIGHT, NOTEBOOK_GRID_MARGIN_Y)
+  computeCellGridH(
+    cell,
+    NOTEBOOK_GRID_ROW_HEIGHT,
+    NOTEBOOK_GRID_MARGIN_Y,
+    isExpectingResult(cell, "unrequested"),
+  )
 
 export const hasAgentVisibleCellHeightChanged = (
   cell: NotebookCell,
@@ -1321,11 +1403,16 @@ export const cellHeightPatchForRows = (
   rows: number,
   rowHeight: number,
   marginY: number,
+  expectingResult: boolean = false,
 ): Partial<NotebookCell> => {
-  if (rows === computeCellGridH(cell, rowHeight, marginY)) return {}
+  if (rows === computeCellGridH(cell, rowHeight, marginY, expectingResult)) {
+    return {}
+  }
   const targetContentPx =
-    rows * rowHeight + (rows - 1) * marginY - cellChromePx(cell)
-  if (!isDoubleView(cell)) {
+    rows * rowHeight +
+    (rows - 1) * marginY -
+    cellChromePx(cell, expectingResult)
+  if (!isDoubleView(cell) && !expectingResult) {
     return {
       topHeight: Math.max(minTopHeightFor(cell), targetContentPx),
       topResized: true,
@@ -1381,7 +1468,12 @@ export const buildAppliedLayout = (
       nextY = Math.max(nextY, existing.y + existing.h)
       return existing
     }
-    const cellH = computeCellGridH(cell, defaults.rowHeight, defaults.marginY)
+    const cellH = computeCellGridH(
+      cell,
+      defaults.rowHeight,
+      defaults.marginY,
+      isExpectingResult(cell, "unrequested"),
+    )
     const item: CellLayoutItem = {
       i: cell.id,
       x: 0,
@@ -1403,8 +1495,11 @@ export type NotebookDocumentState = {
 export const buildAppliedNotebookState = (
   current: NotebookDocumentState,
   request: ApplyRequest,
-): NotebookDocumentState & { diff: AppliedDiff } => {
-  const { nextCells, diff } = buildAppliedCells(current.cells, request)
+): NotebookDocumentState & { diff: AppliedDiff; resultsCleared: string[] } => {
+  const { nextCells, diff, resultsCleared } = buildAppliedCells(
+    current.cells,
+    request,
+  )
   const targetLayoutMode =
     request.layoutMode === undefined || request.layoutMode === null
       ? current.settings.layoutMode
@@ -1424,11 +1519,13 @@ export const buildAppliedNotebookState = (
       ? nextCells.map((cell, i) => {
           const g = request.cells[i]?.grid
           if (!g) return cell
+          const prior = prevById.get(cell.id) ?? cell
           const patch = cellHeightPatchForRows(
-            prevById.get(cell.id) ?? cell,
+            prior,
             g.h,
             NOTEBOOK_GRID_ROW_HEIGHT,
             NOTEBOOK_GRID_MARGIN_Y,
+            isExpectingResult(prior, "unrequested"),
           )
           return Object.keys(patch).length > 0 ? { ...cell, ...patch } : cell
         })
@@ -1468,6 +1565,7 @@ export const buildAppliedNotebookState = (
     settings: nextSettings,
     maximizedCellId: nextMaximizedCellId,
     diff,
+    resultsCleared,
   }
 }
 

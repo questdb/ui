@@ -1,7 +1,17 @@
 import type { ColumnLayout } from "../../../components/ResultGrid/types"
+import { normalizeSql } from "../../../utils/formatSql"
+import { sqlHash } from "./notebookUtils"
 
 const STORAGE_KEY = "notebook.grid.layout"
 const LRU_MAX = 20
+
+export const columnLayoutQueryKey = (query: string): string => {
+  try {
+    return "q" + sqlHash(normalizeSql(query, false))
+  } catch {
+    return "q" + sqlHash(query.trim())
+  }
+}
 
 type CellLayouts = Record<string, ColumnLayout>
 type BufferLayouts = Record<string, CellLayouts>

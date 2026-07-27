@@ -19,20 +19,23 @@ import {
 } from "@tanstack/react-table"
 
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import type {
   CellValue,
   MaxColumnWidth,
   ResultGridDataSource,
   ResultGridRow,
+  ResultGridViewport,
 } from "./types"
 import {
   applyMaxColumnWidth,
   clampColumnWidths,
+  columnId,
+  COLUMN_ID_PREFIX,
   sampleColumnWidths,
   isLeftAligned,
   formatCellValue,
   formatColumnType,
+  toSingleLineDisplay,
 } from "./inlineGridUtils"
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
 import {
@@ -75,10 +78,7 @@ declare module "@tanstack/react-table" {
   }
 }
 
-const WIDTH_SAMPLE_ROWS = 1000
 const FREEZE_HANDLE_EDGE_INSET = 4
-const COLUMN_ID_PREFIX = "col_"
-const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
 
 type GridCellProps = {
   rowIndex: number
@@ -116,7 +116,7 @@ const GridCell = React.memo(function GridCell({
   const colType = col?.type ?? ""
   const align = isLeftAligned(colType) ? "left" : "right"
   const displayValue = loaded
-    ? unescapeHtml(formatCellValue(rawValue, col, colWidth))
+    ? toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
     : ""
   return (
     <Cell
@@ -158,6 +158,8 @@ type Props = {
   onColumnOrderCommit?: (order: string[]) => void
   initialPinnedColumns?: string[]
   onPinnedColumnsCommit?: (pinnedLeft: string[]) => void
+  initialViewport?: ResultGridViewport
+  onViewportSave?: (viewport: ResultGridViewport) => void
   onYieldFocus?: () => void
   onResetLayout?: () => void
   onSelectionChange?: (hasSelection: boolean) => void
@@ -221,6 +223,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       onColumnOrderCommit,
       initialPinnedColumns,
       onPinnedColumnsCommit,
+      initialViewport,
+      onViewportSave,
       onYieldFocus,
       onResetLayout,
       onSelectionChange,
@@ -241,6 +245,18 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
     const gridRef = useRef<HTMLDivElement>(null)
     const scrollRef = useRef<HTMLDivElement>(null)
 
+    useLayoutEffect(
+      () => () => {
+        const viewport = scrollRef.current
+        if (!viewport) return
+        onViewportSave?.({
+          scrollTop: viewport.scrollTop,
+          scrollLeft: viewport.scrollLeft,
+        })
+      },
+      [onViewportSave],
+    )
+
     const containerWidth = useContainerWidth(gridRef)
     const fontsReady = useFontsReady()
     const { scrolledDown, shadowLeft, handleScroll } =
@@ -248,11 +264,11 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
 
     const virtualRowCount = Math.min(rowCount, MAX_VIRTUAL_ROWS)
 
-    // Sampling text lengths over 1000 rows is the expensive part, so it runs
-    // once per result — and once more if the webfont finishes loading after a
+    // Measuring the sampled cells is the expensive part, so it runs once per
+    // result — and once more if the webfont finishes loading after a
     // fallback-font measurement.
     const sampledWidths = useMemo(
-      () => sampleColumnWidths(columns, sampleRows.slice(0, WIDTH_SAMPLE_ROWS)),
+      () => sampleColumnWidths(columns, sampleRows),
       [columns, sampleRows, fontsReady],
     )
 
@@ -568,6 +584,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       count: virtualRowCount,
       getScrollElement: () => scrollRef.current,
       estimateSize: () => ROW_HEIGHT,
+      initialOffset: initialViewport?.scrollTop ?? 0,
       overscan: 3,
     })
 
@@ -576,6 +593,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       count: headers.length,
       getScrollElement: () => scrollRef.current,
       estimateSize: (index) => headers[index]?.getSize() ?? 100,
+      initialOffset: initialViewport?.scrollLeft ?? 0,
       overscan: 2,
     })
 

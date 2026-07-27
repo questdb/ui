@@ -4,17 +4,19 @@ import { ResultGridPanel } from "./ResultGridPanel"
 import { StatusNotification } from "./StatusNotification"
 import { TabBar } from "./TabBar"
 import { ResultWrapper, SuccessMessage } from "./styles"
+import type { ResultGridViewportStore } from "./resultGridViewportStore"
 
 type Props = {
   result: CellResult
-  isFocused?: boolean
-  onTabChange?: (index: number) => void
-  onCancelQuery?: (index: number) => void
-  bufferId?: number
+  isFocused: boolean
+  onTabChange: (index: number) => void
+  onCancelQuery: (index: number) => void
+  bufferId: number
   cellId: string
-  isRunning?: boolean
-  onReRun?: (index: number) => void
-  onYieldFocus?: () => void
+  isRunning: boolean
+  onReRun: (index: number) => void
+  onYieldFocus: () => void
+  viewportStore: ResultGridViewportStore
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -27,6 +29,7 @@ export const InlineResultTable: React.FC<Props> = ({
   isRunning,
   onReRun,
   onYieldFocus,
+  viewportStore,
 }) => {
   if (result.results.length === 0) {
     return (
@@ -62,8 +65,9 @@ export const InlineResultTable: React.FC<Props> = ({
           bufferId={bufferId}
           cellId={cellId}
           isRunning={isRunning}
-          onReRun={() => onReRun?.(result.activeResultIndex)}
+          onReRun={() => onReRun(result.activeResultIndex)}
           onYieldFocus={onYieldFocus}
+          viewportStore={viewportStore}
         />
       )}
     </ResultWrapper>

@@ -15,6 +15,7 @@ import {
   cellModeChangePatch,
   duplicateCellAt,
   insertCell,
+  isExpectingResult,
   mergeCellChartConfig,
   nextGridSeedPosition,
   NOTEBOOK_GRID_MARGIN_Y,
@@ -22,6 +23,7 @@ import {
   removeCell,
   swapCellDown,
   swapCellUp,
+  topHeightForSql,
   upsertCellLayout,
   type CellGridPosition,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
@@ -33,8 +35,15 @@ import {
 // a behavior change can never land on one surface and not the other.
 //
 // Side effects are returned as data, never performed here:
-//   - `cleanup.cellIds` — snapshots/layouts each shell drops after its commit.
-//   - `touchedCellId`    — the cell an agent-edit notification should point at.
+//   - `cleanup.cellIds`    — snapshots/layouts each shell drops after its commit.
+//   - `cancelRuns.cellIds` — cells whose in-flight run the mounted shell aborts
+//                            (the run would keep writing cell.result after the
+//                            chart engine takes ownership).
+//   - `deleteSnapshots.cellIds` — cells that survive the transition but whose
+//                            persisted result no longer matches their SQL;
+//                            each shell deletes the snapshot so hydration
+//                            cannot resurrect the old SQL's rows.
+//   - `touchedCellId`      — the cell an agent-edit notification should point at.
 //
 // Identity contract: untouched cells keep object identity (the composed
 // notebookUtils helpers guarantee it), and `parts.settings` is returned by
@@ -46,6 +55,8 @@ export type NotebookTransitionResult<T = void> = {
   result: T
   touchedCellId?: string
   cleanup?: { cellIds: string[] }
+  cancelRuns?: { cellIds: string[] }
+  deleteSnapshots?: { cellIds: string[] }
 }
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
@@ -101,11 +112,18 @@ export const updateCellTransition = (
   updates: Partial<NotebookCell>,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  let patch = updates
   if (updates.value !== undefined && cell.type !== "markdown") {
     requireCellWithinLineLimit(updates.value)
+    if (!cell.topResized && updates.topHeight === undefined) {
+      const estimated = topHeightForSql(updates.value)
+      if (cell.topHeight == null || estimated !== topHeightForSql(cell.value)) {
+        patch = { ...updates, topHeight: estimated }
+      }
+    }
   }
   return {
-    parts: { ...parts, cells: patchCellIn(parts.cells, cellId, updates) },
+    parts: { ...parts, cells: patchCellIn(parts.cells, cellId, patch) },
     result: undefined,
     touchedCellId: cellId,
   }
@@ -219,6 +237,7 @@ export const setCellLayoutTransition = (
     pos.h,
     NOTEBOOK_GRID_ROW_HEIGHT,
     NOTEBOOK_GRID_MARGIN_Y,
+    isExpectingResult(cell, "unrequested"),
   )
   return {
     parts: {
@@ -244,6 +263,7 @@ export const setCellModeTransition = (
   mode: CellMode,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  const entersDraw = mode === "draw" && cell.mode !== "draw"
   return {
     parts: {
       ...parts,
@@ -254,6 +274,7 @@ export const setCellModeTransition = (
     },
     result: undefined,
     touchedCellId: cellId,
+    ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
   }
 }
 
@@ -329,5 +350,8 @@ export const applyNotebookStateTransition = (
     },
     result: { applied: next.diff },
     cleanup: { cellIds: next.diff.deleted },
+    ...(next.resultsCleared.length > 0
+      ? { deleteSnapshots: { cellIds: next.resultsCleared } }
+      : {}),
   }
 }

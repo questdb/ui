@@ -1,5 +1,4 @@
 import type { ColumnDefinition } from "../../utils/questdb/types"
-import { unescapeHtml } from "../../utils/escapeHtml"
 import type { CellValue, MaxColumnWidth, ResultGridRow } from "./types"
 import { theme } from "../../theme"
 import {
@@ -51,6 +50,7 @@ let truncatedArrayCache = new WeakMap<
   object,
   { columnWidth: number; formatted: string }
 >()
+let sampledWidthCache = new WeakMap<ResultGridRow[], number[]>()
 
 // Safari resolves the canvas font at assignment time, so a face that finishes
 // loading afterwards is only picked up once the font is reassigned.
@@ -59,6 +59,7 @@ export const invalidateMeasuredFont = (): void => {
   cellCharAdvances = undefined
   asciiCellAdvances = undefined
   truncatedArrayCache = new WeakMap()
+  sampledWidthCache = new WeakMap()
 }
 
 const measureTextWidth = (text: string, font: string): number => {
@@ -228,25 +229,44 @@ const formatArrayValue = (
 
 const MAX_MEASURE_CHARS = 2000
 
-// Wide results sample fewer rows so the sampled-cell count stays flat up to
-// ~1000 columns, then holds at MIN_WIDTH_SAMPLE_ROWS rows per column.
+// tanstack column ids — also the key contract of persisted column layouts.
+export const COLUMN_ID_PREFIX = "col_"
+export const columnId = (dataIndex: number) => `${COLUMN_ID_PREFIX}${dataIndex}`
+
+// Rows to measure per column: never more than WIDTH_SAMPLE_ROWS, and fewer as
+// results widen so the sampled-cell count stays flat up to ~1000 columns, then
+// holds at MIN_WIDTH_SAMPLE_ROWS rows per column.
+const WIDTH_SAMPLE_ROWS = 1000
 const WIDTH_SAMPLE_CELL_BUDGET = 50000
 const MIN_WIDTH_SAMPLE_ROWS = 50
 
+const sampleRowCount = (columnCount: number): number =>
+  Math.min(
+    WIDTH_SAMPLE_ROWS,
+    Math.max(
+      MIN_WIDTH_SAMPLE_ROWS,
+      Math.floor(WIDTH_SAMPLE_CELL_BUDGET / Math.max(columnCount, 1)),
+    ),
+  )
+
 // Sampling is container-independent so it runs once per result; the
-// container-driven cap is applied separately by clampColumnWidths.
+// container-driven cap is applied separately by clampColumnWidths. Results are
+// cached per dataset reference, so a placeholder and the grid it swaps into
+// measure once between them and a remount never re-measures. Datasets are
+// immutable result payloads — a caller mutating one in place would read a
+// stale width.
 export const sampleColumnWidths = (
   columns: ColumnDefinition[],
   dataset: ResultGridRow[],
 ): number[] => {
-  const rowBudget = Math.max(
-    MIN_WIDTH_SAMPLE_ROWS,
-    Math.floor(WIDTH_SAMPLE_CELL_BUDGET / Math.max(columns.length, 1)),
-  )
+  const cached = sampledWidthCache.get(dataset)
+  if (cached) return cached
+
+  const rowBudget = sampleRowCount(columns.length)
   const rows =
     dataset.length > rowBudget ? dataset.slice(0, rowBudget) : dataset
 
-  return columns.map((col, colIdx) => {
+  const widths = columns.map((col, colIdx) => {
     const isArray = isArrayColumn(col)
     const headerTextPx = Math.max(
       measureTextWidth(col.name, HEADER_NAME_FONT),
@@ -276,6 +296,9 @@ export const sampleColumnWidths = (
     }
     return Math.min(width, MAX_SAMPLED_WIDTH_PX)
   })
+
+  sampledWidthCache.set(dataset, widths)
+  return widths
 }
 
 export const applyMaxColumnWidth = (
@@ -357,8 +380,11 @@ export const formatCellValueForCopy = (
   if (value === null) return "null"
 
   if (col && isArrayColumn(col)) {
-    return unescapeHtml(formatArrayFull(value, col))
+    return formatArrayFull(value, col)
   }
 
-  return unescapeHtml(formatCellValue(value, col))
+  return formatCellValue(value, col)
 }
+
+export const toSingleLineDisplay = (text: string): string =>
+  text.replace(/[\r\n]+/g, " ")

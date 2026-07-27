@@ -1,6 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import { hasPendingResult } from "../notebookUtils"
 import { normalizeQueryText } from "../../Monaco/utils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
@@ -74,6 +75,32 @@ export const resultMatchesQueries = (
       !(r.type === "dql" && r.truncated) &&
       normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
   )
+
+export type ChartResult =
+  | { kind: "missing" }
+  | { kind: "stale" }
+  | { kind: "pending" }
+  | {
+      kind: "settled"
+      results: QueryExecResult[]
+      hadError: boolean
+      timestamp: number
+    }
+
+export const toChartResult = (
+  result: CellResult | null | undefined,
+  queries: string[],
+): ChartResult => {
+  if (result == null) return { kind: "missing" }
+  if (!resultMatchesQueries(result, queries)) return { kind: "stale" }
+  if (hasPendingResult(result)) return { kind: "pending" }
+  return {
+    kind: "settled",
+    results: successResults(result.results.map(toExecResult)),
+    hadError: result.results.some((r) => r.type === "error"),
+    timestamp: result.timestamp,
+  }
+}
 
 export const resultsEquivalent = (
   a: QueryExecResult[],

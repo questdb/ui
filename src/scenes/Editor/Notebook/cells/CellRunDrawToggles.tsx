@@ -47,7 +47,6 @@ type Props = {
   showLabels: boolean
   onRun: () => void
   onHideResult: () => void
-  onCancel: () => void
   onDraw: () => void
 }
 
@@ -61,49 +60,32 @@ export const CellRunDrawToggles: React.FC<Props> = ({
   showLabels,
   onRun,
   onHideResult,
-  onCancel,
   onDraw,
 }) => (
   <>
-    {isRunning ? (
-      <Tooltip content="Cancel">
-        <ToggleButton
-          onClick={(e) => {
-            e.stopPropagation()
-            onCancel()
-          }}
-          aria-label="Cancel"
-          aria-busy
-        >
-          <Spinner size={20} />
-          {showLabels && "Run"}
-        </ToggleButton>
-      </Tooltip>
-    ) : (
-      <Tooltip
-        content={runActive ? "Hide result" : `Run (${ctrlCmd}+Shift+Enter)`}
+    <Tooltip
+      content={runActive ? "Hide result" : `Run (${ctrlCmd}+Shift+Enter)`}
+    >
+      <ToggleButton
+        type="button"
+        $active={runActive}
+        aria-pressed={runActive}
+        aria-disabled={isRunning || (!runActive && !canRun)}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (isRunning || (!runActive && !canRun)) return
+          if (runActive) {
+            onHideResult()
+            return
+          }
+          onRun()
+        }}
+        aria-label={runActive ? "Hide result" : "Run"}
       >
-        <ToggleButton
-          type="button"
-          $active={runActive}
-          aria-pressed={runActive}
-          aria-disabled={!runActive && !canRun}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (!runActive && !canRun) return
-            if (runActive) {
-              onHideResult()
-              return
-            }
-            onRun()
-          }}
-          aria-label={runActive ? "Hide result" : "Run"}
-        >
-          <PlayIcon style={{ transform: "scale(1.1)" }} />
-          {showLabels && "Run"}
-        </ToggleButton>
-      </Tooltip>
-    )}
+        <PlayIcon style={{ transform: "scale(1.1)" }} />
+        {showLabels && "Run"}
+      </ToggleButton>
+    </Tooltip>
     <Tooltip
       content={
         isDrawMode

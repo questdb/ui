@@ -9,10 +9,7 @@ import {
 import { escapeRegExpCharacters } from "../../../../utils/textSearch"
 
 const functionPattern = new RegExp(
-  `(${functions
-    .filter((fn) => !keywords.includes(fn))
-    .map(escapeRegExpCharacters)
-    .join("|")})(\\s*)(?=\\s*\\()`,
+  `(${functions.map(escapeRegExpCharacters).join("|")})(\\s*)(?=\\s*\\()`,
   "i",
 )
 

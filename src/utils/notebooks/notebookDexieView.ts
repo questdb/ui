@@ -26,9 +26,8 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
-export const migratePersistedNotebookView = (
-  view: NotebookViewState,
-): NotebookViewState => dropLegacyChartConfigs(migrateLegacyCellNames(view))
+export const migratePersistedNotebookView = (view: NotebookViewState) =>
+  dropLegacyChartConfigs(migrateLegacyCellNames(view))
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

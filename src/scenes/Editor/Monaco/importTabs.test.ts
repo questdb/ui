@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
+import { MAX_NOTEBOOK_CELLS } from "../../../store/notebook"
 import {
   MetricType,
   MetricViewMode,
@@ -210,18 +211,18 @@ describe("validateBufferSchema", () => {
       ).toContain('cells[1].id: duplicate "a"')
     })
 
-    it("rejects a notebook with more than 50 cells", () => {
-      const cells = Array.from({ length: 51 }, (_, i) => ({
+    it("rejects a notebook over the cell limit", () => {
+      const cells = Array.from({ length: MAX_NOTEBOOK_CELLS + 1 }, (_, i) => ({
         id: `c${i}`,
         value: "SELECT 1",
       }))
       expect(validateBufferSchema(notebookTab({ cells }))).toContain(
-        "notebookViewState.cells: exceeds cell limit (51 > 50)",
+        `notebookViewState.cells: exceeds cell limit (${MAX_NOTEBOOK_CELLS + 1} > ${MAX_NOTEBOOK_CELLS})`,
       )
     })
 
-    it("accepts a notebook with exactly 50 cells", () => {
-      const cells = Array.from({ length: 50 }, (_, i) => ({
+    it("accepts a notebook at exactly the cell limit", () => {
+      const cells = Array.from({ length: MAX_NOTEBOOK_CELLS }, (_, i) => ({
         id: `c${i}`,
         value: "SELECT 1",
       }))

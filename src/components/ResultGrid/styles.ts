@@ -240,7 +240,7 @@ export const CellText = styled.div`
   width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre;
 `
 
 export const CellTooltipAnchor = styled.div`
