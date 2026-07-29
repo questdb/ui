@@ -9,6 +9,8 @@ import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
 import { createDefaultNotebookViewState } from "../../store/notebook"
 import { shouldShowNotebookModal } from "../../utils/notebookOnboarding"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { PRIMARY_BUTTON_HOOK } from "./shared"
 import { Step1 } from "./Step1"
 import { Step2 } from "./Step2"
@@ -134,6 +136,7 @@ export const NotebookOnboardingModal = () => {
 
   useEffect(() => {
     if (open) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_ONBOARDING_OPEN)
       updateNotebookOnboarding({ showNotebookPromo: false })
     }
   }, [open, updateNotebookOnboarding])
@@ -147,6 +150,10 @@ export const NotebookOnboardingModal = () => {
   }, [open, step])
 
   const createNotebook = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
+      source: "onboarding_modal",
+      step,
+    })
     updateNotebookOnboarding({ showMcpPromo: false })
     void addBuffer({ notebookViewState: createDefaultNotebookViewState() })
     setOpen(false)
@@ -156,7 +163,10 @@ export const NotebookOnboardingModal = () => {
     <RadixDialog.Root
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen) setOpen(false)
+        if (!isOpen) {
+          void trackEvent(ConsoleEvent.NOTEBOOK_ONBOARDING_CLOSE, { step })
+          setOpen(false)
+        }
       }}
     >
       <RadixDialog.Portal>
@@ -172,13 +182,24 @@ export const NotebookOnboardingModal = () => {
           <HiddenTitle>
             {step === 0 ? "Introducing Notebooks" : "QuestDB MCP Connection"}
           </HiddenTitle>
-          <CloseButton title="Close" onClick={() => setOpen(false)}>
+          <CloseButton
+            title="Close"
+            onClick={() => {
+              void trackEvent(ConsoleEvent.NOTEBOOK_ONBOARDING_CLOSE, { step })
+              setOpen(false)
+            }}
+          >
             <XIcon size={16} color="#858585" weight="bold" />
           </CloseButton>
           {step === 0 ? (
             <Step1
               onCreateNotebook={createNotebook}
-              onNext={() => setStep(1)}
+              onNext={() => {
+                void trackEvent(ConsoleEvent.NOTEBOOK_ONBOARDING_STEP, {
+                  step: 1,
+                })
+                setStep(1)
+              }}
             />
           ) : (
             <Step2 onCreateNotebook={createNotebook} />

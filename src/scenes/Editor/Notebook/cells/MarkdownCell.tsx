@@ -22,6 +22,8 @@ import { useCellResize } from "./useCellResize"
 import { ResizeHandle } from "../resize"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { ctrlCmd } from "../../../../utils/platform"
 import {
   hasAgentVisibleCellHeightChanged,
@@ -283,14 +285,18 @@ const MarkdownCellInner: React.FC<Props> = ({
     [cell.id, bufferIdForEvents, updateCell],
   )
 
-  const apply = useCallback(() => {
-    setEditing(false)
-    emitUserAction({
-      kind: "user_updated_cell",
-      bufferId: bufferIdForEvents,
-      cellId: cell.id,
-    })
-  }, [bufferIdForEvents, cell.id])
+  const apply = useCallback(
+    (method: "button" | "shortcut" | "blur") => {
+      void trackEvent(ConsoleEvent.NOTEBOOK_MARKDOWN_APPLY, { method })
+      setEditing(false)
+      emitUserAction({
+        kind: "user_updated_cell",
+        bufferId: bufferIdForEvents,
+        cellId: cell.id,
+      })
+    },
+    [bufferIdForEvents, cell.id],
+  )
 
   const edit = useCallback(() => setEditing(true), [])
 
@@ -309,7 +315,7 @@ const MarkdownCellInner: React.FC<Props> = ({
   }, [editing])
 
   useEffect(() => {
-    if (wasFocusedRef.current && !isFocused && editing) apply()
+    if (wasFocusedRef.current && !isFocused && editing) apply("blur")
     wasFocusedRef.current = isFocused
   }, [isFocused, editing, apply])
 
@@ -373,7 +379,11 @@ const MarkdownCellInner: React.FC<Props> = ({
         right={
           editing ? (
             <Tooltip content={`Apply (${ctrlCmd}+Enter)`}>
-              <Button skin="transparent" onClick={apply} aria-label="Apply">
+              <Button
+                skin="transparent"
+                onClick={() => apply("button")}
+                aria-label="Apply"
+              >
                 <CheckIcon size={20} />
               </Button>
             </Tooltip>
@@ -403,7 +413,7 @@ const MarkdownCellInner: React.FC<Props> = ({
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                   e.preventDefault()
                   e.stopPropagation()
-                  apply()
+                  apply("shortcut")
                 }
               }}
             />
@@ -430,7 +440,12 @@ const MarkdownCellInner: React.FC<Props> = ({
           targetRef={bodyRef}
           onResize={heightResize.resizeLive}
           onResizeEnd={heightResize.resizeEnd}
-          onDoubleClick={heightResize.resetHeight}
+          onDoubleClick={() => {
+            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
+              region: "s",
+            })
+            heightResize.resetHeight()
+          }}
           minHeight={MIN_MARKDOWN_HEIGHT_PX}
         />
       </CellShell>

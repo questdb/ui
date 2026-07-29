@@ -8,6 +8,8 @@ import { MCPBridgePairPopover } from "./PairPopover"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
 import { Tone, accentColor, deriveTone, hexToRgba } from "./tone"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -160,6 +162,7 @@ export const MCPBridgeStatus: React.FC = () => {
   // Opening the popover is the user's "check": it shows the agent-changes
   // row, so the pill stops blinking until the next background edit.
   const handleToggle = (open: boolean) => {
+    if (open) void trackEvent(ConsoleEvent.MCP_STATUS_POPOVER_OPEN, { tone })
     setPopoverOpen(open)
     if (open) agentChanges.markPopoverOpened()
   }

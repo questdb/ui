@@ -54,6 +54,8 @@ import {
 } from "../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
 import { useCellBandObservers } from "./useCellBandObservers"
 import { useChartRefresh } from "./chartRefresh/ChartRefreshContext"
@@ -485,8 +487,15 @@ const GridLayout: React.FC = () => {
   )
 
   // Drag-stop = move (x/y change). Just persist positions.
-  const handleDragStop = useCallback(
-    (newLayout: Layout, ..._args: unknown[]) => {
+  const handleDragStop = useCallback<EventCallback>(
+    (newLayout, oldItem, newItem) => {
+      if (
+        oldItem &&
+        newItem &&
+        (oldItem.x !== newItem.x || oldItem.y !== newItem.y)
+      ) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "drag" })
+      }
       autoScroll.stop()
       updateSettings({ layout: mapLayoutXYW(newLayout) })
       if (typeof activeBuffer.id === "number") {
@@ -499,8 +508,19 @@ const GridLayout: React.FC = () => {
     [autoScroll, mapLayoutXYW, updateSettings, activeBuffer.id],
   )
 
-  const handleResizeStop = useCallback(
-    (newLayout: Layout, ..._args: unknown[]) => {
+  const handleResizeStop = useCallback<EventCallback>(
+    (newLayout, oldItem, newItem, _placeholder, _event, element) => {
+      const region = element?.dataset.axis
+      if (
+        region &&
+        oldItem &&
+        newItem &&
+        (oldItem.x !== newItem.x ||
+          oldItem.w !== newItem.w ||
+          oldItem.h !== newItem.h)
+      ) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
+      }
       updateSettings({ layout: mapLayoutXYW(newLayout) })
       const cellById = new Map(cells.map((c) => [c.id, c]))
       for (const item of newLayout) {
@@ -857,6 +877,7 @@ export const Notebook: React.FC = () => {
   )
 
   const retrySeed = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_LOAD_RETRY)
     setSeedAttempt((attempt) => attempt + 1)
   }
 

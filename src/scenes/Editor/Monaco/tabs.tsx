@@ -31,7 +31,11 @@ import {
 } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
-import { type Buffer, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
+import {
+  type Buffer,
+  BufferType,
+  MAX_BUFFER_NAME_LENGTH,
+} from "../../../store/buffers"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -399,6 +403,14 @@ export const Tabs = () => {
         buffer.metricsViewState.metrics.length > 0) ||
       buffer.notebookViewState != null
     ) {
+      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
+        type:
+          buffer.notebookViewState != null
+            ? BufferType.NOTEBOOK
+            : buffer.metricsViewState != null
+              ? BufferType.METRICS
+              : BufferType.SQL,
+      })
       await archiveBuffer(parseInt(id))
     } else {
       await deleteBuffer(parseInt(id))
@@ -687,6 +699,9 @@ export const Tabs = () => {
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onSelect={() => {
+                void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
+                  source: "tab_menu",
+                })
                 void addBuffer({
                   notebookViewState: createDefaultNotebookViewState(),
                 })

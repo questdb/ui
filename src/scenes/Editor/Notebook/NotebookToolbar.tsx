@@ -161,7 +161,7 @@ const ToggleButton = styled.button<{ $active: boolean }>`
 `
 
 export const NotebookToolbar: React.FC = () => {
-  const { settings } = useNotebookState()
+  const { cells, settings } = useNotebookState()
   const { updateSettings } = useNotebookActions()
   const { activeBuffer, buffers, duplicateNotebook, updateBuffer } = useEditor()
   const { openNotebookChat } = useAIConversationActions()
@@ -229,7 +229,7 @@ export const NotebookToolbar: React.FC = () => {
     if (!target) return
     const trimmed = draftName.trim()
     if (!trimmed || trimmed === target.label) return
-    void trackEvent(ConsoleEvent.TAB_RENAME)
+    void trackEvent(ConsoleEvent.TAB_RENAME, { type: "notebook" })
     void updateBuffer(target.id, { label: trimmed })
   }
 
@@ -245,6 +245,7 @@ export const NotebookToolbar: React.FC = () => {
   // User-origin only: tool-driven set_layout_mode bypasses this handler so it doesn't appear in the AI digest.
   const handleModeChange = (next: NotebookLayoutMode) => {
     if (next === mode) return
+    void trackEvent(ConsoleEvent.NOTEBOOK_LAYOUT_MODE_CHANGE, { to: next })
     updateSettings({ layoutMode: next })
     if (typeof activeBuffer.id === "number") {
       emitUserAction({
@@ -257,12 +258,19 @@ export const NotebookToolbar: React.FC = () => {
 
   const handleBuildWithAI = () => {
     if (typeof activeBuffer.id !== "number") return
+    void trackEvent(ConsoleEvent.NOTEBOOK_BUILD_WITH_AI, {
+      cellCount: cells.length,
+    })
     void openNotebookChat(activeBuffer.id)
   }
 
   const handleDuplicate = async () => {
     if (typeof activeBuffer.id !== "number" || isArchived || isDuplicating)
       return
+    void trackEvent(ConsoleEvent.NOTEBOOK_DUPLICATE, {
+      cellCount: cells.length,
+      layoutMode: mode,
+    })
     setIsDuplicating(true)
     try {
       await duplicateNotebook(activeBuffer.id)

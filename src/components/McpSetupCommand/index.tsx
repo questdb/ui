@@ -4,6 +4,8 @@ import { CopyButton } from "../CopyButton"
 import { CopyCommand } from "../icons/copy-command"
 import { EXPECTED_BRIDGE_VERSION } from "../../utils/mcp/protocolVersion"
 import { color } from "../../utils"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 export const SETUP_COMMAND = `npx @questdb/mcp-bridge@${EXPECTED_BRIDGE_VERSION} setup`
 
@@ -46,7 +48,13 @@ const CopyCommandButton = styled(CopyButton)`
   }
 `
 
-export const McpSetupCommand = ({ iconSize = 16 }: { iconSize?: number }) => (
+export const McpSetupCommand = ({
+  iconSize = 16,
+  source,
+}: {
+  iconSize?: number
+  source: "promo" | "onboarding"
+}) => (
   <>
     <Code>
       npx <Package>@questdb/mcp-bridge@{EXPECTED_BRIDGE_VERSION}</Package> setup
@@ -57,6 +65,9 @@ export const McpSetupCommand = ({ iconSize = 16 }: { iconSize?: number }) => (
       size="sm"
       text={SETUP_COMMAND}
       icon={<CopyCommand size={iconSize} />}
+      onCopy={() =>
+        void trackEvent(ConsoleEvent.MCP_SETUP_COMMAND_COPY, { source })
+      }
     />
   </>
 )

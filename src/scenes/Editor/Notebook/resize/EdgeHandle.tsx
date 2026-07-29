@@ -3,6 +3,8 @@ import styled from "styled-components"
 import { color } from "../../../../utils"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { CornerChip, SideChip } from "./chips"
 
 const isCorner = (axis: string): boolean => axis === "se" || axis === "sw"
@@ -119,10 +121,14 @@ const dispatchAxisDoubleClick = (axis: string, target: HTMLElement): void => {
   const cellId = cellEl?.dataset.cellId
   if (!cellId) return
   if (axis === "s") {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, { region: "s" })
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_SIZE, { cellId })
     return
   }
   if (axis === "e" || axis === "w") {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, {
+      kind: axis === "e" ? "right" : "left",
+    })
     eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
       cellId,
       kind: axis === "e" ? "right" : "left",

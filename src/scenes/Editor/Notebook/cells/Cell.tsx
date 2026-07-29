@@ -43,6 +43,8 @@ import { useCellResultStatus } from "../resultHydration/CellResultHydrationConte
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   MIN_EDITOR_HEIGHT,
   useCellResizeOrchestration,
@@ -419,6 +421,10 @@ const CellInner: React.FC<Props> = ({
           <CellNameLabel
             name={cell.name}
             onRename={(name) => {
+              void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RENAME, {
+                cellType: cell.type ?? "sql",
+                hadName: !!cell.name,
+              })
               updateCell(cell.id, { name: name || undefined })
               signalUserEdit(bufferIdForEvents)
             }}
@@ -440,7 +446,12 @@ const CellInner: React.FC<Props> = ({
                 signalUserEdit(bufferIdForEvents)
                 clearCellResult(cell.id)
               }}
-              onDraw={() => void handleDrawClick()}
+              onDraw={() => {
+                void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
+                  mode: isDrawMode ? "run" : "draw",
+                })
+                void handleDrawClick()
+              }}
             />
           ) : toolbarTier === "expanded" ? (
             <CellWideActions
@@ -533,7 +544,12 @@ const CellInner: React.FC<Props> = ({
           targetRef={editorContainerRef}
           onResize={middleResizeLive}
           onResizeEnd={middleResizeEnd}
-          onDoubleClick={resetToDefaults}
+          onDoubleClick={() => {
+            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
+              region: "mid",
+            })
+            resetToDefaults()
+          }}
           doubleView={doubleView}
         />
       )}
@@ -583,14 +599,19 @@ const CellInner: React.FC<Props> = ({
               ? bottomResize.resizeLive
               : topResize.resizeLive
         }
-        onResizeEnd={
-          isViewMaximized
-            ? maximizedChartResizeEnd
-            : showBottomSlot
-              ? bottomResize.resizeEnd
-              : topResize.resizeEnd
-        }
-        onDoubleClick={isViewMaximized ? resetToDefaults : resetBottomArea}
+        onResizeEnd={(height) => {
+          void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "s" })
+          if (isViewMaximized) maximizedChartResizeEnd(height)
+          else if (showBottomSlot) bottomResize.resizeEnd(height)
+          else topResize.resizeEnd(height)
+        }}
+        onDoubleClick={() => {
+          void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
+            region: "s",
+          })
+          if (isViewMaximized) resetToDefaults()
+          else resetBottomArea()
+        }}
         minHeight={
           isViewMaximized
             ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX

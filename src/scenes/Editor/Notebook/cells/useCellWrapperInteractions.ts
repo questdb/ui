@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef } from "react"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 // Wrapper-level interactions shared by every cell kind (SQL and markdown) so
 // they behave identically and can't drift: click-to-focus, arrow-key reorder
@@ -47,6 +49,7 @@ export const useCellWrapperInteractions = ({
       if (!canArrowMove || e.target !== e.currentTarget) return
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
       e.preventDefault()
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "keyboard" })
       if (e.key === "ArrowUp") moveCellUp(cellId)
       else moveCellDown(cellId)
       emitUserAction({
