@@ -578,6 +578,7 @@ const GridLayout: React.FC = () => {
         nextW = cur.x + cur.w
       }
       if (nextX === cur.x && nextW === cur.w) return
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, { kind })
       const nextLayout: CellLayoutItem[] = currentLayout.map((l) =>
         l.i === cellId
           ? { i: l.i, x: nextX, y: l.y, w: nextW, h: l.h }

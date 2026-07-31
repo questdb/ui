@@ -125,7 +125,7 @@ export const CellViewToggle: React.FC<Props> = ({
     e.stopPropagation()
     if (isRunning) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "chart",
+      to: view === "chart" ? "none" : "chart",
       method: "toggle",
     })
     signalUserEdit(bufferId)

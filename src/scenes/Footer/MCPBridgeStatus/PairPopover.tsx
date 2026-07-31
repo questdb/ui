@@ -374,7 +374,12 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       setSucceeded(false)
       setSubmitted(true)
       // Order matters: the rebuilt client reads perms in its initial hello.
-      if (permsDirty) setPermissions(draftPermissions)
+      if (permsDirty) {
+        void trackEvent(ConsoleEvent.MCP_PERMISSIONS_CHANGE, {
+          level: permissionLevelOf(normalizePermissions(draftPermissions)),
+        })
+        setPermissions(draftPermissions)
+      }
       void trackEvent(ConsoleEvent.MCP_MANUAL_PAIR_SUBMIT)
       connect(nextUrl, nextToken)
     }

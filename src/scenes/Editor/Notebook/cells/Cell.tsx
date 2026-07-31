@@ -545,9 +545,7 @@ const CellInner: React.FC<Props> = ({
           onResize={middleResizeLive}
           onResizeEnd={middleResizeEnd}
           onDoubleClick={() => {
-            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
-              region: "mid",
-            })
+            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
             resetToDefaults()
           }}
           doubleView={doubleView}
@@ -606,9 +604,7 @@ const CellInner: React.FC<Props> = ({
           else topResize.resizeEnd(height)
         }}
         onDoubleClick={() => {
-          void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
-            region: "s",
-          })
+          void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
           if (isViewMaximized) resetToDefaults()
           else resetBottomArea()
         }}

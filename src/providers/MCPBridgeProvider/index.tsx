@@ -217,7 +217,6 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setVersionMismatch(m),
     )
     const offHelloAck = client.on("helloAck", () => {
-      void trackEvent(ConsoleEvent.MCP_CONNECTED)
       // Promote pending → consented so a same-tab refresh silently restores.
       markPendingPairConsented()
       setLastError(null)

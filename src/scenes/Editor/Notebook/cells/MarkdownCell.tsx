@@ -441,9 +441,7 @@ const MarkdownCellInner: React.FC<Props> = ({
           onResize={heightResize.resizeLive}
           onResizeEnd={heightResize.resizeEnd}
           onDoubleClick={() => {
-            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, {
-              region: "s",
-            })
+            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
             heightResize.resetHeight()
           }}
           minHeight={MIN_MARKDOWN_HEIGHT_PX}

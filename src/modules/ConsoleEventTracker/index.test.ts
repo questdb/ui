@@ -94,10 +94,42 @@ describe("trackEvent", () => {
     import.meta.env.MODE = originalMode
   })
 
-  it("is a no-op before start", async () => {
+  it("queues events before start without writing to IDB", async () => {
     await trackEvent("query.exec")
     const entries = await db.events.toArray()
     expect(entries).toHaveLength(0)
+  })
+
+  it("flushes queued pre-start events on start", async () => {
+    const originalMode = import.meta.env.MODE
+    import.meta.env.MODE = "production"
+
+    await trackEvent("notebook.onboarding_open")
+    await trackEvent("mcp.pairing_prompted", { a: 1 })
+    await start(mockConfig)
+
+    const entries = await db.events.toArray()
+    expect(entries.map((e) => e.name)).toEqual([
+      "notebook.onboarding_open",
+      "mcp.pairing_prompted",
+    ])
+    expect(entries[1].props).toBe('{"a":1}')
+
+    import.meta.env.MODE = originalMode
+  })
+
+  it("discards queued events on stop", async () => {
+    const originalMode = import.meta.env.MODE
+    import.meta.env.MODE = "production"
+
+    await trackEvent("query.exec")
+    stop()
+    await start(mockConfig)
+
+    const entries = await db.events.toArray()
+    expect(entries).toHaveLength(0)
+
+    import.meta.env.MODE = originalMode
   })
 
   it("silently drops on IDB write error", async () => {

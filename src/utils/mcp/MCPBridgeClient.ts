@@ -120,6 +120,7 @@ export class MCPBridgeClient {
   private outstandingPing: { nonce: string; sentAt: number } | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private hadSession = false
+  private everHadSession = false
   private explicitlyClosed = false
   private _consecutiveFailedAttempts = 0
   private get consecutiveFailedAttempts(): number {
@@ -362,6 +363,10 @@ export class MCPBridgeClient {
 
   private handleHelloAck(msg: HelloAckMessage): void {
     this.sessionId = msg.sessionId
+    if (!this.everHadSession) {
+      this.everHadSession = true
+      void trackEvent(ConsoleEvent.MCP_CONNECTED)
+    }
     this.hadSession = true
     this.consecutiveFailedAttempts = 0
     // Emit before `connected` so consumers see the drift in the same paint

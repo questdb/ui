@@ -121,14 +121,11 @@ const dispatchAxisDoubleClick = (axis: string, target: HTMLElement): void => {
   const cellId = cellEl?.dataset.cellId
   if (!cellId) return
   if (axis === "s") {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET, { region: "s" })
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_SIZE, { cellId })
     return
   }
   if (axis === "e" || axis === "w") {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, {
-      kind: axis === "e" ? "right" : "left",
-    })
     eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
       cellId,
       kind: axis === "e" ? "right" : "left",

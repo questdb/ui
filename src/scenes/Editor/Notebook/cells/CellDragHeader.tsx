@@ -3,8 +3,6 @@ import styled from "styled-components"
 import { CellToolbar } from "./CellToolbar"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { NotebookCell } from "../../../../store/notebook"
 
@@ -96,9 +94,6 @@ export const CellDragHeader: React.FC<Props> = ({
         )
       )
         return
-      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EXPAND_WIDTH, {
-        kind: "full",
-      })
       eventBus.publish(EventType.NOTEBOOK_CELL_EXPAND_WIDTH, {
         cellId,
         kind: "full",

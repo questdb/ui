@@ -18,7 +18,7 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
 import { useNotebookActions, useNotebookState } from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
-import { MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
+import { BufferType, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
 import { useEditor } from "../../../providers/EditorProvider"
 import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import {
@@ -229,7 +229,7 @@ export const NotebookToolbar: React.FC = () => {
     if (!target) return
     const trimmed = draftName.trim()
     if (!trimmed || trimmed === target.label) return
-    void trackEvent(ConsoleEvent.TAB_RENAME, { type: "notebook" })
+    void trackEvent(ConsoleEvent.TAB_RENAME, { type: BufferType.NOTEBOOK })
     void updateBuffer(target.id, { label: trimmed })
   }
 
@@ -281,7 +281,7 @@ export const NotebookToolbar: React.FC = () => {
 
   const handleExport = () => {
     if (typeof activeBuffer.id !== "number") return
-    void trackEvent(ConsoleEvent.TAB_EXPORT, { type: "notebook" })
+    void trackEvent(ConsoleEvent.TAB_EXPORT, { type: BufferType.NOTEBOOK })
     exportBuffers({ bufferId: activeBuffer.id }).catch((err) => {
       toast.error(
         `Failed to export notebook: ${err instanceof Error ? err.message : "Unknown error"}`,

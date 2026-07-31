@@ -10,6 +10,8 @@ import type { Permissions } from "../../utils/tools/permissions"
 export type McpDeniedReasonCode =
   | "schema_access"
   | "write_sql"
+  | "draw_write"
+  | "classify_failed"
   | "stale"
   | "not_fetched"
   | "invalid_buffer_id"
@@ -32,6 +34,8 @@ export const mcpToolCallEvent = (toolName: string): ConsoleEvent | null => {
 
 const SCHEMA_ACCESS_DENY_MARKER = "requires the 'grantSchemaAccess' permission"
 const WRITE_SQL_DENY_MARKER = "(write operation)"
+const DRAW_WRITE_DENY_PREFIX = "Cannot draw a write query"
+const CLASSIFY_FAILED_DENY_PREFIX = "Cannot classify cell SQL"
 
 const firstText = (result: McpToolResultLike): string => {
   for (const item of result.content) {
@@ -64,6 +68,12 @@ export const classifyToolResult = (
       return { outcome: "denied", reasonCode: "write_sql" }
     }
     return { outcome: "denied" }
+  }
+  if (text.startsWith(DRAW_WRITE_DENY_PREFIX)) {
+    return { outcome: "denied", reasonCode: "draw_write" }
+  }
+  if (text.startsWith(CLASSIFY_FAILED_DENY_PREFIX)) {
+    return { outcome: "denied", reasonCode: "classify_failed" }
   }
   return result.isError ? { outcome: "tool_error" } : { outcome: "ok" }
 }

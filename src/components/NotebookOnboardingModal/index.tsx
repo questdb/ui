@@ -150,12 +150,17 @@ export const NotebookOnboardingModal = () => {
   }, [open, step])
 
   const createNotebook = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
-      source: "onboarding_modal",
-      step,
-    })
     updateNotebookOnboarding({ showMcpPromo: false })
-    void addBuffer({ notebookViewState: createDefaultNotebookViewState() })
+    void addBuffer({
+      notebookViewState: createDefaultNotebookViewState(),
+    }).then((buffer) => {
+      if (buffer) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
+          source: "onboarding_modal",
+          step,
+        })
+      }
+    })
     setOpen(false)
   }
 

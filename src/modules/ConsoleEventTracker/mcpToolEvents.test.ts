@@ -11,6 +11,12 @@ import {
   STATE_NOT_FETCHED_MESSAGE,
   STATE_STALE_MESSAGE,
 } from "../../utils/notebooks/notebookToolMessages"
+import {
+  denyReasonFailClosedClassify,
+  denyReasonForDrawWrite,
+  denyReasonForSchemaTool,
+  denyReasonForWriteSql,
+} from "../../utils/tools/permissions"
 import { mcpTools } from "../../utils/tools/tools"
 
 const textResult = (text: string, isError = true) => ({
@@ -66,26 +72,51 @@ describe("classifyToolResult", () => {
   })
 
   it("classifies schema-access denials", () => {
-    const result = textResult(
-      "PERMISSION_DENIED: tool 'get_tables' requires the 'grantSchemaAccess' permission. " +
-        "Ask the user to grant it in the QuestDB console (footer → MCP popover or AI Assistant settings).",
-    )
-    expect(classifyToolResult(result)).toEqual({
+    expect(
+      classifyToolResult(textResult(denyReasonForSchemaTool("get_tables"))),
+    ).toEqual({
       outcome: "denied",
       reasonCode: "schema_access",
     })
   })
 
   it("classifies write-SQL denials", () => {
-    const result = textResult(
-      "PERMISSION_DENIED: this SQL is 'INSERT' (write operation) and " +
-        "requires the 'write' permission. Ask the user to grant it in the " +
-        "QuestDB console (footer → MCP popover or AI Assistant settings).",
-    )
-    expect(classifyToolResult(result)).toEqual({
+    expect(
+      classifyToolResult(textResult(denyReasonForWriteSql("INSERT"))),
+    ).toEqual({
       outcome: "denied",
       reasonCode: "write_sql",
     })
+  })
+
+  it("classifies draw-write refusals", () => {
+    expect(
+      classifyToolResult(textResult(denyReasonForDrawWrite("INSERT"))),
+    ).toEqual({
+      outcome: "denied",
+      reasonCode: "draw_write",
+    })
+  })
+
+  it("classifies fail-closed draw classification refusals", () => {
+    expect(
+      classifyToolResult(
+        textResult(denyReasonFailClosedClassify("draw", "request timed out")),
+      ),
+    ).toEqual({
+      outcome: "denied",
+      reasonCode: "classify_failed",
+    })
+  })
+
+  it("classifies fail-closed execution classification as a generic denial", () => {
+    expect(
+      classifyToolResult(
+        textResult(
+          denyReasonFailClosedClassify("execution", "request timed out"),
+        ),
+      ),
+    ).toEqual({ outcome: "denied" })
   })
 
   it("classifies other PERMISSION_DENIED messages without a reasonCode", () => {

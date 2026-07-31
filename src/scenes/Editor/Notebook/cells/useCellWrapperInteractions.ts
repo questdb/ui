@@ -24,7 +24,8 @@ export const useCellWrapperInteractions = ({
   isMaximized,
   isFocused,
 }: Options) => {
-  const { moveCellUp, moveCellDown, setFocusedCell } = useNotebookActions()
+  const { moveCellUp, moveCellDown, setFocusedCell, getCellsSnapshot } =
+    useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -49,7 +50,13 @@ export const useCellWrapperInteractions = ({
       if (!canArrowMove || e.target !== e.currentTarget) return
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
       e.preventDefault()
-      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "keyboard" })
+      const cells = getCellsSnapshot()
+      const idx = cells.findIndex((c) => c.id === cellId)
+      const canMove =
+        e.key === "ArrowUp" ? idx > 0 : idx !== -1 && idx < cells.length - 1
+      if (canMove) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "keyboard" })
+      }
       if (e.key === "ArrowUp") moveCellUp(cellId)
       else moveCellDown(cellId)
       emitUserAction({
@@ -64,7 +71,14 @@ export const useCellWrapperInteractions = ({
         node.scrollIntoView({ block: "nearest" })
       })
     },
-    [canArrowMove, cellId, moveCellUp, moveCellDown, bufferIdForEvents],
+    [
+      canArrowMove,
+      cellId,
+      moveCellUp,
+      moveCellDown,
+      getCellsSnapshot,
+      bufferIdForEvents,
+    ],
   )
 
   const onMouseDown = useCallback(
