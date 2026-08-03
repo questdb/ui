@@ -6,6 +6,8 @@ import {
   onAgentEdit,
   type AgentEdit,
 } from "../../../utils/notebooks/agentActivity"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const POPPER_AUTOHIDE_MS = 10_000
 
@@ -76,6 +78,7 @@ export const useAgentChanges = (): AgentChanges => {
 
   const view = useCallback(async () => {
     if (!latest) return
+    void trackEvent(ConsoleEvent.MCP_AGENT_CHANGES_VIEW)
     const workspace = getWorkspace()
     if (!workspace) {
       toast.error("The notebook workspace isn't ready yet. Try again shortly.")
@@ -97,6 +100,7 @@ export const useAgentChanges = (): AgentChanges => {
   }, [latest])
 
   const dismiss = useCallback(() => {
+    void trackEvent(ConsoleEvent.MCP_AGENT_CHANGES_DISMISS)
     dismissedRef.current = true
     setPopperVisible(false)
     setAutoHidePaused(false)

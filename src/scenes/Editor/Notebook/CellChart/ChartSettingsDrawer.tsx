@@ -3,6 +3,8 @@ import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Button, Input } from "../../../../components"
 import { Select } from "../../../../components/Select"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartConfig, QueryChart } from "./chartTypes"
 import { groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
@@ -185,6 +187,9 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
       ) {
         return
       }
+      void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, {
+        method: "escape",
+      })
       onClose()
       e.stopImmediatePropagation()
     }
@@ -227,27 +232,43 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
       queries: d.queries.map((q, i) => (i === index ? next : q)),
     }))
 
+  const dismiss = (method: "backdrop" | "close" | "button") => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, { method })
+    onClose()
+  }
+
   const commit = () => {
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
     if (badIdx >= 0) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SAVE_BLOCKED, {
+        reason: "ohlc_incomplete",
+      })
       setSaveAttempted(true)
       setActiveIndex(badIdx)
       return
     }
+    const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_SAVE, {
+      chartType: primary?.type,
+      seriesCount: primary?.yColumns.length ?? 0,
+      queryCount: draft.queries.filter((q) => q != null).length,
+      hasRightAxis: hasRight,
+      partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
+    })
     onSave(draft)
     onClose()
   }
 
   return (
     <>
-      <Backdrop onClick={onClose} aria-hidden />
+      <Backdrop onClick={() => dismiss("backdrop")} aria-hidden />
       <Panel role="dialog" aria-label="Chart settings">
         <Header>
           <Title>Chart settings</Title>
           <Button
             skin="transparent"
             type="button"
-            onClick={onClose}
+            onClick={() => dismiss("close")}
             aria-label="Close chart settings"
           >
             <XIcon size={18} />
@@ -365,7 +386,11 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
         </Body>
 
         <Footer>
-          <Button type="button" skin="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            skin="secondary"
+            onClick={() => dismiss("button")}
+          >
             Cancel
           </Button>
           <Button type="button" skin="primary" onClick={commit}>

@@ -11,6 +11,8 @@ import {
   useNotebookState,
 } from "../NotebookProvider"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 type AddVariant = "primary" | "secondary"
 type AddTier = "between" | "bottom"
@@ -137,6 +139,10 @@ const useUserAddCell = () => {
     }
   }
   const add = (afterCellId?: string, type?: CellType) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_ADD, { cellType: type ?? "sql" })
+    if (cells.length + 1 >= MAX_NOTEBOOK_CELLS) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_LIMIT_REACHED)
+    }
     emit(addCell(afterCellId, undefined, type))
   }
   return { add, atLimit }

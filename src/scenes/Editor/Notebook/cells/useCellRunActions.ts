@@ -15,6 +15,8 @@ import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 type Options = {
   cell: NotebookCell
@@ -79,6 +81,7 @@ export const useCellRunActions = ({
         validateWithGlobals(s),
       )
       if (!decision.granted) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED)
         toast.error(decision.reason)
         return false
       }
@@ -117,6 +120,7 @@ export const useCellRunActions = ({
     if (!normalized) return false
 
     clearHighlight()
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
     const { ok } = await runCell(cell.id, normalized)
     applyHighlight(ok)
     return true
@@ -131,6 +135,7 @@ export const useCellRunActions = ({
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
       emitUserAction({
         kind: "user_ran_cell",
         bufferId: bufferIdForEvents,
@@ -208,6 +213,7 @@ export const useCellRunActions = ({
       )
       if (plan.kind === "noop") return
       if (plan.kind === "chart") {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
         firstRunRef.current = false
         eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, {
           cellId: cell.id,

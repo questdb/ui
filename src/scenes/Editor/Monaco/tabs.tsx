@@ -33,7 +33,11 @@ import {
 } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 import { format, formatDistance } from "date-fns"
-import { type Buffer, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
+import {
+  type Buffer,
+  bufferTypeOf,
+  MAX_BUFFER_NAME_LENGTH,
+} from "../../../store/buffers"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -402,6 +406,9 @@ export const Tabs = () => {
         buffer.metricsViewState.metrics.length > 0) ||
       buffer.notebookViewState != null
     ) {
+      void trackEvent(ConsoleEvent.TAB_ARCHIVE, {
+        type: bufferTypeOf(buffer),
+      })
       await archiveBuffer(parseInt(id))
     } else {
       await deleteBuffer(parseInt(id))
@@ -442,7 +449,10 @@ export const Tabs = () => {
   }
 
   const rename = async (id: string, title: string) => {
-    void trackEvent(ConsoleEvent.TAB_RENAME)
+    const buffer = buffers.find((buffer) => buffer.id === parseInt(id))
+    void trackEvent(ConsoleEvent.TAB_RENAME, {
+      ...(buffer ? { type: bufferTypeOf(buffer) } : {}),
+    })
     await updateBuffer(parseInt(id), {
       label: title.slice(0, MAX_BUFFER_NAME_LENGTH),
     })
@@ -701,6 +711,12 @@ export const Tabs = () => {
               onSelect={() => {
                 void addBuffer({
                   notebookViewState: createDefaultNotebookViewState(),
+                }).then((buffer) => {
+                  if (buffer) {
+                    void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
+                      source: "tab_menu",
+                    })
+                  }
                 })
               }}
               data-hook="new-tab-notebook"

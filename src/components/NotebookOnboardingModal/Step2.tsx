@@ -93,7 +93,7 @@ export const Step2 = ({
           seamlessly
         </Instruction>
         <CommandBox>
-          <McpSetupCommand />
+          <McpSetupCommand source="onboarding" />
         </CommandBox>
       </CommandGroup>
 

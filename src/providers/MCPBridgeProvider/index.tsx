@@ -32,6 +32,14 @@ import {
   type Permissions,
 } from "../../utils/tools/permissions"
 import { consumePendingPairFromUrl } from "../../utils/mcp/consumePendingPair"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import {
+  applyNotebookStateLayoutMode,
+  classifyToolResult,
+  mcpToolCallEvent,
+  permissionLevelOf,
+} from "../../modules/ConsoleEventTracker/mcpToolEvents"
 import { QuestContext } from "../QuestProvider"
 import { useLocalStorage } from "../LocalStorageProvider"
 import { on as onUserAction } from "../../utils/notebooks/notebookAIBridge"
@@ -215,6 +223,13 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
     })
 
     const offToolCall = client.on("toolCall", (call: ToolCallMessage) => {
+      const toolEvent = mcpToolCallEvent(call.name)
+      if (toolEvent === null) {
+        void trackEvent(ConsoleEvent.MCP_UNKNOWN_TOOL, {
+          tool: call.name.slice(0, 100),
+        })
+      }
+      const startedAt = Date.now()
       const aborter = new AbortController()
       inflightAbortersRef.current.set(call.requestId, aborter)
       const deadlineTimer =
@@ -248,7 +263,24 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             ...dispatchCtxRef.current,
             signal: aborter.signal,
           })
-          if (sendRevokedErrorIfNeeded()) return
+          if (sendRevokedErrorIfNeeded()) {
+            if (toolEvent) {
+              void trackEvent(toolEvent, {
+                outcome: "aborted",
+                durationMs: Date.now() - startedAt,
+              })
+            }
+            return
+          }
+          if (toolEvent) {
+            void trackEvent(toolEvent, {
+              ...classifyToolResult(result),
+              durationMs: Date.now() - startedAt,
+              ...(call.name === "apply_notebook_state"
+                ? applyNotebookStateLayoutMode(call.arguments)
+                : {}),
+            })
+          }
           client.sendToolResult({
             v: EXPECTED_BRIDGE_VERSION,
             type: "tool_result",
@@ -257,7 +289,21 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             isError: result.isError ?? false,
           })
         } catch (err) {
-          if (sendRevokedErrorIfNeeded()) return
+          if (sendRevokedErrorIfNeeded()) {
+            if (toolEvent) {
+              void trackEvent(toolEvent, {
+                outcome: "aborted",
+                durationMs: Date.now() - startedAt,
+              })
+            }
+            return
+          }
+          if (toolEvent) {
+            void trackEvent(toolEvent, {
+              outcome: "dispatch_error",
+              durationMs: Date.now() - startedAt,
+            })
+          }
           const message =
             err instanceof Error ? err.message : "tool dispatch failed"
           client.sendToolResult({
@@ -362,6 +408,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setUrl(pair.url)
       setToken(pair.token)
     } else {
+      void trackEvent(ConsoleEvent.MCP_PAIRING_PROMPTED)
       setPendingConsent({ url: pair.url, token: pair.token })
     }
   }, [])
@@ -420,6 +467,11 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
   const acceptPendingConsent = useCallback(
     (committedPermissions: Permissions) => {
       if (!pendingConsent || consentInFlight) return
+      void trackEvent(ConsoleEvent.MCP_PAIRING_ACCEPTED, {
+        permissionLevel: permissionLevelOf(
+          normalizePermissions(committedPermissions),
+        ),
+      })
       // Order matters: the about-to-be-constructed client reads
       // permissionsRef.current in its initial hello.
       setPermissions(committedPermissions)
@@ -444,6 +496,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
       setConsentSucceeded(false)
       return
     }
+    void trackEvent(ConsoleEvent.MCP_PAIRING_DECLINED)
     setPendingConsent(null)
     setConsentInFlight(false)
     if (clientRef.current) {

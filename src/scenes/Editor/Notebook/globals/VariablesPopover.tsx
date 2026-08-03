@@ -20,6 +20,8 @@ import { CopyButton } from "../../../../components/CopyButton"
 import { Input } from "../../../../components/Input"
 import { toast } from "../../../../components/Toast"
 import { QuestContext } from "../../../../providers/QuestProvider"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { color } from "../../../../utils"
 import {
   canReadFromClipboard,
@@ -459,6 +461,9 @@ export const VariablesPopover: React.FC = () => {
       if (!(await validateOnServer(list))) return
       if (cancelledRef.current) return
       if (!variablesEqual(normalizeVariables(settings.variables), list)) {
+        void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
+          variableCount: list.length,
+        })
         signalUserEdit(bufferId)
         updateSettings({ variables: list })
       }
@@ -474,6 +479,7 @@ export const VariablesPopover: React.FC = () => {
   }
 
   const handleOpenChange = (next: boolean) => {
+    if (next) void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_OPEN)
     if (!next) cancelledRef.current = true
     setOpen(next)
   }
@@ -486,6 +492,9 @@ export const VariablesPopover: React.FC = () => {
         toast.error("No DECLARE block found in clipboard")
         return
       }
+      void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_IMPORT, {
+        importedCount: parsed.length,
+      })
       setDrafts((prev) => {
         const next = prev.filter((d) => d.name !== "" || d.value !== "")
         for (const { name, value } of parsed) {

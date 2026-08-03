@@ -8,6 +8,8 @@ import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import QueryResult from "../../QueryResult"
 import { QueryInNotification } from "../../Monaco/query-in-notification"
 import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 const liveRegionMessage = (result: SingleQueryResult): string => {
   switch (result.type) {
@@ -67,7 +69,10 @@ export const StatusNotification: React.FC<Props> = ({
             {onCancelQuery && (
               <CancelButton
                 skin="error"
-                onClick={() => onCancelQuery(activeIndex)}
+                onClick={() => {
+                  void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN_CANCEL)
+                  onCancelQuery(activeIndex)
+                }}
               >
                 <Stop size="18px" />
               </CancelButton>
