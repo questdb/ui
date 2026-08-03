@@ -287,6 +287,74 @@ describe("QueryExecutionManager", () => {
     )
   })
 
+  it("rekeys the active execution so release works with the new key", () => {
+    const manager = createManager()
+    const oldKey = "select 1@10-18" as QueryKey
+    const newKey = "select 1@20-28" as QueryKey
+
+    manager.markActive(1, oldKey, vi.fn())
+    manager.rekeyActive(oldKey, newKey)
+
+    expect(manager.getActive()?.queryKey).toBe(newKey)
+
+    manager.releaseExecution(oldKey)
+    expect(manager.getActive()?.queryKey).toBe(newKey)
+
+    manager.releaseExecution(newKey)
+    expect(manager.getActive()).toBeNull()
+  })
+
+  it("ignores rekey when the old key does not match the active execution", () => {
+    const manager = createManager()
+    const activeKey = "select 1@10-18" as QueryKey
+
+    manager.markActive(1, activeKey, vi.fn())
+    manager.rekeyActive("other@0-5" as QueryKey, "other@5-10" as QueryKey)
+
+    expect(manager.getActive()?.queryKey).toBe(activeKey)
+  })
+
+  it("keeps the abort callback across a rekey so cancel aborts the original run", () => {
+    // Given an active execution that was rekeyed after an edit above it
+    const manager = createManager()
+    const onAbort = vi.fn()
+    manager.markActive(1, "select 1@10-18" as QueryKey, onAbort)
+    manager.rekeyActive(
+      "select 1@10-18" as QueryKey,
+      "select 1@20-28" as QueryKey,
+    )
+
+    // When the user cancels the running query
+    manager.cancelActive()
+
+    // Then the original run is aborted
+    expect(onAbort).toHaveBeenCalledTimes(1)
+    expect(manager.getActive()).toBeNull()
+  })
+
+  it("rekeys the active execution within a non-default scope", () => {
+    // Given an active execution under a notebook cell scope
+    const manager = createManager()
+    const scopeKey = "notebook-cell-7"
+    const oldKey = "select 1@10-18" as QueryKey
+    const newKey = "select 1@20-28" as QueryKey
+    manager.markActive(1, oldKey, vi.fn(), scopeKey)
+
+    // When it is rekeyed within that scope
+    manager.rekeyActive(oldKey, newKey, scopeKey)
+
+    // Then the scoped active execution moves to the new key
+    expect(manager.getActive(scopeKey)?.queryKey).toBe(newKey)
+    // And the default scope is untouched
+    expect(manager.getActive()).toBeNull()
+
+    // And release still works with either key on that scope
+    manager.releaseExecution(oldKey, scopeKey)
+    expect(manager.getActive(scopeKey)?.queryKey).toBe(newKey)
+    manager.releaseExecution(newKey, scopeKey)
+    expect(manager.getActive(scopeKey)).toBeNull()
+  })
+
   it("notifies subscribers when manager state changes", () => {
     const manager = createManager()
     const activeKey = "active@0-6" as QueryKey

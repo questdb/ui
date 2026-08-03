@@ -29,6 +29,7 @@ import {
   isBlockingAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { useAIConversationActions } from "../../../providers/AIConversationProvider"
+import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { MAX_CELL_LINES } from "../../../store/notebook"
@@ -62,6 +63,12 @@ import {
   createQueryKey,
   parseQueryKey,
   createQueryKeyFromRequest,
+  InflightQuery,
+  createInflightQuery,
+  shiftInflightQuery,
+  shiftSelection,
+  applyQueryKeyUpdates,
+  isInflightQueryStillInPlace,
   validateQueryJIT,
   setErrorMarkerForQuery,
   getQueryStartOffset,
@@ -277,6 +284,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   } = editorContext
   const { quest, questExecution } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
+  const { runWithSelection } = useLocalStorage()
   const {
     handleGlyphClick,
     hasConversationForQuery,
@@ -317,9 +325,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const runningValueRef = useRef(running)
   const activeBufferRef = useRef(activeBuffer)
   const requestRef = useRef(request)
+  const inflightQueryRef = useRef<InflightQuery | null>(null)
+  const runSeqRef = useRef(0)
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
   const canUseAIRef = useRef(canUseAI)
+  const runWithSelectionRef = useRef(runWithSelection)
+  const shareLinkSelectionRunRef = useRef(false)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
   const findQueryByConversationIdRef = useRef(findQueryByConversationId)
@@ -540,11 +552,31 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     buildAndCopyShareLink([query])
   }
 
+  const syncQueriesToRun = (
+    editor: editor.IStandaloneCodeEditor,
+    runWithSelection: boolean,
+  ): Request[] => {
+    const queriesToRun = getQueriesToRun(
+      editor,
+      queryOffsetsRef.current ?? [],
+      runWithSelection,
+    )
+    queriesToRunRef.current = queriesToRun
+    dispatch(actions.query.setQueriesToRun(queriesToRun))
+    return queriesToRun
+  }
+
   const handleCopyLinkSelection = () => {
     void trackEvent(ConsoleEvent.EDITOR_COPY_QUERY_LINK, {
       from: "shortcut",
     })
-    buildAndCopyShareLink(queriesToRunRef.current ?? [])
+    const editor = editorRef.current
+    if (!editor) return
+    // Link sharing always honors the selection, independent of the
+    // run-with-selection setting.
+    buildAndCopyShareLink(
+      getQueriesToRun(editor, queryOffsetsRef.current ?? [], true),
+    )
   }
 
   const handleCopyLinkAllQueries = (shortcut?: boolean) => {
@@ -750,6 +782,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const activeBufferId = activeBufferRef.current.id as number
 
+    const inflightQuery = inflightQueryRef.current
+    const runningQueryLineNumber =
+      runningValueRef.current !== RunningType.NONE &&
+      inflightQuery !== null &&
+      !inflightQuery.dislodged &&
+      inflightQuery.bufferId === activeBufferId
+        ? model.getPositionAt(inflightQuery.startOffset).lineNumber
+        : null
+
     const allQueryOffsets: { startOffset: number; endOffset: number }[] = []
     const newGlyphWidgetIds = new Map<string, editor.IGlyphMarginWidget>()
     const newGlyphWidgetLineNumbers = new Set<number>()
@@ -784,10 +825,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           ? hasConversationForQueryRef.current(activeBufferId, queryKey)
           : false
 
-        const isRunningQuery =
-          runningValueRef.current !== RunningType.NONE &&
-          requestRef.current?.row !== undefined &&
-          requestRef.current?.row + 1 === startLineNumber
+        const isRunningQuery = startLineNumber === runningQueryLineNumber
 
         const handleRunClick = () => {
           void trackEvent(ConsoleEvent.EDITOR_GLYPH_RUN)
@@ -955,12 +993,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       cursorChangeTimeoutRef.current = window.setTimeout(() => {
-        const queriesToRun = getQueriesToRun(
-          editor,
-          queryOffsetsRef.current ?? [],
-        )
-        queriesToRunRef.current = queriesToRun
-        dispatch(actions.query.setQueriesToRun(queriesToRun))
+        syncQueriesToRun(editor, runWithSelectionRef.current)
 
         if (monacoRef.current && editorRef.current) {
           applyLineMarkings(monaco, editor, e.source)
@@ -995,7 +1028,40 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const activeBufferId = activeBufferRef.current.id as number
       const bufferExecutions = executionRefs.current[activeBufferId.toString()]
 
-      const notificationUpdates: Array<() => void> = []
+      const notificationKeyUpdates = new Map<QueryKey, QueryKey>()
+
+      const inflightQueryBeforeChanges =
+        inflightQueryRef.current &&
+        inflightQueryRef.current.bufferId === activeBufferId
+          ? inflightQueryRef.current
+          : null
+      let inflightQueryAfterChanges: InflightQuery | null = null
+      if (inflightQueryBeforeChanges) {
+        const shiftedInflightQuery = shiftInflightQuery(
+          inflightQueryBeforeChanges,
+          e.changes,
+        )
+        inflightQueryRef.current = shiftedInflightQuery
+        inflightQueryAfterChanges = shiftedInflightQuery
+        if (
+          shiftedInflightQuery.queryKey !== inflightQueryBeforeChanges.queryKey
+        ) {
+          questExecution.rekeyActive(
+            inflightQueryBeforeChanges.queryKey,
+            shiftedInflightQuery.queryKey,
+          )
+          // Dispatched before this handler's await below: the settle handlers
+          // read the live inflight key, so a query completing during the await
+          // must already find its notification under the shifted key.
+          dispatch(
+            actions.query.updateNotificationKey(
+              inflightQueryBeforeChanges.queryKey,
+              shiftedInflightQuery.queryKey,
+              activeBufferId,
+            ),
+          )
+        }
+      }
 
       if (bufferExecutions) {
         const keysToUpdate: Array<{
@@ -1039,18 +1105,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           })
         })
 
-        keysToUpdate.forEach(({ oldKey, newKey, data }) => {
-          delete bufferExecutions[oldKey]
-          bufferExecutions[newKey] = data
-          notificationUpdates.push(() =>
-            dispatch(
-              actions.query.updateNotificationKey(
-                oldKey,
-                newKey,
-                activeBufferId,
-              ),
-            ),
-          )
+        applyQueryKeyUpdates(bufferExecutions, keysToUpdate)
+        keysToUpdate.forEach(({ oldKey, newKey }) => {
+          notificationKeyUpdates.set(oldKey, newKey)
         })
       }
 
@@ -1058,6 +1115,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       Object.keys(currentNotifications).forEach((key) => {
         const queryKey = key as QueryKey
+
+        if (
+          queryKey === inflightQueryBeforeChanges?.queryKey ||
+          queryKey === inflightQueryAfterChanges?.queryKey
+        ) {
+          return
+        }
 
         const { queryText, startOffset, endOffset } = parseQueryKey(queryKey)
         const effectiveOffsetDelta = e.changes
@@ -1073,15 +1137,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
         const newOffset = startOffset + effectiveOffsetDelta
         const newKey = createQueryKey(queryText, newOffset)
-        notificationUpdates.push(() =>
-          dispatch(
-            actions.query.updateNotificationKey(
-              queryKey,
-              newKey,
-              activeBufferId,
-            ),
-          ),
-        )
+        notificationKeyUpdates.set(queryKey, newKey)
       })
 
       if (bufferExecutions && Object.keys(bufferExecutions).length === 0) {
@@ -1111,15 +1167,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         applyGlyphsAndLineMarkings(monaco, editor)
       }
 
-      const queriesToRun = getQueriesToRun(
-        editor,
-        queryOffsetsRef.current ?? [],
-      )
-      queriesToRunRef.current = queriesToRun
-      dispatch(actions.query.setQueriesToRun(queriesToRun))
+      syncQueriesToRun(editor, runWithSelectionRef.current)
 
       contentJustChangedRef.current = false
-      notificationUpdates.forEach((update) => update())
+      if (notificationKeyUpdates.size > 0) {
+        dispatch(
+          actions.query.updateNotificationKeys(
+            Array.from(notificationKeyUpdates, ([oldKey, newKey]) => ({
+              oldKey,
+              newKey,
+            })),
+            activeBufferId,
+          ),
+        )
+      }
 
       // JIT validation (debounced)
       if (validationTimeoutRef.current) {
@@ -1239,12 +1300,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       // Initial decoration setup
       applyGlyphsAndLineMarkings(monaco, editor)
-      const queriesToRun = getQueriesToRun(
+      // A ?query link selects its statements to run them all; that selection
+      // must be honored even when the run-with-selection setting is off.
+      const runsShareLinkSelection = Boolean(query && executeQuery)
+      const queriesToRun = syncQueriesToRun(
         editor,
-        queryOffsetsRef.current ?? [],
+        runsShareLinkSelection || runWithSelectionRef.current,
       )
-      queriesToRunRef.current = queriesToRun
-      dispatch(actions.query.setQueriesToRun(queriesToRun))
 
       if (!query || !executeQuery) {
         triggerJitValidation()
@@ -1253,6 +1315,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           if (queriesToRun.length > 1) {
             handleTriggerRunScript()
           } else {
+            shareLinkSelectionRunRef.current = true
             toggleRunning()
           }
         }
@@ -1707,6 +1770,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   useEffect(() => {
+    runWithSelectionRef.current = runWithSelection
+    const editor = editorRef.current
+    if (!editor) return
+    syncQueriesToRun(editor, runWithSelection)
+  }, [runWithSelection])
+
+  useEffect(() => {
     canUseAIRef.current = canUseAI
     const lineCount = editorRef.current?.getModel()?.getLineCount()
     if (lineCount) {
@@ -1778,25 +1848,49 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (![RunningType.NONE, RunningType.SCRIPT].includes(running)) {
       applyGlyphsAndLineMarkings(monaco, editor)
 
+      // Consumed once: only the share-link mount path sets it, right before
+      // dispatching this run.
+      const honorShareLinkSelection = shareLinkSelectionRunRef.current
+      shareLinkSelectionRunRef.current = false
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : getQueryRequestFromEditor(editor)
+          : getQueryRequestFromEditor(
+              editor,
+              honorShareLinkSelection || runWithSelectionRef.current,
+            )
 
       const isRunningExplain = running === RunningType.EXPLAIN
 
       const targetBufferId = activeBufferRef.current.id as number
 
       if (request?.query) {
-        editor.updateOptions({ readOnly: true })
         const parentQuery = request.query
-        const parentQueryKey = createQueryKeyFromRequest(editor, request)
+        const runStartOffset = getQueryStartOffset(editor, request)
+        const runModelVersionId = editor.getModel()?.getVersionId() ?? null
+        const parentQueryKey = createQueryKey(parentQuery, runStartOffset)
+        const runSeq = ++runSeqRef.current
+        const isCurrentRun = () => runSeqRef.current === runSeq
+        inflightQueryRef.current = createInflightQuery(
+          targetBufferId,
+          parentQuery,
+          runStartOffset,
+        )
         questExecution.markActive(targetBufferId, parentQueryKey, () => {
           if (editorQueryIdRef.current !== null) {
             quest.abort(editorQueryIdRef.current)
             editorQueryIdRef.current = null
           }
         })
+
+        const staleExecutions = executionRefs.current[targetBufferId.toString()]
+        if (staleExecutions && staleExecutions[parentQueryKey]) {
+          delete staleExecutions[parentQueryKey]
+          if (Object.keys(staleExecutions).length === 0) {
+            cleanupExecutionRefs(targetBufferId)
+          }
+        }
+
         const originalQueryText = request.selection
           ? request.selection.queryText
           : request.query
@@ -1807,12 +1901,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
         // give the notification a slight delay to prevent flashing for fast queries
         notificationTimeoutRef.current = window.setTimeout(() => {
-          if (runningValueRef.current && requestRef.current && editor) {
+          if (
+            isCurrentRun() &&
+            runningValueRef.current &&
+            requestRef.current &&
+            editor
+          ) {
             dispatch(
               actions.query.addNotification(
                 {
                   type: NotificationType.LOADING,
-                  query: parentQueryKey,
+                  query: inflightQueryRef.current?.queryKey ?? parentQueryKey,
                   isExplain: isRunningExplain,
                   content: (
                     <Box gap="1rem" align="center">
@@ -1834,6 +1933,35 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           notificationTimeoutRef.current = null
         }, 1000)
 
+        const settleExecution = () => {
+          // A run superseded by a newer one settles under its own key and must
+          // not touch the shared running state the newer run now owns.
+          if (!isCurrentRun()) {
+            return { inflightQuery: null, currentQueryKey: parentQueryKey }
+          }
+          if (notificationTimeoutRef.current) {
+            window.clearTimeout(notificationTimeoutRef.current)
+            notificationTimeoutRef.current = null
+          }
+          setRequest(undefined)
+          dispatch(actions.query.stopRunning())
+          const inflightQuery = inflightQueryRef.current
+          const currentQueryKey = inflightQuery?.queryKey ?? parentQueryKey
+          questExecution.releaseExecution(currentQueryKey)
+          return { inflightQuery, currentQueryKey }
+        }
+
+        const getAnchoredInflightQuery = (
+          inflightQuery: InflightQuery | null,
+          model: editor.ITextModel | null,
+        ): InflightQuery | null =>
+          inflightQuery !== null &&
+          model !== null &&
+          activeBufferRef.current.id === targetBufferId &&
+          isInflightQueryStillInPlace(model.getValue(), inflightQuery)
+            ? inflightQuery
+            : null
+
         const { promise: queryPromise, queryId } = quest.queryRaw(
           normalizeQueryText(queryToRun),
           {
@@ -1846,19 +1974,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
         void queryPromise
           .then((result) => {
-            if (notificationTimeoutRef.current) {
-              window.clearTimeout(notificationTimeoutRef.current)
-              notificationTimeoutRef.current = null
-            }
-
-            setRequest(undefined)
-            dispatch(actions.query.stopRunning())
-            questExecution.releaseExecution(parentQueryKey)
+            const { inflightQuery, currentQueryKey } = settleExecution()
             if (!editorRef.current) return
 
             const targetBufferIdStr = targetBufferId.toString()
-            if (executionRefs.current[targetBufferIdStr] && editorRef.current) {
-              delete executionRefs.current[targetBufferIdStr][parentQueryKey]
+            if (executionRefs.current[targetBufferIdStr]) {
+              delete executionRefs.current[targetBufferIdStr][currentQueryKey]
               if (
                 Object.keys(executionRefs.current[targetBufferIdStr]).length ===
                 0
@@ -1867,26 +1988,20 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               }
             }
 
-            if (request.selection) {
-              const model = editorRef.current.getModel()
-              if (model) {
-                const targetBufferIdStr = targetBufferId.toString()
-                if (!executionRefs.current[targetBufferIdStr]) {
-                  executionRefs.current[targetBufferIdStr] = {}
-                }
+            const model = editorRef.current.getModel()
+            const anchoredQuery = getAnchoredInflightQuery(inflightQuery, model)
+            if (request.selection && anchoredQuery) {
+              if (!executionRefs.current[targetBufferIdStr]) {
+                executionRefs.current[targetBufferIdStr] = {}
+              }
 
-                const queryStartOffset = getQueryStartOffset(
-                  editorRef.current,
-                  request,
-                )
-                executionRefs.current[targetBufferIdStr][parentQueryKey] = {
-                  success: true,
-                  selection: request.selection,
-                  queryText: parentQuery,
-                  startOffset: queryStartOffset,
-                  endOffset:
-                    queryStartOffset + normalizeQueryText(parentQuery).length,
-                }
+              const offsetDelta = anchoredQuery.startOffset - runStartOffset
+              executionRefs.current[targetBufferIdStr][currentQueryKey] = {
+                success: true,
+                selection: shiftSelection(request.selection, offsetDelta),
+                queryText: parentQuery,
+                startOffset: anchoredQuery.startOffset,
+                endOffset: anchoredQuery.endOffset,
               }
             }
 
@@ -1899,7 +2014,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               dispatch(
                 actions.query.addNotification(
                   {
-                    query: parentQueryKey,
+                    query: currentQueryKey,
                     isExplain: isRunningExplain,
                     content: <QueryInNotification query={queryToRun} />,
                   },
@@ -1913,7 +2028,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               dispatch(
                 actions.query.addNotification(
                   {
-                    query: parentQueryKey,
+                    query: currentQueryKey,
                     isExplain: isRunningExplain,
                     content: (
                       <Text color="foreground" ellipsis title={queryToRun}>
@@ -1937,7 +2052,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               dispatch(
                 actions.query.addNotification(
                   {
-                    query: parentQueryKey,
+                    query: currentQueryKey,
                     isExplain: isRunningExplain,
                     jitCompiled: result.explain?.jitCompiled ?? false,
                     content: (
@@ -1955,75 +2070,94 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
           })
           .catch((error: ErrorResult) => {
-            if (notificationTimeoutRef.current) {
-              window.clearTimeout(notificationTimeoutRef.current)
-              notificationTimeoutRef.current = null
-            }
-
-            setRequest(undefined)
-            dispatch(actions.query.stopRunning())
-            questExecution.releaseExecution(parentQueryKey)
+            const { inflightQuery, currentQueryKey } = settleExecution()
 
             if (editorRef?.current && monacoRef?.current) {
-              // For error positioning, we need to use the original request (without EXPLAIN prefix)
-              // but adjust the error position if it was an EXPLAIN query
-              let adjustedErrorPosition = error.position
-              if (isRunningExplain) {
-                // Adjust error position to account for removed "EXPLAIN " prefix
-                adjustedErrorPosition = Math.max(0, error.position - 8)
-              }
-              if (request.selection) {
-                adjustedErrorPosition += parentQuery.indexOf(
-                  request.selection.queryText,
-                )
-              }
-
-              const errorRange = getErrorRange(
-                editorRef.current,
-                request,
-                adjustedErrorPosition,
+              const model = editorRef.current.getModel()
+              const anchoredQuery = getAnchoredInflightQuery(
+                inflightQuery,
+                model,
               )
-
-              const errorToStore = { ...error, position: adjustedErrorPosition }
-
-              // Use the already-defined parentQueryKey instead of recalculating it here
-              const targetBufferIdStr = targetBufferId.toString()
-              if (!executionRefs.current[targetBufferIdStr]) {
-                executionRefs.current[targetBufferIdStr] = {}
-              }
-
-              const startOffset = getQueryStartOffset(
-                editorRef.current,
-                request,
-              )
-              executionRefs.current[targetBufferIdStr][parentQueryKey] = {
-                error: errorToStore,
-                selection: request.selection,
-                queryText: parentQuery,
-                startOffset,
-                endOffset: startOffset + normalizeQueryText(parentQuery).length,
-              }
-
-              if (errorRange) {
-                editorRef?.current.focus()
-
-                if (!request.selection) {
-                  editorRef?.current.setPosition({
-                    lineNumber: errorRange.startLineNumber,
-                    column: errorRange.startColumn,
-                  })
+              if (anchoredQuery && model) {
+                // For error positioning, we need to use the original request (without EXPLAIN prefix)
+                // but adjust the error position if it was an EXPLAIN query
+                let adjustedErrorPosition = error.position
+                if (isRunningExplain) {
+                  // Adjust error position to account for removed "EXPLAIN " prefix
+                  adjustedErrorPosition = Math.max(0, error.position - 8)
+                }
+                if (request.selection) {
+                  adjustedErrorPosition += parentQuery.indexOf(
+                    request.selection.queryText,
+                  )
                 }
 
-                editorRef?.current.revealPosition({
-                  lineNumber: errorRange.startLineNumber,
-                  column: errorRange.endColumn,
-                })
+                const offsetDelta = anchoredQuery.startOffset - runStartOffset
+                const currentQueryPosition = model.getPositionAt(
+                  anchoredQuery.startOffset,
+                )
+                const currentRequest: Request = {
+                  ...request,
+                  row: currentQueryPosition.lineNumber - 1,
+                  column: currentQueryPosition.column,
+                  selection:
+                    request.selection &&
+                    shiftSelection(request.selection, offsetDelta),
+                }
+
+                const errorRange = getErrorRange(
+                  editorRef.current,
+                  currentRequest,
+                  adjustedErrorPosition,
+                )
+
+                const errorToStore = {
+                  ...error,
+                  position: adjustedErrorPosition,
+                }
+
+                const targetBufferIdStr = targetBufferId.toString()
+                if (!executionRefs.current[targetBufferIdStr]) {
+                  executionRefs.current[targetBufferIdStr] = {}
+                }
+
+                executionRefs.current[targetBufferIdStr][currentQueryKey] = {
+                  error: errorToStore,
+                  selection: currentRequest.selection,
+                  queryText: parentQuery,
+                  startOffset: anchoredQuery.startOffset,
+                  endOffset: anchoredQuery.endOffset,
+                }
+
+                const bufferUntouchedSinceRun =
+                  model.getVersionId() === runModelVersionId
+                const isCancelledByUser =
+                  String(error.error) === "Cancelled by user"
+                if (
+                  errorRange &&
+                  bufferUntouchedSinceRun &&
+                  !isCancelledByUser
+                ) {
+                  editorRef?.current.focus()
+
+                  if (!request.selection) {
+                    editorRef?.current.setPosition({
+                      lineNumber: errorRange.startLineNumber,
+                      column: errorRange.startColumn,
+                    })
+                  }
+
+                  editorRef?.current.revealPosition({
+                    lineNumber: errorRange.startLineNumber,
+                    column: errorRange.endColumn,
+                  })
+                }
               }
 
               dispatch(
                 actions.query.addNotification(
                   {
-                    query: parentQueryKey,
+                    query: currentQueryKey,
                     isExplain: isRunningExplain,
                     content: <Text color="red">{error.error}</Text>,
                     sideContent: <QueryInNotification query={queryToRun} />,
@@ -2035,6 +2169,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             }
           })
           .finally(() => {
+            if (isCurrentRun()) {
+              inflightQueryRef.current = null
+            }
             if (!scriptConfirmationOpenRef.current) {
               executePendingScriptRun()
             }
@@ -2082,7 +2219,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (monacoRef?.current && editorRef?.current) {
       applyGlyphsAndLineMarkings(monacoRef.current, editorRef.current)
     }
-    editorRef.current?.updateOptions({ readOnly: !!request })
   }, [request])
 
   useEffect(() => {

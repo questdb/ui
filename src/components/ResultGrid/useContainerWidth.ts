@@ -17,11 +17,15 @@ export const useWidthObserver = (
 ): void => {
   const onWidthRef = useRef(onWidth)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hasMeasuredRef = useRef(false)
 
   useLayoutEffect(() => {
     const measured = ref.current?.getBoundingClientRect().width
     // A 0 width (not laid out yet) would collapse every column to zero.
-    if (measured) onWidthRef.current(measured)
+    if (measured) {
+      hasMeasuredRef.current = true
+      onWidthRef.current(measured)
+    }
   }, [ref])
 
   useEffect(() => {
@@ -29,6 +33,13 @@ export const useWidthObserver = (
     const observer = new ResizeObserver(([entry]) => {
       const measured = entry.contentRect.width
       if (!measured) return
+      // The first real measurement decides the initial layout — deliver it
+      // immediately. The debounce only smooths subsequent resizes.
+      if (!hasMeasuredRef.current) {
+        hasMeasuredRef.current = true
+        onWidthRef.current(measured)
+        return
+      }
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(
         () => onWidthRef.current(measured),
@@ -47,8 +58,10 @@ export const useWidthObserver = (
   }, [onWidth])
 }
 
-export const useContainerWidth = (ref: RefObject<HTMLElement>): number => {
-  const [width, setWidth] = useState(800)
+export const useContainerWidth = (
+  ref: RefObject<HTMLElement>,
+): number | null => {
+  const [width, setWidth] = useState<number | null>(null)
   useWidthObserver(ref, setWidth)
   return width
 }

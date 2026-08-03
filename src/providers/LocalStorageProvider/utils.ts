@@ -22,8 +22,29 @@
  *
  ******************************************************************************/
 
+import { MAX_COLUMN_WIDTH_BOUNDS } from "../../components/ResultGrid/dimensions"
+import type { MaxColumnWidth } from "../../components/ResultGrid/types"
+
 export const parseBoolean = (value: string, defaultValue: boolean): boolean =>
   value ? value === "true" : defaultValue
 
 export const parseInteger = (value: string, defaultValue: number): number =>
   isNaN(parseInt(value)) ? defaultValue : parseInt(value)
+
+export const parseMaxColumnWidth = (value: string): MaxColumnWidth => {
+  const parsed = parseInt(value)
+  if (isNaN(parsed)) return "auto"
+  return Math.min(
+    Math.max(parsed, MAX_COLUMN_WIDTH_BOUNDS.min),
+    MAX_COLUMN_WIDTH_BOUNDS.max,
+  )
+}
+
+export const isMaxColumnWidthDraftValid = (draft: string): boolean => {
+  if (draft === "") return true
+  if (!/^\d+$/.test(draft)) return false
+  const width = parseInt(draft)
+  return (
+    width >= MAX_COLUMN_WIDTH_BOUNDS.min && width <= MAX_COLUMN_WIDTH_BOUNDS.max
+  )
+}

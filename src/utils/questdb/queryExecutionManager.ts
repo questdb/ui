@@ -131,6 +131,17 @@ export class QueryExecutionManager {
     this.refreshSnapshot()
   }
 
+  rekeyActive = (
+    oldKey: QueryKey,
+    newKey: QueryKey,
+    scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+  ): void => {
+    const active = this._activeByScope.get(scopeKey)
+    if (!active || active.queryKey !== oldKey) return
+    this._activeByScope.set(scopeKey, { ...active, queryKey: newKey })
+    this.refreshSnapshot()
+  }
+
   private abortActive(scopeKey: ScopeKey): void {
     const active = this._activeByScope.get(scopeKey)
     if (!active) return

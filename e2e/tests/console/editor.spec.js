@@ -2086,3 +2086,308 @@ describe("import/export tabs", () => {
     cy.getByDataHook("import-summary-close").click()
   })
 })
+
+describe("editor settings", () => {
+  const runWithSelectionTable = "e2e_run_with_selection"
+
+  beforeEach(() => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.clearEditor()
+    cy.execQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
+    cy.execQuery(
+      `CREATE TABLE ${runWithSelectionTable} AS (SELECT x a, x b, x c FROM long_sequence(1))`,
+    )
+  })
+
+  afterEach(() => {
+    cy.execQuery(`DROP TABLE IF EXISTS ${runWithSelectionTable}`)
+  })
+
+  const openEditorSettings = () => {
+    cy.getByDataHook("editor-tabs-menu-button").click()
+    cy.getByDataHook("editor-tabs-menu-settings").click()
+    cy.getByDataHook("editor-settings-modal").should("be.visible")
+  }
+
+  it("toggles 'Run with selection' from the modal and persists it", () => {
+    // Given the setting defaults to on
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").should(
+      "have.attr",
+      "aria-checked",
+      "true",
+    )
+
+    // When it is switched off and saved
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("editor-settings-save").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+
+    // Then the choice is persisted to local storage
+    cy.window()
+      .its("localStorage")
+      .invoke("getItem", "editor.runWithSelection")
+      .should("eq", "false")
+
+    // And reopening the modal shows it still off
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").should(
+      "have.attr",
+      "aria-checked",
+      "false",
+    )
+    cy.getByDataHook("editor-settings-cancel").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+  })
+
+  it("runs the selected fragment when enabled and the whole query once disabled", () => {
+    const table = runWithSelectionTable
+    const query = `select a from ${table}`
+    const startColumn = query.indexOf(table) + 1
+    const endColumn = startColumn + table.length
+
+    // Given a query selecting one column, with the table name highlighted
+    cy.typeQueryDirectly(query)
+    cy.selectRange(
+      { lineNumber: 1, column: startColumn },
+      { lineNumber: 1, column: endColumn },
+    )
+
+    // When 'Run with selection' is enabled (default), the selection runs
+    cy.getByDataHook("button-run-query").should("contain", "Run selected query")
+    cy.clickRunQuery()
+    // Then the bare table name returns every column
+    cy.get("[data-hook='grid-header-name']").should("have.length", 3)
+
+    // When 'Run with selection' is turned off
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    // Then the run button reflects the new setting without any further
+    // editor interaction
+    cy.getByDataHook("button-run-query").should("contain", "Run query")
+
+    // And the same fragment is selected and run again
+    cy.selectRange(
+      { lineNumber: 1, column: startColumn },
+      { lineNumber: 1, column: endColumn },
+    )
+    cy.getByDataHook("button-run-query").should("contain", "Run query")
+    cy.clickRunQuery()
+    // Then the whole cursor query runs, returning only the single column
+    cy.get("[data-hook='grid-header-name']").should("have.length", 1)
+  })
+
+  it("runs the share-link selection even when 'Run with selection' is off", () => {
+    // Given the setting is turned off
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    // And a buffer whose statement contains the shared fragment
+    cy.typeQueryDirectly("select 1 union all select 2;")
+
+    // When a share link for the fragment auto-runs
+    cy.visit(
+      `${baseUrl}?query=${encodeURIComponent("select 2")}&executeQuery=true`,
+    )
+    cy.getEditorContent().should("be.visible")
+
+    // Then only the selected fragment runs, not the containing statement
+    cy.getGridRows().should("have.length", 1)
+    cy.getGridRow(0).should("contain", "2")
+  })
+
+  it("caps column width at the configured maximum and returns to auto", () => {
+    const cell = () =>
+      cy.get("[data-hook='result-grid-tanstack']:visible #cell-0-0")
+
+    // Given a result with a very wide column under automatic sizing
+    cy.typeQueryDirectly(
+      "select string_agg(x::string, ',') s from long_sequence(500)",
+    )
+    cy.clickRunQuery()
+    cell().should("be.visible")
+
+    // When a width below the minimum is saved
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-max-column-width").clear().type("10")
+    cy.getByDataHook("editor-settings-save").click()
+
+    // Then the modal stays open and shows a validation error
+    cy.getByDataHook("editor-settings-modal").should("be.visible")
+    cy.getByDataHook("editor-settings-max-column-width-error").should(
+      "contain",
+      "between 60 and 4000",
+    )
+
+    // When a valid maximum column width is saved
+    cy.getByDataHook("editor-settings-max-column-width").clear().type("250")
+    cy.getByDataHook("editor-settings-max-column-width-error").should(
+      "not.exist",
+    )
+    cy.getByDataHook("editor-settings-save").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+
+    // Then the open result reflows and the column settles at the cap
+    cell().should(($cell) => {
+      expect($cell[0].getBoundingClientRect().width).to.be.closeTo(250, 3)
+    })
+
+    // And reopening the modal shows the stored value
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-max-column-width").should(
+      "have.value",
+      "250",
+    )
+
+    // When the field is cleared back to auto and saved
+    cy.getByDataHook("editor-settings-max-column-width").clear()
+    cy.getByDataHook("editor-settings-save").click()
+
+    // Then the column fills the grid again
+    let gridWidth
+    cy.get("[data-hook='result-grid-tanstack']:visible").then(($grid) => {
+      gridWidth = $grid[0].getBoundingClientRect().width
+    })
+    cell().should(($cell) => {
+      expect($cell[0].getBoundingClientRect().width).to.be.closeTo(
+        gridWidth,
+        20,
+      )
+    })
+  })
+})
+
+describe("editing while a query is running", () => {
+  beforeEach(() => {
+    cy.loadConsoleWithAuth()
+    cy.getEditorContent().should("be.visible")
+    cy.clearEditor()
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(2000)
+      })
+    })
+  })
+
+  it("keeps the editor editable in flight and still lands the result", () => {
+    // Given a running query
+    cy.typeQuery("select 1")
+    cy.clickRunIconInLine(1)
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // Then the editor is not read-only and can be shifted mid-flight
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      expect(editor.getOption(win.monaco.editor.EditorOption.readOnly)).to.eq(
+        false,
+      )
+
+      const before = editor.getValue()
+      editor.setPosition({ lineNumber: 1, column: 1 })
+      editor.trigger("test", "type", { text: "-- shifted while running\n" })
+      expect(editor.getValue()).to.not.eq(before)
+      expect(editor.getValue()).to.contain("-- shifted while running")
+    })
+
+    // And the running glyph follows the query to its new line
+    cy.getCancelIconInLine(2).should("be.visible")
+
+    // When the query completes, its result lands in the query log
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+    cy.expandNotifications()
+    cy.getExpandedNotifications().should("contain", "select 1")
+
+    // And the success glyph sits on the query's shifted line
+    cy.get(".glyph-widget-2 .glyph-run-icon.success").should("be.visible")
+  })
+
+  it("drops the glyphs but still lands the result when the running query is edited", () => {
+    // Given a running query
+    cy.typeQuery("select 1")
+    cy.clickRunIconInLine(1)
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When text is typed inside the running query, dislodging it
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      editor.setPosition({ lineNumber: 1, column: 8 })
+      editor.trigger("test", "type", { text: "x" })
+      expect(editor.getValue()).to.contain("select x1")
+    })
+
+    // Then no line claims the running glyph anymore
+    cy.get(".glyph-run-icon.cancel").should("not.exist")
+
+    // When the query completes, its result still lands in the query log
+    cy.getByDataHook("success-notification").should("contain", "select 1")
+
+    // And no success glyph is drawn for the edited query
+    cy.get(".glyph-run-icon.success").should("not.exist")
+  })
+
+  it("keeps the cursor where the user types when the query fails after an edit", () => {
+    // Given a running query that will fail
+    cy.typeQuery("select * from non_existent_table")
+    cy.clickRunIconInLine(1)
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When a comment line is typed above it while it runs
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      editor.setPosition({ lineNumber: 1, column: 1 })
+      editor.trigger("test", "type", { text: "-- typing during the run\n" })
+      editor.setPosition({ lineNumber: 1, column: 10 })
+    })
+
+    // Then the error lands in the query log
+    cy.getByDataHook("error-notification").should(
+      "contain",
+      "table does not exist",
+    )
+
+    // And the error glyph sits on the query's shifted line
+    cy.get(".glyph-widget-2 .glyph-run-icon.error").should("be.visible")
+
+    // And the cursor stays where the user was typing instead of jumping
+    // into the failed query
+    cy.window().then((win) => {
+      const position = win.monaco.editor.getEditors()[0].getPosition()
+      expect(position.lineNumber).to.eq(1)
+      expect(position.column).to.eq(10)
+    })
+  })
+
+  it("supersedes the running query when a second run is confirmed, landing only the new result", () => {
+    // Given a first query that is still running
+    cy.typeQuery("select 1 a;{enter}select 2 b;")
+    cy.clickRunIconInLine(1)
+    cy.getCancelIconInLine(1).should("be.visible")
+
+    // When a second query is run while the first is in flight
+    cy.clickRunIconInLine(2)
+
+    // Then the console asks to cancel the running query, and confirming
+    // supersedes it
+    cy.getByDataHook("abort-confirmation-dialog").should("be.visible")
+    cy.getByDataHook("abort-confirmation-dialog-confirm").click()
+
+    // Then only the second query's result lands in the query log
+    cy.get('[data-hook="success-notification"]', { timeout: 10000 }).should(
+      "contain",
+      "select 2 b",
+    )
+
+    // And the superseded first query never lands a result of its own
+    cy.get('[data-hook="success-notification"]').should(
+      "not.contain",
+      "select 1 a",
+    )
+
+    // And no query is left running
+    cy.get(".glyph-run-icon.cancel").should("not.exist")
+  })
+})

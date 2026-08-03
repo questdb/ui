@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react"
 import type { editor } from "monaco-editor"
 import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { getQueryFromCursor, normalizeQueryText } from "../../Monaco/utils"
 import { resolveRunAction } from "../notebookUtils"
@@ -49,6 +50,7 @@ export const useCellRunActions = ({
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const validateWithGlobals = useValidateWithGlobals()
+  const { runWithSelection } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
   // A run from the Run toggle spins the Run segment; a run from the refresh
@@ -106,6 +108,7 @@ export const useCellRunActions = ({
   ])
 
   const tryRunSelection = useCallback(async (): Promise<boolean> => {
+    if (!runWithSelection) return false
     const ed = editorRef.current
     if (!ed) return false
     const selection = ed.getSelection()
@@ -121,7 +124,14 @@ export const useCellRunActions = ({
     const { ok } = await runCell(cell.id, normalized)
     applyHighlight(ok)
     return true
-  }, [cell.id, runCell, editorRef, applyHighlight, clearHighlight])
+  }, [
+    runWithSelection,
+    cell.id,
+    runCell,
+    editorRef,
+    applyHighlight,
+    clearHighlight,
+  ])
 
   const emitRanEvent = useCallback(
     (status: RanStatus) => {

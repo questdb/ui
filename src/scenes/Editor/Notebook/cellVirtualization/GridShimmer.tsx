@@ -1,24 +1,30 @@
 import React, { useMemo } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
-import type {
-  CellResult,
-  DqlQueryResult,
-  SingleQueryResult,
-} from "../../../../store/notebook"
+import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import {
+  CELL_BORDER_PX,
+  CELL_PADDING_PX,
+  HEADER_BORDER_PX,
+  HEADER_COPY_BUTTON_PX,
+  HEADER_GAP_PX,
   HEADER_HEIGHT,
+  HEADER_NAME_FONT_SIZE_PX,
+  HEADER_PADDING_PX,
+  HEADER_TYPE_FONT_SIZE_PX,
   ROW_HEIGHT,
 } from "../../../../components/ResultGrid/dimensions"
 import {
+  applyMaxColumnWidth,
   COLUMN_ID_PREFIX,
   columnId,
   formatColumnType,
   isLeftAligned,
   sampleColumnWidths,
-  WIDTH_SAMPLE_ROWS,
 } from "../../../../components/ResultGrid/inlineGridUtils"
-import type { ResultGridRow } from "../../../../components/ResultGrid/types"
+import { useFontsReady } from "../../../../components/ResultGrid/useFontsReady"
+import type { MaxColumnWidth } from "../../../../components/ResultGrid/types"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import {
   columnLayoutQueryKey,
   loadNotebookColumnLayout,
@@ -109,23 +115,41 @@ const HeaderCell = styled.div<{ $width: number; $align: "left" | "right" }>`
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0.5rem 1rem;
-  border-right: 1px solid ${color("selection")};
+  padding: 0.5rem ${HEADER_PADDING_PX / 2}px;
+  border-right: ${HEADER_BORDER_PX}px solid ${color("selection")};
   overflow: hidden;
   text-align: ${({ $align }) => $align};
 `
 
+// Mirrors the live header's name row, whose copy button is always laid out
+// (visibility: hidden) — the same space sampleColumnWidths reserves via
+// HEADER_CHROME_PX. Without it a name that fits here truncates on the swap.
+const HeaderNameRow = styled.div<{ $align: "left" | "right" }>`
+  display: flex;
+  align-items: center;
+  flex-direction: ${({ $align }) =>
+    $align === "right" ? "row-reverse" : "row"};
+  justify-content: flex-start;
+  gap: ${HEADER_GAP_PX}px;
+`
+
+const HeaderCopyButtonSpacer = styled.div`
+  flex-shrink: 0;
+  width: ${HEADER_COPY_BUTTON_PX}px;
+`
+
 const HeaderName = styled.span`
   color: ${color("cyan")};
-  font-size: ${({ theme }) => theme.fontSize.md};
+  font-size: ${HEADER_NAME_FONT_SIZE_PX}px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 `
 
 const HeaderType = styled.span`
   color: ${color("gray2")};
-  font-size: ${({ theme }) => theme.fontSize.ms};
+  font-size: ${HEADER_TYPE_FONT_SIZE_PX}px;
   text-transform: lowercase;
   white-space: nowrap;
 `
@@ -144,8 +168,8 @@ const BodyCell = styled.div<{ $width: number; $align: "left" | "right" }>`
   justify-content: ${({ $align }) =>
     $align === "right" ? "flex-end" : "flex-start"};
   height: ${ROW_HEIGHT}px;
-  padding: 0 0.6rem;
-  border-right: 1px solid ${color("selection")};
+  padding: 0 ${CELL_PADDING_PX / 2}px;
+  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
   border-bottom: 1px solid ${color("selection")};
   box-sizing: border-box;
   overflow: hidden;
@@ -187,21 +211,6 @@ const tabKeysFor = (results: SingleQueryResult[]): string[] => {
   })
 }
 
-// Cached per dataset reference so repeated placeholder mounts of the same
-// result never re-sample.
-const sampledWidths = new WeakMap<object, number[]>()
-
-const sampledWidthsFor = (active: DqlQueryResult): number[] => {
-  const cached = sampledWidths.get(active.dataset)
-  if (cached) return cached
-  const widths = sampleColumnWidths(
-    active.columns,
-    active.dataset.slice(0, WIDTH_SAMPLE_ROWS) as ResultGridRow[],
-  )
-  sampledWidths.set(active.dataset, widths)
-  return widths
-}
-
 // The live grid's width/order/pinning pipeline, so the swap shifts nothing.
 // Frozen columns follow the pin list, not columnOrder — ResultGrid's
 // moveColumnToFront reorders the pin list alone.
@@ -209,6 +218,7 @@ export const displayColumnsFor = (
   active: SingleQueryResult | undefined,
   bufferId: number,
   cellId: string,
+  maxColumnWidth: MaxColumnWidth,
 ): DisplayColumn[] => {
   if (active?.type !== "dql" || active.columns.length === 0) return []
   const layout = loadNotebookColumnLayout(
@@ -230,7 +240,12 @@ export const displayColumnsFor = (
   const displayIds = [...pinned, ...ordered.filter((id) => !pinnedSet.has(id))]
   const sizing = layout?.columnSizing
   const needsSampling = naturalIds.some((id) => sizing?.[id] === undefined)
-  const sampled = needsSampling ? sampledWidthsFor(active) : []
+  const sampled = needsSampling
+    ? applyMaxColumnWidth(
+        sampleColumnWidths(active.columns, active.dataset),
+        maxColumnWidth,
+      )
+    : []
   return displayIds.map((id) => {
     const index = parseInt(id.slice(COLUMN_ID_PREFIX.length), 10)
     const col = active.columns[index]
@@ -256,8 +271,8 @@ const GenericCell = styled.div<{ $align: "left" | "right" }>`
   justify-content: ${({ $align }) =>
     $align === "right" ? "flex-end" : "flex-start"};
   height: ${ROW_HEIGHT}px;
-  padding: 0 0.6rem;
-  border-right: 1px solid ${color("selection")};
+  padding: 0 ${CELL_PADDING_PX / 2}px;
+  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
   border-bottom: 1px solid ${color("selection")};
   box-sizing: border-box;
   overflow: hidden;
@@ -307,10 +322,15 @@ export const GridShimmer = ({
   bufferId: number
   cellId: string
 }) => {
+  const { maxColumnWidth } = useLocalStorage()
+  const fontsReady = useFontsReady()
   const active = result ? activeResultOf(result) : undefined
+  // fontsReady is a cache buster: the webfont landing invalidates every
+  // measured width, so a placeholder sampled against the fallback re-samples
+  // rather than holding stale widths for the life of the dataset.
   const columns = useMemo(
-    () => displayColumnsFor(active, bufferId, cellId),
-    [active, bufferId, cellId],
+    () => displayColumnsFor(active, bufferId, cellId, maxColumnWidth),
+    [active, bufferId, cellId, maxColumnWidth, fontsReady],
   )
   const rowCount =
     active?.type === "dql"
@@ -354,7 +374,10 @@ export const GridShimmer = ({
           <HeaderRow>
             {columns.map((c) => (
               <HeaderCell key={c.key} $width={c.width} $align={c.align}>
-                <HeaderName>{c.name}</HeaderName>
+                <HeaderNameRow $align={c.align}>
+                  <HeaderName>{c.name}</HeaderName>
+                  <HeaderCopyButtonSpacer />
+                </HeaderNameRow>
                 <HeaderType>{c.typeLabel}</HeaderType>
               </HeaderCell>
             ))}

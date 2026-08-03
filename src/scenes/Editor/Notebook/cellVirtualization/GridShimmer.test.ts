@@ -9,6 +9,7 @@ import {
 import { displayColumnsFor } from "./GridShimmer"
 
 const BUFFER_ID = 7
+const MAX_COLUMN_WIDTH = 100
 
 const dql = (): DqlQueryResult => ({
   type: "dql",
@@ -40,7 +41,7 @@ describe("displayColumnsFor", () => {
     const active = dql()
 
     // When display columns are computed
-    const cols = displayColumnsFor(active, BUFFER_ID, "cell-natural")
+    const cols = displayColumnsFor(active, BUFFER_ID, "cell-natural", "auto")
 
     // Then columns keep their natural order with content-sampled widths
     expect(cols.map((c) => c.name)).toEqual(["ts", "price", "symbol"])
@@ -58,7 +59,7 @@ describe("displayColumnsFor", () => {
     })
 
     // When display columns are computed
-    const cols = displayColumnsFor(active, BUFFER_ID, "cell-pinned")
+    const cols = displayColumnsFor(active, BUFFER_ID, "cell-pinned", "auto")
 
     // Then the frozen band follows the pin list, the rest follow columnOrder
     expect(cols.map((c) => c.name)).toEqual(["price", "ts", "symbol"])
@@ -72,11 +73,48 @@ describe("displayColumnsFor", () => {
     })
 
     // When display columns are computed
-    const cols = displayColumnsFor(active, BUFFER_ID, "cell-sized")
+    const cols = displayColumnsFor(active, BUFFER_ID, "cell-sized", "auto")
 
     // Then the persisted width wins and the rest fall back to sampling
     expect(cols[1].width).toBe(321)
     expect(cols[0].width).toBeGreaterThan(0)
+  })
+
+  it("caps sampled widths at the configured maximum, as the live grid does", () => {
+    // Given a result whose timestamp column samples wider than the cap
+    const active = dql()
+    const uncapped = displayColumnsFor(active, BUFFER_ID, "cell-capped", "auto")
+    expect(uncapped[0].width).toBeGreaterThan(MAX_COLUMN_WIDTH)
+
+    // When display columns are computed with that cap
+    const cols = displayColumnsFor(
+      active,
+      BUFFER_ID,
+      "cell-capped",
+      MAX_COLUMN_WIDTH,
+    )
+
+    // Then the over-wide column lands on the cap, so the swap shifts nothing
+    expect(cols[0].width).toBe(MAX_COLUMN_WIDTH)
+  })
+
+  it("leaves persisted widths above the cap alone", () => {
+    // Given a layout whose persisted width exceeds the cap
+    const active = dql()
+    saveLayout("cell-capped-sized", active, {
+      columnSizing: { [columnId(1)]: 321 },
+    })
+
+    // When display columns are computed with that cap
+    const cols = displayColumnsFor(
+      active,
+      BUFFER_ID,
+      "cell-capped-sized",
+      MAX_COLUMN_WIDTH,
+    )
+
+    // Then the width the user dragged survives — the cap only bounds sampling
+    expect(cols[1].width).toBe(321)
   })
 
   it("drops layout ids that no longer exist in the result", () => {
@@ -88,7 +126,7 @@ describe("displayColumnsFor", () => {
     })
 
     // When display columns are computed
-    const cols = displayColumnsFor(active, BUFFER_ID, "cell-stale")
+    const cols = displayColumnsFor(active, BUFFER_ID, "cell-stale", "auto")
 
     // Then the unknown id is gone and every real column is present
     expect(cols.map((c) => c.name)).toEqual(["symbol", "ts", "price"])
@@ -97,7 +135,7 @@ describe("displayColumnsFor", () => {
   it("returns no columns when the result is not in memory", () => {
     // Given a cell whose result has not hydrated yet
     // When display columns are computed without a result
-    const cols = displayColumnsFor(undefined, BUFFER_ID, "cell-lazy")
+    const cols = displayColumnsFor(undefined, BUFFER_ID, "cell-lazy", "auto")
 
     // Then the shimmer falls back to its generic silhouette
     expect(cols).toEqual([])

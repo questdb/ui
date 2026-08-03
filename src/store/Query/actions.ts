@@ -37,6 +37,7 @@ import {
   QueryAction,
   QueryAT,
   QueryKey,
+  QueryKeyUpdate,
   RunningType,
   QueriesToRun,
 } from "../../types"
@@ -126,6 +127,17 @@ const updateNotificationKey = (
   },
 })
 
+const updateNotificationKeys = (
+  updates: QueryKeyUpdate[],
+  bufferId: NotificationNamespaceKey,
+): QueryAction => ({
+  type: QueryAT.UPDATE_NOTIFICATION_KEYS,
+  payload: {
+    updates,
+    bufferId,
+  },
+})
+
 const moveNotificationNamespace = (
   fromBufferId: NotificationNamespaceKey,
   toBufferId: NotificationNamespaceKey,
@@ -150,6 +162,7 @@ export default {
   cleanupBufferNotifications,
   removeNotification,
   updateNotificationKey,
+  updateNotificationKeys,
   moveNotificationNamespace,
   setResult,
   stopRunning,

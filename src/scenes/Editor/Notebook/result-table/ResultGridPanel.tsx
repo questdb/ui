@@ -16,6 +16,7 @@ import {
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
+import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 
 type Props = {
   data: DqlQueryResult
@@ -66,6 +67,7 @@ export const ResultGridPanel: React.FC<Props> = ({
     runToken,
     viewportStore,
   })
+  const { maxColumnWidth } = useLocalStorage()
   const [hasSelection, setHasSelection] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(
     columnLayout?.pinnedColumns?.length ?? 0,
@@ -94,6 +96,7 @@ export const ResultGridPanel: React.FC<Props> = ({
       <ResultGrid
         ref={gridRef}
         dataSource={dataSource}
+        maxColumnWidth={maxColumnWidth}
         runToken={runToken}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}
