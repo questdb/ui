@@ -59,6 +59,7 @@ export type NotebookContextSnapshot =
       buffer_id: number
       label: string
       layout_mode: "list" | "grid"
+      auto_refresh_default: AutoRefresh
       maximized_cell_id: string | null
       variables?: Array<{ name: string; value: string }>
       cells: NotebookContextCell[]
@@ -184,6 +185,7 @@ export const buildSnapshot = async (
     buffer_id: bufferId,
     label: meta.label,
     layout_mode: layoutMode,
+    auto_refresh_default: settings.autoRefreshDefault ?? true,
     maximized_cell_id: maximizedCellId,
     cells: cells.map((c) => buildCell(c, gridByCellId, layoutMode)),
   }
@@ -217,6 +219,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   lines.push(`  buffer_id: ${snap.buffer_id}`)
   lines.push(`  label: ${JSON.stringify(sanitizeForPromptContext(snap.label))}`)
   lines.push(`  layout_mode: ${snap.layout_mode}`)
+  lines.push(`  auto_refresh_default: ${snap.auto_refresh_default}`)
   lines.push(
     `  maximized_cell_id: ${
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
@@ -289,6 +292,8 @@ export const formatDigest = (digest: UserActionDigest): string => {
     parts.push(`  ran: { ${entries} }`)
   }
   if (digest.layoutModeTo) parts.push(`  layout_mode: ${digest.layoutModeTo}`)
+  if (digest.autoRefreshDefaultTo !== undefined)
+    parts.push(`  auto_refresh_default: ${digest.autoRefreshDefaultTo}`)
   if (digest.notebookStatusChange)
     parts.push(`  notebook_status: ${digest.notebookStatusChange}`)
   if (parts.length === 0) return ""

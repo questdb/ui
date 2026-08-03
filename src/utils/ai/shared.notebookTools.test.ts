@@ -502,6 +502,57 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
   })
 
+  it("set_cell_autorefresh with null DELETES the override key so the cell inherits", async () => {
+    // Given a cell carrying a stored override
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", { autoRefresh: "5s" }),
+    ])
+    // When the agent clears it
+    await dispatchTool(
+      "set_cell_autorefresh",
+      { buffer_id: 1, cell_id: "c", value: null },
+      makeClient(),
+      noopStatus,
+    )
+    // Then no key remains — a spread patch would have kept it
+    const updated = cellById(state, "c")
+    expect(updated && "autoRefresh" in updated).toBe(false)
+  })
+
+  it("set_notebook_autorefresh stores the notebook default in settings", async () => {
+    const { state } = mountLive(1, [cell("c")])
+    await dispatchTool(
+      "set_notebook_autorefresh",
+      { buffer_id: 1, value: "30s" },
+      makeClient(),
+      noopStatus,
+    )
+    expect(state.parts.settings.autoRefreshDefault).toBe("30s")
+  })
+
+  it("set_notebook_autorefresh accepts Off (false) as a value", async () => {
+    const { state } = mountLive(1, [cell("c")])
+    await dispatchTool(
+      "set_notebook_autorefresh",
+      { buffer_id: 1, value: false },
+      makeClient(),
+      noopStatus,
+    )
+    expect(state.parts.settings.autoRefreshDefault).toBe(false)
+  })
+
+  it("set_notebook_autorefresh rejects a token outside the allowed set", async () => {
+    const { state } = mountLive(1, [cell("c")])
+    const res = await dispatchTool(
+      "set_notebook_autorefresh",
+      { buffer_id: 1, value: "2s" },
+      makeClient(),
+      noopStatus,
+    )
+    expect(res.is_error).toBe(true)
+    expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
+  })
+
   it("set_cell_name sets the cell name", async () => {
     const { state } = mountLive(1, [cell("c")])
     await dispatchTool(
@@ -862,6 +913,78 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     }
     expect(parsed.applied.updated).toEqual(["b"])
     expect(parsed.applied.deleted).toEqual(["c"])
+  })
+
+  it("apply_notebook_state stores auto_refresh_default, including Off; null preserves", async () => {
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+    // When an apply sets the default to Off — false must survive as a value
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        auto_refresh_default: false,
+        cells: [{ id: "a", preserve_value: true }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    expect(state.parts.settings.autoRefreshDefault).toBe(false)
+    // When a later apply passes null
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        auto_refresh_default: null,
+        cells: [{ id: "a", preserve_value: true }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    // Then the stored default survives
+    expect(state.parts.settings.autoRefreshDefault).toBe(false)
+  })
+
+  it("apply_notebook_state rejects an invalid auto_refresh_default before mutating", async () => {
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        auto_refresh_default: "2s",
+        cells: [{ value: "SELECT 2" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    // Then the tool errors and nothing committed
+    expect(res.is_error).toBe(true)
+    expect((JSON.parse(res.content) as { message: string }).message).toContain(
+      "auto_refresh_default",
+    )
+    expect(cellById(state, "a")?.value).toBe("SELECT 1")
+    expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
+  })
+
+  it("apply_notebook_state rejects an invalid per-cell auto_refresh instead of wiping the override", async () => {
+    // Given a cell the user set to Off
+    const { state } = mountLive(1, [
+      cell("a", "SELECT 1", { autoRefresh: false }),
+    ])
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [{ id: "a", preserve_value: true, auto_refresh: "2sec" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    // Then the typo errors instead of silently deleting the override
+    expect(res.is_error).toBe(true)
+    expect((JSON.parse(res.content) as { message: string }).message).toContain(
+      "cells[0].auto_refresh",
+    )
+    expect(cellById(state, "a")?.autoRefresh).toBe(false)
   })
 
   it("apply_notebook_state applies ordered variables; null preserves, [] clears", async () => {

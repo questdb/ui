@@ -15,9 +15,14 @@ import {
   buildPersistPayload,
   capResultBytes,
   cellHeightPatchForRows,
+  cellModeChangePatch,
   cellToolbarMenuFlags,
   cellToolbarTier,
+  clearCellAutoRefresh,
   cloneNotebookViewState,
+  countAutoRefreshOverrides,
+  isAutoRefreshOverride,
+  resolveAutoRefresh,
   cloneNotebookViewStateWithCellIdMap,
   computeAgentCellGridH,
   computeCellGridH,
@@ -1172,7 +1177,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
-  it("defaults isViewMaximized and autoRefresh to true on new draw cells", () => {
+  it("defaults isViewMaximized to true and stores no autoRefresh key on new draw cells", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1185,7 +1190,8 @@ describe("buildAppliedCells", () => {
         },
       ],
     })
-    expect(nextCells[0].autoRefresh).toBe(true)
+    // No stored key: the cell inherits the notebook default.
+    expect("autoRefresh" in nextCells[0]).toBe(false)
     expect(nextCells[0].isViewMaximized).toBe(true)
   })
 
@@ -1273,7 +1279,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBe("draw")
   })
 
-  it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
+  it("applies a fixed refresh interval to a draw cell and clears it to inherit when omitted", () => {
     // Given a draw cell created with a 5s fixed interval
     const drawCell = {
       value: "SELECT 1",
@@ -1292,8 +1298,8 @@ describe("buildAppliedCells", () => {
     const { nextCells } = buildAppliedCells(created, {
       cells: [{ ...drawCell, id: created[0].id }],
     })
-    // Then a draw cell defaults back to adaptive (true)
-    expect(nextCells[0].autoRefresh).toBe(true)
+    // Then no key remains — the cell inherits the notebook default
+    expect("autoRefresh" in nextCells[0]).toBe(false)
   })
 
   it("refuses an empty cells array", () => {
@@ -2623,6 +2629,56 @@ describe("autoRefreshIntervalMs", () => {
   })
 })
 
+describe("auto-refresh inheritance helpers", () => {
+  it("resolveAutoRefresh prefers the override, then the default, then adaptive", () => {
+    expect(resolveAutoRefresh("5s", "30s")).toBe("5s")
+    expect(resolveAutoRefresh(undefined, "30s")).toBe("30s")
+    expect(resolveAutoRefresh(undefined, undefined)).toBe(true)
+  })
+
+  it("resolveAutoRefresh treats false as a value, never as absent", () => {
+    expect(resolveAutoRefresh(false, "30s")).toBe(false)
+    expect(resolveAutoRefresh(undefined, false)).toBe(false)
+  })
+
+  it("countAutoRefreshOverrides counts stored keys on ANY mode, including dormant run-cell overrides", () => {
+    // Given a draw override, a dormant run-mode override, and an inheriting cell
+    const cells: NotebookCell[] = [
+      { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
+      { ...cell("b", "SELECT 2"), mode: "run", autoRefresh: false },
+      cell("c", "SELECT 3"),
+    ]
+    // Then the count matches what a reset would clear
+    expect(countAutoRefreshOverrides(cells)).toBe(2)
+    expect(isAutoRefreshOverride(cells[1])).toBe(true)
+    expect(isAutoRefreshOverride(cells[2])).toBe(false)
+  })
+
+  it("clearCellAutoRefresh deletes the key so a later draw switch cannot resurrect it", () => {
+    // Given a run cell carrying a dormant override
+    const dormant: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "run",
+      autoRefresh: "1s",
+    }
+    // When the override clears and the cell later switches to draw
+    const cleared = clearCellAutoRefresh(dormant)
+    const redrawn: NotebookCell = {
+      ...cleared,
+      mode: "draw",
+      ...cellModeChangePatch(cleared, "draw"),
+    }
+    // Then no key exists at any point
+    expect("autoRefresh" in cleared).toBe(false)
+    expect("autoRefresh" in redrawn).toBe(false)
+  })
+
+  it("clearCellAutoRefresh returns the same cell when no override exists", () => {
+    const c = cell("a", "SELECT 1")
+    expect(clearCellAutoRefresh(c)).toBe(c)
+  })
+})
+
 describe("resolveCellView", () => {
   const result = { results: [], activeResultIndex: 0, timestamp: 0 }
   it("is chart whenever the cell is in draw mode", () => {
@@ -3082,6 +3138,29 @@ describe("buildAppliedNotebookState", () => {
     expect(next.diff.updated).toEqual(["a"])
     expect(next.diff.added).toHaveLength(1)
     expect(next.diff.deleted).toEqual([])
+  })
+
+  it("applies auto_refresh_default and preserves it on null", () => {
+    // Given a notebook with a stored notebook-level default
+    const current = {
+      cells: [cell("a", "SELECT 1")],
+      settings: { autoRefreshDefault: "30s" as const },
+      maximizedCellId: null,
+    }
+    // When apply sets a new default
+    const set = buildAppliedNotebookState(current, {
+      autoRefreshDefault: "5s",
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then the new default is stored
+    expect(set.settings.autoRefreshDefault).toBe("5s")
+    // When apply passes null
+    const preserved = buildAppliedNotebookState(current, {
+      autoRefreshDefault: null,
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then the stored default survives
+    expect(preserved.settings.autoRefreshDefault).toBe("30s")
   })
 
   it("grid layout mode builds a layout for every cell", () => {

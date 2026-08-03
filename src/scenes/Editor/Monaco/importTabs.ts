@@ -307,6 +307,8 @@ const sanitizeNotebookSettings = (
       return typeof o.name === "string" && typeof o.value === "string"
     })
   }
+  if (isAutoRefresh(item.autoRefreshDefault))
+    settings.autoRefreshDefault = item.autoRefreshDefault
   return settings
 }
 

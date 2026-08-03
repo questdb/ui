@@ -29,6 +29,7 @@ export const AUTO_REFRESH_INTERVALS = {
 } as const
 
 export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+// false means "Off", true means "Auto" — presence checks must be `!== undefined`.
 export type AutoRefresh = boolean | AutoRefreshInterval
 
 // Cell kind. `undefined` means "sql" everywhere — code only ever tests
@@ -131,6 +132,7 @@ export type NotebookSettings = {
   layoutMode?: NotebookLayoutMode
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
+  autoRefreshDefault?: AutoRefresh
 }
 
 export type NotebookViewState = {

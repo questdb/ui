@@ -43,11 +43,16 @@ import {
 } from "../../../utils/notebooks/notebookController"
 import {
   type CellRunOutcome,
+  clearCellAutoRefresh,
   computeResultBottomHeight,
+  countAutoRefreshOverrides,
   generateId,
   releaseCellResultPatch,
   snapshotResultsMatchQueries,
 } from "./notebookUtils"
+import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { getQueriesFromText } from "../Monaco/utils"
 import { silently } from "../../../utils/notebooks/notebookToolError"
 import type { AutoRefresh } from "../../../store/notebook"
@@ -115,7 +120,9 @@ export type NotebookActions = {
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
-  setCellRefresh: (cellId: string, value: AutoRefresh) => void
+  setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
+  resetAutoRefreshOverrides: () => void
+  refreshAllCharts: () => void
   setCellViewMaximized: (cellId: string, value: boolean) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
@@ -144,6 +151,8 @@ const NOOP_ACTIONS: NotebookActions = {
   clearCellResult: () => undefined,
   setCellChartConfig: () => undefined,
   setCellRefresh: () => undefined,
+  resetAutoRefreshOverrides: () => undefined,
+  refreshAllCharts: () => undefined,
   setCellViewMaximized: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
@@ -511,6 +520,7 @@ export const NotebookProvider: React.FC<{
   const chartRefreshEngine = useChartRefreshEngine({
     bufferId,
     cells: store.cells,
+    autoRefreshDefault: settings.autoRefreshDefault,
     deps: {
       executeSingle,
       validateWithGlobals,
@@ -730,6 +740,16 @@ export const NotebookProvider: React.FC<{
     [applyTransition, bufferId],
   )
 
+  const resetAutoRefreshOverrides = useCallback(() => {
+    const count = countAutoRefreshOverrides(store.cellsRef.current)
+    if (count === 0) return
+    signalUserEdit(bufferId)
+    store.updateCells((prev) => prev.map(clearCellAutoRefresh))
+    void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_RESET_OVERRIDES, {
+      count,
+    })
+  }, [bufferId, store])
+
   liveActionsRef.current = {
     getVariables: () => settingsRef.current.variables,
     updateSettings,
@@ -748,6 +768,8 @@ export const NotebookProvider: React.FC<{
     clearCellResult,
     setCellChartConfig: store.setCellChartConfig,
     setCellRefresh: store.setCellRefresh,
+    resetAutoRefreshOverrides,
+    refreshAllCharts: () => chartRefreshEngine.refreshAll(),
     setCellViewMaximized,
     setFocusedCell,
     setMaximizedCellId,

@@ -51,7 +51,26 @@ export const autoRefreshIntervalMs = (
 
 export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
   typeof value === "boolean" ||
-  (typeof value === "string" && value in AUTO_REFRESH_INTERVALS)
+  (typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(AUTO_REFRESH_INTERVALS, value))
+
+export const resolveAutoRefresh = (
+  cellValue: AutoRefresh | undefined,
+  notebookDefault: AutoRefresh | undefined,
+): AutoRefresh => cellValue ?? notebookDefault ?? true
+
+export const isAutoRefreshOverride = (
+  cell: Pick<NotebookCell, "autoRefresh">,
+): boolean => cell.autoRefresh !== undefined
+
+export const countAutoRefreshOverrides = (cells: NotebookCell[]): number =>
+  cells.filter(isAutoRefreshOverride).length
+
+export const clearCellAutoRefresh = (cell: NotebookCell): NotebookCell => {
+  if (!isAutoRefreshOverride(cell)) return cell
+  const { autoRefresh: _, ...rest } = cell
+  return rest
+}
 
 // What a cell currently shows in its bottom slot — drives the toolbar's
 // view-switch / refresh / chart actions and their disabled states.
@@ -655,6 +674,7 @@ type ApplyCellRequest = {
 
 type ApplyRequest = {
   layoutMode?: "list" | "grid" | null
+  autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
   cells: ApplyCellRequest[]
@@ -920,8 +940,7 @@ export const buildAppliedCells = (
         : isDraw
           ? true
           : undefined
-    const autoRefresh =
-      req.autoRefresh != null ? req.autoRefresh : isDraw ? true : undefined
+    const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
 
     if (existing) {
       updated.push(existing.id)
@@ -1544,6 +1563,15 @@ export const buildAppliedNotebookState = (
     }
   } else if (request.layoutMode !== undefined && request.layoutMode !== null) {
     nextSettings = { ...nextSettings, layoutMode: request.layoutMode }
+  }
+  if (
+    request.autoRefreshDefault !== undefined &&
+    request.autoRefreshDefault !== null
+  ) {
+    nextSettings = {
+      ...nextSettings,
+      autoRefreshDefault: request.autoRefreshDefault,
+    }
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }

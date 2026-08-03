@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react"
-import type { NotebookCell } from "../../../../store/notebook"
+import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import {
   ChartRefreshEngine,
   type ChartFetchState,
@@ -22,9 +22,10 @@ export const useChartRefresh = () => useContext(ChartRefreshContext)
 export const useChartRefreshEngine = (options: {
   bufferId: number
   cells: NotebookCell[]
+  autoRefreshDefault?: AutoRefresh
   deps: ChartRefreshDeps
 }): ChartRefreshEngine => {
-  const { bufferId, cells, deps } = options
+  const { bufferId, cells, autoRefreshDefault, deps } = options
   const depsRef = useRef(deps)
   const engine = useMemo(
     () => new ChartRefreshEngine(bufferId, () => depsRef.current),
@@ -41,8 +42,8 @@ export const useChartRefreshEngine = (options: {
   }, [engine])
 
   useEffect(() => {
-    engine.sync(cells)
-  }, [engine, cells])
+    engine.sync(cells, autoRefreshDefault)
+  }, [engine, cells, autoRefreshDefault])
 
   return engine
 }

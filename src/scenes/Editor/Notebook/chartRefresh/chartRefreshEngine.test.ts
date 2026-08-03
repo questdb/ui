@@ -157,9 +157,12 @@ describe("ChartRefreshEngine", () => {
 
   // Entries start hidden until an observer reports them (no init-load fetch
   // burst); tests that model on-screen cells report visibility before sync.
-  const syncOnScreen = (cells: NotebookCell[]) => {
+  const syncOnScreen = (
+    cells: NotebookCell[],
+    autoRefreshDefault?: AutoRefresh,
+  ) => {
     for (const cell of cells) engine.setVisible(cell.id, true)
-    engine.sync(cells)
+    engine.sync(cells, autoRefreshDefault)
   }
 
   beforeEach(() => {
@@ -1498,6 +1501,396 @@ describe("ChartRefreshEngine", () => {
     expect(cellResults.get("c1")?.results[0]).toMatchObject({
       type: "error",
       error: "network down",
+    })
+  })
+
+  describe("notebook auto-refresh default", () => {
+    const inheriting = (id: string, value: string): NotebookCell => ({
+      id,
+      position: 0,
+      value,
+      mode: "draw",
+    })
+
+    it("polls an inheriting cell at the notebook default while an override keeps its own cadence", async () => {
+      // Given an inheriting cell and a 5s-override cell under a 1s default
+      syncOnScreen(
+        [inheriting("c1", "select 1"), drawCell("c2", "select 2", "5s")],
+        "1s",
+      )
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // When one default interval elapses
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Then only the inheriting cell fetched again
+      expect(
+        deps.executeSingle.mock.calls.slice(2).map(([sql]) => sql),
+      ).toEqual(["select 1"])
+
+      // And the override cell fetches on its own 5s cadence
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(
+        deps.executeSingle.mock.calls.slice(2).map(([sql]) => sql),
+      ).toContain("select 2")
+    })
+
+    it("an Off default stops inheriting cells after one settle-fetch", async () => {
+      // Given an inheriting cell under an Off default
+      syncOnScreen([inheriting("c1", "select 1")], false)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // Then no polling ever starts
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("a default-only change bypasses sameDrawCells and restarts the sleeping poll on the new cadence", async () => {
+      // Given an inheriting cell synced under a 1s default
+      const cells = [inheriting("c1", "select 1")]
+      syncOnScreen(cells, "1s")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the SAME cell array re-syncs with a 5s default
+      engine.sync(cells, "5s")
+
+      // Then the next fetch waits the new interval, not the old one
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(4000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("refreshAll", () => {
+    it("fetches only visible entries on the click; hidden entries send nothing", async () => {
+      // Given one visible and one hidden settled Off cell
+      engine.setVisible("c1", true)
+      engine.setVisible("c2", false)
+      engine.sync([
+        drawCell("c1", "select 1", false),
+        drawCell("c2", "select 2", false),
+      ])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the user clicks refresh-all
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then only the visible cell refetched
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+        "select 1",
+      ])
+
+      // And no request ever fires for the hidden cell off-screen
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).not.toContain(
+        "select 2",
+      )
+    })
+
+    it("queues visible refetches through the fetch limiter", async () => {
+      // Given an engine capped at one in-flight fetch with two settled cells
+      engine.destroy()
+      engine = new ChartRefreshEngine(
+        BUFFER_ID,
+        () => deps as ChartRefreshDeps,
+        { initialFetchJitterMs: 0, maxConcurrentFetches: 1 },
+      )
+      engine.attach()
+      syncOnScreen([
+        drawCell("c1", "select 1", false),
+        drawCell("c2", "select 2", false),
+      ])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // When refresh-all fires and the first refetch is slow
+      let release!: () => void
+      deps.executeSingle
+        .mockImplementationOnce(
+          (sql: string) =>
+            new Promise<QueryExecResult>((res) => {
+              release = () => res(dqlResult(sql))
+            }),
+        )
+        .mockImplementation((sql: string) => Promise.resolve(dqlResult(sql)))
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then only one refetch is in flight; the second waits its slot
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+      release()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(4)
+    })
+
+    it("a hidden polling cell redeems its pending refresh with exactly one fetch on reveal", async () => {
+      // Given a polling cell that fetched while visible and then hid
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.setVisible("c1", false)
+
+      // When refresh-all flags it — nothing fetches while hidden
+      engine.refreshAll()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // And the cell is revealed while its data would still count as fresh
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then exactly one catch-up fetch runs (without the flag, the fresh
+      // data would skip it) and the normal poll cadence resumes
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    })
+
+    it("a hidden Off cell redeems its pending refresh on reveal instead of settling silently", async () => {
+      // Given a settled Off cell that hid
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.setVisible("c1", false)
+      engine.refreshAll()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the cell is revealed
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then the flag forces one real fetch — ensureData alone would settle
+      // from the existing frame without touching the network
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // And no poll starts for an Off cell afterwards
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+
+    it("requestHydrate does not consume the pending refresh; the later reveal does", async () => {
+      // Given a hidden flagged cell whose snapshot loads in the retain band
+      harness.beginLoadOnRequest()
+      engine.sync([drawCell("c1", "select 1", false)])
+      engine.refreshAll()
+      engine.requestHydrate("c1")
+      await flushAsync()
+      harness.settleLoad("c1", dqlCellResult("select 1"))
+      await flushAsync()
+
+      // Then hydration fetched nothing
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // When the cell is really revealed
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then the pending refresh fires exactly once
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("no double fetch on reveal with jitter and a slow query — polling branch", async () => {
+      // Given a jittered engine (deterministic 150ms) with a flagged hidden
+      // polling cell
+      const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
+      engine.destroy()
+      engine = new ChartRefreshEngine(
+        BUFFER_ID,
+        () => deps as ChartRefreshDeps,
+        { initialFetchJitterMs: 300 },
+      )
+      engine.attach()
+      engine.setVisible("c1", true)
+      engine.sync([drawCell("c1", "select 1", "1s")])
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.setVisible("c1", false)
+      engine.refreshAll()
+
+      // When the reveal restarts the poll and its first fetch is SLOW —
+      // the race window the forced-fetch design would have hit
+      let release!: () => void
+      deps.executeSingle.mockImplementation(
+        (sql: string) =>
+          new Promise<QueryExecResult>((res) => {
+            release = () => res(dqlResult(sql))
+          }),
+      )
+      engine.setVisible("c1", true)
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // Then no second fetch piles on while the slow one is in flight
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      release()
+      await flushAsync()
+      random.mockRestore()
+    })
+
+    it("the pending refresh dies when the cell leaves draw mode", async () => {
+      // Given a settled Off cell that hid and got flagged
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.setVisible("c1", false)
+      engine.refreshAll()
+
+      // When the cell exits draw mode and returns while still hidden
+      engine.sync([{ ...drawCell("c1", "select 1", false), mode: "run" }])
+      engine.sync([drawCell("c1", "select 1", false)])
+      await flushAsync()
+
+      // Then the reveal settles from the existing frame — no redeemed fetch
+      engine.setVisible("c1", true)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("refresh-all in a hidden tab flags every cell and redeems them on return", async () => {
+      // Given two visible settled Off cells and a hidden tab
+      syncOnScreen([
+        drawCell("c1", "select 1", false),
+        drawCell("c2", "select 2", false),
+      ])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      setDocumentHidden(true)
+
+      // When refresh-all fires — a hidden tab must not fetch
+      engine.refreshAll()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // Then the tab's return redeems both flags
+      setDocumentHidden(false)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(4)
+    })
+
+    it("a repeated refresh-all click neither aborts nor duplicates the in-flight fetch", async () => {
+      // Given a visible Off cell whose refetch is slow
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      let release!: () => void
+      deps.executeSingle.mockImplementation(
+        (sql: string) =>
+          new Promise<QueryExecResult>((res) => {
+            release = () => res(dqlResult(sql))
+          }),
+      )
+
+      // When the user clicks twice in a row
+      engine.refreshAll()
+      await flushAsync()
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then exactly one refetch runs, and it lands
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      release()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(cellResults.get("c1")).toBeDefined()
+    })
+
+    it("a flagged cell cleared to empty SQL clears its data on reveal instead of fetching", async () => {
+      // Given a settled cell that hid, got flagged, and lost its SQL
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(cellResults.get("c1")).toBeDefined()
+      engine.setVisible("c1", false)
+      engine.refreshAll()
+      engine.sync([drawCell("c1", "", false)])
+      await vi.advanceTimersByTimeAsync(301)
+
+      // When the cell is revealed
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then no query runs and the stale rows are gone
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(cellResults.get("c1")).toBeUndefined()
+    })
+
+    it("a flagged cell edited while hidden fetches the NEW SQL once on reveal", async () => {
+      // Given a settled cell that hid, got flagged, and was edited
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.setVisible("c1", false)
+      engine.refreshAll()
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the cell is revealed
+      engine.setVisible("c1", true)
+      await flushAsync()
+
+      // Then the redeemed fetch runs the new SQL exactly once
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.any(AbortSignal),
+        10_000,
+      )
+    })
+
+    it("refresh-all on a visible polling cell fetches immediately and restarts the cadence", async () => {
+      // Given a visible 30s cell that last fetched 10s ago
+      syncOnScreen([drawCell("c1", "select 1", "30s")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the user clicks refresh-all
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then one fetch fires immediately despite the fresh data
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // And the old tick time passes without a fetch — the cadence restarted
+      await vi.advanceTimersByTimeAsync(20_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // And the next poll fires one full interval after the forced fetch
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    })
+
+    it("refresh-all promotes an edit still inside the debounce and fetches only the new SQL", async () => {
+      // Given a settled Off cell whose SQL was just edited
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.sync([drawCell("c1", "select 2", false)])
+
+      // When the user clicks refresh-all before the debounce expires
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then exactly one fetch runs, with the edited SQL
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.any(AbortSignal),
+        10_000,
+      )
+
+      // And the debounce expiry does not fetch a second time
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
     })
   })
 })

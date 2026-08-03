@@ -115,6 +115,7 @@ export { migratePersistedNotebookView } from "../notebookDexieView"
 export {
   addCellTransition,
   applyNotebookStateTransition,
+  clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
   moveCellDownTransition,
@@ -125,6 +126,7 @@ export {
   setCellModeTransition,
   setCellViewMaximizedTransition,
   setLayoutModeTransition,
+  setNotebookAutoRefreshTransition,
   updateCellTransition,
   type NotebookTransitionResult,
 } from "./notebookTransitions"

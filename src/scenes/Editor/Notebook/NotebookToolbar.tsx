@@ -27,6 +27,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
+import { NotebookRefreshControl } from "./NotebookRefreshControl"
 
 const Toolbar = styled(Box).attrs({
   align: "center",
@@ -40,6 +41,12 @@ const Toolbar = styled(Box).attrs({
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  & > * {
+    flex-shrink: 0;
+  }
 `
 
 const NotebookGlyph = styled(NotebookIcon)`
@@ -357,6 +364,7 @@ export const NotebookToolbar: React.FC = () => {
           </Button>
         </TooltipButton>
         <VariablesPopover />
+        <NotebookRefreshControl />
         <ToggleGroup>
           <ToggleButton
             $active={mode === "list"}

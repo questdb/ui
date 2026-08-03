@@ -38,6 +38,7 @@ describe("buildNotebookFreshness — per-turn flow freshness tracker", () => {
       buffer_id: 3,
       label: "Trades",
       layout_mode: "list",
+      auto_refresh_default: true,
       maximized_cell_id: null,
       cells: [],
     }

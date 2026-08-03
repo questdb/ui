@@ -15,6 +15,7 @@ import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
   NOTEBOOK_ROW_CAP,
+  resolveAutoRefresh,
   singleResultFromExec,
   sqlHash,
 } from "../notebookUtils"
@@ -149,6 +150,7 @@ type Entry = {
   sql: string
   autoRefresh: AutoRefresh
   visible: boolean
+  pendingManualRefresh: boolean
   ensureAttempted: boolean
   lastFetchedAt: number
   state: ChartFetchState
@@ -171,6 +173,7 @@ export class ChartRefreshEngine {
   private listeners = new PerKeyListeners()
   private visibilityByCell = new Map<string, boolean>()
   private lastSyncedDrawCells: DrawCellSyncKey[] | null = null
+  private autoRefreshDefault: AutoRefresh | undefined
   private documentHidden = false
   private limitFetch: <T>(task: () => Promise<T>) => Promise<T>
   private initialFetchJitterMs: number
@@ -233,9 +236,12 @@ export class ChartRefreshEngine {
     this.lastSyncedDrawCells = null
   }
 
-  sync(cells: NotebookCell[]) {
+  sync(cells: NotebookCell[], autoRefreshDefault?: AutoRefresh) {
     const drawCells = cells.filter((cell) => cell.mode === "draw")
+    const defaultChanged = autoRefreshDefault !== this.autoRefreshDefault
+    this.autoRefreshDefault = autoRefreshDefault
     if (
+      !defaultChanged &&
       this.lastSyncedDrawCells &&
       sameDrawCells(this.lastSyncedDrawCells, drawCells)
     )
@@ -274,6 +280,44 @@ export class ChartRefreshEngine {
     if (entry) void this.fetchOnce(entry)
   }
 
+  refreshAll() {
+    for (const entry of this.entries.values()) {
+      if (entry.inFlight) continue
+      if (entry.visible && !this.documentHidden) this.forceRefresh(entry)
+      else entry.pendingManualRefresh = true
+    }
+  }
+
+  private forceRefresh(entry: Entry) {
+    if (!entry.visible || this.documentHidden) {
+      entry.pendingManualRefresh = true
+      return
+    }
+    entry.pendingManualRefresh = false
+    if (this.promotePendingSql(entry)) return
+    if (this.shouldPoll(entry)) {
+      entry.lastFetchedAt = 0
+      entry.poll?.abort()
+      entry.poll = null
+      entry.pollKey = null
+      this.updatePoll(entry)
+    } else {
+      void this.fetchOnce(entry)
+    }
+  }
+
+  private promotePendingSql(entry: Entry): boolean {
+    if (entry.sqlDebounce) {
+      clearTimeout(entry.sqlDebounce)
+      entry.sqlDebounce = null
+    }
+    const sql = entry.pendingSql
+    entry.pendingSql = null
+    if (sql == null || sql === entry.sql) return false
+    this.applySql(entry, sql)
+    return true
+  }
+
   // Called by the notebook's cell visibility observer. Hiding pauses the poll
   // (in-flight fetches finish and land); revealing resumes it, fetching
   // immediately when the data is older than the cell's interval.
@@ -301,6 +345,10 @@ export class ChartRefreshEngine {
   }
 
   private resume(entry: Entry) {
+    if (entry.pendingManualRefresh) {
+      this.forceRefresh(entry)
+      return
+    }
     this.ensureData(entry)
   }
 
@@ -316,9 +364,13 @@ export class ChartRefreshEngine {
     const entry: Entry = {
       cellId: cell.id,
       sql: cell.value,
-      autoRefresh: cell.autoRefresh ?? true,
+      autoRefresh: resolveAutoRefresh(
+        cell.autoRefresh,
+        this.autoRefreshDefault,
+      ),
       state: pendingChartFetchState(cell.value),
       visible: this.visibilityByCell.get(cell.id) ?? false,
+      pendingManualRefresh: false,
       ensureAttempted: false,
       lastFetchedAt: 0,
       classifyCache: new Map(),
@@ -339,7 +391,10 @@ export class ChartRefreshEngine {
   }
 
   private updateEntry(entry: Entry, cell: NotebookCell) {
-    const autoRefresh = cell.autoRefresh ?? true
+    const autoRefresh = resolveAutoRefresh(
+      cell.autoRefresh,
+      this.autoRefreshDefault,
+    )
     if (autoRefresh !== entry.autoRefresh) {
       entry.autoRefresh = autoRefresh
       this.updatePoll(entry)

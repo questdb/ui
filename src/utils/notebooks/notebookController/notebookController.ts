@@ -109,6 +109,7 @@ export type ApplyNotebookStateCellRequest = {
 
 export type ApplyNotebookStateRequest = {
   layoutMode?: "list" | "grid" | null
+  autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
   cells: ApplyNotebookStateCellRequest[]

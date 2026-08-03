@@ -63,6 +63,7 @@ import {
   withBoundNotebook,
   withBoundNotebookReadOnly,
   addCellTransition,
+  clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
   moveCellDownTransition,
@@ -73,6 +74,7 @@ import {
   setCellModeTransition,
   setCellViewMaximizedTransition,
   setLayoutModeTransition,
+  setNotebookAutoRefreshTransition,
   updateCellTransition,
   type ViewParts,
   type NotebookTransitionResult,
@@ -964,11 +966,11 @@ export const dispatchTool = async (
             cell_id: string
             value: unknown
           }) || {}
-        if (!isAutoRefresh(value)) {
+        if (value !== null && !isAutoRefresh(value)) {
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: value must be true, false, or one of "1s", "5s", "10s", "30s", "1m".`,
+              message: `VALIDATION_ERROR: value must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
             }),
             is_error: true,
           }
@@ -978,9 +980,32 @@ export const dispatchTool = async (
           runTransition(
             buffer_id,
             (parts) =>
-              updateCellTransition(parts, buffer_id, cell_id, {
-                autoRefresh: value,
-              }),
+              value === null
+                ? clearCellAutoRefreshTransition(parts, buffer_id, cell_id)
+                : updateCellTransition(parts, buffer_id, cell_id, {
+                    autoRefresh: value,
+                  }),
+            signal,
+          ),
+        )
+      }
+      case "set_notebook_autorefresh": {
+        const { buffer_id, value } =
+          (input as { buffer_id: number; value: unknown }) || {}
+        if (!isAutoRefresh(value)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: value must be true, false, or one of "1s", "5s", "10s", "30s", "1m".`,
+            }),
+            is_error: true,
+          }
+        }
+        setStatus(AIOperationStatus.ConfiguringChart)
+        return routeNotebookTool(() =>
+          runTransition(
+            buffer_id,
+            (parts) => setNotebookAutoRefreshTransition(parts, value),
             signal,
           ),
         )

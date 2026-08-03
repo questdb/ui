@@ -236,6 +236,34 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("always populates auto_refresh_default — effective true when unset, the stored value when set", async () => {
+    const cells = [sql("a", "SELECT 1")]
+    const unsetId = await seedNotebook({ cells })
+    const storedId = await seedNotebook({
+      cells,
+      settings: { autoRefreshDefault: "30s" },
+    })
+    const offId = await seedNotebook({
+      cells,
+      settings: { autoRefreshDefault: false },
+    })
+    const unset = await buildSnapshot(unsetId)
+    const stored = await buildSnapshot(storedId)
+    const off = await buildSnapshot(offId)
+    if (
+      unset?.status === "ok" &&
+      stored?.status === "ok" &&
+      off?.status === "ok"
+    ) {
+      // The agent always sees one concrete effective value.
+      expect(unset.auto_refresh_default).toBe(true)
+      expect(stored.auto_refresh_default).toBe("30s")
+      expect(off.auto_refresh_default).toBe(false)
+    } else {
+      throw new Error("expected ok snapshots")
+    }
+  })
+
   it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
@@ -375,6 +403,14 @@ describe("formatDigest", () => {
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("notebook_status: archived")
   })
+
+  it("prints an Off autorefresh default — false is a value, not an absence", () => {
+    // Given a digest whose only change is the notebook default going Off
+    const d = createEmptyDigest()
+    d.autoRefreshDefaultTo = false
+    // Then the block states it (a truthiness guard would drop this line)
+    expect(formatDigest(d)).toContain("auto_refresh_default: false")
+  })
 })
 
 describe("formatNotebookContextPrefix", () => {
@@ -389,6 +425,7 @@ describe("formatNotebookContextPrefix", () => {
       buffer_id: 1,
       label: "x",
       layout_mode: "list",
+      auto_refresh_default: true,
       maximized_cell_id: null,
       cells: [],
     }
@@ -406,6 +443,7 @@ describe("formatNotebookContextPrefix", () => {
       buffer_id: 2,
       label: "Notebook 1",
       layout_mode: "list",
+      auto_refresh_default: true,
       maximized_cell_id: null,
       cells: [],
     }

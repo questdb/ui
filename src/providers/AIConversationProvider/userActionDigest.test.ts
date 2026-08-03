@@ -41,6 +41,15 @@ describe("createEmptyDigest / isEmptyDigest", () => {
     ])
     expect(isEmptyDigest(d)).toBe(true)
   })
+
+  it("is not empty after an Off autorefresh default change", () => {
+    // Given only a default change to Off — false must count as a value
+    const d = apply([
+      { kind: "user_changed_autorefresh_default", bufferId: 1, value: false },
+    ])
+    // Then the digest reaches the agent instead of being dropped as empty
+    expect(isEmptyDigest(d)).toBe(false)
+  })
 })
 
 describe("user_added_cell", () => {
@@ -138,6 +147,17 @@ describe("user_changed_layout_mode", () => {
       { kind: "user_changed_layout_mode", bufferId: 1, mode: "grid" },
     ])
     expect(d.layoutModeTo).toBe("grid")
+  })
+})
+
+describe("user_changed_autorefresh_default", () => {
+  it("stores the final value, including Off (false)", () => {
+    const d = apply([
+      { kind: "user_changed_autorefresh_default", bufferId: 1, value: "30s" },
+      { kind: "user_changed_autorefresh_default", bufferId: 1, value: false },
+    ])
+    // false means "Off" — a valid final value the digest must keep
+    expect(d.autoRefreshDefaultTo).toBe(false)
   })
 })
 

@@ -649,7 +649,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set auto-refresh polling for a draw-mode cell's chart. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\").",
+    "description": "Set auto-refresh polling for a draw-mode cell's chart, as a per-cell override of the notebook default (set_notebook_autorefresh). `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"), or null to clear the override so the cell inherits the notebook default.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -663,7 +663,7 @@
         "value": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": ["boolean", "null"]
             },
             {
               "type": "string",
@@ -673,6 +673,35 @@
         }
       },
       "required": ["buffer_id", "cell_id", "value"]
+    }
+  },
+  {
+    "name": "set_notebook_autorefresh",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Set the notebook-level auto-refresh default for draw-mode charts. Cells with no per-cell value inherit it; set_cell_autorefresh sets a per-cell override that wins over it. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\").",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": ["1s", "5s", "10s", "30s", "1m"]
+            }
+          ]
+        }
+      },
+      "required": ["buffer_id", "value"]
     }
   },
   {
@@ -731,7 +760,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use this for bulk edits spanning multiple cells or creating a notebook from scratch. Use update_cell or set_cell_* for small operations. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config only when composing a multi-cell layout from scratch, changing many cells at once, or restructuring an existing notebook. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' with auto_refresh=true render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
+    "description": "Bulk-apply the entire desired state of a notebook in one atomic call. Use this for bulk edits spanning multiple cells or creating a notebook from scratch. Use update_cell or set_cell_* for small operations. Use INSTEAD OF chained add_cell + update_cell + set_cell_mode + set_cell_chart_config only when composing a multi-cell layout from scratch, changing many cells at once, or restructuring an existing notebook. The cells array is the COMPLETE desired list: cells in the current notebook whose id is missing from your request are DELETED. For new cells, omit `id` and one will be generated. Each cell carries exactly one of `value` (full verbatim SQL) or `preserve_value: true` (keep the existing cell's SQL, results, and run history unchanged) — prefer preserve_value for every cell whose SQL you are not changing, and NEVER send a value reconstructed from a preview or a truncated get_cell read. Charts in mode='draw' render automatically — do not call run_cell afterwards. Cells with resolved mode='run' (explicit, or omitted: new defaults to 'run', existing preserves) auto-execute after the apply — EXCEPT cells whose statements include DDL/DML (INSERT/UPDATE/CREATE/DROP/...): those are NEVER auto-executed (their `runs` entry gets `skipped: true`), so applying state can never trigger a write's side effects. Take consent from the user, then call run_cell explicitly to execute them. Markdown cells (type:\"markdown\") are rendered prose and are likewise never auto-run. The response includes a `runs: [{cellId, success, queryCount?, results?, error?, skipped?}]` array — `results` is the per-statement status list (`\"success\"` / `\"cancelled\"` / `\"ERROR: <message>\"`); a top-level `error` is set only when the run was refused before any statement executed. Always call get_workspace_state first; the state-freshness gate applies.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -743,6 +772,18 @@
           "type": ["string", "null"],
           "enum": ["list", "grid", null],
           "description": "Notebook layout mode after this apply. Null preserves current."
+        },
+        "auto_refresh_default": {
+          "anyOf": [
+            {
+              "type": ["boolean", "null"]
+            },
+            {
+              "type": "string",
+              "enum": ["1s", "5s", "10s", "30s", "1m"]
+            }
+          ],
+          "description": "Notebook-level auto-refresh default after this apply. Cells with no per-cell auto_refresh inherit it. Null preserves current."
         },
         "maximized_cell_id": {
           "type": ["string", "null"],
@@ -809,7 +850,7 @@
                     "enum": ["1s", "5s", "10s", "30s", "1m"]
                   }
                 ],
-                "description": "Auto-refresh for draw cells: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Null defaults to true (adaptive) when mode='draw'."
+                "description": "Auto-refresh override for draw cells: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default."
               },
               "is_view_maximized": {
                 "type": ["boolean", "null"],
@@ -952,6 +993,7 @@
       "required": [
         "buffer_id",
         "layout_mode",
+        "auto_refresh_default",
         "maximized_cell_id",
         "variables",
         "cells"

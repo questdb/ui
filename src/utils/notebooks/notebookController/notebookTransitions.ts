@@ -1,5 +1,6 @@
 import {
   MAX_NOTEBOOK_CELLS,
+  type AutoRefresh,
   type CellMode,
   type CellType,
   type NotebookCell,
@@ -13,6 +14,7 @@ import {
   buildAppliedNotebookState,
   cellHeightPatchForRows,
   cellModeChangePatch,
+  clearCellAutoRefresh,
   duplicateCellAt,
   insertCell,
   isExpectingResult,
@@ -223,6 +225,35 @@ export const setLayoutModeTransition = (
   parts: { ...parts, settings: { ...parts.settings, layoutMode: mode } },
   result: undefined,
 })
+
+export const setNotebookAutoRefreshTransition = (
+  parts: ViewParts,
+  value: AutoRefresh,
+): NotebookTransitionResult => ({
+  parts: {
+    ...parts,
+    settings: { ...parts.settings, autoRefreshDefault: value },
+  },
+  result: undefined,
+})
+
+export const clearCellAutoRefreshTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+): NotebookTransitionResult => {
+  requireCellIn(parts.cells, cellId, bufferId)
+  return {
+    parts: {
+      ...parts,
+      cells: parts.cells.map((c) =>
+        c.id === cellId ? clearCellAutoRefresh(c) : c,
+      ),
+    },
+    result: undefined,
+    touchedCellId: cellId,
+  }
+}
 
 export const setCellLayoutTransition = (
   parts: ViewParts,
