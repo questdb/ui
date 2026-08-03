@@ -34,6 +34,7 @@ import type { ExecutionRefs } from "../../scenes/Editor/index"
 import {
   bufferStore,
   BufferType,
+  bufferTypeOf,
   fallbackBuffer,
   makeBuffer,
   makeFallbackBuffer,
@@ -348,11 +349,7 @@ export const EditorProvider: React.FC = ({ children }) => {
         return undefined
       }
 
-      const bufferType = newBuffer?.notebookViewState
-        ? BufferType.NOTEBOOK
-        : newBuffer?.metricsViewState
-          ? BufferType.METRICS
-          : BufferType.SQL
+      const bufferType = bufferTypeOf(newBuffer ?? {})
 
       void trackEvent(ConsoleEvent.TAB_ADD, {
         type: bufferType,

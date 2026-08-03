@@ -34,11 +34,11 @@ export type PermissionDecision =
   | { granted: true }
   | { granted: false; reason: string }
 
-const denyReasonForSchemaTool = (tool: string): string =>
+export const denyReasonForSchemaTool = (tool: string): string =>
   `PERMISSION_DENIED: tool '${tool}' requires the 'grantSchemaAccess' permission. ` +
   "Ask the user to grant it in the QuestDB console (footer → MCP popover or AI Assistant settings)."
 
-const denyReasonForWriteSql = (queryType: string): string =>
+export const denyReasonForWriteSql = (queryType: string): string =>
   `PERMISSION_DENIED: this SQL is '${queryType}' (write operation) and ` +
   "requires the 'write' permission. Ask the user to grant it in the " +
   "QuestDB console (footer → MCP popover or AI Assistant settings)."
@@ -54,11 +54,11 @@ export const denyReasonUnresolvedSql = (tool: string): string =>
   `PERMISSION_DENIED: could not resolve SQL for tool '${tool}'. ` +
   "Retry after refreshing notebook state; refusing to execute because the SQL cannot be classified safely."
 
-const denyReasonForDrawWrite = (queryType: string): string =>
+export const denyReasonForDrawWrite = (queryType: string): string =>
   `Cannot draw a write query ('${queryType}'). ` +
   "Draw cells must contain only DQL (SELECT). Switch to Run mode to execute this SQL."
 
-const denyReasonFailClosedClassify = (
+export const denyReasonFailClosedClassify = (
   context: "execution" | "draw",
   message: string,
 ): string =>

@@ -39,6 +39,16 @@ export enum BufferType {
   NOTEBOOK = "Notebook",
 }
 
+export const bufferTypeOf = (buffer: {
+  notebookViewState?: NotebookViewState | null
+  metricsViewState?: MetricsViewState | null
+}): BufferType =>
+  buffer.notebookViewState != null
+    ? BufferType.NOTEBOOK
+    : buffer.metricsViewState != null
+      ? BufferType.METRICS
+      : BufferType.SQL
+
 export type Metric = {
   tableId?: number
   metricType: MetricType

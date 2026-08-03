@@ -15,6 +15,8 @@ import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
 import type { CellView } from "../notebookUtils"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 const Container = styled.div`
   display: flex;
@@ -122,12 +124,20 @@ export const CellViewToggle: React.FC<Props> = ({
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isRunning) return
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: view === "chart" ? "none" : "chart",
+      method: "toggle",
+    })
     signalUserEdit(bufferId)
     eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
   }
   const handleTable = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (isRunning) return
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: view === "grid" ? "none" : "grid",
+      method: "toggle",
+    })
     signalUserEdit(bufferId)
     if (view === "grid") {
       clearCellResult(cellId)
@@ -137,6 +147,10 @@ export const CellViewToggle: React.FC<Props> = ({
   }
   const handleSplit = (e: React.MouseEvent) => {
     e.stopPropagation()
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
+      isViewMaximized: !isViewMaximized,
+      view,
+    })
     signalUserEdit(bufferId)
     setCellViewMaximized(cellId, !isViewMaximized)
   }

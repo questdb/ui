@@ -158,7 +158,7 @@ export const NotebookMcpPromo = () => {
         </Header>
         <Actions>
           <CommandBox>
-            <McpSetupCommand iconSize={18} />
+            <McpSetupCommand iconSize={18} source="promo" />
           </CommandBox>
           <FootNote>
             Install the MCP using your terminal and use it in any coding agent

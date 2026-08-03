@@ -2,6 +2,8 @@ import React from "react"
 import styled from "styled-components"
 import { Button, CopyButton, MultiSelect, Text } from "../../../../components"
 import { Select } from "../../../../components/Select"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
 import type { ChartType, QueryChart, SeriesAxis } from "./chartTypes"
 import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
@@ -161,6 +163,10 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           value={query.type}
           onChange={(e) => {
             const type = e.target.value as ChartType
+            void trackEvent(ConsoleEvent.NOTEBOOK_CHART_TYPE_CHANGE, {
+              from: query.type,
+              to: type,
+            })
             const patch: Partial<QueryChart> = { type }
             if (type === "candlestick" && !query.ohlc) {
               const oh = findOhlc(groups.numeric)
@@ -299,7 +305,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       <Button
         type="button"
         skin="secondary"
-        onClick={() => onSetQuery(activeTab.inferredChart)}
+        onClick={() => {
+          void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, {
+            chartType: query.type,
+          })
+          onSetQuery(activeTab.inferredChart)
+        }}
       >
         Reset to auto
       </Button>

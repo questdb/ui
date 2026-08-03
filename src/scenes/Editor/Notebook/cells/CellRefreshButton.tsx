@@ -11,6 +11,8 @@ import type { AutoRefresh } from "../../../../store/notebook"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 const Container = styled.div`
   display: flex;
@@ -81,6 +83,7 @@ export const CellRefreshButton: React.FC<Props> = ({
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
     signalUserEdit(bufferId)
+    if (isChart) void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(
       isChart
         ? EventType.NOTEBOOK_CELL_REFRESH_CHART
@@ -89,6 +92,11 @@ export const CellRefreshButton: React.FC<Props> = ({
     )
   }
   const handleSelect = (value: AutoRefresh) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
+      from: autoRefreshLabel(autoRefresh),
+      to: autoRefreshLabel(value),
+      trigger: "button",
+    })
     signalUserEdit(bufferId)
     setCellRefresh(cellId, value)
   }

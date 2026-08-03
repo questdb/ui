@@ -38,6 +38,8 @@ import {
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -158,6 +160,10 @@ export const CellToolbar: React.FC<Props> = ({
 
   // Minimize the chart/table to the editor, keeping the data on the cell.
   const handleViewSql = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: "sql",
+      method: "menu",
+    })
     signalUserEdit(bufferId)
     setCellViewMaximized(cellId, false)
   }
@@ -168,6 +174,10 @@ export const CellToolbar: React.FC<Props> = ({
       eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
       return
     }
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: "grid",
+      method: "menu",
+    })
     // A chart transfers its data to the grid (no re-query); restore the data
     // pane in case the SQL was being shown.
     if (isChartView) setCellMode(cellId, "run")
@@ -175,6 +185,10 @@ export const CellToolbar: React.FC<Props> = ({
   }
   const handleViewChart = () => {
     if (isRunning) return
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: "chart",
+      method: "menu",
+    })
     signalUserEdit(bufferId)
     if (isNoneView || isGridView) {
       // Entering draw can be refused (non-DQL SQL); maximize only once the
@@ -185,42 +199,65 @@ export const CellToolbar: React.FC<Props> = ({
     setCellViewMaximized(cellId, true)
   }
   const handleToggleMaximizeView = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
+      isViewMaximized: !cell.isViewMaximized,
+      view,
+    })
     signalUserEdit(bufferId)
     setCellViewMaximized(cellId, !cell.isViewMaximized)
   }
   const handleMaximizeCell = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
+      action: isMaximized ? "restore" : "maximize",
+      cellType: cell.type ?? "sql",
+    })
     signalUserEdit(bufferId)
     setMaximizedCellId(isMaximized ? null : cellId)
   }
   const handleRefreshNow = () => {
     signalUserEdit(bufferId)
-    eventBus.publish(
-      isChartView
-        ? EventType.NOTEBOOK_CELL_REFRESH_CHART
-        : EventType.NOTEBOOK_CELL_RUN,
-      { cellId },
-    )
+    if (isChartView) {
+      void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+      eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId })
+      return
+    }
+    eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
   }
   const handleResetZoom = () => {
     clearChartZoom(cellId)
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
   }
-  const handleChartSettings = () =>
+  const handleChartSettings = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
+      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+    })
     eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
+  }
   const handleRefreshSelect = (value: AutoRefresh) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
+      from: autoRefreshLabel(autoRefresh),
+      to: autoRefreshLabel(value),
+      trigger: "menu",
+    })
     signalUserEdit(bufferId)
     setCellRefresh(cellId, value)
   }
 
   const handleMoveUp = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "menu" })
     moveCellUp(cellId)
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
   const handleMoveDown = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MOVE, { method: "menu" })
     moveCellDown(cellId)
     emitUserAction({ kind: "user_moved_cell", bufferId, cellId })
   }
   const handleDuplicate = async () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DUPLICATE, {
+      cellType: cell.type ?? "sql",
+      view,
+    })
     const newCellId = await duplicateCell(cellId)
     if (newCellId) {
       setFocusedCell(newCellId)
@@ -233,6 +270,9 @@ export const CellToolbar: React.FC<Props> = ({
     }
   }
   const handleDelete = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DELETE, {
+      cellType: cell.type ?? "sql",
+    })
     deleteCell(cellId)
     emitUserAction({ kind: "user_deleted_cell", bufferId, cellId })
   }

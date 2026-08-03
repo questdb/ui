@@ -2,6 +2,8 @@ import React from "react"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
 import { Queue } from "@phosphor-icons/react"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { LoadingIconSvg } from "../../Monaco/icons"
 import {
   CancelledIcon,
@@ -68,7 +70,16 @@ export const TabBar: React.FC<Props> = ({ result, onTabChange }) => (
         // eslint-disable-next-line react/no-array-index-key
         key={i}
         $active={i === result.activeResultIndex}
-        onClick={() => onTabChange?.(i)}
+        onClick={() => {
+          if (i !== result.activeResultIndex) {
+            void trackEvent(ConsoleEvent.NOTEBOOK_RESULT_TAB_SWITCH, {
+              tabIndex: i,
+              tabCount: result.results.length,
+              resultType: r.type,
+            })
+          }
+          onTabChange?.(i)
+        }}
         title={r.query}
         role="tab"
         aria-selected={i === result.activeResultIndex}

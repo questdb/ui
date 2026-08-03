@@ -5,6 +5,8 @@ import { useCellResize } from "./useCellResize"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
@@ -136,6 +138,7 @@ export const useCellResizeOrchestration = ({
   }
 
   const middleResizeEnd = (height: number) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "mid" })
     const { top, bottom } = partitionCellHeights(
       middleSum(),
       height,

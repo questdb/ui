@@ -13,7 +13,13 @@ import { Input } from "../../../components/Input"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MAX_RECONNECT_ATTEMPTS } from "../../../utils/mcp/MCPBridgeClient"
 import { LOCALHOST_WS_RE, TOKEN_RE } from "../../../utils/mcp/pairValidation"
-import type { Permissions } from "../../../utils/tools/permissions"
+import {
+  normalizePermissions,
+  type Permissions,
+} from "../../../utils/tools/permissions"
+import { trackEvent } from "../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { permissionLevelOf } from "../../../modules/ConsoleEventTracker/mcpToolEvents"
 import { Tone, accentColor, deriveTone } from "./tone"
 import { BridgeUpgradeNotice } from "./BridgeUpgradeNotice"
 import { BridgeSetupNotice } from "./BridgeSetupNotice"
@@ -339,6 +345,9 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       const isConnected = status === "connected"
       const needsConnect = credsDirty || !isConnected
       if (!needsConnect && permsDirty) {
+        void trackEvent(ConsoleEvent.MCP_PERMISSIONS_CHANGE, {
+          level: permissionLevelOf(normalizePermissions(draftPermissions)),
+        })
         setPermissions(draftPermissions)
         onClose()
         return
@@ -365,11 +374,18 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
       setSucceeded(false)
       setSubmitted(true)
       // Order matters: the rebuilt client reads perms in its initial hello.
-      if (permsDirty) setPermissions(draftPermissions)
+      if (permsDirty) {
+        void trackEvent(ConsoleEvent.MCP_PERMISSIONS_CHANGE, {
+          level: permissionLevelOf(normalizePermissions(draftPermissions)),
+        })
+        setPermissions(draftPermissions)
+      }
+      void trackEvent(ConsoleEvent.MCP_MANUAL_PAIR_SUBMIT)
       connect(nextUrl, nextToken)
     }
 
     const onDisconnect = () => {
+      void trackEvent(ConsoleEvent.MCP_DISCONNECT_CLICK)
       disconnect()
       setDraftUrl(DEFAULT_WS_URL_PREFIX)
       setDraftToken("")

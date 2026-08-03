@@ -6,6 +6,8 @@ import {
   type BridgeVersionMismatch,
 } from "./protocolVersion"
 import type { Permissions } from "../tools/permissions"
+import { trackEvent } from "../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import {
   WS_CLOSE_CODES,
   type AnyMessage,
@@ -117,6 +119,8 @@ export class MCPBridgeClient {
   private pongTimer: ReturnType<typeof setTimeout> | null = null
   private outstandingPing: { nonce: string; sentAt: number } | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private hadSession = false
+  private everHadSession = false
   private explicitlyClosed = false
   private _consecutiveFailedAttempts = 0
   private get consecutiveFailedAttempts(): number {
@@ -321,6 +325,14 @@ export class MCPBridgeClient {
       reason,
       wasClean: (ev as { wasClean?: boolean } | undefined)?.wasClean,
     })
+    const hadSession = this.hadSession
+    this.hadSession = false
+    if (hadSession && !this.explicitlyClosed) {
+      void trackEvent(ConsoleEvent.MCP_DISCONNECTED, {
+        closeCode: code,
+        terminal: TERMINAL_BRIDGE_CLOSE_CODES.has(code),
+      })
+    }
     this.stopHeartbeat()
     this.ws = null
     if (this.explicitlyClosed) {
@@ -331,6 +343,7 @@ export class MCPBridgeClient {
     // doesn't resurrect the loop on tab focus — only a fresh deep-link
     // re-pair can recover from these codes.
     if (TERMINAL_BRIDGE_CLOSE_CODES.has(code)) {
+      if (!hadSession) void trackEvent(ConsoleEvent.MCP_CONNECT_FAILED)
       this.cancelReconnect()
       this.explicitlyClosed = true
       if (code === WS_CLOSE_CODES.major_version_mismatch) {
@@ -350,6 +363,11 @@ export class MCPBridgeClient {
 
   private handleHelloAck(msg: HelloAckMessage): void {
     this.sessionId = msg.sessionId
+    if (!this.everHadSession) {
+      this.everHadSession = true
+      void trackEvent(ConsoleEvent.MCP_CONNECTED)
+    }
+    this.hadSession = true
     this.consecutiveFailedAttempts = 0
     // Emit before `connected` so consumers see the drift in the same paint
     // the session goes live, never a frame of clean-connected first.
@@ -435,6 +453,7 @@ export class MCPBridgeClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     this.consecutiveFailedAttempts += 1
     if (this.consecutiveFailedAttempts > MAX_CONSECUTIVE_FAILED_ATTEMPTS) {
+      void trackEvent(ConsoleEvent.MCP_CONNECT_FAILED)
       this.setStatus("disconnected")
       return
     }
