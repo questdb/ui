@@ -88,6 +88,19 @@ function interceptAIRequest(responseText = "Test AI response", sql = null) {
   }).as("openaiRequest")
 }
 
+// Radix arms a tooltip only on a trigger pointermove, and realHover emits a
+// single move event. That one armed intent can be silently lost to the
+// provider's pointer-in-transit gate or to boundary events fired when the DOM
+// re-renders under the stationary pointer (e.g. right after a tab switch while
+// its data fetches land). Nothing re-arms it without another pointermove, so
+// nudge the pointer after hovering: the first move lets Radix clear stale
+// transit state, the second re-arms the tooltip.
+function hoverForTooltip(hook) {
+  cy.getByDataHook(hook).realHover()
+  cy.getByDataHook(hook).realMouseMove(2, 2, { position: "center" })
+  cy.getByDataHook(hook).realMouseMove(0, 0, { position: "center" })
+}
+
 describe("TableDetailsDrawer", () => {
   beforeEach(() => {
     cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
@@ -826,7 +839,7 @@ describe("TableDetailsDrawer", () => {
       cy.openDetailsDrawer(TEST_TABLE)
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
-      cy.getByDataHook("table-details-error-ask-ai").realHover()
+      hoverForTooltip("table-details-error-ask-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -836,7 +849,7 @@ describe("TableDetailsDrawer", () => {
       cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
-      cy.getByDataHook("table-details-warning-ask-ai").realHover()
+      hoverForTooltip("table-details-warning-ask-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -847,7 +860,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("tooltip").should("not.exist")
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
-      cy.getByDataHook("table-details-explain-ai").realHover()
+      hoverForTooltip("table-details-explain-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -878,7 +891,7 @@ describe("TableDetailsDrawer", () => {
       cy.openDetailsDrawer(TEST_TABLE)
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
-      cy.getByDataHook("table-details-error-ask-ai").realHover()
+      hoverForTooltip("table-details-error-ask-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -888,7 +901,7 @@ describe("TableDetailsDrawer", () => {
       cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
-      cy.getByDataHook("table-details-warning-ask-ai").realHover()
+      hoverForTooltip("table-details-warning-ask-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -900,7 +913,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-copy-ddl").should("be.visible").click()
-      cy.getByDataHook("table-details-explain-ai").realHover()
+      hoverForTooltip("table-details-explain-ai")
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",

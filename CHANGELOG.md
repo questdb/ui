@@ -17,6 +17,12 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.2 - 2026.08.03
+### Added
+- editor settings, remove readonly from single query run, smarter grid column widths [#584](https://github.com/questdb/ui/pull/584)
+- notebook/MCP telemetry events [#593](https://github.com/questdb/ui/pull/593)
+
+
 ## 2.0.1 - 2026.07.23
 ### Added
 - notebooks onboarding modal and in-notebook MCP promo [#585](https://github.com/questdb/ui/pull/585)
