@@ -66,6 +66,12 @@ export const isAutoRefreshOverride = (
 export const countAutoRefreshOverrides = (cells: NotebookCell[]): number =>
   cells.filter(isAutoRefreshOverride).length
 
+export const countActiveAutoRefreshOverrides = (
+  cells: NotebookCell[],
+): number =>
+  cells.filter((cell) => cell.mode === "draw" && isAutoRefreshOverride(cell))
+    .length
+
 export const clearCellAutoRefresh = (cell: NotebookCell): NotebookCell => {
   if (!isAutoRefreshOverride(cell)) return cell
   const { autoRefresh: _, ...rest } = cell

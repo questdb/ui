@@ -20,6 +20,7 @@ import {
   cellToolbarTier,
   clearCellAutoRefresh,
   cloneNotebookViewState,
+  countActiveAutoRefreshOverrides,
   countAutoRefreshOverrides,
   isAutoRefreshOverride,
   resolveAutoRefresh,
@@ -2661,6 +2662,19 @@ describe("auto-refresh inheritance helpers", () => {
     expect(countAutoRefreshOverrides(cells)).toBe(2)
     expect(isAutoRefreshOverride(cells[1])).toBe(true)
     expect(isAutoRefreshOverride(cells[2])).toBe(false)
+  })
+
+  it("countActiveAutoRefreshOverrides ignores dormant run-cell keys — only draw overrides show in the toolbar", () => {
+    // Given a draw override, a dormant run-mode override, and an inheriting cell
+    const cells: NotebookCell[] = [
+      { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
+      { ...cell("b", "SELECT 2"), mode: "run", autoRefresh: false },
+      cell("c", "SELECT 3"),
+    ]
+    // Then only the draw override counts toward the displayed total
+    expect(countActiveAutoRefreshOverrides(cells)).toBe(1)
+    // And a notebook with only dormant keys shows no override at all
+    expect(countActiveAutoRefreshOverrides([cells[1], cells[2]])).toBe(0)
   })
 
   it("clearCellAutoRefresh deletes the key so a later draw switch cannot resurrect it", () => {

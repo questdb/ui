@@ -1736,6 +1736,64 @@ describe("ChartRefreshEngine", () => {
       random.mockRestore()
     })
 
+    it("a refresh-all click survives the cell hiding during the start jitter", async () => {
+      // Given a jittered engine (deterministic 150ms) with a settled 30s cell
+      const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
+      engine.destroy()
+      engine = new ChartRefreshEngine(
+        BUFFER_ID,
+        () => deps as ChartRefreshDeps,
+        { initialFetchJitterMs: 300 },
+      )
+      engine.attach()
+      engine.setVisible("c1", true)
+      engine.sync([drawCell("c1", "select 1", "30s")])
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the user clicks refresh-all and the cell hides inside the jitter
+      engine.refreshAll()
+      await vi.advanceTimersByTimeAsync(50)
+      engine.setVisible("c1", false)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // Then the reveal redeems the click instead of settling from stale data
+      engine.setVisible("c1", true)
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      random.mockRestore()
+    })
+
+    it("a refresh-all click survives a tab switch during the start jitter", async () => {
+      // Given a jittered engine (deterministic 150ms) with a settled 30s cell
+      const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
+      engine.destroy()
+      engine = new ChartRefreshEngine(
+        BUFFER_ID,
+        () => deps as ChartRefreshDeps,
+        { initialFetchJitterMs: 300 },
+      )
+      engine.attach()
+      engine.setVisible("c1", true)
+      engine.sync([drawCell("c1", "select 1", "30s")])
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the user clicks refresh-all and switches tabs inside the jitter
+      engine.refreshAll()
+      await vi.advanceTimersByTimeAsync(50)
+      setDocumentHidden(true)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // Then the return to the tab redeems the click with a real fetch
+      setDocumentHidden(false)
+      await vi.advanceTimersByTimeAsync(150)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      random.mockRestore()
+    })
+
     it("the pending refresh dies when the cell leaves draw mode", async () => {
       // Given a settled Off cell that hid and got flagged
       syncOnScreen([drawCell("c1", "select 1", false)])

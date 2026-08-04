@@ -9,7 +9,10 @@ import {
   useNotebookBufferId,
   useNotebookState,
 } from "./NotebookProvider"
-import { autoRefreshLabel, countAutoRefreshOverrides } from "./notebookUtils"
+import {
+  autoRefreshLabel,
+  countActiveAutoRefreshOverrides,
+} from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
   IntervalLabel,
@@ -38,7 +41,7 @@ export const NotebookRefreshControl: React.FC = () => {
   const bufferId = useNotebookBufferId()
   const defaultValue = settings.autoRefreshDefault ?? true
   const defaultLabel = autoRefreshLabel(defaultValue)
-  const overrideCount = countAutoRefreshOverrides(cells)
+  const overrideCount = countActiveAutoRefreshOverrides(cells)
   const drawCellCount = cells.filter((cell) => cell.mode === "draw").length
   const intervalAriaLabel =
     overrideCount > 0

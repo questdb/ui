@@ -569,7 +569,15 @@ export class ChartRefreshEngine {
     entry.poll?.abort()
     entry.poll = null
     entry.pollKey = key
-    if (!enabled) return
+    if (!enabled) {
+      // A manual refresh still waiting out the start jitter dies with the
+      // poll — hand it back to pending so resume() redeems the click.
+      if (entry.manualRefreshInFlight && !entry.inFlight) {
+        entry.manualRefreshInFlight = false
+        entry.pendingManualRefresh = true
+      }
+      return
+    }
     const abort = new AbortController()
     entry.poll = abort
     void this.runPollLoop(entry, abort)
@@ -602,6 +610,7 @@ export class ChartRefreshEngine {
     this.stopResultLoadWait(entry)
     const { queries, queriesKey } = entry.state
     if (queries.length === 0) {
+      entry.manualRefreshInFlight = false
       this.setState(entry, {
         fetching: false,
         settledKey: queriesKey,
