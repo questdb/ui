@@ -8,6 +8,27 @@ const { ctrlOrCmd } = require("../../utils")
 const getTabDragHandleByTitle = (title) =>
   `.chrome-tab[data-tab-title="${title}"] .chrome-tab-drag-handle`
 
+const dragTabOnto = (sourceTitle, targetTitle) => {
+  cy.getEditorTabByTitle(sourceTitle).then(($tab) => {
+    const wasActive = $tab.attr("active") !== undefined
+    cy.get(getTabDragHandleByTitle(sourceTitle))
+      .should("be.visible")
+      .realMouseDown({ position: "center" })
+    if (wasActive) {
+      cy.wait(500)
+    } else {
+      cy.getEditorTabByTitle(sourceTitle).should("have.attr", "active")
+    }
+    cy.get(getTabDragHandleByTitle(targetTitle)).realMouseMove(0, 0, {
+      position: "center",
+    })
+    cy.wait(50)
+    cy.get(getTabDragHandleByTitle(targetTitle)).realMouseUp({
+      position: "center",
+    })
+  })
+}
+
 describe("run query", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
@@ -1416,9 +1437,7 @@ describe("editor tabs", () => {
     cy.getEditorTabByTitle("SQL").should("be.visible")
     cy.getEditorTabByTitle("SQL 1").should("be.visible")
 
-    cy.get(getTabDragHandleByTitle("SQL 1"))
-      .should("be.visible")
-      .drag(getTabDragHandleByTitle("SQL"))
+    dragTabOnto("SQL", "SQL 1")
 
     cy.wait(1000)
 
@@ -1427,9 +1446,7 @@ describe("editor tabs", () => {
       expect($tabs.last()).to.contain("SQL")
     })
 
-    cy.get(getTabDragHandleByTitle("SQL 1"))
-      .should("be.visible")
-      .drag(getTabDragHandleByTitle("SQL"))
+    dragTabOnto("SQL", "SQL 1")
 
     cy.wait(1000)
 
