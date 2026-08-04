@@ -37,8 +37,10 @@ export const AutoRefreshOptions: React.FC<Props> = ({
   >
     {inheritedValue !== undefined && (
       <>
-        <DropdownMenu.RadioItem value={INHERIT_KEY}>
-          {value !== undefined && <OverrideDot />}
+        <DropdownMenu.RadioItem
+          value={INHERIT_KEY}
+          indicator={value !== undefined ? <OverrideDot /> : undefined}
+        >
           {`Notebook default (${autoRefreshLabel(inheritedValue)})`}
         </DropdownMenu.RadioItem>
         <DropdownMenu.Divider />

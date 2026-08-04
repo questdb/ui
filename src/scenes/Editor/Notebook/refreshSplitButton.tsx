@@ -53,5 +53,4 @@ export const OverrideDot = styled.span`
   border-radius: 50%;
   background: ${({ theme }) => theme.color.pinkPrimary};
   flex-shrink: 0;
-  margin-right: 0.3rem;
 `

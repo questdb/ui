@@ -1892,5 +1892,26 @@ describe("ChartRefreshEngine", () => {
       await vi.advanceTimersByTimeAsync(1000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
     })
+
+    it("still refetches when a mid-edit only changes the SQL cosmetically", async () => {
+      // Given a settled Off cell edited in a way that leaves the queries equal,
+      // so the promoted SQL could settle from the existing frame
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      engine.sync([drawCell("c1", "select 1;\n", false)])
+
+      // When the user clicks refresh-all inside the debounce window
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then the click still produces a real fetch, rather than settling from
+      // the frame the equal queries already hold
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // And the debounce expiry adds nothing
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
   })
 })

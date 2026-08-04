@@ -294,7 +294,7 @@ export class ChartRefreshEngine {
       return
     }
     entry.pendingManualRefresh = false
-    if (this.promotePendingSql(entry)) return
+    this.promotePendingSql(entry)
     if (this.shouldPoll(entry)) {
       entry.lastFetchedAt = 0
       entry.poll?.abort()
@@ -306,16 +306,15 @@ export class ChartRefreshEngine {
     }
   }
 
-  private promotePendingSql(entry: Entry): boolean {
+  private promotePendingSql(entry: Entry) {
     if (entry.sqlDebounce) {
       clearTimeout(entry.sqlDebounce)
       entry.sqlDebounce = null
     }
     const sql = entry.pendingSql
     entry.pendingSql = null
-    if (sql == null || sql === entry.sql) return false
-    this.applySql(entry, sql)
-    return true
+    if (sql == null || sql === entry.sql) return
+    this.applySqlState(entry, sql)
   }
 
   // Called by the notebook's cell visibility observer. Hiding pauses the poll
@@ -434,7 +433,7 @@ export class ChartRefreshEngine {
     this.notify(cellId)
   }
 
-  private applySql(entry: Entry, sql: string) {
+  private applySqlState(entry: Entry, sql: string) {
     entry.inFlight?.abort()
     entry.inFlight = null
     this.stopResultLoadWait(entry)
@@ -457,6 +456,10 @@ export class ChartRefreshEngine {
       fetching: false,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
+  }
+
+  private applySql(entry: Entry, sql: string) {
+    this.applySqlState(entry, sql)
     if (entry.visible) this.ensureData(entry)
     else entry.ensureAttempted = false
   }

@@ -2608,6 +2608,15 @@ describe("isAutoRefresh", () => {
     expect(isAutoRefresh(null)).toBe(false)
     expect(isAutoRefresh(undefined)).toBe(false)
   })
+
+  it("rejects inherited Object property names", () => {
+    // An `in` check would accept these; each one reaches the poll-interval
+    // lookup as a function and degrades the cadence math to NaN.
+    expect(isAutoRefresh("toString")).toBe(false)
+    expect(isAutoRefresh("constructor")).toBe(false)
+    expect(isAutoRefresh("__proto__")).toBe(false)
+    expect(isAutoRefresh("hasOwnProperty")).toBe(false)
+  })
 })
 
 describe("autoRefreshLabel", () => {

@@ -275,7 +275,11 @@ describe("buildSnapshot", () => {
         queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
     })
-    const id = await seedNotebook({ cells: [cell] })
+    // A stored notebook default keeps the cell's 5s a genuine override.
+    const id = await seedNotebook({
+      cells: [cell],
+      settings: { autoRefreshDefault: true },
+    })
     const snap = await buildSnapshot(id)
     if (snap?.status === "ok") {
       // Snake-case wire shape the model can copy straight back into apply_notebook_state.

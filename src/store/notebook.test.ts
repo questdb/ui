@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest"
 import {
   dropLegacyChartConfigs,
   migrateCellName,
+  migrateLegacyAutoRefresh,
   migrateLegacyCellNames,
+  type AutoRefresh,
   type NotebookCell,
   type NotebookViewState,
 } from "./notebook"
@@ -12,6 +14,13 @@ const cell = (over: Partial<NotebookCell> & { id: string }): NotebookCell => ({
   value: "",
   ...over,
 })
+
+const chart = (id: string, autoRefresh?: AutoRefresh): NotebookCell =>
+  cell(
+    autoRefresh === undefined
+      ? { id, mode: "draw" }
+      : { id, mode: "draw", autoRefresh },
+  )
 
 describe("migrateCellName", () => {
   it("promotes a legacy chartConfig.name to the cell name and drops the old copy", () => {
@@ -44,6 +53,154 @@ describe("migrateCellName", () => {
     // When migrated
     // Then the explicit name wins and the cell is returned unchanged
     expect(migrateCellName(input)).toBe(input)
+  })
+})
+
+describe("migrateLegacyAutoRefresh", () => {
+  const overrides = (state: NotebookViewState): string[] =>
+    state.cells.filter((c) => c.autoRefresh !== undefined).map((c) => c.id)
+
+  it("adopts the shared cadence as the notebook default when every chart agrees", () => {
+    // Given 10 legacy charts the user had all turned Off
+    const state: NotebookViewState = {
+      cells: Array.from({ length: 10 }, (_, i) => chart(`c${i}`, false)),
+    }
+
+    // When the notebook loads
+    const result = migrateLegacyAutoRefresh(state)
+
+    // Then the notebook reads Off and no chart claims to override it
+    expect(result.settings?.autoRefreshDefault).toBe(false)
+    expect(overrides(result)).toEqual([])
+  })
+
+  it("leaves the default unset for all-adaptive charts, which already reads as Auto", () => {
+    // Given legacy AI charts, each persisted with an explicit true
+    const state: NotebookViewState = {
+      cells: [chart("a", true), chart("b", true), chart("c", true)],
+    }
+
+    // When the notebook loads
+    const result = migrateLegacyAutoRefresh(state)
+
+    // Then the phantom overrides are gone and no redundant key is stored
+    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    expect(overrides(result)).toEqual([])
+  })
+
+  it("adopts a shared fixed interval", () => {
+    const state: NotebookViewState = {
+      cells: [chart("a", "5s"), chart("b", "5s")],
+    }
+    const result = migrateLegacyAutoRefresh(state)
+    expect(result.settings?.autoRefreshDefault).toBe("5s")
+    expect(overrides(result)).toEqual([])
+  })
+
+  it("keeps an override only where a chart diverges from the resulting default", () => {
+    // Given legacy adaptive charts mixed with charts the user turned Off
+    const state: NotebookViewState = {
+      cells: [
+        chart("legacy1", true),
+        chart("legacy2", true),
+        chart("off1", false),
+        chart("off2", false),
+      ],
+    }
+
+    // When the notebook loads
+    const result = migrateLegacyAutoRefresh(state)
+
+    // Then the default falls back to Auto and only the real divergence remains
+    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    expect(overrides(result)).toEqual(["off1", "off2"])
+  })
+
+  it("marks every chart an override when they diverge with no adaptive majority", () => {
+    const state: NotebookViewState = {
+      cells: [chart("a", false), chart("b", "5s")],
+    }
+    const result = migrateLegacyAutoRefresh(state)
+    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    expect(overrides(result)).toEqual(["a", "b"])
+  })
+
+  it("clears a dormant adaptive key on a run cell so it cannot inflate the count", () => {
+    // Given a cell that carried an override before switching out of draw mode
+    const state: NotebookViewState = {
+      cells: [cell({ id: "a", mode: "run", autoRefresh: true })],
+    }
+
+    // Then the invisible key is gone, but a diverging one survives the switch
+    expect(overrides(migrateLegacyAutoRefresh(state))).toEqual([])
+    expect(
+      overrides(
+        migrateLegacyAutoRefresh({
+          cells: [cell({ id: "a", mode: "run", autoRefresh: "5s" })],
+        }),
+      ),
+    ).toEqual(["a"])
+  })
+
+  it("only decides from charts, ignoring a dormant run-cell value", () => {
+    // Given every chart Off and an unrelated dormant key on a run cell
+    const state: NotebookViewState = {
+      cells: [
+        chart("a", false),
+        chart("b", false),
+        cell({ id: "r", mode: "run", autoRefresh: "1m" }),
+      ],
+    }
+
+    // Then the charts still set the default; the run cell does not vote
+    const result = migrateLegacyAutoRefresh(state)
+    expect(result.settings?.autoRefreshDefault).toBe(false)
+    expect(overrides(result)).toEqual(["r"])
+  })
+
+  it("never touches a notebook that already has a stored default", () => {
+    // Given a post-upgrade notebook where the pinned cell is deliberate
+    const state: NotebookViewState = {
+      cells: [chart("a", true), chart("b", "5s")],
+      settings: { autoRefreshDefault: "30s" },
+    }
+
+    // Then the migration leaves it exactly as-is
+    expect(migrateLegacyAutoRefresh(state)).toBe(state)
+  })
+
+  it("returns the same state when no cell stores a value", () => {
+    const state: NotebookViewState = { cells: [chart("a"), chart("b")] }
+    expect(migrateLegacyAutoRefresh(state)).toBe(state)
+  })
+
+  it("is idempotent", () => {
+    const state: NotebookViewState = {
+      cells: [chart("a", false), chart("b", false)],
+    }
+    const once = migrateLegacyAutoRefresh(state)
+    expect(migrateLegacyAutoRefresh(once)).toBe(once)
+  })
+
+  it("preserves what every chart actually polls at", () => {
+    // Given a mix of stored, absent, and diverging values
+    const state: NotebookViewState = {
+      cells: [
+        chart("a", true),
+        chart("b"),
+        chart("c", false),
+        chart("d", "5s"),
+      ],
+    }
+    const before = state.cells.map((c) => c.autoRefresh ?? true)
+
+    // When migrated, each cell resolves against the new default
+    const result = migrateLegacyAutoRefresh(state)
+    const fallback = result.settings?.autoRefreshDefault ?? true
+    const after = result.cells.map((c) => c.autoRefresh ?? fallback)
+
+    // Then every chart polls exactly as it did before
+    expect(after).toEqual(before)
   })
 })
 
