@@ -74,7 +74,7 @@ describe("migrateLegacyAutoRefresh", () => {
     expect(overrides(result)).toEqual([])
   })
 
-  it("leaves the default unset for all-adaptive charts, which already reads as Auto", () => {
+  it("keeps all-adaptive charts on Auto and drops their phantom overrides", () => {
     // Given legacy AI charts, each persisted with an explicit true
     const state: NotebookViewState = {
       cells: [chart("a", true), chart("b", true), chart("c", true)],
@@ -83,8 +83,8 @@ describe("migrateLegacyAutoRefresh", () => {
     // When the notebook loads
     const result = migrateLegacyAutoRefresh(state)
 
-    // Then the phantom overrides are gone and no redundant key is stored
-    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    // Then the notebook reads Auto and nothing claims to override it
+    expect(result.settings?.autoRefreshDefault).toBe(true)
     expect(overrides(result)).toEqual([])
   })
 
@@ -112,7 +112,7 @@ describe("migrateLegacyAutoRefresh", () => {
     const result = migrateLegacyAutoRefresh(state)
 
     // Then the default falls back to Auto and only the real divergence remains
-    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    expect(result.settings?.autoRefreshDefault).toBe(true)
     expect(overrides(result)).toEqual(["off1", "off2"])
   })
 
@@ -121,7 +121,7 @@ describe("migrateLegacyAutoRefresh", () => {
       cells: [chart("a", false), chart("b", "5s")],
     }
     const result = migrateLegacyAutoRefresh(state)
-    expect(result.settings?.autoRefreshDefault).toBeUndefined()
+    expect(result.settings?.autoRefreshDefault).toBe(true)
     expect(overrides(result)).toEqual(["a", "b"])
   })
 
@@ -158,6 +158,24 @@ describe("migrateLegacyAutoRefresh", () => {
     expect(overrides(result)).toEqual(["r"])
   })
 
+  it("stamps the default it resolved, so a later override is never mistaken for legacy data", () => {
+    // Given an untouched notebook — the one shape a deliberate override could
+    // otherwise be misread as legacy
+    const first = migrateLegacyAutoRefresh({ cells: [chart("a")] })
+    expect(first.settings?.autoRefreshDefault).toBe(true)
+
+    // When the user sets that single chart to Off and it loads again
+    const overridden: NotebookViewState = {
+      ...first,
+      cells: [{ ...first.cells[0], autoRefresh: false }],
+    }
+    const reloaded = migrateLegacyAutoRefresh(overridden)
+
+    // Then the override survives instead of collapsing into the default
+    expect(reloaded.cells[0].autoRefresh).toBe(false)
+    expect(reloaded.settings?.autoRefreshDefault).toBe(true)
+  })
+
   it("never touches a notebook that already has a stored default", () => {
     // Given a post-upgrade notebook where the pinned cell is deliberate
     const state: NotebookViewState = {
@@ -166,11 +184,6 @@ describe("migrateLegacyAutoRefresh", () => {
     }
 
     // Then the migration leaves it exactly as-is
-    expect(migrateLegacyAutoRefresh(state)).toBe(state)
-  })
-
-  it("returns the same state when no cell stores a value", () => {
-    const state: NotebookViewState = { cells: [chart("a"), chart("b")] }
     expect(migrateLegacyAutoRefresh(state)).toBe(state)
   })
 

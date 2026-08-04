@@ -190,30 +190,26 @@ export const migrateLegacyCellNames = (
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
 
-const isLegacyAutoRefreshNotebook = (state: NotebookViewState): boolean =>
-  state.settings?.autoRefreshDefault === undefined &&
-  state.cells.some((cell) => cell.autoRefresh !== undefined)
-
 export const migrateLegacyAutoRefresh = (
   state: NotebookViewState,
 ): NotebookViewState => {
-  if (!isLegacyAutoRefreshNotebook(state)) return state
+  if (state.settings?.autoRefreshDefault !== undefined) return state
   const shown = state.cells
     .filter((cell) => cell.mode === "draw")
     .map((cell) => cell.autoRefresh ?? true)
-  const nextDefault =
+  const autoRefreshDefault =
     shown.length > 0 && shown.every((value) => value === shown[0])
       ? shown[0]
       : true
   const cells = state.cells.map((cell) => {
-    if (cell.autoRefresh !== nextDefault) return cell
+    if (cell.autoRefresh !== autoRefreshDefault) return cell
     const next = { ...cell }
     delete next.autoRefresh
     return next
   })
-  const settings =
-    nextDefault === true
-      ? state.settings
-      : { ...state.settings, autoRefreshDefault: nextDefault }
-  return { ...state, cells, settings }
+  return {
+    ...state,
+    cells,
+    settings: { ...state.settings, autoRefreshDefault },
+  }
 }
