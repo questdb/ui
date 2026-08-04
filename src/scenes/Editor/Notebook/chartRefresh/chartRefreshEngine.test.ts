@@ -1803,6 +1803,66 @@ describe("ChartRefreshEngine", () => {
       expect(cellResults.get("c1")).toBeDefined()
     })
 
+    it("supersedes a background poll fetch instead of silently skipping the click", async () => {
+      // Given a visible 5s cell whose poll tick is mid-flight on a slow query
+      syncOnScreen([drawCell("c1", "select 1", "5s")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      let release!: () => void
+      deps.executeSingle.mockImplementationOnce(
+        (sql: string) =>
+          new Promise<QueryExecResult>((res) => {
+            release = () => res(dqlResult(sql))
+          }),
+      )
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // When the user clicks refresh-all during that fetch
+      engine.refreshAll()
+      await flushAsync()
+
+      // Then the pre-click fetch is superseded by a fresh one immediately
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+
+      // And the aborted straggler lands without side effects
+      release()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+      const state = engine.getState("c1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
+    })
+
+    it("flags a hidden cell whose last fetch is still in flight, so reveal redeems the click", async () => {
+      // Given a polling cell that hid while its poll fetch was in flight
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      let release!: () => void
+      deps.executeSingle.mockImplementationOnce(
+        (sql: string) =>
+          new Promise<QueryExecResult>((res) => {
+            release = () => res({ ...dqlResult(sql), dataset: [[3, 4]] })
+          }),
+      )
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      engine.setVisible("c1", false)
+
+      // When the user clicks refresh-all and the straggler lands a fresh
+      // frame while hidden
+      engine.refreshAll()
+      release()
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // Then the reveal redeems the click with a real fetch — the just-landed
+      // frame would otherwise count as fresh and settle silently
+      engine.setVisible("c1", true)
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    })
+
     it("a flagged cell cleared to empty SQL clears its data on reveal instead of fetching", async () => {
       // Given a settled cell that hid, got flagged, and lost its SQL
       syncOnScreen([drawCell("c1", "select 1", false)])

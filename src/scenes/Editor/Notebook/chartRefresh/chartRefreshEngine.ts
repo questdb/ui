@@ -151,6 +151,7 @@ type Entry = {
   autoRefresh: AutoRefresh
   visible: boolean
   pendingManualRefresh: boolean
+  manualRefreshInFlight: boolean
   ensureAttempted: boolean
   lastFetchedAt: number
   state: ChartFetchState
@@ -282,9 +283,14 @@ export class ChartRefreshEngine {
 
   refreshAll() {
     for (const entry of this.entries.values()) {
-      if (entry.inFlight) continue
-      if (entry.visible && !this.documentHidden) this.forceRefresh(entry)
-      else entry.pendingManualRefresh = true
+      if (!entry.visible || this.documentHidden) {
+        entry.pendingManualRefresh = true
+        continue
+      }
+      // A repeat click must not abort the fetch the previous click started; a
+      // background poll fetch queried pre-click state, so supersede it.
+      if (entry.inFlight && entry.manualRefreshInFlight) continue
+      this.forceRefresh(entry)
     }
   }
 
@@ -295,6 +301,9 @@ export class ChartRefreshEngine {
     }
     entry.pendingManualRefresh = false
     this.promotePendingSql(entry)
+    entry.manualRefreshInFlight = true
+    entry.inFlight?.abort()
+    entry.inFlight = null
     if (this.shouldPoll(entry)) {
       entry.lastFetchedAt = 0
       entry.poll?.abort()
@@ -370,6 +379,7 @@ export class ChartRefreshEngine {
       state: pendingChartFetchState(cell.value),
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
+      manualRefreshInFlight: false,
       ensureAttempted: false,
       lastFetchedAt: 0,
       classifyCache: new Map(),
@@ -436,6 +446,7 @@ export class ChartRefreshEngine {
   private applySqlState(entry: Entry, sql: string) {
     entry.inFlight?.abort()
     entry.inFlight = null
+    entry.manualRefreshInFlight = false
     this.stopResultLoadWait(entry)
     entry.sql = sql
     entry.classifyCache = new Map()
@@ -719,6 +730,7 @@ export class ChartRefreshEngine {
       // must not flip `fetching` off while its replacement is in flight.
       if (entry.inFlight === ac) {
         entry.inFlight = null
+        entry.manualRefreshInFlight = false
         entry.lastFetchedAt = Date.now()
         this.setState(entry, { fetching: false })
       }

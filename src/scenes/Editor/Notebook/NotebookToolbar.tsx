@@ -60,6 +60,7 @@ const TitleContainer = styled(Box).attrs({ align: "center", gap: "0.5rem" })`
 
 const Name = styled.span`
   min-width: 0;
+  max-width: 40rem;
   font-size: 1.6rem;
   font-weight: 600;
   color: ${color("foreground")};
