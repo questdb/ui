@@ -470,7 +470,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Position a single cell in grid mode. x/y/w/h are integers in the 12-column react-grid-layout grid (w ≤ 12).",
+    "description": "Position a single cell in grid mode. x/y/w/h are integers in the react-grid-layout grid. The 12-column limit applies to WIDTH only (w ≤ 12); h is NOT in column units — the rendered cell box is h*10 + (h-1)*20 px (10px rows with 20px gaps BETWEEN rows; do NOT estimate with h*30), and a fixed 44px cell header inside it leaves (h*30 - 64)px of content. Chart cells pad the plot a further ~40px top and ~56px bottom (~86px when the zoom slider shows) inside that content area. EXAMPLES: markdown h:3 -> 3*10 + 2*20 = 70px box, 70 - 44 = 26px of text (the minimum strip); markdown h:5 -> 130px box, 86px of text (a comfortable title); chart h:10 -> 280px box, 236px content, ~140px of plot after padding (~110px with the zoom slider).",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -957,7 +957,7 @@
               "grid": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Grid position when layout_mode='grid'. x/y/w/h in 12-column units (w ≤ 12).",
+                "description": "Grid position when layout_mode='grid'. The 12 columns apply to width only (w ≤ 12). Rendered cell box is h*10 + (h-1)*20 px (do NOT estimate with h*30); a fixed 44px header leaves (h*30 - 64)px of content; chart plots pad a further ~40px top and ~56-86px bottom. EXAMPLES: markdown h:3 -> 70px box / 26px text (the minimum); markdown h:5 -> 130px / 86px text (a title); chart h:10 -> 280px / ~140px of plot.",
                 "properties": {
                   "x": {
                     "type": "integer"
