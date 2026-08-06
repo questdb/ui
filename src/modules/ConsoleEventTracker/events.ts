@@ -104,6 +104,7 @@ export enum ConsoleEvent {
   NEWS_OPEN = "news.open",
 
   NOTEBOOK_CREATE = "notebook.create",
+  NOTEBOOK_TAB_OPEN = "notebook.tab_open",
   NOTEBOOK_DUPLICATE = "notebook.duplicate",
   NOTEBOOK_BUILD_WITH_AI = "notebook.build_with_ai",
   NOTEBOOK_LOAD_RETRY = "notebook.load_retry",
