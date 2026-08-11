@@ -12,8 +12,11 @@ import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
+// Announcements ride on TEXT CHANGES: a steady-state poll that reverifies the
+// same rows keeps the message identical, so the screen reader stays quiet.
+// Failures, recoveries and row-count changes alter the text and are read out.
 const liveRegionMessage = (slot: StatementSlotView): string => {
-  if (slot.refreshing) return "Refreshing query"
+  if (slot.refreshing && slot.result === null) return "Refreshing query"
   if (slot.result?.type === "running") return "Query running"
   if (slot.refreshError !== undefined) {
     return `Refresh failed: ${slot.refreshError}`
@@ -204,13 +207,14 @@ export const StatusNotification: React.FC<Props> = ({
   }
 
   return (
-    <NotificationContainer
-      role={isError || isCancelled ? "alert" : "status"}
-      aria-live={isError || isCancelled ? "assertive" : "polite"}
-      aria-atomic="true"
-      title={notice}
-    >
-      <LiveRegion>{liveRegionMessage(slot)}</LiveRegion>
+    <NotificationContainer title={notice}>
+      <LiveRegion
+        role={isError || isCancelled ? "alert" : "status"}
+        aria-live={isError || isCancelled ? "assertive" : "polite"}
+        aria-atomic="true"
+      >
+        {liveRegionMessage(slot)}
+      </LiveRegion>
       {body}
     </NotificationContainer>
   )

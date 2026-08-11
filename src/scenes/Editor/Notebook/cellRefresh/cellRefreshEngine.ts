@@ -1180,22 +1180,41 @@ export class CellRefreshEngine {
         this.updatePoll(entry)
         return
       }
-      this.setState(entry, { classifyBlock: null, classifiedKey: queriesKey })
       const slotKeys = statementKeysFor(queries)
-      let hadFailure = false
+      const invalidSlots: Array<{ key: StatementKey; message: string }> = []
+      const launchSlots: Array<{ key: StatementKey; index: number }> = []
+      slotKeys.forEach((key, index) => {
+        if (entry.state.cancelledSlots.has(key)) return
+        const stmt = classified[index]
+        if (stmt?.klass === "ERROR") {
+          invalidSlots.push({ key, message: stmt.error ?? "Invalid statement" })
+        } else {
+          launchSlots.push({ key, index })
+        }
+      })
+      const launchPatch: Partial<CellFetchState> = {
+        classifyBlock: null,
+        classifiedKey: queriesKey,
+      }
+      if (invalidSlots.length > 0) {
+        const slotErrors = new Map(entry.state.slotErrors)
+        invalidSlots.forEach(({ key, message }) =>
+          slotErrors.set(key, message.trim()),
+        )
+        launchPatch.slotErrors = slotErrors
+      }
+      if (launchSlots.length > 0) {
+        const slotFetching = new Set(entry.state.slotFetching)
+        launchSlots.forEach(({ key }) => slotFetching.add(key))
+        launchPatch.slotFetching = slotFetching
+      }
+      this.setState(entry, launchPatch)
+      let hadFailure = invalidSlots.length > 0
       await Promise.all(
-        slotKeys.map(async (key, index) => {
+        launchSlots.map(async ({ key, index }) => {
           if (round.signal.aborted) return
-          if (entry.state.cancelledSlots.has(key)) return
-          const stmt = classified[index]
-          if (stmt?.klass === "ERROR") {
-            hadFailure = true
-            this.setSlotError(entry, key, stmt.error ?? "Invalid statement")
-            return
-          }
           const slotAbort = new AbortController()
           entry.slotAborts.set(key, slotAbort)
-          this.setSlotFetching(entry, key, true)
           try {
             const exec = await this.limitRequest(
               () =>
@@ -1220,12 +1239,8 @@ export class CellRefreshEngine {
               const unchanged =
                 previous !== undefined &&
                 resultsEquivalent([toExecResult(previous)], [exec])
-              if (!unchanged) {
-                this.commitSlotResult(entry, key, exec)
-                this.stampSlotSwappedAt(entry, key)
-              }
-              this.stampSlotFetchedAt(entry, key)
-              this.clearSlotError(entry, key)
+              if (!unchanged) this.commitSlotResult(entry, key, exec)
+              this.settleSlotSuccess(entry, key, !unchanged)
             }
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
@@ -1236,7 +1251,8 @@ export class CellRefreshEngine {
             // replacement round registered under the same key.
             if (entry.slotAborts.get(key) === slotAbort) {
               entry.slotAborts.delete(key)
-              this.setSlotFetching(entry, key, false)
+              if (entry.state.slotFetching.has(key))
+                this.setSlotFetching(entry, key, false)
             }
           }
         }),
@@ -1353,16 +1369,26 @@ export class CellRefreshEngine {
     this.setState(entry, { slotFetchedAt, slotSwappedAt })
   }
 
-  private stampSlotFetchedAt(entry: Entry, key: StatementKey) {
+  // A settle is one patch — stamps, error clear and fetching flip land in a
+  // single notify, so a round of S slots costs S renders, not 5S.
+  private settleSlotSuccess(entry: Entry, key: StatementKey, swapped: boolean) {
+    const now = Date.now()
     const slotFetchedAt = new Map(entry.state.slotFetchedAt)
-    slotFetchedAt.set(key, Date.now())
-    this.setState(entry, { slotFetchedAt })
-  }
-
-  private stampSlotSwappedAt(entry: Entry, key: StatementKey) {
-    const slotSwappedAt = new Map(entry.state.slotSwappedAt)
-    slotSwappedAt.set(key, Date.now())
-    this.setState(entry, { slotSwappedAt })
+    slotFetchedAt.set(key, now)
+    const slotFetching = new Set(entry.state.slotFetching)
+    slotFetching.delete(key)
+    const patch: Partial<CellFetchState> = { slotFetchedAt, slotFetching }
+    if (swapped) {
+      const slotSwappedAt = new Map(entry.state.slotSwappedAt)
+      slotSwappedAt.set(key, now)
+      patch.slotSwappedAt = slotSwappedAt
+    }
+    if (entry.state.slotErrors.has(key)) {
+      const slotErrors = new Map(entry.state.slotErrors)
+      slotErrors.delete(key)
+      patch.slotErrors = slotErrors
+    }
+    this.setState(entry, patch)
   }
 
   private setSlotFetching(entry: Entry, key: StatementKey, fetching: boolean) {

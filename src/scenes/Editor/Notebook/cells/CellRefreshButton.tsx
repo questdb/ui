@@ -55,6 +55,7 @@ export const CellRefreshButton: React.FC<Props> = ({
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (refreshing) return
     signalUserEdit(bufferId)
     if (isChart) void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(
@@ -84,7 +85,9 @@ export const CellRefreshButton: React.FC<Props> = ({
           onClick={handleRefresh}
           aria-label="Refresh"
           aria-busy={refreshing}
-          disabled={refreshing}
+          // aria-disabled + click guard, not native disabled: a poll tick must
+          // not evict keyboard focus from the button mid-cycle.
+          aria-disabled={refreshing || undefined}
         >
           {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
         </SplitSide>

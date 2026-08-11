@@ -365,6 +365,7 @@ export const runHeadlessCell = async (
     gate,
     (stmt) => statementRequestLimiter(() => validate(stmt, signal), signal),
   )
+  if (signal?.aborted) return emptySummary()
   if (barrier.action === "denied") {
     return { ...emptySummary(), denied: barrier.reason }
   }

@@ -49,11 +49,15 @@ export const CellBottomContent: React.FC<Props> = ({
   // Tabs follow the editor's statement list; results attach to it by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no
   // statement claims (selection run) falls back to the results' own tabs.
+  const statements = useMemo(
+    () => (cell.mode === "draw" ? [] : getQueriesFromText(cell.value)),
+    [cell.mode, cell.value],
+  )
   const frame = useMemo(
     () =>
-      deriveStatementFrame(getQueriesFromText(cell.value), cell.result) ??
+      deriveStatementFrame(statements, cell.result) ??
       derivePositionalFrame(cell.result),
-    [cell.value, cell.result],
+    [statements, cell.result],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),

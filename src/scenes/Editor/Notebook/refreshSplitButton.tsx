@@ -26,13 +26,22 @@ export const SplitSide = styled(Button)`
     height: 1.8rem;
   }
 
-  &&:hover:not(:disabled) {
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
     background: ${({ theme }) => `${theme.color.selection}80`};
     color: ${({ theme }) => theme.color.foreground};
   }
 
-  &:disabled {
+  &&:hover[aria-disabled="true"],
+  &&:active[aria-disabled="true"] {
+    background: transparent;
+    color: ${({ theme }) => theme.color.foreground};
+    filter: none;
+  }
+
+  &:disabled,
+  &[aria-disabled="true"] {
     opacity: 0.5;
+    cursor: default;
   }
 `
 
