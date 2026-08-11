@@ -43,11 +43,11 @@ import {
 } from "../../../utils/notebooks/notebookController"
 import {
   type CellRunOutcome,
-  clearCellAutoRefresh,
   computeResultBottomHeight,
   countAutoRefreshOverrides,
   generateId,
   releaseCellResultPatch,
+  resetCellAutoRefresh,
   snapshotResultsMatchQueries,
   statementKeysFor,
 } from "./notebookUtils"
@@ -778,10 +778,16 @@ export const NotebookProvider: React.FC<{
   )
 
   const resetAutoRefreshOverrides = useCallback(() => {
-    const count = countAutoRefreshOverrides(store.cellsRef.current)
+    const autoRefreshDefault = settingsRef.current.autoRefreshDefault
+    const count = countAutoRefreshOverrides(
+      store.cellsRef.current,
+      autoRefreshDefault,
+    )
     if (count === 0) return
     signalUserEdit(bufferId)
-    store.updateCells((prev) => prev.map(clearCellAutoRefresh))
+    store.updateCells((prev) =>
+      prev.map((cell) => resetCellAutoRefresh(cell, autoRefreshDefault)),
+    )
     void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_RESET_OVERRIDES, {
       count,
     })

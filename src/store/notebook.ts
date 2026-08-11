@@ -206,6 +206,16 @@ export const chartAutoRefreshStamp = (
     ? { autoRefresh: true }
     : {}
 
+// A stamped chart carries the same `autoRefresh: true` a user override would;
+// this tells the two apart so born-live charts don't read as user overrides.
+export const isChartAutoRefreshStamp = (
+  cell: Pick<NotebookCell, "mode" | "autoRefresh">,
+  autoRefreshDefault: AutoRefresh | undefined,
+): boolean =>
+  cell.mode === "draw" &&
+  cell.autoRefresh === true &&
+  autoRefreshDefault === undefined
+
 // Charts drawn before the uniform-Off fallback polled through an implicit
 // per-view Auto. The stamp makes that liveness explicit so they keep polling;
 // grids never polled, and stay off. No notebook default is ever synthesized.

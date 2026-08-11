@@ -51,7 +51,7 @@ export const NotebookRefreshControl: React.FC = () => {
   const cellRefresh = useCellRefresh()
   const storedDefault = settings.autoRefreshDefault
   const defaultLabel = autoRefreshLabel(storedDefault ?? false)
-  const overrideCount = countActiveAutoRefreshOverrides(cells)
+  const overrideCount = countActiveAutoRefreshOverrides(cells, storedDefault)
   const refreshableCellCount = cells.filter(
     (cell) => resolveCellView(cell) !== "none",
   ).length

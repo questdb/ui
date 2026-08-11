@@ -19,6 +19,7 @@ import {
   cellToolbarMenuFlags,
   cellToolbarTier,
   clearCellAutoRefresh,
+  resetCellAutoRefresh,
   cloneNotebookViewState,
   countActiveAutoRefreshOverrides,
   countAutoRefreshOverrides,
@@ -2669,9 +2670,30 @@ describe("auto-refresh inheritance helpers", () => {
       cell("c", "SELECT 3"),
     ]
     // Then the count matches what a reset would clear
-    expect(countAutoRefreshOverrides(cells)).toBe(2)
-    expect(isAutoRefreshOverride(cells[1])).toBe(true)
-    expect(isAutoRefreshOverride(cells[2])).toBe(false)
+    expect(countAutoRefreshOverrides(cells, undefined)).toBe(2)
+    expect(isAutoRefreshOverride(cells[1], undefined)).toBe(true)
+    expect(isAutoRefreshOverride(cells[2], undefined)).toBe(false)
+  })
+
+  it("born-live chart stamp is not an override while the default is unset, and becomes one once a default is stored", () => {
+    // Given a freshly drawn chart carrying the born-live stamp
+    const stamped: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: true,
+    }
+    // Then with no notebook default it reads as the default state, not an override
+    expect(isAutoRefreshOverride(stamped, undefined)).toBe(false)
+    expect(countAutoRefreshOverrides([stamped], undefined)).toBe(0)
+    // And once the notebook stores a default, the same value is a real override
+    expect(isAutoRefreshOverride(stamped, "5s")).toBe(true)
+    // A run cell with true is never a stamp
+    expect(
+      isAutoRefreshOverride(
+        { ...cell("b", "SELECT 2"), mode: "run", autoRefresh: true },
+        undefined,
+      ),
+    ).toBe(true)
   })
 
   it("countActiveAutoRefreshOverrides counts overrides on cells showing a view — editor-only keys stay dormant", () => {
@@ -2695,9 +2717,9 @@ describe("auto-refresh inheritance helpers", () => {
       { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: "1s" },
     ]
     // Then only the cells with a visible view count toward the displayed total
-    expect(countActiveAutoRefreshOverrides(cells)).toBe(2)
+    expect(countActiveAutoRefreshOverrides(cells, undefined)).toBe(2)
     // And a notebook with only editor-only keys shows no override at all
-    expect(countActiveAutoRefreshOverrides([cells[2]])).toBe(0)
+    expect(countActiveAutoRefreshOverrides([cells[2]], undefined)).toBe(0)
   })
 
   it("clearCellAutoRefresh deletes the key so a later draw switch cannot resurrect it", () => {
@@ -2722,6 +2744,59 @@ describe("auto-refresh inheritance helpers", () => {
   it("clearCellAutoRefresh returns the same cell when no override exists", () => {
     const c = cell("a", "SELECT 1")
     expect(clearCellAutoRefresh(c)).toBe(c)
+  })
+
+  it("clearCellAutoRefresh strips a chart stamp — the per-cell inherit choice is deliberate", () => {
+    // Given a born-live chart, no notebook default
+    const stamped: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: true,
+    }
+    // When the user picks "Notebook default" on the cell
+    const cleared = clearCellAutoRefresh(stamped)
+    // Then the key is gone — the chart inherits Off and is never re-stamped
+    expect("autoRefresh" in cleared).toBe(false)
+  })
+
+  it("resetCellAutoRefresh returns a chart to born-live under an unset default instead of freezing it", () => {
+    // Given a chart the user pinned to a fixed interval, no notebook default
+    const pinned: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: "10s",
+    }
+    // When the notebook-level reset clears the override
+    const reset = resetCellAutoRefresh(pinned, undefined)
+    // Then the chart lands on the born-live default, still polling
+    expect(reset.autoRefresh).toBe(true)
+  })
+
+  it("resetCellAutoRefresh leaves the born-live stamp untouched under an unset default", () => {
+    const stamped: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: true,
+    }
+    expect(resetCellAutoRefresh(stamped, undefined)).toBe(stamped)
+  })
+
+  it("resetCellAutoRefresh drops a chart override to inherit when a default is stored", () => {
+    // Given a chart pinned to Auto while the notebook default is 5s
+    const pinned: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: true,
+    }
+    // When the notebook-level reset clears the override
+    const reset = resetCellAutoRefresh(pinned, "5s")
+    // Then no key remains — the chart inherits the notebook default
+    expect("autoRefresh" in reset).toBe(false)
+  })
+
+  it("resetCellAutoRefresh preserves a deliberate inherit — reset only touches overrides", () => {
+    const inheriting: NotebookCell = { ...cell("a", "SELECT 1"), mode: "draw" }
+    expect(resetCellAutoRefresh(inheriting, undefined)).toBe(inheriting)
   })
 })
 
@@ -3238,6 +3313,78 @@ describe("buildAppliedNotebookState", () => {
     })
     // Then the stored default survives
     expect(preserved.settings.autoRefreshDefault).toBe("30s")
+  })
+
+  const chart = (id: string): NotebookCell => ({
+    ...cell(id, "SELECT 1"),
+    mode: "draw",
+    chartConfig: {
+      xColumn: "ts",
+      queries: [{ type: "line", yColumns: ["v"] }],
+    },
+  })
+  const chartRequestCell = {
+    value: "SELECT 1",
+    mode: "draw" as const,
+    chartConfig: {
+      xColumn: "ts",
+      queries: [{ type: "line" as const, yColumns: ["v"] }],
+    },
+  }
+
+  it("stamps a new draw cell born-live when the default is unset", () => {
+    // Given a notebook with no auto-refresh default
+    const current = state([cell("a", "SELECT 1")])
+    // When apply adds a chart without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ id: "a", preserveValue: true }, chartRequestCell],
+    })
+    // Then the new chart polls born-live, like the editor's draw switch
+    expect(next.cells[1].autoRefresh).toBe(true)
+  })
+
+  it("stamps an existing run cell converted to draw, like the editor's draw switch", () => {
+    // Given an existing run cell
+    const current = state([cell("a", "SELECT 1")])
+    // When apply turns it into a chart without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a" }],
+    })
+    // Then the converted chart polls born-live
+    expect(next.cells[0].autoRefresh).toBe(true)
+  })
+
+  it("echoing an inheriting chart does not re-stamp it — a read/apply round-trip preserves inherit", () => {
+    // Given a chart the user set back to the notebook default (unset ⇒ Off)
+    const current = state([chart("a")])
+    // When an agent echoes the notebook state without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a" }],
+    })
+    // Then the chart still inherits — it does not flip to Auto
+    expect("autoRefresh" in next.cells[0]).toBe(false)
+  })
+
+  it("echoing a chart's explicit auto_refresh keeps it", () => {
+    // Given a born-live chart carrying its stamp
+    const current = state([{ ...chart("a"), autoRefresh: true as const }])
+    // When an agent echoes the stamped value
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a", autoRefresh: true }],
+    })
+    // Then the chart keeps polling
+    expect(next.cells[0].autoRefresh).toBe(true)
+  })
+
+  it("apply clears a chart's explicit auto_refresh to inherit when omitted", () => {
+    // Given a chart pinned to a fixed interval
+    const current = state([{ ...chart("a"), autoRefresh: "5s" as const }])
+    // When an agent applies the cell without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a" }],
+    })
+    // Then the override clears — PUT semantics, no re-stamp
+    expect("autoRefresh" in next.cells[0]).toBe(false)
   })
 
   it("grid layout mode builds a layout for every cell", () => {
