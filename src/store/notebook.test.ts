@@ -89,20 +89,33 @@ describe("migrateImplicitChartAutoRefresh", () => {
       settings: { autoRefreshDefault: "30s" },
     }
 
-    // Then the migration leaves it exactly as-is
-    expect(migrateImplicitChartAutoRefresh(state)).toBe(state)
+    // When the notebook loads
+    const result = migrateImplicitChartAutoRefresh(state)
+
+    // Then the cells stay exactly as-is and the default survives
+    expect(result.cells).toBe(state.cells)
+    expect(result.settings?.autoRefreshDefault).toBe("30s")
   })
 
-  it("returns the same state when nothing needs the stamp, and is idempotent", () => {
-    // Given only explicit charts and run cells
-    const state: NotebookViewState = {
-      cells: [chart("a", false), cell({ id: "r", mode: "run" })],
-    }
-    expect(migrateImplicitChartAutoRefresh(state)).toBe(state)
+  it("marks the view migrated so the stamp runs only once", () => {
+    // Given an unmigrated notebook
+    const result = migrateImplicitChartAutoRefresh({ cells: [chart("a")] })
 
-    // And a stamped notebook does not change on a second pass
-    const stamped = migrateImplicitChartAutoRefresh({ cells: [chart("b")] })
-    expect(migrateImplicitChartAutoRefresh(stamped)).toBe(stamped)
+    // Then the view carries the marker and a second pass is identity
+    expect(result.settings?.autoRefreshMigrated).toBe(true)
+    expect(migrateImplicitChartAutoRefresh(result)).toBe(result)
+  })
+
+  it("never re-stamps a migrated view, so a cleared chart override survives a reload", () => {
+    // Given a migrated notebook whose chart the user reset to "inherit"
+    const state: NotebookViewState = {
+      cells: [chart("a")],
+      settings: { autoRefreshMigrated: true },
+    }
+
+    // When the notebook loads again
+    // Then the chart stays inherited instead of reverting to Auto
+    expect(migrateImplicitChartAutoRefresh(state)).toBe(state)
   })
 })
 

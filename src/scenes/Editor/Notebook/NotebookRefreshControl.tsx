@@ -79,7 +79,7 @@ export const NotebookRefreshControl: React.FC = () => {
   }
 
   const handleSelectDefault = (value: AutoRefresh | undefined) => {
-    if (value === undefined || value === (storedDefault ?? false)) return
+    if (value === undefined || value === storedDefault) return
     void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_DEFAULT_CHANGE, {
       from:
         storedDefault === undefined ? "unset" : autoRefreshLabel(storedDefault),
@@ -127,7 +127,7 @@ export const NotebookRefreshControl: React.FC = () => {
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={4}>
             <AutoRefreshOptions
-              value={storedDefault ?? false}
+              value={storedDefault}
               onSelect={handleSelectDefault}
             />
             {overrideCount > 0 && (

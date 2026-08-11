@@ -134,6 +134,7 @@ export type NotebookSettings = {
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
   autoRefreshDefault?: AutoRefresh
+  autoRefreshMigrated?: true
 }
 
 export type NotebookViewState = {
@@ -208,15 +209,24 @@ export const chartAutoRefreshStamp = (
 // Charts drawn before the uniform-Off fallback polled through an implicit
 // per-view Auto. The stamp makes that liveness explicit so they keep polling;
 // grids never polled, and stay off. No notebook default is ever synthesized.
+// The marker makes the stamp one-time: on a migrated view an undefined
+// autoRefresh is a deliberate "inherit", and re-stamping it would silently
+// revert a cleared chart to Auto.
 export const migrateImplicitChartAutoRefresh = (
   state: NotebookViewState,
 ): NotebookViewState => {
+  if (state.settings?.autoRefreshMigrated) return state
   const autoRefreshDefault = state.settings?.autoRefreshDefault
   const needsStamp = (cell: NotebookCell) =>
     Object.keys(chartAutoRefreshStamp(cell, autoRefreshDefault)).length > 0
-  if (!state.cells.some(needsStamp)) return state
-  const cells = state.cells.map((cell) =>
-    needsStamp(cell) ? { ...cell, autoRefresh: true as const } : cell,
-  )
-  return { ...state, cells }
+  const cells = state.cells.some(needsStamp)
+    ? state.cells.map((cell) =>
+        needsStamp(cell) ? { ...cell, autoRefresh: true as const } : cell,
+      )
+    : state.cells
+  return {
+    ...state,
+    cells,
+    settings: { ...state.settings, autoRefreshMigrated: true },
+  }
 }

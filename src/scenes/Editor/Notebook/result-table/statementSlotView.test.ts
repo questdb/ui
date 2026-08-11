@@ -29,7 +29,6 @@ const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotFetchedAt: new Map(),
-  slotSwappedAt: new Map(),
   ...over,
 })
 
@@ -44,23 +43,20 @@ describe("buildStatementSlotViews", () => {
       slotFetching: new Set([key2]),
       slotErrors: new Map([[key1, "boom"]]),
       slotFetchedAt: new Map([[key1, 1234]]),
-      slotSwappedAt: new Map([[key1, 1200]]),
     })
 
     // When the slot views are built
     const slots = buildStatementSlotViews(frame, state)
 
-    // Then each slot carries its own refresh state, freshness, and swap token
+    // Then each slot carries its own refresh state and freshness
     expect(slots[0]).toMatchObject({
       key: key1,
       refreshing: false,
       refreshError: "boom",
       fetchedAt: 1234,
-      swappedAt: 1200,
     })
     expect(slots[1]).toMatchObject({ key: key2, refreshing: true })
     expect(slots[1].refreshError).toBeUndefined()
-    expect(slots[1].swappedAt).toBeUndefined()
   })
 
   it("marks a statement with no result as not run, with no refresh state", () => {

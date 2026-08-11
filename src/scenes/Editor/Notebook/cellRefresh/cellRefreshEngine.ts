@@ -82,11 +82,6 @@ export type CellFetchState = {
   // after a partial round the succeeded slots are newer than their siblings.
   // Memory-only — a reload falls back to the frame's saved time.
   slotFetchedAt: ReadonlyMap<StatementKey, number>
-  // Wall-clock of each slot's last settle that CHANGED its rows. This is the
-  // grid's viewport/focus reset token: an identical refresh advances
-  // slotFetchedAt (the status line must show the poll that verified the rows)
-  // but not this, so the user keeps their scroll position.
-  slotSwappedAt: ReadonlyMap<StatementKey, number>
 }
 
 export type CellRefreshDeps = {
@@ -135,7 +130,6 @@ export const pendingCellFetchState = (sql: string): CellFetchState => {
     slotErrors: new Map(),
     cancelledSlots: new Set(),
     slotFetchedAt: new Map(),
-    slotSwappedAt: new Map(),
   }
 }
 
@@ -426,9 +420,8 @@ export class CellRefreshEngine {
     }
     entry.pendingManualRefresh = false
     this.promotePendingSql(entry)
+    this.abortRound(entry)
     entry.manualRefreshInFlight = true
-    entry.inFlight?.abort()
-    entry.inFlight = null
     if (this.shouldPoll(entry)) {
       entry.lastFetchedAt = 0
       entry.poll?.abort()
@@ -547,19 +540,16 @@ export class CellRefreshEngine {
     this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = Date.now()
     // The refresh stamps describe rounds the run just superseded: leaving
-    // them would show the old refresh time under the run's rows and let a
-    // pre-run viewport restore onto them. Cleared, both fall back to the
-    // frame's own run timestamp.
+    // them would show the old refresh time under the run's rows. Cleared, the
+    // status line falls back to the frame's own run timestamp.
     if (
       entry.state.slotErrors.size === 0 &&
-      entry.state.slotFetchedAt.size === 0 &&
-      entry.state.slotSwappedAt.size === 0
+      entry.state.slotFetchedAt.size === 0
     )
       return
     this.setState(entry, {
       slotErrors: new Map(),
       slotFetchedAt: new Map(),
-      slotSwappedAt: new Map(),
     })
   }
 
@@ -574,7 +564,7 @@ export class CellRefreshEngine {
     this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = Date.now()
     this.clearSlotError(entry, statementKey)
-    this.clearSlotStamps(entry, statementKey)
+    this.clearSlotFetchStamp(entry, statementKey)
     if (entry.state.slotErrors.size > 0) this.persistGridFrame(entry, true)
   }
 
@@ -590,9 +580,6 @@ export class CellRefreshEngine {
     if (!entry) return
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
-    if (entry.state.fetching || entry.state.slotFetching.size > 0) {
-      this.setState(entry, { fetching: false, slotFetching: new Set() })
-    }
   }
 
   // Balances noteRunStarted on EVERY outcome — denied, skipped, superseded,
@@ -709,11 +696,18 @@ export class CellRefreshEngine {
     this.notify(cellId)
   }
 
+  // Superseding a round also clears its progress flags: the aborted round's
+  // finishRound no-ops (inFlight is nulled here), so nothing else would — a
+  // replacement round deferred behind the poll jitter can die with the poll,
+  // and `fetching` would stay stuck on for a hidden cell.
   private abortRound(entry: Entry) {
     entry.inFlight?.abort()
     entry.inFlight = null
     for (const abort of entry.slotAborts.values()) abort.abort()
     entry.slotAborts.clear()
+    if (entry.state.fetching || entry.state.slotFetching.size > 0) {
+      this.setState(entry, { fetching: false, slotFetching: new Set() })
+    }
   }
 
   private applySqlState(entry: Entry, sql: string) {
@@ -741,9 +735,6 @@ export class CellRefreshEngine {
     const slotFetchedAt = new Map(
       [...entry.state.slotFetchedAt].filter(([key]) => slotKeys.has(key)),
     )
-    const slotSwappedAt = new Map(
-      [...entry.state.slotSwappedAt].filter(([key]) => slotKeys.has(key)),
-    )
     this.setState(entry, {
       queries,
       queriesKey,
@@ -752,7 +743,6 @@ export class CellRefreshEngine {
       cancelledSlots: new Set(),
       slotErrors,
       slotFetchedAt,
-      slotSwappedAt,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
     if (entry.kind === "grid") this.ensureClassified(entry)
@@ -1231,16 +1221,15 @@ export class CellRefreshEngine {
               this.setSlotError(entry, key, exec.error ?? "Query failed")
             } else {
               // The fetch time always advances — the status line shows the
-              // poll that just verified the rows. The swap token advances
-              // only when the rows changed: it drives the grid's
-              // viewport/focus reset, and an identical frame must not cost
-              // the user their scroll position.
+              // poll that just verified the rows. The frame is rewritten only
+              // when the rows changed, so an identical poll costs no renders
+              // and no snapshot churn.
               const previous = this.currentSlotResult(entry.cellId, key)
               const unchanged =
                 previous !== undefined &&
                 resultsEquivalent([toExecResult(previous)], [exec])
               if (!unchanged) this.commitSlotResult(entry, key, exec)
-              this.settleSlotSuccess(entry, key, !unchanged)
+              this.settleSlotSuccess(entry, key)
             }
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
@@ -1316,9 +1305,9 @@ export class CellRefreshEngine {
       currentKeys[
         Math.min(Math.max(current.activeResultIndex, 0), currentKeys.length - 1)
       ]
-    // The frame timestamp is every sibling tab's viewport token: bumping it
-    // per slot settle would reset their scroll. The settled slot's own token
-    // advances through slotFetchedAt instead.
+    // The frame timestamp is the grid's viewport token for every tab:
+    // bumping it per slot settle would reset scroll and focus. A settled
+    // slot's freshness advances through slotFetchedAt instead.
     deps.setCellResult(entry.cellId, {
       ...current,
       results: nextResults,
@@ -1356,33 +1345,21 @@ export class CellRefreshEngine {
     this.setState(entry, { slotErrors })
   }
 
-  private clearSlotStamps(entry: Entry, key: StatementKey) {
-    if (
-      !entry.state.slotFetchedAt.has(key) &&
-      !entry.state.slotSwappedAt.has(key)
-    )
-      return
+  private clearSlotFetchStamp(entry: Entry, key: StatementKey) {
+    if (!entry.state.slotFetchedAt.has(key)) return
     const slotFetchedAt = new Map(entry.state.slotFetchedAt)
-    const slotSwappedAt = new Map(entry.state.slotSwappedAt)
     slotFetchedAt.delete(key)
-    slotSwappedAt.delete(key)
-    this.setState(entry, { slotFetchedAt, slotSwappedAt })
+    this.setState(entry, { slotFetchedAt })
   }
 
-  // A settle is one patch — stamps, error clear and fetching flip land in a
-  // single notify, so a round of S slots costs S renders, not 5S.
-  private settleSlotSuccess(entry: Entry, key: StatementKey, swapped: boolean) {
-    const now = Date.now()
+  // A settle is one patch — stamp, error clear and fetching flip land in a
+  // single notify, so a round of S slots costs S renders, not 3S.
+  private settleSlotSuccess(entry: Entry, key: StatementKey) {
     const slotFetchedAt = new Map(entry.state.slotFetchedAt)
-    slotFetchedAt.set(key, now)
+    slotFetchedAt.set(key, Date.now())
     const slotFetching = new Set(entry.state.slotFetching)
     slotFetching.delete(key)
     const patch: Partial<CellFetchState> = { slotFetchedAt, slotFetching }
-    if (swapped) {
-      const slotSwappedAt = new Map(entry.state.slotSwappedAt)
-      slotSwappedAt.set(key, now)
-      patch.slotSwappedAt = slotSwappedAt
-    }
     if (entry.state.slotErrors.has(key)) {
       const slotErrors = new Map(entry.state.slotErrors)
       slotErrors.delete(key)
