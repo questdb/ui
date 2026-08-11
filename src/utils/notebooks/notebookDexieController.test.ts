@@ -1,5 +1,6 @@
 import "../../test/stubBrowserGlobals"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { clearStatementClassCache } from "../tools/permissions"
 
 import {
   __resetNotebookDexieControllerForTests,
@@ -92,7 +93,7 @@ type PendingQuery = {
   resolve: (result: unknown) => void
 }
 
-const makeQuest = () => {
+const makeQuest = (opts: { validate?: (sql: string) => unknown } = {}) => {
   const pending: PendingQuery[] = []
   const quest = {
     queryRaw: (sql: string) => {
@@ -103,6 +104,9 @@ const makeQuest = () => {
       pending.push({ sql, resolve })
       return { promise, queryId: `q-${pending.length}` }
     },
+    ...(opts.validate
+      ? { validateQuery: (sql: string) => Promise.resolve(opts.validate!(sql)) }
+      : {}),
     abort: vi.fn(),
   } as unknown as Client
   const respondNext = (result: unknown) => {
@@ -176,6 +180,7 @@ beforeEach(async () => {
   __resetNotebookBufferQueuesForTests()
   __resetNotebookDexieControllerForTests()
   __resetAgentActivityForTests()
+  clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
 })
@@ -577,7 +582,9 @@ describe("createDexieNotebookController — runCell", () => {
     expect(snapshot?.results?.[0]).toMatchObject({ type: "dql" })
   })
 
-  it("a multi-statement script stops on error and cancels the remainder", async () => {
+  it("falls back to a sequential stop-on-error script when classification is unavailable", async () => {
+    // The mock quest has no validateQuery — an unknown class never selects
+    // the parallel strategy.
     await seedNotebook({ cells: [cell("a", "SELECT 1; SELECT 2; SELECT 3")] })
     const { quest, respondNext } = makeQuest()
     const controller = makeController({}, quest)
@@ -587,6 +594,123 @@ describe("createDexieNotebookController — runCell", () => {
     const summary = await pending
     expect(summary.success).toBe(false)
     expect(summary.results).toEqual(["success", "ERROR: boom", "cancelled"])
+  })
+
+  const dqlValidation = {
+    query: "q",
+    columns: [{ name: "x", type: "INT" }],
+    timestamp: 0,
+  }
+
+  it("runs a non-write multi-statement cell in parallel — one failure skips nothing", async () => {
+    // Given a classified all-DQL script
+    await seedNotebook({ cells: [cell("a", "SELECT 1; SELECT 2; SELECT 3")] })
+    const { quest, pending, respondNext } = makeQuest({
+      validate: () => dqlValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When it runs, every statement launches together
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (pending.length < 3) throw new Error("not all launched")
+    })
+
+    // And the middle one fails while its siblings succeed
+    respondNext(dqlResult)
+    respondNext(errorResult)
+    respondNext(dqlResult)
+    const summary = await run
+
+    // Then the failure skips nothing — no cancelled remainder
+    expect(summary.success).toBe(false)
+    expect(summary.results).toEqual(["success", "ERROR: boom", "success"])
+  })
+
+  it("skips an invalid statement with its validation error and runs its siblings", async () => {
+    // Given a script whose second statement fails validation
+    await seedNotebook({ cells: [cell("a", "SELECT 1; SELECT bad_col")] })
+    const { quest, pending, respondNext } = makeQuest({
+      validate: (sql) =>
+        sql.includes("bad_col")
+          ? { query: sql, position: 0, error: "column not found" }
+          : dqlValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When it runs
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (pending.length < 1) throw new Error("sibling not launched")
+    })
+    respondNext(dqlResult)
+    const summary = await run
+
+    // Then the invalid statement never executed; its slot carries the error
+    expect(summary.results).toEqual(["success", "ERROR: column not found"])
+    expect(pending).toHaveLength(0)
+  })
+
+  it("autoRun gate skips a write cell at the barrier", async () => {
+    // Given an auto-run of a DML cell
+    await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
+    const { quest, pending } = makeQuest({
+      validate: () => ({ queryType: "INSERT" }),
+    })
+    const controller = makeController({}, quest)
+
+    // When the gated run reaches the barrier
+    const summary = await controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+
+    // Then it skips without executing anything
+    expect(summary.skipped).toMatch(/AUTO_RUN_SKIPPED/)
+    expect(pending).toHaveLength(0)
+  })
+
+  it("explicit gate denies a write without the write permission at the barrier", async () => {
+    await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
+    const { quest, pending } = makeQuest({
+      validate: () => ({ queryType: "INSERT" }),
+    })
+    const controller = makeController({}, quest)
+
+    const summary = await controller.runCell(
+      "a",
+      undefined,
+      "INSERT INTO t VALUES (1)",
+      {
+        kind: "explicit",
+        permissions: { grantSchemaAccess: true, read: true, write: false },
+      },
+    )
+
+    expect(summary.denied).toMatch(/'write' permission/)
+    expect(pending).toHaveLength(0)
+  })
+
+  it("explicit gate without write fails closed when classification is unreachable", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 42 FROM never_cached")] })
+    const { quest, pending } = makeQuest({
+      validate: () => {
+        throw new Error("network down")
+      },
+    })
+    const controller = makeController({}, quest)
+
+    const summary = await controller.runCell(
+      "a",
+      undefined,
+      "SELECT 42 FROM never_cached",
+      {
+        kind: "explicit",
+        permissions: { grantSchemaAccess: true, read: true, write: false },
+      },
+    )
+
+    expect(summary.denied).toMatch(/could not classify/)
+    expect(pending).toHaveLength(0)
   })
 
   it("records a NOTICE result as a DQL with the notice attached", async () => {

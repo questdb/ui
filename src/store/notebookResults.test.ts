@@ -114,10 +114,12 @@ describe("notebookResults", () => {
 
   it("updateCellSnapshotActiveIndex updates an existing record and skips a missing one", async () => {
     await saveCellSnapshot(snap(1, "c1", 100))
-    await updateCellSnapshotActiveIndex(1, "c1", 3)
-    expect((await loadCellSnapshot(1, "c1"))?.activeResultIndex).toBe(3)
+    await updateCellSnapshotActiveIndex(1, "c1", 3, "select 30")
+    const updated = await loadCellSnapshot(1, "c1")
+    expect(updated?.activeResultIndex).toBe(3)
+    expect(updated?.activeStatementKey).toBe("select 30")
 
-    await updateCellSnapshotActiveIndex(1, "ghost", 3)
+    await updateCellSnapshotActiveIndex(1, "ghost", 3, "select 30")
     expect(await loadCellSnapshot(1, "ghost")).toBeUndefined()
   })
 
@@ -191,7 +193,7 @@ describe("notebookResults", () => {
     expect(savedAt).toBeGreaterThanOrEqual(copiedAtLeast)
 
     // And changing the duplicate leaves the source snapshot untouched
-    await updateCellSnapshotActiveIndex(2, "new-run", 0)
+    await updateCellSnapshotActiveIndex(2, "new-run", 0, "select 10")
     await deleteCellSnapshot(2, "new-draw")
     expect(await loadCellSnapshot(1, "run")).toMatchObject({
       activeResultIndex: 1,

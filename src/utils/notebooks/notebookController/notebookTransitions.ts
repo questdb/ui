@@ -1,4 +1,5 @@
 import {
+  chartAutoRefreshStamp,
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
   type CellMode,
@@ -12,6 +13,8 @@ import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   buildAppliedNotebookState,
+  carriedRunError,
+  carriedRunStatus,
   cellHeightPatchForRows,
   cellModeChangePatch,
   clearCellAutoRefresh,
@@ -20,6 +23,7 @@ import {
   isExpectingResult,
   mergeCellChartConfig,
   nextGridSeedPosition,
+  reconcileCellResultForValue,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
   removeCell,
@@ -120,14 +124,27 @@ export const updateCellTransition = (
     if (!cell.topResized && updates.topHeight === undefined) {
       const estimated = topHeightForSql(updates.value)
       if (cell.topHeight == null || estimated !== topHeightForSql(cell.value)) {
-        patch = { ...updates, topHeight: estimated }
+        patch = { ...patch, topHeight: estimated }
+      }
+    }
+    if (updates.value !== cell.value && cell.result != null) {
+      const reconciled = reconcileCellResultForValue(cell.result, updates.value)
+      patch = { ...patch, result: reconciled }
+      if (reconciled === null) {
+        patch = {
+          ...patch,
+          lastRunStatus: carriedRunStatus(cell),
+          lastRunError: carriedRunError(cell),
+        }
       }
     }
   }
+  const resultDropped = patch.result === null && cell.result != null
   return {
     parts: { ...parts, cells: patchCellIn(parts.cells, cellId, patch) },
     result: undefined,
     touchedCellId: cellId,
+    ...(resultDropped ? { deleteSnapshots: { cellIds: [cellId] } } : {}),
   }
 }
 
@@ -229,9 +246,13 @@ export const setLayoutModeTransition = (
 export const setNotebookAutoRefreshTransition = (
   parts: ViewParts,
   value: AutoRefresh,
+  resetCellOverrides: boolean,
 ): NotebookTransitionResult => ({
   parts: {
     ...parts,
+    cells: resetCellOverrides
+      ? parts.cells.map(clearCellAutoRefresh)
+      : parts.cells,
     settings: { ...parts.settings, autoRefreshDefault: value },
   },
   result: undefined,
@@ -301,6 +322,12 @@ export const setCellModeTransition = (
       cells: patchCellIn(parts.cells, cellId, {
         mode,
         ...cellModeChangePatch(cell, mode),
+        ...(entersDraw
+          ? chartAutoRefreshStamp(
+              { mode, autoRefresh: cell.autoRefresh },
+              parts.settings.autoRefreshDefault,
+            )
+          : {}),
       }),
     },
     result: undefined,

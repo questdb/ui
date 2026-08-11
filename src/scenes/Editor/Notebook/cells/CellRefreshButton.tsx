@@ -5,6 +5,7 @@ import { Spinner } from "./Spinner"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import { autoRefreshLabel, resolveAutoRefresh } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
 import {
@@ -20,10 +21,13 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
+const WRITE_BLOCK_TOOLTIP =
+  "This cell contains DDL/DML, auto-refresh is disabled"
+
 type Props = {
   cellId: string
-  // Grid refreshes by re-running the query and has no auto-refresh interval;
-  // chart refreshes its own fetch and exposes the interval dropdown.
+  // Chart refreshes its own fetch; a grid refresh re-runs the statements while
+  // the old rows stay visible. Both views expose the interval dropdown.
   view: "grid" | "chart"
   cellAutoRefresh: AutoRefresh | undefined
   autoRefreshDefault: AutoRefresh | undefined
@@ -39,9 +43,14 @@ export const CellRefreshButton: React.FC<Props> = ({
 }) => {
   const { setCellRefresh } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const fetchState = useCellFetchState(cellId)
   const isChart = view === "chart"
   const autoRefresh = resolveAutoRefresh(cellAutoRefresh, autoRefreshDefault)
   const hasOverride = cellAutoRefresh !== undefined
+  const writeBlocked =
+    view === "grid" && fetchState?.classifyBlock?.kind === "write"
+  const refreshing =
+    isRefreshing || (view === "grid" && (fetchState?.fetching ?? false))
   const intervalTooltip = useTriggerTooltip()
 
   const handleRefresh = (e: React.MouseEvent) => {
@@ -74,53 +83,64 @@ export const CellRefreshButton: React.FC<Props> = ({
           type="button"
           onClick={handleRefresh}
           aria-label="Refresh"
-          aria-busy={isRefreshing}
-          disabled={isRefreshing}
+          aria-busy={refreshing}
+          disabled={refreshing}
         >
-          {isRefreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
+          {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
         </SplitSide>
       </Tooltip>
-      {isChart && (
-        <>
-          <SplitDivider />
-          <DropdownMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
-            <Tooltip
-              content={
-                hasOverride
-                  ? "Auto-refresh interval (overrides notebook default)"
-                  : "Auto-refresh interval"
-              }
-              {...intervalTooltip.tooltipProps}
-            >
-              <DropdownMenu.Trigger asChild>
-                <SplitSide
-                  skin="transparent"
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={`Auto-refresh interval: ${autoRefreshLabel(
-                    autoRefresh,
-                  )}${hasOverride ? " (overrides notebook default)" : ""}`}
-                >
-                  {hasOverride && <OverrideDot />}
-                  <IntervalLabel>{autoRefreshLabel(autoRefresh)}</IntervalLabel>
-                  <CaretDownIcon />
-                </SplitSide>
-              </DropdownMenu.Trigger>
-            </Tooltip>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content align="end" sideOffset={4}>
-                <AutoRefreshOptions
-                  value={cellAutoRefresh}
-                  onSelect={handleSelect}
-                  inheritedValue={resolveAutoRefresh(
-                    undefined,
-                    autoRefreshDefault,
-                  )}
-                />
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        </>
+      <SplitDivider />
+      {writeBlocked ? (
+        <Tooltip content={WRITE_BLOCK_TOOLTIP}>
+          <SplitSide
+            skin="transparent"
+            type="button"
+            aria-label={WRITE_BLOCK_TOOLTIP}
+            aria-disabled
+            disabled
+          >
+            <IntervalLabel>Off</IntervalLabel>
+            <CaretDownIcon />
+          </SplitSide>
+        </Tooltip>
+      ) : (
+        <DropdownMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
+          <Tooltip
+            content={
+              hasOverride
+                ? "Auto-refresh interval (overrides notebook default)"
+                : "Auto-refresh interval"
+            }
+            {...intervalTooltip.tooltipProps}
+          >
+            <DropdownMenu.Trigger asChild>
+              <SplitSide
+                skin="transparent"
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Auto-refresh interval: ${autoRefreshLabel(
+                  autoRefresh,
+                )}${hasOverride ? " (overrides notebook default)" : ""}`}
+              >
+                {hasOverride && <OverrideDot />}
+                <IntervalLabel>{autoRefreshLabel(autoRefresh)}</IntervalLabel>
+                <CaretDownIcon />
+              </SplitSide>
+            </DropdownMenu.Trigger>
+          </Tooltip>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content align="end" sideOffset={4}>
+              <AutoRefreshOptions
+                value={cellAutoRefresh}
+                onSelect={handleSelect}
+                inheritedValue={resolveAutoRefresh(
+                  undefined,
+                  autoRefreshDefault,
+                )}
+              />
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       )}
     </SplitButtonContainer>
   )

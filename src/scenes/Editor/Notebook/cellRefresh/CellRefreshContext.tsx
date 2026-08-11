@@ -8,27 +8,27 @@ import {
 } from "react"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import {
-  ChartRefreshEngine,
-  type ChartFetchState,
-  type ChartRefreshDeps,
-} from "./chartRefreshEngine"
+  CellRefreshEngine,
+  type CellFetchState,
+  type CellRefreshDeps,
+} from "./cellRefreshEngine"
 
-const ChartRefreshContext = createContext<ChartRefreshEngine | null>(null)
+const CellRefreshContext = createContext<CellRefreshEngine | null>(null)
 
-export const ChartRefreshProvider = ChartRefreshContext.Provider
+export const CellRefreshProvider = CellRefreshContext.Provider
 
-export const useChartRefresh = () => useContext(ChartRefreshContext)
+export const useCellRefresh = () => useContext(CellRefreshContext)
 
-export const useChartRefreshEngine = (options: {
+export const useCellRefreshEngine = (options: {
   bufferId: number
   cells: NotebookCell[]
   autoRefreshDefault?: AutoRefresh
-  deps: ChartRefreshDeps
-}): ChartRefreshEngine => {
+  deps: CellRefreshDeps
+}): CellRefreshEngine => {
   const { bufferId, cells, autoRefreshDefault, deps } = options
   const depsRef = useRef(deps)
   const engine = useMemo(
-    () => new ChartRefreshEngine(bufferId, () => depsRef.current),
+    () => new CellRefreshEngine(bufferId, () => depsRef.current),
     [bufferId],
   )
 
@@ -48,11 +48,11 @@ export const useChartRefreshEngine = (options: {
   return engine
 }
 
-export const useChartFetchState = (
+export const useCellFetchState = (
   cellId: string,
-): ChartFetchState | undefined => {
-  const engine = useContext(ChartRefreshContext)
-  const [state, setState] = useState<ChartFetchState | undefined>(() =>
+): CellFetchState | undefined => {
+  const engine = useContext(CellRefreshContext)
+  const [state, setState] = useState<CellFetchState | undefined>(() =>
     engine?.getState(cellId),
   )
 

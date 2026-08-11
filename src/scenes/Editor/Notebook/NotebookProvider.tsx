@@ -49,7 +49,9 @@ import {
   generateId,
   releaseCellResultPatch,
   snapshotResultsMatchQueries,
+  statementKeysFor,
 } from "./notebookUtils"
+import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -65,12 +67,14 @@ import {
   pruneToRecentNotebooks,
 } from "../../../store/notebookResults"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
+import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
 import { createValidateWithGlobals } from "./declareUtils"
 import {
-  ChartRefreshProvider,
-  useChartRefreshEngine,
-} from "./chartRefresh/ChartRefreshContext"
+  CellRefreshProvider,
+  useCellRefreshEngine,
+} from "./cellRefresh/CellRefreshContext"
+import type { CellRefreshEngine } from "./cellRefresh/cellRefreshEngine"
 import {
   CellVirtualizationProvider,
   createVirtualizationEngine,
@@ -112,17 +116,18 @@ export type NotebookActions = {
     sql?: string,
     signal?: AbortSignal,
     expectFullValue?: boolean,
+    gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
   reRunResultAt: (cellId: string, index: number) => Promise<boolean>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
-  setActiveResultIndex: (cellId: string, index: number) => void
+  setActiveStatement: (cellId: string, statementKey: string) => void
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
-  refreshAllCharts: () => void
+  refreshAllCells: () => { refreshed: number; skippedWrites: number }
   setCellViewMaximized: (cellId: string, value: boolean) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
@@ -146,13 +151,13 @@ const NOOP_ACTIONS: NotebookActions = {
   reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
-  setActiveResultIndex: () => undefined,
+  setActiveStatement: () => undefined,
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
   setCellChartConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
-  refreshAllCharts: () => undefined,
+  refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
   setCellViewMaximized: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
@@ -163,6 +168,7 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   ...NOOP_ACTIONS,
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
+  readRefreshState: () => new Map(),
   flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
     run({
@@ -244,6 +250,8 @@ export const NotebookProvider: React.FC<{
 
   const { executeSingle } = useQueryExecution(settings.variables)
 
+  const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
+
   const { persistCells, persistImmediately, persistDebounced } =
     useNotebookPersistence({
       bufferId,
@@ -252,6 +260,11 @@ export const NotebookProvider: React.FC<{
       maximizedCellIdRef,
       settingsRef,
       preview,
+      flushRefreshSnapshots: () => {
+        void cellRefreshEngineRef.current
+          ?.flushPendingSnapshots()
+          .catch(() => undefined)
+      },
     })
 
   const store = useCellsStore({
@@ -269,12 +282,16 @@ export const NotebookProvider: React.FC<{
 
   // Results hydrate per cell on scroll approach and release back to
   // IndexedDB-only when the cell leaves the retain band. The virtualization
-  // engine drives both directions; the ref breaks the construction cycle.
+  // engine drives both directions; the refs break the construction cycles.
+  // A refreshing cell never releases: its visible frame is the refresh
+  // round's swap target.
   const virtualizationEngineRef = useRef<CellVirtualizationEngine | null>(null)
   const resultHydration = useMemo(
     () =>
       new CellResultHydrationEngine({
         loadSnapshot: (cellId) => loadCellSnapshot(bufferId, cellId),
+        rewriteSnapshot: (snapshot) => persistCellSnapshot(snapshot),
+        deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
         getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
         applyResult: (cellId, result) => {
           hydrateCells((prev) =>
@@ -291,7 +308,10 @@ export const NotebookProvider: React.FC<{
           )
         },
         canRelease: (cellId) =>
-          virtualizationEngineRef.current?.canReleaseData(cellId) ?? false,
+          (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
+          !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
+        seedRefreshErrors: (cellId, errors) =>
+          cellRefreshEngineRef.current?.seedRefreshErrors(cellId, errors),
       }),
     [],
   )
@@ -334,10 +354,16 @@ export const NotebookProvider: React.FC<{
     }
   }, [bufferId, cellsRef])
 
+  const validateWithGlobals = useMemo(
+    () => createValidateWithGlobals(quest, () => settingsRef.current.variables),
+    [quest],
+  )
+
   const execution = useCellExecution({
     bufferId,
     cellsRef,
     executeSingle,
+    validateWithGlobals,
     updateCellResult: store.updateCellResult,
     updateCell: store.updateCell,
     updateCells: store.updateCells,
@@ -512,12 +538,7 @@ export const NotebookProvider: React.FC<{
     [hydrateCells],
   )
 
-  const validateWithGlobals = useMemo(
-    () => createValidateWithGlobals(quest, () => settingsRef.current.variables),
-    [quest],
-  )
-
-  const chartRefreshEngine = useChartRefreshEngine({
+  const cellRefreshEngine = useCellRefreshEngine({
     bufferId,
     cells: store.cells,
     autoRefreshDefault: settings.autoRefreshDefault,
@@ -529,15 +550,18 @@ export const NotebookProvider: React.FC<{
         store.cellsRef.current.find((c) => c.id === cellId)?.result,
       isDrawCell: (cellId) =>
         store.cellsRef.current.find((c) => c.id === cellId)?.mode === "draw",
+      isCellRunning: (cellId) => execution.runningCellIds.has(cellId),
       resultLoadStatus: (cellId) => resultHydration.statusOf(cellId),
       subscribeResultLoad: (cellId, listener) =>
         resultHydration.subscribe(cellId, listener),
       requestResultLoad: (cellId) => resultHydration.request(cellId),
       noteResultMissing: (cellId) => resultHydration.noteMissing(cellId),
+      reviveResultLoad: (cellId) => resultHydration.reviveMissing(cellId),
       onSnapshotPersisted: (cellId, results) =>
         resultHydration.notePersisted(cellId, results),
     },
   })
+  cellRefreshEngineRef.current = cellRefreshEngine
 
   const cellVirtualizationEngine = createVirtualizationEngine({
     bufferId,
@@ -547,7 +571,7 @@ export const NotebookProvider: React.FC<{
     runningCellIds: execution.runningCellIds,
     onCellDataNeeded: (cellId) => {
       resultHydration.request(cellId)
-      chartRefreshEngine.requestHydrate(cellId)
+      cellRefreshEngine.requestHydrate(cellId)
     },
     onCellDataReleasable: (cellId) => resultHydration.noteReleasable(cellId),
   })
@@ -569,8 +593,12 @@ export const NotebookProvider: React.FC<{
       sql?: string,
       signal?: AbortSignal,
       expectFullValue: boolean = false,
+      gate?: RunCellGate,
     ) => {
       activeCellQueryKeysRef.current.set(cellId, queryKey)
+      // A manual run always wins: cancel the cell's refresh round up front so
+      // a settling slot can't race the run's placeholder frame.
+      cellRefreshEngineRef.current?.noteRunStarted(cellId)
 
       try {
         const outcome = await execution.runCell(
@@ -578,7 +606,11 @@ export const NotebookProvider: React.FC<{
           sql,
           signal,
           expectFullValue,
+          gate,
         )
+        if (outcome.result) {
+          cellRefreshEngineRef.current?.noteCellRan(cellId)
+        }
         // Size the result-double-view to the result shape, unless the user
         // locked the bottom height (bottomResized).
         const cell = store.cellsRef.current.find((c) => c.id === cellId)
@@ -595,6 +627,9 @@ export const NotebookProvider: React.FC<{
 
         return outcome
       } finally {
+        // Balance noteRunStarted on every outcome — denied, skipped,
+        // superseded, thrown included — or refresh stays gated forever.
+        cellRefreshEngineRef.current?.noteRunFinished(cellId)
         if (activeCellQueryKeysRef.current.get(cellId) === queryKey) {
           activeCellQueryKeysRef.current.delete(cellId)
           questExecution.releaseExecution(queryKey, scopeKey)
@@ -610,6 +645,7 @@ export const NotebookProvider: React.FC<{
       sql?: string,
       signal?: AbortSignal,
       expectFullValue: boolean = false,
+      gate?: RunCellGate,
     ) => {
       const runId = ++notebookRunIdRef.current
       const queryKey = createNotebookQueryKey(bufferId, cellId, runId)
@@ -624,6 +660,7 @@ export const NotebookProvider: React.FC<{
             sql,
             signal,
             expectFullValue,
+            gate,
           ).then(resolve)
         }
         const request = () =>
@@ -667,7 +704,7 @@ export const NotebookProvider: React.FC<{
       const queries = getQueriesFromText(source?.value ?? "")
       let snapshotsCopied = 0
       if (source) {
-        await chartRefreshEngine.flushPendingSnapshots().catch(() => undefined)
+        await cellRefreshEngine.flushPendingSnapshots().catch(() => undefined)
         try {
           snapshotsCopied = await copyNotebookSnapshots(
             bufferId,
@@ -707,7 +744,7 @@ export const NotebookProvider: React.FC<{
       if (snapshotsCopied === 0) resultHydration.noteMissing(newId)
       return applied
     },
-    [applyTransition, bufferId, cellsRef, resultHydration, chartRefreshEngine],
+    [applyTransition, bufferId, cellsRef, resultHydration, cellRefreshEngine],
   )
 
   const moveCellUp = useCallback(
@@ -760,23 +797,45 @@ export const NotebookProvider: React.FC<{
     moveCellDown,
     duplicateCell,
     runCell,
-    reRunResultAt: execution.reRunResultAt,
+    reRunResultAt: (cellId, index) => {
+      // A per-tab rerun is a manual run: it cancels the refresh round, and
+      // any COMMIT clears that statement's refresh error — a committed error
+      // result is newer than the stale refresh failure it replaces.
+      const engine = cellRefreshEngineRef.current
+      engine?.noteRunStarted(cellId)
+      const result = store.cellsRef.current.find((c) => c.id === cellId)?.result
+      const statementKey = result
+        ? statementKeysFor(result.results.map((r) => r.query))[index]
+        : undefined
+      return execution
+        .reRunResultAt(cellId, index)
+        .then((outcome) => {
+          if (outcome.committed && statementKey !== undefined) {
+            engine?.noteStatementRan(cellId, statementKey)
+          }
+          return outcome.ok
+        })
+        .finally(() => {
+          cellRefreshEngineRef.current?.noteRunFinished(cellId)
+        })
+    },
     cancelCell,
     cancelQuery: execution.cancelQuery,
-    setActiveResultIndex: execution.setActiveResultIndex,
+    setActiveStatement: execution.setActiveStatement,
     setCellMode,
     clearCellResult,
     setCellChartConfig: store.setCellChartConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
-    refreshAllCharts: () => chartRefreshEngine.refreshAll(),
+    refreshAllCells: () => cellRefreshEngine.refreshAll(),
     setCellViewMaximized,
     setFocusedCell,
     setMaximizedCellId,
     getCellsSnapshot: () => store.cellsRef.current.slice(),
     getSettings: () => ({ ...settingsRef.current }),
     getMaximizedCellId: () => maximizedCellIdRef.current,
-    flushChartSnapshots: () => chartRefreshEngine.flushPendingSnapshots(),
+    readRefreshState: () => cellRefreshEngine.readRefreshState(),
+    flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
     applyTransition,
   }
 
@@ -825,13 +884,13 @@ export const NotebookProvider: React.FC<{
     <NotebookBufferIdContext.Provider value={bufferId}>
       <NotebookActionsContext.Provider value={actionsValue}>
         <NotebookStateContext.Provider value={stateValue}>
-          <ChartRefreshProvider value={chartRefreshEngine}>
+          <CellRefreshProvider value={cellRefreshEngine}>
             <CellVirtualizationProvider value={cellVirtualizationEngine}>
               <CellResultHydrationProvider value={resultHydration}>
                 {children}
               </CellResultHydrationProvider>
             </CellVirtualizationProvider>
-          </ChartRefreshProvider>
+          </CellRefreshProvider>
         </NotebookStateContext.Provider>
       </NotebookActionsContext.Provider>
     </NotebookBufferIdContext.Provider>

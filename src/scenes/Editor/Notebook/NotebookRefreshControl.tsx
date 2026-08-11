@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
 import { ArrowClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react"
 import { DropdownMenu, Tooltip } from "../../../components"
@@ -9,9 +9,11 @@ import {
   useNotebookBufferId,
   useNotebookState,
 } from "./NotebookProvider"
+import { useCellRefresh } from "./cellRefresh/CellRefreshContext"
 import {
   autoRefreshLabel,
   countActiveAutoRefreshOverrides,
+  resolveCellView,
 } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
@@ -34,15 +36,26 @@ const ResetItemTitle = styled.span`
   gap: 0.6rem;
 `
 
+const MenuHint = styled.div`
+  max-width: 24rem;
+  padding: 0.4rem 1rem 0.6rem;
+  color: ${({ theme }) => theme.color.gray2};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+`
+
 export const NotebookRefreshControl: React.FC = () => {
   const { cells, settings } = useNotebookState()
-  const { refreshAllCharts, resetAutoRefreshOverrides, updateSettings } =
+  const { refreshAllCells, resetAutoRefreshOverrides, updateSettings } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
-  const defaultValue = settings.autoRefreshDefault ?? true
-  const defaultLabel = autoRefreshLabel(defaultValue)
+  const cellRefresh = useCellRefresh()
+  const storedDefault = settings.autoRefreshDefault
+  const defaultLabel = autoRefreshLabel(storedDefault ?? false)
   const overrideCount = countActiveAutoRefreshOverrides(cells)
-  const drawCellCount = cells.filter((cell) => cell.mode === "draw").length
+  const refreshableCellCount = cells.filter(
+    (cell) => resolveCellView(cell) !== "none",
+  ).length
+  const [writeBlockedCount, setWriteBlockedCount] = useState(0)
   const intervalAriaLabel =
     overrideCount > 0
       ? `Notebook auto-refresh: ${defaultLabel}, ${overrideCount} ${
@@ -52,17 +65,24 @@ export const NotebookRefreshControl: React.FC = () => {
   const intervalTooltip = useTriggerTooltip()
 
   const handleRefreshAll = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_REFRESH_ALL, {
-      chartCount: drawCellCount,
-    })
     signalUserEdit(bufferId)
-    refreshAllCharts()
+    const counts = refreshAllCells()
+    void trackEvent(ConsoleEvent.NOTEBOOK_REFRESH_ALL, {
+      refreshedCount: counts.refreshed,
+      skippedWriteCount: counts.skippedWrites,
+    })
+  }
+
+  const handleMenuOpenChange = (open: boolean) => {
+    intervalTooltip.onMenuOpenChange(open)
+    if (open) setWriteBlockedCount(cellRefresh?.countWriteBlockedGrids() ?? 0)
   }
 
   const handleSelectDefault = (value: AutoRefresh | undefined) => {
-    if (value === undefined || value === defaultValue) return
+    if (value === undefined || value === (storedDefault ?? false)) return
     void trackEvent(ConsoleEvent.NOTEBOOK_AUTOREFRESH_DEFAULT_CHANGE, {
-      from: defaultLabel,
+      from:
+        storedDefault === undefined ? "unset" : autoRefreshLabel(storedDefault),
       to: autoRefreshLabel(value),
     })
     updateSettings({ autoRefreshDefault: value })
@@ -75,19 +95,19 @@ export const NotebookRefreshControl: React.FC = () => {
 
   return (
     <SplitButtonContainer>
-      <Tooltip content="Refresh charts">
+      <Tooltip content="Refresh cells">
         <SplitSide
           skin="transparent"
           type="button"
           onClick={handleRefreshAll}
-          aria-label="Refresh charts"
-          disabled={drawCellCount === 0}
+          aria-label="Refresh cells"
+          disabled={refreshableCellCount === 0}
         >
           <ArrowClockwiseIcon />
         </SplitSide>
       </Tooltip>
       <SplitDivider />
-      <DropdownMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
+      <DropdownMenu.Root onOpenChange={handleMenuOpenChange}>
         <Tooltip
           content="Notebook auto-refresh"
           {...intervalTooltip.tooltipProps}
@@ -107,7 +127,7 @@ export const NotebookRefreshControl: React.FC = () => {
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={4}>
             <AutoRefreshOptions
-              value={defaultValue}
+              value={storedDefault ?? false}
               onSelect={handleSelectDefault}
             />
             {overrideCount > 0 && (
@@ -126,6 +146,24 @@ export const NotebookRefreshControl: React.FC = () => {
                     Reset cell overrides
                   </ResetItemTitle>
                 </DropdownMenu.Item>
+              </>
+            )}
+            {storedDefault === undefined && (
+              <>
+                <DropdownMenu.Divider />
+                <MenuHint>
+                  Charts poll on Auto; grids stay off until you set a default.
+                </MenuHint>
+              </>
+            )}
+            {writeBlockedCount > 0 && (
+              <>
+                <DropdownMenu.Divider />
+                <MenuHint>
+                  {writeBlockedCount === 1
+                    ? "1 cell contains DDL/DML and is excluded from auto-refresh."
+                    : `${writeBlockedCount} cells contain DDL/DML and are excluded from auto-refresh.`}
+                </MenuHint>
               </>
             )}
           </DropdownMenu.Content>

@@ -236,7 +236,7 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("always populates auto_refresh_default — effective true when unset, the stored value when set", async () => {
+  it("reports auto_refresh_default only when the notebook configured one", async () => {
     const cells = [sql("a", "SELECT 1")]
     const unsetId = await seedNotebook({ cells })
     const storedId = await seedNotebook({
@@ -255,8 +255,10 @@ describe("buildSnapshot", () => {
       stored?.status === "ok" &&
       off?.status === "ok"
     ) {
-      // The agent always sees one concrete effective value.
-      expect(unset.auto_refresh_default).toBe(true)
+      // Absence stays observable: with no configured default, charts poll on
+      // Auto and grids do not poll at all — one synthesized value would hide
+      // that split.
+      expect(unset.auto_refresh_default).toBeUndefined()
       expect(stored.auto_refresh_default).toBe("30s")
       expect(off.auto_refresh_default).toBe(false)
     } else {

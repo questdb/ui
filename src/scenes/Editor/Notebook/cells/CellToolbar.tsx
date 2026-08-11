@@ -32,6 +32,7 @@ import {
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import {
   emitUserAction,
   signalUserEdit,
@@ -131,6 +132,10 @@ export const CellToolbar: React.FC<Props> = ({
   const isNoneView = view === "none"
   const isViewMaximized = !isNoneView && !!cell.isViewMaximized
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
+  // A write cell never ticks, so the menu must not offer an interval the
+  // engine would ignore — same gate the inline selector applies.
+  const autoRefreshBlocked =
+    useCellFetchState(cellId)?.classifyBlock?.kind === "write"
   const [menuOpen, setMenuOpen] = useState(false)
   const moreActionsTooltip = useTriggerTooltip()
 
@@ -375,8 +380,10 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showAutoRefreshItem && (
                 <DropdownMenu.Sub>
-                  <DropdownMenu.SubTrigger>
-                    {`Auto-refresh (${autoRefreshLabel(autoRefresh)})`}
+                  <DropdownMenu.SubTrigger disabled={autoRefreshBlocked}>
+                    {autoRefreshBlocked
+                      ? "Auto-refresh (contains DDL/DML)"
+                      : `Auto-refresh (${autoRefreshLabel(autoRefresh)})`}
                   </DropdownMenu.SubTrigger>
                   <DropdownMenu.Portal>
                     <DropdownMenu.SubContent>

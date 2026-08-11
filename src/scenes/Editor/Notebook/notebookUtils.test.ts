@@ -47,6 +47,11 @@ import {
   partitionCellHeights,
   topHeightForSql,
   patchCellRunResult,
+  reconcileCellResultForValue,
+  reconcileResultsForStatements,
+  derivePositionalFrame,
+  deriveStatementFrame,
+  statementKeysFor,
   removeCell,
   resolveRunCompletion,
   scaleCellHeights,
@@ -836,19 +841,20 @@ describe("buildAppliedCells", () => {
     expect(resultsCleared).toEqual(["a"])
   })
 
-  it("reports resultsCleared for a released cell whose result lives only on disk", () => {
+  it("keeps a released cell's snapshot on a value change — hydration reconciles it", () => {
     // Given a cell released by virtualization: no in-memory result, only a run
     // marker pointing at a persisted snapshot
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "x", lastRunStatus: "success" },
     ]
     // When an apply replaces its SQL
-    const { resultsCleared } = buildAppliedCells(prev, {
+    const { nextCells, resultsCleared } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "x2" }],
     })
-    // Then the orphaned snapshot is flagged — hydration would otherwise
-    // resurrect the old SQL's rows under the new SQL
-    expect(resultsCleared).toEqual(["a"])
+    // Then the snapshot survives for hydration to reconcile by statement
+    // content — unmatched results are dropped at load, never shown
+    expect(resultsCleared).toEqual([])
+    expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
   it("reports resultsCleared when a run cell is converted to markdown", () => {
@@ -887,7 +893,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
-  it("resets lastRunStatus when a value change drops an error result", () => {
+  it("carries the error outcome as recorded history when a value change drops an error result", () => {
     // Given a cell that errored on its previous SQL
     const prev: NotebookCell[] = [
       {
@@ -903,17 +909,19 @@ describe("buildAppliedCells", () => {
         },
       },
     ]
-    // When the SQL is fixed via apply_notebook_state
+    // When the SQL is rewritten via apply_notebook_state
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
     })
-    // Then the stale error must not leak onto the fixed, not-yet-rerun cell
+    // Then the record still describes the last run that actually happened —
+    // only a new run rewrites it
     expect(nextCells[0].result).toBeNull()
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    expect(nextCells[0].lastRunStatus).toBe("error")
+    expect(nextCells[0].lastRunError).toBe("boom")
   })
 
-  it("resets a persisted error status when the SQL changes", () => {
-    // Given a passive cell whose error survives only as persisted run history
+  it("keeps a released cell's persisted run history when the SQL changes", () => {
+    // Given a passive cell whose outcome survives only as persisted run history
     const prev: NotebookCell[] = [
       {
         id: "a",
@@ -923,13 +931,14 @@ describe("buildAppliedCells", () => {
       },
     ]
 
-    // When the SQL is fixed without a live result blob
+    // When the SQL is edited without a live result blob
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
     })
 
-    // Then the previous SQL's error is cleared
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    // Then the recorded history stays — hydration reconciles the snapshot,
+    // and only a run rewrites the recorded outcome
+    expect(nextCells[0].lastRunStatus).toBe("error")
   })
 
   it("preserveValue keeps the existing cell's value, result, and run history", () => {
@@ -2217,7 +2226,7 @@ describe("lastRunError carry chain", () => {
     })
   })
 
-  it("buildAppliedCells drops the stale carried error when the value changes", () => {
+  it("buildAppliedCells keeps a stripped cell's carried error across a value change", () => {
     // Given a stripped errored cell carrying status + error markers
     const [stripped] = stripCellResults([errored("a")])
 
@@ -2226,9 +2235,10 @@ describe("lastRunError carry chain", () => {
       cells: [{ id: "a", value: "select fixed" }],
     })
 
-    // Then neither the stale status nor its error attaches to the new SQL
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
-    expect(nextCells[0].lastRunError).toBeUndefined()
+    // Then the recorded history survives — it describes the last run that
+    // actually happened, and only a run rewrites it
+    expect(nextCells[0].lastRunStatus).toBe("error")
+    expect(nextCells[0].lastRunError).toBe("table does not exist")
   })
 
   it("buildAppliedCells drops run markers when a cell turns markdown", () => {
@@ -2640,10 +2650,10 @@ describe("autoRefreshIntervalMs", () => {
 })
 
 describe("auto-refresh inheritance helpers", () => {
-  it("resolveAutoRefresh prefers the override, then the default, then adaptive", () => {
+  it("resolveAutoRefresh prefers the override, then the default, then Off", () => {
     expect(resolveAutoRefresh("5s", "30s")).toBe("5s")
     expect(resolveAutoRefresh(undefined, "30s")).toBe("30s")
-    expect(resolveAutoRefresh(undefined, undefined)).toBe(true)
+    expect(resolveAutoRefresh(undefined, undefined)).toBe(false)
   })
 
   it("resolveAutoRefresh treats false as a value, never as absent", () => {
@@ -2664,17 +2674,30 @@ describe("auto-refresh inheritance helpers", () => {
     expect(isAutoRefreshOverride(cells[2])).toBe(false)
   })
 
-  it("countActiveAutoRefreshOverrides ignores dormant run-cell keys — only draw overrides show in the toolbar", () => {
-    // Given a draw override, a dormant run-mode override, and an inheriting cell
+  it("countActiveAutoRefreshOverrides counts overrides on cells showing a view — editor-only keys stay dormant", () => {
+    // Given a chart override, a grid-view run override, and an editor-only override
+    const gridResult: NotebookCell["result"] = {
+      results: [
+        {
+          type: "dql",
+          query: "SELECT 2",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
     const cells: NotebookCell[] = [
       { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
-      { ...cell("b", "SELECT 2"), mode: "run", autoRefresh: false },
-      cell("c", "SELECT 3"),
+      { ...cell("b", "SELECT 2", gridResult), mode: "run", autoRefresh: false },
+      { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: "1s" },
     ]
-    // Then only the draw override counts toward the displayed total
-    expect(countActiveAutoRefreshOverrides(cells)).toBe(1)
-    // And a notebook with only dormant keys shows no override at all
-    expect(countActiveAutoRefreshOverrides([cells[1], cells[2]])).toBe(0)
+    // Then only the cells with a visible view count toward the displayed total
+    expect(countActiveAutoRefreshOverrides(cells)).toBe(2)
+    // And a notebook with only editor-only keys shows no override at all
+    expect(countActiveAutoRefreshOverrides([cells[2]])).toBe(0)
   })
 
   it("clearCellAutoRefresh deletes the key so a later draw switch cannot resurrect it", () => {
@@ -2916,6 +2939,37 @@ describe("cellToolbarMenuFlags", () => {
     // …and View table / View chart still let the user bring a pane back
     expect(f.showViewTable).toBe(true)
     expect(f.showViewChart).toBe(true)
+  })
+
+  it("offers the interval submenu to grids, not just charts, wherever the inline control is absent", () => {
+    // Given grid cells in the tiers that render no inline interval control
+    // Then the menu is the fallback — auto-refresh is not a chart-only feature
+    expect(flags({ tier: "compact", view: "grid" }).showAutoRefreshItem).toBe(
+      true,
+    )
+    expect(flags({ tier: "standard", view: "grid" }).showAutoRefreshItem).toBe(
+      true,
+    )
+  })
+
+  it("never duplicates the inline interval control at the expanded tier", () => {
+    // Given the expanded tier, which renders the split-button interval for
+    // BOTH views
+    // Then the menu omits it rather than showing the same control twice
+    expect(flags({ tier: "expanded", view: "grid" }).showAutoRefreshItem).toBe(
+      false,
+    )
+    expect(flags({ tier: "expanded", view: "chart" }).showAutoRefreshItem).toBe(
+      false,
+    )
+  })
+
+  it("omits the interval submenu for a cell with no view", () => {
+    // Given a cell showing neither a grid nor a chart, there is nothing to
+    // auto-refresh
+    expect(flags({ tier: "compact", view: "none" }).showAutoRefreshItem).toBe(
+      false,
+    )
   })
 
   it("offers Reset zoom only for a zoomed chart in the compact tier", () => {
@@ -3414,5 +3468,283 @@ describe("topHeight stamping", () => {
 
     // Then the user's height stays pinned
     expect(nextCells[0].topHeight).toBe(300)
+  })
+})
+
+const dqlResult = (query: string, count = 1): SingleQueryResult => ({
+  type: "dql",
+  query,
+  columns: [{ name: "x", type: "INT" }],
+  dataset: [[count]],
+  count,
+})
+
+const resultOf = (
+  results: SingleQueryResult[],
+  extra: Partial<CellResult> = {},
+): CellResult => ({
+  results,
+  activeResultIndex: 0,
+  timestamp: 0,
+  ...extra,
+})
+
+describe("reconcileResultsForStatements — content carryover", () => {
+  it("keeps results for unchanged statements across whitespace and semicolon edits", () => {
+    // Given a two-statement frame
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+    // When the statements only gain whitespace and semicolons
+    const reconciled = reconcileResultsForStatements(
+      ["  SELECT 1;", "SELECT 2  "],
+      previous,
+    )
+    // Then both results survive in statement order
+    expect(reconciled?.results.map((r) => r.query)).toEqual([
+      "SELECT 1",
+      "SELECT 2",
+    ])
+  })
+
+  it("drops an edited statement's result and keeps its siblings", () => {
+    // Given results for two statements
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+    // When the second statement is edited
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 999"],
+      previous,
+    )
+    // Then only the untouched statement keeps its result
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+
+  it("matches duplicate statements by occurrence order", () => {
+    // Given two identical statements with distinct results
+    const previous = resultOf([
+      dqlResult("SELECT 1", 10),
+      dqlResult("SELECT 1", 20),
+    ])
+    // When one duplicate is removed
+    const reconciled = reconcileResultsForStatements(["SELECT 1"], previous)
+    // Then the first occurrence's result survives
+    expect(reconciled?.results).toHaveLength(1)
+    expect(reconciled?.results[0]).toMatchObject({ count: 10 })
+  })
+
+  it("returns null when no result survives (the cell collapses)", () => {
+    // Given a frame whose only statement is rewritten
+    const previous = resultOf([dqlResult("SELECT 1")])
+    // When reconciled against entirely new SQL
+    // Then there is no frame
+    expect(reconcileResultsForStatements(["SELECT 2"], previous)).toBeNull()
+    expect(reconcileResultsForStatements([], previous)).toBeNull()
+  })
+
+  it("preserves the active statement by content across a reorder", () => {
+    // Given the second statement is active
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
+    })
+    // When the statements are reordered
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 2", "SELECT 1"],
+      previous,
+    )
+    // Then the active key still points at the same statement
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 2"])[0],
+    )
+  })
+
+  it("falls back to the nearest surviving statement when the active one is removed", () => {
+    // Given three results with the middle one active
+    const previous = resultOf(
+      [dqlResult("SELECT 1"), dqlResult("SELECT 2"), dqlResult("SELECT 3")],
+      { activeResultIndex: 1 },
+    )
+    // When the active statement is removed
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 3"],
+      previous,
+    )
+    // Then the previous neighbor becomes active
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 1"])[0],
+    )
+  })
+
+  it("anchors on activeResultIndex for records without an active key", () => {
+    // Given a legacy record with only a positional active index
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // When the statement list is unchanged
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 2"],
+      previous,
+    )
+    // Then the active key resolves to the indexed statement
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 2"])[0],
+    )
+  })
+
+  it("never carries a running or queued placeholder as a result", () => {
+    // Given a frame a crash left behind: one settled result, one placeholder
+    const previous = resultOf([
+      dqlResult("SELECT 1"),
+      { type: "running", query: "SELECT 2" },
+    ])
+    // When reconciled against the unchanged statements
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 2"],
+      previous,
+    )
+    // Then only the settled result survives — the placeholder slot
+    // regenerates as "Not run" at display time, never as a ghost spinner
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+
+  it("returns null for a frame holding only placeholders", () => {
+    // Given a snapshot that captured a run mid-flight
+    const previous = resultOf([
+      { type: "running", query: "SELECT 1" },
+      { type: "queued", query: "SELECT 2" },
+    ])
+    // When reconciled
+    // Then no result survives and the frame collapses
+    expect(
+      reconcileResultsForStatements(["SELECT 1", "SELECT 2"], previous),
+    ).toBeNull()
+  })
+})
+
+describe("reconcileCellResultForValue — run ownership", () => {
+  it("returns a pending frame untouched — the run owns it", () => {
+    // Given a run in flight: one statement settled, one still running
+    const pending = resultOf([
+      dqlResult("SELECT 1"),
+      { type: "running", query: "SELECT 2" },
+    ])
+
+    // When the SQL is edited mid-run
+    const reconciled = reconcileCellResultForValue(pending, "SELECT 1")
+
+    // Then the frame comes back as the SAME object: the run's positional
+    // writes stay aligned, and the carryover applies after the run settles
+    expect(reconciled).toBe(pending)
+  })
+
+  it("reconciles a settled frame by content", () => {
+    // Given a settled two-statement frame
+    const settled = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+
+    // When the second statement is edited away
+    const reconciled = reconcileCellResultForValue(settled, "SELECT 1")
+
+    // Then only the surviving statement keeps its result
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+})
+
+describe("deriveStatementFrame — display slots", () => {
+  it("gives every statement a slot and marks resultless slots as not run", () => {
+    // Given a compact result missing the middle statement
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 3")])
+    // When the frame is derived for three statements
+    const frame = deriveStatementFrame(
+      ["SELECT 1", "SELECT 2", "SELECT 3"],
+      result,
+    )
+    // Then slots follow editor order and the unmatched slot is empty
+    expect(frame?.slots.map((s) => s.result?.query ?? null)).toEqual([
+      "SELECT 1",
+      null,
+      "SELECT 3",
+    ])
+  })
+
+  it("resolves the active slot from the active statement key", () => {
+    // Given the frame's active key points at the last statement
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
+    })
+    // When the frame is derived with a placeholder in between
+    const frame = deriveStatementFrame(
+      ["SELECT 1", "SELECT 99", "SELECT 2"],
+      result,
+    )
+    // Then the active slot index follows the statement, not the result index
+    expect(frame?.activeSlotIndex).toBe(2)
+  })
+
+  it("maps a legacy active index through the result's own statement", () => {
+    // Given a legacy record whose second result is active
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // When a new statement is inserted before it
+    const frame = deriveStatementFrame(
+      ["SELECT 0", "SELECT 1", "SELECT 2"],
+      result,
+    )
+    // Then the active slot follows the statement content
+    expect(frame?.activeSlotIndex).toBe(2)
+  })
+
+  it("distinguishes duplicate statements by occurrence", () => {
+    // Given two identical statements with distinct results
+    const result = resultOf([
+      dqlResult("SELECT 1", 10),
+      dqlResult("SELECT 1", 20),
+    ])
+    // When the frame is derived
+    const frame = deriveStatementFrame(["SELECT 1", "SELECT 1"], result)
+    // Then each slot keeps its own occurrence's result
+    expect(frame?.slots.map((s) => s.result)).toMatchObject([
+      { count: 10 },
+      { count: 20 },
+    ])
+  })
+
+  it("returns null without a result or without a single surviving slot", () => {
+    // Given no result, or a result that matches no statement
+    const result = resultOf([dqlResult("SELECT 1")])
+    // When the frame is derived
+    // Then there is no frame
+    expect(deriveStatementFrame(["SELECT 1"], null)).toBeNull()
+    expect(deriveStatementFrame([], result)).toBeNull()
+    expect(deriveStatementFrame(["SELECT 2"], result)).toBeNull()
+  })
+})
+
+describe("derivePositionalFrame — orphan results (selection runs)", () => {
+  it("builds tabs from the results themselves when no statement claims them", () => {
+    // Given a selection-fragment result no editor statement matches
+    const result = resultOf([dqlResult("SELECT 1")])
+    // When the positional frame is derived
+    const frame = derivePositionalFrame(result)
+    // Then the fragment gets its own visible slot with its rows attached
+    expect(frame?.slots).toHaveLength(1)
+    expect(frame?.slots[0].sql).toBe("SELECT 1")
+    expect(frame?.slots[0].result).toBe(result.results[0])
+  })
+
+  it("keeps the active tab and clamps an out-of-range index", () => {
+    // Given a two-result frame viewed on its second tab
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // Then the active slot follows the index, clamped when out of range
+    expect(derivePositionalFrame(result)?.activeSlotIndex).toBe(1)
+    expect(
+      derivePositionalFrame({ ...result, activeResultIndex: 9 })
+        ?.activeSlotIndex,
+    ).toBe(1)
+  })
+
+  it("returns null without a result or with an empty one", () => {
+    expect(derivePositionalFrame(null)).toBeNull()
+    expect(derivePositionalFrame(resultOf([]))).toBeNull()
   })
 })

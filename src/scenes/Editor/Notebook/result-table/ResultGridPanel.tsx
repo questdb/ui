@@ -20,6 +20,9 @@ import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 
 type Props = {
   data: DqlQueryResult
+  // Statement identity for the viewport store. The column layout stays keyed
+  // by query text alone — duplicate statements share identical columns.
+  viewportKey: string
   runToken: number
   isFocused: boolean
   bufferId: number
@@ -34,23 +37,25 @@ const useInitialGridState = ({
   bufferId,
   cellId,
   data,
+  viewportKey,
   runToken,
   viewportStore,
 }: Pick<
   Props,
-  "bufferId" | "cellId" | "data" | "runToken" | "viewportStore"
+  "bufferId" | "cellId" | "data" | "viewportKey" | "runToken" | "viewportStore"
 >) =>
   useMemo(() => {
     const queryKey = columnLayoutQueryKey(data.query)
     return {
       queryKey,
       columnLayout: loadNotebookColumnLayout(bufferId, cellId, queryKey),
-      viewport: viewportStore.load(queryKey, runToken),
+      viewport: viewportStore.load(viewportKey, runToken),
     }
-  }, [bufferId, cellId, data.query, runToken, viewportStore])
+  }, [bufferId, cellId, data.query, viewportKey, runToken, viewportStore])
 
 export const ResultGridPanel: React.FC<Props> = ({
   data,
+  viewportKey,
   runToken,
   isFocused,
   bufferId,
@@ -64,6 +69,7 @@ export const ResultGridPanel: React.FC<Props> = ({
     bufferId,
     cellId,
     data,
+    viewportKey,
     runToken,
     viewportStore,
   })
@@ -79,8 +85,8 @@ export const ResultGridPanel: React.FC<Props> = ({
   )
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
-      viewportStore.save(queryKey, runToken, nextViewport),
-    [viewportStore, queryKey, runToken],
+      viewportStore.save(viewportKey, runToken, nextViewport),
+    [viewportStore, viewportKey, runToken],
   )
 
   return (

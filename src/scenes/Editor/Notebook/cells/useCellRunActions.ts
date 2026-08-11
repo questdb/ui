@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react"
 import type { editor } from "monaco-editor"
 import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { getQueryFromCursor, normalizeQueryText } from "../../Monaco/utils"
@@ -247,9 +248,33 @@ export const useCellRunActions = ({
   )
   const runAll = useCallback(() => runResolved("all"), [runResolved])
   const runSingle = useCallback(() => runResolved("single"), [runResolved])
-  // Refresh re-runs the whole cell to reproduce its grid — never a stray
-  // editor selection.
-  const refreshRun = useCallback(() => runResolved("all", true), [runResolved])
+  const cellRefresh = useCellRefresh()
+  // Refresh on a classified non-write grid routes to the engine: every
+  // statement refreshes in parallel while the old rows stay visible. A write
+  // cell — and a cell without a grid — keeps the run gesture (never a stray
+  // editor selection).
+  const refreshRun = useCallback(() => {
+    const state = cellRefresh?.getState(cell.id)
+    const engineRefreshable =
+      cellRefresh !== null &&
+      cell.mode !== "draw" &&
+      cell.result != null &&
+      state !== undefined &&
+      state.classifiedKey === state.queriesKey &&
+      state.classifyBlock === null
+    if (engineRefreshable) {
+      void cellRefresh.refresh(cell.id).then(() => {
+        const settled = cellRefresh.getState(cell.id)
+        emitRanEvent(
+          settled !== undefined && settled.slotErrors.size > 0
+            ? "error"
+            : "success",
+        )
+      })
+      return
+    }
+    runResolved("all", true)
+  }, [cell.id, cell.mode, cell.result, cellRefresh, emitRanEvent, runResolved])
 
   useEffect(() => {
     if (!isRunning) firstRunRef.current = false

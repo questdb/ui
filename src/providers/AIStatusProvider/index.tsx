@@ -62,6 +62,8 @@ export enum AIOperationStatus {
   // Layout = positional/structural; Chart = visualization settings.
   ConfiguringLayout = "Configuring layout",
   ConfiguringChart = "Configuring chart",
+  // Auto-refresh applies to grids as well as charts — neutral wording.
+  ConfiguringAutoRefresh = "Configuring auto-refresh",
   InspectingNotebook = "Inspecting notebook",
 }
 

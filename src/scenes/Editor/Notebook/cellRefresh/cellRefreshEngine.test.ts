@@ -12,10 +12,13 @@ import { deleteCellSnapshot } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import {
-  ChartRefreshEngine,
+  CellRefreshEngine,
   deriveChartLoading,
-  type ChartRefreshDeps,
-} from "./chartRefreshEngine"
+  type CellRefreshDeps,
+} from "./cellRefreshEngine"
+import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
+import { clearStatementClassCache } from "../../../../utils/tools/permissions"
+import { statementKeysFor } from "../notebookUtils"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 
 vi.mock("../persistCellSnapshot", () => ({
@@ -86,6 +89,7 @@ const makeDeps = () => {
     }),
     getCellResult: vi.fn((cellId: string) => cellResults.get(cellId)),
     isDrawCell: vi.fn(() => true),
+    isCellRunning: vi.fn(() => false),
     resultLoadStatus: vi.fn(
       (cellId: string): CellResultStatus =>
         loadStatuses.get(cellId) ?? "unrequested",
@@ -106,6 +110,11 @@ const makeDeps = () => {
     }),
     noteResultMissing: vi.fn((cellId: string) => {
       loadStatuses.set(cellId, "missing")
+    }),
+    reviveResultLoad: vi.fn((cellId: string) => {
+      if ((loadStatuses.get(cellId) ?? "unrequested") !== "missing") return
+      loadStatuses.delete(cellId)
+      deps.requestResultLoad(cellId)
     }),
     onSnapshotPersisted: vi.fn<[string, SingleQueryResult[]], void>(),
   }
@@ -149,11 +158,11 @@ const setDocumentHidden = (hidden: boolean) => {
   fakeDocument.dispatchEvent(new Event("visibilitychange"))
 }
 
-describe("ChartRefreshEngine", () => {
+describe("CellRefreshEngine", () => {
   let harness: ReturnType<typeof makeDeps>
   let deps: ReturnType<typeof makeDeps>["deps"]
   let cellResults: ReturnType<typeof makeDeps>["cellResults"]
-  let engine: ChartRefreshEngine
+  let engine: CellRefreshEngine
 
   // Entries start hidden until an observer reports them (no init-load fetch
   // burst); tests that model on-screen cells report visibility before sync.
@@ -167,13 +176,14 @@ describe("ChartRefreshEngine", () => {
 
   beforeEach(() => {
     vi.useFakeTimers()
+    clearStatementClassCache()
     fakeDocument.hidden = false
     ;(globalThis as { document?: unknown }).document = fakeDocument
     harness = makeDeps()
     deps = harness.deps
     cellResults = harness.cellResults
     // Jitter off: tests assert exact fetch timing.
-    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+    engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
       initialFetchJitterMs: 0,
     })
     engine.attach()
@@ -760,9 +770,9 @@ describe("ChartRefreshEngine", () => {
 
   it("does not skip the catch-up fetch after a poll aborted during its start jitter", async () => {
     // Given a jittered engine whose cell holds an old settled frame
-    const jittered = new ChartRefreshEngine(
+    const jittered = new CellRefreshEngine(
       BUFFER_ID,
-      () => deps as ChartRefreshDeps,
+      () => deps as CellRefreshDeps,
       { initialFetchJitterMs: 300 },
     )
     cellResults.set("c1", dqlCellResult("select 1"))
@@ -1259,6 +1269,12 @@ describe("ChartRefreshEngine", () => {
       fetching: true,
       settledKey: "select 1",
       classifyBlock: null,
+      classifiedKey: null,
+      slotFetching: new Set<string>(),
+      slotErrors: new Map<string, string>(),
+      cancelledSlots: new Set<string>(),
+      slotFetchedAt: new Map<string, number>(),
+      slotSwappedAt: new Map<string, number>(),
     }
 
     // Then the recovery fetch after a failed restore shows the spinner
@@ -1311,9 +1327,9 @@ describe("ChartRefreshEngine", () => {
   it("bounds concurrent fetches across cells", async () => {
     // Given an engine capped at one in-flight fetch and a slow first query
     engine.destroy()
-    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+    engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
       initialFetchJitterMs: 0,
-      maxConcurrentFetches: 1,
+      requestLimiter: createRequestLimiter(1),
     })
     engine.attach()
     let releaseFirst!: (value: QueryExecResult) => void
@@ -1342,7 +1358,7 @@ describe("ChartRefreshEngine", () => {
     // so the jitter is a deterministic 150ms
     const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
     engine.destroy()
-    engine = new ChartRefreshEngine(BUFFER_ID, () => deps as ChartRefreshDeps, {
+    engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
       initialFetchJitterMs: 300,
     })
     engine.attach()
@@ -1597,11 +1613,10 @@ describe("ChartRefreshEngine", () => {
     it("queues visible refetches through the fetch limiter", async () => {
       // Given an engine capped at one in-flight fetch with two settled cells
       engine.destroy()
-      engine = new ChartRefreshEngine(
-        BUFFER_ID,
-        () => deps as ChartRefreshDeps,
-        { initialFetchJitterMs: 0, maxConcurrentFetches: 1 },
-      )
+      engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
+        initialFetchJitterMs: 0,
+        requestLimiter: createRequestLimiter(1),
+      })
       engine.attach()
       syncOnScreen([
         drawCell("c1", "select 1", false),
@@ -1702,11 +1717,9 @@ describe("ChartRefreshEngine", () => {
       // polling cell
       const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
       engine.destroy()
-      engine = new ChartRefreshEngine(
-        BUFFER_ID,
-        () => deps as ChartRefreshDeps,
-        { initialFetchJitterMs: 300 },
-      )
+      engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
+        initialFetchJitterMs: 300,
+      })
       engine.attach()
       engine.setVisible("c1", true)
       engine.sync([drawCell("c1", "select 1", "1s")])
@@ -1740,11 +1753,9 @@ describe("ChartRefreshEngine", () => {
       // Given a jittered engine (deterministic 150ms) with a settled 30s cell
       const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
       engine.destroy()
-      engine = new ChartRefreshEngine(
-        BUFFER_ID,
-        () => deps as ChartRefreshDeps,
-        { initialFetchJitterMs: 300 },
-      )
+      engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
+        initialFetchJitterMs: 300,
+      })
       engine.attach()
       engine.setVisible("c1", true)
       engine.sync([drawCell("c1", "select 1", "30s")])
@@ -1769,11 +1780,9 @@ describe("ChartRefreshEngine", () => {
       // Given a jittered engine (deterministic 150ms) with a settled 30s cell
       const random = vi.spyOn(Math, "random").mockReturnValue(0.5)
       engine.destroy()
-      engine = new ChartRefreshEngine(
-        BUFFER_ID,
-        () => deps as ChartRefreshDeps,
-        { initialFetchJitterMs: 300 },
-      )
+      engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
+        initialFetchJitterMs: 300,
+      })
       engine.attach()
       engine.setVisible("c1", true)
       engine.sync([drawCell("c1", "select 1", "30s")])
@@ -2030,6 +2039,1040 @@ describe("ChartRefreshEngine", () => {
       // And the debounce expiry adds nothing
       await vi.advanceTimersByTimeAsync(1000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("grid entries", () => {
+    const gridFrame = (queries: string[]): CellResult => ({
+      results: queries.map((q) => ({
+        type: "dql" as const,
+        query: q,
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+        timestamp: 0,
+      })),
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+
+    const gridCell = (
+      id: string,
+      value: string,
+      queries: string[],
+      autoRefresh: AutoRefresh | undefined,
+    ): NotebookCell => {
+      const result = gridFrame(queries)
+      cellResults.set(id, result)
+      return { id, position: 0, value, mode: "run", autoRefresh, result }
+    }
+
+    const errorValidation = (sql: string, error: string) => ({
+      query: sql,
+      position: 0,
+      error,
+    })
+
+    const validateBySql = (map: Record<string, unknown>) => {
+      deps.validateWithGlobals.mockImplementation((sql: string) =>
+        Promise.resolve(map[sql.trim()] ?? dqlValidation),
+      )
+    }
+
+    const keyOf = (sql: string) => statementKeysFor([sql])[0]
+
+    it("ticks a refreshable grid and swaps each slot's rows in place", async () => {
+      // Given a two-statement run cell with a visible grid on a 1s interval
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        "1s",
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // Then the round executes both statements in parallel
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+        "select 2",
+      ])
+
+      // And each slot swapped its own rows while the frame kept both tabs
+      const written = cellResults.get("g1")
+      expect(written?.results.map((r) => r.query)).toEqual([
+        "select 1",
+        "select 2",
+      ])
+      expect(
+        written?.results.every(
+          (r) => r.type === "dql" && r.columns.length === 2,
+        ),
+      ).toBe(true)
+    })
+
+    it("keeps the frame timestamp across slot settles — sibling tabs never lose their viewport token", async () => {
+      // Given a two-statement grid whose frame settled at a known time
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        "1s",
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // Then the swapped frame keeps the run's own timestamp — the token a
+      // sibling tab derives its viewport from must not churn per slot settle
+      const written = cellResults.get("g1")
+      expect(written?.results).toHaveLength(2)
+      expect(written?.timestamp).toBe(0)
+    })
+
+    it("skips the commit and holds the swap token on identical rows, while the fetch time advances", async () => {
+      // Given a polling grid whose first tick swapped fresh rows in
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+      const state = engine.getState("g1")
+      const fetchedAfterSwap = state?.slotFetchedAt.get(keyOf("select 1"))
+      const swappedAfterSwap = state?.slotSwappedAt.get(keyOf("select 1"))
+      expect(fetchedAfterSwap).toBeDefined()
+      expect(swappedAfterSwap).toBeDefined()
+
+      // When later ticks return the same rows
+      await vi.advanceTimersByTimeAsync(6000)
+
+      // Then the frame is never re-written and the swap token holds — a
+      // re-commit would reset the tab's scroll and focus for identical data —
+      // while the fetch time keeps advancing for the status line
+      expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+      const settled = engine.getState("g1")
+      expect(settled?.slotSwappedAt.get(keyOf("select 1"))).toBe(
+        swappedAfterSwap,
+      )
+      expect(
+        settled?.slotFetchedAt.get(keyOf("select 1")) ?? 0,
+      ).toBeGreaterThan(fetchedAfterSwap ?? 0)
+    })
+
+    it("commits and advances the swap token when a tick returns changed rows", async () => {
+      // Given a polling grid whose data moves every tick
+      let tick = 0
+      deps.executeSingle.mockImplementation((sql: string) => {
+        tick += 1
+        return Promise.resolve({
+          type: "dql" as const,
+          query: sql,
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[100 + tick]],
+          count: 1,
+        })
+      })
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      const writesAfterSwap = deps.setCellResult.mock.calls.length
+      const swappedAfterSwap = engine
+        .getState("g1")
+        ?.slotSwappedAt.get(keyOf("select 1"))
+      expect(swappedAfterSwap).toBeDefined()
+
+      // When the next tick lands with different rows
+      await vi.advanceTimersByTimeAsync(6000)
+
+      // Then the slot commits again and its swap token advances
+      expect(deps.setCellResult.mock.calls.length).toBeGreaterThan(
+        writesAfterSwap,
+      )
+      expect(
+        engine.getState("g1")?.slotSwappedAt.get(keyOf("select 1")) ?? 0,
+      ).toBeGreaterThan(swappedAfterSwap ?? 0)
+    })
+
+    it("clears a slot's refresh error without a commit when identical rows confirm recovery", async () => {
+      // Given a grid whose refresh failed once, old rows still on screen
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve({
+          type: "dql" as const,
+          query: sql,
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        }),
+      )
+      deps.executeSingle.mockImplementationOnce((sql: string) =>
+        Promise.resolve({
+          type: "error" as const,
+          query: sql,
+          columns: [],
+          dataset: [],
+          count: 0,
+          error: "boom",
+        }),
+      )
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(engine.getState("g1")?.slotErrors.get(keyOf("select 1"))).toBe(
+        "boom",
+      )
+
+      // When the next refresh succeeds with the rows the frame already holds
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the badge clears and the fetch time records the verifying poll,
+      // while the frame and its swap token stay untouched
+      const state = engine.getState("g1")
+      expect(state?.slotErrors.size).toBe(0)
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+      expect(state?.slotFetchedAt.get(keyOf("select 1"))).toBeDefined()
+      expect(state?.slotSwappedAt.get(keyOf("select 1"))).toBeUndefined()
+    })
+
+    it("never registers an editor-only run cell", async () => {
+      // Given a run cell with no result and no run marker
+      const cell: NotebookCell = {
+        id: "g1",
+        position: 0,
+        value: "select 1",
+        mode: "run",
+        autoRefresh: "1s",
+      }
+
+      // When the engine syncs it
+      syncOnScreen([cell])
+      await vi.advanceTimersByTimeAsync(5000)
+
+      // Then no entry exists and nothing ever fetches
+      expect(engine.getState("g1")).toBeUndefined()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
+    it("waits for hydration and never bootstraps a missing frame", async () => {
+      // Given a released run cell: marker only, snapshot resolves missing
+      const cell: NotebookCell = {
+        id: "g1",
+        position: 0,
+        value: "select 1",
+        mode: "run",
+        autoRefresh: "1s",
+        lastRunStatus: "success",
+      }
+
+      // When the engine syncs it and time passes
+      syncOnScreen([cell])
+      await vi.advanceTimersByTimeAsync(5000)
+
+      // Then the entry exists but no fetch ever ran — the first frame always
+      // comes from the run path
+      expect(engine.getState("g1")).toBeDefined()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
+    it("keeps a failed slot's old rows and flushes the frame immediately with its error", async () => {
+      // Given a two-statement grid whose second statement fails on refresh
+      deps.executeSingle.mockImplementation((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve({
+              type: "error" as const,
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve(dqlResult(sql)),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // When a manual refresh round settles
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the failed slot keeps its old rows and carries the error
+      const state = engine.getState("g1")
+      expect(state?.slotErrors.get(keyOf("select 2"))).toBe("boom")
+      const written = cellResults.get("g1")
+      expect(written?.results[1]).toMatchObject({
+        type: "dql",
+        query: "select 2",
+        dataset: [[1]],
+      })
+      // And the whole visible frame persisted immediately, error included
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+      expect(persistCellSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cellId: "g1",
+          refreshErrors: [{ statementKey: keyOf("select 2"), message: "boom" }],
+        }),
+      )
+      const persisted = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+      expect(persisted.results).toHaveLength(2)
+    })
+
+    it("persists every manual refresh immediately, even back-to-back inside the throttle window", async () => {
+      // Given a grid already persisted once, so the throttle window is open
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the user refreshes again a moment later — well inside the 10s
+      // snapshot throttle
+      await vi.advanceTimersByTimeAsync(2000)
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the fresh frame is written straight away rather than parked in a
+      // pending slot that a reload would lose (the pagehide flush is a
+      // best-effort backstop, never the thing correctness rests on)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    })
+
+    it("throttles automatic ticks — a lost tick frame is regenerated by the next one", async () => {
+      // Given a grid polling every second
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      const afterFirst = vi.mocked(persistCellSnapshot).mock.calls.length
+
+      // When several ticks land inside one throttle window
+      await vi.advanceTimersByTimeAsync(4000)
+
+      // Then they do not each hit IndexedDB — the throttle still protects a
+      // live poller from churning the disk
+      expect(vi.mocked(persistCellSnapshot).mock.calls.length).toBe(afterFirst)
+    })
+
+    it("excludes an invalid statement and refreshes its siblings", async () => {
+      // Given the second statement fails validation
+      validateBySql({ "select 2": errorValidation("select 2", "bad column") })
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // When a refresh round settles
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then only the valid statement executed; the invalid slot carries the
+      // validation error and keeps its old rows
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+      ])
+      const state = engine.getState("g1")
+      expect(state?.slotErrors.get(keyOf("select 2"))).toBe("bad column")
+      expect(cellResults.get("g1")?.results[1]).toMatchObject({
+        query: "select 2",
+        dataset: [[1]],
+      })
+    })
+
+    it("blocks the whole round when any statement classifies as a write", async () => {
+      // Given a grid whose second statement is DML
+      validateBySql({ "select 2": { queryType: "INSERT" } })
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // When a refresh is attempted
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then nothing executes and the old rows stay
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      expect(engine.getState("g1")?.classifyBlock).toEqual({
+        kind: "write",
+        queryType: "INSERT",
+      })
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        dataset: [[1]],
+      })
+    })
+
+    it("an Off write grid acquires its classification without ever ticking", async () => {
+      // Given an auto-refresh-off cell containing DML
+      validateBySql({ "insert into t values (1)": { queryType: "INSERT" } })
+      const cell = gridCell(
+        "g1",
+        "insert into t values (1)",
+        ["insert into t values (1)"],
+        false,
+      )
+
+      // When the engine syncs it
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // Then classification ran on creation and nothing executed
+      expect(engine.getState("g1")?.classifyBlock).toEqual({
+        kind: "write",
+        queryType: "INSERT",
+      })
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
+    it("cancels one slot after the barrier without failing it", async () => {
+      // Given the second statement's execution never returns until aborted
+      deps.executeSingle.mockImplementation(
+        (sql: string, signal?: AbortSignal) =>
+          sql === "select 2"
+            ? new Promise<QueryExecResult>((_, reject) => {
+                signal?.addEventListener("abort", () =>
+                  reject(new DOMException("Aborted", "AbortError")),
+                )
+              })
+            : Promise.resolve(dqlResult(sql)),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(engine.getState("g1")?.slotFetching.has(keyOf("select 2"))).toBe(
+        true,
+      )
+
+      // When the user cancels that slot
+      engine.cancelSlot("g1", keyOf("select 2"))
+      await flushAsync()
+
+      // Then the slot keeps its rows with no error, the sibling settled, and
+      // the round finished
+      const state = engine.getState("g1")
+      expect(state?.fetching).toBe(false)
+      expect(state?.slotErrors.size).toBe(0)
+      expect(cellResults.get("g1")?.results[1]).toMatchObject({
+        dataset: [[1]],
+      })
+    })
+
+    it("a pre-barrier cancel drops execution intent while validation completes", async () => {
+      // Given a validation the round must wait for
+      const validations = new Map<string, (value: unknown) => void>()
+      deps.validateWithGlobals.mockImplementation(
+        (sql: string) =>
+          new Promise((resolve) => {
+            validations.set(sql.trim(), resolve)
+          }),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // When the second slot is cancelled before the barrier settles
+      engine.cancelSlot("g1", keyOf("select 2"))
+      validations.get("select 1")?.(dqlValidation)
+      validations.get("select 2")?.(dqlValidation)
+      await flushAsync()
+
+      // Then the cancelled slot never executes; its sibling does
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+      ])
+      expect(engine.getState("g1")?.slotErrors.size).toBe(0)
+    })
+
+    it("a pre-barrier cancel never unblocks a write cell", async () => {
+      // Given the cancelled statement classifies as a write at the barrier
+      const validations = new Map<string, (value: unknown) => void>()
+      deps.validateWithGlobals.mockImplementation(
+        (sql: string) =>
+          new Promise((resolve) => {
+            validations.set(sql.trim(), resolve)
+          }),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; insert into t values (1)",
+        ["select 1", "insert into t values (1)"],
+        false,
+      )
+      syncOnScreen([cell])
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // When the user cancels the write statement mid-validation
+      engine.cancelSlot("g1", keyOf("insert into t values (1)"))
+      validations.get("select 1")?.(dqlValidation)
+      validations.get("insert into t values (1)")?.({ queryType: "INSERT" })
+      await flushAsync()
+
+      // Then the barrier still blocks the cell — the sibling never launches
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      expect(engine.getState("g1")?.classifyBlock).toEqual({
+        kind: "write",
+        queryType: "INSERT",
+      })
+    })
+
+    it("seeds persisted refresh errors for surviving statements only", async () => {
+      // Given errors seeded before the entry exists — one for a statement the
+      // cell no longer contains
+      engine.seedRefreshErrors("g1", [
+        { statementKey: keyOf("select 1"), message: "old failure" },
+        { statementKey: keyOf("select gone"), message: "dropped" },
+      ])
+
+      // When the cell syncs into the engine
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // Then only the surviving statement's error re-enters the channel
+      const state = engine.getState("g1")
+      expect(state?.slotErrors.get(keyOf("select 1"))).toBe("old failure")
+      expect(state?.slotErrors.size).toBe(1)
+    })
+
+    it("reshapes the frame on an SQL edit and drops the edited statement's error", async () => {
+      // Given a grid with refresh errors on both statements
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      engine.seedRefreshErrors("g1", [
+        { statementKey: keyOf("select 1"), message: "e1" },
+        { statementKey: keyOf("select 2"), message: "e2" },
+      ])
+
+      // When the second statement is edited and the debounce expires
+      engine.sync([{ ...cell, value: "select 1; select 3" }])
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Then the surviving statement keeps its rows and its error; the edited
+      // one dropped both
+      const written = cellResults.get("g1")
+      expect(written?.results.map((r) => r.query)).toEqual(["select 1"])
+      const state = engine.getState("g1")
+      expect(state?.slotErrors.get(keyOf("select 1"))).toBe("e1")
+      expect(state?.slotErrors.size).toBe(1)
+    })
+
+    it("refreshAll skips write grids and reports the counts", async () => {
+      // Given a refreshable grid and a classified write grid
+      validateBySql({ "insert into t values (1)": { queryType: "INSERT" } })
+      const readable = gridCell("g1", "select 1", ["select 1"], false)
+      const write = gridCell(
+        "g2",
+        "insert into t values (1)",
+        ["insert into t values (1)"],
+        false,
+      )
+      syncOnScreen([readable, write])
+      await flushAsync()
+
+      // When refresh-all fires
+      const counts = engine.refreshAll()
+      await flushAsync()
+
+      // Then the write grid is skipped and reported
+      expect(counts).toEqual({ refreshed: 1, skippedWrites: 1 })
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+      ])
+    })
+
+    it("redeems refresh-all for a released grid once its snapshot load settles", async () => {
+      // Given an off-screen grid cell whose rows were released to disk
+      harness.beginLoadOnRequest()
+      engine.sync([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          mode: "run",
+          autoRefresh: false,
+          lastRunStatus: "success",
+        },
+      ])
+      await flushAsync()
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // When the user clicks refresh-all and then scrolls the cell in
+      engine.refreshAll()
+      engine.setVisible("g1", true)
+      await flushAsync()
+
+      // Then the click waits on the snapshot load instead of settling silently
+      expect(deps.requestResultLoad).toHaveBeenCalledWith("g1")
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // And once the snapshot lands, the refresh runs against it
+      harness.settleLoad("g1", gridFrame(["select 1"]))
+      await flushAsync()
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 1",
+      ])
+    })
+
+    it("revives the retained snapshot when the SQL settles back after a collapse", async () => {
+      // Given a settled grid whose text collapses mid-edit
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      harness.beginLoadOnRequest()
+      engine.sync([{ ...cell, value: "sel" }])
+      await vi.advanceTimersByTimeAsync(400)
+      expect(cellResults.get("g1")).toBeUndefined()
+
+      // When the text settles back to the original SQL
+      engine.sync([{ ...cell, value: "select 1" }])
+      await vi.advanceTimersByTimeAsync(400)
+
+      // Then the engine asks hydration for a revive and the restored frame
+      // lands without a run
+      expect(deps.reviveResultLoad).toHaveBeenCalledWith("g1")
+      harness.settleLoad("g1", gridFrame(["select 1"]))
+      expect(cellResults.get("g1")?.results[0]).toMatchObject({
+        query: "select 1",
+      })
+    })
+
+    it("consumes refresh-all when the released grid's snapshot is gone", async () => {
+      // Given an off-screen released grid whose snapshot load settles missing
+      harness.beginLoadOnRequest()
+      engine.sync([
+        {
+          id: "g1",
+          position: 0,
+          value: "select 1",
+          mode: "run",
+          autoRefresh: false,
+          lastRunStatus: "success",
+        },
+      ])
+      await flushAsync()
+
+      // When the click lands, the cell scrolls in, and the load finds nothing
+      engine.refreshAll()
+      engine.setVisible("g1", true)
+      await flushAsync()
+      harness.settleLoad("g1", "missing")
+      await flushAsync()
+
+      // Then the click settles without fetching — nothing loops
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      const state = engine.getState("g1")
+      expect(state?.settledKey).toBe(state?.queriesKey)
+    })
+
+    it("skips a tick while the cell runs", async () => {
+      // Given a grid whose cell has a run in flight
+      deps.isCellRunning.mockReturnValue(true)
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // When a refresh fires
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then nothing executes — the manual run always wins
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+
+    it("blocks refreshes for the whole run span, the classification barrier included", async () => {
+      // Given a run announced to the engine while runningCellIds still lags —
+      // the run is classifying, so isCellRunning reports false
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+
+      // When a refresh fires inside that window
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then no round starts — the run owns the cell until it finishes
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // When the run finishes
+      engine.noteRunFinished("g1")
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then refreshes work again
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps the gate closed until the last overlapping run finishes", async () => {
+      // Given a run superseded by a second run on the same cell
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      engine.noteRunStarted("g1")
+      engine.noteRunStarted("g1")
+
+      // When only the superseded run finishes
+      engine.noteRunFinished("g1")
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the gate holds for the run still in flight
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // And it reopens when that run finishes too
+      engine.noteRunFinished("g1")
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("cancels the in-flight round when a run starts and commits nothing from it", async () => {
+      // Given a grid round whose statement response is still in flight
+      let resolveFetch: () => void = () => {}
+      deps.executeSingle.mockImplementation(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            resolveFetch = () => resolve(dqlResult(sql))
+          }),
+      )
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      const before = cellResults.get("g1")
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(engine.getState("g1")?.fetching).toBe(true)
+
+      // When a run starts and the late response lands afterwards
+      engine.noteRunStarted("g1")
+      resolveFetch()
+      await flushAsync()
+
+      // Then the round is cancelled: no spinner remains and the aborted
+      // slot never swaps its rows into the frame
+      expect(engine.getState("g1")?.fetching).toBe(false)
+      expect(engine.getState("g1")?.slotFetching.size).toBe(0)
+      expect(cellResults.get("g1")).toBe(before)
+    })
+
+    const changingResults = () => {
+      let tick = 0
+      deps.executeSingle.mockImplementation((sql: string) => {
+        tick += 1
+        return Promise.resolve<QueryExecResult>({
+          type: "dql",
+          query: sql,
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[100 + tick]],
+          count: 1,
+        })
+      })
+    }
+
+    // An automatic tick inside the 10s window parks its frame in the pending
+    // snapshot; hiding the cell stops further ticks so the pending frame is
+    // the only candidate write left.
+    const parkThrottledFrame = async () => {
+      changingResults()
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1000)
+      engine.setVisible("g1", false)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    }
+
+    it("a run commit drops the throttle-blocked frame — pre-run rows never overwrite the run's snapshot", async () => {
+      // Given an automatic tick parked behind the snapshot throttle
+      await parkThrottledFrame()
+
+      // When a run commits (the run path persists its own snapshot)
+      engine.noteCellRan("g1")
+
+      // Then neither the reopening window nor an explicit flush writes the
+      // stale pre-run frame over the run's record
+      await vi.advanceTimersByTimeAsync(15_000)
+      await engine.flushPendingSnapshots()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("a per-statement rerun commit drops the throttle-blocked frame too", async () => {
+      // Given an automatic tick parked behind the snapshot throttle
+      await parkThrottledFrame()
+
+      // When a rerun commits (the rerun path persists the whole frame)
+      engine.noteStatementRan("g1", keyOf("select 1"))
+
+      // Then the stale pending frame never persists
+      await vi.advanceTimersByTimeAsync(15_000)
+      await engine.flushPendingSnapshots()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+
+    it("noteStatementRan clears one slot's error; noteCellRan clears them all", async () => {
+      // Given a refresh round that failed both statements
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve<QueryExecResult>({
+          type: "error",
+          query: sql,
+          columns: [],
+          dataset: [],
+          count: 0,
+          error: "boom",
+        }),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(engine.getState("g1")?.slotErrors.size).toBe(2)
+
+      // When one statement is rerun
+      engine.noteStatementRan("g1", keyOf("select 1"))
+
+      // Then only its badge clears
+      expect(engine.getState("g1")?.slotErrors.size).toBe(1)
+      expect(engine.getState("g1")?.slotErrors.get(keyOf("select 2"))).toBe(
+        "boom",
+      )
+
+      // And a full run clears the rest
+      engine.noteCellRan("g1")
+      expect(engine.getState("g1")?.slotErrors.size).toBe(0)
+    })
+
+    it("a per-statement rerun writes surviving sibling refresh errors back to disk", async () => {
+      // Given a two-statement grid where only the second statement's refresh fails
+      deps.executeSingle.mockImplementation((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve<QueryExecResult>({
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve(dqlResult(sql)),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      const persistsBefore = vi.mocked(persistCellSnapshot).mock.calls.length
+
+      // When the healthy statement is rerun (the rerun path wrote a record
+      // that carries no refreshErrors)
+      engine.noteStatementRan("g1", keyOf("select 1"))
+
+      // Then the engine re-persists the frame so the sibling's failure
+      // survives a reload
+      const calls = vi.mocked(persistCellSnapshot).mock.calls
+      expect(calls.length).toBe(persistsBefore + 1)
+      expect(calls[calls.length - 1][0].refreshErrors).toEqual([
+        { statementKey: keyOf("select 2"), message: "boom" },
+      ])
+    })
+
+    it("a run commit clears the refresh stamps so the run frame's own timestamp takes over", async () => {
+      // Given a grid whose manual refresh swapped fresh rows in (stamps set)
+      changingResults()
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      const key = keyOf("select 1")
+      expect(engine.getState("g1")?.slotFetchedAt.get(key)).toBeDefined()
+      expect(engine.getState("g1")?.slotSwappedAt.get(key)).toBeDefined()
+
+      // When a run commits a new frame
+      engine.noteCellRan("g1")
+
+      // Then the stamps are gone — the status line and the viewport token
+      // must follow the run, not the superseded refresh round
+      expect(engine.getState("g1")?.slotFetchedAt.size).toBe(0)
+      expect(engine.getState("g1")?.slotSwappedAt.size).toBe(0)
+    })
+
+    it("a per-statement rerun clears only that statement's stamps", async () => {
+      // Given a two-statement grid with refresh stamps on both slots
+      changingResults()
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        false,
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(engine.getState("g1")?.slotFetchedAt.size).toBe(2)
+
+      // When one statement is rerun
+      engine.noteStatementRan("g1", keyOf("select 1"))
+
+      // Then only its stamps drop; the sibling keeps its refresh times
+      const state = engine.getState("g1")
+      expect(state?.slotFetchedAt.has(keyOf("select 1"))).toBe(false)
+      expect(state?.slotSwappedAt.has(keyOf("select 1"))).toBe(false)
+      expect(state?.slotFetchedAt.has(keyOf("select 2"))).toBe(true)
+      expect(state?.slotSwappedAt.has(keyOf("select 2"))).toBe(true)
+    })
+
+    it("a superseded round's late settle leaves the replacement round's slot state intact", async () => {
+      // Given a manual refresh whose fetch hangs
+      const resolvers: Array<() => void> = []
+      deps.executeSingle.mockImplementation(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            resolvers.push(() => resolve(dqlResult(sql)))
+          }),
+      )
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(resolvers).toHaveLength(1)
+
+      // When a second refresh supersedes it and registers the same statement
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(resolvers).toHaveLength(2)
+
+      // And the aborted round's response lands late
+      resolvers[0]()
+      await flushAsync()
+
+      // Then the replacement round still reports its slot as fetching — the
+      // "Refreshing..." line stays up and Cancel stays routable
+      expect(engine.getState("g1")?.slotFetching.has(keyOf("select 1"))).toBe(
+        true,
+      )
+      expect(engine.getState("g1")?.fetching).toBe(true)
+
+      // And the replacement settles normally
+      resolvers[1]()
+      await flushAsync()
+      expect(engine.getState("g1")?.slotFetching.size).toBe(0)
+      expect(engine.getState("g1")?.fetching).toBe(false)
+    })
+
+    it("a cell refresh inside the SQL debounce promotes the edit and fetches only the new SQL", async () => {
+      // Given a settled grid whose SQL was just edited (debounce pending)
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+      engine.sync([{ ...cell, value: "select 2" }])
+
+      // When the user clicks the cell's refresh before the debounce expires
+      void engine.refresh("g1")
+      await flushAsync()
+
+      // Then the promoted SQL executes — never the stale statement
+      expect(deps.executeSingle.mock.calls.map(([sql]) => sql)).toEqual([
+        "select 2",
+      ])
+
+      // And the debounce expiry adds nothing
+      await vi.advanceTimersByTimeAsync(301)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it("a poll tick never aborts an in-flight manual refresh", async () => {
+      // Given a settled 1s-interval grid
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      const settledCalls = deps.executeSingle.mock.calls.length
+
+      // When a manual refresh starts and hangs across several intervals
+      let resolveManual: () => void = () => {}
+      deps.executeSingle.mockImplementation(
+        (sql: string) =>
+          new Promise<QueryExecResult>((resolve) => {
+            resolveManual = () => resolve(dqlResult(sql))
+          }),
+      )
+      void engine.refresh("g1")
+      await flushAsync()
+      expect(deps.executeSingle.mock.calls.length).toBe(settledCalls + 1)
+      await vi.advanceTimersByTimeAsync(2500)
+
+      // Then the ticks are skipped instead of aborting the manual round
+      expect(deps.executeSingle.mock.calls.length).toBe(settledCalls + 1)
+      expect(engine.getState("g1")?.fetching).toBe(true)
+
+      // And the user's own round settles
+      resolveManual()
+      await flushAsync()
+      expect(engine.getState("g1")?.fetching).toBe(false)
+    })
+
+    it("a mid-edit collapse drops the frame but keeps the persisted snapshot", async () => {
+      // Given a settled grid
+      const cell = gridCell("g1", "select 1", ["select 1"], false)
+      syncOnScreen([cell])
+      await flushAsync()
+
+      // When a transient mid-typing state matches no statement and the
+      // debounce fires
+      engine.sync([{ ...cell, value: "select 1, b fro" }])
+      await vi.advanceTimersByTimeAsync(301)
+
+      // Then the display collapses, but the snapshot survives on disk —
+      // only a reload's reconcile against the completed text may delete it
+      expect(deps.setCellResult).toHaveBeenCalledWith("g1", undefined)
+      expect(deps.noteResultMissing).toHaveBeenCalledWith("g1")
+      expect(deleteCellSnapshot).not.toHaveBeenCalled()
     })
   })
 })

@@ -4,11 +4,14 @@ const MAX_VIEWPORTS_PER_CELL = 20
 
 type ViewportEntry = ResultGridViewport & { runToken: number }
 
+// Keyed per STATEMENT (normalized text + occurrence), not per frame: a
+// refresh settles one slot at a time, so only the statement that actually got
+// new rows loses its saved scroll. The entry's own token carries that — a
+// stale token simply fails to load.
 export type ResultGridViewportStore = {
-  replaceResult: (runToken: number) => void
-  load: (queryKey: string, runToken: number) => ResultGridViewport | null
+  load: (statementKey: string, runToken: number) => ResultGridViewport | null
   save: (
-    queryKey: string,
+    statementKey: string,
     runToken: number,
     viewport: ResultGridViewport,
   ) => void
@@ -20,28 +23,17 @@ const normalizeOffset = (value: number): number =>
 
 export const createResultGridViewportStore = (): ResultGridViewportStore => {
   const entries = new Map<string, ViewportEntry>()
-  let currentResultToken: number | undefined
 
   return {
-    replaceResult(runToken) {
-      if (currentResultToken !== undefined && currentResultToken !== runToken) {
-        entries.clear()
-      }
-      currentResultToken = runToken
-    },
-
-    load(queryKey, runToken) {
-      const entry = entries.get(queryKey)
+    load(statementKey, runToken) {
+      const entry = entries.get(statementKey)
       if (!entry || entry.runToken !== runToken) return null
       return { scrollTop: entry.scrollTop, scrollLeft: entry.scrollLeft }
     },
 
-    save(queryKey, runToken, viewport) {
-      if (currentResultToken !== undefined && currentResultToken !== runToken) {
-        return
-      }
-      entries.delete(queryKey)
-      entries.set(queryKey, {
+    save(statementKey, runToken, viewport) {
+      entries.delete(statementKey)
+      entries.set(statementKey, {
         runToken,
         scrollTop: normalizeOffset(viewport.scrollTop),
         scrollLeft: normalizeOffset(viewport.scrollLeft),
@@ -55,7 +47,6 @@ export const createResultGridViewportStore = (): ResultGridViewportStore => {
 
     clear() {
       entries.clear()
-      currentResultToken = undefined
     },
   }
 }

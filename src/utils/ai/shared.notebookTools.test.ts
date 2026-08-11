@@ -28,6 +28,14 @@ import {
   saveCellSnapshot,
 } from "../../store/notebookResults"
 import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
+import {
+  checkStatementsForAutoRun,
+  checkStatementsForExecution,
+  classifyStatements,
+  clearStatementClassCache,
+  type RunCellGate,
+} from "../tools/permissions"
+import type { ValidateQueryResult } from "../questdb/types"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
@@ -54,6 +62,9 @@ const mountLive = (
       signal?: AbortSignal,
       sql?: string,
     ) => Promise<RunCellSummary>
+    // When set, the harness runner honors the gate contract the real runner
+    // implements: classify the checked SQL, deny/skip on the barrier.
+    validate?: (sql: string) => Promise<ValidateQueryResult>
     // Fires on each readView — lets a test simulate a user edit racing a read.
     onRead?: () => void
   } = {},
@@ -66,10 +77,42 @@ const mountLive = (
       focusedCellId: null,
     },
   }
-  const runCell =
+  const inner =
     opts.runCell ??
     (() =>
       Promise.resolve({ success: true, queryCount: 1, results: ["success"] }))
+  const runCell = async (
+    cellId: string,
+    signal?: AbortSignal,
+    sql?: string,
+    gate?: RunCellGate,
+  ): Promise<RunCellSummary> => {
+    if (gate !== undefined && sql !== undefined && opts.validate) {
+      const stmts = await classifyStatements(sql, opts.validate)
+      if (gate.kind === "explicit") {
+        const decision = checkStatementsForExecution(stmts, gate.permissions)
+        if (!decision.granted) {
+          return {
+            success: false,
+            queryCount: 0,
+            results: [],
+            denied: decision.reason,
+          }
+        }
+      } else {
+        const decision = checkStatementsForAutoRun(stmts)
+        if (decision.action === "skip") {
+          return {
+            success: false,
+            queryCount: 0,
+            results: [],
+            skipped: decision.reason,
+          }
+        }
+      }
+    }
+    return inner(cellId, signal, sql)
+  }
   const controller: NotebookController = {
     bufferId,
     kind: "live",
@@ -147,6 +190,7 @@ beforeEach(async () => {
   __resetNotebookControllerForTests()
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
+  clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
   // A backing Dexie row so buildSnapshot (get_notebook_state) can read meta.
@@ -302,6 +346,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
+      undefined,
       undefined,
       undefined,
     )
@@ -541,6 +586,47 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(state.parts.settings.autoRefreshDefault).toBe(false)
   })
 
+  it("set_notebook_autorefresh with reset_cell_overrides clears every per-cell override atomically", async () => {
+    // Given a dashboard where every cell carries its own interval
+    const { state } = mountLive(1, [
+      cell("grid1", "SELECT 1", { autoRefresh: "5s" }),
+      cell("grid2", "SELECT 2", { autoRefresh: false }),
+      cell("chart1", "SELECT 3", { autoRefresh: true, mode: "draw" }),
+      cell("plain", "SELECT 4"),
+    ])
+    // When the agent sets a notebook default and asks for the reset
+    await dispatchTool(
+      "set_notebook_autorefresh",
+      { buffer_id: 1, value: "30s", reset_cell_overrides: true },
+      makeClient(),
+      noopStatus,
+    )
+    // Then the default is stored and no override key survives —
+    // every cell now inherits 30s
+    expect(state.parts.settings.autoRefreshDefault).toBe("30s")
+    for (const id of ["grid1", "grid2", "chart1", "plain"]) {
+      const updated = cellById(state, id)
+      expect(updated && "autoRefresh" in updated).toBe(false)
+    }
+  })
+
+  it("set_notebook_autorefresh without reset_cell_overrides keeps per-cell overrides winning", async () => {
+    // Given a cell pinned to its own interval
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", { autoRefresh: "5s" }),
+    ])
+    // When the agent sets only the notebook default
+    await dispatchTool(
+      "set_notebook_autorefresh",
+      { buffer_id: 1, value: "30s", reset_cell_overrides: null },
+      makeClient(),
+      noopStatus,
+    )
+    // Then the override stays and still wins over the new default
+    expect(state.parts.settings.autoRefreshDefault).toBe("30s")
+    expect(cellById(state, "c")?.autoRefresh).toBe("5s")
+  })
+
   it("set_notebook_autorefresh rejects a token outside the allowed set", async () => {
     const { state } = mountLive(1, [cell("c")])
     const res = await dispatchTool(
@@ -551,6 +637,117 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     expect(res.is_error).toBe(true)
     expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
+  })
+
+  it("set_cell_mode draw stamps an explicit Auto so the chart is born polling", async () => {
+    // Given a run cell in a notebook with no auto-refresh default
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+
+    // When the agent switches it to draw mode
+    await dispatchTool(
+      "set_cell_mode",
+      { buffer_id: 1, cell_id: "c", mode: "draw" },
+      makeClient(),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: false },
+      vi.fn().mockResolvedValue({
+        query: "SELECT 1",
+        columns: [{ name: "1", type: "INT" }],
+        timestamp: 0,
+      }),
+    )
+
+    // Then the chart carries the stamp as an ordinary per-cell value
+    expect(cellById(state, "c")?.mode).toBe("draw")
+    expect(cellById(state, "c")?.autoRefresh).toBe(true)
+  })
+
+  it("set_cell_mode draw yields to a stored notebook default instead of stamping", async () => {
+    // Given a notebook whose owner chose a notebook-wide cadence
+    const { state } = mountLive(1, [cell("c", "SELECT 1")], {
+      settings: { autoRefreshDefault: "30s" },
+    })
+
+    // When the agent switches the cell to draw mode
+    await dispatchTool(
+      "set_cell_mode",
+      { buffer_id: 1, cell_id: "c", mode: "draw" },
+      makeClient(),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: false },
+      vi.fn().mockResolvedValue({
+        query: "SELECT 1",
+        columns: [{ name: "1", type: "INT" }],
+        timestamp: 0,
+      }),
+    )
+
+    // Then no stamp lands — the chart inherits the notebook default
+    expect(cellById(state, "c")?.mode).toBe("draw")
+    expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
+  })
+
+  it("apply_notebook_state stamps draw cells sent without auto_refresh", async () => {
+    // Given a notebook with no auto-refresh default
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When an apply composes a chart without a per-cell auto_refresh
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "a", preserve_value: true },
+          {
+            value: "SELECT ts, price FROM trades",
+            mode: "draw",
+            chart_config: {
+              x_column: "ts",
+              queries: [{ type: "line", y_columns: ["price"] }],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the chart is born polling and the grid cell stays unstamped
+    const chart = state.parts.cells.find((c) => c.mode === "draw")
+    expect(chart?.autoRefresh).toBe(true)
+    expect(cellById(state, "a")?.autoRefresh).toBeUndefined()
+  })
+
+  it("apply_notebook_state does not stamp when the same apply sets a default", async () => {
+    // Given an apply that configures the notebook default and a chart together
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When the apply carries auto_refresh_default alongside the draw cell
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        auto_refresh_default: "30s",
+        cells: [
+          { id: "a", preserve_value: true },
+          {
+            value: "SELECT ts, price FROM trades",
+            mode: "draw",
+            chart_config: {
+              x_column: "ts",
+              queries: [{ type: "line", y_columns: ["price"] }],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the chart inherits the default instead of carrying a stamp
+    const chart = state.parts.cells.find((c) => c.mode === "draw")
+    expect(chart?.autoRefresh).toBeUndefined()
+    expect(state.parts.settings.autoRefreshDefault).toBe("30s")
   })
 
   it("set_cell_name sets the cell name", async () => {
@@ -1744,27 +1941,37 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       }),
     )
     expect(res.is_error).toBeFalsy()
-    // The exact authorization-checked SQL is threaded to execution.
-    expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1")
+    // The exact authorization-checked SQL is threaded to execution, with the
+    // permission gate the runner's barrier enforces.
+    expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1", {
+      kind: "explicit",
+      permissions: { grantSchemaAccess: false, read: false, write: false },
+    })
   })
 
   it("run_cell executes the checked SQL, not a value swapped in during the validate round-trip", async () => {
-    // A run-mode cell starts at a read query the gate will allow.
-    const { state, runCell } = mountLive(1, [cell("c", "SELECT 1")])
     // Simulate a concurrent ungated update_cell landing while run_cell awaits
     // the /sql/validate round-trip: the live cell value flips to a write
     // between classification and execution.
+    const state0: { swap?: () => void } = {}
     const validateSql = vi.fn((sql: string) => {
-      state.parts = {
-        ...state.parts,
-        cells: [cell("c", "DROP TABLE t")],
-      }
+      state0.swap?.()
       return Promise.resolve({
         query: sql,
         columns: [{ name: "c1", type: "LONG" }],
         timestamp: -1,
       })
     })
+    // A run-mode cell starts at a read query the gate will allow.
+    const { state, runCell } = mountLive(1, [cell("c", "SELECT 1")], {
+      validate: validateSql,
+    })
+    state0.swap = () => {
+      state.parts = {
+        ...state.parts,
+        cells: [cell("c", "DROP TABLE t")],
+      }
+    }
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -1776,8 +1983,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(res.is_error).toBeFalsy()
     // The race is real: the live value did change mid-flight...
     expect(cellById(state, "c")?.value).toBe("DROP TABLE t")
-    // ...but the executor was handed the checked SELECT, never the DROP.
-    expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1")
+    // ...but the runner was handed the checked SELECT, never the DROP — its
+    // barrier classifies and executes that exact string.
+    expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1", {
+      kind: "explicit",
+      permissions: { grantSchemaAccess: false, read: true, write: false },
+    })
   })
 
   it("run_cell with no gate leaves execution to re-read the live cell", async () => {
@@ -1790,7 +2001,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     expect(res.is_error).toBeFalsy()
     // No gate ran, so no SQL is pinned — the executor re-reads the cell.
-    expect(runCell).toHaveBeenCalledWith("c", undefined, undefined)
+    expect(runCell).toHaveBeenCalledWith("c", undefined, undefined, undefined)
   })
 
   it("allows add_cell with run=true and SELECT when read and write are both denied", async () => {
@@ -1813,20 +2024,27 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("skips add_cell run when the cell contains DDL/DML — the cell is still added", async () => {
-    const { state, runCell } = mountLive(1)
+    const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
+    const { state, runCell } = mountLive(1, [], { validate })
     const res = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: true },
-      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+      validate,
     )
     expect(res.is_error).toBeFalsy()
     expect(cellById(state, cellIds(state)[0])?.value).toBe(
       "INSERT INTO t VALUES (1)",
     )
-    expect(runCell).not.toHaveBeenCalled()
+    // The runner's barrier decides the skip — dispatch hands it the gate.
+    expect(runCell).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      "INSERT INTO t VALUES (1)",
+      { kind: "autoRun" },
+    )
     const parsed = JSON.parse(res.content) as {
       cellId: string
       ran: boolean
@@ -1840,23 +2058,29 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(parsed.note).toMatch(/run_cell/)
   })
 
-  // SAFETY PRECONDITION — "agent flows never auto-run DDL/DML". The guard lives
-  // inside `if (perms && validateSql)`, so it protects the flow ONLY because
-  // every production call site threads BOTH args (anthropicProvider,
+  // SAFETY PRECONDITION — "agent flows never auto-run DDL/DML". The gate is
+  // threaded ONLY inside `if (perms && validateSql)`, so it protects the flow
+  // because every production call site threads BOTH args (anthropicProvider,
   // openaiProvider, openaiChatCompletionsProvider, dispatchMCPTool). This pins
   // both halves so a caller that drops the gate args — or a refactor of that
   // condition — fails loudly here instead of silently auto-running a write.
   it("auto-run write protection depends entirely on the gate args", async () => {
-    const gate = mountLive(1, [], { runCell: okRun })
+    const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
+    const gate = mountLive(1, [], { runCell: okRun, validate })
     const gated = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: true },
-      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+      validate,
     )
-    expect(gate.runCell).not.toHaveBeenCalled()
+    expect(gate.runCell).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      "INSERT INTO t VALUES (1)",
+      { kind: "autoRun" },
+    )
     expect(JSON.parse(gated.content)).toMatchObject({
       ran: false,
       skipped: true,
@@ -1869,7 +2093,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       makeClient(),
       noopStatus,
     )
-    expect(ungate.runCell).toHaveBeenCalled()
+    expect(ungate.runCell).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+    )
     expect(JSON.parse(ungated.content)).toMatchObject({ ran: true })
   })
 })
@@ -1899,6 +2128,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       expect.any(String),
       undefined,
       undefined,
+      undefined,
     )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ success: boolean; queryCount?: number; results?: string[] }>
@@ -1926,6 +2156,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     )
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
+      undefined,
       undefined,
       undefined,
     )
@@ -2037,7 +2268,8 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips DDL/DML run cells regardless of the write permission", async () => {
-    const { runCell } = mountLive(1, [], { runCell: okRun })
+    const validate = vi.fn().mockResolvedValue({ queryType: "DROP TABLE" })
+    const { runCell } = mountLive(1, [], { runCell: okRun, validate })
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2049,10 +2281,15 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: false },
-      vi.fn().mockResolvedValue({ queryType: "DROP TABLE" }),
+      validate,
     )
     expect(res.is_error).toBeFalsy()
-    expect(runCell).not.toHaveBeenCalled()
+    expect(runCell).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      "DROP TABLE victim",
+      { kind: "autoRun" },
+    )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{
         cellId: string
@@ -2067,10 +2304,11 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips DDL/DML cells regardless of run history (writes never auto-run)", async () => {
+    const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
-      { runCell: okRun },
+      { runCell: okRun, validate },
     )
     const res = await dispatchTool(
       "apply_notebook_state",
@@ -2083,10 +2321,15 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: true },
-      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+      validate,
     )
     expect(res.is_error).toBeFalsy()
-    expect(runCell).not.toHaveBeenCalled()
+    expect(runCell).toHaveBeenCalledWith(
+      "ins-1",
+      undefined,
+      "INSERT INTO t VALUES (1)",
+      { kind: "autoRun" },
+    )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{
         cellId: string
@@ -2105,10 +2348,11 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips DDL/DML cells that never ran before (only run_cell executes writes)", async () => {
+    const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
-      { runCell: okRun },
+      { runCell: okRun, validate },
     )
     const res = await dispatchTool(
       "apply_notebook_state",
@@ -2124,9 +2368,10 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: true },
-      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+      validate,
     )
-    expect(runCell).not.toHaveBeenCalled()
+    const gates = vi.mocked(runCell).mock.calls.map((call) => call[3])
+    expect(gates).toEqual([{ kind: "autoRun" }, { kind: "autoRun" }])
     const parsed = JSON.parse(res.content) as {
       runs: Array<{
         cellId: string
@@ -2161,7 +2406,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       dqlValidate,
     )
-    expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1")
+    expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
+      kind: "autoRun",
+    })
   })
 
   it("preserves existing mode when mode is omitted on an existing cell (draw stays draw, run stays run)", async () => {
@@ -2198,7 +2445,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     )
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledTimes(1)
-    expect(runCell).toHaveBeenCalledWith("run-id", undefined, "SELECT 1")
+    expect(runCell).toHaveBeenCalledWith("run-id", undefined, "SELECT 1", {
+      kind: "autoRun",
+    })
     expect(cellById(state, "run-id")?.mode).toBe("run")
     expect(cellById(state, "draw-id")?.mode).toBe("draw")
   })
@@ -2578,10 +2827,11 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
   })
 
   it("auto-run skips a preserved write cell, gating on its live SQL", async () => {
+    const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
-      { runCell: okRun },
+      { runCell: okRun, validate },
     )
     const res = await dispatchTool(
       "apply_notebook_state",
@@ -2594,10 +2844,15 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       makeClient(),
       noopStatus,
       { grantSchemaAccess: true, read: true, write: true },
-      vi.fn().mockResolvedValue({ queryType: "INSERT" }),
+      validate,
     )
     expect(res.is_error).toBeFalsy()
-    expect(runCell).not.toHaveBeenCalled()
+    expect(runCell).toHaveBeenCalledWith(
+      "ins-1",
+      undefined,
+      "INSERT INTO t VALUES (1)",
+      { kind: "autoRun" },
+    )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ cellId: string; skipped?: boolean }>
     }
@@ -2629,6 +2884,8 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
         timestamp: -1,
       }),
     )
-    expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1")
+    expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
+      kind: "autoRun",
+    })
   })
 })

@@ -85,6 +85,7 @@ export const withBoundNotebookReadOnly = async <T>(
 // === Consumer API — the AI-tool / read layers use only these ================
 export { getController } from "./notebookControllerUtils"
 export type {
+  CellRefreshView,
   NotebookController,
   RunCellSummary,
   ApplyNotebookStateRequest,

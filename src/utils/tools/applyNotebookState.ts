@@ -12,7 +12,6 @@ import {
 import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
-  classifyAndCheckSqlForAutoRun,
   denyReasonUnresolvedSql,
   requireAllDQL,
   type PermissionDecision,
@@ -141,24 +140,9 @@ const runAppliedCells = async (
   const settled = await Promise.all(
     resolved.map(async (r): Promise<RunEntry | null> => {
       if (!r.runnable) return null
-      if (perms && validateSql) {
-        const decision = await classifyAndCheckSqlForAutoRun(
-          r.value,
-          validateSql,
-        )
-        if (decision.action === "deny") {
-          return { cellId: r.cellId, success: false, error: decision.reason }
-        }
-        if (decision.action === "skip") {
-          return {
-            cellId: r.cellId,
-            success: true,
-            skipped: true,
-            note: decision.reason,
-          }
-        }
-      }
       try {
+        // The runner's barrier classification decides auto-run eligibility —
+        // writes are skipped at launch, never pre-checked.
         const result = await withBoundNotebook(
           bufferId,
           (ctrl) =>
@@ -166,9 +150,21 @@ const runAppliedCells = async (
               r.cellId,
               signal,
               perms && validateSql ? r.value : undefined,
+              perms && validateSql ? { kind: "autoRun" } : undefined,
             ),
           signal,
         )
+        if (result.denied !== undefined) {
+          return { cellId: r.cellId, success: false, error: result.denied }
+        }
+        if (result.skipped !== undefined) {
+          return {
+            cellId: r.cellId,
+            success: true,
+            skipped: true,
+            note: result.skipped,
+          }
+        }
         return {
           cellId: r.cellId,
           success: result.success,

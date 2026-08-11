@@ -58,7 +58,7 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
 import { useCellBandObservers } from "./useCellBandObservers"
-import { useChartRefresh } from "./chartRefresh/ChartRefreshContext"
+import { useCellRefresh } from "./cellRefresh/CellRefreshContext"
 import { useCellVirtualizationEngine } from "./cellVirtualization/CellVirtualizationContext"
 import {
   useCellResultHydrationEngine,
@@ -750,7 +750,7 @@ const useNotebookSearchReveal = () => {
 const NotebookContent: React.FC = () => {
   const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
-  const chartEngine = useChartRefresh()
+  const chartEngine = useCellRefresh()
   const virtualizationEngine = useCellVirtualizationEngine()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)

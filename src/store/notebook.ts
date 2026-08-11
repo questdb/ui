@@ -104,6 +104,7 @@ export type SingleQueryResult =
 export type CellResult = {
   results: SingleQueryResult[]
   activeResultIndex: number
+  activeStatementKey?: string
   error?: string
   timestamp: number
   script?: {
@@ -190,26 +191,32 @@ export const migrateLegacyCellNames = (
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
 
-export const migrateLegacyAutoRefresh = (
+// Nothing polls unless the cell or the notebook says so — but charts are born
+// live: entering draw mode stamps an explicit Auto onto the cell. A stored
+// notebook default (even Off) is the user's notebook-wide intent, so the
+// stamp yields to it and the chart inherits instead.
+export const chartAutoRefreshStamp = (
+  cell: Pick<NotebookCell, "mode" | "autoRefresh">,
+  autoRefreshDefault: AutoRefresh | undefined,
+): Partial<NotebookCell> =>
+  cell.mode === "draw" &&
+  cell.autoRefresh === undefined &&
+  autoRefreshDefault === undefined
+    ? { autoRefresh: true }
+    : {}
+
+// Charts drawn before the uniform-Off fallback polled through an implicit
+// per-view Auto. The stamp makes that liveness explicit so they keep polling;
+// grids never polled, and stay off. No notebook default is ever synthesized.
+export const migrateImplicitChartAutoRefresh = (
   state: NotebookViewState,
 ): NotebookViewState => {
-  if (state.settings?.autoRefreshDefault !== undefined) return state
-  const shown = state.cells
-    .filter((cell) => cell.mode === "draw")
-    .map((cell) => cell.autoRefresh ?? true)
-  const autoRefreshDefault =
-    shown.length > 0 && shown.every((value) => value === shown[0])
-      ? shown[0]
-      : true
-  const cells = state.cells.map((cell) => {
-    if (cell.autoRefresh !== autoRefreshDefault) return cell
-    const next = { ...cell }
-    delete next.autoRefresh
-    return next
-  })
-  return {
-    ...state,
-    cells,
-    settings: { ...state.settings, autoRefreshDefault },
-  }
+  const autoRefreshDefault = state.settings?.autoRefreshDefault
+  const needsStamp = (cell: NotebookCell) =>
+    Object.keys(chartAutoRefreshStamp(cell, autoRefreshDefault)).length > 0
+  if (!state.cells.some(needsStamp)) return state
+  const cells = state.cells.map((cell) =>
+    needsStamp(cell) ? { ...cell, autoRefresh: true as const } : cell,
+  )
+  return { ...state, cells }
 }
