@@ -132,7 +132,7 @@ export const NotebookRefreshControl: React.FC = () => {
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={4}>
             <AutoRefreshOptions
-              value={storedDefault}
+              value={storedDefault ?? false}
               onSelect={handleSelectDefault}
             />
             {overrideCount > 0 && (
