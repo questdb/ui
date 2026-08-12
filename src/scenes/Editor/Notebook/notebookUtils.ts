@@ -14,8 +14,6 @@ import type {
 } from "../../../store/notebook"
 import {
   AUTO_REFRESH_INTERVALS,
-  chartAutoRefreshStamp,
-  isChartAutoRefreshStamp,
   createCell,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
@@ -57,54 +55,27 @@ export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
     Object.prototype.hasOwnProperty.call(AUTO_REFRESH_INTERVALS, value))
 
 // Terminal fallback is Off for every view: nothing polls unless the cell or
-// the notebook says so. Charts stay live because entering draw mode stamps an
-// explicit Auto onto the cell (chartAutoRefreshStamp).
+// the notebook says so.
 export const resolveAutoRefresh = (
   cellValue: AutoRefresh | undefined,
   notebookDefault: AutoRefresh | undefined,
 ): AutoRefresh => cellValue ?? notebookDefault ?? false
 
-export const isAutoRefreshOverride = (
-  cell: Pick<NotebookCell, "mode" | "autoRefresh">,
-  autoRefreshDefault: AutoRefresh | undefined,
-): boolean =>
-  cell.autoRefresh !== undefined &&
-  !isChartAutoRefreshStamp(cell, autoRefreshDefault)
-
-export const countAutoRefreshOverrides = (
-  cells: NotebookCell[],
-  autoRefreshDefault: AutoRefresh | undefined,
-): number =>
-  cells.filter((cell) => isAutoRefreshOverride(cell, autoRefreshDefault)).length
+export const countAutoRefreshOverrides = (cells: NotebookCell[]): number =>
+  cells.filter((cell) => cell.autoRefresh !== undefined).length
 
 export const countActiveAutoRefreshOverrides = (
   cells: NotebookCell[],
-  autoRefreshDefault: AutoRefresh | undefined,
 ): number =>
   cells.filter(
     (cell) =>
-      resolveCellView(cell) !== "none" &&
-      isAutoRefreshOverride(cell, autoRefreshDefault),
+      resolveCellView(cell) !== "none" && cell.autoRefresh !== undefined,
   ).length
 
-// Plain strip for the per-cell "Notebook default" choice — a deliberate
-// inherit is never re-stamped.
 export const clearCellAutoRefresh = (cell: NotebookCell): NotebookCell => {
   if (cell.autoRefresh === undefined) return cell
   const { autoRefresh: _, ...rest } = cell
   return rest
-}
-
-// The notebook-level reset instead returns each cell to its default state,
-// and for a draw cell under an unset default that state is born-live — the
-// stamp comes back rather than leaving the chart silently frozen.
-export const resetCellAutoRefresh = (
-  cell: NotebookCell,
-  autoRefreshDefault: AutoRefresh | undefined,
-): NotebookCell => {
-  if (!isAutoRefreshOverride(cell, autoRefreshDefault)) return cell
-  const cleared = clearCellAutoRefresh(cell)
-  return { ...cleared, ...chartAutoRefreshStamp(cleared, autoRefreshDefault) }
 }
 
 // What a cell currently shows in its bottom slot — drives the toolbar's
@@ -1825,19 +1796,8 @@ export const buildAppliedNotebookState = (
     nextMaximizedCellId = null
   }
 
-  // Apply is a PUT: an omitted auto_refresh clears any prior override. Cells
-  // becoming charts (new, or run→draw) are stamped born-live, mirroring the
-  // editor's draw switch — but a cell that already was a chart keeps its
-  // cleared state, so an agent echoing read state cannot flip an inheriting
-  // chart back to Auto.
-  const stampedCells = cells.map((cell) => {
-    if (prevById.get(cell.id)?.mode === "draw") return cell
-    const stamp = chartAutoRefreshStamp(cell, nextSettings.autoRefreshDefault)
-    return "autoRefresh" in stamp ? { ...cell, ...stamp } : cell
-  })
-
   return {
-    cells: stampedCells,
+    cells,
     settings: nextSettings,
     maximizedCellId: nextMaximizedCellId,
     diff,

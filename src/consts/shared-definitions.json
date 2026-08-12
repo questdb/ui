@@ -649,7 +649,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set auto-refresh polling for a cell, as a per-cell override of the notebook default (set_notebook_autorefresh). Applies to both chart (draw-mode) and grid (run-mode) cells. A cell containing DDL/DML never polls: the value is stored, but the engine blocks its ticks and read tools report `auto_refresh_blocked: \"contains_write\"`. Markdown cells are rejected. Nothing polls without a per-cell value or a notebook default; a cell that becomes a chart while the notebook has no default is stamped with an explicit `true` so charts are born polling — that stamp is a normal per-cell value you can read and change. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"), or null to clear the override so the cell inherits the notebook default.",
+    "description": "Set auto-refresh polling for a cell, as a per-cell override of the notebook default (set_notebook_autorefresh). Applies to both chart (draw-mode) and grid (run-mode) cells. A cell containing DDL/DML never polls: the value is stored, but the engine blocks its ticks and read tools report `auto_refresh_blocked: \"contains_write\"`. Markdown cells are rejected. Nothing polls without a per-cell value or a notebook default. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"), or null to clear the override so the cell inherits the notebook default.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -681,7 +681,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set the notebook-level auto-refresh default for every cell showing a chart or a grid. Cells with no per-cell value inherit it; set_cell_autorefresh sets a per-cell override that wins over it. Cells containing DDL/DML are skipped — auto-refresh never executes a write. Until this is set, nothing polls except chart cells, which get an explicit per-cell `true` stamped when they become charts. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"). `reset_cell_overrides: true` additionally deletes every per-cell override in the same atomic call, so ALL cells follow the new default — the equivalent of the console's \"Reset cell overrides\" action. Nothing re-runs; false or null leaves per-cell overrides in place and they keep winning over the default.",
+    "description": "Set the notebook-level auto-refresh default for every cell showing a chart or a grid. Cells with no per-cell value inherit it; set_cell_autorefresh sets a per-cell override that wins over it. Cells containing DDL/DML are skipped — auto-refresh never executes a write. Until this is set, nothing polls. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"). `reset_cell_overrides: true` additionally deletes every per-cell override in the same atomic call, so ALL cells follow the new default — the equivalent of the console's \"Reset cell overrides\" action. Nothing re-runs; false or null leaves per-cell overrides in place and they keep winning over the default.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -853,7 +853,7 @@
                     "enum": ["1s", "5s", "10s", "30s", "1m"]
                   }
                 ],
-                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default; a mode='draw' cell with no override and no default is stamped `true` after the apply (charts are born polling)."
+                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default."
               },
               "is_view_maximized": {
                 "type": ["boolean", "null"],

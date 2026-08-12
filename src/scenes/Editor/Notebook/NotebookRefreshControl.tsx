@@ -51,7 +51,7 @@ export const NotebookRefreshControl: React.FC = () => {
   const cellRefresh = useCellRefresh()
   const storedDefault = settings.autoRefreshDefault
   const defaultLabel = autoRefreshLabel(storedDefault ?? false)
-  const overrideCount = countActiveAutoRefreshOverrides(cells, storedDefault)
+  const overrideCount = countActiveAutoRefreshOverrides(cells)
   const refreshableCellCount = cells.filter(
     (cell) => resolveCellView(cell) !== "none",
   ).length
@@ -152,7 +152,8 @@ export const NotebookRefreshControl: React.FC = () => {
               <>
                 <DropdownMenu.Divider />
                 <MenuHint>
-                  Charts poll on Auto; grids stay off until you set a default.
+                  Cells refresh only when you set a notebook default or a
+                  per-cell interval.
                 </MenuHint>
               </>
             )}

@@ -1,5 +1,4 @@
 import {
-  chartAutoRefreshStamp,
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
   type CellMode,
@@ -322,12 +321,6 @@ export const setCellModeTransition = (
       cells: patchCellIn(parts.cells, cellId, {
         mode,
         ...cellModeChangePatch(cell, mode),
-        ...(entersDraw
-          ? chartAutoRefreshStamp(
-              { mode, autoRefresh: cell.autoRefresh },
-              parts.settings.autoRefreshDefault,
-            )
-          : {}),
       }),
     },
     result: undefined,

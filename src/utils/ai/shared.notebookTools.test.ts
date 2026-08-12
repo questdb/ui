@@ -639,7 +639,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
   })
 
-  it("set_cell_mode draw stamps an explicit Auto so the chart is born polling", async () => {
+  it("set_cell_mode draw never writes auto_refresh — the chart inherits", async () => {
     // Given a run cell in a notebook with no auto-refresh default
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
 
@@ -657,37 +657,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       }),
     )
 
-    // Then the chart carries the stamp as an ordinary per-cell value
-    expect(cellById(state, "c")?.mode).toBe("draw")
-    expect(cellById(state, "c")?.autoRefresh).toBe(true)
-  })
-
-  it("set_cell_mode draw yields to a stored notebook default instead of stamping", async () => {
-    // Given a notebook whose owner chose a notebook-wide cadence
-    const { state } = mountLive(1, [cell("c", "SELECT 1")], {
-      settings: { autoRefreshDefault: "30s" },
-    })
-
-    // When the agent switches the cell to draw mode
-    await dispatchTool(
-      "set_cell_mode",
-      { buffer_id: 1, cell_id: "c", mode: "draw" },
-      makeClient(),
-      noopStatus,
-      { grantSchemaAccess: true, read: true, write: false },
-      vi.fn().mockResolvedValue({
-        query: "SELECT 1",
-        columns: [{ name: "1", type: "INT" }],
-        timestamp: 0,
-      }),
-    )
-
-    // Then no stamp lands — the chart inherits the notebook default
+    // Then the chart stores no per-cell value
     expect(cellById(state, "c")?.mode).toBe("draw")
     expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
   })
 
-  it("apply_notebook_state stamps draw cells sent without auto_refresh", async () => {
+  it("apply_notebook_state never synthesizes auto_refresh for draw cells", async () => {
     // Given a notebook with no auto-refresh default
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
 
@@ -712,17 +687,17 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
 
-    // Then the chart is born polling and the grid cell stays unstamped
+    // Then no cell stores a per-cell value — both inherit
     const chart = state.parts.cells.find((c) => c.mode === "draw")
-    expect(chart?.autoRefresh).toBe(true)
+    expect(chart?.autoRefresh).toBeUndefined()
     expect(cellById(state, "a")?.autoRefresh).toBeUndefined()
   })
 
-  it("apply_notebook_state does not stamp when the same apply sets a default", async () => {
-    // Given an apply that configures the notebook default and a chart together
+  it("apply_notebook_state stores auto_refresh_default alongside cells", async () => {
+    // Given a notebook with no auto-refresh default
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
 
-    // When the apply carries auto_refresh_default alongside the draw cell
+    // When the apply carries auto_refresh_default alongside a draw cell
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -744,7 +719,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
 
-    // Then the chart inherits the default instead of carrying a stamp
+    // Then the default lands and the chart inherits it
     const chart = state.parts.cells.find((c) => c.mode === "draw")
     expect(chart?.autoRefresh).toBeUndefined()
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")

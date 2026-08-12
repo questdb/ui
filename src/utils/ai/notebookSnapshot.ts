@@ -227,8 +227,7 @@ export const buildSnapshot = async (
       buildCell(c, gridByCellId, layoutMode, refreshState),
     ),
   }
-  // Absence stays observable: with no configured default, charts poll on Auto
-  // and grids do not poll at all.
+  // Absence stays observable: with no configured default, nothing polls.
   if (settings.autoRefreshDefault !== undefined) {
     out.auto_refresh_default = settings.autoRefreshDefault
   }

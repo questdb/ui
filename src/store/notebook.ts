@@ -192,46 +192,22 @@ export const migrateLegacyCellNames = (
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
 
-// Nothing polls unless the cell or the notebook says so — but charts are born
-// live: entering draw mode stamps an explicit Auto onto the cell. A stored
-// notebook default (even Off) is the user's notebook-wide intent, so the
-// stamp yields to it and the chart inherits instead.
-export const chartAutoRefreshStamp = (
-  cell: Pick<NotebookCell, "mode" | "autoRefresh">,
-  autoRefreshDefault: AutoRefresh | undefined,
-): Partial<NotebookCell> =>
-  cell.mode === "draw" &&
-  cell.autoRefresh === undefined &&
-  autoRefreshDefault === undefined
-    ? { autoRefresh: true }
-    : {}
-
-// A stamped chart carries the same `autoRefresh: true` a user override would;
-// this tells the two apart so born-live charts don't read as user overrides.
-export const isChartAutoRefreshStamp = (
-  cell: Pick<NotebookCell, "mode" | "autoRefresh">,
-  autoRefreshDefault: AutoRefresh | undefined,
-): boolean =>
-  cell.mode === "draw" &&
-  cell.autoRefresh === true &&
-  autoRefreshDefault === undefined
-
 // Charts drawn before the uniform-Off fallback polled through an implicit
-// per-view Auto. The stamp makes that liveness explicit so they keep polling;
-// grids never polled, and stay off. No notebook default is ever synthesized.
-// The marker makes the stamp one-time: on a migrated view an undefined
-// autoRefresh is a deliberate "inherit", and re-stamping it would silently
-// revert a cleared chart to Auto.
+// per-view Auto. The migration writes that liveness as an explicit Auto
+// override so they keep polling; grids never polled, and stay off. No
+// notebook default is ever synthesized. The marker makes the write one-time:
+// on a migrated view an undefined autoRefresh is a deliberate "inherit".
 export const migrateImplicitChartAutoRefresh = (
   state: NotebookViewState,
 ): NotebookViewState => {
   if (state.settings?.autoRefreshMigrated) return state
-  const autoRefreshDefault = state.settings?.autoRefreshDefault
-  const needsStamp = (cell: NotebookCell) =>
-    Object.keys(chartAutoRefreshStamp(cell, autoRefreshDefault)).length > 0
-  const cells = state.cells.some(needsStamp)
+  const legacyLiveChart = (cell: NotebookCell) =>
+    cell.mode === "draw" &&
+    cell.autoRefresh === undefined &&
+    state.settings?.autoRefreshDefault === undefined
+  const cells = state.cells.some(legacyLiveChart)
     ? state.cells.map((cell) =>
-        needsStamp(cell) ? { ...cell, autoRefresh: true as const } : cell,
+        legacyLiveChart(cell) ? { ...cell, autoRefresh: true as const } : cell,
       )
     : state.cells
   return {
