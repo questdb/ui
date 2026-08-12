@@ -65,6 +65,7 @@ export const NotebookRefreshControl: React.FC = () => {
   const intervalTooltip = useTriggerTooltip()
 
   const handleRefreshAll = () => {
+    if (refreshableCellCount === 0) return
     signalUserEdit(bufferId)
     const counts = refreshAllCells()
     void trackEvent(ConsoleEvent.NOTEBOOK_REFRESH_ALL, {
@@ -95,13 +96,17 @@ export const NotebookRefreshControl: React.FC = () => {
 
   return (
     <SplitButtonContainer>
-      <Tooltip content="Refresh cells">
+      <Tooltip
+        content={
+          refreshableCellCount === 0 ? "No cells to refresh" : "Refresh cells"
+        }
+      >
         <SplitSide
           skin="transparent"
           type="button"
           onClick={handleRefreshAll}
           aria-label="Refresh cells"
-          disabled={refreshableCellCount === 0}
+          aria-disabled={refreshableCellCount === 0}
         >
           <ArrowClockwiseIcon />
         </SplitSide>
@@ -146,15 +151,6 @@ export const NotebookRefreshControl: React.FC = () => {
                     Reset cell overrides
                   </ResetItemTitle>
                 </DropdownMenu.Item>
-              </>
-            )}
-            {storedDefault === undefined && (
-              <>
-                <DropdownMenu.Divider />
-                <MenuHint>
-                  Cells refresh only when you set a notebook default or a
-                  per-cell interval.
-                </MenuHint>
               </>
             )}
             {writeBlockedCount > 0 && (

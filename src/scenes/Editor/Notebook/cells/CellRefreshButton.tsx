@@ -100,7 +100,6 @@ export const CellRefreshButton: React.FC<Props> = ({
             type="button"
             aria-label={WRITE_BLOCK_TOOLTIP}
             aria-disabled
-            disabled
           >
             <IntervalLabel>Off</IntervalLabel>
             <CaretDownIcon />
