@@ -2411,9 +2411,10 @@ describe("cloneNotebookViewState", () => {
   it("strips results but preserves structural fields and run history", () => {
     const out = cloneNotebookViewState(source(), seqIds())
     expect(out.cells[1].result).toBeUndefined()
-    // cloned cells keep run history so auto-run never re-fires their writes
+    // cloned cells keep recorded run history so auto-run never re-fires their
+    // writes; a draw cell's frame is refresh-produced and never seeds history
     expect(out.cells[0].lastRunStatus).toBe("success")
-    expect(out.cells[1].lastRunStatus).toBe("success")
+    expect(out.cells[1].lastRunStatus).toBeUndefined()
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)
