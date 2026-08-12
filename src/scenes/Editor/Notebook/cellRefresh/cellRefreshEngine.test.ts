@@ -2389,6 +2389,184 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
     })
 
+    it("a repeating failure writes once per throttle window, never per tick", async () => {
+      // Given a polling grid whose second statement fails every tick
+      deps.executeSingle.mockImplementation((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve<QueryExecResult>({
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve(dqlResult(sql)),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        "1s",
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      // the first failing round flushed the frame with its error immediately
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the same failure repeats across many ticks
+      await vi.advanceTimersByTimeAsync(25_000)
+
+      // Then writes land once per window — savedAt stays fresh with no
+      // per-tick churn
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(3)
+
+      // And a recovery persists the clean frame immediately
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(dqlResult(sql)),
+      )
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(4)
+      const recovered = vi.mocked(persistCellSnapshot).mock.calls[3][0]
+      expect(recovered.refreshErrors).toBeUndefined()
+    })
+
+    it("throttles rows-changing ticks under a repeating failure — the error rides along each window", async () => {
+      // Given a polling grid whose data moves every tick while one statement
+      // always fails
+      let tick = 0
+      deps.executeSingle.mockImplementation((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve<QueryExecResult>({
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve({
+              type: "dql" as const,
+              query: sql,
+              columns: [{ name: "x", type: "INT" }],
+              dataset: [[100 + ++tick]],
+              count: 1,
+            }),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        "1s",
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      // the first failing round persisted immediately (error set changed)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When rows keep changing under the same failure
+      await vi.advanceTimersByTimeAsync(4000)
+
+      // Then the intermediate ticks stay throttled — no write per second
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // And the reopened window flushes the latest frame, error included
+      await vi.advanceTimersByTimeAsync(7000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      const flushed = vi.mocked(persistCellSnapshot).mock.calls[1][0]
+      expect(flushed.refreshErrors).toEqual([
+        { statementKey: keyOf("select 2"), message: "boom" },
+      ])
+    })
+
+    it("a changed error message bypasses the throttle", async () => {
+      // Given a polling grid whose statement fails with one message
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve<QueryExecResult>({
+          type: "error",
+          query: sql,
+          columns: [],
+          dataset: [],
+          count: 0,
+          error: "boom",
+        }),
+      )
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the failure message changes inside the throttle window
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve<QueryExecResult>({
+          type: "error",
+          query: sql,
+          columns: [],
+          dataset: [],
+          count: 0,
+          error: "boom2",
+        }),
+      )
+      await vi.advanceTimersByTimeAsync(1500)
+
+      // Then the new error state writes straight away
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      const rewritten = vi.mocked(persistCellSnapshot).mock.calls[1][0]
+      expect(rewritten.refreshErrors).toEqual([
+        { statementKey: keyOf("select 1"), message: "boom2" },
+      ])
+    })
+
+    it("retries a failed error-frame write immediately on the next round", async () => {
+      // Given the disk rejects the first write of a failing round
+      vi.mocked(persistCellSnapshot).mockResolvedValueOnce(false)
+      deps.executeSingle.mockImplementation((sql: string) =>
+        sql === "select 2"
+          ? Promise.resolve<QueryExecResult>({
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "boom",
+            })
+          : Promise.resolve(dqlResult(sql)),
+      )
+      const cell = gridCell(
+        "g1",
+        "select 1; select 2",
+        ["select 1", "select 2"],
+        "1s",
+      )
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When the next round settles with the error still unsynced to disk
+      await vi.advanceTimersByTimeAsync(1500)
+
+      // Then the write retries immediately, and once it lands the repeats
+      // fall back to the throttle
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(2)
+    })
+
+    it("an unchanged polling frame still re-persists once per window, keeping savedAt fresh", async () => {
+      // Given a polling grid whose data never changes after the first swap
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+
+      // When ticks continue long past the 10s throttle window
+      await vi.advanceTimersByTimeAsync(25_000)
+
+      // Then one write per window keeps the reload timestamp current — a
+      // reload must not show minutes-old data under a live poller
+      expect(persistCellSnapshot).toHaveBeenCalledTimes(3)
+    })
+
     it("throttles automatic ticks — a lost tick frame is regenerated by the next one", async () => {
       // Given a grid polling every second
       const cell = gridCell("g1", "select 1", ["select 1"], "1s")

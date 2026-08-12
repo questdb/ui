@@ -197,6 +197,15 @@ const sameEntryCells = (
       previous[index].kind === kind,
   )
 
+const slotErrorsSignature = (
+  slotErrors: ReadonlyMap<StatementKey, string>,
+): string =>
+  JSON.stringify(
+    [...slotErrors.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  )
+
+const NO_ERRORS_SIG = slotErrorsSignature(new Map())
+
 type Entry = {
   kind: CellEntryKind
   cellId: string
@@ -222,6 +231,7 @@ type Entry = {
   resultLoadUnsubscribe: (() => void) | null
   lastSnapshotAt: number
   persistedResults: WeakMap<SingleQueryResult[], string>
+  lastPersistedErrorsSig: string | null
   lastClearedSqlHash: string | null
   pendingSnapshot: { results: SingleQueryResult[]; durationMs: number } | null
   snapshotTimer: ReturnType<typeof setTimeout> | null
@@ -539,6 +549,9 @@ export class CellRefreshEngine {
     if (!entry) return
     this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = Date.now()
+    // The run's own record replaced the disk copy, and it carries no
+    // refreshErrors.
+    entry.lastPersistedErrorsSig = NO_ERRORS_SIG
     // The refresh stamps describe rounds the run just superseded: leaving
     // them would show the old refresh time under the run's rows. Cleared, the
     // status line falls back to the frame's own run timestamp.
@@ -563,6 +576,9 @@ export class CellRefreshEngine {
     if (!entry) return
     this.dropPendingSnapshot(entry)
     entry.lastSnapshotAt = Date.now()
+    // The rerun's own record replaced the disk copy, and it carries no
+    // refreshErrors.
+    entry.lastPersistedErrorsSig = NO_ERRORS_SIG
     this.clearSlotError(entry, statementKey)
     this.clearSlotFetchStamp(entry, statementKey)
     if (entry.state.slotErrors.size > 0) this.persistGridFrame(entry, true)
@@ -637,6 +653,7 @@ export class CellRefreshEngine {
       resultLoadUnsubscribe: null,
       lastSnapshotAt: 0,
       persistedResults: new WeakMap(),
+      lastPersistedErrorsSig: null,
       lastClearedSqlHash: null,
       pendingSnapshot: null,
       snapshotTimer: null,
@@ -1201,7 +1218,6 @@ export class CellRefreshEngine {
         launchPatch.slotFetching = slotFetching
       }
       this.setState(entry, launchPatch)
-      let hadFailure = invalidSlots.length > 0
       await Promise.all(
         launchSlots.map(async ({ key, index }) => {
           if (round.signal.aborted) return
@@ -1219,7 +1235,6 @@ export class CellRefreshEngine {
             )
             if (slotAbort.signal.aborted || round.signal.aborted) return
             if (exec.type === "error") {
-              hadFailure = true
               this.setSlotError(entry, key, exec.error ?? "Query failed")
             } else {
               // The fetch time always advances — the status line shows the
@@ -1235,7 +1250,6 @@ export class CellRefreshEngine {
             }
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
-            hadFailure = true
             this.setSlotError(entry, key, errorMessage(e))
           } finally {
             // A superseded round's late settle must not clobber the slot the
@@ -1250,7 +1264,7 @@ export class CellRefreshEngine {
       )
       if (round.signal.aborted) return
       this.setState(entry, { settledKey: queriesKey })
-      this.persistGridFrame(entry, hadFailure || manual)
+      this.persistGridFrame(entry, manual)
     } finally {
       this.finishRound(entry, round)
     }
@@ -1321,16 +1335,22 @@ export class CellRefreshEngine {
   // The snapshot write unit is always the WHOLE visible frame — never an
   // error alone.
   //
-  // `immediate` bypasses the throttle. It covers every frame whose loss the
-  // user would notice: a round that left failures, and any round the user
-  // asked for by hand. Only automatic ticks stay throttled, and losing one is
-  // self-correcting — the next tick regenerates it. The pagehide flush is a
+  // Every settled round queues a write through the 10s throttle — an
+  // unchanged frame still re-persists once per window, so a reload's savedAt
+  // stays current instead of showing minutes-old data under a live poller.
+  // The throttle is bypassed only when the error set CHANGED (first failure,
+  // new message, recovery) — that state must survive an immediate reload —
+  // and when the user asked by hand. A repeating failure follows the
+  // throttle like any healthy tick; losing a throttled tick is
+  // self-correcting — the next one regenerates it. The pagehide flush is a
   // best-effort backstop, not a guarantee: an IndexedDB write started during
   // teardown is routinely dropped, so nothing durable may depend on it.
-  private persistGridFrame(entry: Entry, immediate: boolean) {
+  private persistGridFrame(entry: Entry, manual: boolean) {
     const current = this.getDeps().getCellResult(entry.cellId)
     if (!current || current.results.length === 0) return
-    if (immediate) entry.lastSnapshotAt = 0
+    const errorsSig = slotErrorsSignature(entry.state.slotErrors)
+    if (manual || errorsSig !== entry.lastPersistedErrorsSig)
+      entry.lastSnapshotAt = 0
     this.queueSnapshot(entry, current.results, 0)
   }
 
@@ -1478,6 +1498,7 @@ export class CellRefreshEngine {
   ): Promise<void> {
     this.dropPendingSnapshot(entry)
     const persistedSqlHash = sqlHash(entry.sql)
+    const persistedErrorsSig = slotErrorsSignature(entry.state.slotErrors)
     const current = this.getDeps().getCellResult(entry.cellId)
     const failedCount = results.filter((r) => r.type === "error").length
     const script =
@@ -1513,6 +1534,7 @@ export class CellRefreshEngine {
     }).then((saved) => {
       if (!saved) return
       entry.persistedResults.set(results, persistedSqlHash)
+      entry.lastPersistedErrorsSig = persistedErrorsSig
       entry.lastClearedSqlHash = null
       this.getDeps().onSnapshotPersisted(entry.cellId, results)
     })
