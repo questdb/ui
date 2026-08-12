@@ -828,7 +828,7 @@ export class CellRefreshEngine {
     ) {
       this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
-      entry.lastFetchedAt = chartResult.timestamp
+      entry.lastFetchedAt = Math.max(entry.lastFetchedAt, chartResult.timestamp)
       this.updatePoll(entry)
       return
     }
@@ -852,7 +852,9 @@ export class CellRefreshEngine {
     const result = this.getDeps().getCellResult(entry.cellId)
     if (result != null) {
       this.setState(entry, { settledKey: entry.state.queriesKey })
-      entry.lastFetchedAt = result.timestamp
+      // The frame timestamp never advances on grid ticks (it is the viewport
+      // token) — a reveal must not regress the freshness finishRound stamped.
+      entry.lastFetchedAt = Math.max(entry.lastFetchedAt, result.timestamp)
       this.updatePoll(entry)
       return
     }

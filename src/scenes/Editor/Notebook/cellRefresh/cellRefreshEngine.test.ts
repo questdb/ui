@@ -2164,6 +2164,28 @@ describe("CellRefreshEngine", () => {
       expect(written?.timestamp).toBe(0)
     })
 
+    it("skips the reveal catch-up when a polling grid ticked recently", async () => {
+      // Given a polling grid that completed a round moments ago
+      const cell = gridCell("g1", "select 1", ["select 1"], "1m")
+      syncOnScreen([cell])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When it is hidden and revealed well within its interval
+      engine.setVisible("g1", false)
+      await vi.advanceTimersByTimeAsync(5000)
+      engine.setVisible("g1", true)
+      await flushAsync()
+
+      // Then there is no immediate refetch — the stale frame timestamp must
+      // not regress the freshness the settled round stamped
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // And the next tick still arrives on the interval
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+
     it("skips the commit on identical rows, while the fetch time advances", async () => {
       // Given a polling grid whose first tick swapped fresh rows in
       const cell = gridCell("g1", "select 1", ["select 1"], "1s")
