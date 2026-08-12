@@ -6,7 +6,7 @@ import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { getQueryFromCursor, normalizeQueryText } from "../../Monaco/utils"
-import { resolveRunAction } from "../notebookUtils"
+import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
 import {
   emitUserAction,
   signalUserEdit,
@@ -178,10 +178,10 @@ export const useCellRunActions = ({
     // gesture can unmount the editor, and reading it afterwards loses it.
     const cursorQuery = ed ? getQueryFromCursor(ed)?.query : undefined
     if (ed && (await tryRunSelection())) return
-    // Cursor first; otherwise reuse the active result tab's query so a single
-    // run never silently expands into running every statement.
-    const activeQuery =
-      cell.result?.results[cell.result.activeResultIndex]?.query
+    // Cursor first; otherwise the active tab's statement — resolved from the
+    // same frame the tabs render, so a "Not run" tab runs its own SQL and a
+    // single run never silently expands into running every statement.
+    const activeQuery = resolveActiveStatementSql(cell.value, cell.result)
     const sql = cursorQuery ?? activeQuery
     if (!sql?.trim()) {
       await handleRunAll()
@@ -196,6 +196,7 @@ export const useCellRunActions = ({
     emitRanEvent(createRunStatus(priorResult, freshResult, ok))
   }, [
     cell.id,
+    cell.value,
     cell.result,
     runCell,
     tryRunSelection,

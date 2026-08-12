@@ -50,6 +50,7 @@ import {
   reconcileResultsForStatements,
   derivePositionalFrame,
   deriveStatementFrame,
+  resolveActiveStatementSql,
   statementKeysFor,
   removeCell,
   resolveRunCompletion,
@@ -3808,5 +3809,51 @@ describe("derivePositionalFrame — orphan results (selection runs)", () => {
   it("returns null without a result or with an empty one", () => {
     expect(derivePositionalFrame(null)).toBeNull()
     expect(derivePositionalFrame(resultOf([]))).toBeNull()
+  })
+})
+
+describe("resolveActiveStatementSql — the single-run target", () => {
+  it("resolves a selected 'Not run' tab to its own SQL, not the stale result index", () => {
+    // Given a two-result frame whose active tab is an appended, never-run
+    // statement — activeResultIndex still points at the first result
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 0,
+      activeStatementKey: statementKeysFor([
+        "SELECT 1",
+        "SELECT 2",
+        "SELECT 3",
+      ])[2],
+    })
+    // When the single-run target is resolved with the editor unavailable
+    const sql = resolveActiveStatementSql(
+      "SELECT 1; SELECT 2; SELECT 3",
+      result,
+    )
+    // Then the selected statement runs — never the stale index's query
+    expect(sql).toBe("SELECT 3")
+  })
+
+  it("falls back to the result index for a legacy snapshot without a key", () => {
+    // Given an old record that only carries the active index
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // Then the index's own statement resolves
+    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
+      "SELECT 2",
+    )
+  })
+
+  it("resolves a selection-fragment frame positionally", () => {
+    // Given a fragment result no editor statement claims
+    const result = resultOf([dqlResult("SELECT 99")])
+    // Then the fragment's own query resolves
+    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
+      "SELECT 99",
+    )
+  })
+
+  it("returns undefined without a result, so the caller can fall back", () => {
+    expect(resolveActiveStatementSql("SELECT 1", null)).toBeUndefined()
   })
 })

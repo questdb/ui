@@ -918,6 +918,19 @@ export const derivePositionalFrame = (
   }
 }
 
+// The single-run target mirrors the tab the bottom slot renders — the active
+// slot carries its statement even before it has run, so a "Not run" tab
+// resolves to its own SQL, never to a stale result index.
+export const resolveActiveStatementSql = (
+  value: string,
+  result: CellResult | null | undefined,
+): string | undefined => {
+  const frame =
+    deriveStatementFrame(getQueriesFromText(value), result) ??
+    derivePositionalFrame(result)
+  return frame?.slots[frame.activeSlotIndex]?.sql
+}
+
 export const cloneNotebookViewStateWithCellIdMap = (
   source: NotebookViewState,
   newId: () => string = generateId,
