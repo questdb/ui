@@ -4,6 +4,7 @@ import { Button } from "../../../components"
 export const SplitButtonContainer = styled.div`
   display: flex;
   align-items: center;
+  overflow: hidden;
   border-radius: 0.4rem;
   background: ${({ theme }) => theme.color.backgroundLighter};
   border: 1px solid ${({ theme }) => `${theme.color.selection}80`};
