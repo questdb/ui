@@ -168,6 +168,10 @@ const errorExecResult = (query: string, cause: unknown): QueryExecResult => ({
 export type CellRefreshEngineOptions = {
   initialFetchJitterMs?: number
   requestLimiter?: RequestLimiter
+  // React 17 renders each state update in an async continuation separately;
+  // the provider passes unstable_batchedUpdates so a slot settle costs one
+  // render pass instead of one per subscriber.
+  batchUpdates?: (fn: () => void) => void
 }
 
 // Editor-only cells are never entries: charts are entries by mode, grids only
@@ -246,6 +250,7 @@ export class CellRefreshEngine {
   private documentHidden = false
   private limitRequest: RequestLimiter
   private initialFetchJitterMs: number
+  private batchUpdates: (fn: () => void) => void
   private pendingErrorSeeds = new Map<
     string,
     Array<{ statementKey: string; message: string }>
@@ -278,6 +283,7 @@ export class CellRefreshEngine {
     this.limitRequest = options.requestLimiter ?? statementRequestLimiter
     this.initialFetchJitterMs =
       options.initialFetchJitterMs ?? INITIAL_FETCH_JITTER_MS
+    this.batchUpdates = options.batchUpdates ?? ((fn) => fn())
   }
 
   attach() {
@@ -1234,30 +1240,34 @@ export class CellRefreshEngine {
               slotAbort.signal,
             )
             if (slotAbort.signal.aborted || round.signal.aborted) return
-            if (exec.type === "error") {
-              this.setSlotError(entry, key, exec.error ?? "Query failed")
-            } else {
-              // The fetch time always advances — the status line shows the
-              // poll that just verified the rows. The frame is rewritten only
-              // when the rows changed, so an identical poll costs no renders
-              // and no snapshot churn.
-              const previous = this.currentSlotResult(entry.cellId, key)
-              const unchanged =
-                previous !== undefined &&
-                resultsEquivalent([toExecResult(previous)], [exec])
-              if (!unchanged) this.commitSlotResult(entry, key, exec)
-              this.settleSlotSuccess(entry, key)
-            }
+            this.batchUpdates(() => {
+              if (exec.type === "error") {
+                this.setSlotError(entry, key, exec.error ?? "Query failed")
+              } else {
+                // The fetch time always advances — the status line shows the
+                // poll that just verified the rows. The frame is rewritten only
+                // when the rows changed, so an identical poll costs no renders
+                // and no snapshot churn.
+                const previous = this.currentSlotResult(entry.cellId, key)
+                const unchanged =
+                  previous !== undefined &&
+                  resultsEquivalent([toExecResult(previous)], [exec])
+                if (!unchanged) this.commitSlotResult(entry, key, exec)
+                this.settleSlotSuccess(entry, key)
+              }
+            })
           } catch (e) {
             if (slotAbort.signal.aborted || round.signal.aborted) return
-            this.setSlotError(entry, key, errorMessage(e))
+            this.batchUpdates(() =>
+              this.setSlotError(entry, key, errorMessage(e)),
+            )
           } finally {
             // A superseded round's late settle must not clobber the slot the
             // replacement round registered under the same key.
             if (entry.slotAborts.get(key) === slotAbort) {
               entry.slotAborts.delete(key)
               if (entry.state.slotFetching.has(key))
-                this.setSlotFetching(entry, key, false)
+                this.batchUpdates(() => this.setSlotFetching(entry, key, false))
             }
           }
         }),

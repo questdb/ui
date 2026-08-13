@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react"
+import { unstable_batchedUpdates } from "react-dom"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import {
   CellRefreshEngine,
@@ -28,13 +29,16 @@ export const useCellRefreshEngine = (options: {
   const { bufferId, cells, autoRefreshDefault, deps } = options
   const depsRef = useRef(deps)
   const engine = useMemo(
-    () => new CellRefreshEngine(bufferId, () => depsRef.current),
+    () =>
+      new CellRefreshEngine(bufferId, () => depsRef.current, {
+        batchUpdates: unstable_batchedUpdates,
+      }),
     [bufferId],
   )
 
   useEffect(() => {
     depsRef.current = deps
-  })
+  }, [deps])
 
   useEffect(() => {
     engine.attach()

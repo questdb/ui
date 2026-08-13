@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react"
+import React, { useCallback, useEffect, useMemo } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
@@ -64,6 +64,21 @@ export const CellBottomContent: React.FC<Props> = ({
     [frame, fetchState],
   )
 
+  const resultIndexOf = useCallback(
+    (statementKey: string): number =>
+      statementKeysFor(
+        (cell.result?.results ?? []).map((r) => r.query),
+      ).indexOf(statementKey),
+    [cell.result],
+  )
+  const reRunStatement = useCallback(
+    (statementKey: string) => {
+      const index = resultIndexOf(statementKey)
+      if (index !== -1) void reRunResultAt(cell.id, index)
+    },
+    [resultIndexOf, reRunResultAt, cell.id],
+  )
+
   useEffect(
     () => () => {
       viewportStore.clear()
@@ -83,12 +98,6 @@ export const CellBottomContent: React.FC<Props> = ({
     )
   }
   if (cell.result && frame) {
-    // Cancel and rerun take the statement key and translate it to the
-    // execution slot — never an index into the compact result array.
-    const resultIndexOf = (statementKey: string): number =>
-      statementKeysFor(
-        (cell.result?.results ?? []).map((r) => r.query),
-      ).indexOf(statementKey)
     return contentMode === "full" ? (
       <InlineResultTable
         slots={slots}
@@ -109,10 +118,7 @@ export const CellBottomContent: React.FC<Props> = ({
         bufferId={bufferId}
         cellId={cell.id}
         isRunning={isRunning}
-        onReRun={(statementKey) => {
-          const index = resultIndexOf(statementKey)
-          if (index !== -1) void reRunResultAt(cell.id, index)
-        }}
+        onReRun={reRunStatement}
         onYieldFocus={onYieldFocus}
         viewportStore={viewportStore}
       />

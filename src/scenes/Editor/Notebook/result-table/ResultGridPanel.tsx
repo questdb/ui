@@ -20,15 +20,16 @@ import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 
 type Props = {
   data: DqlQueryResult
-  // Statement identity for the viewport store. The column layout stays keyed
-  // by query text alone — duplicate statements share identical columns.
-  viewportKey: string
+  // Statement identity for the viewport store and the re-run action. The
+  // column layout stays keyed by query text alone — duplicate statements
+  // share identical columns.
+  statementKey: string
   runToken: number
   isFocused: boolean
   bufferId: number
   cellId: string
   isRunning: boolean
-  onReRun: () => void
+  onReRun: (statementKey: string) => void
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
 }
@@ -37,25 +38,25 @@ const useInitialGridState = ({
   bufferId,
   cellId,
   data,
-  viewportKey,
+  statementKey,
   runToken,
   viewportStore,
 }: Pick<
   Props,
-  "bufferId" | "cellId" | "data" | "viewportKey" | "runToken" | "viewportStore"
+  "bufferId" | "cellId" | "data" | "statementKey" | "runToken" | "viewportStore"
 >) =>
   useMemo(() => {
     const queryKey = columnLayoutQueryKey(data.query)
     return {
       queryKey,
       columnLayout: loadNotebookColumnLayout(bufferId, cellId, queryKey),
-      viewport: viewportStore.load(viewportKey, runToken),
+      viewport: viewportStore.load(statementKey, runToken),
     }
-  }, [bufferId, cellId, data.query, viewportKey, runToken, viewportStore])
+  }, [bufferId, cellId, data.query, statementKey, runToken, viewportStore])
 
-export const ResultGridPanel: React.FC<Props> = ({
+const ResultGridPanelInner: React.FC<Props> = ({
   data,
-  viewportKey,
+  statementKey,
   runToken,
   isFocused,
   bufferId,
@@ -69,7 +70,7 @@ export const ResultGridPanel: React.FC<Props> = ({
     bufferId,
     cellId,
     data,
-    viewportKey,
+    statementKey,
     runToken,
     viewportStore,
   })
@@ -85,8 +86,8 @@ export const ResultGridPanel: React.FC<Props> = ({
   )
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
-      viewportStore.save(viewportKey, runToken, nextViewport),
-    [viewportStore, viewportKey, runToken],
+      viewportStore.save(statementKey, runToken, nextViewport),
+    [viewportStore, statementKey, runToken],
   )
 
   return (
@@ -97,7 +98,7 @@ export const ResultGridPanel: React.FC<Props> = ({
         isFrozen={pinnedCount > 0}
         hasSelection={hasSelection}
         isRunning={isRunning}
-        onReRun={onReRun}
+        onReRun={() => onReRun(statementKey)}
       />
       <ResultGrid
         ref={gridRef}
@@ -141,3 +142,5 @@ export const ResultGridPanel: React.FC<Props> = ({
     </>
   )
 }
+
+export const ResultGridPanel = React.memo(ResultGridPanelInner)

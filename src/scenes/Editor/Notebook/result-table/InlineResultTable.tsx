@@ -67,13 +67,13 @@ export const InlineResultTable: React.FC<Props> = ({
         <ResultGridPanel
           key={activeSlot.key}
           data={activeResult}
-          viewportKey={activeSlot.key}
+          statementKey={activeSlot.key}
           runToken={timestamp}
           isFocused={isFocused}
           bufferId={bufferId}
           cellId={cellId}
           isRunning={isRunning}
-          onReRun={() => onReRun(activeSlot.key)}
+          onReRun={onReRun}
           onYieldFocus={onYieldFocus}
           viewportStore={viewportStore}
         />
