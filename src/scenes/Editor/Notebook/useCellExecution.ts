@@ -9,13 +9,24 @@ import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { getQueriesFromText } from "../Monaco/utils"
+import type { ValidateQueryResult } from "../../../utils/questdb/types"
+import {
+  hasWriteStatement,
+  resolveRunBarrier,
+  type ClassifiedStatement,
+  type RunBarrierOutcome,
+  type RunCellGate,
+} from "../../../utils/tools/permissions"
+import { statementRequestLimiter } from "../../../utils/questdb/requestLimiter"
 import {
   buildInitialScriptResults,
   type CellRunOutcome,
   hasPendingResult,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
+  runHistoryPatch,
   singleResultFromExec,
+  statementKeysFor,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
@@ -69,6 +80,10 @@ type Options = {
     signal?: AbortSignal,
     limit?: number,
   ) => Promise<QueryExecResult>
+  validateWithGlobals: (
+    sql: string,
+    signal?: AbortSignal,
+  ) => Promise<ValidateQueryResult>
   updateCellResult: (
     cellId: string,
     index: number,
@@ -88,6 +103,7 @@ export const useCellExecution = ({
   bufferId,
   cellsRef,
   executeSingle,
+  validateWithGlobals,
   updateCellResult,
   updateCell,
   updateCells,
@@ -97,6 +113,10 @@ export const useCellExecution = ({
   const [runningCellIds, setRunningCellIds] = useState<Set<string>>(new Set())
 
   const abortControllersRef = useRef<Map<string, AbortController[]>>(new Map())
+
+  // Barrier-phase claims: a run that is still validating has no per-query
+  // controllers yet, so cancel and delete reach it through this map.
+  const barrierAbortsRef = useRef<Map<string, Set<AbortController>>>(new Map())
 
   const runGenerationRef = useRef<Map<string, number>>(new Map())
 
@@ -116,6 +136,9 @@ export const useCellExecution = ({
         results: result.results,
         savedAt: Date.now(),
         activeResultIndex: result.activeResultIndex,
+        ...(result.activeStatementKey !== undefined
+          ? { activeStatementKey: result.activeStatementKey }
+          : {}),
         ...(result.script ? { script: result.script } : {}),
       }).then((saved) => {
         if (saved) onSnapshotPersisted(cellId, result.results)
@@ -124,12 +147,25 @@ export const useCellExecution = ({
     [bufferId, cellsRef, onSnapshotPersisted],
   )
 
+  // Recorded run history: only checked run commits write it, always right
+  // after the commit's generation-and-SQL checks passed, from the frame the
+  // run just landed.
+  const stampRunHistory = useCallback(
+    (cellId: string) => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell?.result) return
+      updateCell(cellId, runHistoryPatch(cell.result))
+    },
+    [cellsRef, updateCell],
+  )
+
   const runScript = useCallback(
     async (
       cellId: string,
       queries: string[],
       externalSignal: AbortSignal | undefined,
       expectFullValue: boolean,
+      valueAtRunStart: string,
     ): Promise<CellRunOutcome> => {
       if (queries.length === 0) return { ok: false, superseded: false }
 
@@ -141,7 +177,6 @@ export const useCellExecution = ({
       const priorResult = hasPendingResult(startCell?.result)
         ? undefined
         : startCell?.result
-      const valueAtRunStart = startCell?.value
 
       // One AbortController per query so `cancelQuery(index)` cancels just that slot.
       const controllers = queries.map(() => new AbortController())
@@ -206,11 +241,22 @@ export const useCellExecution = ({
             isAuto ? i : undefined,
           )
 
-          const result = await executeSingle(
-            sql,
-            perQuery.signal,
-            NOTEBOOK_ROW_CAP,
-          )
+          let result: QueryExecResult
+          try {
+            result = await statementRequestLimiter(
+              () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
+              perQuery.signal,
+            )
+          } catch {
+            result = {
+              type: "error",
+              query: sql,
+              columns: [],
+              dataset: [],
+              count: 0,
+              error: "Cancelled by user",
+            }
+          }
           if (!isCurrentRun()) {
             return { ok: failedCount === 0, superseded: true }
           }
@@ -277,6 +323,7 @@ export const useCellExecution = ({
           failedCount,
           durationMs: Date.now() - startTime,
         })
+        stampRunHistory(cellId)
         persistSnapshot(cellId)
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
@@ -306,6 +353,188 @@ export const useCellExecution = ({
       updateCell,
       updateCellResult,
       setScriptSummary,
+      stampRunHistory,
+      persistSnapshot,
+    ],
+  )
+
+  // Parallel run for refreshable (non-write) cells: every DQL statement
+  // launches at once through the shared limiter; an invalid statement is
+  // skipped with its validation error as the slot result; one failure skips
+  // nothing. No tab auto-advance — completion order is random.
+  const runParallel = useCallback(
+    async (
+      cellId: string,
+      queries: string[],
+      classified: ClassifiedStatement[],
+      externalSignal: AbortSignal | undefined,
+      expectFullValue: boolean,
+      valueAtRunStart: string,
+    ): Promise<CellRunOutcome> => {
+      const prior = abortControllersRef.current.get(cellId)
+      prior?.forEach((c) => c.abort())
+
+      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const startCell = cellsRef.current.find((c) => c.id === cellId)
+      const priorResult = hasPendingResult(startCell?.result)
+        ? undefined
+        : startCell?.result
+
+      const controllers = queries.map(() => new AbortController())
+      const onExternalAbort = () =>
+        controllers.forEach((c) => c.abort(externalSignal?.reason))
+      if (externalSignal?.aborted) {
+        onExternalAbort()
+      } else {
+        externalSignal?.addEventListener("abort", onExternalAbort, {
+          once: true,
+        })
+      }
+      abortControllersRef.current.set(cellId, controllers)
+      autoFocusRef.current.set(cellId, false)
+
+      const startTime = Date.now()
+      updateCell(cellId, {
+        result: {
+          results: buildInitialScriptResults(queries),
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        },
+      })
+      const finalResults = buildInitialScriptResults(queries)
+      setRunningCellIds((prev) => new Set(prev).add(cellId))
+
+      let failedCount = 0
+      try {
+        await Promise.all(
+          queries.map(async (sql, index) => {
+            const stmt = classified[index]
+            if (stmt?.klass === "ERROR") {
+              failedCount++
+              const invalid: SingleQueryResult = {
+                type: "error",
+                query: sql,
+                error: stmt.error ?? "Invalid statement",
+              }
+              finalResults[index] = invalid
+              if (isCurrentRun()) updateCellResult(cellId, index, invalid)
+              return
+            }
+            const perQuery = controllers[index]
+            if (perQuery.signal.aborted) {
+              failedCount++
+              const interrupted: SingleQueryResult = {
+                type: "error",
+                query: sql,
+                error: "Cancelled by user",
+              }
+              finalResults[index] = interrupted
+              if (isCurrentRun()) updateCellResult(cellId, index, interrupted)
+              return
+            }
+            updateCellResult(cellId, index, { type: "running", query: sql })
+            let result: QueryExecResult
+            try {
+              result = await statementRequestLimiter(
+                () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
+                perQuery.signal,
+              )
+            } catch {
+              result = {
+                type: "error",
+                query: sql,
+                columns: [],
+                dataset: [],
+                count: 0,
+                error: "Cancelled by user",
+              }
+            }
+            if (!isCurrentRun()) return
+            const landed = singleResultFromExec(result, sql)
+            finalResults[index] = landed
+            updateCellResult(cellId, index, landed)
+            if (result.type === "error") failedCount++
+          }),
+        )
+
+        if (!isCurrentRun()) {
+          return { ok: failedCount === 0, superseded: true }
+        }
+        const liveCell = cellsRef.current.find((c) => c.id === cellId)
+        if (!liveCell) {
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        const completion = resolveRunCompletion(
+          liveCell,
+          valueAtRunStart,
+          expectFullValue,
+        )
+        if (completion === "result_cleared") {
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            resultCleared: true,
+          }
+        }
+        if (completion === "cell_changed") {
+          updateCell(cellId, { result: priorResult })
+          return {
+            ok: failedCount === 0,
+            superseded: false,
+            cellChanged: true,
+          }
+        }
+        if (!liveCell.result) {
+          updateCell(cellId, {
+            result: {
+              results: finalResults,
+              activeResultIndex: 0,
+              timestamp: Date.now(),
+            },
+          })
+        }
+        if (queries.length > 1) {
+          setScriptSummary(cellId, {
+            successCount: queries.length - failedCount,
+            failedCount,
+            durationMs: Date.now() - startTime,
+          })
+        }
+        stampRunHistory(cellId)
+        persistSnapshot(cellId)
+      } finally {
+        externalSignal?.removeEventListener("abort", onExternalAbort)
+        if (isCurrentRun()) {
+          clearRunningCell(
+            abortControllersRef,
+            autoFocusRef,
+            setRunningCellIds,
+            cellId,
+          )
+        }
+      }
+
+      return {
+        ok: failedCount === 0,
+        superseded: false,
+        result: {
+          results: finalResults,
+          activeResultIndex: 0,
+          timestamp: Date.now(),
+        },
+      }
+    },
+    [
+      cellsRef,
+      executeSingle,
+      updateCell,
+      updateCellResult,
+      setScriptSummary,
+      stampRunHistory,
       persistSnapshot,
     ],
   )
@@ -316,6 +545,7 @@ export const useCellExecution = ({
       sql?: string,
       externalSignal?: AbortSignal,
       expectFullValue: boolean = false,
+      gate?: RunCellGate,
     ): Promise<CellRunOutcome> => {
       const notRun: CellRunOutcome = { ok: false, superseded: false }
       const cell = cellsRef.current.find((c) => c.id === cellId)
@@ -337,15 +567,78 @@ export const useCellExecution = ({
       }
 
       const queries = getQueriesFromText(queryText)
+      if (queries.length === 0) return notRun
+
+      // The run claims the cell before the barrier: the attribution baseline
+      // is the gesture-time value, and a barrier-phase abort handle lets
+      // cancel and delete reach a run that is still validating.
+      const valueAtRunStart = cell.value
+      const barrierAc = new AbortController()
+      const onBarrierAbort = () => barrierAc.abort(externalSignal?.reason)
+      externalSignal?.addEventListener("abort", onBarrierAbort, { once: true })
+      const claims =
+        barrierAbortsRef.current.get(cellId) ?? new Set<AbortController>()
+      claims.add(barrierAc)
+      barrierAbortsRef.current.set(cellId, claims)
+
+      let barrier: RunBarrierOutcome
+      try {
+        barrier = await resolveRunBarrier(
+          queryText,
+          queries.length,
+          gate,
+          (stmt) =>
+            statementRequestLimiter(
+              () => validateWithGlobals(stmt, barrierAc.signal),
+              barrierAc.signal,
+            ),
+        )
+      } finally {
+        externalSignal?.removeEventListener("abort", onBarrierAbort)
+        claims.delete(barrierAc)
+        if (claims.size === 0) barrierAbortsRef.current.delete(cellId)
+      }
+
+      // Re-check the claim after the barrier await: a cancel, delete, or
+      // mode change that landed during validation would otherwise launch —
+      // and commit — the run.
+      if (barrierAc.signal.aborted || externalSignal?.aborted) return notRun
+      if (barrier.action === "denied") {
+        return { ok: false, superseded: false, denied: barrier.reason }
+      }
+      if (barrier.action === "skipped") {
+        return { ok: false, superseded: false, skipped: barrier.reason }
+      }
+      const classified = barrier.classified
+      const liveAfterBarrier = cellsRef.current.find((c) => c.id === cellId)
+      if (!liveAfterBarrier || liveAfterBarrier.type === "markdown") {
+        return notRun
+      }
+
+      if (classified && !hasWriteStatement(classified)) {
+        return runParallel(
+          cellId,
+          queries,
+          classified,
+          externalSignal,
+          expectFullValue,
+          valueAtRunStart,
+        )
+      }
       if (queries.length > 1) {
-        return runScript(cellId, queries, externalSignal, expectFullValue)
+        return runScript(
+          cellId,
+          queries,
+          externalSignal,
+          expectFullValue,
+          valueAtRunStart,
+        )
       }
 
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
-      const valueAtRunStart = cell.value
       const priorRaw = cellsRef.current.find((c) => c.id === cellId)?.result
       const priorResult = hasPendingResult(priorRaw) ? undefined : priorRaw
 
@@ -356,8 +649,12 @@ export const useCellExecution = ({
       })
       abortControllersRef.current.set(cellId, [ac])
 
+      // Record the parsed statement, never the raw cell text: display and
+      // carryover attach results by statement content, and comments around the
+      // statement would orphan the frame. Execution still sends queryText.
+      const recordedQuery = queries[0]
       const runningResult: CellResult = {
-        results: [{ type: "running", query: queryText }],
+        results: [{ type: "running", query: recordedQuery }],
         activeResultIndex: 0,
         timestamp: Date.now(),
       }
@@ -365,11 +662,22 @@ export const useCellExecution = ({
 
       setRunningCellIds((prev) => new Set(prev).add(cellId))
       try {
-        const execResult = await executeSingle(
-          queryText,
-          ac.signal,
-          NOTEBOOK_ROW_CAP,
-        )
+        let execResult: QueryExecResult
+        try {
+          execResult = await statementRequestLimiter(
+            () => executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
+            ac.signal,
+          )
+        } catch {
+          execResult = {
+            type: "error",
+            query: queryText,
+            columns: [],
+            dataset: [],
+            count: 0,
+            error: "Cancelled by user",
+          }
+        }
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) {
           return { ok: execResult.type !== "error", superseded: true }
@@ -404,11 +712,14 @@ export const useCellExecution = ({
           }
         }
         const cellResult: CellResult = {
-          results: [singleResultFromExec(execResult, queryText)],
+          results: [singleResultFromExec(execResult, recordedQuery)],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
-        updateCell(cellId, { result: cellResult })
+        updateCell(cellId, {
+          result: cellResult,
+          ...runHistoryPatch(cellResult),
+        })
         persistSnapshot(cellId, cellResult)
         return {
           ok: execResult.type !== "error",
@@ -427,41 +738,93 @@ export const useCellExecution = ({
         }
       }
     },
-    [cellsRef, executeSingle, updateCell, runScript, persistSnapshot],
+    [
+      cellsRef,
+      executeSingle,
+      validateWithGlobals,
+      updateCell,
+      runScript,
+      runParallel,
+      persistSnapshot,
+    ],
   )
 
+  // The per-tab rerun keeps its presentation (the slot blanks to a running
+  // placeholder) but joins the run/refresh arbiter: it enters the run
+  // generation, marks the cell running so refresh ticks skip, and its commit
+  // is generation-checked. `committed` and `ok` separate: a committed error
+  // result is still newer than any stale refresh error the slot carries.
   const reRunResultAt = useCallback(
-    async (cellId: string, index: number): Promise<boolean> => {
+    async (
+      cellId: string,
+      index: number,
+    ): Promise<{ committed: boolean; ok: boolean }> => {
+      const notCommitted = { committed: false, ok: false }
       const cell = cellsRef.current.find((c) => c.id === cellId)
-      if (!cell?.result) return false
+      if (!cell?.result) return notCommitted
       const target = cell.result.results[index]
-      if (!target || !target.query.trim()) return false
+      if (!target || !target.query.trim()) return notCommitted
       const sql = target.query
 
+      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
       const controllers = abortControllersRef.current.get(cellId) ?? []
       controllers[index]?.abort()
       const ac = new AbortController()
       controllers[index] = ac
       abortControllersRef.current.set(cellId, controllers)
+      setRunningCellIds((prev) => new Set(prev).add(cellId))
 
       updateCellResult(cellId, index, { type: "running", query: sql })
 
-      const execResult = await executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP)
-      if (ac.signal.aborted) return execResult.type !== "error"
-      publishSchemaIfMutating(execResult)
-      const liveCell = cellsRef.current.find((c) => c.id === cellId)
-      if (!liveCell?.result) return execResult.type !== "error"
-      updateCellResult(cellId, index, singleResultFromExec(execResult, sql))
-      persistSnapshot(cellId)
-      return execResult.type !== "error"
+      try {
+        let execResult: QueryExecResult
+        try {
+          execResult = await statementRequestLimiter(
+            () => executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP),
+            ac.signal,
+          )
+        } catch {
+          execResult = {
+            type: "error",
+            query: sql,
+            columns: [],
+            dataset: [],
+            count: 0,
+            error: "Cancelled by user",
+          }
+        }
+        if (ac.signal.aborted || !isCurrentRun()) return notCommitted
+        publishSchemaIfMutating(execResult)
+        const liveCell = cellsRef.current.find((c) => c.id === cellId)
+        if (!liveCell?.result) return notCommitted
+        updateCellResult(cellId, index, singleResultFromExec(execResult, sql))
+        stampRunHistory(cellId)
+        persistSnapshot(cellId)
+        return { committed: true, ok: execResult.type !== "error" }
+      } finally {
+        if (isCurrentRun()) {
+          setRunningCellIds((prev) => {
+            const next = new Set(prev)
+            next.delete(cellId)
+            return next
+          })
+        }
+      }
     },
-    [cellsRef, executeSingle, updateCellResult, persistSnapshot],
+    [
+      cellsRef,
+      executeSingle,
+      updateCellResult,
+      stampRunHistory,
+      persistSnapshot,
+    ],
   )
 
   // Silently discard an in-flight run: no cancelled markers, no snapshot
   // delete. For ownership hand-offs (run→draw) where the chart engine takes
   // over and the run must simply stop writing.
   const abortCellRun = useCallback((cellId: string) => {
+    barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort())
     const controllers = abortControllersRef.current.get(cellId)
     if (!controllers) return
     // Supersede the in-flight run so its late resolution can't write back
@@ -476,6 +839,7 @@ export const useCellExecution = ({
   }, [])
 
   const cancelCell = useCallback((cellId: string) => {
+    barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort())
     const controllers = abortControllersRef.current.get(cellId)
     if (!controllers) return
     controllers.forEach((ac) => ac.abort())
@@ -499,22 +863,42 @@ export const useCellExecution = ({
     [cellsRef, updateCellResult],
   )
 
-  const setActiveResultIndex = useCallback(
-    (cellId: string, index: number) => {
+  // The active tab is a STATEMENT, not a position: a tab the user selects may
+  // hold no result yet (added since the last run), and the compact array's
+  // indices shift as statements come and go.
+  const setActiveStatement = useCallback(
+    (cellId: string, statementKey: string) => {
       autoFocusRef.current.set(cellId, false)
+      const result = cellsRef.current.find((c) => c.id === cellId)?.result
+      if (!result) return
+      const resultIndex = statementKeysFor(
+        result.results.map((r) => r.query),
+      ).indexOf(statementKey)
+      const activeResultIndex =
+        resultIndex === -1 ? result.activeResultIndex : resultIndex
       updateCells((prev) =>
         prev.map((c) => {
           if (c.id !== cellId || !c.result) return c
-          return { ...c, result: { ...c.result, activeResultIndex: index } }
+          return {
+            ...c,
+            result: {
+              ...c.result,
+              activeResultIndex,
+              activeStatementKey: statementKey,
+            },
+          }
         }),
       )
       // Keep the snapshot on the tab the user is viewing, so a release or a
       // reload restores this tab instead of snapping back to the first.
-      void updateCellSnapshotActiveIndex(bufferId, cellId, index).catch(
-        () => undefined,
-      )
+      void updateCellSnapshotActiveIndex(
+        bufferId,
+        cellId,
+        activeResultIndex,
+        statementKey,
+      ).catch(() => undefined)
     },
-    [updateCells, bufferId],
+    [cellsRef, updateCells, bufferId],
   )
 
   useEffect(() => {
@@ -538,6 +922,6 @@ export const useCellExecution = ({
     abortCellRun,
     cancelCell,
     cancelQuery,
-    setActiveResultIndex,
+    setActiveStatement,
   }
 }

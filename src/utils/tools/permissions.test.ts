@@ -1,19 +1,29 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   DEFAULT_DENIED,
   DEFAULT_GRANTED,
+  checkStatementsForAutoRun,
+  checkStatementsForExecution,
+  checkStatementsForRunQuery,
   checkToolPermission,
   classifyAndCheckSqlForAutoRun,
   classifyAndCheckSqlForExecution,
   classifyAndCheckSqlForRunQuery,
   classifyStatements,
+  clearStatementClassCache,
   normalizePermissions,
   requireAllDQL,
+  resolveRunBarrier,
   runPermissionGate,
+  type ClassifiedStatement,
   type Permissions,
   type ToolCategory,
 } from "./permissions"
 import type { ValidateQueryResult } from "../questdb/types"
+
+beforeEach(() => {
+  clearStatementClassCache()
+})
 
 // Three-scope state fixtures. Cascade: write ⇒ read ⇒ grantSchemaAccess.
 const ALL_OFF: Permissions = {
@@ -200,10 +210,12 @@ describe("classifyStatements", () => {
     ])
   })
 
-  it("classifies syntax errors as ERROR", async () => {
+  it("classifies syntax errors as ERROR and retains the server message", async () => {
     const validate = vi.fn().mockResolvedValue(errorValidate)
     const out = await classifyStatements("BAD", validate)
-    expect(out).toEqual([{ sql: "BAD", klass: "ERROR" }])
+    expect(out).toEqual([
+      { sql: "BAD", klass: "ERROR", error: "syntax", errorPosition: 0 },
+    ])
   })
 
   it("splits and classifies each statement of a multi-statement cell", async () => {
@@ -232,6 +244,292 @@ describe("classifyStatements", () => {
     await expect(classifyStatements("SELECT 1", validate)).rejects.toThrow(
       /network down/,
     )
+  })
+})
+
+describe("statement class cache", () => {
+  it("caches DQL and DDL_DML classes by statement text", async () => {
+    // Given a mixed cell classified once
+    const validate = vi.fn(
+      validatorFor({
+        "SELECT 1": dqlValidate("SELECT 1"),
+        "INSERT INTO t VALUES (1)": dmlValidate,
+      }),
+    )
+    await classifyStatements("SELECT 1; INSERT INTO t VALUES (1)", validate)
+    expect(validate).toHaveBeenCalledTimes(2)
+
+    // When the same statements are classified again
+    const out = await classifyStatements(
+      "SELECT 1; INSERT INTO t VALUES (1)",
+      validate,
+    )
+
+    // Then no new validate requests are made and classes are preserved
+    expect(validate).toHaveBeenCalledTimes(2)
+    expect(out).toEqual([
+      { sql: "SELECT 1", klass: "DQL" },
+      {
+        sql: "INSERT INTO t VALUES (1)",
+        klass: "DDL_DML",
+        queryType: "INSERT",
+      },
+    ])
+  })
+
+  it("hits the cache across whitespace and trailing-semicolon variants", async () => {
+    // Given a statement classified once
+    const validate = vi.fn().mockResolvedValue(dqlValidate("SELECT 1"))
+    await classifyStatements("SELECT 1", validate)
+
+    // When the same statement is classified with a trailing semicolon
+    const out = await classifyStatements("  SELECT 1;  ", validate)
+
+    // Then the cached class is reused
+    expect(validate).toHaveBeenCalledTimes(1)
+    expect(out[0].klass).toBe("DQL")
+  })
+
+  it("never caches ERROR — an invalid statement is revalidated every time", async () => {
+    // Given a statement that fails validation, then validates as DML
+    const validate = vi
+      .fn()
+      .mockResolvedValueOnce(errorValidate)
+      .mockResolvedValueOnce(dmlValidate)
+    await classifyStatements("BAD", validate)
+
+    // When it is classified again after the schema changed
+    const out = await classifyStatements("BAD", validate)
+
+    // Then the fresh class wins
+    expect(validate).toHaveBeenCalledTimes(2)
+    expect(out).toEqual([{ sql: "BAD", klass: "DDL_DML", queryType: "INSERT" }])
+  })
+
+  it("a transport failure caches nothing", async () => {
+    // Given a validate call that fails at the transport level
+    const validate = vi.fn().mockRejectedValueOnce(new Error("network down"))
+    await expect(classifyStatements("SELECT 1", validate)).rejects.toThrow()
+
+    // When classification is retried after connectivity returns
+    validate.mockResolvedValueOnce(dqlValidate("SELECT 1"))
+    const out = await classifyStatements("SELECT 1", validate)
+
+    // Then the statement is validated again
+    expect(validate).toHaveBeenCalledTimes(2)
+    expect(out[0].klass).toBe("DQL")
+  })
+})
+
+describe("checkStatements* (pre-classified barrier variants)", () => {
+  const dqlStmt: ClassifiedStatement = { sql: "SELECT 1", klass: "DQL" }
+  const writeStmt: ClassifiedStatement = {
+    sql: "INSERT INTO t VALUES (1)",
+    klass: "DDL_DML",
+    queryType: "INSERT",
+  }
+  const errorStmt: ClassifiedStatement = {
+    sql: "BAD",
+    klass: "ERROR",
+    error: "syntax",
+  }
+
+  it("execution: write statement without write permission → denied", () => {
+    const decision = checkStatementsForExecution(
+      [dqlStmt, writeStmt],
+      READ_ONLY,
+    )
+    if (decision.granted) throw new Error("expected deny")
+    expect(decision.reason).toMatch(/INSERT/)
+  })
+
+  it("execution: invalid statements never demote the cell — DQL + ERROR is granted", () => {
+    expect(
+      checkStatementsForExecution([dqlStmt, errorStmt], READ_ONLY),
+    ).toEqual({ granted: true })
+  })
+
+  it("run_query: DQL without read → denied for read", () => {
+    const decision = checkStatementsForRunQuery([dqlStmt], SCHEMA_ONLY)
+    expect(decision.granted).toBe(false)
+  })
+
+  it("auto-run: write statement → skip; DQL + ERROR → run", () => {
+    expect(checkStatementsForAutoRun([dqlStmt, writeStmt]).action).toBe("skip")
+    expect(checkStatementsForAutoRun([dqlStmt, errorStmt])).toEqual({
+      action: "run",
+    })
+  })
+})
+
+describe("resolveRunBarrier — the runner's pre-launch gate", () => {
+  it("skips classification for an ungated single statement", async () => {
+    // Given a plain UI run of one statement
+    const validate = vi.fn()
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier("SELECT 1", 1, undefined, validate)
+
+    // Then no validate round trip happens and the run proceeds unclassified
+    expect(validate).not.toHaveBeenCalled()
+    expect(out).toEqual({ action: "proceed", classified: null })
+  })
+
+  it("classifies an ungated multi-statement cell for strategy", async () => {
+    // Given an ungated script of two reads
+    const validate = vi.fn(validatorFor({}))
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "SELECT 1; SELECT 2",
+      2,
+      undefined,
+      validate,
+    )
+
+    // Then every statement is classified so the runner can pick parallel
+    expect(out.action).toBe("proceed")
+    if (out.action === "proceed") {
+      expect(out.classified?.map((s) => s.klass)).toEqual(["DQL", "DQL"])
+    }
+  })
+
+  it("explicit gate: denies a write without the write permission", async () => {
+    // Given an agent-run cell containing an INSERT under read-only perms
+    const validate = vi.fn(
+      validatorFor({ "INSERT INTO t VALUES (1)": dmlValidate }),
+    )
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "INSERT INTO t VALUES (1)",
+      1,
+      { kind: "explicit", permissions: READ_ONLY },
+      validate,
+    )
+
+    // Then the run is denied before anything executes
+    expect(out.action).toBe("denied")
+    if (out.action === "denied") expect(out.reason).toMatch(/INSERT/)
+  })
+
+  it("explicit gate: grants a write with the write permission", async () => {
+    // Given the same INSERT with write granted
+    const validate = vi.fn(
+      validatorFor({ "INSERT INTO t VALUES (1)": dmlValidate }),
+    )
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "INSERT INTO t VALUES (1)",
+      1,
+      { kind: "explicit", permissions: ALL_ON },
+      validate,
+    )
+
+    // Then the run proceeds with the classification attached
+    expect(out.action).toBe("proceed")
+    if (out.action === "proceed") {
+      expect(out.classified?.[0].klass).toBe("DDL_DML")
+    }
+  })
+
+  it("autoRun gate: skips a write cell — agent flows never auto-run DDL/DML", async () => {
+    // Given an auto-run of a DML cell
+    const validate = vi.fn(
+      validatorFor({ "INSERT INTO t VALUES (1)": dmlValidate }),
+    )
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "INSERT INTO t VALUES (1)",
+      1,
+      { kind: "autoRun" },
+      validate,
+    )
+
+    // Then the cell is skipped, never executed
+    expect(out.action).toBe("skipped")
+    if (out.action === "skipped") expect(out.reason).toMatch(/AUTO_RUN_SKIPPED/)
+  })
+
+  it("autoRun gate: an invalid statement never demotes the cell", async () => {
+    // Given a read cell whose second statement fails validation
+    const validate = vi.fn(validatorFor({ BAD: errorValidate }))
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "SELECT 1; BAD",
+      2,
+      { kind: "autoRun" },
+      validate,
+    )
+
+    // Then the run proceeds — the invalid slot carries its error instead
+    expect(out.action).toBe("proceed")
+  })
+
+  it("fails closed when classification is unreachable under autoRun", async () => {
+    // Given a validate transport that is down
+    const validate = vi.fn().mockRejectedValue(new Error("network down"))
+
+    // When an auto-run reaches the barrier
+    const out = await resolveRunBarrier(
+      "SELECT 1",
+      1,
+      { kind: "autoRun" },
+      validate,
+    )
+
+    // Then the run is denied — an unclassifiable cell could hide a write
+    expect(out.action).toBe("denied")
+    if (out.action === "denied")
+      expect(out.reason).toMatch(/could not classify/)
+  })
+
+  it("fails closed when explicit-without-write cannot classify", async () => {
+    const validate = vi.fn().mockRejectedValue(new Error("network down"))
+
+    const out = await resolveRunBarrier(
+      "SELECT 1",
+      1,
+      { kind: "explicit", permissions: READ_ONLY },
+      validate,
+    )
+
+    expect(out.action).toBe("denied")
+  })
+
+  it("falls open to the unclassified path when explicit-with-write cannot classify", async () => {
+    // Given write permission — the gate could not be used to smuggle a write
+    const validate = vi.fn().mockRejectedValue(new Error("network down"))
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "SELECT 1",
+      1,
+      { kind: "explicit", permissions: ALL_ON },
+      validate,
+    )
+
+    // Then the run proceeds without a classification (sequential strategy)
+    expect(out).toEqual({ action: "proceed", classified: null })
+  })
+
+  it("falls open when an ungated multi-statement cell cannot classify", async () => {
+    // Given a plain UI script run with validation unreachable
+    const validate = vi.fn().mockRejectedValue(new Error("network down"))
+
+    // When the barrier resolves
+    const out = await resolveRunBarrier(
+      "SELECT 1; SELECT 2",
+      2,
+      undefined,
+      validate,
+    )
+
+    // Then the user's run still proceeds on the sequential path
+    expect(out).toEqual({ action: "proceed", classified: null })
   })
 })
 

@@ -14,11 +14,11 @@ import { toast } from "../../../../components/Toast"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { useChartFetchState } from "../chartRefresh/ChartRefreshContext"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import {
   deriveChartLoading,
-  pendingChartFetchState,
-} from "../chartRefresh/chartRefreshEngine"
+  pendingCellFetchState,
+} from "../cellRefresh/cellRefreshEngine"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import {
   getChartZoom,
@@ -85,10 +85,10 @@ export const DrawCanvas: React.FC<Props> = ({
   const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
-  const fetchState = useChartFetchState(cell.id)
+  const fetchState = useCellFetchState(cell.id)
   const resultStatus = useCellResultStatus(cell.id)
   const state = useMemo(
-    () => fetchState ?? pendingChartFetchState(cell.value),
+    () => fetchState ?? pendingCellFetchState(cell.value),
     [fetchState, cell.value],
   )
   const { queries, queriesKey, settledKey, classifyBlock } = state

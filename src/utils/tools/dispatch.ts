@@ -19,13 +19,12 @@ import {
 } from "../../store/buffers"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
-  classifyAndCheckSqlForAutoRun,
-  classifyAndCheckSqlForExecution,
   classifyAndCheckSqlForRunQuery,
   denyReasonUnresolvedSql,
   requireAllDQL,
   runPermissionGate,
   type Permissions,
+  type RunCellGate,
 } from "./permissions"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
@@ -63,6 +62,7 @@ import {
   withBoundNotebook,
   withBoundNotebookReadOnly,
   addCellTransition,
+  clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
   moveCellDownTransition,
@@ -73,6 +73,7 @@ import {
   setCellModeTransition,
   setCellViewMaximizedTransition,
   setLayoutModeTransition,
+  setNotebookAutoRefreshTransition,
   updateCellTransition,
   type ViewParts,
   type NotebookTransitionResult,
@@ -137,10 +138,11 @@ const runCellBound = (
   cellId: string,
   signal?: AbortSignal,
   sql?: string,
+  gate?: RunCellGate,
 ) =>
   withBoundNotebook(
     bufferId,
-    (ctrl) => ctrl.runCell(cellId, signal, sql),
+    (ctrl) => ctrl.runCell(cellId, signal, sql, gate),
     signal,
   )
 
@@ -513,7 +515,10 @@ export const dispatchTool = async (
         return routeNotebookTool(async () => ({
           cells: await withBoundNotebookReadOnly(
             buffer_id,
-            (view) => Promise.resolve(summarizeCells(view.cells)),
+            (view, controller) =>
+              Promise.resolve(
+                summarizeCells(view.cells, controller?.readRefreshState?.()),
+              ),
             signal,
           ),
         }))
@@ -529,13 +534,14 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           withBoundNotebookReadOnly(
             buffer_id,
-            (view) =>
+            (view, controller) =>
               Promise.resolve(
                 serializeCell(
                   view.cells,
                   cell_id,
                   buffer_id,
                   get_full_content === true,
+                  controller?.readRefreshState?.(),
                 ),
               ),
             signal,
@@ -587,34 +593,22 @@ export const dispatchTool = async (
               : { cellId }
           }
           if (run) {
-            if (perms && validateSql) {
-              const decision = await classifyAndCheckSqlForAutoRun(
-                sql,
-                validateSql,
-              )
-              if (decision.action === "deny") {
-                return {
-                  cellId,
-                  ran: false,
-                  error: decision.reason,
-                }
-              }
-              if (decision.action === "skip") {
-                return {
-                  cellId,
-                  ran: false,
-                  skipped: true,
-                  note: decision.reason,
-                }
-              }
-            }
             setStatus(AIOperationStatus.RunningCell, { cellId })
+            // The runner's barrier classification decides auto-run
+            // eligibility — writes are skipped at launch, never pre-checked.
             const r = await runCellBound(
               buffer_id,
               cellId,
               signal,
               perms && validateSql ? sql : undefined,
+              perms && validateSql ? { kind: "autoRun" } : undefined,
             )
+            if (r.denied !== undefined) {
+              return { cellId, ran: false, error: r.denied }
+            }
+            if (r.skipped !== undefined) {
+              return { cellId, ran: false, skipped: true, note: r.skipped }
+            }
             return {
               cellId,
               ran: r.success,
@@ -779,17 +773,30 @@ export const dispatchTool = async (
               is_error: true,
             }
           }
-          const decision = await classifyAndCheckSqlForExecution(
-            value,
-            perms,
-            validateSql,
-          )
-          if (!decision.granted) {
-            return { content: decision.reason, is_error: true }
+          // The runner's barrier classification enforces the permission — one
+          // classification per launch, shared with strategy selection.
+          let deniedReason: string | undefined
+          const routed = await routeNotebookTool(async () => {
+            const summary = await runCellBound(
+              buffer_id,
+              cell_id,
+              signal,
+              value,
+              {
+                kind: "explicit",
+                permissions: perms,
+              },
+            )
+            if (summary.denied !== undefined) {
+              deniedReason = summary.denied
+              return {}
+            }
+            return summary
+          })
+          if (deniedReason !== undefined) {
+            return { content: deniedReason, is_error: true }
           }
-          return routeNotebookTool(() =>
-            runCellBound(buffer_id, cell_id, signal, value),
-          )
+          return routed
         }
         return routeNotebookTool(() => runCellBound(buffer_id, cell_id, signal))
       }
@@ -964,6 +971,51 @@ export const dispatchTool = async (
             cell_id: string
             value: unknown
           }) || {}
+        if (value !== null && !isAutoRefresh(value)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: value must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+            }),
+            is_error: true,
+          }
+        }
+        // Markdown cells hold prose and never run, so an interval on them is
+        // meaningless — mirrors run_cell's markdown refusal.
+        const autoRefreshCell = (await readCells(buffer_id, signal)).find(
+          (c) => c.id === cell_id,
+        )
+        if (autoRefreshCell?.type === "markdown") {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message:
+                "VALIDATION_ERROR: markdown cells are never executed, so auto-refresh does not apply to them.",
+            }),
+            is_error: true,
+          }
+        }
+        setStatus(AIOperationStatus.ConfiguringAutoRefresh, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          runTransition(
+            buffer_id,
+            (parts) =>
+              value === null
+                ? clearCellAutoRefreshTransition(parts, buffer_id, cell_id)
+                : updateCellTransition(parts, buffer_id, cell_id, {
+                    autoRefresh: value,
+                  }),
+            signal,
+          ),
+        )
+      }
+      case "set_notebook_autorefresh": {
+        const { buffer_id, value, reset_cell_overrides } =
+          (input as {
+            buffer_id: number
+            value: unknown
+            reset_cell_overrides?: boolean
+          }) || {}
         if (!isAutoRefresh(value)) {
           return {
             content: JSON.stringify({
@@ -973,14 +1025,16 @@ export const dispatchTool = async (
             is_error: true,
           }
         }
-        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        setStatus(AIOperationStatus.ConfiguringAutoRefresh)
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
             (parts) =>
-              updateCellTransition(parts, buffer_id, cell_id, {
-                autoRefresh: value,
-              }),
+              setNotebookAutoRefreshTransition(
+                parts,
+                value,
+                reset_cell_overrides === true,
+              ),
             signal,
           ),
         )

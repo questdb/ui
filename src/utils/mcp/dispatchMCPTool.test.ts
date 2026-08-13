@@ -175,6 +175,7 @@ describe("dispatchMCPTool — state-freshness gate", () => {
     "set_cell_layout",
     "set_cell_mode",
     "set_cell_chart_config",
+    "set_notebook_autorefresh",
     "set_cell_autorefresh",
     "set_cell_view_maximized",
     "set_cell_maximized",

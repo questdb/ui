@@ -159,11 +159,34 @@ describe("cellRunStatus", () => {
     expect(getCellRunStatus(undefined)).toEqual({ status: "none" })
   })
 
-  it("prefers the live result over a stale persisted status", () => {
+  it("prefers the recorded run history over a refresh-produced frame", () => {
+    // Given a cell whose recorded run succeeded while a later refresh left an
+    // error result in the frame
+    // Then the recorded outcome wins — refresh settles never rewrite history
     expect(
       getCellRunStatus({
         result: { results: [{ type: "error", error: "x" }] },
         lastRunStatus: "success",
+      }),
+    ).toEqual({ status: "success" })
+  })
+
+  it("live execution always shows through as running", () => {
+    // Given a recorded outcome with a new run in flight
+    expect(
+      getCellRunStatus({
+        result: { results: [{ type: "running" }] },
+        lastRunStatus: "error",
+        lastRunError: "old",
+      }),
+    ).toEqual({ status: "running" })
+  })
+
+  it("derives from the result only when no history was recorded", () => {
+    // Given a pre-stamping record: a result with no lastRunStatus
+    expect(
+      getCellRunStatus({
+        result: { results: [{ type: "error", error: "x" }] },
       }),
     ).toEqual({ status: "error", error: "x" })
   })

@@ -51,7 +51,32 @@ export const autoRefreshIntervalMs = (
 
 export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
   typeof value === "boolean" ||
-  (typeof value === "string" && value in AUTO_REFRESH_INTERVALS)
+  (typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(AUTO_REFRESH_INTERVALS, value))
+
+// Terminal fallback is Off for every view: nothing polls unless the cell or
+// the notebook says so.
+export const resolveAutoRefresh = (
+  cellValue: AutoRefresh | undefined,
+  notebookDefault: AutoRefresh | undefined,
+): AutoRefresh => cellValue ?? notebookDefault ?? false
+
+export const countAutoRefreshOverrides = (cells: NotebookCell[]): number =>
+  cells.filter((cell) => cell.autoRefresh !== undefined).length
+
+export const countActiveAutoRefreshOverrides = (
+  cells: NotebookCell[],
+): number =>
+  cells.filter(
+    (cell) =>
+      resolveCellView(cell) !== "none" && cell.autoRefresh !== undefined,
+  ).length
+
+export const clearCellAutoRefresh = (cell: NotebookCell): NotebookCell => {
+  if (cell.autoRefresh === undefined) return cell
+  const { autoRefresh: _, ...rest } = cell
+  return rest
+}
 
 // What a cell currently shows in its bottom slot — drives the toolbar's
 // view-switch / refresh / chart actions and their disabled states.
@@ -159,7 +184,9 @@ export const cellToolbarMenuFlags = (params: {
   const isNoneView = view === "none"
   const hasToolbarSplit = tier !== "compact" && !isNoneView
   const hasToolbarRefresh = tier === "expanded" && !isNoneView
-  const hasToolbarInterval = tier === "expanded" && isChartView
+  // The inline interval control rides on the refresh split-button, which the
+  // expanded tier renders for grids as well as charts.
+  const hasToolbarInterval = hasToolbarRefresh
   const chartCollapsed = isCompact && isChartView && sqlShown
 
   const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
@@ -170,7 +197,10 @@ export const cellToolbarMenuFlags = (params: {
   const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
   const showResetZoom =
     isCompact && isChartView && chartZoomed && !chartCollapsed
-  const showAutoRefreshItem = !hasToolbarInterval && isChartView
+  // Auto-refresh applies to any cell showing a view, not just charts. Unlike
+  // Refresh it survives a collapsed chart: it patches cell state rather than
+  // publishing to the unmounted canvas.
+  const showAutoRefreshItem = !hasToolbarInterval && !isNoneView
   const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
   const showChartSettings = isChartView && !chartCollapsed
   const showMoveUp = !isGridMode && cellIndex > 0
@@ -354,6 +384,10 @@ export type CellRunOutcome = {
   cellChanged?: boolean
   notStarted?: boolean
   resultCleared?: boolean
+  // Barrier decisions for gated (agent) runs: a permission denial or an
+  // auto-run write skip. Nothing executed when either is set.
+  denied?: string
+  skipped?: string
   // The result THIS run produced, set only when it committed. Consumers that
   // report the run's output must read this instead of cell.result — a draw
   // cell's auto-refresh replaces cell.result independently of the run.
@@ -423,20 +457,36 @@ export const collapseResultToRunStatus = (result: CellResult): RunStatus => {
 
 // Run history must survive every path that drops the result blob (persist,
 // duplicate, clone) — agents read last_run_status to decide whether a cell
-// still needs an explicit run_cell.
-const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
-  cell.result ? collapseResultToRunStatus(cell.result) : cell.lastRunStatus
+// still needs an explicit run_cell. Recorded history wins: every run commit
+// stamps it, so it is at least as fresh as any run-produced result; only
+// refresh results are newer, and excluding those is the point. A draw frame
+// is always refresh-produced, so it never seeds history — deriving from it
+// would freeze a transient poll error into a permanent fabricated failure.
+export const carriedRunStatus = (cell: NotebookCell): RunStatus | undefined =>
+  cell.lastRunStatus ??
+  (cell.mode !== "draw" && cell.result
+    ? collapseResultToRunStatus(cell.result)
+    : undefined)
 
-// The error string to carry alongside lastRunStatus when the result blob is
-// dropped. Derived from the live result when present (so it always matches the
-// carried status and a since-fixed cell clears its stale error), else the
-// already-carried lastRunError.
-const carriedRunError = (cell: NotebookCell): string | undefined => {
-  if (cell.result) {
-    const errored = cell.result.results.find((r) => r.type === "error")
-    return errored?.type === "error" ? errored.error : undefined
+// The error travels with its recorded status as one pair; derivation from the
+// result happens only for records that predate stamping.
+export const carriedRunError = (cell: NotebookCell): string | undefined => {
+  if (cell.lastRunStatus !== undefined) return cell.lastRunError
+  if (cell.mode === "draw") return undefined
+  const errored = cell.result?.results.find((r) => r.type === "error")
+  return errored?.type === "error" ? errored.error : undefined
+}
+
+// The stamp a run commit writes next to its result. A run without an error
+// clears any previous one — history describes the last run wholesale.
+export const runHistoryPatch = (
+  result: CellResult,
+): Pick<NotebookCell, "lastRunStatus" | "lastRunError"> => {
+  const errored = result.results.find((r) => r.type === "error")
+  return {
+    lastRunStatus: collapseResultToRunStatus(result),
+    lastRunError: errored?.type === "error" ? errored.error : undefined,
   }
-  return cell.lastRunError
 }
 
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
@@ -655,6 +705,7 @@ type ApplyCellRequest = {
 
 type ApplyRequest = {
   layoutMode?: "list" | "grid" | null
+  autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
   cells: ApplyCellRequest[]
@@ -697,6 +748,193 @@ export const snapshotResultsMatchQueries = (
     (result, index) =>
       normalizeQueryText(result.query) === normalizeQueryText(queries[index]),
   )
+
+// Statement identity across edits: normalized text plus occurrence order for
+// duplicates. Results follow this key, never their position.
+export type StatementKey = string
+
+const STATEMENT_KEY_SEPARATOR = "\u0001"
+
+export const statementKeysFor = (texts: string[]): StatementKey[] => {
+  const occurrences = new Map<string, number>()
+  return texts.map((text) => {
+    const normalized = normalizeQueryText(text)
+    const occurrence = occurrences.get(normalized) ?? 0
+    occurrences.set(normalized, occurrence + 1)
+    return `${normalized}${STATEMENT_KEY_SEPARATOR}${occurrence}`
+  })
+}
+
+const clampIndex = (index: number, length: number): number =>
+  Math.min(Math.max(index, 0), Math.max(length - 1, 0))
+
+const nearestCarriedKey = (
+  newKeyByOldIndex: Map<number, StatementKey>,
+  anchor: number,
+  length: number,
+): StatementKey | undefined => {
+  for (let distance = 0; distance < length; distance++) {
+    const before = newKeyByOldIndex.get(anchor - distance)
+    if (before !== undefined) return before
+    const after = newKeyByOldIndex.get(anchor + distance)
+    if (after !== undefined) return after
+  }
+  return undefined
+}
+
+export type ReconciledCellResult = {
+  results: SingleQueryResult[]
+  activeStatementKey: StatementKey
+  activeResultIndex: number
+}
+
+export const reconcileResultsForStatements = (
+  statements: string[],
+  previous: CellResult,
+): ReconciledCellResult | null => {
+  if (statements.length === 0 || previous.results.length === 0) return null
+  const slotKeys = statementKeysFor(statements)
+  const resultKeys = statementKeysFor(previous.results.map((r) => r.query))
+  const oldIndexByKey = new Map<StatementKey, number>()
+  resultKeys.forEach((key, index) => oldIndexByKey.set(key, index))
+  const survivors: SingleQueryResult[] = []
+  const survivorKeys: StatementKey[] = []
+  const newKeyByOldIndex = new Map<number, StatementKey>()
+  for (const key of slotKeys) {
+    const oldIndex = oldIndexByKey.get(key)
+    if (oldIndex === undefined) continue
+    const candidate = previous.results[oldIndex]
+    // A placeholder is not a carryable result: carrying one would resurrect a
+    // ghost "Running" slot no execution backs (e.g. from a snapshot a crash
+    // left behind). The slot regenerates as "Not run" at display time.
+    if (candidate.type === "running" || candidate.type === "queued") continue
+    survivors.push(candidate)
+    survivorKeys.push(key)
+    newKeyByOldIndex.set(oldIndex, key)
+  }
+  if (survivors.length === 0) return null
+  const carriedActiveKey =
+    previous.activeStatementKey !== undefined &&
+    slotKeys.includes(previous.activeStatementKey)
+      ? previous.activeStatementKey
+      : nearestCarriedKey(
+          newKeyByOldIndex,
+          clampIndex(previous.activeResultIndex, previous.results.length),
+          previous.results.length,
+        )
+  const activeStatementKey = carriedActiveKey ?? slotKeys[0]
+  return {
+    results: survivors,
+    activeStatementKey,
+    activeResultIndex: Math.max(0, survivorKeys.indexOf(activeStatementKey)),
+  }
+}
+
+// Applies the carryover to a cell's in-memory result after an SQL edit:
+// unchanged statements keep their results, everything else drops. A frame
+// that loses slots also loses its script summary — the counts no longer
+// describe what is on screen. Zero survivors collapse the frame to null.
+export const reconcileCellResultForValue = (
+  result: CellResult | null | undefined,
+  value: string,
+): CellResult | null => {
+  if (result == null) return null
+  // A pending frame is run-owned: the run writes results into it by position,
+  // so reshaping it here would land rows under the wrong statement. The frame
+  // stays pending until the run's last slot settles, and every completion step
+  // after that runs synchronously — deferring the reconcile is always safe.
+  if (hasPendingResult(result)) return result
+  const reconciled = reconcileResultsForStatements(
+    getQueriesFromText(value),
+    result,
+  )
+  if (!reconciled) return null
+  const frameUnchanged =
+    reconciled.results.length === result.results.length &&
+    reconciled.results.every((r, index) => r === result.results[index])
+  const next: CellResult = {
+    ...result,
+    results: reconciled.results,
+    activeResultIndex: reconciled.activeResultIndex,
+    activeStatementKey: reconciled.activeStatementKey,
+  }
+  if (!frameUnchanged) delete next.script
+  return next
+}
+
+export type StatementSlot = {
+  key: StatementKey
+  sql: string
+  result: SingleQueryResult | null
+}
+
+export type StatementFrame = {
+  slots: StatementSlot[]
+  activeSlotIndex: number
+}
+
+export const deriveStatementFrame = (
+  statements: string[],
+  result: CellResult | null | undefined,
+): StatementFrame | null => {
+  if (!result || statements.length === 0 || result.results.length === 0) {
+    return null
+  }
+  const slotKeys = statementKeysFor(statements)
+  const resultKeys = statementKeysFor(result.results.map((r) => r.query))
+  const resultByKey = new Map<StatementKey, SingleQueryResult>()
+  resultKeys.forEach((key, index) => {
+    resultByKey.set(key, result.results[index])
+  })
+  const slots = slotKeys.map((key, index) => ({
+    key,
+    sql: statements[index],
+    result: resultByKey.get(key) ?? null,
+  }))
+  if (slots.every((slot) => slot.result === null)) return null
+  const activeKey =
+    result.activeStatementKey ??
+    resultKeys[clampIndex(result.activeResultIndex, resultKeys.length)]
+  const activeSlotIndex = slotKeys.indexOf(activeKey)
+  return {
+    slots,
+    activeSlotIndex: activeSlotIndex === -1 ? 0 : activeSlotIndex,
+  }
+}
+
+// Fallback for a frame no statement claims: a selection or cursor-fragment
+// run records the fragment it executed, so tabs follow the results
+// themselves. Display-only — an edit or reload still drops the orphans.
+export const derivePositionalFrame = (
+  result: CellResult | null | undefined,
+): StatementFrame | null => {
+  if (!result || result.results.length === 0) return null
+  const keys = statementKeysFor(result.results.map((r) => r.query))
+  return {
+    slots: result.results.map((r, index) => ({
+      key: keys[index],
+      sql: r.query,
+      result: r,
+    })),
+    activeSlotIndex: clampIndex(
+      result.activeResultIndex,
+      result.results.length,
+    ),
+  }
+}
+
+// The single-run target mirrors the tab the bottom slot renders — the active
+// slot carries its statement even before it has run, so a "Not run" tab
+// resolves to its own SQL, never to a stale result index.
+export const resolveActiveStatementSql = (
+  value: string,
+  result: CellResult | null | undefined,
+): string | undefined => {
+  const frame =
+    deriveStatementFrame(getQueriesFromText(value), result) ??
+    derivePositionalFrame(result)
+  return frame?.slots[frame.activeSlotIndex]?.sql
+}
 
 export const cloneNotebookViewStateWithCellIdMap = (
   source: NotebookViewState,
@@ -920,32 +1158,39 @@ export const buildAppliedCells = (
         : isDraw
           ? true
           : undefined
-    const autoRefresh =
-      req.autoRefresh != null ? req.autoRefresh : isDraw ? true : undefined
+    const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
 
     if (existing) {
       updated.push(existing.id)
       const valueChanged = existing.value !== value
+      // Results carry over by statement content: unchanged statements keep
+      // theirs, zero survivors collapse the frame. A released cell (result on
+      // disk only) keeps its snapshot — hydration reconciles it on load.
       const next: NotebookCell = {
         ...existing,
         id: existing.id,
         position: index,
         value,
-        result: valueChanged ? null : existing.result,
+        result: valueChanged
+          ? reconcileCellResultForValue(existing.result, value)
+          : existing.result,
       }
-      if (valueChanged) {
-        // Preserve run history so agents still see a committed write survived a
-        // value edit — but an error belonged to the SQL just replaced, so
-        // carrying it forward would resurrect a stale error on the fixed cell.
+      const resultDropped =
+        valueChanged && existing.result != null && next.result === null
+      if (resultDropped) {
+        // The whole frame is gone — collapse the run outcome into recorded
+        // history the way a release would. The record describes the last run
+        // that actually happened; only a run rewrites it.
         const carried = carriedRunStatus(existing)
-        delete next.lastRunError
-        if (carried === "error") delete next.lastRunStatus
-        else if (carried !== undefined) next.lastRunStatus = carried
+        const carriedError = carriedRunError(existing)
+        if (carried !== undefined) next.lastRunStatus = carried
+        if (carriedError !== undefined) next.lastRunError = carriedError
+        else delete next.lastRunError
       }
       const hadRunResult =
         existing.result != null ||
         (existing.lastRunStatus != null && existing.lastRunStatus !== "none")
-      if (hadRunResult && (valueChanged || resolvedType === "markdown")) {
+      if ((resolvedType === "markdown" && hadRunResult) || resultDropped) {
         resultsCleared.push(existing.id)
       }
       if (resolvedMode !== undefined) next.mode = resolvedMode
@@ -1244,7 +1489,7 @@ export const patchCellRunResult = (
 ): NotebookCell[] =>
   cells.map((cell) => {
     if (cell.id !== cellId) return cell
-    const next: NotebookCell = { ...cell, result }
+    const next: NotebookCell = { ...cell, result, ...runHistoryPatch(result) }
     if (
       !cell.bottomResized &&
       cell.mode !== "draw" &&
@@ -1544,6 +1789,15 @@ export const buildAppliedNotebookState = (
     }
   } else if (request.layoutMode !== undefined && request.layoutMode !== null) {
     nextSettings = { ...nextSettings, layoutMode: request.layoutMode }
+  }
+  if (
+    request.autoRefreshDefault !== undefined &&
+    request.autoRefreshDefault !== null
+  ) {
+    nextSettings = {
+      ...nextSettings,
+      autoRefreshDefault: request.autoRefreshDefault,
+    }
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }

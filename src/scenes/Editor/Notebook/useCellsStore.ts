@@ -1,7 +1,11 @@
 import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
-import { attachScriptSummary, setResultAt } from "./notebookUtils"
+import {
+  attachScriptSummary,
+  clearCellAutoRefresh,
+  setResultAt,
+} from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
 
 type Options = {
@@ -85,9 +89,16 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   )
 
   const setCellRefresh = useCallback(
-    (cellId: string, value: AutoRefresh) =>
-      updateCell(cellId, { autoRefresh: value }),
-    [updateCell],
+    (cellId: string, value: AutoRefresh | undefined) => {
+      if (value === undefined) {
+        updateCells((prev) =>
+          prev.map((c) => (c.id === cellId ? clearCellAutoRefresh(c) : c)),
+        )
+      } else {
+        updateCell(cellId, { autoRefresh: value })
+      }
+    },
+    [updateCell, updateCells],
   )
 
   return {

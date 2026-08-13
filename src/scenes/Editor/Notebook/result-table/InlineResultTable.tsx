@@ -1,26 +1,30 @@
 import React from "react"
-import type { CellResult } from "../../../../store/notebook"
 import { ResultGridPanel } from "./ResultGridPanel"
 import { StatusNotification } from "./StatusNotification"
 import { TabBar } from "./TabBar"
 import { ResultWrapper, SuccessMessage } from "./styles"
+import type { StatementSlotView } from "./statementSlotView"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 
 type Props = {
-  result: CellResult
+  slots: StatementSlotView[]
+  activeSlotIndex: number
+  timestamp: number
   isFocused: boolean
-  onTabChange: (index: number) => void
-  onCancelQuery: (index: number) => void
+  onTabChange: (statementKey: string) => void
+  onCancelQuery: (statementKey: string) => void
   bufferId: number
   cellId: string
   isRunning: boolean
-  onReRun: (index: number) => void
+  onReRun: (statementKey: string) => void
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
 }
 
 export const InlineResultTable: React.FC<Props> = ({
-  result,
+  slots,
+  activeSlotIndex,
+  timestamp,
   isFocused,
   onTabChange,
   onCancelQuery,
@@ -31,7 +35,7 @@ export const InlineResultTable: React.FC<Props> = ({
   onYieldFocus,
   viewportStore,
 }) => {
-  if (result.results.length === 0) {
+  if (slots.length === 0) {
     return (
       <ResultWrapper>
         <SuccessMessage>OK</SuccessMessage>
@@ -39,33 +43,37 @@ export const InlineResultTable: React.FC<Props> = ({
     )
   }
 
-  const activeResult =
-    result.results[result.activeResultIndex] ?? result.results[0]
-  const isMultiQuery = result.results.length > 1
+  const activeSlot = slots[activeSlotIndex] ?? slots[0]
+  const activeResult = activeSlot.result
+  const isMultiQuery = slots.length > 1
 
   return (
     <ResultWrapper>
-      {isMultiQuery && <TabBar result={result} onTabChange={onTabChange} />}
-
-      {activeResult && (
-        <StatusNotification
-          timestamp={result.timestamp}
-          activeResult={activeResult}
-          activeIndex={result.activeResultIndex}
-          onCancelQuery={onCancelQuery}
+      {isMultiQuery && (
+        <TabBar
+          slots={slots}
+          activeSlotIndex={activeSlotIndex}
+          onTabChange={onTabChange}
         />
       )}
 
+      <StatusNotification
+        timestamp={timestamp}
+        slot={activeSlot}
+        onCancelQuery={onCancelQuery}
+      />
+
       {activeResult?.type === "dql" && activeResult.columns.length > 0 && (
         <ResultGridPanel
-          key={`${result.activeResultIndex}-${activeResult.query}`}
+          key={activeSlot.key}
           data={activeResult}
-          runToken={result.timestamp}
+          statementKey={activeSlot.key}
+          runToken={timestamp}
           isFocused={isFocused}
           bufferId={bufferId}
           cellId={cellId}
           isRunning={isRunning}
-          onReRun={() => onReRun(result.activeResultIndex)}
+          onReRun={onReRun}
           onYieldFocus={onYieldFocus}
           viewportStore={viewportStore}
         />

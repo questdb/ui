@@ -2,6 +2,7 @@ import type { PartitionBy } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
 import type { RanStatus } from "../../utils/ai/runStatus"
+import type { AutoRefresh } from "../../store/notebook"
 import type { TokenUsage } from "../../utils/ai/aiAssistant"
 import type { OperationHistory } from "../AIStatusProvider"
 
@@ -68,6 +69,7 @@ export type UserActionDigest = {
   edited: Set<string>
   ran: Map<string, RanStatus>
   layoutModeTo?: "list" | "grid"
+  autoRefreshDefaultTo?: AutoRefresh
   notebookStatusChange?: "archived" | "deleted"
 }
 

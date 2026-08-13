@@ -11,8 +11,16 @@ import type { RunCellSummary } from "./notebookController"
 import { NotebookToolError } from "./notebookToolError"
 import { enqueueBufferTask } from "./notebookBufferQueue"
 import { emitAgentEdit } from "./agentActivity"
-import { executeSingleRaw } from "../executeSingleRaw"
+import { executeSingleRaw, type QueryExecResult } from "../executeSingleRaw"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
+import { createValidateWithGlobals } from "../../scenes/Editor/Notebook/declareUtils"
+import {
+  hasWriteStatement,
+  resolveRunBarrier,
+  type ClassifiedStatement,
+  type RunCellGate,
+} from "../tools/permissions"
+import { statementRequestLimiter } from "../questdb/requestLimiter"
 import {
   buildInitialScriptResults,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -218,12 +226,104 @@ const executeCellQueries = async (args: {
   }
 }
 
+// Parallel execution for refreshable (non-write) cells — live-path parity:
+// every DQL statement launches at once through the shared limiter, an invalid
+// statement is skipped with its validation error as the slot result, and one
+// failure skips nothing.
+const executeCellQueriesParallel = async (args: {
+  queries: string[]
+  classified: ClassifiedStatement[]
+  variables: NotebookVariable[] | undefined
+  quest: Client
+  signal?: AbortSignal
+  supersedeSignal: AbortSignal
+}): Promise<CellResult> => {
+  const { queries, classified, variables, quest, signal, supersedeSignal } =
+    args
+  const runAbort = new AbortController()
+  let aborted = false
+  const onAbort = () => {
+    aborted = true
+    runAbort.abort()
+  }
+  const abortSignals = signal ? [signal, supersedeSignal] : [supersedeSignal]
+  for (const abortSignal of abortSignals) {
+    if (abortSignal.aborted) onAbort()
+    else abortSignal.addEventListener("abort", onAbort, { once: true })
+  }
+
+  const startTime = Date.now()
+  const results: SingleQueryResult[] = buildInitialScriptResults(queries)
+  let successCount = 0
+  let failedCount = 0
+
+  try {
+    await Promise.all(
+      queries.map(async (query, index) => {
+        const stmt = classified[index]
+        if (stmt?.klass === "ERROR") {
+          failedCount++
+          results[index] = {
+            type: "error",
+            query,
+            error: stmt.error ?? "Invalid statement",
+          }
+          return
+        }
+        if (aborted) {
+          results[index] = { type: "cancelled", query, reason: "user" }
+          return
+        }
+        let exec: QueryExecResult
+        try {
+          exec = await statementRequestLimiter(
+            () =>
+              executeSingleRaw(
+                quest,
+                query,
+                variables,
+                runAbort.signal,
+                NOTEBOOK_ROW_CAP,
+              ),
+            runAbort.signal,
+          )
+        } catch {
+          results[index] = { type: "cancelled", query, reason: "user" }
+          return
+        }
+        results[index] = singleResultFromExec(exec, query)
+        if (exec.type === "error") failedCount++
+        else successCount++
+      }),
+    )
+
+    const result: CellResult = {
+      results,
+      activeResultIndex: 0,
+      timestamp: startTime,
+    }
+    if (queries.length > 1) {
+      result.script = {
+        successCount,
+        failedCount,
+        durationMs: Date.now() - startTime,
+      }
+    }
+    return result
+  } finally {
+    for (const abortSignal of abortSignals) {
+      abortSignal.removeEventListener("abort", onAbort)
+    }
+  }
+}
+
 export const runHeadlessCell = async (
   bufferId: number,
   deps: DexieControllerDeps,
   cellId: string,
   signal?: AbortSignal,
   sql?: string,
+  gate?: RunCellGate,
 ): Promise<RunCellSummary> => {
   const prep = await enqueueBufferTask(bufferId, async () => {
     const view = await readNotebookView(bufferId)
@@ -255,20 +355,49 @@ export const runHeadlessCell = async (
     )
   }
 
+  // The runner's barrier classification is the single decision for permission
+  // enforcement, auto-run eligibility, and strategy — dispatch never
+  // classifies separately (live-path parity).
+  const validate = createValidateWithGlobals(quest, () => prep.variables)
+  const barrier = await resolveRunBarrier(
+    queryText,
+    queries.length,
+    gate,
+    (stmt) => statementRequestLimiter(() => validate(stmt, signal), signal),
+  )
+  if (signal?.aborted) return emptySummary()
+  if (barrier.action === "denied") {
+    return { ...emptySummary(), denied: barrier.reason }
+  }
+  if (barrier.action === "skipped") {
+    return { ...emptySummary(), skipped: barrier.reason }
+  }
+  const classified = barrier.classified
+
   const run = beginHeadlessRun(bufferId, cellId)
 
   try {
     // The queue is NOT held during execution, so runs on other cells of the
     // same notebook proceed in parallel; the commit re-reads and patches only
     // this cell.
-    const ranResult = await executeCellQueries({
-      queries,
-      queryText,
-      variables: prep.variables,
-      quest,
-      signal,
-      supersedeSignal: run.signal,
-    })
+    const ranResult =
+      classified && !hasWriteStatement(classified)
+        ? await executeCellQueriesParallel({
+            queries,
+            classified,
+            variables: prep.variables,
+            quest,
+            signal,
+            supersedeSignal: run.signal,
+          })
+        : await executeCellQueries({
+            queries,
+            queryText,
+            variables: prep.variables,
+            quest,
+            signal,
+            supersedeSignal: run.signal,
+          })
 
     const outcome = await enqueueBufferTask(
       bufferId,

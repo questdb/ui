@@ -7,13 +7,24 @@ import type { CellResult, SingleQueryResult } from "./notebook"
 // capped at the notebook row/byte limits before it is saved.
 // `activeResultIndex` and `script` restore the tab the user was viewing and the
 // script summary; records written before these fields existed omit them, so
-// readers must default (index 0, no summary).
+// readers must default (index 0, no summary). `activeStatementKey` is the
+// content identity of the active tab (normalized text + occurrence);
+// `activeResultIndex` stays only as the read fallback for older records.
+// `refreshErrors` restores per-statement refresh failures, so a reload never
+// hides a failed refresh; records without the field restore no errors.
+export type SnapshotRefreshError = {
+  statementKey: string
+  message: string
+}
+
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
   results: SingleQueryResult[]
   savedAt: number
   activeResultIndex?: number
+  activeStatementKey?: string
+  refreshErrors?: SnapshotRefreshError[]
   script?: CellResult["script"]
 }
 
@@ -32,9 +43,10 @@ export const updateCellSnapshotActiveIndex = (
   bufferId: number,
   cellId: string,
   activeResultIndex: number,
+  activeStatementKey: string,
 ): Promise<void> =>
   db.notebook_results
-    .update([bufferId, cellId], { activeResultIndex })
+    .update([bufferId, cellId], { activeResultIndex, activeStatementKey })
     .then(() => undefined)
 
 // Index-only read: snapshot payloads are never deserialized.

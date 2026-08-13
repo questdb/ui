@@ -26,11 +26,13 @@ import { useTriggerTooltip } from "./useTriggerTooltip"
 import {
   autoRefreshLabel,
   cellToolbarMenuFlags,
+  resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import {
   emitUserAction,
   signalUserEdit,
@@ -85,6 +87,7 @@ type Props = {
   cellIndex: number
   totalCells: number
   layoutMode: "list" | "grid"
+  autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
   isRunning?: boolean
   inline?: boolean
@@ -98,6 +101,7 @@ export const CellToolbar: React.FC<Props> = ({
   cellIndex,
   totalCells,
   layoutMode,
+  autoRefreshDefault,
   isMaximized,
   isRunning = false,
   inline,
@@ -127,7 +131,11 @@ export const CellToolbar: React.FC<Props> = ({
   const isGridView = view === "grid"
   const isNoneView = view === "none"
   const isViewMaximized = !isNoneView && !!cell.isViewMaximized
-  const autoRefresh = cell.autoRefresh ?? true
+  const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
+  // A write cell never ticks, so the menu must not offer an interval the
+  // engine would ignore — same gate the inline selector applies.
+  const autoRefreshBlocked =
+    useCellFetchState(cellId)?.classifyBlock?.kind === "write"
   const [menuOpen, setMenuOpen] = useState(false)
   const moreActionsTooltip = useTriggerTooltip()
 
@@ -233,10 +241,11 @@ export const CellToolbar: React.FC<Props> = ({
     })
     eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
   }
-  const handleRefreshSelect = (value: AutoRefresh) => {
+  const handleRefreshSelect = (value: AutoRefresh | undefined) => {
+    if (value === cell.autoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
       from: autoRefreshLabel(autoRefresh),
-      to: autoRefreshLabel(value),
+      to: value === undefined ? "default" : autoRefreshLabel(value),
       trigger: "menu",
     })
     signalUserEdit(bufferId)
@@ -371,14 +380,20 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showAutoRefreshItem && (
                 <DropdownMenu.Sub>
-                  <DropdownMenu.SubTrigger>
-                    {`Auto-refresh (${autoRefreshLabel(autoRefresh)})`}
+                  <DropdownMenu.SubTrigger disabled={autoRefreshBlocked}>
+                    {autoRefreshBlocked
+                      ? "Auto-refresh (contains DDL/DML)"
+                      : `Auto-refresh (${autoRefreshLabel(autoRefresh)})`}
                   </DropdownMenu.SubTrigger>
                   <DropdownMenu.Portal>
                     <DropdownMenu.SubContent>
                       <AutoRefreshOptions
-                        value={autoRefresh}
+                        value={cell.autoRefresh}
                         onSelect={handleRefreshSelect}
+                        inheritedValue={resolveAutoRefresh(
+                          undefined,
+                          autoRefreshDefault,
+                        )}
                       />
                     </DropdownMenu.SubContent>
                   </DropdownMenu.Portal>

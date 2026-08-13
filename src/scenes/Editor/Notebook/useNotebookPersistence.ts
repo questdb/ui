@@ -16,6 +16,7 @@ type Options = {
   maximizedCellIdRef: MutableRefObject<string | null>
   settingsRef: MutableRefObject<NotebookSettings>
   preview: boolean
+  flushRefreshSnapshots: () => void
 }
 
 // On unmount, flushes any pending debounced write via refs so a tab
@@ -27,6 +28,7 @@ export const useNotebookPersistence = ({
   maximizedCellIdRef,
   settingsRef,
   preview,
+  flushRefreshSnapshots,
 }: Options) => {
   const persistTimeoutRef = useRef<number | null>(null)
   const pendingCellsRef = useRef<NotebookCell[] | null>(null)
@@ -105,8 +107,15 @@ export const useNotebookPersistence = ({
   const bufferIdRef = useRef(bufferId)
   bufferIdRef.current = bufferId
 
+  const flushRefreshSnapshotsRef = useRef(flushRefreshSnapshots)
+  flushRefreshSnapshotsRef.current = flushRefreshSnapshots
+
   const flushPending = useCallback(() => {
     if (preview) return
+    // The refresh engine throttles its result-snapshot writes; a reload
+    // inside that window must not swallow the last frame. IndexedDB puts
+    // started during pagehide generally complete.
+    flushRefreshSnapshotsRef.current()
     if (persistTimeoutRef.current === null) return
     window.clearTimeout(persistTimeoutRef.current)
     persistTimeoutRef.current = null
