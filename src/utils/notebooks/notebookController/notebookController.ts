@@ -34,6 +34,7 @@ import {
   runHeadlessCell,
   type DexieControllerDeps,
 } from "../notebookHeadlessRun"
+import type { RunCellGate } from "../../tools/permissions"
 import type { NotebookTransitionResult } from "./notebookTransitions"
 
 // The two NotebookController implementations, side by side. Both expose the same
@@ -48,6 +49,10 @@ export type RunCellSummary = {
   results: string[]
   unverified?: boolean
   note?: string
+  // Barrier decisions for gated (agent) runs: a permission denial or an
+  // auto-run write skip. Nothing executed when either is set.
+  denied?: string
+  skipped?: string
 }
 
 // Runs a transition against the bound document and resolves its result. A
@@ -57,6 +62,15 @@ export type NotebookMutate = <T>(
   transition: (parts: ViewParts) => NotebookTransitionResult<T>,
 ) => Promise<T>
 
+// Live-only refresh state, read straight off the refresh engine. Absent for
+// unmounted notebooks — the tool docs say so, so an agent never reads absence
+// as "not refreshing" or "not blocked".
+export type CellRefreshView = {
+  refreshing: boolean
+  lastRefreshError?: string
+  autoRefreshBlocked?: "contains_write"
+}
+
 export type NotebookController = {
   bufferId: number
   // Route discriminant — a registry identity check would misclassify a live
@@ -64,10 +78,12 @@ export type NotebookController = {
   kind: "live" | "dexie"
   mutate: NotebookMutate
   readView: () => Promise<NotebookViewState>
+  readRefreshState?: () => ReadonlyMap<string, CellRefreshView>
   runCell: (
     cellId: string,
     signal?: AbortSignal,
     sql?: string,
+    gate?: RunCellGate,
   ) => Promise<RunCellSummary>
   flushChartSnapshots?: () => Promise<void>
 }
@@ -76,11 +92,13 @@ export type NotebookController = {
 // `applyTransition` runs a transition against React state (cancelling any run of
 // a deleted cell via its cleanup list); the reads are synchronous ref snapshots.
 export type NotebookControllerActions = {
+  readRefreshState: () => ReadonlyMap<string, CellRefreshView>
   runCell: (
     cellId: string,
     sql?: string,
     signal?: AbortSignal,
     expectFullValue?: boolean,
+    gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
   applyTransition: <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
@@ -109,6 +127,7 @@ export type ApplyNotebookStateCellRequest = {
 
 export type ApplyNotebookStateRequest = {
   layoutMode?: "list" | "grid" | null
+  autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
   cells: ApplyNotebookStateCellRequest[]
@@ -140,9 +159,10 @@ export const createNotebookController = (
         maximizedCellId:
           liveActionsRef.current.getMaximizedCellId() ?? undefined,
       }),
+    readRefreshState: () => liveActionsRef.current.readRefreshState(),
     // runCell is not a transition, so it does not inherit requireCellIn — guard
     // it here, matching the passive route's requireCellIn in runHeadlessCell.
-    runCell: async (cellId, signal, sql) => {
+    runCell: async (cellId, signal, sql, gate) => {
       const cellBefore = requireCellIn(
         liveActionsRef.current.getCellsSnapshot(),
         cellId,
@@ -157,8 +177,24 @@ export const createNotebookController = (
         }
       }
 
+      const outcome = await liveActionsRef.current.runCell(
+        cellId,
+        sql,
+        signal,
+        true,
+        gate,
+      )
+      if (outcome.denied !== undefined || outcome.skipped !== undefined) {
+        return {
+          ...summarizeCellResults(undefined),
+          ...(outcome.denied !== undefined ? { denied: outcome.denied } : {}),
+          ...(outcome.skipped !== undefined
+            ? { skipped: outcome.skipped }
+            : {}),
+        }
+      }
       const { superseded, cellChanged, notStarted, resultCleared, result } =
-        await liveActionsRef.current.runCell(cellId, sql, signal, true)
+        outcome
 
       if (superseded || cellChanged || resultCleared) {
         return {
@@ -276,7 +312,7 @@ export const createDexieNotebookController = (
     mutate,
     readView: () =>
       enqueueBufferTask(bufferId, () => readNotebookView(bufferId)),
-    runCell: (cellId, signal, sql) =>
-      runHeadlessCell(bufferId, deps, cellId, signal, sql),
+    runCell: (cellId, signal, sql, gate) =>
+      runHeadlessCell(bufferId, deps, cellId, signal, sql, gate),
   }
 }

@@ -1,4 +1,4 @@
-import type { CellMode } from "../../store/notebook"
+import type { AutoRefresh, CellMode } from "../../store/notebook"
 import type { RanStatus } from "../ai/runStatus"
 import type { Client } from "../questdb/client"
 
@@ -134,6 +134,11 @@ export type UserActionEvent =
       kind: "user_changed_layout_mode"
       bufferId: number
       mode: "list" | "grid"
+    }
+  | {
+      kind: "user_changed_autorefresh_default"
+      bufferId: number
+      value: AutoRefresh
     }
   | {
       kind: "user_changed_cell_mode"

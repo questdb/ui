@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import type { CellResult, NotebookCell } from "../../../../store/notebook"
-import { useChartRefresh } from "../chartRefresh/ChartRefreshContext"
+import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import {
   deriveChartLoading,
-  type ChartFetchState,
-} from "../chartRefresh/chartRefreshEngine"
+  type CellFetchState,
+} from "../cellRefresh/cellRefreshEngine"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 
@@ -13,7 +13,7 @@ type ChartLoadingState = { loading: boolean; refreshing: boolean }
 const IDLE: ChartLoadingState = { loading: false, refreshing: false }
 
 const derive = (
-  fetchState: ChartFetchState | undefined,
+  fetchState: CellFetchState | undefined,
   result: CellResult | null | undefined,
   resultLoading: boolean,
 ): ChartLoadingState => {
@@ -31,7 +31,7 @@ const derive = (
 // mid-fetch correct, and covers entry removal — getState turns undefined and
 // the state derives back to idle.
 export const useChartLoading = (cell: NotebookCell): ChartLoadingState => {
-  const engine = useChartRefresh()
+  const engine = useCellRefresh()
   const resultStatus = useCellResultStatus(cell.id)
   const resultLoading = resultStatus === "loading"
   const result = cell.result

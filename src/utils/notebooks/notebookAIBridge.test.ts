@@ -488,6 +488,7 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       getSettings: () => ({}),
       getMaximizedCellId: () => currentMaximizedId,
       flushChartSnapshots: () => Promise.resolve(),
+      readRefreshState: () => new Map(),
     }
     return { live, applied }
   }
@@ -551,6 +552,7 @@ describe("createNotebookController — live runCell supersession", () => {
     getSettings: () => ({}),
     getMaximizedCellId: () => null,
     flushChartSnapshots: () => Promise.resolve(),
+    readRefreshState: () => new Map(),
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({

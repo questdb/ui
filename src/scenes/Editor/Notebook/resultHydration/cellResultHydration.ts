@@ -5,6 +5,25 @@ import type {
 } from "../../../../store/notebook"
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
+import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
+import {
+  reconcileResultsForStatements,
+  statementKeysFor,
+} from "../notebookUtils"
+
+// Legacy records hold the raw cell text — comments included — as the
+// statement's query. Parsing it back to the statement lets those results
+// survive key matching; the changed frame then rewrites to disk.
+const normalizeSnapshotResultQuery = (
+  result: SingleQueryResult,
+): SingleQueryResult => {
+  const parsed = getQueriesFromText(result.query)
+  if (parsed.length !== 1) return result
+  if (normalizeQueryText(parsed[0]) === normalizeQueryText(result.query)) {
+    return result
+  }
+  return { ...result, query: parsed[0] }
+}
 import { scheduleIdle } from "../notebookScheduling"
 import { PerKeyListeners } from "../perKeyListeners"
 
@@ -20,10 +39,16 @@ const MAX_LOAD_RETRIES = 2
 
 export type CellResultHydrationDeps = {
   loadSnapshot: (cellId: string) => Promise<NotebookResultSnapshot | undefined>
+  rewriteSnapshot: (snapshot: NotebookResultSnapshot) => Promise<boolean>
+  deleteSnapshot: (cellId: string) => Promise<void>
   getCell: (cellId: string) => NotebookCell | undefined
   applyResult: (cellId: string, result: CellResult) => void
   releaseResult: (cellId: string) => void
   canRelease: (cellId: string) => boolean
+  seedRefreshErrors: (
+    cellId: string,
+    errors: Array<{ statementKey: string; message: string }>,
+  ) => void
 }
 
 export const hasRunMarker = (cell: NotebookCell): boolean =>
@@ -45,11 +70,16 @@ export class CellResultHydrationEngine {
   // fails safe (the cell just never releases).
   private persisted = new WeakSet<SingleQueryResult[]>()
   private lastSyncedCellIds: string[] | null = null
+  // Cells whose current load is a revive: a zero-survivor reconcile must not
+  // delete the snapshot — the text that failed to match may still be
+  // transient, and a later matching settle (undo) needs the rows back.
+  private reviving = new Set<string>()
 
   constructor(private deps: CellResultHydrationDeps) {}
 
   destroy() {
     this.destroyed = true
+    this.reviving.clear()
     this.statuses.clear()
     this.listeners.clear()
     this.anyListeners.clear()
@@ -127,7 +157,20 @@ export class CellResultHydrationEngine {
     this.setStatus(cellId, "missing")
   }
 
+  // Re-attempts a "missing" cell's load without the delete-on-empty terminal.
+  // For the zero-survivor collapse: the snapshot stayed on disk, so a settle
+  // back to matching SQL restores the rows instead of staying blank.
+  reviveMissing(cellId: string) {
+    if (this.destroyed) return
+    if (this.statusOf(cellId) !== "missing") return
+    this.reviving.add(cellId)
+    this.statuses.delete(cellId)
+    this.request(cellId)
+    if (this.statusOf(cellId) !== "loading") this.reviving.delete(cellId)
+  }
+
   forget(cellId: string) {
+    this.reviving.delete(cellId)
     this.releaseQueue.delete(cellId)
     this.loadAttempts.delete(cellId)
     const previous = this.statuses.get(cellId)
@@ -160,25 +203,93 @@ export class CellResultHydrationEngine {
       return
     }
     if (cell.result != null) {
+      this.reviving.delete(cellId)
       this.setStatus(cellId, "loaded")
       return
     }
     if (this.deps.canRelease(cellId)) {
+      this.reviving.delete(cellId)
       this.setStatus(cellId, "unrequested")
       return
     }
     if (snapshot && snapshot.results.length > 0) {
-      this.persisted.add(snapshot.results)
-      this.deps.applyResult(cellId, {
-        results: snapshot.results,
-        activeResultIndex: snapshot.activeResultIndex ?? 0,
-        timestamp: snapshot.savedAt,
-        ...(snapshot.script ? { script: snapshot.script } : {}),
-      })
-      this.setStatus(cellId, "loaded")
+      this.applyReconciled(cellId, cell, snapshot)
       return
     }
+    this.reviving.delete(cellId)
     this.setStatus(cellId, "missing")
+  }
+
+  // The cell's SQL may have changed while the notebook was unmounted
+  // (update_cell / apply_notebook_state). Results follow statement content:
+  // unmatched old results are never exposed under new SQL. A changed frame is
+  // rewritten to disk before its array counts as persisted/releasable, and a
+  // frame with no survivor deletes the snapshot — every later reload agrees.
+  private applyReconciled(
+    cellId: string,
+    cell: NotebookCell,
+    snapshot: NotebookResultSnapshot,
+  ) {
+    const statements = getQueriesFromText(cell.value)
+    const reconciled = reconcileResultsForStatements(statements, {
+      results: snapshot.results.map(normalizeSnapshotResultQuery),
+      activeResultIndex: snapshot.activeResultIndex ?? 0,
+      ...(snapshot.activeStatementKey !== undefined
+        ? { activeStatementKey: snapshot.activeStatementKey }
+        : {}),
+      timestamp: snapshot.savedAt,
+    })
+    if (!reconciled) {
+      if (!this.reviving.delete(cellId)) {
+        void this.deps.deleteSnapshot(cellId).catch(() => undefined)
+      }
+      this.setStatus(cellId, "missing")
+      return
+    }
+    this.reviving.delete(cellId)
+    const frameChanged =
+      reconciled.results.length !== snapshot.results.length ||
+      reconciled.results.some((result, index) => {
+        return result !== snapshot.results[index]
+      })
+    const slotKeys = new Set(statementKeysFor(statements))
+    const refreshErrors = snapshot.refreshErrors?.filter((error) =>
+      slotKeys.has(error.statementKey),
+    )
+    if (frameChanged) {
+      const rewritten: NotebookResultSnapshot = {
+        ...snapshot,
+        results: reconciled.results,
+        activeResultIndex: reconciled.activeResultIndex,
+        activeStatementKey: reconciled.activeStatementKey,
+        ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
+      }
+      delete rewritten.script
+      if (!refreshErrors || refreshErrors.length === 0) {
+        delete rewritten.refreshErrors
+      }
+      void this.deps
+        .rewriteSnapshot(rewritten)
+        .then((saved) => {
+          if (saved) this.persisted.add(reconciled.results)
+        })
+        .catch(() => undefined)
+    } else {
+      this.persisted.add(reconciled.results)
+    }
+    this.deps.applyResult(cellId, {
+      results: reconciled.results,
+      activeResultIndex: reconciled.activeResultIndex,
+      activeStatementKey: reconciled.activeStatementKey,
+      timestamp: snapshot.savedAt,
+      ...(snapshot.script && !frameChanged ? { script: snapshot.script } : {}),
+    })
+    // Persisted refresh failures re-enter the engine channel, so a reload
+    // restores the red badge and last_refresh_error alongside the old rows.
+    if (refreshErrors && refreshErrors.length > 0) {
+      this.deps.seedRefreshErrors(cellId, refreshErrors)
+    }
+    this.setStatus(cellId, "loaded")
   }
 
   // A cell resting on screen gets no further band transitions, so a failed

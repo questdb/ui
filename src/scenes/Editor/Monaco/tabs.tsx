@@ -716,6 +716,9 @@ export const Tabs = () => {
                     void trackEvent(ConsoleEvent.NOTEBOOK_CREATE, {
                       source: "tab_menu",
                     })
+                    void trackEvent(ConsoleEvent.NOTEBOOK_TAB_OPEN, {
+                      source: "tab_menu",
+                    })
                   }
                 })
               }}

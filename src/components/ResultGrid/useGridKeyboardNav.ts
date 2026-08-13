@@ -111,6 +111,18 @@ export const useGridKeyboardNav = (
     [],
   )
 
+  // A refresh can shrink the dataset under the focus; clamp it back into
+  // bounds so navigation never anchors past the last row or column.
+  useEffect(() => {
+    setFocusedCell((cell) => {
+      if (!cell) return cell
+      if (rowCount === 0 || colCount === 0) return null
+      const row = Math.min(cell.row, rowCount - 1)
+      const col = Math.min(cell.col, colCount - 1)
+      return row === cell.row && col === cell.col ? cell : { row, col }
+    })
+  }, [rowCount, colCount])
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!focusedCell) return

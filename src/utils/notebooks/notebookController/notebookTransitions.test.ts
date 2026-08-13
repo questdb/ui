@@ -51,8 +51,8 @@ describe("applyNotebookStateTransition", () => {
     expect(out.result.applied.deleted).toEqual(["b", "c"])
   })
 
-  it("flags a value-changed run cell in deleteSnapshots, separate from cleanup", () => {
-    // Given a run cell with persisted run history and an untouched sibling
+  it("keeps a released cell's snapshot on a value change — hydration reconciles it", () => {
+    // Given a released run cell (history only, result on disk) and a sibling
     const parts = partsOf([
       cell("a", "SELECT 1", { lastRunStatus: "success" }),
       cell("b", "SELECT 2"),
@@ -64,10 +64,66 @@ describe("applyNotebookStateTransition", () => {
         { id: "b", preserveValue: true },
       ],
     })
-    // Then the surviving cell's stale snapshot travels in deleteSnapshots —
-    // not cleanup, which would also drop its layout and cancel its run
-    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+    // Then no snapshot deletion is requested — hydration reconciles the
+    // persisted results by statement content on the next load
+    expect(out.deleteSnapshots).toBeUndefined()
     expect(out.cleanup?.cellIds).toEqual([])
+  })
+
+  it("flags a live result that loses every statement in deleteSnapshots", () => {
+    // Given a mounted run cell whose in-memory result matches its SQL
+    const parts = partsOf([
+      cell("a", "SELECT 1", {
+        result: {
+          results: [
+            {
+              type: "dql",
+              query: "SELECT 1",
+              columns: [{ name: "x", type: "INT" }],
+              dataset: [[1]],
+              count: 1,
+            },
+          ],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      }),
+    ])
+    // When an apply rewrites the SQL so no statement survives
+    const out = applyNotebookStateTransition(parts, {
+      cells: [{ id: "a", value: "SELECT 99" }],
+    })
+    // Then the frame collapses and the snapshot deletion is requested, so
+    // disk agrees with the collapsed cell on every later reload
+    expect(out.parts.cells[0].result).toBeNull()
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+  })
+
+  it("carries surviving statements' results through an apply rewrite", () => {
+    // Given a mounted two-statement cell with both results in memory
+    const dql = (query: string) => ({
+      type: "dql" as const,
+      query,
+      columns: [{ name: "x", type: "INT" }],
+      dataset: [[1]],
+      count: 1,
+    })
+    const parts = partsOf([
+      cell("a", "SELECT 1; SELECT 2", {
+        result: {
+          results: [dql("SELECT 1"), dql("SELECT 2")],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      }),
+    ])
+    // When an apply edits only the second statement
+    const out = applyNotebookStateTransition(parts, {
+      cells: [{ id: "a", value: "SELECT 1; SELECT 99" }],
+    })
+    // Then the unchanged statement keeps its result and nothing is deleted
+    expect(out.parts.cells[0].result?.results).toEqual([dql("SELECT 1")])
+    expect(out.deleteSnapshots).toBeUndefined()
   })
 
   it("omits deleteSnapshots when no run cell's value changed", () => {
@@ -309,6 +365,69 @@ describe("transition validation guards", () => {
 
     // Then no height is stamped
     expect(out.parts.cells[0].topHeight).toBeUndefined()
+  })
+
+  const dqlOf = (query: string) => ({
+    type: "dql" as const,
+    query,
+    columns: [{ name: "x", type: "INT" }],
+    dataset: [[1]],
+    count: 1,
+  })
+
+  it("updateCell carries surviving statements' results across a value edit", () => {
+    // Given a mounted two-statement cell with both results in memory
+    const ran = cell("a", "SELECT 1; SELECT 2", {
+      result: {
+        results: [dqlOf("SELECT 1"), dqlOf("SELECT 2")],
+        activeResultIndex: 0,
+        timestamp: 0,
+      },
+    })
+
+    // When update_cell edits only the second statement
+    const out = updateCellTransition(partsOf([ran]), BUFFER_ID, "a", {
+      value: "SELECT 1; SELECT 99",
+    })
+
+    // Then the unchanged statement keeps its result, nothing is deleted
+    expect(out.parts.cells[0].result?.results).toEqual([dqlOf("SELECT 1")])
+    expect(out.deleteSnapshots).toBeUndefined()
+  })
+
+  it("updateCell collapses the frame and flags the snapshot when nothing survives", () => {
+    // Given a mounted cell whose only statement is rewritten
+    const ran = cell("a", "SELECT 1", {
+      result: {
+        results: [dqlOf("SELECT 1")],
+        activeResultIndex: 0,
+        timestamp: 0,
+      },
+    })
+
+    // When update_cell replaces the SQL wholesale
+    const out = updateCellTransition(partsOf([ran]), BUFFER_ID, "a", {
+      value: "SELECT 99",
+    })
+
+    // Then the frame collapses, history carries, and the snapshot is flagged
+    expect(out.parts.cells[0].result).toBeNull()
+    expect(out.parts.cells[0].lastRunStatus).toBe("success")
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+  })
+
+  it("updateCell keeps a released cell's snapshot on a value edit", () => {
+    // Given a released cell: run history only, results on disk
+    const released = cell("a", "SELECT 1", { lastRunStatus: "success" })
+
+    // When update_cell edits the SQL
+    const out = updateCellTransition(partsOf([released]), BUFFER_ID, "a", {
+      value: "SELECT 99",
+    })
+
+    // Then no snapshot deletion is requested — hydration reconciles it
+    expect(out.deleteSnapshots).toBeUndefined()
+    expect(out.parts.cells[0].lastRunStatus).toBe("success")
   })
 
   it("deleteCell throws unknown_cell for a missing id", () => {

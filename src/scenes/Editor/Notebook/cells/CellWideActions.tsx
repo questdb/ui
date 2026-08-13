@@ -8,7 +8,8 @@ type Props = {
   // Only the grid/chart views reach here — the neutral (none) state renders the
   // Run/Draw toggles instead.
   view: "grid" | "chart"
-  autoRefresh: AutoRefresh
+  cellAutoRefresh: AutoRefresh | undefined
+  autoRefreshDefault: AutoRefresh | undefined
   isViewMaximized: boolean
   isRunning: boolean
   isGridLoading: boolean
@@ -20,7 +21,8 @@ type Props = {
 export const CellWideActions: React.FC<Props> = ({
   cellId,
   view,
-  autoRefresh,
+  cellAutoRefresh,
+  autoRefreshDefault,
   isViewMaximized,
   isRunning,
   isGridLoading,
@@ -35,7 +37,8 @@ export const CellWideActions: React.FC<Props> = ({
       <CellRefreshButton
         cellId={cellId}
         view={view}
-        autoRefresh={autoRefresh}
+        cellAutoRefresh={cellAutoRefresh}
+        autoRefreshDefault={autoRefreshDefault}
         // A grid's first run spins the Run segment instead — only a true refresh
         // (re-running an existing grid) spins the refresh button.
         isRefreshing={

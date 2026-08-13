@@ -1,10 +1,10 @@
 import React from "react"
 import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
-import { Queue } from "@phosphor-icons/react"
-import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
+import { ArrowClockwiseIcon, MinusIcon, Queue } from "@phosphor-icons/react"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { LoadingIconSvg } from "../../Monaco/icons"
+import type { StatementSlotView } from "./statementSlotView"
 import {
   CancelledIcon,
   Tab,
@@ -21,16 +21,32 @@ const truncateQuery = (query: string, maxLen = 30): string => {
     : oneLine
 }
 
-const StatusIcon: React.FC<{ type: SingleQueryResult["type"] }> = ({
-  type,
-}) => {
-  if (type === "running") {
+// A refresh keeps the old rows on screen, so the tab — not the grid — carries
+// the refresh state: a spinner while in flight, a red refresh icon when the
+// last round failed. A statement with no result yet is neutral, never an error.
+const SlotIcon: React.FC<{ slot: StatementSlotView }> = ({ slot }) => {
+  if (slot.refreshing || slot.result?.type === "running") {
     return (
       <TabSpinner>
         <LoadingIconSvg />
       </TabSpinner>
     )
   }
+  if (slot.refreshError !== undefined) {
+    return (
+      <TabStatusIcon $success={false}>
+        <ArrowClockwiseIcon size={18} />
+      </TabStatusIcon>
+    )
+  }
+  if (slot.result === null) {
+    return (
+      <CancelledIcon>
+        <MinusIcon size={18} />
+      </CancelledIcon>
+    )
+  }
+  const { type } = slot.result
   if (type === "queued") {
     return (
       <CancelledIcon>
@@ -57,35 +73,40 @@ const StatusIcon: React.FC<{ type: SingleQueryResult["type"] }> = ({
 }
 
 type Props = {
-  result: CellResult
-  onTabChange?: (index: number) => void
+  slots: StatementSlotView[]
+  activeSlotIndex: number
+  onTabChange?: (statementKey: string) => void
 }
 
-export const TabBar: React.FC<Props> = ({ result, onTabChange }) => (
+export const TabBar: React.FC<Props> = ({
+  slots,
+  activeSlotIndex,
+  onTabChange,
+}) => (
   <TabBarWrapper role="tablist">
-    {result.results.map((r, i) => (
+    {slots.map((slot, i) => (
       <Tab
         // Positional identity — duplicate SQL across statements is legal
         // (e.g. `SELECT 1; SELECT 1;`) and would collapse if keyed on query.
         // eslint-disable-next-line react/no-array-index-key
         key={i}
-        $active={i === result.activeResultIndex}
+        $active={i === activeSlotIndex}
         onClick={() => {
-          if (i !== result.activeResultIndex) {
+          if (i !== activeSlotIndex) {
             void trackEvent(ConsoleEvent.NOTEBOOK_RESULT_TAB_SWITCH, {
               tabIndex: i,
-              tabCount: result.results.length,
-              resultType: r.type,
+              tabCount: slots.length,
+              resultType: slot.result?.type ?? "none",
             })
           }
-          onTabChange?.(i)
+          onTabChange?.(slot.key)
         }}
-        title={r.query}
+        title={slot.sql}
         role="tab"
-        aria-selected={i === result.activeResultIndex}
+        aria-selected={i === activeSlotIndex}
       >
-        <StatusIcon type={r.type} />
-        <TabLabel>{truncateQuery(r.query)}</TabLabel>
+        <SlotIcon slot={slot} />
+        <TabLabel>{truncateQuery(slot.sql)}</TabLabel>
       </Tab>
     ))}
   </TabBarWrapper>

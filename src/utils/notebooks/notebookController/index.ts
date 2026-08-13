@@ -85,6 +85,7 @@ export const withBoundNotebookReadOnly = async <T>(
 // === Consumer API — the AI-tool / read layers use only these ================
 export { getController } from "./notebookControllerUtils"
 export type {
+  CellRefreshView,
   NotebookController,
   RunCellSummary,
   ApplyNotebookStateRequest,
@@ -115,6 +116,7 @@ export { migratePersistedNotebookView } from "../notebookDexieView"
 export {
   addCellTransition,
   applyNotebookStateTransition,
+  clearCellAutoRefreshTransition,
   deleteCellTransition,
   duplicateCellTransition,
   moveCellDownTransition,
@@ -125,6 +127,7 @@ export {
   setCellModeTransition,
   setCellViewMaximizedTransition,
   setLayoutModeTransition,
+  setNotebookAutoRefreshTransition,
   updateCellTransition,
   type NotebookTransitionResult,
 } from "./notebookTransitions"

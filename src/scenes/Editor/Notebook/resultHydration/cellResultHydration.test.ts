@@ -6,6 +6,7 @@ import type {
 } from "../../../../store/notebook"
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { CellVirtualizationEngine } from "../cellVirtualization/cellVirtualizationEngine"
+import { statementKeysFor } from "../notebookUtils"
 import { CellResultHydrationEngine } from "./cellResultHydration"
 
 vi.mock("../notebookScheduling", () => ({
@@ -47,6 +48,12 @@ describe("CellResultHydrationEngine", () => {
   let applied: Array<[string, CellResult]>
   let released: string[]
   let releasableCellIds: Set<string>
+  let rewrites: NotebookResultSnapshot[]
+  let pendingRewrites: Array<(saved: boolean) => void>
+  let deletedSnapshots: string[]
+  let seededErrors: Array<
+    [string, Array<{ statementKey: string; message: string }>]
+  >
 
   const ranCell = (id: string): NotebookCell => ({
     id,
@@ -78,6 +85,10 @@ describe("CellResultHydrationEngine", () => {
     applied = []
     released = []
     releasableCellIds = new Set()
+    rewrites = []
+    pendingRewrites = []
+    deletedSnapshots = []
+    seededErrors = []
     engine = new CellResultHydrationEngine({
       loadSnapshot: (cellId) =>
         new Promise((resolve, reject) => {
@@ -89,6 +100,20 @@ describe("CellResultHydrationEngine", () => {
           })
           pendingLoads.set(cellId, handles)
         }),
+      rewriteSnapshot: (rewritten) =>
+        new Promise((resolve) => {
+          rewrites.push(rewritten)
+          snapshots.set(rewritten.cellId, rewritten)
+          pendingRewrites.push(resolve)
+        }),
+      deleteSnapshot: (cellId) => {
+        deletedSnapshots.push(cellId)
+        snapshots.delete(cellId)
+        return Promise.resolve()
+      },
+      seedRefreshErrors: (cellId, errors) => {
+        seededErrors.push([cellId, errors])
+      },
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
         applied.push([cellId, result])
@@ -133,6 +158,7 @@ describe("CellResultHydrationEngine", () => {
         {
           results: [dqlResult("select 1")],
           activeResultIndex: 0,
+          activeStatementKey: statementKeysFor(["select 1"])[0],
           timestamp: 1000,
         },
       ],
@@ -141,7 +167,7 @@ describe("CellResultHydrationEngine", () => {
 
   it("restores the viewed tab and script summary from the snapshot", async () => {
     // Given a script cell's snapshot saved on its second tab with a summary
-    seedCell(ranCell("c1"))
+    seedCell({ ...ranCell("c1"), value: "select 1; select 2" })
     const results = [dqlResult("select 1"), dqlResult("select 2")]
     const script = { successCount: 2, failedCount: 0, durationMs: 12 }
     snapshots.set(
@@ -155,13 +181,22 @@ describe("CellResultHydrationEngine", () => {
 
     // Then the user lands on the tab they were viewing, summary intact
     expect(applied).toEqual([
-      ["c1", { results, activeResultIndex: 1, timestamp: 1000, script }],
+      [
+        "c1",
+        {
+          results,
+          activeResultIndex: 1,
+          activeStatementKey: statementKeysFor(["select 1", "select 2"])[1],
+          timestamp: 1000,
+          script,
+        },
+      ],
     ])
   })
 
   it("re-hydrates a released cell with the exact same result", async () => {
     // Given a hydrated script cell
-    seedCell(ranCell("c1"))
+    seedCell({ ...ranCell("c1"), value: "select 1; select 2" })
     const results = [dqlResult("select 1"), dqlResult("select 2")]
     const script = { successCount: 2, failedCount: 0, durationMs: 12 }
     snapshots.set(
@@ -183,6 +218,115 @@ describe("CellResultHydrationEngine", () => {
     // Then the second hydration deep-equals the first
     expect(applied).toHaveLength(2)
     expect(applied[1][1]).toEqual(applied[0][1])
+  })
+
+  it("reconciles a snapshot against SQL edited while unmounted — survivors hydrate, the rest drop", async () => {
+    // Given a snapshot saved for two statements, one of which was edited away
+    seedCell({ ...ranCell("c1"), value: "select 1; select 3" })
+    snapshots.set(
+      "c1",
+      snapshot("c1", [dqlResult("select 1"), dqlResult("select 2")], {
+        activeResultIndex: 1,
+        script: { successCount: 2, failedCount: 0, durationMs: 12 },
+      }),
+    )
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then only the surviving statement's result is exposed, without the
+    // stale script summary, and the reconciled frame is rewritten to disk
+    expect(applied).toHaveLength(1)
+    expect(applied[0][1].results).toEqual([dqlResult("select 1")])
+    expect(applied[0][1].script).toBeUndefined()
+    expect(rewrites).toHaveLength(1)
+    expect(rewrites[0].results).toEqual([dqlResult("select 1")])
+    expect(rewrites[0].script).toBeUndefined()
+  })
+
+  it("keeps a reconciled frame in memory until its rewrite confirms", async () => {
+    // Given a hydrated cell whose snapshot needed reconciliation
+    seedCell({ ...ranCell("c1"), value: "select 1" })
+    snapshots.set(
+      "c1",
+      snapshot("c1", [dqlResult("select 1"), dqlResult("select 2")]),
+    )
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // When it becomes releasable before the rewrite resolves
+    releasableCellIds.add("c1")
+    engine.noteReleasable("c1")
+    await vi.advanceTimersByTimeAsync(1)
+
+    // Then the unconfirmed frame stays in memory
+    expect(released).toEqual([])
+
+    // When the rewrite confirms
+    pendingRewrites.shift()?.(true)
+    await vi.advanceTimersByTimeAsync(0)
+    engine.noteReleasable("c1")
+    await vi.advanceTimersByTimeAsync(1)
+
+    // Then the release lands
+    expect(released).toEqual(["c1"])
+  })
+
+  it("restores a legacy record whose query holds the raw cell text, comments included", async () => {
+    // Given a record written before recording was fixed: the single run
+    // stored the whole cell text — leading comment included — as the query
+    seedCell({ ...ranCell("c1"), value: "-- note\nselect 1" })
+    snapshots.set("c1", snapshot("c1", [dqlResult("-- note\nselect 1")]))
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the result survives under the parsed statement instead of being
+    // deleted as an orphan, and the converged record is rewritten to disk
+    expect(deletedSnapshots).toEqual([])
+    expect(applied).toHaveLength(1)
+    expect(applied[0][1].results[0]).toMatchObject({ query: "select 1" })
+    expect(rewrites).toHaveLength(1)
+    expect(rewrites[0].results[0]).toMatchObject({ query: "select 1" })
+  })
+
+  it("deletes the snapshot and resolves missing when no statement survives", async () => {
+    // Given a snapshot whose only statement was rewritten
+    seedCell({ ...ranCell("c1"), value: "select 99" })
+    snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then nothing is applied, the cell collapses, and the snapshot is gone
+    expect(applied).toEqual([])
+    expect(engine.statusOf("c1")).toBe("missing")
+    expect(deletedSnapshots).toEqual(["c1"])
+  })
+
+  it("keeps only surviving statements' refresh errors in the rewritten snapshot", async () => {
+    // Given persisted refresh errors for a surviving and a removed statement
+    seedCell({ ...ranCell("c1"), value: "select 1" })
+    snapshots.set("c1", {
+      ...snapshot("c1", [dqlResult("select 1"), dqlResult("select 2")]),
+      refreshErrors: [
+        { statementKey: statementKeysFor(["select 1"])[0], message: "boom" },
+        { statementKey: statementKeysFor(["select 2"])[0], message: "gone" },
+      ],
+    })
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the removed statement's error is dropped from the rewrite
+    expect(rewrites).toHaveLength(1)
+    expect(rewrites[0].refreshErrors).toEqual([
+      { statementKey: statementKeysFor(["select 1"])[0], message: "boom" },
+    ])
   })
 
   it("never clobbers a live result that lands while the snapshot load is in flight", async () => {
@@ -592,6 +736,77 @@ describe("CellResultHydrationEngine", () => {
     engine.forget("c2")
     expect(anyListener).toHaveBeenCalledTimes(2)
   })
+
+  describe("reviveMissing", () => {
+    it("restores the retained snapshot when the cell's SQL matches again", async () => {
+      // Given a cell whose display collapsed but whose snapshot survived
+      seedCell(ranCell("c1"))
+      snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+      engine.noteMissing("c1")
+
+      // When the SQL settles back to matching and the revive load resolves
+      engine.reviveMissing("c1")
+      await resolveLoad("c1")
+
+      // Then the rows come back and the snapshot is untouched
+      expect(applied).toHaveLength(1)
+      expect(applied[0][1].results[0]).toMatchObject({ query: "select 1" })
+      expect(engine.statusOf("c1")).toBe("loaded")
+      expect(deletedSnapshots).toEqual([])
+    })
+
+    it("keeps the snapshot when the revive finds zero survivors", async () => {
+      // Given a collapsed cell whose current SQL matches nothing on disk
+      seedCell({ ...ranCell("c1"), value: "select 999" })
+      snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+      engine.noteMissing("c1")
+
+      // When the revive load resolves against the non-matching text
+      engine.reviveMissing("c1")
+      await resolveLoad("c1")
+
+      // Then nothing applies, the snapshot survives for a later matching
+      // settle, and the status returns to missing
+      expect(applied).toEqual([])
+      expect(deletedSnapshots).toEqual([])
+      expect(snapshots.has("c1")).toBe(true)
+      expect(engine.statusOf("c1")).toBe("missing")
+
+      // And a later matching settle still gets its rows back
+      seedCell({ ...ranCell("c1"), value: "select 1" })
+      engine.reviveMissing("c1")
+      await resolveLoad("c1")
+      expect(applied).toHaveLength(1)
+    })
+
+    it("a normal load's zero-survivor reconcile still deletes the snapshot", async () => {
+      // Given a cell whose stored rows match nothing in its current SQL
+      seedCell({ ...ranCell("c1"), value: "select 999" })
+      snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+
+      // When a plain band-entry load resolves
+      engine.request("c1")
+      await resolveLoad("c1")
+
+      // Then the terminal delete still applies — revive semantics never leak
+      // into normal loads
+      expect(deletedSnapshots).toEqual(["c1"])
+      expect(engine.statusOf("c1")).toBe("missing")
+    })
+
+    it("does nothing unless the cell is known missing", () => {
+      // Given a cell that was never requested
+      seedCell(ranCell("c1"))
+      snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+
+      // When a stray revive arrives
+      engine.reviveMissing("c1")
+
+      // Then no load starts
+      expect(loadCounts.get("c1")).toBeUndefined()
+      expect(engine.statusOf("c1")).toBe("unrequested")
+    })
+  })
 })
 
 // Mirrors the NotebookProvider wiring: band callbacks drive request /
@@ -639,6 +854,9 @@ describe("virtualization band → hydration engine wiring", () => {
           })
           pendingLoads.set(cellId, handles)
         }),
+      rewriteSnapshot: () => Promise.resolve(true),
+      deleteSnapshot: () => Promise.resolve(),
+      seedRefreshErrors: () => undefined,
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
         applied.push([cellId, result])

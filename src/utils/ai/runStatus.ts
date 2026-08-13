@@ -30,6 +30,9 @@ export const deriveRunStatusFromResults = (
   return { status: "none" }
 }
 
+// Read order: live execution first (pending slots), then the RECORDED run
+// history (stamped by run commits only — refresh settles never touch it),
+// then result derivation as the fallback for records that predate stamping.
 export const getCellRunStatus = (
   cell:
     | {
@@ -42,11 +45,18 @@ export const getCellRunStatus = (
     | null
     | undefined,
 ): { status: RunStatus; error?: string } => {
-  if (cell?.result) return deriveRunStatusFromResults(cell.result.results)
-  return {
-    status: cell?.lastRunStatus ?? "none",
-    ...(cell?.lastRunError ? { error: cell.lastRunError } : {}),
+  const results = cell?.result?.results
+  if (results?.some((r) => r.type === "running" || r.type === "queued")) {
+    return { status: "running" }
   }
+  if (cell?.lastRunStatus !== undefined) {
+    return {
+      status: cell.lastRunStatus,
+      ...(cell.lastRunError ? { error: cell.lastRunError } : {}),
+    }
+  }
+  if (cell?.result) return deriveRunStatusFromResults(cell.result.results)
+  return { status: "none" }
 }
 
 export const createRunStatus = (

@@ -1,7 +1,7 @@
 import React, { useMemo } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
-import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
+import type { SingleQueryResult } from "../../../../store/notebook"
 import {
   CELL_BORDER_PX,
   CELL_PADDING_PX,
@@ -199,18 +199,6 @@ const valueWidthPct = (
   return 45 + jitter
 }
 
-const activeResultOf = (result: CellResult): SingleQueryResult | undefined =>
-  result.results[result.activeResultIndex] ?? result.results[0]
-
-const tabKeysFor = (results: SingleQueryResult[]): string[] => {
-  const seen = new Map<string, number>()
-  return results.map((r) => {
-    const count = seen.get(r.query) ?? 0
-    seen.set(r.query, count + 1)
-    return `tab-${r.query}-${count}`
-  })
-}
-
 // The live grid's width/order/pinning pipeline, so the swap shifts nothing.
 // Frozen columns follow the pin list, not columnOrder — ResultGrid's
 // moveColumnToFront reorders the pin list alone.
@@ -313,42 +301,46 @@ const GenericGridShimmer = () => (
   </>
 )
 
+// Geometry follows the DERIVED frame: the tab strip counts statements (a
+// "Not run" slot still owns a tab), and the silhouette samples whatever the
+// active slot currently shows.
 export const GridShimmer = ({
-  result,
+  statementCount,
+  activeResult,
   bufferId,
   cellId,
 }: {
-  result?: CellResult
+  statementCount: number
+  activeResult?: SingleQueryResult
   bufferId: number
   cellId: string
 }) => {
   const { maxColumnWidth } = useLocalStorage()
   const fontsReady = useFontsReady()
-  const active = result ? activeResultOf(result) : undefined
   // fontsReady is a cache buster: the webfont landing invalidates every
   // measured width, so a placeholder sampled against the fallback re-samples
   // rather than holding stale widths for the life of the dataset.
   const columns = useMemo(
-    () => displayColumnsFor(active, bufferId, cellId, maxColumnWidth),
-    [active, bufferId, cellId, maxColumnWidth, fontsReady],
+    () => displayColumnsFor(activeResult, bufferId, cellId, maxColumnWidth),
+    [activeResult, bufferId, cellId, maxColumnWidth, fontsReady],
   )
   const rowCount =
-    active?.type === "dql"
-      ? Math.min(active.dataset.length, MAX_SHIMMER_ROWS)
+    activeResult?.type === "dql"
+      ? Math.min(activeResult.dataset.length, MAX_SHIMMER_ROWS)
       : 0
   return (
     <Wrapper data-hook="cell-grid-shimmer" aria-hidden="true">
-      {result && result.results.length > 1 && (
+      {statementCount > 1 && (
         <TabStrip>
-          {tabKeysFor(result.results).map((key) => (
-            <TabShimmer key={key} />
+          {Array.from({ length: statementCount }, (_, i) => (
+            <TabShimmer key={`tab-${i}`} />
           ))}
         </TabStrip>
       )}
       <StatusStrip>
         <StatusBar />
       </StatusStrip>
-      {!result && (
+      {statementCount === 0 && (
         <>
           <ActionsStrip>
             <QueryBar />

@@ -159,6 +159,9 @@ export const NotebookOnboardingModal = () => {
           source: "onboarding_modal",
           step,
         })
+        void trackEvent(ConsoleEvent.NOTEBOOK_TAB_OPEN, {
+          source: "onboarding_modal",
+        })
       }
     })
     setOpen(false)

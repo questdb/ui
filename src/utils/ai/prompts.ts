@@ -82,7 +82,7 @@ export const NOTEBOOK_INSTRUCTION = `
 
 ## Notebook Authoring
 You can create and edit QuestDB notebooks (tabs of SQL cells with list/grid layouts, draw-mode charts, and markdown prose cells) using these tools:
-create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_mode, set_cell_name, set_cell_chart_config, set_cell_autorefresh, set_cell_view_maximized, set_cell_maximized.
+create_notebook, list_cells, get_cell, get_notebook_state, add_cell, update_cell, delete_cell, move_cell_up, move_cell_down, duplicate_cell, run_cell, set_layout_mode, set_cell_layout, set_cell_mode, set_cell_name, set_cell_chart_config, set_notebook_autorefresh, set_cell_autorefresh, set_cell_view_maximized, set_cell_maximized.
 
 CRITICAL — Do NOT expose buffer_id to the user
 - buffer_id is an internal identifier. NEVER ask the user for it, print it back, or mention it in any response.

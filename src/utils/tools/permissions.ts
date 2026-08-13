@@ -2,7 +2,10 @@ import type {
   ValidateQueryResult,
   ValidateQuerySuccessResult,
 } from "../questdb/types"
-import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
+import {
+  getQueriesFromText,
+  normalizeQueryText,
+} from "../../scenes/Editor/Monaco/utils"
 
 export type Permissions = {
   grantSchemaAccess: boolean
@@ -96,6 +99,31 @@ export type ClassifiedStatement = {
   sql: string
   klass: StatementClass
   queryType?: string
+  error?: string
+  errorPosition?: number
+}
+
+type CachedStatementClass =
+  | { klass: "DQL" }
+  | { klass: "DDL_DML"; queryType?: string }
+
+// Successful classes are grammar-stable for a given text, so they cache
+// safely. ERROR is schema-dependent (a missing table can appear later) and
+// is revalidated on every classification.
+const STATEMENT_CLASS_CACHE_MAX = 500
+
+const statementClassCache = new Map<string, CachedStatementClass>()
+
+export const clearStatementClassCache = () => {
+  statementClassCache.clear()
+}
+
+const cacheStatementClass = (key: string, value: CachedStatementClass) => {
+  if (statementClassCache.size >= STATEMENT_CLASS_CACHE_MAX) {
+    const oldest = statementClassCache.keys().next().value
+    if (oldest !== undefined) statementClassCache.delete(oldest)
+  }
+  statementClassCache.set(key, value)
 }
 
 export const classifyStatements = async (
@@ -106,13 +134,72 @@ export const classifyStatements = async (
   if (statements.length === 0) return []
   const results = await Promise.all(
     statements.map(async (stmt): Promise<ClassifiedStatement> => {
+      const key = normalizeQueryText(stmt)
+      const cached = statementClassCache.get(key)
+      if (cached) return { sql: stmt, ...cached }
       const result = await validate(stmt)
-      if ("error" in result) return { sql: stmt, klass: "ERROR" }
-      if (isDqlResult(result)) return { sql: stmt, klass: "DQL" }
+      if ("error" in result) {
+        return {
+          sql: stmt,
+          klass: "ERROR",
+          error: result.error,
+          errorPosition: result.position,
+        }
+      }
+      if (isDqlResult(result)) {
+        cacheStatementClass(key, { klass: "DQL" })
+        return { sql: stmt, klass: "DQL" }
+      }
+      cacheStatementClass(key, {
+        klass: "DDL_DML",
+        queryType: result.queryType,
+      })
       return { sql: stmt, klass: "DDL_DML", queryType: result.queryType }
     }),
   )
   return results
+}
+
+export const hasWriteStatement = (stmts: ClassifiedStatement[]): boolean =>
+  stmts.some((s) => s.klass === "DDL_DML")
+
+// Barrier-bound run gating: the runner's pre-launch classification is the
+// single decision for permission enforcement, auto-run eligibility, and
+// strategy — dispatch never classifies separately.
+export type RunCellGate =
+  | { kind: "explicit"; permissions: Permissions }
+  | { kind: "autoRun" }
+
+export const checkStatementsForRunQuery = (
+  stmts: ClassifiedStatement[],
+  perms: Permissions,
+): PermissionDecision => {
+  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
+  if (writeStmt && !perms.write) {
+    return {
+      granted: false,
+      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
+    }
+  }
+  const hasDql = stmts.some((s) => s.klass === "DQL")
+  if (hasDql && !perms.read && !perms.write) {
+    return { granted: false, reason: denyReasonForReadSql() }
+  }
+  return { granted: true }
+}
+
+export const checkStatementsForExecution = (
+  stmts: ClassifiedStatement[],
+  perms: Permissions,
+): PermissionDecision => {
+  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
+  if (writeStmt && !perms.write) {
+    return {
+      granted: false,
+      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
+    }
+  }
+  return { granted: true }
 }
 
 export const classifyAndCheckSqlForRunQuery = async (
@@ -133,18 +220,7 @@ export const classifyAndCheckSqlForRunQuery = async (
       reason: denyReasonFailClosedClassify("execution", message),
     }
   }
-  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
-  if (writeStmt && !perms.write) {
-    return {
-      granted: false,
-      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
-    }
-  }
-  const hasDql = stmts.some((s) => s.klass === "DQL")
-  if (hasDql && !perms.read && !perms.write) {
-    return { granted: false, reason: denyReasonForReadSql() }
-  }
-  return { granted: true }
+  return checkStatementsForRunQuery(stmts, perms)
 }
 
 export const classifyAndCheckSqlForExecution = async (
@@ -165,14 +241,7 @@ export const classifyAndCheckSqlForExecution = async (
       reason: denyReasonFailClosedClassify("execution", message),
     }
   }
-  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
-  if (writeStmt && !perms.write) {
-    return {
-      granted: false,
-      reason: denyReasonForWriteSql(writeStmt.queryType ?? "write"),
-    }
-  }
-  return { granted: true }
+  return checkStatementsForExecution(stmts, perms)
 }
 
 export type AutoRunDecision =
@@ -184,6 +253,68 @@ const skipReasonForWrite = (queryType: string): string =>
   `AUTO_RUN_SKIPPED: this cell contains a '${queryType}' (write) statement, ` +
   "so it was NOT executed — agent flows never auto-run DDL/DML. " +
   "Confirm with the user, then call run_cell explicitly."
+
+export const checkStatementsForAutoRun = (
+  stmts: ClassifiedStatement[],
+): AutoRunDecision => {
+  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
+  if (!writeStmt) return { action: "run" }
+  return {
+    action: "skip",
+    reason: skipReasonForWrite(writeStmt.queryType ?? "write"),
+  }
+}
+
+export type RunBarrierOutcome =
+  | { action: "proceed"; classified: ClassifiedStatement[] | null }
+  | { action: "denied"; reason: string }
+  | { action: "skipped"; reason: string }
+
+// The runner's pre-launch barrier, shared by the live and headless paths: one
+// classification per launch decides permission enforcement, auto-run
+// eligibility, and strategy. A plain single-statement run skips it — there is
+// no strategy to pick and the server enforces validity itself. Classification
+// failure fails closed exactly when the gate could not otherwise stop a
+// write: autoRun always, explicit only without the write permission.
+export const resolveRunBarrier = async (
+  queryText: string,
+  statementCount: number,
+  gate: RunCellGate | undefined,
+  validate: (stmt: string) => Promise<ValidateQueryResult>,
+): Promise<RunBarrierOutcome> => {
+  if (gate === undefined && statementCount <= 1) {
+    return { action: "proceed", classified: null }
+  }
+  let classified: ClassifiedStatement[]
+  try {
+    classified = await classifyStatements(queryText, validate)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "validate failed"
+    const failClosed =
+      gate?.kind === "autoRun" ||
+      (gate?.kind === "explicit" && !gate.permissions.write)
+    if (failClosed) {
+      return {
+        action: "denied",
+        reason: denyReasonFailClosedClassify("execution", message),
+      }
+    }
+    return { action: "proceed", classified: null }
+  }
+  if (gate?.kind === "explicit") {
+    const decision = checkStatementsForExecution(classified, gate.permissions)
+    if (!decision.granted) {
+      return { action: "denied", reason: decision.reason }
+    }
+  }
+  if (gate?.kind === "autoRun") {
+    const decision = checkStatementsForAutoRun(classified)
+    if (decision.action === "skip") {
+      return { action: "skipped", reason: decision.reason }
+    }
+  }
+  return { action: "proceed", classified }
+}
 
 export const classifyAndCheckSqlForAutoRun = async (
   sql: string,
@@ -199,12 +330,7 @@ export const classifyAndCheckSqlForAutoRun = async (
       reason: denyReasonFailClosedClassify("execution", message),
     }
   }
-  const writeStmt = stmts.find((s) => s.klass === "DDL_DML")
-  if (!writeStmt) return { action: "run" }
-  return {
-    action: "skip",
-    reason: skipReasonForWrite(writeStmt.queryType ?? "write"),
-  }
+  return checkStatementsForAutoRun(stmts)
 }
 
 // Permission-independent: drawing a write query is semantically incoherent,

@@ -12,7 +12,6 @@ import {
 import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
-  classifyAndCheckSqlForAutoRun,
   denyReasonUnresolvedSql,
   requireAllDQL,
   type PermissionDecision,
@@ -141,24 +140,9 @@ const runAppliedCells = async (
   const settled = await Promise.all(
     resolved.map(async (r): Promise<RunEntry | null> => {
       if (!r.runnable) return null
-      if (perms && validateSql) {
-        const decision = await classifyAndCheckSqlForAutoRun(
-          r.value,
-          validateSql,
-        )
-        if (decision.action === "deny") {
-          return { cellId: r.cellId, success: false, error: decision.reason }
-        }
-        if (decision.action === "skip") {
-          return {
-            cellId: r.cellId,
-            success: true,
-            skipped: true,
-            note: decision.reason,
-          }
-        }
-      }
       try {
+        // The runner's barrier classification decides auto-run eligibility —
+        // writes are skipped at launch, never pre-checked.
         const result = await withBoundNotebook(
           bufferId,
           (ctrl) =>
@@ -166,9 +150,21 @@ const runAppliedCells = async (
               r.cellId,
               signal,
               perms && validateSql ? r.value : undefined,
+              perms && validateSql ? { kind: "autoRun" } : undefined,
             ),
           signal,
         )
+        if (result.denied !== undefined) {
+          return { cellId: r.cellId, success: false, error: result.denied }
+        }
+        if (result.skipped !== undefined) {
+          return {
+            cellId: r.cellId,
+            success: true,
+            skipped: true,
+            note: result.skipped,
+          }
+        }
         return {
           cellId: r.cellId,
           success: result.success,
@@ -198,10 +194,18 @@ export const dispatchApplyNotebookState = async (
   signal: AbortSignal | undefined,
   toolContext: ToolExecutionContext | undefined,
 ): Promise<{ content: string; is_error?: boolean }> => {
-  const { buffer_id, layout_mode, maximized_cell_id, variables, cells } =
+  const {
+    buffer_id,
+    layout_mode,
+    auto_refresh_default,
+    maximized_cell_id,
+    variables,
+    cells,
+  } =
     (input as {
       buffer_id: number
       layout_mode?: "list" | "grid" | null
+      auto_refresh_default?: boolean | string | null
       maximized_cell_id?: string | null
       variables?: NotebookVariable[] | null
       cells: Array<{
@@ -250,7 +254,33 @@ export const dispatchApplyNotebookState = async (
       is_error: true,
     }
   }
+  if (
+    auto_refresh_default !== undefined &&
+    auto_refresh_default !== null &&
+    !isAutoRefresh(auto_refresh_default)
+  ) {
+    return {
+      content: JSON.stringify({
+        error_code: "validation",
+        message: `VALIDATION_ERROR: auto_refresh_default must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+      }),
+      is_error: true,
+    }
+  }
   for (const [idx, c] of cells.entries()) {
+    if (
+      c.auto_refresh !== undefined &&
+      c.auto_refresh !== null &&
+      !isAutoRefresh(c.auto_refresh)
+    ) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+        }),
+        is_error: true,
+      }
+    }
     const hasValue = typeof c.value === "string"
     const preserves = c.preserve_value === true
     if (preserves === hasValue) {
@@ -344,6 +374,9 @@ export const dispatchApplyNotebookState = async (
   }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
+    autoRefreshDefault: isAutoRefresh(auto_refresh_default)
+      ? auto_refresh_default
+      : null,
     maximizedCellId:
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
     variables:

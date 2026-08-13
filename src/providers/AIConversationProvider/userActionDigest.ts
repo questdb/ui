@@ -40,6 +40,9 @@ export const applyUserActionToDigest = (
     case "user_changed_layout_mode":
       digest.layoutModeTo = evt.mode
       return digest
+    case "user_changed_autorefresh_default":
+      digest.autoRefreshDefaultTo = evt.value
+      return digest
     case "user_archived_notebook":
       digest.notebookStatusChange = "archived"
       return digest
@@ -57,4 +60,5 @@ export const isEmptyDigest = (d: UserActionDigest): boolean =>
   d.edited.size === 0 &&
   d.ran.size === 0 &&
   d.layoutModeTo === undefined &&
+  d.autoRefreshDefaultTo === undefined &&
   d.notebookStatusChange === undefined
