@@ -225,14 +225,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (code !== null) {
         // User has just been redirected back from the OAuth2 provider with an authorization code
         const state = getValue(StoreKey.OAUTH_STATE)
-        if (state) {
-          removeValue(StoreKey.OAUTH_STATE)
-          const stateParam = urlParams.get("state")
-          if (!stateParam || state !== stateParam) {
-            // state is missing or there is a mismatch, user has to re-authenticate
-            logout({ promptForLogin: true })
-            return
-          }
+        const stateParam = urlParams.get("state")
+        removeValue(StoreKey.OAUTH_STATE)
+
+        if (
+          settings["acl.oidc.state.required"] &&
+          (!state || state !== stateParam)
+        ) {
+          // the callback cannot be tied to a login this browser started
+          logout({ promptForLogin: true })
+          return
         }
 
         const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
