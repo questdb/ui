@@ -1,7 +1,7 @@
 import {
-  BRIDGE_UPGRADE_COMMAND,
-  BRIDGE_VERSION_MISMATCH_COPY,
-  EXPECTED_BRIDGE_VERSION,
+  MCP_UPGRADE_COMMAND,
+  MCP_VERSION_MISMATCH_COPY,
+  EXPECTED_MCP_VERSION,
   isBridgeVersionMismatch,
   type BridgeVersionMismatch,
 } from "./protocolVersion"
@@ -32,15 +32,15 @@ const TERMINAL_BRIDGE_CLOSE_CODES = new Set<number>([
 
 const terminalCloseMessage = (code: number, reason: string): string => {
   if (code === WS_CLOSE_CODES.superseded) {
-    return "Another browser tab is paired with this bridge. Disconnect the other tab or pair this one via a fresh link."
+    return "Another browser tab is paired with this MCP server. Disconnect the other tab or pair this one via a fresh link."
   }
   if (code === WS_CLOSE_CODES.token_invalid) {
-    return "Pairing token is no longer valid — the bridge likely restarted. Re-pair via a fresh deep link."
+    return "Pairing token is no longer valid, the MCP server likely restarted. Re-pair via a fresh deep link."
   }
   if (code === WS_CLOSE_CODES.major_version_mismatch) {
-    return `${BRIDGE_VERSION_MISMATCH_COPY.major.message} ${BRIDGE_UPGRADE_COMMAND}`
+    return `${MCP_VERSION_MISMATCH_COPY.major.message} ${MCP_UPGRADE_COMMAND}`
   }
-  return reason || `Bridge closed with code ${code}.`
+  return reason || `MCP server closed with code ${code}.`
 }
 
 export type MCPBridgeClientStatus =
@@ -261,12 +261,12 @@ export class MCPBridgeClient {
     // Never log the token, not even a prefix — 4 bytes is enough to
     // confirm an exfiltrated token if a leak appears elsewhere.
     const hello: HelloMessage = {
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "hello",
       token: this.opts.token,
       userAgent:
         typeof navigator !== "undefined" ? navigator.userAgent : "node",
-      expectedBridgeVersion: EXPECTED_BRIDGE_VERSION,
+      expectedBridgeVersion: EXPECTED_MCP_VERSION,
       consoleOrigin: this.opts.consoleOrigin,
       tools: this.opts.tools,
       permissions: this.permissions,
@@ -303,7 +303,7 @@ export class MCPBridgeClient {
         return
       case "ping":
         this.send({
-          v: EXPECTED_BRIDGE_VERSION,
+          v: EXPECTED_MCP_VERSION,
           type: "pong",
           nonce: parsed.nonce,
         } satisfies PongMessage)
@@ -427,7 +427,7 @@ export class MCPBridgeClient {
     const sentAt = monotonicNow()
     this.outstandingPing = { nonce, sentAt }
     this.send({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "ping",
       nonce,
     } satisfies PingMessage)

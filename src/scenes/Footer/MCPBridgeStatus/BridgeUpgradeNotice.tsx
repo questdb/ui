@@ -2,8 +2,8 @@ import React from "react"
 import styled from "styled-components"
 import { WarningIcon } from "@phosphor-icons/react"
 import {
-  BRIDGE_UPGRADE_COMMAND,
-  BRIDGE_VERSION_MISMATCH_COPY,
+  MCP_UPGRADE_COMMAND,
+  MCP_VERSION_MISMATCH_COPY,
   type BridgeVersionMismatch,
 } from "../../../utils/mcp/protocolVersion"
 import { CopyableCommand } from "./CopyableCommand"
@@ -27,14 +27,14 @@ export const BridgeUpgradeNotice = ({
 }: {
   severity: BridgeVersionMismatch
 }) => {
-  const copy = BRIDGE_VERSION_MISMATCH_COPY[severity]
+  const copy = MCP_VERSION_MISMATCH_COPY[severity]
   return (
     <>
       <WarningIcon size={16} weight="duotone" />
       <Text>
         <strong>{copy.title}</strong>
         <Detail>{copy.message}</Detail>
-        <CopyableCommand command={BRIDGE_UPGRADE_COMMAND} />
+        <CopyableCommand command={MCP_UPGRADE_COMMAND} />
       </Text>
     </>
   )

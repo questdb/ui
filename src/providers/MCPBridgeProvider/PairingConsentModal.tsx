@@ -261,7 +261,7 @@ export const PairingConsentModal: React.FC<Props> = ({
               )}
             </IconBadge>
             <Title>
-              {succeeded ? "MCP Bridge connected" : "Connect to MCP Bridge?"}
+              {succeeded ? "MCP server connected" : "Connect to MCP server?"}
             </Title>
             <Lede>
               {succeeded
@@ -290,7 +290,7 @@ export const PairingConsentModal: React.FC<Props> = ({
               <TrustNote>
                 <ShieldCheckIcon size={16} weight="duotone" />
                 <span>
-                  <strong>Loopback only:</strong> The bridge runs on your
+                  <strong>Loopback only:</strong> The MCP server runs on your
                   machine and never leaves it. Every action runs through your
                   already-authenticated console session.
                 </span>
@@ -330,10 +330,10 @@ export const PairingConsentModal: React.FC<Props> = ({
               >
                 <WarningIcon size={16} weight="duotone" />
                 <StatusText>
-                  <strong>Could not connect to MCP bridge</strong>
+                  <strong>Could not connect to MCP server</strong>
                   <StatusDetail>
                     {error ??
-                      `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+                      `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
                   </StatusDetail>
                 </StatusText>
               </StatusRow>

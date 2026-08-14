@@ -51,7 +51,7 @@ const waitForPaired = () => {
     expect(win.__mcpFakeWS.framesOfType("hello").length).to.be.greaterThan(0)
   })
   cy.window().then((win) => win.__mcpFakeWS.helloAck())
-  cy.getByDataHook("mcp-bridge-status-pill", { timeout: 10000 }).should(
+  cy.getByDataHook("mcp-status-pill", { timeout: 10000 }).should(
     "contain",
     "MCP connected",
   )

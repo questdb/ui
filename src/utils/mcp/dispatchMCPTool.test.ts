@@ -7,7 +7,7 @@ import {
   type NotebookFreshness,
 } from "../notebooks/notebookFreshness"
 import { db } from "../../store/db"
-import { EXPECTED_BRIDGE_VERSION } from "./protocolVersion"
+import { EXPECTED_MCP_VERSION } from "./protocolVersion"
 import type { ToolCallMessage } from "./types"
 import type { ModelToolsClient } from "../ai/aiAssistant"
 import type { MetaToolContext } from "./metaResolvers"
@@ -61,7 +61,7 @@ const makeCall = (
   name: string,
   args: Record<string, unknown> = {},
 ): ToolCallMessage => ({
-  v: EXPECTED_BRIDGE_VERSION,
+  v: EXPECTED_MCP_VERSION,
   type: "tool_call",
   requestId: "r-" + name,
   name,

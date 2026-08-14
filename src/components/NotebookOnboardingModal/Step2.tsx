@@ -77,7 +77,7 @@ export const Step2 = ({
         analysis back and forth with your agent.
       </Bullet>
       <Bullet icon={<LockKeyIcon size={20} />} title="Privacy first">
-        The MCP bridge runs locally on your machine, your data is never sent to
+        The MCP server runs locally on your machine, your data is never sent to
         a remote server.
       </Bullet>
       <Bullet icon={<AirTrafficControlIcon size={20} />} title="Full control">

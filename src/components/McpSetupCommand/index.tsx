@@ -2,12 +2,14 @@ import React from "react"
 import styled from "styled-components"
 import { CopyButton } from "../CopyButton"
 import { CopyCommand } from "../icons/copy-command"
-import { EXPECTED_BRIDGE_VERSION } from "../../utils/mcp/protocolVersion"
+import {
+  EXPECTED_MCP_VERSION,
+  MCP_PACKAGE,
+  MCP_SETUP_COMMAND,
+} from "../../utils/mcp/protocolVersion"
 import { color } from "../../utils"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-
-export const SETUP_COMMAND = `npx @questdb/mcp-bridge@${EXPECTED_BRIDGE_VERSION} setup`
 
 const Code = styled.span`
   flex: 1;
@@ -16,9 +18,7 @@ const Code = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.3rem;
   color: ${color("offWhite2")};
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 `
 
 const Package = styled.span`
@@ -29,6 +29,7 @@ const CopyCommandButton = styled(CopyButton)`
   && {
     height: auto;
     min-width: 0;
+    flex-shrink: 0;
     padding: 0.4rem;
     background: transparent;
     border: none;
@@ -57,13 +58,17 @@ export const McpSetupCommand = ({
 }) => (
   <>
     <Code>
-      npx <Package>@questdb/mcp-bridge@{EXPECTED_BRIDGE_VERSION}</Package> setup
+      npx{" "}
+      <Package>
+        {MCP_PACKAGE}@{EXPECTED_MCP_VERSION}
+      </Package>{" "}
+      setup
     </Code>
     <CopyCommandButton
       iconOnly
       skin="transparent"
       size="sm"
-      text={SETUP_COMMAND}
+      text={MCP_SETUP_COMMAND}
       icon={<CopyCommand size={iconSize} />}
       onCopy={() =>
         void trackEvent(ConsoleEvent.MCP_SETUP_COMMAND_COPY, { source })
