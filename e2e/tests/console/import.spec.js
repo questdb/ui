@@ -60,7 +60,7 @@ describe("questdb import", () => {
       "timestamp",
     )
 
-    cy.get("[aria-label='schemaColumns.0.type']").should(
+    cy.getByDataHook("table-schema-dialog-column-0-type").should(
       "contain",
       "TIMESTAMP_NS",
     )

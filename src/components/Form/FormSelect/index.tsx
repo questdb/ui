@@ -8,6 +8,7 @@ type FormSelectProps = {
   defaultValue?: string | number
   disabled?: boolean
   menuLabel?: React.ReactNode
+  dataHook?: string
 }
 
 export const FormSelect = ({
@@ -16,6 +17,7 @@ export const FormSelect = ({
   defaultValue,
   disabled,
   menuLabel,
+  dataHook,
 }: FormSelectProps) => {
   const { control, formState, getFieldState } = useFormContext()
   const hasError = getFieldState(name, formState).error != null
@@ -29,6 +31,7 @@ export const FormSelect = ({
         <SelectMenuControl
           id={name}
           name={name}
+          dataHook={dataHook}
           value={field.value == null ? "" : String(field.value)}
           options={options.map((option) => ({
             ...option,

@@ -8,22 +8,22 @@ The implementation lives in [`src/theme/index.ts`](src/theme/index.ts). The
 palette is intentionally flat: every color is `theme.color.tokenName`, grouped
 by comments in the source. There are no nested color objects, and the only
 first-party CSS custom properties are the `--qdb-*` properties generated from
-this palette so legacy SCSS can read it. Eighteen deliberately invariant roles
-are defined once and composed independently into both palettes; light mode never
-inherits the dark palette.
+this palette so legacy SCSS can read it. A small set of deliberately
+theme-invariant roles is defined once and composed independently into both
+palettes; light mode never inherits the dark palette.
 
 ## What changed
 
-Before this redesign, `theme.color` exposed 60 dark-only tokens. Many encoded a
+Before this redesign, `theme.color` exposed dark-only tokens. Many encoded a
 hue, a component, or one specific opacity, while other UI colors still lived
 outside the palette. That made global tuning difficult and encouraged new
 near-duplicates.
 
-The palette now has 130 tokens:
+The palette now has two kinds of roles:
 
-- 70 shared UI roles for surfaces, content, borders, interactions, status,
+- Shared UI roles for surfaces, content, borders, interactions, status,
   shadows, glass, and brand treatments.
-- 60 isolated roles required by renderers or deliberately self-contained
+- Isolated roles required by renderers or deliberately self-contained
   experiences: the result grid, Monaco, data visualization, authentication,
   onboarding, browser window controls, instance presets, and the color picker.
 
@@ -266,7 +266,7 @@ identity—components must not pick a series by color name.
 | ------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------- |
 | `dataGrid`                     | gray `.11` / ink `.16`                      | Chart axes and grid lines.                                              |
 | `dataArea`                     | white `.012` / ink `.018`                   | Quiet plot-area separation.                                             |
-| `dataSeries1`                  | `#ff6b6b` / `#d51515`                       | Series slot 1, red.                                                     |
+| `dataSeries1`                  | `#ff6b6b` / `#d51515`                       | Metric widget series slot 1, red. `dataSeries*` are user-pickable metric colors; auto-assigned chart series use `chartSeries*`. |
 | `dataSeries2`                  | `#4ecdc4` / `#0c7966`                       | Series slot 2, teal.                                                    |
 | `dataSeries3`                  | `#ffd93d` / `#80690d`                       | Series slot 3, yellow/olive.                                            |
 | `dataSeries4`                  | `#95d86e` / `#357b0c`                       | Series slot 4, green.                                                   |
@@ -276,6 +276,7 @@ identity—components must not pick a series by color name.
 | `dataSeries8`                  | `#ff79c6` / `#cc147e`                       | Series slot 8, magenta.                                                 |
 | `dataSeries9`                  | `#8be9fd` / `#1072a5`                       | Series slot 9, cyan/blue.                                               |
 | `dataSeries10`                 | `#f1fa8c` / `#61740b`                       | Series slot 10, yellow/olive.                                           |
+| `chartSeries1..8`              | `#8be9fd #d14671 #ffb86c #bd93f9 #f1fa8c #ff79c6 #50fa7b #ff5555` / `#1590aa #e42560 #c16f18 #7425e4 #728d11 #e425ac #139842 #e42525` | Auto-assigned series order for notebook/result charts and quick-vis. Calm brand hues lead; assignment is positional, not user-picked. |
 | `dataPositive`, `dataNegative` | `#2ca875`, `#d94d58` / `#05603e`, `#a81f2e` | Directional financial/operational data, not generic form success/error. |
 
 ### Authentication

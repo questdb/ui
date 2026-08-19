@@ -57,14 +57,14 @@ export const createMacaronsTheme = () => {
   }
 
   const colorPalette = [
-    getThemeColor("dataSeries1"),
-    getThemeColor("dataSeries2"),
-    getThemeColor("dataSeries3"),
-    getThemeColor("dataSeries4"),
-    getThemeColor("dataSeries5"),
-    getThemeColor("dataSeries6"),
-    getThemeColor("dataSeries7"),
-    getThemeColor("dataSeries8"),
+    getThemeColor("chartSeries1"),
+    getThemeColor("chartSeries2"),
+    getThemeColor("chartSeries3"),
+    getThemeColor("chartSeries4"),
+    getThemeColor("chartSeries5"),
+    getThemeColor("chartSeries6"),
+    getThemeColor("chartSeries7"),
+    getThemeColor("chartSeries8"),
   ]
 
   const theme = {

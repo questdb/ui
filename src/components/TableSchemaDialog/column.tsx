@@ -129,6 +129,7 @@ export const Column = ({
 
           <Form.Item name={`schemaColumns.${index}.type`}>
             <Form.Select
+              dataHook={`table-schema-dialog-column-${index}-type`}
               defaultValue={action === "import" ? column.type : "VARCHAR"}
               name={`schemaColumns.${index}.type`}
               options={supportedColumnTypes.filter((type) =>

@@ -129,6 +129,14 @@ export type ColorShape = {
   dataSeries8: string
   dataSeries9: string
   dataSeries10: string
+  chartSeries1: string
+  chartSeries2: string
+  chartSeries3: string
+  chartSeries4: string
+  chartSeries5: string
+  chartSeries6: string
+  chartSeries7: string
+  chartSeries8: string
   dataPositive: string
   dataNegative: string
   authBackdrop: string

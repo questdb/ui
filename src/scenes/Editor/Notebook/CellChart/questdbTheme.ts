@@ -2,14 +2,14 @@ import type { ColorShape } from "../../../../types"
 
 export const createQuestdbTheme = (colors: ColorShape) => {
   const seriesPalette = [
-    colors.dataSeries1,
-    colors.dataSeries2,
-    colors.dataSeries3,
-    colors.dataSeries4,
-    colors.dataSeries5,
-    colors.dataSeries6,
-    colors.dataSeries7,
-    colors.dataSeries8,
+    colors.chartSeries1,
+    colors.chartSeries2,
+    colors.chartSeries3,
+    colors.chartSeries4,
+    colors.chartSeries5,
+    colors.chartSeries6,
+    colors.chartSeries7,
+    colors.chartSeries8,
   ]
 
   const axis = {

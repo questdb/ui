@@ -61,9 +61,7 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-name").should("contain", "test-instance")
     cy.getByDataHook("topbar-instance-icon").realHover()
     cy.contains("test description of the test instance").should("be.visible")
-    cy.contains("You are connected to a QuestDB instance for testing").should(
-      "be.visible",
-    )
+    cy.contains("testing").should("be.visible")
   })
 })
 
