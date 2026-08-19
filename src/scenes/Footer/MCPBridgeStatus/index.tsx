@@ -7,7 +7,7 @@ import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MCPBridgePairPopover } from "./PairPopover"
 import { AgentChangesPopper } from "./AgentChangesPopper"
 import { useAgentChanges } from "./useAgentChanges"
-import { Tone, accentColor, deriveTone, hexToRgba } from "./tone"
+import { Tone, accentColor, deriveTone } from "./tone"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -36,32 +36,25 @@ const Wrapper = styled(ButtonBase)<PillStyleProps>`
   align-items: center;
   gap: 0.6rem;
   height: 3.2rem;
-  padding: 0 1rem;
-  border: 1px solid ${(props) => hexToRgba(accent(props), 0.24)};
+  padding: 0 1.2rem;
+  border: 1px solid ${accent};
   border-radius: 0.6rem;
-  background: ${(props) =>
-    props.$tone === "warning"
-      ? props.theme.color.statusWarningSurface
-      : hexToRgba(accent(props), 0.065)};
-  color: ${({ theme, $tone }) =>
-    $tone === "warning"
-      ? theme.color.contentPrimary
-      : theme.color.contentSecondary};
+  background: ${({ theme }) => theme.color.controlSurface};
+  box-shadow: 0 0.1rem 0.2rem ${({ theme }) => theme.color.shadowSubtle};
+  color: ${({ theme }) => theme.color.contentPrimary};
   font: inherit;
   font-size: 1.25rem;
   font-weight: 500;
   cursor: pointer;
   transition:
     background 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 
   &:hover {
-    background: ${(props) =>
-      props.$tone === "warning"
-        ? props.theme.color.statusWarningSurfaceHover
-        : hexToRgba(accent(props), 0.14)};
-    border-color: ${(props) => hexToRgba(accent(props), 0.44)};
-    color: ${({ theme }) => theme.color.contentPrimary};
+    background: ${({ theme }) => theme.color.controlSurfaceHover};
+    border-color: ${accent};
+    box-shadow: 0 0.2rem 0.5rem ${({ theme }) => theme.color.shadowSoft};
   }
 
   &:focus-visible {
@@ -112,7 +105,7 @@ const Pill = forwardRef<
       $newChanges={newChanges}
       {...rest}
     >
-      <Icon size={14} weight="duotone" />
+      <Icon size={15} weight="duotone" />
       <span>{label}</span>
     </Wrapper>
   )
