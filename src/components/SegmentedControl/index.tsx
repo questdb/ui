@@ -375,7 +375,7 @@ export const SegmentedControlButton = styled(
     color: ${({ $tone = "neutral", theme }) => {
       if ($tone === "success") return theme.color.statusSuccess
       if ($tone === "info") return theme.color.statusInfo
-      return theme.color.contentSecondary
+      return theme.color.contentPrimary
     }};
   }
 
@@ -387,7 +387,7 @@ export const SegmentedControlButton = styled(
         &&,
         &&:hover:not(:disabled):not([aria-disabled="true"]) {
           background: ${theme.color.interactionNeutral};
-          color: ${theme.color.contentSecondary};
+          color: ${theme.color.contentPrimary};
         }
       `
     }
