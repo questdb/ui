@@ -79,14 +79,17 @@ const StyledThumb = styled(SwitchPrimitive.Thumb)<{ $size: "sm" | "md" }>`
   width: ${({ $size }) => ($size === "sm" ? "12px" : "14px")};
   height: ${({ $size }) => ($size === "sm" ? "12px" : "14px")};
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
-  background-color: ${({ theme }) => theme.color.contentInverse};
+  background-color: ${({ theme }) => theme.color.controlKnob};
   border-radius: 100%;
   box-shadow: 0 1px 3px ${({ theme }) => theme.color.shadowSoft};
-  transition: transform 120ms ease;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
   transform: translateX(0);
   will-change: transform;
 
   &[data-state="checked"] {
+    background-color: ${({ theme }) => theme.color.contentInverse};
     transform: translateX(16px);
   }
 

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
 import styled from "styled-components"
+import { AIStopButton } from "../../../components/AIStopButton"
+import { Button } from "../../../components/Button"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
@@ -16,6 +18,7 @@ import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
+import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { useChartQuery } from "./useChartQuery"
 
 type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
@@ -107,11 +110,21 @@ const EmptyState = styled.div<{ $tone?: "danger" }>`
   font-size: 1.3rem;
   text-align: center;
 
-  svg {
+  > svg {
     color: ${({ $tone, theme }) =>
       $tone === "danger"
         ? theme.color.statusDanger
         : theme.color.contentDisabled};
+  }
+`
+
+const LoadingStatus = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+
+  > svg {
+    color: ${({ theme }) => theme.color.contentDisabled};
   }
 `
 
@@ -127,6 +140,7 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
   const [zoomStart, setZoomStart] = useState(0)
   const [zoomEnd, setZoomEnd] = useState(100)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
+  const trackedChartResultRef = useRef<QueryExecResult | null>(null)
 
   const queryKey = result ? normalizeQueryText(result.query) : ""
   const config =
@@ -187,12 +201,55 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
     chartResult.dataset.length > 0 &&
     hasChartableColumns
 
+  useEffect(() => {
+    if (
+      !canDraw ||
+      chartResult === null ||
+      trackedChartResultRef.current === chartResult
+    ) {
+      return
+    }
+
+    const chartType = resolution?.renderQueries[0]?.type
+    if (chartType === undefined) return
+
+    trackedChartResultRef.current = chartResult
+    void trackEvent(ConsoleEvent.CHART_DRAW, {
+      chartType,
+      source: "result",
+    })
+  }, [canDraw, chartResult, resolution])
+
   let body: React.ReactNode
   if (chartQuery.status === "loading") {
     body = (
       <EmptyState data-hook="result-chart-loading">
-        <CircleNotchSpinner size={32} />
-        <span>Loading chart data…</span>
+        <LoadingStatus>
+          <CircleNotchSpinner size={24} />
+          <span role="status">Loading chart data…</span>
+          <AIStopButton
+            size="md"
+            onClick={chartQuery.cancel}
+            title="Stop chart query"
+            ariaLabel="Stop chart query"
+            dataHook="result-chart-cancel"
+          />
+        </LoadingStatus>
+      </EmptyState>
+    )
+  } else if (chartQuery.status === "cancelled") {
+    body = (
+      <EmptyState data-hook="result-chart-cancelled">
+        <ChartLineIcon size={32} weight="regular" aria-hidden />
+        <span>Chart loading was cancelled.</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={chartQuery.retry}
+          dataHook="result-chart-retry"
+        >
+          Retry
+        </Button>
       </EmptyState>
     )
   } else if (chartQuery.status === "error") {
@@ -236,7 +293,12 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
 
   return (
     <Root $visible={visible} data-hook="result-chart" aria-hidden={!visible}>
-      {resolution ? (
+      {chartQuery.status === "loading" ? (
+        <SettingsPlaceholder
+          data-hook="chart-settings-placeholder"
+          aria-hidden
+        />
+      ) : resolution ? (
         <ChartSettingsPanel
           key={queryKey}
           tabs={resolution.tabs}

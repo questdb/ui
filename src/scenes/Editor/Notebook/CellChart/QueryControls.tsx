@@ -166,6 +166,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         <FieldLabel>Type</FieldLabel>
         <SelectMenuControl
           name={`type-${idx}`}
+          ariaLabel="Chart type"
           value={query.type}
           onValueChange={(value) => {
             const type = value as ChartType
@@ -198,6 +199,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                 </Text>
                 <SelectMenuControl
                   name={`ohlc-${k}-${idx}`}
+                  ariaLabel={`${label} column`}
                   value={query.ohlc?.[k] ?? ""}
                   onValueChange={(value) =>
                     onUpdateQuery({
@@ -235,6 +237,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <FieldLabel>Value</FieldLabel>
           <SelectMenuControl
             name={`value-${idx}`}
+            ariaLabel="Value column"
             value={query.yColumns[0] ?? ""}
             onValueChange={(value) =>
               onUpdateQuery({
@@ -256,7 +259,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         <Field>
           <FieldLabel>Series</FieldLabel>
           <MultiSelect
-            name={`y-${idx}`}
+            name="Series"
             value={query.yColumns}
             onChange={(next) => onUpdateQuery({ yColumns: next })}
             options={numericOptions}
@@ -271,6 +274,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
             <FieldLabel>Partition by</FieldLabel>
             <SelectMenuControl
               name={`partition-${idx}`}
+              ariaLabel="Partition by"
               value={query.partitionByColumn ?? ""}
               onValueChange={(value) =>
                 onUpdateQuery({
@@ -293,6 +297,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           <FieldLabel>Y-axis</FieldLabel>
           <SelectMenuControl
             name={`axis-${idx}`}
+            ariaLabel="Y-axis"
             value={query.axis ?? "left"}
             onValueChange={(value) =>
               onUpdateQuery({ axis: value as SeriesAxis })

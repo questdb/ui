@@ -229,6 +229,7 @@ export const FilesToUpload = ({
       render: ({ data }) => (
         <SelectMenuControl
           name="table_owner"
+          ariaLabel="Table owner"
           value={data.table_owner || ownedByList[0] || ""}
           modal={false}
           onValueChange={(value) =>
@@ -325,6 +326,7 @@ export const FilesToUpload = ({
         return (
           <SelectMenuControl
             name="write_mode"
+            ariaLabel="Write mode"
             value={writeMode}
             dataHook="import-write-mode-trigger"
             modal={false}

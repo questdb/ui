@@ -166,6 +166,7 @@ shared by light mode.
 | `controlSurface`          | `#262833` / `#f6f7f8`                            | Default solid secondary button, segmented-control item, and keycap face.                      |
 | `controlSurfaceHover`     | `#32343e` / `#e7e9ed`                            | Hover fill for `controlSurface`; dark mode rises to the Core gray anchor.                     |
 | `controlTrack`            | `#262833` / `#d9dce2`                            | Switch track and segmented-control substrate; matches secondary buttons in dark mode.         |
+| `controlKnob`             | `#f8f8f2` / `#505968`                            | Resting switch knob on `controlTrack`; checked knobs use `contentInverse` on the accent fill. |
 
 ### Actions and status
 

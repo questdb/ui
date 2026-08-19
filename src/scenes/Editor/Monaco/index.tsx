@@ -340,6 +340,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     new Map(),
   )
   const highlightedLineNumberRef = useRef<number | null>(null)
+  const loadingGlyphLineNumberRef = useRef<number | null>(null)
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -1644,11 +1645,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         column: query.column,
       })
 
+      loadingGlyphLineNumberRef.current = lineNumber
       toggleGlyphWidgetLoading(lineNumber, true)
 
       const result = await runIndividualQuery(query, i === queries.length - 1)
 
       toggleGlyphWidgetLoading(lineNumber, false)
+      loadingGlyphLineNumberRef.current = null
 
       individualQueryResults.push(result)
       if (result.success) {
@@ -2295,6 +2298,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     })
     glyphWidgetsRef.current.clear()
     applyGlyphsAndLineMarkings(monaco, editor)
+
+    // The script loop's spinner lives on the widget DOM, not in the options
+    // the rebuild reads from, so the executing line must get it back.
+    if (loadingGlyphLineNumberRef.current !== null) {
+      toggleGlyphWidgetLoading(loadingGlyphLineNumberRef.current, true)
+    }
   }, [theme.mode])
 
   useEffect(() => {

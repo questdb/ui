@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import {
@@ -177,17 +177,35 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const [draft, setDraft] = useState<ChartConfig>(config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
+  const drawerWasOpenRef = useRef(false)
   const visible = presentation === "panel" || open
 
-  const resetDraft = () => {
+  const resetDraft = useCallback(() => {
     setDraft(config)
     setActiveIndex(tabs[0]?.index ?? 0)
     setSaveAttempted(false)
-  }
+  }, [config, tabs])
 
   useEffect(() => {
-    if (visible) resetDraft()
-  }, [open, presentation])
+    const drawerIsOpen = presentation === "drawer" && open
+    const drawerJustOpened = drawerIsOpen && !drawerWasOpenRef.current
+    drawerWasOpenRef.current = drawerIsOpen
+
+    if (drawerJustOpened) {
+      resetDraft()
+      return
+    }
+
+    if (presentation === "panel") {
+      setDraft(config)
+      setActiveIndex((current) =>
+        tabs.some((tab) => tab.index === current)
+          ? current
+          : (tabs[0]?.index ?? 0),
+      )
+      setSaveAttempted(false)
+    }
+  }, [config, open, presentation, resetDraft, tabs])
 
   useEffect(() => {
     if (!open || presentation !== "drawer") return
@@ -305,6 +323,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
             <FieldLabel>X-axis</FieldLabel>
             <SelectMenuControl
               name="x-axis"
+              ariaLabel="X-axis"
               value={draft.xColumn ?? ""}
               placeholder="Select column"
               onValueChange={(value) =>

@@ -17,9 +17,12 @@ const Label = styled(ButtonBase)<{ $placeholder: boolean }>`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: text;
   user-select: none;
   flex-shrink: 1;
+
+  && {
+    cursor: text;
+  }
 
   &:hover,
   &:focus-visible {

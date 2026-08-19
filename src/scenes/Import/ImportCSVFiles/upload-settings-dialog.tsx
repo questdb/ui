@@ -286,6 +286,11 @@ export const UploadSettingsDialog = ({
                     {option.type === "select" && (
                       <SelectMenuControl
                         name={option.name}
+                        ariaLabel={
+                          typeof option.label === "string"
+                            ? option.label
+                            : option.name
+                        }
                         value={option.defaultValue}
                         onValueChange={(value) =>
                           setSettings({

@@ -314,7 +314,7 @@ export const SelectMenuControl = ({
   dataHook,
   labelFontSize = "1.3rem",
   menuLabel,
-  modal,
+  modal = false,
   onOpenChange,
   ariaInvalid,
   ariaDescribedBy,
@@ -322,6 +322,12 @@ export const SelectMenuControl = ({
 }: SelectMenuControlProps) => {
   const selectedOption = options.find((option) => option.value === value)
   const label = selectedOption?.label ?? placeholder
+  const accessibleLabel =
+    ariaLabel === null
+      ? undefined
+      : [ariaLabel ?? name, typeof label === "string" ? label : undefined]
+          .filter(Boolean)
+          .join(": ")
 
   return (
     <RadixDropdownMenu.Root modal={modal} onOpenChange={onOpenChange}>
@@ -334,7 +340,7 @@ export const SelectMenuControl = ({
         labelFontSize={labelFontSize}
         fullWidth
         disabled={disabled}
-        aria-label={ariaLabel === null ? undefined : (ariaLabel ?? name)}
+        aria-label={accessibleLabel}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedBy}
         title={typeof label === "string" ? label : undefined}
@@ -368,8 +374,15 @@ export const SelectMenuControl = ({
   )
 }
 
+const SelectMenuRoot = ({
+  modal = false,
+  ...props
+}: React.ComponentProps<typeof RadixDropdownMenu.Root>) => (
+  <RadixDropdownMenu.Root modal={modal} {...props} />
+)
+
 export const SelectMenu = {
-  Root: RadixDropdownMenu.Root,
+  Root: SelectMenuRoot,
   Trigger,
   TriggerButton: SelectMenuTriggerButton,
   Portal: RadixDropdownMenu.Portal,

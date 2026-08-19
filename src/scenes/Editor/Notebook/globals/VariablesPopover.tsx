@@ -121,14 +121,17 @@ const DragHandle = styled(IconButton).attrs({
   min-width: 1.8rem;
   height: 2.4rem;
   padding: 0;
-  cursor: grab;
   opacity: 0.35;
+
+  && {
+    cursor: grab;
+  }
 
   &:hover {
     transform: scale(1.08);
   }
 
-  &:active {
+  &&:active {
     cursor: grabbing;
     transform: scale(0.96);
   }

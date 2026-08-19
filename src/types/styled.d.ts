@@ -62,6 +62,7 @@ export type ColorShape = {
   controlSurface: string
   controlSurfaceHover: string
   controlTrack: string
+  controlKnob: string
   actionPrimary: string
   actionPrimaryHover: string
   statusDanger: string

@@ -113,6 +113,7 @@ export const darkColors: ColorShape = {
   controlSurface: "#262833",
   controlSurfaceHover: "#32343e",
   controlTrack: "#262833",
+  controlKnob: "#f8f8f2",
 
   // Actions and status
   actionPrimary: "#b81447",
@@ -267,6 +268,7 @@ export const lightColors: ColorShape = {
   controlSurface: "#f6f7f8",
   controlSurfaceHover: "#e7e9ed",
   controlTrack: "#d9dce2",
+  controlKnob: "#505968",
 
   // Actions and status
   actionPrimary: "#8a0f35",

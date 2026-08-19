@@ -18,6 +18,7 @@ type Props = {
   placeholder?: string
   disabled?: boolean
   className?: string
+  modal?: boolean
   // Above this count, trigger shows "X of Y" instead of comma-joined labels.
   inlineThreshold?: number
 }
@@ -80,6 +81,7 @@ export const MultiSelect: React.FC<Props> = ({
   placeholder = "None selected",
   disabled,
   className,
+  modal = false,
   inlineThreshold = 2,
 }) => {
   const summary = summarize(value, options, placeholder, inlineThreshold)
@@ -99,7 +101,7 @@ export const MultiSelect: React.FC<Props> = ({
   }
 
   return (
-    <RadixDropdownMenu.Root>
+    <RadixDropdownMenu.Root modal={modal}>
       <RadixDropdownMenu.Trigger asChild>
         <SelectMenuTriggerButton
           className={className}

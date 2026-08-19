@@ -17,16 +17,16 @@ describe("questdb charts", () => {
       .and("have.attr", "aria-hidden", "false")
 
     cy.getByDataHook("chart-settings-panel").within(() => {
-      cy.get('button[aria-label="x-axis"]').should(
+      cy.get('button[aria-label^="X-axis"]').should(
         "contain.text",
         "rnd_timestamp",
       )
-      cy.get('button[aria-label="type-0"]').should("contain.text", "Line")
-      cy.get('button[aria-label^="y-0:"]').should("contain.text", "All (1)")
+      cy.get('button[aria-label^="Chart type"]').should("contain.text", "Line")
+      cy.get('button[aria-label^="Series"]').should("contain.text", "All (1)")
     })
 
     cy.getByDataHook("chart-settings-panel")
-      .find('button[aria-label^="y-0:"]')
+      .find('button[aria-label^="Series"]')
       .click()
     cy.contains('[role="menuitemcheckbox"]', "x")
       .should("have.attr", "data-state", "checked")
@@ -34,11 +34,11 @@ describe("questdb charts", () => {
     cy.get("body").type("{esc}")
 
     cy.getByDataHook("chart-settings-panel")
-      .find('button[aria-label="type-0"]')
+      .find('button[aria-label^="Chart type"]')
       .click()
     cy.contains('[role="menuitemradio"]', "Bar").click()
     cy.getByDataHook("chart-settings-panel")
-      .find('button[aria-label="type-0"]')
+      .find('button[aria-label^="Chart type"]')
       .should("contain.text", "Bar")
     cy.getByDataHook("chart-settings-panel").contains("button", "Apply").click()
 
