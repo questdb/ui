@@ -832,6 +832,32 @@ describe("sanitizeBuffer", () => {
       expect(state?.settings?.variables).toEqual([{ name: "v", value: "1" }])
     })
 
+    it("round-trips settings.autoRefreshDefault and drops an invalid token", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [{ id: "c1", value: "SELECT 1" }],
+          settings: { autoRefreshDefault: "30s" },
+        },
+      }
+      // A valid token survives import…
+      expect(
+        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+      ).toBe("30s")
+      // …Off (false) is a valid value, not an absent one…
+      input.notebookViewState.settings = { autoRefreshDefault: false as never }
+      expect(
+        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+      ).toBe(false)
+      // …and an unknown token is dropped.
+      input.notebookViewState.settings = { autoRefreshDefault: "2s" }
+      expect(
+        sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
+      ).toBeUndefined()
+    })
+
     it("keeps a fixed-interval autoRefresh token and bottomResized, drops a malformed interval", () => {
       const input = {
         label: "Notebook",

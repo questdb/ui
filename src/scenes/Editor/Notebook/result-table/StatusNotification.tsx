@@ -1,17 +1,28 @@
 import React from "react"
 import { Stop } from "../../../../components/icons"
-import { Queue } from "@phosphor-icons/react"
+import { ArrowClockwiseIcon, Queue } from "@phosphor-icons/react"
 import { Box, Text } from "../../../../components"
 import Notification from "../../../Notifications/Notification"
 import { NotificationType } from "../../../../store/Query/types"
-import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
+import type { SingleQueryResult } from "../../../../store/notebook"
 import QueryResult from "../../QueryResult"
 import { QueryInNotification } from "../../Monaco/query-in-notification"
+import type { StatementSlotView } from "./statementSlotView"
 import { CancelButton, LiveRegion, NotificationContainer } from "./styles"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
-const liveRegionMessage = (result: SingleQueryResult): string => {
+// Announcements ride on TEXT CHANGES: a steady-state poll that reverifies the
+// same rows keeps the message identical, so the screen reader stays quiet.
+// Failures, recoveries and row-count changes alter the text and are read out.
+const liveRegionMessage = (slot: StatementSlotView): string => {
+  if (slot.refreshing && slot.result === null) return "Refreshing query"
+  if (slot.result?.type === "running") return "Query running"
+  if (slot.refreshError !== undefined) {
+    return `Refresh failed: ${slot.refreshError}`
+  }
+  if (slot.result === null) return "Query not run"
+  const { result } = slot
   switch (result.type) {
     case "running":
       return "Query running"
@@ -34,52 +45,94 @@ const liveRegionMessage = (result: SingleQueryResult): string => {
 
 type Props = {
   timestamp: number
-  activeResult: SingleQueryResult
-  activeIndex: CellResult["activeResultIndex"]
-  onCancelQuery?: (index: number) => void
+  slot: StatementSlotView
+  onCancelQuery?: (statementKey: string) => void
 }
 
 export const StatusNotification: React.FC<Props> = ({
   timestamp,
-  activeResult,
-  activeIndex,
+  slot,
   onCancelQuery,
 }) => {
+  const activeResult: SingleQueryResult = slot.result ?? {
+    type: "queued",
+    query: slot.sql,
+  }
   const { type } = activeResult
-  const isError = type === "error"
+  const isError =
+    type === "error" || (slot.refreshError !== undefined && type !== "running")
   const isCancelled = type === "cancelled"
   const notice = activeResult.type === "dql" ? activeResult.notice : undefined
 
   const baseProps = {
     query: "@0-0" as const,
-    createdAt: new Date(timestamp),
+    createdAt: new Date(slot.fetchedAt ?? timestamp),
     compact: true,
     isMinimized: true,
-    sideContent: <QueryInNotification query={activeResult.query} />,
+    sideContent: <QueryInNotification query={slot.sql} />,
   }
 
+  const cancelButton = onCancelQuery && (
+    <CancelButton
+      variant="dangerGhost"
+      onClick={() => {
+        void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN_CANCEL)
+        onCancelQuery(slot.key)
+      }}
+    >
+      <Stop size="18px" />
+    </CancelButton>
+  )
+
   let body: React.ReactElement
-  if (type === "running") {
+  // A live run wins over refresh state; refresh state wins over the settled
+  // result the tab still shows — those rows are the previous round's, and
+  // the line must say so.
+  if (slot.refreshing) {
+    body = (
+      <Notification
+        {...baseProps}
+        content={
+          <Box gap="1rem" align="center">
+            <Text color="contentPrimary">Refreshing...</Text>
+            {cancelButton}
+          </Box>
+        }
+        type={NotificationType.LOADING}
+      />
+    )
+  } else if (type === "running") {
     body = (
       <Notification
         {...baseProps}
         content={
           <Box gap="1rem" align="center">
             <Text color="contentPrimary">Running...</Text>
-            {onCancelQuery && (
-              <CancelButton
-                variant="dangerGhost"
-                onClick={() => {
-                  void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN_CANCEL)
-                  onCancelQuery(activeIndex)
-                }}
-              >
-                <Stop size="18px" />
-              </CancelButton>
-            )}
+            {cancelButton}
           </Box>
         }
         type={NotificationType.LOADING}
+      />
+    )
+  } else if (slot.refreshError !== undefined) {
+    body = (
+      <Notification
+        {...baseProps}
+        content={
+          <Box gap="1rem" align="center">
+            <ArrowClockwiseIcon size={16} />
+            <span>{`Refresh failed: ${slot.refreshError}`}</span>
+          </Box>
+        }
+        type={NotificationType.ERROR}
+      />
+    )
+  } else if (slot.result === null) {
+    body = (
+      <Notification
+        {...baseProps}
+        content={<Text color="contentSecondary">Not run</Text>}
+        type={NotificationType.INFO}
       />
     )
   } else if (type === "queued") {
@@ -109,7 +162,7 @@ export const StatusNotification: React.FC<Props> = ({
         type={NotificationType.ERROR}
       />
     )
-  } else if (isError) {
+  } else if (activeResult.type === "error") {
     body = (
       <Notification
         {...baseProps}
@@ -154,13 +207,14 @@ export const StatusNotification: React.FC<Props> = ({
   }
 
   return (
-    <NotificationContainer
-      role={isError || isCancelled ? "alert" : "status"}
-      aria-live={isError || isCancelled ? "assertive" : "polite"}
-      aria-atomic="true"
-      title={notice}
-    >
-      <LiveRegion>{liveRegionMessage(activeResult)}</LiveRegion>
+    <NotificationContainer title={notice}>
+      <LiveRegion
+        role={isError || isCancelled ? "alert" : "status"}
+        aria-live={isError || isCancelled ? "assertive" : "polite"}
+        aria-atomic="true"
+      >
+        {liveRegionMessage(slot)}
+      </LiveRegion>
       {body}
     </NotificationContainer>
   )

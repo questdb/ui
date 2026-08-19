@@ -1,4 +1,7 @@
-import { getController } from "../notebooks/notebookController"
+import {
+  getController,
+  type CellRefreshView,
+} from "../notebooks/notebookController"
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
 import { NotebookToolError } from "../notebooks/notebookToolError"
@@ -50,6 +53,11 @@ export type NotebookContextCell = {
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
+  // Live-only: present for the mounted notebook alone. Absence never means
+  // "not refreshing" or "not blocked".
+  refreshing?: true
+  last_refresh_error?: string
+  auto_refresh_blocked?: "contains_write"
   grid?: { x: number; y: number; w: number; h: number }
 }
 
@@ -59,6 +67,8 @@ export type NotebookContextSnapshot =
       buffer_id: number
       label: string
       layout_mode: "list" | "grid"
+      // Absent when the notebook has no configured default.
+      auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
       variables?: Array<{ name: string; value: string }>
       cells: NotebookContextCell[]
@@ -116,15 +126,42 @@ const lastRunSummary = (
   return { last_run_status: status }
 }
 
+// The refresh channel is separate from run history: `last_run_status` stays
+// the outcome of the last completed RUN, while these describe the last
+// refresh round. Both grid and chart cells report here.
+const refreshFields = (
+  view: CellRefreshView | undefined,
+): Pick<
+  NotebookContextCell,
+  "refreshing" | "last_refresh_error" | "auto_refresh_blocked"
+> => {
+  if (!view) return {}
+  return {
+    ...(view.refreshing ? { refreshing: true as const } : {}),
+    ...(view.lastRefreshError !== undefined
+      ? {
+          last_refresh_error: sanitizeForPromptContext(
+            truncate(view.lastRefreshError, ERROR_MAX),
+          ),
+        }
+      : {}),
+    ...(view.autoRefreshBlocked !== undefined
+      ? { auto_refresh_blocked: view.autoRefreshBlocked }
+      : {}),
+  }
+}
+
 const buildCell = (
   cell: NotebookCell,
   gridByCellId: Map<string, CellLayoutItem>,
   layoutMode: "list" | "grid",
+  refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
 ): NotebookContextCell => {
   const out: NotebookContextCell = {
     id: cell.id,
     preview: preview(cell.value),
     ...lastRunSummary(cell),
+    ...refreshFields(refreshState?.get(cell.id)),
   }
   if (cell.value.length > PREVIEW_MAX) {
     out.preview_truncated = true
@@ -170,6 +207,7 @@ export const buildSnapshot = async (
     return { status: "archived", buffer_id: bufferId, label: meta.label }
   }
   const view = controller ? await controller.readView() : meta.view
+  const refreshState = controller?.readRefreshState?.()
   const cells: NotebookCell[] = view.cells
   const settings: NotebookSettings = view.settings ?? {}
   const maximizedCellId = view.maximizedCellId ?? null
@@ -185,7 +223,13 @@ export const buildSnapshot = async (
     label: meta.label,
     layout_mode: layoutMode,
     maximized_cell_id: maximizedCellId,
-    cells: cells.map((c) => buildCell(c, gridByCellId, layoutMode)),
+    cells: cells.map((c) =>
+      buildCell(c, gridByCellId, layoutMode, refreshState),
+    ),
+  }
+  // Absence stays observable: with no configured default, nothing polls.
+  if (settings.autoRefreshDefault !== undefined) {
+    out.auto_refresh_default = settings.autoRefreshDefault
   }
   const variables = normalizeVariables(settings.variables)
   if (variables.length > 0) {
@@ -217,6 +261,9 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   lines.push(`  buffer_id: ${snap.buffer_id}`)
   lines.push(`  label: ${JSON.stringify(sanitizeForPromptContext(snap.label))}`)
   lines.push(`  layout_mode: ${snap.layout_mode}`)
+  if (snap.auto_refresh_default !== undefined) {
+    lines.push(`  auto_refresh_default: ${snap.auto_refresh_default}`)
+  }
   lines.push(
     `  maximized_cell_id: ${
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
@@ -263,6 +310,13 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
           c.last_run_error_summary,
         )}`,
       )
+    if (c.refreshing) lines.push(`      refreshing: true`)
+    if (c.last_refresh_error)
+      lines.push(
+        `      last_refresh_error: ${JSON.stringify(c.last_refresh_error)}`,
+      )
+    if (c.auto_refresh_blocked)
+      lines.push(`      auto_refresh_blocked: ${c.auto_refresh_blocked}`)
     if (c.grid) {
       lines.push(
         `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w}, h: ${c.grid.h} }`,
@@ -289,6 +343,8 @@ export const formatDigest = (digest: UserActionDigest): string => {
     parts.push(`  ran: { ${entries} }`)
   }
   if (digest.layoutModeTo) parts.push(`  layout_mode: ${digest.layoutModeTo}`)
+  if (digest.autoRefreshDefaultTo !== undefined)
+    parts.push(`  auto_refresh_default: ${digest.autoRefreshDefaultTo}`)
   if (digest.notebookStatusChange)
     parts.push(`  notebook_status: ${digest.notebookStatusChange}`)
   if (parts.length === 0) return ""
@@ -362,6 +418,10 @@ export type NotebookCellSummary = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   last_run_status?: RunStatus
+  // Live-only (mounted notebook); see NotebookContextCell.
+  refreshing?: true
+  last_refresh_error?: string
+  auto_refresh_blocked?: "contains_write"
 }
 
 export type NotebookCellDetails = {
@@ -378,9 +438,16 @@ export type NotebookCellDetails = {
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
+  // Live-only (mounted notebook); see NotebookContextCell.
+  refreshing?: true
+  last_refresh_error?: string
+  auto_refresh_blocked?: "contains_write"
 }
 
-export const summarizeCells = (cells: NotebookCell[]): NotebookCellSummary[] =>
+export const summarizeCells = (
+  cells: NotebookCell[],
+  refreshState?: ReadonlyMap<string, CellRefreshView>,
+): NotebookCellSummary[] =>
   cells.map((cell) => {
     const summary: NotebookCellSummary = {
       id: cell.id,
@@ -390,6 +457,7 @@ export const summarizeCells = (cells: NotebookCell[]): NotebookCellSummary[] =>
           : `${cell.value.slice(0, 117)}...`,
       position: cell.position,
       last_run_status: runStatusOf(cell).status,
+      ...refreshFields(refreshState?.get(cell.id)),
     }
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
@@ -402,6 +470,7 @@ export const serializeCell = (
   cellId: string,
   bufferId: number,
   getFullContent: boolean,
+  refreshState?: ReadonlyMap<string, CellRefreshView>,
 ): NotebookCellDetails => {
   const cell = cells.find((c) => c.id === cellId)
   if (!cell) {
@@ -425,6 +494,7 @@ export const serializeCell = (
     position: cell.position,
     last_run_status: run.status,
     last_run_error: run.error,
+    ...refreshFields(refreshState?.get(cell.id)),
   }
   if (truncated) {
     out.truncated = true

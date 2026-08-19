@@ -5,8 +5,10 @@ import { Spinner } from "./Spinner"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
-import { autoRefreshLabel } from "../notebookUtils"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
+import { autoRefreshLabel, resolveAutoRefresh } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
+import { OverrideDot } from "../refreshSplitButton"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
@@ -16,30 +18,44 @@ import {
   EditorRefreshButton,
   EditorRefreshControlGroup,
   EditorRefreshIntervalTrigger,
+  EditorRefreshIntervalTriggerButton,
 } from "../../ToolbarRefreshControls"
+
+const WRITE_BLOCK_TOOLTIP =
+  "This cell contains DDL/DML, auto-refresh is disabled"
 
 type Props = {
   cellId: string
-  // Grid refreshes by re-running the query and has no auto-refresh interval;
-  // chart refreshes its own fetch and exposes the interval dropdown.
+  // Chart refreshes its own fetch; a grid refresh re-runs the statements while
+  // the old rows stay visible. Both views expose the interval dropdown.
   view: "grid" | "chart"
-  autoRefresh: AutoRefresh
+  cellAutoRefresh: AutoRefresh | undefined
+  autoRefreshDefault: AutoRefresh | undefined
   isRefreshing: boolean
 }
 
 export const CellRefreshButton: React.FC<Props> = ({
   cellId,
   view,
-  autoRefresh,
+  cellAutoRefresh,
+  autoRefreshDefault,
   isRefreshing,
 }) => {
   const { setCellRefresh } = useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const fetchState = useCellFetchState(cellId)
   const isChart = view === "chart"
+  const autoRefresh = resolveAutoRefresh(cellAutoRefresh, autoRefreshDefault)
+  const hasOverride = cellAutoRefresh !== undefined
+  const writeBlocked =
+    view === "grid" && fetchState?.classifyBlock?.kind === "write"
+  const refreshing =
+    isRefreshing || (view === "grid" && (fetchState?.fetching ?? false))
   const intervalTooltip = useTriggerTooltip()
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (refreshing) return
     signalUserEdit(bufferId)
     if (isChart) void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(
@@ -49,10 +65,11 @@ export const CellRefreshButton: React.FC<Props> = ({
       { cellId },
     )
   }
-  const handleSelect = (value: AutoRefresh) => {
+  const handleSelect = (value: AutoRefresh | undefined) => {
+    if (value === cellAutoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
       from: autoRefreshLabel(autoRefresh),
-      to: autoRefreshLabel(value),
+      to: value === undefined ? "default" : autoRefreshLabel(value),
       trigger: "button",
     })
     signalUserEdit(bufferId)
@@ -67,28 +84,53 @@ export const CellRefreshButton: React.FC<Props> = ({
           type="button"
           onClick={handleRefresh}
           aria-label="Refresh"
-          aria-busy={isRefreshing}
-          disabled={isRefreshing}
+          aria-busy={refreshing}
+          // aria-disabled + click guard, not native disabled: a poll tick must
+          // not evict keyboard focus from the button mid-cycle.
+          aria-disabled={refreshing || undefined}
         >
-          {isRefreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
+          {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
         </EditorRefreshButton>
       </Tooltip>
-      {isChart && (
+      {writeBlocked ? (
+        <Tooltip content={WRITE_BLOCK_TOOLTIP}>
+          <EditorRefreshIntervalTriggerButton
+            label="Off"
+            type="button"
+            aria-label={WRITE_BLOCK_TOOLTIP}
+            aria-disabled
+          />
+        </Tooltip>
+      ) : (
         <SelectMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
           <Tooltip
-            content="Auto-refresh interval"
+            content={
+              hasOverride
+                ? "Auto-refresh interval (overrides notebook default)"
+                : "Auto-refresh interval"
+            }
             {...intervalTooltip.tooltipProps}
           >
             <EditorRefreshIntervalTrigger
               label={autoRefreshLabel(autoRefresh)}
+              leadingIcon={hasOverride ? <OverrideDot /> : undefined}
               type="button"
               onClick={(e) => e.stopPropagation()}
-              aria-label="Auto-refresh interval"
+              aria-label={`Auto-refresh interval: ${autoRefreshLabel(
+                autoRefresh,
+              )}${hasOverride ? " (overrides notebook default)" : ""}`}
             />
           </Tooltip>
           <SelectMenu.Portal>
             <SelectMenu.Content align="end" sideOffset={4}>
-              <AutoRefreshOptions value={autoRefresh} onSelect={handleSelect} />
+              <AutoRefreshOptions
+                value={cellAutoRefresh}
+                onSelect={handleSelect}
+                inheritedValue={resolveAutoRefresh(
+                  undefined,
+                  autoRefreshDefault,
+                )}
+              />
             </SelectMenu.Content>
           </SelectMenu.Portal>
         </SelectMenu.Root>

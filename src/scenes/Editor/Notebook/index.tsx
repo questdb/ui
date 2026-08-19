@@ -28,7 +28,7 @@ import {
 } from "./NotebookProvider"
 import { Cell } from "./cells/Cell"
 import { MarkdownCell } from "./cells/MarkdownCell"
-import type { NotebookCell } from "../../../store/notebook"
+import type { AutoRefresh, NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
 import { Button, LoadingSpinner } from "../../../components"
 import { NotebookToolbar } from "./NotebookToolbar"
@@ -58,7 +58,7 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { consumeReveal, getPendingReveal } from "./cellReveal"
 import { useCellBandObservers } from "./useCellBandObservers"
-import { useChartRefresh } from "./chartRefresh/ChartRefreshContext"
+import { useCellRefresh } from "./cellRefresh/CellRefreshContext"
 import { useCellVirtualizationEngine } from "./cellVirtualization/CellVirtualizationContext"
 import {
   useCellResultHydrationEngine,
@@ -329,20 +329,21 @@ type CellViewProps = {
   index: number
   totalCells: number
   layoutMode: "list" | "grid"
+  autoRefreshDefault: AutoRefresh | undefined
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
 }
 
-const CellView: React.FC<CellViewProps> = (props) =>
+const CellView: React.FC<CellViewProps> = ({ autoRefreshDefault, ...props }) =>
   props.cell.type === "markdown" ? (
     <MarkdownCell {...props} />
   ) : (
-    <Cell {...props} />
+    <Cell {...props} autoRefreshDefault={autoRefreshDefault} />
   )
 
 const ListLayout: React.FC = () => {
-  const { cells, focusedCellId, maximizedCellId, runningCellIds } =
+  const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
   const { setFocusedCell } = useNotebookActions()
   useScrollUserAddedCellIntoView()
@@ -364,6 +365,7 @@ const ListLayout: React.FC = () => {
               index={index}
               totalCells={cells.length}
               layoutMode="list"
+              autoRefreshDefault={settings.autoRefreshDefault}
               isFocused={focusedCellId === cell.id}
               isMaximized={maximizedCellId === cell.id}
               isRunning={runningCellIds.has(cell.id)}
@@ -651,6 +653,7 @@ const GridLayout: React.FC = () => {
                 index={index}
                 totalCells={cells.length}
                 layoutMode="grid"
+                autoRefreshDefault={settings.autoRefreshDefault}
                 isFocused={focusedCellId === cell.id}
                 isMaximized={maximizedCellId === cell.id}
                 isRunning={runningCellIds.has(cell.id)}
@@ -750,7 +753,7 @@ const useNotebookSearchReveal = () => {
 const NotebookContent: React.FC = () => {
   const { cells, settings, focusedCellId, maximizedCellId, runningCellIds } =
     useNotebookState()
-  const chartEngine = useChartRefresh()
+  const chartEngine = useCellRefresh()
   const virtualizationEngine = useCellVirtualizationEngine()
   const layoutMode = settings.layoutMode ?? "list"
   useScrollRestoredCellIntoView(maximizedCellId)
@@ -807,6 +810,7 @@ const NotebookContent: React.FC = () => {
               index={cells.indexOf(maximizedCell)}
               totalCells={cells.length}
               layoutMode={layoutMode}
+              autoRefreshDefault={settings.autoRefreshDefault}
               isFocused={focusedCellId === cell.id}
               isMaximized
               isRunning={runningCellIds.has(cell.id)}

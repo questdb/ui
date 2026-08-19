@@ -15,6 +15,7 @@ const okSnapshot: NotebookContextSnapshot = {
   buffer_id: 42,
   label: "Trades",
   layout_mode: "list",
+  auto_refresh_default: true,
   maximized_cell_id: null,
   cells: [],
 }

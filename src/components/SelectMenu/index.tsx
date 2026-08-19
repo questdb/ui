@@ -214,13 +214,19 @@ const ItemDescription = styled.span`
   line-height: 1.4;
 `
 
-const ItemIndicator = styled(RadixDropdownMenu.ItemIndicator)`
+const IndicatorSlot = styled.span`
   display: inline-flex;
   width: 1.8rem;
   height: 1.8rem;
   align-items: center;
   justify-content: center;
   color: ${({ theme }) => theme.color.contentAccent};
+`
+
+const ItemIndicator = styled(RadixDropdownMenu.ItemIndicator)`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 `
 
 type ItemProps = Omit<
@@ -230,21 +236,26 @@ type ItemProps = Omit<
   children: React.ReactNode
   description?: React.ReactNode
   icon?: React.ReactNode
+  // Shares the checkmark's slot: a row showing one is never the checked row.
+  indicator?: React.ReactNode
 }
 
 const Item = React.forwardRef<
   React.ElementRef<typeof RadixDropdownMenu.RadioItem>,
   ItemProps
->(({ children, description, icon, ...props }, ref) => (
+>(({ children, description, icon, indicator, ...props }, ref) => (
   <ItemRoot {...props} ref={ref} $hasIcon={icon != null}>
     {icon != null && <ItemIcon>{icon}</ItemIcon>}
     <ItemCopy>
       <ItemLabel>{children}</ItemLabel>
       {description != null && <ItemDescription>{description}</ItemDescription>}
     </ItemCopy>
-    <ItemIndicator>
-      <CheckIcon size={16} weight="bold" />
-    </ItemIndicator>
+    <IndicatorSlot>
+      <ItemIndicator>
+        <CheckIcon size={16} weight="bold" />
+      </ItemIndicator>
+      {indicator}
+    </IndicatorSlot>
   </ItemRoot>
 ))
 
@@ -366,4 +377,9 @@ export const SelectMenu = {
   RadioGroup: RadixDropdownMenu.RadioGroup,
   Item,
   Label,
+  Divider: styled.div`
+    height: 1px;
+    background: ${({ theme }) => theme.color.interactionNeutral};
+    margin: 0.5rem 0.4rem;
+  `,
 }

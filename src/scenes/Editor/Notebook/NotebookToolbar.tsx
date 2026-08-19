@@ -25,6 +25,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
+import { NotebookRefreshControl } from "./NotebookRefreshControl"
 import { NotebookLayoutToggle } from "./NotebookViewToggle"
 import { NotebookRenameInput } from "./NotebookRenameInput"
 
@@ -48,6 +49,12 @@ const Toolbar = styled(Box).attrs({
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  & > * {
+    flex-shrink: 0;
+  }
 `
 
 const NotebookGlyph = styled(NotebookIcon).attrs({
@@ -76,7 +83,7 @@ const TitleContainer = styled(Box).attrs({ align: "center", gap: "0.5rem" })`
 const Name = styled.span`
   display: block;
   min-width: 0;
-  max-width: 100%;
+  max-width: 40rem;
   font-size: 1.6rem;
   font-weight: 600;
   color: ${color("contentPrimary")};
@@ -326,6 +333,7 @@ export const NotebookToolbar: React.FC = () => {
           </Button>
         </TooltipButton>
         <VariablesPopover />
+        <NotebookRefreshControl />
         <NotebookLayoutToggle
           mode={mode}
           onChange={handleModeChange}

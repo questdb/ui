@@ -74,6 +74,8 @@ type BaseButtonProps = {
   download?: string | boolean
   draggable?: boolean
   "aria-label"?: string
+  "aria-busy"?: boolean
+  "aria-disabled"?: boolean
   "aria-pressed"?: boolean
   "aria-expanded"?: boolean
   "aria-controls"?: string

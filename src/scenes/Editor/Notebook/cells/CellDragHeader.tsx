@@ -4,7 +4,7 @@ import { CellToolbar } from "./CellToolbar"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { CellToolbarTier } from "../notebookUtils"
-import type { NotebookCell } from "../../../../store/notebook"
+import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { editorCardHeaderStyles } from "../../sharedStyles"
 
 // The cell's top bar: it is the grid drag handle (`cell-drag-handle`), the
@@ -53,6 +53,7 @@ type Props = {
   cellIndex: number
   totalCells: number
   layoutMode: "list" | "grid"
+  autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
   isRunning?: boolean
   left?: React.ReactNode
@@ -70,6 +71,7 @@ export const CellDragHeader: React.FC<Props> = ({
   cellIndex,
   totalCells,
   layoutMode,
+  autoRefreshDefault,
   isMaximized,
   isRunning = false,
   left,
@@ -104,6 +106,7 @@ export const CellDragHeader: React.FC<Props> = ({
         cellIndex={cellIndex}
         totalCells={totalCells}
         layoutMode={layoutMode}
+        autoRefreshDefault={autoRefreshDefault}
         isMaximized={isMaximized}
         isRunning={isRunning}
         inline

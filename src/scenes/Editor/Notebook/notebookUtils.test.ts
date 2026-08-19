@@ -15,9 +15,14 @@ import {
   buildPersistPayload,
   capResultBytes,
   cellHeightPatchForRows,
+  cellModeChangePatch,
   cellToolbarMenuFlags,
   cellToolbarTier,
+  clearCellAutoRefresh,
   cloneNotebookViewState,
+  countActiveAutoRefreshOverrides,
+  countAutoRefreshOverrides,
+  resolveAutoRefresh,
   cloneNotebookViewStateWithCellIdMap,
   computeAgentCellGridH,
   computeCellGridH,
@@ -41,6 +46,12 @@ import {
   partitionCellHeights,
   topHeightForSql,
   patchCellRunResult,
+  reconcileCellResultForValue,
+  reconcileResultsForStatements,
+  derivePositionalFrame,
+  deriveStatementFrame,
+  resolveActiveStatementSql,
+  statementKeysFor,
   removeCell,
   resolveRunCompletion,
   scaleCellHeights,
@@ -830,19 +841,20 @@ describe("buildAppliedCells", () => {
     expect(resultsCleared).toEqual(["a"])
   })
 
-  it("reports resultsCleared for a released cell whose result lives only on disk", () => {
+  it("keeps a released cell's snapshot on a value change — hydration reconciles it", () => {
     // Given a cell released by virtualization: no in-memory result, only a run
     // marker pointing at a persisted snapshot
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "x", lastRunStatus: "success" },
     ]
     // When an apply replaces its SQL
-    const { resultsCleared } = buildAppliedCells(prev, {
+    const { nextCells, resultsCleared } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "x2" }],
     })
-    // Then the orphaned snapshot is flagged — hydration would otherwise
-    // resurrect the old SQL's rows under the new SQL
-    expect(resultsCleared).toEqual(["a"])
+    // Then the snapshot survives for hydration to reconcile by statement
+    // content — unmatched results are dropped at load, never shown
+    expect(resultsCleared).toEqual([])
+    expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
   it("reports resultsCleared when a run cell is converted to markdown", () => {
@@ -881,7 +893,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
-  it("resets lastRunStatus when a value change drops an error result", () => {
+  it("carries the error outcome as recorded history when a value change drops an error result", () => {
     // Given a cell that errored on its previous SQL
     const prev: NotebookCell[] = [
       {
@@ -897,17 +909,19 @@ describe("buildAppliedCells", () => {
         },
       },
     ]
-    // When the SQL is fixed via apply_notebook_state
+    // When the SQL is rewritten via apply_notebook_state
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
     })
-    // Then the stale error must not leak onto the fixed, not-yet-rerun cell
+    // Then the record still describes the last run that actually happened —
+    // only a new run rewrites it
     expect(nextCells[0].result).toBeNull()
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    expect(nextCells[0].lastRunStatus).toBe("error")
+    expect(nextCells[0].lastRunError).toBe("boom")
   })
 
-  it("resets a persisted error status when the SQL changes", () => {
-    // Given a passive cell whose error survives only as persisted run history
+  it("keeps a released cell's persisted run history when the SQL changes", () => {
+    // Given a passive cell whose outcome survives only as persisted run history
     const prev: NotebookCell[] = [
       {
         id: "a",
@@ -917,13 +931,14 @@ describe("buildAppliedCells", () => {
       },
     ]
 
-    // When the SQL is fixed without a live result blob
+    // When the SQL is edited without a live result blob
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "SELECT * FROM fx_trades" }],
     })
 
-    // Then the previous SQL's error is cleared
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
+    // Then the recorded history stays — hydration reconciles the snapshot,
+    // and only a run rewrites the recorded outcome
+    expect(nextCells[0].lastRunStatus).toBe("error")
   })
 
   it("preserveValue keeps the existing cell's value, result, and run history", () => {
@@ -1172,7 +1187,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
-  it("defaults isViewMaximized and autoRefresh to true on new draw cells", () => {
+  it("defaults isViewMaximized to true and stores no autoRefresh key on new draw cells", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1185,7 +1200,8 @@ describe("buildAppliedCells", () => {
         },
       ],
     })
-    expect(nextCells[0].autoRefresh).toBe(true)
+    // No stored key: the cell inherits the notebook default.
+    expect("autoRefresh" in nextCells[0]).toBe(false)
     expect(nextCells[0].isViewMaximized).toBe(true)
   })
 
@@ -1273,7 +1289,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBe("draw")
   })
 
-  it("applies a fixed refresh interval to a draw cell and defaults to adaptive when omitted", () => {
+  it("applies a fixed refresh interval to a draw cell and clears it to inherit when omitted", () => {
     // Given a draw cell created with a 5s fixed interval
     const drawCell = {
       value: "SELECT 1",
@@ -1292,8 +1308,8 @@ describe("buildAppliedCells", () => {
     const { nextCells } = buildAppliedCells(created, {
       cells: [{ ...drawCell, id: created[0].id }],
     })
-    // Then a draw cell defaults back to adaptive (true)
-    expect(nextCells[0].autoRefresh).toBe(true)
+    // Then no key remains — the cell inherits the notebook default
+    expect("autoRefresh" in nextCells[0]).toBe(false)
   })
 
   it("refuses an empty cells array", () => {
@@ -2210,7 +2226,7 @@ describe("lastRunError carry chain", () => {
     })
   })
 
-  it("buildAppliedCells drops the stale carried error when the value changes", () => {
+  it("buildAppliedCells keeps a stripped cell's carried error across a value change", () => {
     // Given a stripped errored cell carrying status + error markers
     const [stripped] = stripCellResults([errored("a")])
 
@@ -2219,9 +2235,10 @@ describe("lastRunError carry chain", () => {
       cells: [{ id: "a", value: "select fixed" }],
     })
 
-    // Then neither the stale status nor its error attaches to the new SQL
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
-    expect(nextCells[0].lastRunError).toBeUndefined()
+    // Then the recorded history survives — it describes the last run that
+    // actually happened, and only a run rewrites it
+    expect(nextCells[0].lastRunStatus).toBe("error")
+    expect(nextCells[0].lastRunError).toBe("table does not exist")
   })
 
   it("buildAppliedCells drops run markers when a cell turns markdown", () => {
@@ -2394,9 +2411,10 @@ describe("cloneNotebookViewState", () => {
   it("strips results but preserves structural fields and run history", () => {
     const out = cloneNotebookViewState(source(), seqIds())
     expect(out.cells[1].result).toBeUndefined()
-    // cloned cells keep run history so auto-run never re-fires their writes
+    // cloned cells keep recorded run history so auto-run never re-fires their
+    // writes; a draw cell's frame is refresh-produced and never seeds history
     expect(out.cells[0].lastRunStatus).toBe("success")
-    expect(out.cells[1].lastRunStatus).toBe("success")
+    expect(out.cells[1].lastRunStatus).toBeUndefined()
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)
@@ -2602,6 +2620,15 @@ describe("isAutoRefresh", () => {
     expect(isAutoRefresh(null)).toBe(false)
     expect(isAutoRefresh(undefined)).toBe(false)
   })
+
+  it("rejects inherited Object property names", () => {
+    // An `in` check would accept these; each one reaches the poll-interval
+    // lookup as a function and degrades the cadence math to NaN.
+    expect(isAutoRefresh("toString")).toBe(false)
+    expect(isAutoRefresh("constructor")).toBe(false)
+    expect(isAutoRefresh("__proto__")).toBe(false)
+    expect(isAutoRefresh("hasOwnProperty")).toBe(false)
+  })
 })
 
 describe("autoRefreshLabel", () => {
@@ -2620,6 +2647,94 @@ describe("autoRefreshIntervalMs", () => {
     expect(autoRefreshIntervalMs("1m")).toBe(60000)
     expect(autoRefreshIntervalMs(true)).toBeUndefined()
     expect(autoRefreshIntervalMs(false)).toBeUndefined()
+  })
+})
+
+describe("auto-refresh inheritance helpers", () => {
+  it("resolveAutoRefresh prefers the override, then the default, then Off", () => {
+    expect(resolveAutoRefresh("5s", "30s")).toBe("5s")
+    expect(resolveAutoRefresh(undefined, "30s")).toBe("30s")
+    expect(resolveAutoRefresh(undefined, undefined)).toBe(false)
+  })
+
+  it("resolveAutoRefresh treats false as a value, never as absent", () => {
+    expect(resolveAutoRefresh(false, "30s")).toBe(false)
+    expect(resolveAutoRefresh(undefined, false)).toBe(false)
+  })
+
+  it("countAutoRefreshOverrides counts stored keys on ANY mode, including dormant run-cell overrides", () => {
+    // Given a draw override, an Auto chart, a dormant run-mode override, and an inheriting cell
+    const cells: NotebookCell[] = [
+      { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
+      { ...cell("b", "SELECT 2"), mode: "draw", autoRefresh: true },
+      { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: false },
+      cell("d", "SELECT 4"),
+    ]
+    // Then every stored key counts — the count matches what a reset would clear
+    expect(countAutoRefreshOverrides(cells)).toBe(3)
+  })
+
+  it("countActiveAutoRefreshOverrides counts overrides on cells showing a view — editor-only keys stay dormant", () => {
+    // Given a chart override, a grid-view run override, and an editor-only override
+    const gridResult: NotebookCell["result"] = {
+      results: [
+        {
+          type: "dql",
+          query: "SELECT 2",
+          columns: [{ name: "x", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+    const cells: NotebookCell[] = [
+      { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
+      { ...cell("b", "SELECT 2", gridResult), mode: "run", autoRefresh: false },
+      { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: "1s" },
+    ]
+    // Then only the cells with a visible view count toward the displayed total
+    expect(countActiveAutoRefreshOverrides(cells)).toBe(2)
+    // And a notebook with only editor-only keys shows no override at all
+    expect(countActiveAutoRefreshOverrides([cells[2]])).toBe(0)
+  })
+
+  it("clearCellAutoRefresh deletes the key so a later draw switch cannot resurrect it", () => {
+    // Given a run cell carrying a dormant override
+    const dormant: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "run",
+      autoRefresh: "1s",
+    }
+    // When the override clears and the cell later switches to draw
+    const cleared = clearCellAutoRefresh(dormant)
+    const redrawn: NotebookCell = {
+      ...cleared,
+      mode: "draw",
+      ...cellModeChangePatch(cleared, "draw"),
+    }
+    // Then no key exists at any point
+    expect("autoRefresh" in cleared).toBe(false)
+    expect("autoRefresh" in redrawn).toBe(false)
+  })
+
+  it("clearCellAutoRefresh returns the same cell when no override exists", () => {
+    const c = cell("a", "SELECT 1")
+    expect(clearCellAutoRefresh(c)).toBe(c)
+  })
+
+  it("clearCellAutoRefresh drops a chart's Auto so the cell inherits the notebook default", () => {
+    // Given a chart set to Auto, no notebook default
+    const chart: NotebookCell = {
+      ...cell("a", "SELECT 1"),
+      mode: "draw",
+      autoRefresh: true,
+    }
+    // When the user picks "Notebook default" on the cell
+    const cleared = clearCellAutoRefresh(chart)
+    // Then the key is gone — the chart inherits (Off while the default is unset)
+    expect("autoRefresh" in cleared).toBe(false)
   })
 })
 
@@ -2837,6 +2952,37 @@ describe("cellToolbarMenuFlags", () => {
     // …and View table / View chart still let the user bring a pane back
     expect(f.showViewTable).toBe(true)
     expect(f.showViewChart).toBe(true)
+  })
+
+  it("offers the interval submenu to grids, not just charts, wherever the inline control is absent", () => {
+    // Given grid cells in the tiers that render no inline interval control
+    // Then the menu is the fallback — auto-refresh is not a chart-only feature
+    expect(flags({ tier: "compact", view: "grid" }).showAutoRefreshItem).toBe(
+      true,
+    )
+    expect(flags({ tier: "standard", view: "grid" }).showAutoRefreshItem).toBe(
+      true,
+    )
+  })
+
+  it("never duplicates the inline interval control at the expanded tier", () => {
+    // Given the expanded tier, which renders the split-button interval for
+    // BOTH views
+    // Then the menu omits it rather than showing the same control twice
+    expect(flags({ tier: "expanded", view: "grid" }).showAutoRefreshItem).toBe(
+      false,
+    )
+    expect(flags({ tier: "expanded", view: "chart" }).showAutoRefreshItem).toBe(
+      false,
+    )
+  })
+
+  it("omits the interval submenu for a cell with no view", () => {
+    // Given a cell showing neither a grid nor a chart, there is nothing to
+    // auto-refresh
+    expect(flags({ tier: "compact", view: "none" }).showAutoRefreshItem).toBe(
+      false,
+    )
   })
 
   it("offers Reset zoom only for a zoomed chart in the compact tier", () => {
@@ -3084,6 +3230,80 @@ describe("buildAppliedNotebookState", () => {
     expect(next.diff.deleted).toEqual([])
   })
 
+  it("applies auto_refresh_default and preserves it on null", () => {
+    // Given a notebook with a stored notebook-level default
+    const current = {
+      cells: [cell("a", "SELECT 1")],
+      settings: { autoRefreshDefault: "30s" as const },
+      maximizedCellId: null,
+    }
+    // When apply sets a new default
+    const set = buildAppliedNotebookState(current, {
+      autoRefreshDefault: "5s",
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then the new default is stored
+    expect(set.settings.autoRefreshDefault).toBe("5s")
+    // When apply passes null
+    const preserved = buildAppliedNotebookState(current, {
+      autoRefreshDefault: null,
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    // Then the stored default survives
+    expect(preserved.settings.autoRefreshDefault).toBe("30s")
+  })
+
+  const chart = (id: string): NotebookCell => ({
+    ...cell(id, "SELECT 1"),
+    mode: "draw",
+    chartConfig: {
+      xColumn: "ts",
+      queries: [{ type: "line", yColumns: ["v"] }],
+    },
+  })
+  const chartRequestCell = {
+    value: "SELECT 1",
+    mode: "draw" as const,
+    chartConfig: {
+      xColumn: "ts",
+      queries: [{ type: "line" as const, yColumns: ["v"] }],
+    },
+  }
+
+  it("never synthesizes auto_refresh — new and converted charts inherit", () => {
+    // Given a notebook with no auto-refresh default
+    const current = state([cell("a", "SELECT 1")])
+    // When apply converts one cell to a chart and adds another, both without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a" }, chartRequestCell],
+    })
+    // Then neither chart stores a key — both inherit the notebook default
+    expect("autoRefresh" in next.cells[0]).toBe(false)
+    expect("autoRefresh" in next.cells[1]).toBe(false)
+  })
+
+  it("echoing a chart's explicit auto_refresh keeps it", () => {
+    // Given a chart set to Auto
+    const current = state([{ ...chart("a"), autoRefresh: true as const }])
+    // When an agent echoes the value
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a", autoRefresh: true }],
+    })
+    // Then the chart keeps polling
+    expect(next.cells[0].autoRefresh).toBe(true)
+  })
+
+  it("apply clears a chart's explicit auto_refresh to inherit when omitted", () => {
+    // Given a chart pinned to a fixed interval
+    const current = state([{ ...chart("a"), autoRefresh: "5s" as const }])
+    // When an agent applies the cell without auto_refresh
+    const next = buildAppliedNotebookState(current, {
+      cells: [{ ...chartRequestCell, id: "a" }],
+    })
+    // Then the override clears — PUT semantics, no re-stamp
+    expect("autoRefresh" in next.cells[0]).toBe(false)
+  })
+
   it("grid layout mode builds a layout for every cell", () => {
     // Given a list-mode notebook
     const current = state([cell("a", "SELECT 1")])
@@ -3312,5 +3532,329 @@ describe("topHeight stamping", () => {
 
     // Then the user's height stays pinned
     expect(nextCells[0].topHeight).toBe(300)
+  })
+})
+
+const dqlResult = (query: string, count = 1): SingleQueryResult => ({
+  type: "dql",
+  query,
+  columns: [{ name: "x", type: "INT" }],
+  dataset: [[count]],
+  count,
+})
+
+const resultOf = (
+  results: SingleQueryResult[],
+  extra: Partial<CellResult> = {},
+): CellResult => ({
+  results,
+  activeResultIndex: 0,
+  timestamp: 0,
+  ...extra,
+})
+
+describe("reconcileResultsForStatements — content carryover", () => {
+  it("keeps results for unchanged statements across whitespace and semicolon edits", () => {
+    // Given a two-statement frame
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+    // When the statements only gain whitespace and semicolons
+    const reconciled = reconcileResultsForStatements(
+      ["  SELECT 1;", "SELECT 2  "],
+      previous,
+    )
+    // Then both results survive in statement order
+    expect(reconciled?.results.map((r) => r.query)).toEqual([
+      "SELECT 1",
+      "SELECT 2",
+    ])
+  })
+
+  it("drops an edited statement's result and keeps its siblings", () => {
+    // Given results for two statements
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+    // When the second statement is edited
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 999"],
+      previous,
+    )
+    // Then only the untouched statement keeps its result
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+
+  it("matches duplicate statements by occurrence order", () => {
+    // Given two identical statements with distinct results
+    const previous = resultOf([
+      dqlResult("SELECT 1", 10),
+      dqlResult("SELECT 1", 20),
+    ])
+    // When one duplicate is removed
+    const reconciled = reconcileResultsForStatements(["SELECT 1"], previous)
+    // Then the first occurrence's result survives
+    expect(reconciled?.results).toHaveLength(1)
+    expect(reconciled?.results[0]).toMatchObject({ count: 10 })
+  })
+
+  it("returns null when no result survives (the cell collapses)", () => {
+    // Given a frame whose only statement is rewritten
+    const previous = resultOf([dqlResult("SELECT 1")])
+    // When reconciled against entirely new SQL
+    // Then there is no frame
+    expect(reconcileResultsForStatements(["SELECT 2"], previous)).toBeNull()
+    expect(reconcileResultsForStatements([], previous)).toBeNull()
+  })
+
+  it("preserves the active statement by content across a reorder", () => {
+    // Given the second statement is active
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
+    })
+    // When the statements are reordered
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 2", "SELECT 1"],
+      previous,
+    )
+    // Then the active key still points at the same statement
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 2"])[0],
+    )
+  })
+
+  it("falls back to the nearest surviving statement when the active one is removed", () => {
+    // Given three results with the middle one active
+    const previous = resultOf(
+      [dqlResult("SELECT 1"), dqlResult("SELECT 2"), dqlResult("SELECT 3")],
+      { activeResultIndex: 1 },
+    )
+    // When the active statement is removed
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 3"],
+      previous,
+    )
+    // Then the previous neighbor becomes active
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 1"])[0],
+    )
+  })
+
+  it("anchors on activeResultIndex for records without an active key", () => {
+    // Given a legacy record with only a positional active index
+    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // When the statement list is unchanged
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 2"],
+      previous,
+    )
+    // Then the active key resolves to the indexed statement
+    expect(reconciled?.activeStatementKey).toBe(
+      statementKeysFor(["SELECT 2"])[0],
+    )
+  })
+
+  it("never carries a running or queued placeholder as a result", () => {
+    // Given a frame a crash left behind: one settled result, one placeholder
+    const previous = resultOf([
+      dqlResult("SELECT 1"),
+      { type: "running", query: "SELECT 2" },
+    ])
+    // When reconciled against the unchanged statements
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT 1", "SELECT 2"],
+      previous,
+    )
+    // Then only the settled result survives — the placeholder slot
+    // regenerates as "Not run" at display time, never as a ghost spinner
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+
+  it("returns null for a frame holding only placeholders", () => {
+    // Given a snapshot that captured a run mid-flight
+    const previous = resultOf([
+      { type: "running", query: "SELECT 1" },
+      { type: "queued", query: "SELECT 2" },
+    ])
+    // When reconciled
+    // Then no result survives and the frame collapses
+    expect(
+      reconcileResultsForStatements(["SELECT 1", "SELECT 2"], previous),
+    ).toBeNull()
+  })
+})
+
+describe("reconcileCellResultForValue — run ownership", () => {
+  it("returns a pending frame untouched — the run owns it", () => {
+    // Given a run in flight: one statement settled, one still running
+    const pending = resultOf([
+      dqlResult("SELECT 1"),
+      { type: "running", query: "SELECT 2" },
+    ])
+
+    // When the SQL is edited mid-run
+    const reconciled = reconcileCellResultForValue(pending, "SELECT 1")
+
+    // Then the frame comes back as the SAME object: the run's positional
+    // writes stay aligned, and the carryover applies after the run settles
+    expect(reconciled).toBe(pending)
+  })
+
+  it("reconciles a settled frame by content", () => {
+    // Given a settled two-statement frame
+    const settled = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
+
+    // When the second statement is edited away
+    const reconciled = reconcileCellResultForValue(settled, "SELECT 1")
+
+    // Then only the surviving statement keeps its result
+    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+  })
+})
+
+describe("deriveStatementFrame — display slots", () => {
+  it("gives every statement a slot and marks resultless slots as not run", () => {
+    // Given a compact result missing the middle statement
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 3")])
+    // When the frame is derived for three statements
+    const frame = deriveStatementFrame(
+      ["SELECT 1", "SELECT 2", "SELECT 3"],
+      result,
+    )
+    // Then slots follow editor order and the unmatched slot is empty
+    expect(frame?.slots.map((s) => s.result?.query ?? null)).toEqual([
+      "SELECT 1",
+      null,
+      "SELECT 3",
+    ])
+  })
+
+  it("resolves the active slot from the active statement key", () => {
+    // Given the frame's active key points at the last statement
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
+    })
+    // When the frame is derived with a placeholder in between
+    const frame = deriveStatementFrame(
+      ["SELECT 1", "SELECT 99", "SELECT 2"],
+      result,
+    )
+    // Then the active slot index follows the statement, not the result index
+    expect(frame?.activeSlotIndex).toBe(2)
+  })
+
+  it("maps a legacy active index through the result's own statement", () => {
+    // Given a legacy record whose second result is active
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // When a new statement is inserted before it
+    const frame = deriveStatementFrame(
+      ["SELECT 0", "SELECT 1", "SELECT 2"],
+      result,
+    )
+    // Then the active slot follows the statement content
+    expect(frame?.activeSlotIndex).toBe(2)
+  })
+
+  it("distinguishes duplicate statements by occurrence", () => {
+    // Given two identical statements with distinct results
+    const result = resultOf([
+      dqlResult("SELECT 1", 10),
+      dqlResult("SELECT 1", 20),
+    ])
+    // When the frame is derived
+    const frame = deriveStatementFrame(["SELECT 1", "SELECT 1"], result)
+    // Then each slot keeps its own occurrence's result
+    expect(frame?.slots.map((s) => s.result)).toMatchObject([
+      { count: 10 },
+      { count: 20 },
+    ])
+  })
+
+  it("returns null without a result or without a single surviving slot", () => {
+    // Given no result, or a result that matches no statement
+    const result = resultOf([dqlResult("SELECT 1")])
+    // When the frame is derived
+    // Then there is no frame
+    expect(deriveStatementFrame(["SELECT 1"], null)).toBeNull()
+    expect(deriveStatementFrame([], result)).toBeNull()
+    expect(deriveStatementFrame(["SELECT 2"], result)).toBeNull()
+  })
+})
+
+describe("derivePositionalFrame — orphan results (selection runs)", () => {
+  it("builds tabs from the results themselves when no statement claims them", () => {
+    // Given a selection-fragment result no editor statement matches
+    const result = resultOf([dqlResult("SELECT 1")])
+    // When the positional frame is derived
+    const frame = derivePositionalFrame(result)
+    // Then the fragment gets its own visible slot with its rows attached
+    expect(frame?.slots).toHaveLength(1)
+    expect(frame?.slots[0].sql).toBe("SELECT 1")
+    expect(frame?.slots[0].result).toBe(result.results[0])
+  })
+
+  it("keeps the active tab and clamps an out-of-range index", () => {
+    // Given a two-result frame viewed on its second tab
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // Then the active slot follows the index, clamped when out of range
+    expect(derivePositionalFrame(result)?.activeSlotIndex).toBe(1)
+    expect(
+      derivePositionalFrame({ ...result, activeResultIndex: 9 })
+        ?.activeSlotIndex,
+    ).toBe(1)
+  })
+
+  it("returns null without a result or with an empty one", () => {
+    expect(derivePositionalFrame(null)).toBeNull()
+    expect(derivePositionalFrame(resultOf([]))).toBeNull()
+  })
+})
+
+describe("resolveActiveStatementSql — the single-run target", () => {
+  it("resolves a selected 'Not run' tab to its own SQL, not the stale result index", () => {
+    // Given a two-result frame whose active tab is an appended, never-run
+    // statement — activeResultIndex still points at the first result
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 0,
+      activeStatementKey: statementKeysFor([
+        "SELECT 1",
+        "SELECT 2",
+        "SELECT 3",
+      ])[2],
+    })
+    // When the single-run target is resolved with the editor unavailable
+    const sql = resolveActiveStatementSql(
+      "SELECT 1; SELECT 2; SELECT 3",
+      result,
+    )
+    // Then the selected statement runs — never the stale index's query
+    expect(sql).toBe("SELECT 3")
+  })
+
+  it("falls back to the result index for a legacy snapshot without a key", () => {
+    // Given an old record that only carries the active index
+    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
+      activeResultIndex: 1,
+    })
+    // Then the index's own statement resolves
+    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
+      "SELECT 2",
+    )
+  })
+
+  it("resolves a selection-fragment frame positionally", () => {
+    // Given a fragment result no editor statement claims
+    const result = resultOf([dqlResult("SELECT 99")])
+    // Then the fragment's own query resolves
+    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
+      "SELECT 99",
+    )
+  })
+
+  it("returns undefined without a result, so the caller can fall back", () => {
+    expect(resolveActiveStatementSql("SELECT 1", null)).toBeUndefined()
   })
 })

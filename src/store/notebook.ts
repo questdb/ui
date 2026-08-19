@@ -29,6 +29,7 @@ export const AUTO_REFRESH_INTERVALS = {
 } as const
 
 export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+// false means "Off", true means "Auto" — presence checks must be `!== undefined`.
 export type AutoRefresh = boolean | AutoRefreshInterval
 
 // Cell kind. `undefined` means "sql" everywhere — code only ever tests
@@ -103,6 +104,7 @@ export type SingleQueryResult =
 export type CellResult = {
   results: SingleQueryResult[]
   activeResultIndex: number
+  activeStatementKey?: string
   error?: string
   timestamp: number
   script?: {
@@ -131,6 +133,8 @@ export type NotebookSettings = {
   layoutMode?: NotebookLayoutMode
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
+  autoRefreshDefault?: AutoRefresh
+  autoRefreshMigrated?: true
 }
 
 export type NotebookViewState = {
@@ -187,3 +191,28 @@ export const migrateLegacyCellNames = (
   state.cells.some(hasLegacyChartName)
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
+
+// Charts drawn before the uniform-Off fallback polled through an implicit
+// per-view Auto. The migration writes that liveness as an explicit Auto
+// override so they keep polling; grids never polled, and stay off. No
+// notebook default is ever synthesized. The marker makes the write one-time:
+// on a migrated view an undefined autoRefresh is a deliberate "inherit".
+export const migrateImplicitChartAutoRefresh = (
+  state: NotebookViewState,
+): NotebookViewState => {
+  if (state.settings?.autoRefreshMigrated) return state
+  const legacyLiveChart = (cell: NotebookCell) =>
+    cell.mode === "draw" &&
+    cell.autoRefresh === undefined &&
+    state.settings?.autoRefreshDefault === undefined
+  const cells = state.cells.some(legacyLiveChart)
+    ? state.cells.map((cell) =>
+        legacyLiveChart(cell) ? { ...cell, autoRefresh: true as const } : cell,
+      )
+    : state.cells
+  return {
+    ...state,
+    cells,
+    settings: { ...state.settings, autoRefreshMigrated: true },
+  }
+}

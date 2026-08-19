@@ -17,7 +17,7 @@ import { useCellWrapperInteractions } from "./useCellWrapperInteractions"
 import { ResizeHandle } from "../resize"
 import { CellWrapper } from "./CellWrapper"
 import type { ChartConfig } from "../CellChart/chartTypes"
-import type { NotebookCell } from "../../../../store/notebook"
+import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { exceedsCellLineLimit } from "../../../../store/notebook"
 import { useCellSelectionDecoration } from "./useCellSelectionDecoration"
 import { useMonacoCellEditor } from "./useMonacoCellEditor"
@@ -33,6 +33,7 @@ import {
   isDoubleView,
   isExpectingResult,
   MIN_BOTTOM_HEIGHT_PX,
+  resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
 import {
@@ -116,6 +117,7 @@ type Props = {
   index: number
   totalCells: number
   layoutMode?: "list" | "grid"
+  autoRefreshDefault: AutoRefresh | undefined
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
@@ -126,6 +128,7 @@ const CellInner: React.FC<Props> = ({
   index,
   totalCells,
   layoutMode = "list",
+  autoRefreshDefault,
   isFocused,
   isMaximized,
   isRunning,
@@ -185,6 +188,10 @@ const CellInner: React.FC<Props> = ({
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
+  const effectiveAutoRefresh = resolveAutoRefresh(
+    cell.autoRefresh,
+    autoRefreshDefault,
+  )
 
   const {
     topHeight,
@@ -416,6 +423,7 @@ const CellInner: React.FC<Props> = ({
         cellIndex={index}
         totalCells={totalCells}
         layoutMode={layoutMode}
+        autoRefreshDefault={autoRefreshDefault}
         isMaximized={isMaximized}
         isRunning={isRunning}
         headerRef={headerRef}
@@ -443,7 +451,7 @@ const CellInner: React.FC<Props> = ({
               runActive={runActive}
               isDrawMode={isDrawMode}
               canRun={canRun}
-              autoRefreshOn={cell.autoRefresh !== false}
+              autoRefreshOn={effectiveAutoRefresh !== false}
               showLabels={toolbarTier === "expanded"}
               onRun={runAll}
               onHideResult={() => {
@@ -461,7 +469,8 @@ const CellInner: React.FC<Props> = ({
             <CellWideActions
               cellId={cell.id}
               view={view}
-              autoRefresh={cell.autoRefresh ?? true}
+              cellAutoRefresh={cell.autoRefresh}
+              autoRefreshDefault={autoRefreshDefault}
               isViewMaximized={isViewMaximized}
               isRunning={isRunning}
               isGridLoading={isGridLoading}
