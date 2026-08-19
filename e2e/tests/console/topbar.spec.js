@@ -16,7 +16,7 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-badge").should(
       "have.css",
       "background-color",
-      "rgb(40, 42, 54)",
+      "rgba(0, 0, 0, 0)",
     )
   })
 
@@ -40,7 +40,7 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-badge").should(
       "have.css",
       "background-color",
-      "rgb(40, 42, 54)",
+      "rgba(0, 0, 0, 0)",
     )
   })
 
@@ -49,7 +49,8 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-edit-icon").should("be.visible")
     cy.getByDataHook("topbar-instance-edit-icon").click()
     cy.getByDataHook("topbar-instance-name-input").type("test-instance")
-    cy.getByDataHook("topbar-instance-type-select").select("testing")
+    cy.getByDataHook("topbar-instance-type-select").click()
+    cy.getByDataHook("topbar-instance-type-option-testing").click()
     cy.getByDataHook("topbar-instance-description-input").type(
       "test description of the test instance",
     )

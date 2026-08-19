@@ -27,6 +27,7 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { buildResultPageMarkdown } from "../../components/ResultGrid/resultPageMarkdown"
 import { toSingleLineDisplay } from "../../components/ResultGrid/inlineGridUtils"
+import { getThemeColor } from "../../theme/runtime"
 
 const hashString = (str) => {
   let hash = 0
@@ -43,8 +44,8 @@ const COPY_ICON_SVG =
   '<path d="M7 6V3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3v3c0 .552-.45 1-1.007 1H4.007A1.001 1.001 0 0 1 3 21l.003-14c0-.552.45-1 1.007-1H7zM5.003 8 5 20h10V8H5.003zM9 6h8v10h2V4H9v2z"></path>' +
   "</svg>"
 
-const CHECK_ICON_SVG =
-  '<svg width="10" height="10" viewBox="0 0 24 24" fill="#50fa7b" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;right:0;transform:translate(25%,-25%)">' +
+const getCheckIconSvg = () =>
+  `<svg width="10" height="10" viewBox="0 0 24 24" fill="${getThemeColor("editorSyntaxNumber")}" xmlns="http://www.w3.org/2000/svg" style="position:absolute;top:0;right:0;transform:translate(25%,-25%)">` +
   '<path d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm-.997-6 7.07-7.071-1.414-1.414-5.656 5.657-2.829-2.829-1.414 1.414L11.003 16z"></path>' +
   "</svg>"
 
@@ -540,7 +541,7 @@ export function grid(rootElement, _paginationFn, id) {
     const columnName = headerEl.getAttribute("data-column-name")
     void trackEvent(ConsoleEvent.GRID_COLUMN_COPY)
     copyToClipboard(columnName).then(undefined)
-    copyBtn.innerHTML = COPY_ICON_SVG + CHECK_ICON_SVG
+    copyBtn.innerHTML = COPY_ICON_SVG + getCheckIconSvg()
     addClass(copyBtn, "qg-header-copy-active")
     setTimeout(() => {
       copyBtn.innerHTML = COPY_ICON_SVG

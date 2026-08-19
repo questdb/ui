@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
-import styled, { css } from "styled-components"
+import styled, { css, useTheme } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Overlay } from "../Overlay"
 import { ForwardRef } from "../ForwardRef"
-import { color } from "../../utils"
+import { IconButton } from "../IconButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { useEditor } from "../../providers/EditorProvider"
 import { createDefaultNotebookViewState } from "../../store/notebook"
@@ -15,8 +15,7 @@ import { PRIMARY_BUTTON_HOOK } from "./shared"
 import { Step1 } from "./Step1"
 import { Step2 } from "./Step2"
 import { AgentTranscript } from "./AgentTranscript"
-
-const SURFACE = "#050505"
+import { withAlpha } from "../../theme"
 
 const dialogShow = css`
   @keyframes onboardingShow {
@@ -42,10 +41,10 @@ const Content = styled(RadixDialog.Content)<{ $tall?: boolean }>`
     $tall ? "min(66.6rem, 85vh)" : "min(41.6rem, 85vh)"};
   max-height: 85vh;
   overflow: hidden;
-  background: ${SURFACE};
-  border: 1px solid rgba(252, 252, 252, 0.15);
+  background: ${({ theme }) => theme.color.onboardingSurface};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.75rem;
-  box-shadow: 0 0.7rem 3rem -1rem ${({ theme }) => theme.color.black};
+  box-shadow: 0 0.7rem 3rem -1rem ${({ theme }) => theme.color.shadowOverlay};
 
   ${dialogShow}
 
@@ -63,8 +62,8 @@ const RightColumn = styled.div`
   flex-shrink: 0;
   align-self: stretch;
   width: 52rem;
-  background: ${SURFACE};
-  border-left: 1px solid rgba(222, 222, 222, 0.04);
+  background: ${({ theme }) => theme.color.onboardingSurface};
+  border-left: 1px solid ${({ theme }) => theme.color.onboardingDivider};
 
   @media (max-width: 860px) {
     display: none;
@@ -90,27 +89,21 @@ const GradientOverlay = styled.div`
   bottom: 2rem;
   left: 55%;
   right: 0;
-  background: linear-gradient(to right, rgba(5, 5, 5, 0), ${SURFACE});
+  background: ${({ theme }) =>
+    `linear-gradient(to right, ${withAlpha(theme.color.onboardingSurface, 0)}, ${theme.color.onboardingSurface})`};
   pointer-events: none;
 `
 
-const CloseButton = styled.button`
+const CloseButton = styled(IconButton).attrs({
+  label: "Close",
+  variant: "ghost",
+  size: "sm",
+})`
   position: absolute;
   top: 0.9rem;
   right: 0.9rem;
   z-index: 1;
-  display: flex;
   padding: 0.8rem;
-  background: #363636;
-  border: none;
-  border-radius: 0.25rem;
-  color: ${color("offWhite2")};
-  cursor: pointer;
-
-  &:hover {
-    background: #4a4a4a;
-    color: ${color("foreground")};
-  }
 `
 
 const HiddenTitle = styled(RadixDialog.Title)`
@@ -126,6 +119,7 @@ const HiddenTitle = styled(RadixDialog.Title)`
 `
 
 export const NotebookOnboardingModal = () => {
+  const theme = useTheme()
   const { notebookOnboarding, updateNotebookOnboarding } = useLocalStorage()
   const { addBuffer } = useEditor()
   const [open, setOpen] = useState(() =>
@@ -194,7 +188,11 @@ export const NotebookOnboardingModal = () => {
               setOpen(false)
             }}
           >
-            <XIcon size={16} color="#858585" weight="bold" />
+            <XIcon
+              size={16}
+              color={theme.color.onboardingClose}
+              weight="bold"
+            />
           </CloseButton>
           {step === 0 ? (
             <Step1

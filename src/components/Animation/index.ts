@@ -51,11 +51,11 @@ export const slideAnimation = css`
 
   background: linear-gradient(
     90deg,
-    ${color("gray2")} 0%,
-    ${color("gray2")} 40%,
-    ${color("white")} 50%,
-    ${color("gray2")} 60%,
-    ${color("gray2")} 100%
+    ${color("contentSecondary")} 0%,
+    ${color("contentSecondary")} 40%,
+    ${color("contentInverse")} 50%,
+    ${color("contentSecondary")} 60%,
+    ${color("contentSecondary")} 100%
   );
   background-size: 200% auto;
   background-clip: text;

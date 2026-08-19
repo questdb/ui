@@ -317,7 +317,7 @@ Cypress.Commands.add("getMountedEditor", () =>
   cy.get(".monaco-scrollable-element"),
 )
 
-Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor.vs-dark"))
+Cypress.Commands.add("getEditor", () => cy.get(".monaco-editor"))
 
 Cypress.Commands.add("getEditorContent", () =>
   cy.get(".monaco-editor").find("textarea").should("be.visible"),
@@ -544,6 +544,7 @@ Cypress.Commands.add(
         if (clearLocalStorage) {
           win.localStorage.clear()
         }
+        win.localStorage.setItem("appearance.themePreference", "dark")
         for (const [key, value] of Object.entries(localStorageItems)) {
           win.localStorage.setItem(key, value)
         }

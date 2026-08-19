@@ -12,31 +12,27 @@ import {
   Calendar as CalendarIcon,
   Time,
   World,
-} from "@styled-icons/boxicons-regular"
-import { ArrowDropDown, ArrowDropUp } from "@styled-icons/remix-line"
+} from "../../../components/icons"
 import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
 import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"
 import { utcToLocal } from "../../../utils"
+import { EditorRefreshIntervalTriggerButton } from "../ToolbarRefreshControls"
 
 const Root = styled(Box).attrs({
   gap: "1rem",
   flexDirection: "column",
   align: "flex-start",
 })`
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  color: ${({ theme }) => theme.color.contentSecondary};
   width: 50rem;
   padding: 1rem 1rem 0 1rem;
 `
 
 const Cols = styled(Box).attrs({ gap: 0, align: "flex-start" })`
   width: 100%;
-`
-
-const Trigger = styled(Button)`
-  padding-right: 0;
 `
 
 const DatePickers = styled(Box).attrs({
@@ -55,7 +51,7 @@ const MetricDurations = styled.ul`
   list-style: none;
   margin: 0;
   padding: 0 0 0 1rem;
-  border-left: 1px solid ${({ theme }) => theme.color.selection};
+  border-left: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const MetricDurationItem = styled.li<{ selected?: boolean }>`
@@ -63,13 +59,19 @@ const MetricDurationItem = styled.li<{ selected?: boolean }>`
   height: 3rem;
   padding: 0 1rem;
   line-height: 3rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
 
   &:hover {
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ theme }) => theme.color.interactionNeutral};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 
   ${({ selected, theme }) =>
-    selected && `& { background: ${theme.color.selection}; }`}
+    selected &&
+    `& {
+      background: ${theme.color.interactionNeutral};
+      color: ${theme.color.contentPrimary};
+    }`}
 `
 
 const Footer = styled(Box).attrs({
@@ -78,7 +80,7 @@ const Footer = styled(Box).attrs({
 })`
   width: 100%;
   padding: 1rem 0;
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const DatePickerItem = ({
@@ -124,7 +126,7 @@ const DatePickerItem = ({
         <Form.Input name={name} onChange={handleChange} placeholder="now" />
         <Popover
           trigger={
-            <Button skin="secondary">
+            <Button variant="secondary">
               {" "}
               <CalendarIcon size="18px" />{" "}
             </Button>
@@ -277,20 +279,19 @@ export const DateTimePicker = ({
       open={mainOpen}
       onOpenChange={setMainOpen}
       trigger={
-        <Trigger skin="secondary" prefixIcon={<Time size="18px" />}>
-          {durationToHumanReadable(dateFrom, dateTo)}
-          {mainOpen ? (
-            <ArrowDropUp size="28px" />
-          ) : (
-            <ArrowDropDown size="28px" />
-          )}
-        </Trigger>
+        <EditorRefreshIntervalTriggerButton
+          label={durationToHumanReadable(dateFrom, dateTo)}
+          leadingIcon={<Time size="18px" />}
+          type="button"
+          aria-label="Time range"
+          aria-expanded={mainOpen}
+        />
       }
     >
       <Root>
         <Cols>
           <DatePickers>
-            <Text weight={600} color="foreground" size="lg">
+            <Text weight={600} color="contentPrimary" size="lg">
               Absolute time range
             </Text>
             <Form
@@ -330,7 +331,7 @@ export const DateTimePicker = ({
         <Footer>
           <Box gap="0.5rem" align="center">
             <World size="14px" />
-            <Text color="foreground">
+            <Text color="contentPrimary">
               {getLocalTimeZone()} ({getLocalGMTOffset()})
             </Text>
           </Box>

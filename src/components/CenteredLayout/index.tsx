@@ -1,6 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { Text } from "../Text"
+import { Badge } from "../Badge"
 import { useSettings } from "../../providers"
 
 const Root = styled.div`
@@ -12,7 +13,7 @@ const Root = styled.div`
   justify-content: space-between;
   margin-bottom: auto;
   overflow-y: auto;
-  background: ${({ theme }) => theme.color.loginBackground};
+  background: ${({ theme }) => theme.color.authBackdrop};
 `
 
 const Main = styled.div`
@@ -44,15 +45,10 @@ const Footer = styled.div`
   margin-top: auto;
 `
 
-const VersionBadge = styled.div`
-  display: flex;
-  padding: 0.6rem 1.1rem;
-  justify-content: center;
-  align-items: center;
-  border-radius: 0.4rem;
-  border: 0.075rem solid #521427;
-  background: #290a13;
-`
+const VersionBadge = styled(Badge).attrs({
+  variant: "accent",
+  size: "md",
+})``
 
 export const CenteredLayout = ({
   children,
@@ -77,13 +73,13 @@ export const CenteredLayout = ({
         <MainContent>{children}</MainContent>
       </Main>
       <Footer>
-        <Text size="sm" color="gray2">
+        <Text size="sm" color="contentSecondary">
           Copyright &copy; {new Date().getFullYear()} QuestDB. All rights
           reserved.
         </Text>
         {settings["release.type"] && (
           <VersionBadge>
-            <Text size="sm" color="gray2">
+            <Text size="sm" color="contentSecondary">
               QuestDB {settings["release.type"] === "EE" ? "Enterprise" : ""}{" "}
               {settings["release.version"]}
             </Text>

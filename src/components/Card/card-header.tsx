@@ -5,9 +5,9 @@ import { Heading } from "../Heading"
 import styled from "styled-components"
 
 const Root = styled.div`
-  background: #303241;
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-radius: 6px 6px 0 0;
-  border-bottom: 1px solid #3b3e50;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderDefault};
 
   &:only-child {
     border-radius: 6px;
@@ -63,7 +63,7 @@ export const CardHeader = ({
       {has(title, subtitle) && (
         <Titles>
           {has(title) && <Heading level={5}>{title}</Heading>}
-          {has(subtitle) && <Text color="white">{subtitle}</Text>}
+          {has(subtitle) && <Text color="contentInverse">{subtitle}</Text>}
         </Titles>
       )}
 

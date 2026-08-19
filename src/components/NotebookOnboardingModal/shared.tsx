@@ -1,6 +1,7 @@
 import React, { ReactNode } from "react"
 import styled from "styled-components"
 import { color } from "../../utils"
+import { Badge as StatusBadge } from "../Badge"
 
 export const PRIMARY_BUTTON_HOOK = "onboarding-primary"
 
@@ -27,30 +28,19 @@ export const Title = styled.h2`
   font-size: 2.25rem;
   font-weight: 600;
   line-height: 1.4;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
-export const Badge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  height: 2.4rem;
-  padding: 0 1.1rem;
-  border: 1px solid ${color("pinkBadge")};
-  border-bottom-width: 2px;
-  border-radius: 0.25rem;
-  font-size: 1.3rem;
-  font-weight: 500;
-  line-height: 1;
-  color: ${color("pinkBadge")};
-`
+export const Badge = styled(StatusBadge).attrs({
+  variant: "accent",
+  size: "sm",
+})``
 
 export const Subtitle = styled.p`
   margin: 0.7rem 0 0;
   font-size: 1.4rem;
   line-height: 1.5;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const List = styled.div`
@@ -69,7 +59,7 @@ const Item = styled.div`
 const ItemIcon = styled.div`
   display: flex;
   padding-top: 0.2rem;
-  color: ${color("pink")};
+  color: ${color("contentAccent")};
 `
 
 const ItemBody = styled.div`
@@ -84,14 +74,14 @@ const ItemTitle = styled.p`
   margin: 0;
   font-size: 1.4rem;
   font-weight: 500;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const ItemText = styled.p`
   margin: 0;
   font-size: 1.28rem;
   line-height: 1.5;
-  color: ${color("mutedLabel")};
+  color: ${color("contentMuted")};
 `
 
 export const BulletList = ({ children }: { children: ReactNode }) => (
@@ -126,14 +116,14 @@ const SeparatorRow = styled.div`
 const SeparatorLine = styled.div`
   flex: 1;
   height: 1px;
-  background: ${color("selection")};
+  background: ${color("interactionNeutral")};
 `
 
 const SeparatorLabel = styled.div`
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  color: ${color("mutedLabel")};
+  color: ${color("contentMuted")};
   font-size: 1.3rem;
   white-space: nowrap;
 `

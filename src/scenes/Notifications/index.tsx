@@ -42,7 +42,7 @@ import {
 } from "../../components"
 import { ScreenSize, useScreenSize } from "../../hooks"
 import { selectors } from "../../store"
-import { TerminalBox, Subtract, ArrowUpS } from "@styled-icons/remix-line"
+import { TerminalBox, Subtract, ArrowUpS } from "../../components/icons"
 import Notification from "./Notification"
 import { NotificationType } from "../../store/Query/types"
 import type { NotificationNamespaceKey } from "../../store/Query/types"
@@ -53,14 +53,16 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   overflow: auto;
   max-height: 35rem;
   min-height: ${(props) => (props.minimized ? "auto" : "10rem")};
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 const Menu = styled(PaneMenu)`
   justify-content: space-between;
   overflow: hidden;
   border: 0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  box-shadow: 0 -4px 14px ${({ theme }) => theme.color.shadowSubtle};
 
   ::before {
     content: "";
@@ -69,8 +71,8 @@ const Menu = styled(PaneMenu)`
     cursor: text;
     left: 0;
     width: 100%;
-    height: 2px;
-    background: ${({ theme }) => theme.color.backgroundDarker};
+    height: 1px;
+    background: ${({ theme }) => theme.color.borderSubtle};
   }
 `
 
@@ -78,6 +80,7 @@ const Content = styled(PaneContent)<{ minimized: boolean }>`
   overflow: ${(props) => (props.minimized ? "hidden" : "auto")};
   overflow-x: hidden;
   height: ${(props) => (props.minimized ? "4rem" : "100%")};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const Header = styled(Text)`
@@ -189,7 +192,7 @@ const Notifications = ({
   return (
     <Wrapper minimized={isMinimized} data-hook="notifications-wrapper">
       <Menu>
-        <Header color="foreground">
+        <Header color="contentPrimary">
           <TerminalBoxIcon size="18px" />
           Log
         </Header>
@@ -200,7 +203,7 @@ const Notifications = ({
         </LatestNotification>
         {(bufferNotifications.length > 0 || !isMinimized) && (
           <Button
-            skin={`${isMinimized ? "secondary" : "transparent"}`}
+            variant={isMinimized ? "secondary" : "ghost"}
             onClick={toggleMinimized}
             aria-label={isMinimized ? "Expand log" : "Collapse log"}
             aria-expanded={!isMinimized}
@@ -232,7 +235,7 @@ const Notifications = ({
           {!isMinimized && (
             <ClearAllNotifications>
               <Button
-                skin="secondary"
+                variant="secondary"
                 disabled={bufferNotifications.length === 0}
                 onClick={() => {
                   void trackEvent(ConsoleEvent.QUERY_LOG_CLEAR)

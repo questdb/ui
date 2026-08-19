@@ -26,19 +26,19 @@ import React from "react"
 import styled from "styled-components"
 import { Wrapper, SideContent, Content } from "../styles"
 import { NotificationShape } from "../../../../types"
-import { CheckmarkOutline } from "@styled-icons/evaicons-outline"
-import { Zap } from "@styled-icons/boxicons-solid"
+import { CheckmarkOutline } from "../../../../components/icons"
+import { Zap } from "../../../../components/icons"
 import { color } from "../../../../utils"
 import { Timestamp } from "../Timestamp"
 import { IconWithTooltip } from "../../../../components"
 
 const CheckmarkOutlineIcon = styled(CheckmarkOutline)`
-  color: ${color("green")};
+  color: ${color("statusSuccess")};
   flex-shrink: 0;
 `
 
 const ZapIcon = styled(Zap)`
-  color: ${color("yellow")};
+  color: ${color("statusAttention")};
   flex-shrink: 0;
 `
 

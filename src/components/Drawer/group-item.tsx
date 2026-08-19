@@ -20,7 +20,7 @@ export const GroupItem = styled.div<{
   padding: 2rem;
 
   &:not(:last-child) {
-    border-bottom: 0.1rem ${({ theme }) => theme.color.backgroundLighter} solid;
+    border-bottom: 0.1rem ${({ theme }) => theme.color.surfaceRaised} solid;
   }
 
   &:last-child {
@@ -33,7 +33,7 @@ export const GroupItem = styled.div<{
     `
     &:hover {
       cursor: pointer;
-      background-color: ${theme.color.black};
+      background-color: ${theme.color.interactionHover};
     }
   `}
 `

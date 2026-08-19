@@ -2,7 +2,7 @@ import React, { forwardRef, useCallback, useState } from "react"
 import styled, { css, keyframes } from "styled-components"
 import type { DefaultTheme } from "styled-components"
 import { PlugsConnectedIcon, PlugsIcon } from "@phosphor-icons/react"
-import { PopperToggle } from "../../../components"
+import { ButtonBase, PopperToggle } from "../../../components"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
 import { MCPBridgePairPopover } from "./PairPopover"
 import { AgentChangesPopper } from "./AgentChangesPopper"
@@ -22,41 +22,54 @@ type PillStyleProps = {
   $newChanges: boolean
 }
 
-// New agent changes turn the pill cyan regardless of the connection tone —
+// New agent changes turn the pill magenta regardless of the connection tone —
 // they are the one state the user can act on straight from the footer.
 const accent = ({
   theme,
   $tone,
   $newChanges,
 }: PillStyleProps & { theme: DefaultTheme }) =>
-  $newChanges ? theme.color.cyan : theme.color[accentColor($tone)]
+  $newChanges ? theme.color.contentAccent : theme.color[accentColor($tone)]
 
-const Wrapper = styled.button<PillStyleProps>`
+const Wrapper = styled(ButtonBase)<PillStyleProps>`
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  height: 3rem;
-  padding: 0 1.1rem;
-  border: 1px solid ${(props) => hexToRgba(accent(props), 0.1)};
-  border-bottom-width: 2px;
-  border-radius: 0.25rem;
-  background: ${(props) => hexToRgba(accent(props), 0.05)};
-  color: ${({ theme }) => theme.color.foreground};
+  height: 3.2rem;
+  padding: 0 1rem;
+  border: 1px solid ${(props) => hexToRgba(accent(props), 0.24)};
+  border-radius: 0.6rem;
+  background: ${(props) =>
+    props.$tone === "warning"
+      ? props.theme.color.statusWarningSurface
+      : hexToRgba(accent(props), 0.065)};
+  color: ${({ theme, $tone }) =>
+    $tone === "warning"
+      ? theme.color.contentPrimary
+      : theme.color.contentSecondary};
   font: inherit;
+  font-size: 1.25rem;
+  font-weight: 500;
   cursor: pointer;
   transition:
     background 0.15s ease,
     border-color 0.15s ease;
 
   &:hover {
-    background: ${(props) => hexToRgba(accent(props), 0.1)};
-    border-color: ${(props) => hexToRgba(accent(props), 0.25)};
+    background: ${(props) =>
+      props.$tone === "warning"
+        ? props.theme.color.statusWarningSurfaceHover
+        : hexToRgba(accent(props), 0.14)};
+    border-color: ${(props) => hexToRgba(accent(props), 0.44)};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 
   &:focus-visible {
     outline: 1px solid
       ${(props) =>
-        props.$tone === "idle" ? props.theme.color.cyan : accent(props)};
+        props.$tone === "idle"
+          ? props.theme.color.contentAccent
+          : accent(props)};
     outline-offset: 2px;
   }
 

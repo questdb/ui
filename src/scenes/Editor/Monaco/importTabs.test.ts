@@ -993,7 +993,33 @@ describe("sanitizeBuffer", () => {
       )
     })
 
-    it("should accept lowercase hex colors", () => {
+    it("should map a legacy palette hex to its series token", () => {
+      // Given a buffer holding a color persisted before metrics stored tokens
+      const input = {
+        label: "Metrics",
+        value: "",
+        position: 0,
+        metricsViewState: {
+          metrics: [
+            {
+              metricType: MetricType.WAL_ROW_THROUGHPUT,
+              position: 0,
+              color: "#FF6B6B",
+              removed: false,
+            },
+          ],
+        },
+      }
+
+      // When the buffer is sanitized
+      const result = sanitizeBuffer(input)
+
+      // Then the hex resolves to the series slot it came from
+      expect(result.metricsViewState?.metrics?.[0].color).toBe("dataSeries1")
+    })
+
+    it("should replace a hex outside the palette with the default token", () => {
+      // Given a buffer holding a color that belongs to no series slot
       const input = {
         label: "Metrics",
         value: "",
@@ -1009,8 +1035,14 @@ describe("sanitizeBuffer", () => {
           ],
         },
       }
+
+      // When the buffer is sanitized
       const result = sanitizeBuffer(input)
-      expect(result.metricsViewState?.metrics?.[0].color).toBe("#aabbcc")
+
+      // Then no arbitrary value survives into the persisted metric
+      expect(result.metricsViewState?.metrics?.[0].color).toBe(
+        DEFAULT_METRIC_COLOR,
+      )
     })
 
     it("should replace invalid color with default", () => {
@@ -1023,7 +1055,7 @@ describe("sanitizeBuffer", () => {
             {
               metricType: MetricType.WAL_ROW_THROUGHPUT,
               position: 0,
-              color: "red",
+              color: "statusDanger",
               removed: false,
             },
           ],

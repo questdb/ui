@@ -9,7 +9,7 @@ import React, {
 } from "react"
 import { Virtuoso, VirtuosoHandle, ListRange } from "react-virtuoso"
 import styled from "styled-components"
-import { Loader3, FileCopy, Restart } from "@styled-icons/remix-line"
+import { Loader3, FileCopy, Restart } from "../../../components/icons"
 import { MaterializedViewIcon } from "../table-icon"
 import { InfoIcon } from "@phosphor-icons/react"
 import { spinAnimation, toast } from "../../../components"
@@ -139,8 +139,8 @@ const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
   ${({ $contextMenuOpen, theme }) =>
     $contextMenuOpen &&
     `
-    background: ${theme.color.tableSelection};
-    box-shadow: inset 0 0 0 1px ${theme.color.cyan};
+    background: ${theme.color.interactionAccentActive};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
   `}
 `
 
@@ -151,7 +151,7 @@ const FlexSpacer = styled.div`
 const Loader = styled(Loader3)`
   margin-left: 1rem;
   align-self: center;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   ${spinAnimation};
 `
 
@@ -759,7 +759,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                         },
                       )
                     }}
-                    icon={<AISparkle size={16} variant="filled" inverted />}
+                    icon={<AISparkle size={16} variant="filled" />}
                     disabled={
                       !canUse ||
                       !hasSchemaAccess ||

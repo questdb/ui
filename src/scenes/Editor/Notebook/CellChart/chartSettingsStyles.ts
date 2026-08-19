@@ -2,7 +2,7 @@ import styled from "styled-components"
 import { WarningIcon } from "@phosphor-icons/react"
 
 export const IncompatibleIcon = styled(WarningIcon)`
-  color: ${({ theme }) => theme.color.orange};
+  color: ${({ theme }) => theme.color.statusWarning};
   flex-shrink: 0;
 `
 
@@ -20,5 +20,5 @@ export const FieldGroup = styled.div`
 
 export const FieldLabel = styled.span`
   font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `

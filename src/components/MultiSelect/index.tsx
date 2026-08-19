@@ -1,8 +1,9 @@
 import React from "react"
 import styled from "styled-components"
 import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
-import { ArrowDropDown } from "@styled-icons/remix-line"
-import { Check } from "@phosphor-icons/react"
+import { CheckIcon } from "@phosphor-icons/react"
+import { menuItemStyles } from "../menuStyles"
+import { SelectMenu, SelectMenuTriggerButton } from "../SelectMenu"
 
 export type MultiSelectOption = {
   label: string
@@ -21,102 +22,36 @@ type Props = {
   inlineThreshold?: number
 }
 
-const Trigger = styled(RadixDropdownMenu.Trigger)`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
-  background: ${({ theme }) => theme.color.selection};
-  border: 1px transparent solid;
-  padding: 0 0 0 0.75rem;
-  height: 3rem;
-  border-radius: 0.4rem;
-  color: ${({ theme }) => theme.color.foreground};
-  cursor: pointer;
-  width: 100%;
-  font-family: inherit;
-  font-size: ${({ theme }) => theme.fontSize.md};
-
-  &:focus,
-  &[data-state="open"] {
-    border-color: ${({ theme }) => theme.color.pink};
-    outline: none;
-  }
-
-  &:disabled {
-    cursor: default;
-    color: ${({ theme }) => theme.color.gray1};
-    border-color: ${({ theme }) => theme.color.gray1};
-  }
+const Item = styled(RadixDropdownMenu.CheckboxItem)`
+  ${menuItemStyles}
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.8rem;
+  gap: 0.8rem;
+  padding: 0.7rem 0.8rem;
 `
 
-const TriggerLabel = styled.span`
-  flex: 1;
-  text-align: left;
+const ItemLabel = styled.span`
+  min-width: 0;
   overflow: hidden;
+  font-size: 1.3rem;
+  font-weight: 500;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 `
 
-const Caret = styled(ArrowDropDown)`
-  flex-shrink: 0;
-  fill: ${({ theme }) => theme.color.white};
-`
-
-const Content = styled(RadixDropdownMenu.Content)`
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.4rem;
-  padding: 0.4rem;
-  z-index: 9999;
-  min-width: var(--radix-dropdown-menu-trigger-width);
-  max-height: 30rem;
-  overflow-y: auto;
-  box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.36);
-`
-
-const Item = styled(RadixDropdownMenu.CheckboxItem)`
-  font-size: ${({ theme }) => theme.fontSize.md};
-  color: ${({ theme }) => theme.color.foreground};
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  min-height: 2.8rem;
-  padding: 0.4rem 0.8rem;
-  border-radius: 0.3rem;
-  user-select: none;
-  outline: none;
-  cursor: pointer;
-
-  &[data-highlighted] {
-    background: ${({ theme }) => theme.color.tableSelection};
-  }
-
-  &[data-disabled] {
-    opacity: 0.5;
-    pointer-events: none;
-  }
-`
-
-const CheckBox = styled.span<{ $checked: boolean }>`
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 0.2rem;
-  border: 1px solid
-    ${({ theme, $checked }) =>
-      $checked ? theme.color.pinkPrimary : theme.color.gray1};
-  background: ${({ theme, $checked }) =>
-    $checked ? theme.color.pinkPrimary : "transparent"};
-  display: flex;
+const ItemIndicator = styled(RadixDropdownMenu.ItemIndicator)`
+  display: inline-flex;
+  width: 1.8rem;
+  height: 1.8rem;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentAccent};
 `
 
 const Empty = styled.div`
   font-size: ${({ theme }) => theme.fontSize.sm};
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   padding: 0.6rem 0.8rem;
 `
 
@@ -165,18 +100,23 @@ export const MultiSelect: React.FC<Props> = ({
 
   return (
     <RadixDropdownMenu.Root>
-      <Trigger
-        className={className}
-        data-name={name}
-        disabled={disabled}
-        title={summary}
-        aria-label={[name, summary].filter(Boolean).join(": ")}
-      >
-        <TriggerLabel>{summary}</TriggerLabel>
-        <Caret size="24" />
-      </Trigger>
+      <RadixDropdownMenu.Trigger asChild>
+        <SelectMenuTriggerButton
+          className={className}
+          label={summary}
+          labelFontSize="1.3rem"
+          fullWidth
+          disabled={disabled}
+          title={summary}
+          aria-label={[name, summary].filter(Boolean).join(": ")}
+        />
+      </RadixDropdownMenu.Trigger>
       <RadixDropdownMenu.Portal>
-        <Content sideOffset={4} align="start">
+        <SelectMenu.Content
+          sideOffset={4}
+          align="start"
+          minWidth="var(--radix-dropdown-menu-trigger-width)"
+        >
           {options.length === 0 ? (
             <Empty>No options</Empty>
           ) : (
@@ -189,15 +129,15 @@ export const MultiSelect: React.FC<Props> = ({
                   onCheckedChange={() => toggle(opt.value)}
                   onSelect={(e) => e.preventDefault()}
                 >
-                  <CheckBox $checked={checked}>
-                    {checked && <Check size={10} weight="bold" />}
-                  </CheckBox>
-                  {opt.label}
+                  <ItemLabel>{opt.label}</ItemLabel>
+                  <ItemIndicator>
+                    <CheckIcon size={16} weight="bold" />
+                  </ItemIndicator>
                 </Item>
               )
             })
           )}
-        </Content>
+        </SelectMenu.Content>
       </RadixDropdownMenu.Portal>
     </RadixDropdownMenu.Root>
   )

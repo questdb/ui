@@ -50,19 +50,23 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
+import {
+  ensureMonacoThemes,
+  getMonacoThemeName,
+} from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
   overflow: hidden;
-  background: ${color("editorBackground")};
+  background: ${color("editorCanvas")};
 
   .cursorQueryDecoration {
     width: 0.2rem !important;
-    background: ${color("green")};
+    background: ${color("statusSuccess")};
     margin-left: 0.5rem;
   }
 
   .notebookSearchHighlight {
-    background-color: rgba(255, 184, 108, 0.5);
+    background-color: ${({ theme }) => theme.color.editorSearchHighlight};
     border-radius: 2px;
   }
 
@@ -492,7 +496,8 @@ const CellInner: React.FC<Props> = ({
             <Editor
               defaultValue={cell.value}
               language={QuestDBLanguageName}
-              theme="dracula"
+              theme={getMonacoThemeName(theme.mode)}
+              beforeMount={ensureMonacoThemes}
               // Default is the literal text "loading..."; the container already
               // shows the editor background, so render nothing until Monaco mounts
               // instead of a flashing placeholder.
@@ -540,7 +545,7 @@ const CellInner: React.FC<Props> = ({
           view. Renders in every layout mode (list / grid / spotlight). */}
       {isSplit && (
         <ResizeHandle
-          background={theme.color.editorBackground}
+          background={theme.color.editorCanvas}
           targetRef={editorContainerRef}
           onResize={middleResizeLive}
           onResizeEnd={middleResizeEnd}

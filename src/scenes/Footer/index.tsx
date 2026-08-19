@@ -25,9 +25,9 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { CSSTransition } from "react-transition-group"
 import styled, { createGlobalStyle } from "styled-components"
-import { Github } from "@styled-icons/remix-fill"
+import { Github } from "../../components/icons"
 
-import { Link, Text, TransitionDuration } from "../../components"
+import { Button, type ButtonProps, TransitionDuration } from "../../components"
 
 import CtaBanner from "./CtaBanner"
 import BuildVersion from "./BuildVersion"
@@ -36,56 +36,85 @@ import MCPBridgeStatus from "./MCPBridgeStatus"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { useSettings } from "../../providers"
+import { FOOTER_HEIGHT } from "../../consts"
 
 const Wrapper = styled.div`
-  position: absolute;
+  position: relative;
   display: flex;
-  height: 4rem;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding-left: 45px;
+  flex: 0 0 ${FOOTER_HEIGHT};
+  height: ${FOOTER_HEIGHT};
+  padding: 0 0.8rem 0 6.4rem;
+  background-color: ${({ theme }) => theme.color.surfaceBase};
+  background-image: none;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  box-shadow: none;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-family: ${({ theme }) => theme.font};
+  font-size: 1.3rem;
+  z-index: 20;
 `
 
 const LeftContainer = styled.div`
   display: flex;
-  padding-left: 1rem;
   align-items: center;
   flex: 1;
+  min-width: 0;
 `
 
 const RightContainer = styled.div`
   display: flex;
-  padding-right: 1rem;
   align-items: center;
+  gap: 0.8rem;
 
-  & > *:not(:last-child) {
-    margin-right: 1rem;
+  & > * {
+    flex-shrink: 0;
   }
+`
+
+const GithubLinkButton = (props: ButtonProps) => (
+  <Button {...props} as="a" variant="tertiary" />
+)
+
+const GithubLink = styled(GithubLinkButton)`
+  width: 3.2rem;
+  height: 3.2rem;
+  padding: 0;
+  border-radius: 0.6rem;
 `
 
 const CtaBannerTransition = createGlobalStyle`
   .cta-banner-enter {
-    bottom: -10rem;
     opacity: 0;
+    transform: translate(-50%, calc(100% + 2rem));
   }
 
   .cta-banner-enter-active {
-    bottom: 1.6rem;
     opacity: 1;
-    transition: bottom ${TransitionDuration.REG}ms ease-out, opacity ${TransitionDuration.REG}ms ease-out;
+    transform: translate(-50%, 0);
+    transition:
+      transform ${TransitionDuration.REG}ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity ${TransitionDuration.REG}ms ease-out;
   }
 
   .cta-banner-exit,
   .cta-banner-enter-done {
-    bottom: 1.6rem;
     opacity: 1;
+    transform: translate(-50%, 0);
   }
 
   .cta-banner-exit-active {
-    bottom: -10rem;
     opacity: 0;
-    transition: bottom ${TransitionDuration.REG}ms ease-in, opacity ${TransitionDuration.REG}ms ease-in;
+    transform: translate(-50%, calc(100% + 2rem));
+    transition:
+      transform ${TransitionDuration.REG}ms ease-in,
+      opacity ${TransitionDuration.REG}ms ease-in;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cta-banner-enter-active,
+    .cta-banner-exit-active {
+      transition-duration: 0ms;
+    }
   }
 `
 
@@ -114,23 +143,19 @@ const Footer = () => {
   return (
     <Wrapper id="footer">
       <LeftContainer>
-        <Text color="foreground">
-          Copyright &copy; {new Date().getFullYear()} QuestDB
-        </Text>
+        <ConnectionStatus />
       </LeftContainer>
       <RightContainer>
         <MCPBridgeStatus />
-        <ConnectionStatus />
         {showBuildVersion && <BuildVersion />}
-        <Link
-          color="foreground"
-          hoverColor="cyan"
+        <GithubLink
           href="https://github.com/questdb/questdb"
           rel="noreferrer"
           target="_blank"
+          aria-label="QuestDB on GitHub"
         >
-          <Github size="18px" />
-        </Link>
+          <Github size="19px" weight="regular" />
+        </GithubLink>
       </RightContainer>
 
       <CtaBannerTransition />

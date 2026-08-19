@@ -37,20 +37,20 @@ const ModalTitle = styled(Dialog.Title)`
   font-weight: 600;
   margin: 0;
   padding: 0;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   border: 0;
 `
 
 const ModalSubtitle = styled(RadixDialog.Description)`
   font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   margin: 0;
 `
 
 const Separator = styled.div`
   height: 0.1rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const FooterSection = styled(Box).attrs({
@@ -72,7 +72,7 @@ const FooterButton = styled(Button)`
 
 const ErrorText = styled(Text)`
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
 `
 
 type ManageModelsModalProps = {
@@ -152,14 +152,14 @@ export const ManageModelsModal = ({
             <FooterSection>
               {error && <ErrorText>{error}</ErrorText>}
               <FooterButton
-                skin="secondary"
+                variant="secondary"
                 data-hook="manage-models-cancel"
                 onClick={() => onOpenChange(false)}
               >
                 Cancel
               </FooterButton>
               <FooterButton
-                skin="primary"
+                variant="primary"
                 data-hook="manage-models-save"
                 onClick={handleSave}
                 disabled={modelsLoading}

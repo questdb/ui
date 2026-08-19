@@ -29,17 +29,273 @@
 .quick-vis-canvas {
   position: relative;
   flex: 1;
+  overflow: hidden;
+  background: theme-color(surfaceInset);
 }
 
 .quick-vis-controls {
   flex: 0 0 350px;
-  padding: 2rem 1rem;
+  padding: 2rem 1.6rem;
+  overflow-y: auto;
+  background: theme-color(editorCanvas);
+  border-right: 1px solid theme-color(borderSubtle);
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.6rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  label {
+    color: theme-color(contentSecondary);
+    font-size: 1.3rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
 }
 
 #_qvis_frm_draw {
-  margin: 20px 0 20px 0;
+  width: 100%;
+  margin: 0;
 }
 
-.js-chart-draw .icon {
-  margin-right: 0.5rem;
+#_qvis_frm_draw.js-chart-cancel {
+  background: theme-color(statusDangerSurface);
+  border-color: theme-color(transparent);
+  color: theme-color(statusDangerStrong);
+
+  &:hover:not(:disabled) {
+    background: theme-color(statusDangerSurfaceHover);
+    border-color: theme-color(transparent);
+    color: theme-color(statusDangerStrong);
+  }
+}
+
+/* Quick Vis still delegates selection behavior to SlimSelect. Keep that
+   imperative lifecycle intact, but make its generated DOM follow the same
+   trigger, menu, item, input, and selected-value hierarchy as SelectMenu. */
+#quick-vis .ss-main {
+  color: theme-color(contentPrimary);
+  font-family: theme-font(sans);
+  font-size: 1.3rem;
+
+  .ss-single-selected,
+  .ss-multi-selected {
+    min-height: 3.4rem;
+    padding: 0 1.2rem;
+    background: theme-color(controlSurface);
+    border: 1px solid theme-color(borderDefault);
+    border-radius: 0.6rem;
+    color: theme-color(contentPrimary);
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+
+    &:hover:not(.ss-disabled) {
+      background: theme-color(controlSurfaceHover);
+      border-color: theme-color(borderStrong);
+    }
+
+    &.ss-open-above,
+    &.ss-open-below {
+      background: theme-color(controlSurfaceHover);
+      border-color: theme-color(borderAccent);
+      border-radius: 0.6rem;
+    }
+
+    &.ss-disabled {
+      background: theme-color(interactionNeutral);
+      border-color: theme-color(contentDisabled);
+      color: theme-color(contentDisabled);
+      opacity: 0.6;
+    }
+  }
+
+  .ss-single-selected {
+    height: 3.4rem;
+
+    .placeholder {
+      min-width: 0;
+      line-height: 1.3;
+    }
+
+    .ss-arrow {
+      width: 1.6rem;
+      height: 1.6rem;
+      margin: 0 0 0 0.8rem;
+      align-items: center;
+      justify-content: center;
+
+      span {
+        width: 0.6rem;
+        height: 0.6rem;
+        padding: 0;
+        border-color: theme-color(contentSecondary);
+        border-width: 0 1.5px 1.5px 0;
+
+        &.arrow-down {
+          margin: -0.3rem 0 0;
+        }
+
+        &.arrow-up {
+          margin: 0.3rem 0 0;
+        }
+      }
+    }
+  }
+
+  .ss-multi-selected {
+    padding: 0.25rem 0.8rem;
+
+    .ss-values {
+      gap: 0.4rem;
+      min-width: 0;
+
+      .ss-value {
+        min-height: 2.4rem;
+        padding: 0.25rem 0.6rem;
+        margin: 0;
+        background: theme-color(interactionAccentActive);
+        border: 1px solid theme-color(borderAccent);
+        border-radius: 0.4rem;
+        color: theme-color(contentPrimary);
+        font-size: 1.2rem;
+        line-height: 1.2;
+
+        .ss-value-delete {
+          margin-left: 0.5rem;
+          color: theme-color(contentAccent);
+        }
+      }
+    }
+
+    .ss-add {
+      width: 1.6rem;
+      height: 1.6rem;
+      flex: 0 0 1.6rem;
+      margin: 0 0 0 0.6rem;
+      align-items: center;
+      justify-content: center;
+
+      .ss-plus {
+        width: 0.6rem;
+        height: 0.6rem;
+        background: transparent;
+        border: solid theme-color(contentSecondary);
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
+
+        &::after {
+          display: none;
+        }
+
+        &.ss-cross {
+          transform: rotate(-135deg);
+        }
+      }
+    }
+  }
+}
+
+.ss-content.quick-vis-select-menu {
+  margin-top: 0.4rem;
+  padding: 0.8rem 0.4rem;
+  background: theme-color(surfaceOverlay);
+  border: 1px solid theme-color(borderDefault);
+  border-radius: 0.6rem;
+  box-shadow:
+    0 0.2rem 0.2rem -0.1rem theme-color(shadowSubtle),
+    0 0.4rem 0.6rem -0.2rem theme-color(shadowSubtle),
+    0 1.2rem 1.6rem -0.4rem theme-color(shadowSubtle);
+  color: theme-color(contentPrimary);
+  font-family: theme-font(sans);
+  font-size: 1.4rem;
+  transform: translateY(-0.2rem);
+  pointer-events: none;
+
+  &.ss-open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .ss-search {
+    padding: 0 0.4rem 0.8rem;
+
+    input {
+      height: 3.4rem;
+      padding: 0 1rem;
+      background: theme-color(surfaceInput);
+      border: 1px solid theme-color(borderDefault);
+      border-radius: 0.6rem;
+      color: theme-color(contentPrimary);
+      font-size: 1.4rem;
+      font-weight: 400;
+      outline: none;
+
+      &::placeholder {
+        color: theme-color(contentSecondary);
+      }
+
+      &:focus,
+      &:focus-visible {
+        background: theme-color(surfaceInput);
+        border-color: theme-color(contentAccent);
+        box-shadow: none;
+        outline: none;
+      }
+    }
+  }
+
+  .ss-list {
+    max-height: min(32rem, 45vh);
+    padding: 0;
+
+    .ss-option,
+    .ss-optgroup-label-selectable {
+      display: flex;
+      align-items: center;
+      min-height: 3.2rem;
+      padding: 0.5rem 0.8rem;
+      border-radius: 0.4rem;
+      color: theme-color(contentPrimary);
+      font-size: 1.4rem;
+      line-height: 1.5;
+
+      &:hover,
+      &.ss-highlighted {
+        background: theme-color(surfaceRaised);
+        color: theme-color(contentPrimary);
+      }
+
+      &:not(.ss-disabled).ss-option-selected {
+        background: theme-color(interactionAccentActive);
+        color: theme-color(contentAccent);
+      }
+
+      &.ss-disabled {
+        background: transparent;
+        color: theme-color(contentDisabled);
+        opacity: 0.5;
+      }
+
+      &.ss-option-selected {
+        background: theme-color(interactionAccentActive);
+        color: theme-color(contentAccent);
+        opacity: 1;
+      }
+    }
+
+    .ss-search-highlight {
+      background: theme-color(editorSearchHighlight);
+      color: inherit;
+    }
+  }
 }

@@ -20,7 +20,6 @@ export type Widget = {
   label: string
   chartTitle: string
   getDescription: ({ sampleBySeconds }: MethodArgs) => React.ReactNode
-  icon: string
   isTableMetric: boolean
   /**
    * Scale distribution:

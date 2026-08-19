@@ -3,8 +3,8 @@ import { Button } from "../Button"
 import { Box } from "../Box"
 import { Text } from "../Text"
 import styled from "styled-components"
-import { Table as TableIcon, Edit } from "@styled-icons/remix-line"
-import { InfoCircle } from "@styled-icons/boxicons-regular"
+import { Table as TableIcon, Edit } from "../icons"
+import { InfoCircle } from "../icons"
 import { Form } from "../Form"
 import { Columns } from "./columns"
 import { Drawer } from "../Drawer"
@@ -15,10 +15,6 @@ import { isValidTableName } from "./isValidTableName"
 import * as QuestDB from "../../utils/questdb"
 import { Panel } from "../../components/Panel"
 import { Actions } from "./actions"
-
-const StyledContentWrapper = styled(Drawer.ContentWrapper)`
-  --columns: auto 140px; /* magic numbers to fit input, type dropdown and remove button nicely */
-`
 
 const Items = styled(Box).attrs({ gap: "0", flexDirection: "column" })`
   height: 100%;
@@ -192,7 +188,7 @@ export const Dialog = ({
         trigger ?? (
           <Button
             data-hook="table-schema-dialog-trigger"
-            skin={columnCount > 0 ? "transparent" : "secondary"}
+            variant={columnCount > 0 ? "ghost" : "secondary"}
             prefixIcon={
               columnCount > 0 ? <Edit size="18px" /> : <TableIcon size="18px" />
             }
@@ -206,10 +202,7 @@ export const Dialog = ({
       }
       onDismiss={handleDismiss}
     >
-      <StyledContentWrapper
-        mode={action === "add" ? "side" : "modal"}
-        data-hook="create-table-panel"
-      >
+      <Drawer.ContentWrapper data-hook="create-table-panel">
         <Form<SchemaFormValues>
           name="table-schema"
           defaultValues={defaults}
@@ -221,7 +214,14 @@ export const Dialog = ({
           validationSchema={validationSchema}
         >
           <Panel.Header
-            title={name !== "" ? `Table schema for ${name}` : "Create table"}
+            title={
+              <Box>
+                <TableIcon size="20px" />
+                <Text color="contentPrimary">
+                  {name !== "" ? `Table schema for ${name}` : "Create table"}
+                </Text>
+              </Box>
+            }
             afterTitle={
               <Actions
                 ctaText={ctaText}
@@ -319,7 +319,7 @@ export const Dialog = ({
                   )}
 
                   {action === "import" && (
-                    <Text color="gray2">
+                    <Text color="contentSecondary">
                       If you are changing the partitioning strategy, you will
                       need to set `Write mode` to `Overwrite` in Settings.
                     </Text>
@@ -328,7 +328,7 @@ export const Dialog = ({
               </Drawer.GroupItem>
 
               <Drawer.GroupHeader>
-                <Text color="foreground">Columns</Text>
+                <Text color="contentPrimary">Columns</Text>
               </Drawer.GroupHeader>
 
               <Columns
@@ -340,7 +340,7 @@ export const Dialog = ({
             </Inputs>
           </Items>
         </Form>
-      </StyledContentWrapper>
+      </Drawer.ContentWrapper>
     </Drawer>
   )
 }

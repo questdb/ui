@@ -37,14 +37,14 @@
 
   &.selected {
     opacity: 1;
-    color: white;
-    border-left: 2px solid #ff79c6;
-    background: #21222c !important;
+    color: theme-color(contentPrimary);
+    border-left: 2px solid theme-color(editorSyntaxKeyword);
+    background: theme-color(surfaceOverlay) !important;
   }
 }
 
 .nav > li > a:hover {
-  background: #44475a;
+  background: theme-color(editorSelection);
 }
 
 .nav > li > a.selected > .nav-pointer,
@@ -90,7 +90,7 @@
 .dropdown-menu {
   border: medium none;
   border-radius: 3px;
-  box-shadow: 0 0 3px rgba(86, 96, 117, 0.7);
+  box-shadow: 0 0 3px theme-color(shadowStrong);
   display: none;
   float: left;
   font-size: 12px;
@@ -185,8 +185,8 @@
 }
 
 .nav > li.active {
-  border-left: 4px solid color.adjust($navy, $lightness: 2%);
-  background: color.adjust($nav-bg, $lightness: -3%);
+  border-left: 4px solid theme-color(statusSuccessStrong);
+  background: theme-color(surfaceInset);
 }
 
 .nav.nav-second-level > li.active {
@@ -198,11 +198,11 @@
 }
 
 .nav-header a {
-  color: #dfe4ed;
+  color: theme-color(contentSecondary);
 }
 
 .nav-header .text-muted {
-  color: #8095a8;
+  color: theme-color(contentSecondary);
 }
 
 .minimalize-styl-2 {
@@ -229,7 +229,7 @@
 }
 
 .navbar-form-custom .form-control {
-  background: none repeat scroll 0 0 rgba(0, 0, 0, 0);
+  background: none repeat scroll 0 0 theme-color(transparent);
   border: medium none;
   font-size: 14px;
   height: 60px;
@@ -309,7 +309,7 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 }
 
 .canvas-menu.mini-navbar .nav-second-level {
-  background: color.adjust($nav-bg, $lightness: -3%);
+  background: theme-color(surfaceInset);
 }
 
 .mini-navbar li.active .nav-second-level {
@@ -318,32 +318,32 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 
 .navbar-default .special_link a {
   background: $navy;
-  color: white;
+  color: theme-color(contentPrimary);
 }
 
 .navbar-default .special_link a:hover {
-  background: #17987e !important;
-  color: white;
+  background: theme-color(statusSuccessStrong) !important;
+  color: theme-color(contentPrimary);
 }
 
 .navbar-default .special_link a span.label {
-  background: #fff;
+  background: theme-color(contentInverse);
   color: $navy;
 }
 
 .navbar-default .landing_link a {
-  background: color.adjust($navy, $lightness: 3%);
-  color: white;
+  background: theme-color(statusSuccessStrong);
+  color: theme-color(contentPrimary);
 }
 
 .navbar-default .landing_link a:hover {
   background: $navy !important;
-  color: white;
+  color: theme-color(contentPrimary);
 }
 
 .navbar-default .landing_link a span.label {
-  background: #fff;
-  color: color.adjust($navy, $lightness: 3%);
+  background: theme-color(contentInverse);
+  color: theme-color(statusSuccessStrong);
 }
 
 .logo-element {
@@ -354,9 +354,9 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
   justify-content: stretch;
   font-size: 18px;
   font-weight: 600;
-  color: white;
-  background: #1d1d1d;
-  box-shadow: -8px 0px 6px -1px #191a21;
+  color: theme-color(contentPrimary);
+  background: theme-color(surfaceInset);
+  box-shadow: -8px 0px 6px -1px theme-color(editorBorder);
   z-index: 1;
 
   a {
@@ -379,9 +379,9 @@ body.mini-navbar .navbar-default .nav > li > .nav-second-level li a {
 }
 
 .navbar-fixed-top {
-  background: #fff;
+  background: theme-color(contentInverse);
   transition-duration: 0.4s;
-  border-bottom: 1px solid #e7eaec !important;
+  border-bottom: 1px solid theme-color(borderStrong) !important;
   z-index: 2030;
 }
 
@@ -586,7 +586,7 @@ body.canvas-menu.mini-navbar .navbar-default .nav li .profile-element a span {
 
 body.canvas-menu nav.navbar-static-side {
   z-index: 2001;
-  background: #2f4050;
+  background: theme-color(borderDefault);
   height: 100%;
   position: fixed;
   display: none;

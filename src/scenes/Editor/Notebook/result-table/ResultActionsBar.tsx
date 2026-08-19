@@ -1,10 +1,10 @@
 import React, { useState } from "react"
-import { Download2, ArrowDownS } from "@styled-icons/remix-line"
-import { Reset } from "@styled-icons/boxicons-regular"
-import { HandPointLeft } from "@styled-icons/fa-regular"
-import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
-import { Markdown } from "@styled-icons/bootstrap/Markdown"
-import { Check } from "@styled-icons/bootstrap/Check"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
+import { ArrowDownS, Download2, ResetGrid } from "../../../../components/icons"
+import { MoveColumnToFront } from "../../../../components/icons"
+import { TableFreezeColumn } from "../../../../components/icons"
+import { Markdown } from "../../../../components/icons"
+import { Check } from "../../../../components/icons"
 import { DropdownMenu, Tooltip } from "../../../../components"
 import type { DqlQueryResult } from "../../../../store/notebook"
 import {
@@ -18,7 +18,6 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useNotebookActions } from "../NotebookProvider"
 import { expandGlobals } from "../declareUtils"
 import { ActionButton, ActionsBar, FreezeToggle } from "./styles"
-import { ArrowClockwiseIcon } from "@phosphor-icons/react"
 
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault()
 
@@ -88,7 +87,7 @@ export const ResultActionsBar: React.FC<Props> = ({
     <ActionsBar>
       <Tooltip delay={350} placement="bottom" content="Copy result to Markdown">
         <ActionButton
-          skin="transparent"
+          variant="ghost"
           aria-label="Copy result to Markdown"
           onClick={copyMarkdown}
         >
@@ -112,40 +111,40 @@ export const ResultActionsBar: React.FC<Props> = ({
         content="Move selected column to the front"
       >
         <ActionButton
-          skin="transparent"
+          variant="ghost"
           aria-label="Move selected column to the front"
           disabled={!hasSelection}
           onMouseDown={preventFocusSteal}
           onClick={moveColumnToFront}
         >
-          <HandPointLeft size="18px" />
+          <MoveColumnToFront size="18px" weight="regular" />
         </ActionButton>
       </Tooltip>
 
       <Tooltip delay={350} placement="bottom" content="Reset grid layout">
         <ActionButton
-          skin="transparent"
+          variant="ghost"
           aria-label="Reset grid layout"
           onClick={resetLayout}
         >
-          <Reset size="18px" />
+          <ResetGrid size="18px" weight="regular" />
         </ActionButton>
       </Tooltip>
 
       <Tooltip delay={350} placement="bottom" content="Re-run query">
         <ActionButton
-          skin="transparent"
+          variant="ghost"
           aria-label="Re-run query"
           disabled={isRunning || !onReRun}
           onClick={reRun}
         >
-          <ArrowClockwiseIcon size="18px" weight="bold" />
+          <ArrowClockwiseIcon size="18px" weight="regular" />
         </ActionButton>
       </Tooltip>
 
       <DropdownMenu.Root modal={false}>
         <DropdownMenu.Trigger asChild>
-          <ActionButton skin="transparent" aria-label="Download result">
+          <ActionButton variant="ghost" aria-label="Download result">
             <Download2 size="18px" />
             <ArrowDownS size="14px" />
           </ActionButton>

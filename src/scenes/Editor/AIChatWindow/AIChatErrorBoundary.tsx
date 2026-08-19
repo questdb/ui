@@ -23,12 +23,12 @@ const Wrapper = styled.div`
   width: 100%;
   height: 100%;
   padding: 2rem;
-  background: ${color("chatBackground")};
-  border-left: 0.2rem ${color("backgroundDarker")} solid;
+  background: ${({ theme }) => theme.color.surfaceBase};
+  border-left: 0.2rem ${color("surfaceInset")} solid;
 `
 
 const IconWrapper = styled.div`
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   margin-bottom: 1rem;
 `
 
@@ -67,13 +67,13 @@ export class AIChatErrorBoundary extends Component<Props, State> {
           <IconWrapper>
             <WarningCircleIcon size={48} weight="light" />
           </IconWrapper>
-          <Text color="foreground">Something went wrong</Text>
+          <Text color="contentPrimary">Something went wrong</Text>
           {this.state.error && (
-            <ErrorTextLine color="gray2" size="sm">
+            <ErrorTextLine color="contentSecondary" size="sm">
               {this.state.error.message}
             </ErrorTextLine>
           )}
-          <RetryButton skin="secondary" onClick={this.handleRetry}>
+          <RetryButton variant="secondary" onClick={this.handleRetry}>
             <ArrowClockwiseIcon size={16} />
             Try again
           </RetryButton>

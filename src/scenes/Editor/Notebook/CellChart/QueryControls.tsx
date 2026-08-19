@@ -1,11 +1,16 @@
 import React from "react"
 import styled from "styled-components"
-import { Button, CopyButton, MultiSelect, Text } from "../../../../components"
-import { Select } from "../../../../components/Select"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import {
+  Button,
+  Checkbox,
+  CopyButton,
+  MultiSelect,
+  SelectMenuControl,
+  Text,
+} from "../../../../components"
 import { HighlightedSql } from "../../../../components/HighlightedSql"
 import type { ChartType, QueryChart, SeriesAxis } from "./chartTypes"
+import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
@@ -54,10 +59,10 @@ const SqlPre = styled(HighlightedSql)`
   padding: 0.7rem;
   max-height: 9rem;
   overflow: auto;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.surfaceInset};
+  border: 1px solid ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.4rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.1rem;
 `
@@ -67,7 +72,7 @@ const CheckboxRow = styled.label`
   align-items: center;
   gap: 0.5rem;
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   cursor: pointer;
 `
 
@@ -99,6 +104,7 @@ export type QueryControlsProps = {
   ohlcError: boolean
   onUpdateQuery: (patch: Partial<QueryChart>) => void
   onSetQuery: (next: QueryChart) => void
+  telemetry?: ChartSettingsTelemetry
 }
 
 export const QueryControls: React.FC<QueryControlsProps> = ({
@@ -109,6 +115,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
   ohlcError,
   onUpdateQuery,
   onSetQuery,
+  telemetry,
 }) => {
   const groups = groupColumns(activeTab.columns)
   const hasOhlc = !!findOhlc(groups.numeric)
@@ -135,7 +142,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {!activeTab.compatible && (
         <IncompatibleNote>
           <IncompatibleIcon size={14} weight="fill" />
-          <Text color="orange" size="xs" lineHeight="1.2">
+          <Text color="statusWarning" size="xs" lineHeight="1.2">
             {`This query has a different x-axis kind from ${anchorLabel}. It cannot combine and is hidden from the chart.`}
           </Text>
         </IncompatibleNote>
@@ -143,8 +150,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
 
       {!isAnchorTab && (
         <CheckboxRow>
-          <input
-            type="checkbox"
+          <Checkbox
             checked={query.enabled !== false}
             onChange={(e) =>
               onUpdateQuery({
@@ -158,15 +164,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
 
       <Field>
         <FieldLabel>Type</FieldLabel>
-        <Select
+        <SelectMenuControl
           name={`type-${idx}`}
           value={query.type}
-          onChange={(e) => {
-            const type = e.target.value as ChartType
-            void trackEvent(ConsoleEvent.NOTEBOOK_CHART_TYPE_CHANGE, {
-              from: query.type,
-              to: type,
-            })
+          onValueChange={(value) => {
+            const type = value as ChartType
+            telemetry?.onTypeChange?.(query.type, type)
             const patch: Partial<QueryChart> = { type }
             if (type === "candlestick" && !query.ohlc) {
               const oh = findOhlc(groups.numeric)
@@ -190,13 +193,13 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               ] as const
             ).map(([k, label]) => (
               <MiniField key={k}>
-                <Text color="gray2" size="xs">
+                <Text color="contentSecondary" size="xs">
                   {label}
                 </Text>
-                <Select
+                <SelectMenuControl
                   name={`ohlc-${k}-${idx}`}
                   value={query.ohlc?.[k] ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(value) =>
                     onUpdateQuery({
                       ohlc: {
                         open: "",
@@ -204,7 +207,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                         low: "",
                         close: "",
                         ...query.ohlc,
-                        [k]: e.target.value,
+                        [k]: value,
                       },
                     })
                   }
@@ -219,7 +222,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
           {ohlcError && (
             <IncompatibleNote>
               <IncompatibleIcon size={14} weight="fill" />
-              <Text color="orange" size="xs" lineHeight="1.2">
+              <Text color="statusWarning" size="xs" lineHeight="1.2">
                 Map all four OHLC fields to distinct numeric columns
               </Text>
             </IncompatibleNote>
@@ -230,12 +233,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {query.type === "pie" && (
         <Field>
           <FieldLabel>Value</FieldLabel>
-          <Select
+          <SelectMenuControl
             name={`value-${idx}`}
             value={query.yColumns[0] ?? ""}
-            onChange={(e) =>
+            onValueChange={(value) =>
               onUpdateQuery({
-                yColumns: e.target.value ? [e.target.value] : [],
+                yColumns: value ? [value] : [],
               })
             }
             options={[{ label: "Select column", value: "" }, ...numericOptions]}
@@ -266,12 +269,12 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
         groups.categorical.length > 0 && (
           <Field>
             <FieldLabel>Partition by</FieldLabel>
-            <Select
+            <SelectMenuControl
               name={`partition-${idx}`}
               value={query.partitionByColumn ?? ""}
-              onChange={(e) =>
+              onValueChange={(value) =>
                 onUpdateQuery({
-                  partitionByColumn: e.target.value || undefined,
+                  partitionByColumn: value || undefined,
                 })
               }
               options={[
@@ -288,11 +291,11 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       {!isAnchorTab && (
         <Field>
           <FieldLabel>Y-axis</FieldLabel>
-          <Select
+          <SelectMenuControl
             name={`axis-${idx}`}
             value={query.axis ?? "left"}
-            onChange={(e) =>
-              onUpdateQuery({ axis: e.target.value as SeriesAxis })
+            onValueChange={(value) =>
+              onUpdateQuery({ axis: value as SeriesAxis })
             }
             options={[
               { label: "Left", value: "left" },
@@ -304,11 +307,9 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
 
       <Button
         type="button"
-        skin="secondary"
+        variant="secondary"
         onClick={() => {
-          void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, {
-            chartType: query.type,
-          })
+          telemetry?.onResetAuto?.(query.type)
           onSetQuery(activeTab.inferredChart)
         }}
       >

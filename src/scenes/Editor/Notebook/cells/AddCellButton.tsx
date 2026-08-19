@@ -2,7 +2,7 @@ import React from "react"
 import styled, { css } from "styled-components"
 import { MarkdownLogoIcon, PlusSquareIcon } from "@phosphor-icons/react"
 import { color } from "../../../../utils"
-import { Tooltip } from "../../../../components"
+import { ButtonBase, Tooltip } from "../../../../components"
 import type { CellType } from "../../../../store/notebook"
 import { MAX_NOTEBOOK_CELLS } from "../../../../store/notebook"
 import {
@@ -29,7 +29,10 @@ const BottomButton = styled.div<{ $alignCenter?: boolean }>`
 // Add Cell is the primary (pink) action; Add Markdown stays the secondary
 // (gray) one. The "bottom" tier fills half the row each (full-width click
 // target); the "between" tier is compact and centered on the divider line.
-const AddButton = styled.button<{ $variant: AddVariant; $tier: AddTier }>`
+const AddButton = styled(ButtonBase)<{
+  $variant: AddVariant
+  $tier: AddTier
+}>`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,7 +44,7 @@ const AddButton = styled.button<{ $variant: AddVariant; $tier: AddTier }>`
   font-family: ${({ theme }) => theme.font};
   font-weight: 600;
   color: ${({ $variant }) =>
-    $variant === "primary" ? color("pink") : color("comment")};
+    $variant === "primary" ? color("contentAccent") : color("contentMuted")};
 
   ${({ $tier }) =>
     $tier === "bottom"
@@ -69,21 +72,23 @@ const AddButton = styled.button<{ $variant: AddVariant; $tier: AddTier }>`
     ${({ $variant }) =>
       $variant === "primary"
         ? css`
-            background: ${color("pink50")};
+            background: ${color("interactionAccentActive")};
           `
         : css`
-            color: ${color("foreground")};
-            background: ${color("selection")};
+            color: ${color("contentPrimary")};
+            background: ${color("interactionNeutral")};
           `}
   }
 
-  &:disabled {
+  &&:disabled {
     cursor: not-allowed;
     opacity: 0.4;
 
     &:hover {
       color: ${({ $variant }) =>
-        $variant === "primary" ? color("pink") : color("comment")};
+        $variant === "primary"
+          ? color("contentAccent")
+          : color("contentMuted")};
       background: transparent;
     }
   }
@@ -108,7 +113,7 @@ const BetweenLine = styled.div`
   top: 50%;
   left: 0;
   right: 0;
-  border-top: 1px dashed ${color("dividerAccent")};
+  border-top: 1px dashed ${color("borderAccent")};
 `
 
 // Groups the two add buttons and masks the divider line behind them (matching
@@ -120,7 +125,7 @@ const BetweenButtons = styled.div`
   align-items: center;
   gap: 1rem;
   padding: 0 0.8rem;
-  background: ${color("midnight")};
+  background: ${color("surfaceStage")};
 `
 
 // User-origin only: tool-driven add_cell goes through NotebookController directly and doesn't emit here.

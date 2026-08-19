@@ -46,7 +46,7 @@ const Wrapper = styled.div`
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: ${color("backgroundLighter")};
+  background: ${color("surfaceRaised")};
 `
 
 const TabStrip = styled.div`
@@ -56,7 +56,7 @@ const TabStrip = styled.div`
   flex-shrink: 0;
   height: ${TAB_BAR_PX}px;
   padding: 0 8px;
-  border-bottom: 1px solid ${color("selection")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
 `
 
 const TabShimmer = styled(ShimmerBar)`
@@ -105,8 +105,8 @@ const HeaderRow = styled.div`
   display: flex;
   flex-shrink: 0;
   height: ${HEADER_HEIGHT}px;
-  background: ${color("backgroundDarker")};
-  border-bottom: 1px solid ${color("selection")};
+  background: ${color("surfaceInset")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
 `
 
 const HeaderCell = styled.div<{ $width: number; $align: "left" | "right" }>`
@@ -116,7 +116,7 @@ const HeaderCell = styled.div<{ $width: number; $align: "left" | "right" }>`
   flex-direction: column;
   justify-content: center;
   padding: 0.5rem ${HEADER_PADDING_PX / 2}px;
-  border-right: ${HEADER_BORDER_PX}px solid ${color("selection")};
+  border-right: ${HEADER_BORDER_PX}px solid ${color("interactionNeutral")};
   overflow: hidden;
   text-align: ${({ $align }) => $align};
 `
@@ -139,7 +139,7 @@ const HeaderCopyButtonSpacer = styled.div`
 `
 
 const HeaderName = styled.span`
-  color: ${color("cyan")};
+  color: ${color("statusInfo")};
   font-size: ${HEADER_NAME_FONT_SIZE_PX}px;
   white-space: nowrap;
   overflow: hidden;
@@ -148,7 +148,7 @@ const HeaderName = styled.span`
 `
 
 const HeaderType = styled.span`
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   font-size: ${HEADER_TYPE_FONT_SIZE_PX}px;
   text-transform: lowercase;
   white-space: nowrap;
@@ -169,8 +169,8 @@ const BodyCell = styled.div<{ $width: number; $align: "left" | "right" }>`
     $align === "right" ? "flex-end" : "flex-start"};
   height: ${ROW_HEIGHT}px;
   padding: 0 ${CELL_PADDING_PX / 2}px;
-  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
-  border-bottom: 1px solid ${color("selection")};
+  border-right: ${CELL_BORDER_PX}px solid ${color("interactionNeutral")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
   box-sizing: border-box;
   overflow: hidden;
 `
@@ -272,15 +272,15 @@ const GenericCell = styled.div<{ $align: "left" | "right" }>`
     $align === "right" ? "flex-end" : "flex-start"};
   height: ${ROW_HEIGHT}px;
   padding: 0 ${CELL_PADDING_PX / 2}px;
-  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
-  border-bottom: 1px solid ${color("selection")};
+  border-right: ${CELL_BORDER_PX}px solid ${color("interactionNeutral")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
   box-sizing: border-box;
   overflow: hidden;
 `
 
 const GenericHeaderCell = styled(GenericCell)`
   height: ${HEADER_HEIGHT}px;
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   border-bottom: none;
 `
 

@@ -37,7 +37,7 @@ export const QueryExecutionConfirmDialog: React.FC = () => {
           <Dialog.Title>Cancel current query?</Dialog.Title>
 
           <DialogDescription>
-            <Text color="foreground">
+            <Text color="contentPrimary">
               A query is currently running. Starting a new query will cancel the
               current execution.
             </Text>
@@ -46,7 +46,7 @@ export const QueryExecutionConfirmDialog: React.FC = () => {
           <Dialog.ActionButtons>
             <Dialog.Close asChild>
               <DialogButton
-                skin="secondary"
+                variant="secondary"
                 data-hook="abort-confirmation-dialog-dismiss"
                 onClick={handleDismiss}
               >
@@ -55,7 +55,7 @@ export const QueryExecutionConfirmDialog: React.FC = () => {
             </Dialog.Close>
 
             <DialogButton
-              skin="primary"
+              variant="primary"
               data-hook="abort-confirmation-dialog-confirm"
               onClick={handleConfirm}
             >

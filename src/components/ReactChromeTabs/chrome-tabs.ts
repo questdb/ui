@@ -23,10 +23,21 @@
  ******************************************************************************/
 
 import Draggabilly from "draggabilly"
+import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
 
 const TAB_CONTENT_MIN_WIDTH = 150
 const TAB_CONTENT_MAX_WIDTH = 240
 const NEW_TAB_BUTTON_AREA = 90
+const LIQUID_GLASS_HEIGHT = 48
+const LIQUID_GLASS_RADIUS = 10
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value))
+
+let reduceMotionQuery: MediaQueryList | null = null
+const prefersReducedMotion = () =>
+  (reduceMotionQuery ??= window.matchMedia("(prefers-reduced-motion: reduce)"))
+    .matches
 
 const closest = (value: number, array: number[]) => {
   let closestDist = Infinity
@@ -44,8 +55,8 @@ const closest = (value: number, array: number[]) => {
 
 const newTabButtonTemplate = `
     <div class="new-tab-button-wrapper">
-      <button class="new-tab-button" data-hook="new-tab-button">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"></path></svg>
+      <button class="new-tab-button" data-button-variant="ghost" data-hook="new-tab-button" aria-label="Open new tab">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M228,128a12,12,0,0,1-12,12H140v76a12,12,0,0,1-24,0V140H40a12,12,0,0,1,0-24h76V40a12,12,0,0,1,24,0v76h76A12,12,0,0,1,228,128Z"></path></svg>
       </button>
     </div>
   `
@@ -112,6 +123,8 @@ class ChromeTabs {
   autoScrollInterval: number | null
   autoScrollSpeed: number
   dragPlaceholder: HTMLElement | null
+  selectionAnimationFrame: number | null
+  scrollSyncFrame: number | null
   dragState: {
     tabEl: HTMLElement | null
     originIndex: number
@@ -128,6 +141,8 @@ class ChromeTabs {
     this.autoScrollInterval = null
     this.autoScrollSpeed = 0
     this.dragPlaceholder = null
+    this.selectionAnimationFrame = null
+    this.scrollSyncFrame = null
     this.dragState = {
       tabEl: null,
       originIndex: -1,
@@ -145,6 +160,7 @@ class ChromeTabs {
     this.el.setAttribute("data-chrome-tabs-instance-id", this.instanceId + "")
     instanceId += 1
 
+    this.setupLiquidGlassFilter()
     this.setupStyleEl()
     this.setupEvents()
     this.layoutTabs()
@@ -162,11 +178,6 @@ class ChromeTabs {
   }
 
   setupEvents() {
-    window.addEventListener("resize", () => {
-      this.cleanUpPreviouslyDraggedTabs()
-      this.layoutTabs()
-    })
-
     const resizeObserver = new ResizeObserver(() => {
       this.cleanUpPreviouslyDraggedTabs()
       this.layoutTabs()
@@ -175,7 +186,12 @@ class ChromeTabs {
     resizeObserver.observe(this.el)
 
     this.tabContentEl.addEventListener("scroll", () => {
-      this.updateOverflowShadows()
+      if (this.scrollSyncFrame !== null) return
+      this.scrollSyncFrame = window.requestAnimationFrame(() => {
+        this.scrollSyncFrame = null
+        this.updateOverflowShadows()
+        this.updateSelectionGlass(false, false)
+      })
     })
 
     this.el.addEventListener("click", ({ target }) => {
@@ -227,6 +243,28 @@ class ChromeTabs {
 
   get tabContentEl() {
     return this.el.querySelector<HTMLElement>(".chrome-tabs-content")!
+  }
+
+  get selectionLayerEl() {
+    return this.el.querySelector<HTMLElement>(".chrome-tabs-selection-layer")!
+  }
+
+  get selectionGlassEl() {
+    return this.el.querySelector<HTMLElement>(".chrome-tabs-selection-glass")!
+  }
+
+  setupLiquidGlassFilter() {
+    const filter = this.el.querySelector<SVGFilterElement>(
+      ".chrome-tabs-liquid-filter",
+    )
+    const glass = this.selectionGlassEl
+    if (!filter || !glass) return
+
+    const filterId = `qdb-tab-liquid-lens-${this.instanceId}`
+    filter.id = filterId
+    const filterValue = `url("#${filterId}") blur(3px) saturate(150%)`
+    glass.style.backdropFilter = filterValue
+    glass.style.setProperty("-webkit-backdrop-filter", filterValue)
   }
 
   get tabWidths() {
@@ -297,6 +335,108 @@ class ChromeTabs {
     this.tabContentEl.style.width = `${totalTabsWidth}px`
 
     this.updateOverflowShadows()
+    this.updateSelectionGlass()
+  }
+
+  updateSelectionGlass(
+    animate = false,
+    refreshLens = true,
+    targetTab?: HTMLElement,
+  ) {
+    const activeTab = targetTab ?? (this.activeTabEl as HTMLElement | null)
+    const glass = this.selectionGlassEl
+    const layer = this.selectionLayerEl
+
+    if (!activeTab || !glass || !layer) {
+      if (glass) glass.style.opacity = "0"
+      return
+    }
+
+    const activeSurface = activeTab.querySelector<HTMLElement>(
+      ".chrome-tab-content",
+    )
+    if (!activeSurface) return
+
+    const rootRect = this.el.getBoundingClientRect()
+    const containerRect = this.tabContentEl.getBoundingClientRect()
+    const surfaceRect = activeSurface.getBoundingClientRect()
+    const glassRect = glass.getBoundingClientRect()
+    const wasVisible = glass.style.opacity === "1" && glassRect.width > 0
+    const previousX = glassRect.left - containerRect.left
+    const previousWidth = glassRect.width
+    const targetX = surfaceRect.left - containerRect.left
+    const targetWidth = surfaceRect.width
+
+    layer.style.left = `${containerRect.left - rootRect.left}px`
+    layer.style.width = `${containerRect.width}px`
+    if (this.selectionAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.selectionAnimationFrame)
+      this.selectionAnimationFrame = null
+    }
+    glass.style.width = `${targetWidth}px`
+    glass.style.transform = `translate3d(${targetX}px, 0, 0)`
+    glass.style.opacity = "1"
+
+    if (refreshLens) {
+      const map = this.el.querySelector<SVGFEImageElement>(
+        ".chrome-tabs-liquid-map",
+      )
+      const mapUrl = createLiquidLensMap({
+        width: targetWidth,
+        height: LIQUID_GLASS_HEIGHT,
+        radius: LIQUID_GLASS_RADIUS,
+      })
+      if (map && mapUrl && map.getAttribute("href") !== mapUrl) {
+        map.setAttribute("href", mapUrl)
+      }
+    }
+
+    const reduceMotion = prefersReducedMotion()
+    if (
+      !animate ||
+      !wasVisible ||
+      reduceMotion ||
+      Math.abs(targetX - previousX) < 1
+    ) {
+      return
+    }
+
+    const previousCenter = previousX + previousWidth / 2
+    const targetCenter = targetX + targetWidth / 2
+    const travel = targetCenter - previousCenter
+    const maxStretch = Math.min(52, Math.max(12, Math.abs(travel) * 0.2))
+    const duration = 360
+    const startedAt = performance.now()
+
+    const tick = (now: number) => {
+      const progress = clamp((now - startedAt) / duration, 0, 1)
+      // A smooth, quick start makes the destination unambiguous. The sine
+      // envelope stretches the capsule only along x, then returns it to its
+      // exact resting dimensions without shifting the tabs vertically.
+      const eased = 1 - Math.pow(1 - progress, 3.2)
+      const centre = previousCenter + travel * eased
+      const baseWidth = previousWidth + (targetWidth - previousWidth) * eased
+      const liquidStretch =
+        Math.pow(Math.sin(Math.PI * progress), 1.35) * maxStretch
+      const width = baseWidth + liquidStretch
+      const x = centre - width / 2
+
+      glass.style.width = `${width}px`
+      glass.style.transform = `translate3d(${x}px, 0, 0)`
+
+      if (progress < 1) {
+        this.selectionAnimationFrame = window.requestAnimationFrame(tick)
+        return
+      }
+
+      glass.style.width = `${targetWidth}px`
+      glass.style.transform = `translate3d(${targetX}px, 0, 0)`
+      this.selectionAnimationFrame = null
+    }
+
+    glass.style.width = `${previousWidth}px`
+    glass.style.transform = `translate3d(${previousX}px, 0, 0)`
+    this.selectionAnimationFrame = window.requestAnimationFrame(tick)
   }
 
   updateOverflowShadows() {
@@ -311,10 +451,10 @@ class ChromeTabs {
     const parentRect = this.el.getBoundingClientRect()
     const containerRect = container.getBoundingClientRect()
     const rightOffset = Math.max(0, parentRect.right - containerRect.right)
-    this.el.style.setProperty(
-      "--overflow-shadow-right-offset",
-      `${rightOffset}px`,
+    const rightShadow = this.el.querySelector<HTMLElement>(
+      ".chrome-tabs-overflow-shadow-right",
     )
+    if (rightShadow) rightShadow.style.right = `${rightOffset}px`
 
     this.el.setAttribute("data-overflow-left", hasOverflowLeft.toString())
     this.el.setAttribute("data-overflow-right", hasOverflowRight.toString())
@@ -400,6 +540,7 @@ class ChromeTabs {
     if (activeTabEl === tabEl) return
     if (activeTabEl) activeTabEl.removeAttribute("active")
     tabEl.setAttribute("active", "")
+    this.updateSelectionGlass(this.initialScrollDone)
     this.emit("activeTabChange", { tabEl })
     if (this.initialScrollDone) {
       setTimeout(() => this.scrollTabIntoView(tabEl))
@@ -441,6 +582,7 @@ class ChromeTabs {
       this.scrollTabIntoView(activeTab)
     }
     this.el.classList.add("chrome-tabs-ready")
+    this.updateSelectionGlass()
   }
 
   removeTab(tabEl: HTMLElement) {
@@ -647,6 +789,11 @@ class ChromeTabs {
       this.animateTabMove(tabEl, this.dragState.currentIndex, destIndex)
       this.dragState.currentIndex = destIndex
     }
+
+    // Keep the active liquid surface attached to the fixed-position tab while
+    // dragging. The lens dimensions are unchanged, so avoid regenerating its
+    // displacement map on every pointer frame.
+    this.updateSelectionGlass(false, false, tabEl)
   }
 
   setupDraggabilly() {
@@ -800,31 +947,10 @@ class ChromeTabs {
       draggabilly.on("dragMove", (_event, pointer) => {
         const container = this.tabContentEl
         const containerRect = container.getBoundingClientRect()
-        const tabWidth = tabEl.offsetWidth
 
         // Store pointer position for auto-scroll updates
         this.dragState.pointerX = pointer.clientX
-
-        // Calculate absolute position in the scrollable content
-        const relativePointerX = pointer.clientX - containerRect.left
-        const absoluteX = relativePointerX + container.scrollLeft - tabWidth / 2
-
-        const maxPosition = container.scrollWidth - tabWidth
-        const clampedPosition = Math.max(0, Math.min(maxPosition, absoluteX))
-
-        const visualX = clampedPosition - container.scrollLeft
-        const screenX = containerRect.left + visualX
-
-        tabEl.style.left = `${screenX}px`
-        tabEl.style.top = `${containerRect.top}px`
-        tabEl.style.transform = "none"
-
-        const destIndex = closest(clampedPosition, this.tabPositions)
-
-        if (destIndex !== this.dragState.currentIndex && destIndex !== -1) {
-          this.animateTabMove(tabEl, this.dragState.currentIndex, destIndex)
-          this.dragState.currentIndex = destIndex
-        }
+        this.updateDraggedTabPosition()
 
         const edgeThreshold = 50
         const maxScrollSpeed = 10

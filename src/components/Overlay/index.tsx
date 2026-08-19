@@ -28,7 +28,7 @@ const overlayHide = css`
 `
 
 const StyledOverlay = styled.div`
-  background-color: ${({ theme }) => theme.color.overlayBackground};
+  background-color: ${({ theme }) => theme.color.surfaceScrim};
   position: fixed;
   inset: 0;
   z-index: ${OVERLAY_Z_INDEX};
@@ -37,11 +37,11 @@ const StyledOverlay = styled.div`
   ${overlayHide}
 
   &[data-state="open"] {
-    animation: overlayShow 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: overlayShow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   &[data-state="closed"] {
-    animation: overlayHide 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: overlayHide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 `
 

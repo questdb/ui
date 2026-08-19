@@ -64,6 +64,7 @@ import {
   useCellResultHydrationEngine,
   useResultStatusVersion,
 } from "./resultHydration/CellResultHydrationContext"
+import { editorStageSurfaceStyles } from "../sharedStyles"
 
 const GRID_COLS = NOTEBOOK_GRID_COLS
 const ROW_HEIGHT = NOTEBOOK_GRID_ROW_HEIGHT
@@ -74,6 +75,8 @@ const NotebookWrapper = styled.div.attrs({ "data-notebook-root": "true" })`
   flex-direction: column;
   height: 100%;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
 `
 
@@ -82,9 +85,9 @@ const CellListContainer = styled.div<{ $maximized?: boolean }>`
   flex-direction: column;
   flex: 1;
   overflow-y: ${({ $maximized }) => ($maximized ? "hidden" : "auto")};
-  padding: ${({ $maximized }) => ($maximized ? "0" : "2rem")};
-  gap: 2rem;
-  background: ${color("midnight")};
+  padding: ${({ $maximized }) => ($maximized ? "0" : "3rem")};
+  gap: 2.4rem;
+  ${editorStageSurfaceStyles}
   /* Scroll anchoring fights arrow-key reordering: on a move-up React keeps the
      focused cell's DOM node in place, the browser anchors to it and adjusts
      scrollTop so the cell looks frozen while the cells above shuffle. Disabled
@@ -135,11 +138,11 @@ const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
 const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
-  background: ${color("midnight")};
+  padding: 3rem;
+  ${editorStageSurfaceStyles}
 
   .react-grid-item.react-grid-placeholder {
-    background: ${color("selection")};
+    background: ${color("interactionNeutral")};
     opacity: 0.25;
   }
 
@@ -827,7 +830,10 @@ const NotebookArea = styled.div`
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 `
 
 const SeedFallback = styled.div`
@@ -838,7 +844,7 @@ const SeedFallback = styled.div`
   gap: 1.6rem;
   height: 100%;
   width: 100%;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const VisuallyHiddenStatus = styled.span`
@@ -941,7 +947,7 @@ export const Notebook: React.FC = () => {
         <SeedFallback role="alert" aria-live="assertive" aria-atomic="true">
           <span>{seedError.message}</span>
           {seedError.retryable && (
-            <Button skin="secondary" onClick={retrySeed}>
+            <Button variant="secondary" onClick={retrySeed}>
               Retry
             </Button>
           )}

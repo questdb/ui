@@ -42,8 +42,6 @@ import { TableDetailsButton } from "./TableDetailsButton"
 import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
 import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
-import "allotment/dist/style.css"
-
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { AIStatusProvider } from "../../providers/AIStatusProvider"
@@ -58,10 +56,21 @@ const Page = styled.div`
   flex: 1;
   overflow: hidden;
   font-size: 1.4rem;
-  background: #21222c;
+  background-color: ${({ theme }) => theme.color.surfaceCanvas};
+  background-image:
+    linear-gradient(
+      ${({ theme }) => theme.color.borderSubtle} 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      ${({ theme }) => theme.color.borderSubtle} 1px,
+      transparent 1px
+    );
+  background-size: 32px 32px;
 
   ::selection {
-    background: #44475a;
+    background: ${({ theme }) => theme.color.editorSelection};
   }
 `
 
@@ -69,14 +78,15 @@ const Root = styled.div`
   display: flex;
   width: 100%;
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceCanvas};
 `
 
 const Main = styled.div`
   position: relative;
   flex: 1;
   display: flex;
-  width: calc(100% - 4.5rem);
+  width: calc(100% - 5.6rem);
 `
 
 const Layout = () => {

@@ -1,13 +1,14 @@
 .chrome-tabs {
   box-sizing: border-box;
   position: relative;
-  height: 46px;
-  padding: 0 3px 0 3px;
-  background: #282a36;
-  border-radius: 5px 5px 0 0;
+  height: 52px;
+  padding: 0 8px;
+  background: transparent;
+  border-radius: 0;
   overflow: hidden;
   display: flex;
   width: 100%;
+  isolation: isolate;
 }
 
 .chrome-tabs * {
@@ -24,26 +25,70 @@
   flex-shrink: 0;
   position: relative;
   z-index: 5;
-  border-radius: 17px;
-  margin-left: 10px;
+  border-radius: 7px;
+  margin-left: 4px;
 }
 
 .chrome-tabs .new-tab-button-wrapper .new-tab-button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 0;
-  border-radius: 4px;
-  font-weight: 100;
+  width: 4rem;
+  min-width: 4rem;
+  height: 4rem;
+  padding: 0;
+  border-radius: 0.7rem;
+  font-weight: 400;
   font-size: 16px;
-  padding: 0 10px;
-  height: 3rem;
-  border: none;
-  background: none;
-  color: #bdbdbd;
+  border: 1px solid transparent;
+  background: transparent;
+  color: theme-color(contentSecondary);
   box-shadow: none;
   cursor: pointer;
+  outline: none;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease;
+
+  &:focus-visible {
+    outline: 1px solid theme-color(contentAccent);
+    outline-offset: 2px;
+  }
+
+  &:active {
+    filter: brightness(0.9);
+  }
+
+  &[aria-pressed="true"] {
+    background: theme-color(surfaceRaised);
+    border-color: theme-color(borderDefault);
+    box-shadow:
+      inset 0 1px 0 theme-color(borderSubtle),
+      0 4px 12px theme-color(shadowSoft);
+  }
 }
 
-.chrome-tabs .new-tab-button-wrapper .new-tab-button:hover {
-  background: #6272a4;
+@media (hover: hover) {
+  .chrome-tabs .new-tab-button-wrapper .new-tab-button:hover {
+    background: theme-color(surfaceRaised);
+    border-color: transparent;
+    color: theme-color(contentPrimary);
+    box-shadow: none;
+  }
+
+  .chrome-tabs
+    .new-tab-button-wrapper
+    .new-tab-button[aria-pressed="true"]:hover {
+    border-color: theme-color(borderDefault);
+    box-shadow:
+      inset 0 1px 0 theme-color(borderSubtle),
+      0 4px 12px theme-color(shadowSoft);
+  }
 }
 
 [data-hook="editor-tabs-disabled"] .chrome-tabs .new-tab-button-wrapper {
@@ -54,7 +99,7 @@
   position: relative;
   width: auto;
   height: 100%;
-  margin-right: 5px;
+  margin-right: 2px;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -62,14 +107,58 @@
   -ms-overflow-style: none;
 }
 
+.chrome-tabs .chrome-tabs-filter-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chrome-tabs .chrome-tabs-selection-layer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  // The lens must pass over inactive labels to refract them. The active tab is
+  // kept above it, so its icon and title remain perfectly crisp at rest.
+  z-index: 3;
+}
+
+.chrome-tabs .chrome-tabs-selection-glass {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: 0;
+  opacity: 0;
+  background: theme-color(glassSurface);
+  border: 1px solid theme-color(glassBorder);
+  border-bottom-width: 2px;
+  border-bottom-color: theme-color(glassEdge);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px theme-color(shadowSoft);
+  backdrop-filter: blur(12px) saturate(145%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  will-change: transform, width;
+}
+
+.chrome-tabs.chrome-tabs-ready .chrome-tabs-selection-glass {
+  transition:
+    opacity 140ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
 .chrome-tabs .chrome-tabs-content::-webkit-scrollbar {
   display: none;
 }
 
 /* Overflow shadow indicators */
-.chrome-tabs::before,
-.chrome-tabs::after {
-  content: "";
+.chrome-tabs .chrome-tabs-overflow-shadow {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -79,28 +168,28 @@
   z-index: 6;
 }
 
-.chrome-tabs::before {
+.chrome-tabs .chrome-tabs-overflow-shadow-left {
   left: 0;
-  background: linear-gradient(to right, rgba(20, 20, 20, 0.3), transparent);
+  background: linear-gradient(to right, theme-color(shadowMedium), transparent);
 }
 
-.chrome-tabs::after {
-  right: var(--overflow-shadow-right-offset, 90px);
-  background: linear-gradient(to left, rgba(20, 20, 20, 0.3), transparent);
+.chrome-tabs .chrome-tabs-overflow-shadow-right {
+  right: 90px;
+  background: linear-gradient(to left, theme-color(shadowMedium), transparent);
 }
 
-.chrome-tabs[data-overflow-left="true"]::before {
+.chrome-tabs[data-overflow-left="true"] .chrome-tabs-overflow-shadow-left {
   opacity: 1;
 }
 
-.chrome-tabs[data-overflow-right="true"]::after {
+.chrome-tabs[data-overflow-right="true"] .chrome-tabs-overflow-shadow-right {
   opacity: 1;
 }
 
 .chrome-tabs .chrome-tab {
   position: absolute;
   left: 0;
-  height: 46px;
+  height: 52px;
   width: 240px;
   border: 0;
   bottom: 0;
@@ -110,23 +199,27 @@
 }
 
 .chrome-tabs .chrome-tab-rename {
-  font-family: "Open Sans",
+  font-family:
+    "Open Sans",
     -apple-system,
     BlinkMacSystemFont,
     Helvetica,
     Roboto,
     sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
   display: none;
   position: relative;
   z-index: 1;
-  border: 1px solid #8be9fd;
+  border: 1px solid theme-color(contentAccent);
   padding: 0.2rem 0.4rem;
   line-height: 20px;
   height: 20px;
   outline: none;
   border-radius: 4px;
   background: transparent;
-  color: #f8f8f2;
+  color: theme-color(contentPrimary);
   margin-left: 0.3rem;
   width: 100%;
   align-self: center;
@@ -135,14 +228,6 @@
 
 .chrome-tabs .chrome-tab-rename:focus {
   outline: none;
-}
-
-.chrome-tabs .chrome-tab-rename::selection {
-  background: #5880af;
-}
-
-.chrome-tabs .chrome-tab-rename::moz-selection {
-  background: #5880af;
 }
 
 .chrome-tabs .chrome-tab,
@@ -171,30 +256,43 @@
   position: absolute;
   display: flex;
   align-items: center;
-  top: 0;
-  bottom: 0;
-  width: 100%;
-  padding: 9px 8px;
+  top: 2px;
+  bottom: 2px;
+  left: 3px;
+  width: calc(100% - 6px);
+  padding: 11px 10px;
   overflow: hidden;
   pointer-events: all;
   background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: none;
 }
 
 /* Only enable background transition after initial setup to prevent flicker on load */
 .chrome-tabs.chrome-tabs-ready .chrome-tab .chrome-tab-content {
-  transition: background 0.2s ease;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
 }
 
 .chrome-tabs .chrome-tab[active] .chrome-tab-content {
-  background: #44475a;
-  box-shadow:
-    inset 0 -2px 0 0 #c93261;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 @media (hover: hover) {
   .chrome-tabs .chrome-tab:not([active]):hover .chrome-tab-content {
-    background: #333544;
-    box-shadow: inset 0 -2px 0 0 #44475a;
+    background: theme-color(interactionHover);
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-tabs.chrome-tabs-ready .chrome-tabs-selection-glass {
+    transition-duration: 0.01ms;
   }
 }
 
@@ -206,10 +304,51 @@
   justify-content: center;
   flex-shrink: 0;
   flex-grow: 0;
-  height: 16px;
-  width: 16px;
-  background-size: 16px;
+  height: 20px;
+  width: 20px;
+  background-size: 20px 20px;
+  background-position: center;
+  background-repeat: no-repeat;
   margin-left: 4px;
+}
+
+// Theme-aware masks keep the Phosphor tab glyphs crisp while allowing each
+// tab type to use a semantic color in both themes.
+.chrome-tabs .chrome-tab .chrome-tab-favicon--sql,
+.chrome-tabs .chrome-tab .chrome-tab-favicon--notebook,
+.chrome-tabs .chrome-tab .chrome-tab-favicon--metrics,
+.chrome-tabs .chrome-tab .chrome-tab-favicon--preview {
+  background-image: none !important;
+  background-color: theme-color(contentPrimary);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 20px 20px;
+  mask-size: 20px 20px;
+}
+
+.chrome-tabs .chrome-tab .chrome-tab-favicon--sql {
+  -webkit-mask-image: url("/assets/icon-file.svg");
+  mask-image: url("/assets/icon-file.svg");
+}
+
+.chrome-tabs .chrome-tab .chrome-tab-favicon--notebook {
+  background-color: theme-color(contentObject);
+  -webkit-mask-image: url("/assets/icon-notebook.svg");
+  mask-image: url("/assets/icon-notebook.svg");
+}
+
+.chrome-tabs .chrome-tab .chrome-tab-favicon--metrics {
+  background-color: theme-color(contentObject);
+  -webkit-mask-image: url("/assets/icon-chart.svg");
+  mask-image: url("/assets/icon-chart.svg");
+}
+
+.chrome-tabs .chrome-tab .chrome-tab-favicon--preview {
+  background-color: theme-color(contentSecondary);
+  -webkit-mask-image: url("/assets/icon-compare.svg");
+  mask-image: url("/assets/icon-compare.svg");
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-title {
@@ -220,23 +359,36 @@
   margin-left: 4px;
   height: 20px;
   line-height: 20px;
-  color: #9ca1a7;
-  -webkit-mask-image: linear-gradient(90deg,
-      #000 0%,
-      #000 calc(100% - 24px),
-      transparent);
-  mask-image: linear-gradient(90deg,
-      #000 0%,
-      #000 calc(100% - 24px),
-      transparent);
+  color: theme-color(contentMuted);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 120ms ease;
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    theme-color(neutralInk) 0%,
+    theme-color(neutralInk) calc(100% - 24px),
+    transparent
+  );
+  mask-image: linear-gradient(
+    90deg,
+    theme-color(neutralInk) 0%,
+    theme-color(neutralInk) calc(100% - 24px),
+    transparent
+  );
 }
 
-.chrome-tabs .chrome-tab .chrome-tab-favicon+.chrome-tab-title {
+.chrome-tabs .chrome-tab .chrome-tab-favicon + .chrome-tab-title {
   margin-left: 8px;
 }
 
+@media (hover: hover) {
+  .chrome-tabs .chrome-tab:not([active]):hover .chrome-tab-title {
+    color: theme-color(contentSecondary);
+  }
+}
+
 .chrome-tabs .chrome-tab[active] .chrome-tab-title {
-  color: #f1f3f4;
+  color: theme-color(contentPrimary);
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-drag-handle {
@@ -258,21 +410,30 @@
   height: 20px;
   border-radius: 4px;
   cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='%239ca1a7'><path d='M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z'></path></svg>");
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: 12px 12px;
+  background: transparent;
+
+  &::before {
+    position: absolute;
+    inset: 4px;
+    background: theme-color(contentSecondary);
+    content: "";
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path d='M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z'/></svg>")
+      center / contain no-repeat;
+  }
 }
 
 @media (hover: hover) {
   .chrome-tabs .chrome-tab .chrome-tab-close:hover {
-    background-color: #5f6368;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='rgba(255, 255, 255, .7)'><path d='M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z'></path></svg>");
+    background-color: theme-color(surfaceRaised);
+
+    &::before {
+      background: theme-color(contentPrimary);
+    }
   }
 
   .chrome-tabs .chrome-tab .chrome-tab-close:hover:active {
-    background-color: #80868b;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256' fill='rgba(255, 255, 255, .9)'><path d='M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z'></path></svg>");
+    background-color: theme-color(surfaceRaised);
+    filter: brightness(0.9);
   }
 }
 
@@ -285,12 +446,18 @@
   height: 20px;
   border-radius: 4px;
   cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%239ca1a7'><path fill='none' d='M0 0h24v24H0z'></path><path d='M6.414 16 16.556 5.858l-1.414-1.414L5 14.586V16h1.414zm.829 2H3v-4.243L14.435 2.322a1 1 0 0 1 1.414 0l2.829 2.829a1 1 0 0 1 0 1.414L7.243 18zM3 20h18v2H3v-2z'></path></svg>");
-  background-position: center center;
-  background-repeat: no-repeat;
-  background-size: 12px 12px;
+  background: transparent;
   display: none;
   margin-right: 0;
+
+  &::before {
+    position: absolute;
+    inset: 4px;
+    background: theme-color(contentSecondary);
+    content: "";
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M6.414 16 16.556 5.858l-1.414-1.414L5 14.586V16h1.414zm.829 2H3v-4.243L14.435 2.322a1 1 0 0 1 1.414 0l2.829 2.829a1 1 0 0 1 0 1.414L7.243 18zM3 20h18v2H3v-2z'/></svg>")
+      center / contain no-repeat;
+  }
 }
 
 @media (hover: hover) {
@@ -299,13 +466,16 @@
   }
 
   .chrome-tabs .chrome-tab .chrome-tab-edit:hover {
-    background-color: #5f6368;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='rgba(255, 255, 255, .7)'><path fill='none' d='M0 0h24v24H0z'></path><path d='M6.414 16 16.556 5.858l-1.414-1.414L5 14.586V16h1.414zm.829 2H3v-4.243L14.435 2.322a1 1 0 0 1 1.414 0l2.829 2.829a1 1 0 0 1 0 1.414L7.243 18zM3 20h18v2H3v-2z'></path></svg>");
+    background-color: theme-color(surfaceRaised);
+
+    &::before {
+      background: theme-color(contentPrimary);
+    }
   }
 
   .chrome-tabs .chrome-tab .chrome-tab-edit:hover:active {
-    background-color: #80868b;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='rgba(255, 255, 255, .9)'><path fill='none' d='M0 0h24v24H0z'></path><path d='M6.414 16 16.556 5.858l-1.414-1.414L5 14.586V16h1.414zm.829 2H3v-4.243L14.435 2.322a1 1 0 0 1 1.414 0l2.829 2.829a1 1 0 0 1 0 1.414L7.243 18zM3 20h18v2H3v-2z'></path></svg>");
+    background-color: theme-color(surfaceRaised);
+    filter: brightness(0.9);
   }
 }
 
@@ -316,7 +486,8 @@
 }
 
 .chrome-tabs.chrome-tabs-is-sorting .chrome-tab:not(.chrome-tab-is-dragging),
-.chrome-tabs:not(.chrome-tabs-is-sorting) .chrome-tab.chrome-tab-was-just-dragged {
+.chrome-tabs:not(.chrome-tabs-is-sorting)
+  .chrome-tab.chrome-tab-was-just-dragged {
   transition: transform 120ms ease-in-out;
 }
 
@@ -332,7 +503,7 @@
   height: 4px;
   left: 0;
   width: 100%;
-  background: #323639;
+  background: theme-color(borderDefault);
   z-index: 10;
 }
 

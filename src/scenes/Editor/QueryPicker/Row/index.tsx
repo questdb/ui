@@ -24,9 +24,10 @@
 
 import React from "react"
 import styled, { css } from "styled-components"
-import { FileCode } from "@styled-icons/remix-line"
+import { FileCode } from "../../../../components/icons"
 
-import { Text, TransitionDuration } from "../../../../components"
+import { Text } from "../../../../components"
+import { menuItemStyles } from "../../../../components/menuStyles"
 import { color } from "../../../../utils"
 import { Query } from "providers/SettingsProvider/types"
 
@@ -42,63 +43,61 @@ type Props = Readonly<{
 }>
 
 const activeStyles = css`
-  background: ${color("selection")};
+  background: ${color("surfaceRaised")};
 `
 
 const Wrapper = styled.div<{ active: boolean }>`
-  display: flex;
-  height: 2.4rem;
-  padding: 0 0.6rem;
-  line-height: 2.4rem;
-  align-items: center;
-  transition: background ${TransitionDuration.FAST}ms;
-  cursor: pointer;
-  user-select: none;
+  ${menuItemStyles}
+
+  width: 100%;
+  min-width: 0;
 
   ${({ active }) => active && activeStyles};
-
-  > span:not(:last-child) {
-    margin-right: 0.6rem;
-  }
 `
 
 const Value = styled(Text)`
   flex: 1 1 auto;
+  min-width: 0;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  opacity: 0.7;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: 1.2rem;
 `
 
 const FileIcon = styled(FileCode)`
-  height: 2.2rem;
-  flex: 0 0 12px;
-  margin: 0 0.6rem;
-  color: ${color("orange")};
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 1.6rem;
+  color: ${color("statusWarning")};
 `
 
 const Name = styled(Text)`
   flex: 0 0 auto;
+  max-width: 18rem;
+  overflow: hidden;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.3rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `
 
 const Row = ({ active, onMouseEnter, onMouseLeave, onClick, query }: Props) => (
   <Wrapper
     active={active}
+    aria-selected={active}
     onClick={onClick}
     onMouseEnter={onMouseEnter}
     onMouseLeave={onMouseLeave}
+    role="option"
   >
-    <FileIcon size="12px" />
+    <FileIcon />
 
-    {query.name && (
-      <Name color="foreground" size="sm">
-        {query.name}
-      </Name>
-    )}
+    {query.name && <Name>{query.name}</Name>}
 
-    <Value color="foreground" size="sm">
-      {query.value}
-    </Value>
+    <Value>{query.value}</Value>
   </Wrapper>
 )
 

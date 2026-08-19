@@ -2,10 +2,15 @@ import React, { useContext, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { ProcessedFile } from "./types"
 import { DropBox } from "./dropbox"
-import { Search2 } from "@styled-icons/remix-line"
+import { Search2 } from "../../../components/icons"
+import { Import } from "../../../components/icons/import"
 import { Box, Button, Text, Heading } from "../../../components"
 import { Parameter } from "../../../utils"
 import { QuestContext } from "../../../providers"
+
+const UploadIcon = styled(Import).attrs({ size: "60px" })`
+  color: ${({ theme }) => theme.color.contentSecondary};
+`
 
 const Actions = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
   margin: auto;
@@ -14,17 +19,17 @@ const Actions = styled(Box).attrs({ flexDirection: "column", gap: "2rem" })`
 const Info = styled.div`
   margin-top: 1rem;
   padding: 2rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceInset};
   border-radius: ${({ theme }) => theme.borderRadius};
   text-align: center;
 `
 
 const InfoText = styled(Text)`
   line-height: 1.75;
-  color: #8b8fa7;
+  color: ${({ theme }) => theme.color.contentSecondary};
 
   a {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 `
 
@@ -75,12 +80,7 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
       render={({ duplicates, addToQueue }) => (
         <React.Fragment>
           <Actions>
-            <img
-              alt="File upload icon"
-              width="60"
-              height="80"
-              src="assets/upload.svg"
-            />
+            <UploadIcon aria-label="File upload icon" />
             <Heading level={3}>
               Drag CSV files here or paste from clipboard
             </Heading>
@@ -101,13 +101,13 @@ export const Upload = ({ files, onFilesDropped, dialogOpen }: Props) => {
                 uploadInputRef.current?.click()
               }}
               prefixIcon={<Search2 size="18px" />}
-              skin="secondary"
+              variant="secondary"
               data-hook="import-browse-from-disk"
             >
               Browse from disk
             </Button>
             {duplicates.length > 0 && (
-              <Text color="red">
+              <Text color="statusDanger">
                 File{duplicates.length > 1 ? "s" : ""} already added to queue:{" "}
                 {duplicates.map((f) => f.name).join(", ")}. Change target table
                 name and try again.

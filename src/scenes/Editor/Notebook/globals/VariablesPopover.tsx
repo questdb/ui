@@ -14,8 +14,8 @@ import {
   PlusIcon,
   XIcon,
 } from "@phosphor-icons/react"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
-import { Button, Popover } from "../../../../components"
+import { CheckboxCircle } from "../../../../components/icons"
+import { Button, IconButton, Popover } from "../../../../components"
 import { CopyButton } from "../../../../components/CopyButton"
 import { Input } from "../../../../components/Input"
 import { toast } from "../../../../components/Toast"
@@ -44,7 +44,7 @@ import {
   validateVariableShape,
 } from "../declareUtils"
 
-const Trigger = styled(Button).attrs({ skin: "secondary" })`
+const Trigger = styled(Button).attrs({ variant: "secondary" })`
   svg {
     transform: translateY(1px);
   }
@@ -54,19 +54,18 @@ const Body = styled.div`
   display: flex;
   flex-direction: column;
   width: min(56rem, calc(100vw - 4rem));
-  background: ${color("backgroundDarker")};
 `
 
 const Subtitle = styled.div`
   font-size: 1.4rem;
   padding: 1.2rem 1.6rem 0;
-  color: ${color("pinkLighter")};
+  color: ${color("editorSyntaxKeyword")};
   font-family: ${({ theme }) => theme.fontMonospace};
 `
 
 const SubtitleStrong = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const RowList = styled.div`
@@ -97,9 +96,9 @@ const Row = styled.div<{ $dragging?: boolean; $dragInProgress?: boolean }>`
     $dragging &&
     `
     opacity: 0.55;
-    background-color: ${theme.color.backgroundDarker};
-    border-left-color: ${theme.color.pink};
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    background-color: ${theme.color.surfaceInset};
+    border-left-color: ${theme.color.contentAccent};
+    box-shadow: 0 4px 12px ${theme.color.shadowMedium};
   `}
 
   /* Reveal the handle on hover */
@@ -113,85 +112,56 @@ const Row = styled.div<{ $dragging?: boolean; $dragInProgress?: boolean }>`
     $dragInProgress && `& [data-hook="drag-handle"] { opacity: 1; }`}
 `
 
-const DragHandle = styled.button.attrs({ "data-hook": "drag-handle" })`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+const DragHandle = styled(IconButton).attrs({
+  variant: "ghost",
+  size: "sm",
+  "data-hook": "drag-handle",
+})`
   width: 1.8rem;
+  min-width: 1.8rem;
   height: 2.4rem;
   padding: 0;
-  border: 0;
-  border-radius: 0.4rem;
-  background: transparent;
-  color: ${color("gray2")};
   cursor: grab;
   opacity: 0.35;
-  transition:
-    opacity 0.15s ease,
-    color 0.15s ease,
-    background-color 0.15s ease,
-    transform 0.1s ease;
 
   &:hover {
-    color: ${color("foreground")};
-    background: ${color("selection")};
     transform: scale(1.08);
   }
 
   &:active {
     cursor: grabbing;
     transform: scale(0.96);
-    background: ${color("backgroundDarker")};
   }
 
   &:focus-visible {
-    outline: 2px solid ${color("pink")};
-    outline-offset: 1px;
     opacity: 1;
   }
 `
 
 const AtLabel = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
-  color: ${color("purple")};
+  color: ${color("statusFeature")};
   font-size: 1.4rem;
   user-select: none;
 `
 
 const AssignSymbol = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
-  color: ${color("pinkLighter")};
+  color: ${color("contentAccent")};
   font-size: 1.4rem;
   user-select: none;
 `
 
 const NameInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.4rem;
-  font-weight: 400;
-  background: ${color("inputBackground")};
-  border-color: ${color("selection")};
-
-  &:focus {
-    background: ${color("inputBackground")};
-  }
 `
 
 const ValueInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: 1.4rem;
-  font-weight: 400;
-  background: ${color("inputBackground")};
-  border-color: ${color("selection")};
-
-  &:focus {
-    background: ${color("inputBackground")};
-  }
 `
 
-const DeleteButton = styled(Button).attrs({ skin: "transparent" })`
+const DeleteButton = styled(Button).attrs({ variant: "ghost" })`
   padding: 0.4rem;
-  color: ${color("gray2")};
 `
 
 const AddRow = styled.div`
@@ -203,7 +173,7 @@ const Footer = styled.div`
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.6rem 1.2rem;
-  border-top: 1px solid ${color("background")};
+  border-top: 1px solid ${color("borderSubtle")};
   gap: 0.8rem;
 `
 
@@ -220,7 +190,7 @@ const FooterRight = styled.div`
 `
 
 const AddButton = styled(Button).attrs({
-  skin: "transparent",
+  variant: "ghost",
   prefixIcon: <PlusIcon size={14} />,
 })``
 
@@ -233,12 +203,12 @@ const ImportedTick = styled(CheckboxCircle)`
   top: 0;
   right: 0;
   transform: translate(50%, -50%);
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const InlineHint = styled.div`
   font-size: 1.2rem;
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   padding-left: 2.4rem;
   grid-column: 3 / span 4;
 `
@@ -575,6 +545,7 @@ export const VariablesPopover: React.FC = () => {
                   onDrop={handleDragEnd}
                 >
                   <DragHandle
+                    label={`Drag ${d.name || "variable"} to reorder`}
                     type="button"
                     draggable
                     title="Drag to reorder"
@@ -658,7 +629,7 @@ export const VariablesPopover: React.FC = () => {
         <Footer>
           <FooterLeft>
             <ImportButton
-              skin="secondary"
+              variant="secondary"
               prefixIcon={<ClipboardTextIcon size={16} />}
               onClick={handleImport}
               title="Import DECLARE block from clipboard"
@@ -677,11 +648,11 @@ export const VariablesPopover: React.FC = () => {
             />
           </FooterLeft>
           <FooterRight>
-            <Button skin="secondary" onClick={handleCancel}>
+            <Button variant="secondary" onClick={handleCancel}>
               Cancel
             </Button>
             <Button
-              skin="primary"
+              variant="primary"
               onClick={handleApply}
               disabled={!canApply || validating}
               disabledTooltip={

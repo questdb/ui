@@ -14,9 +14,10 @@ import { useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, PieChart, FileSearch } from "@styled-icons/remix-line"
+import { Database2, Grid, FileSearch } from "../../components/icons"
+import { ChartLineIcon } from "@phosphor-icons/react"
 import { ResultViewMode } from "./types"
-import { BUTTON_ICON_SIZE } from "../../consts"
+import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
 import { Import } from "./import"
 import { BottomPanel } from "../../store/Console/types"
@@ -25,7 +26,6 @@ import { Import as ImportIcon } from "../../components/icons/import"
 import { useSettings, useSearch } from "../../providers"
 import { SearchPanel } from "../Search"
 import { LeftPanelType } from "../../providers/LocalStorageProvider/types"
-import { color } from "../../utils/styled"
 import { AIStatusIndicator } from "../../components/AIStatusIndicator"
 
 const Root = styled.div`
@@ -33,6 +33,7 @@ const Root = styled.div`
   flex-direction: row;
   flex: 1;
   max-height: 100%;
+  background: ${({ theme }) => theme.color.surfaceCanvas};
 `
 
 const MainContent = styled.div`
@@ -77,8 +78,14 @@ const SidebarSpacer = styled.div`
 `
 
 const SidePanelRight = styled.div`
-  background: ${color("chatBackground")};
+  background: ${({ theme }) => theme.color.surfaceBase};
   height: 100%;
+  border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
+`
+
+const Wrapper = styled.div`
+  height: 100%;
+  border-right: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 const viewModes: {
@@ -87,12 +94,12 @@ const viewModes: {
   tooltipText: string
 }[] = [
   {
-    icon: <Grid size={BUTTON_ICON_SIZE} />,
+    icon: <Grid size={SIDEBAR_ICON_SIZE} />,
     mode: "grid",
     tooltipText: "Grid",
   },
   {
-    icon: <PieChart size={BUTTON_ICON_SIZE} />,
+    icon: <ChartLineIcon size={SIDEBAR_ICON_SIZE} />,
     mode: "chart",
     tooltipText: "Chart",
   },
@@ -180,6 +187,11 @@ const Console = () => {
                   content={`${isDataSourcesPanelOpen ? "Hide" : "Show"} data sources`}
                 >
                   <Navigation
+                    aria-label={
+                      isDataSourcesPanelOpen
+                        ? "Hide data sources"
+                        : "Show data sources"
+                    }
                     data-hook="tables-panel-button"
                     direction="left"
                     onClick={() => {
@@ -199,7 +211,7 @@ const Console = () => {
                     }}
                     selected={isDataSourcesPanelOpen}
                   >
-                    <Database2 size={BUTTON_ICON_SIZE} />
+                    <Database2 size={SIDEBAR_ICON_SIZE} />
                   </Navigation>
                 </Tooltip>
                 <Tooltip
@@ -209,6 +221,11 @@ const Console = () => {
                   }
                 >
                   <Navigation
+                    aria-label={
+                      isSearchPanelOpen
+                        ? "Hide search in tabs"
+                        : "Search in tabs"
+                    }
                     data-hook="search-panel-button"
                     direction="left"
                     onClick={() => {
@@ -219,7 +236,7 @@ const Console = () => {
                     }}
                     selected={isSearchPanelOpen}
                   >
-                    <FileSearch size={BUTTON_ICON_SIZE} />
+                    <FileSearch size={SIDEBAR_ICON_SIZE} />
                   </Navigation>
                 </Tooltip>
                 <SidebarSpacer />
@@ -227,6 +244,11 @@ const Console = () => {
                   viewModes.map(({ icon, mode, tooltipText }) => (
                     <Tooltip key={mode} placement="right" content={tooltipText}>
                       <Navigation
+                        aria-label={`${tooltipText} result panel`}
+                        aria-pressed={
+                          activeBottomPanel === "result" &&
+                          resultViewMode === mode
+                        }
                         data-hook={`${mode}-panel-button`}
                         direction="left"
                         onClick={() => {
@@ -262,6 +284,7 @@ const Console = () => {
                 >
                   <PrimaryToggleButton
                     readOnly={consoleConfig.readOnly}
+                    aria-disabled={consoleConfig.readOnly}
                     {...(!consoleConfig.readOnly && {
                       onClick: () => {
                         const isActive = activeBottomPanel === "import"
@@ -275,10 +298,13 @@ const Console = () => {
                         )
                       },
                     })}
-                    selected={activeBottomPanel === "import"}
+                    selected={
+                      !consoleConfig.readOnly && activeBottomPanel === "import"
+                    }
+                    aria-label="Import CSV"
                     data-hook="import-panel-button"
                   >
-                    <ImportIcon size={BUTTON_ICON_SIZE} />
+                    <ImportIcon size={SIDEBAR_ICON_SIZE} />
                   </PrimaryToggleButton>
                 </Tooltip>
               </Sidebar>
@@ -312,11 +338,13 @@ const Console = () => {
                         minSize={320}
                         priority={LayoutPriority.Low}
                       >
-                        <Schema open={isDataSourcesPanelOpen} />
-                        <SearchPanel
-                          ref={searchPanelRef}
-                          open={isSearchPanelOpen}
-                        />
+                        <Wrapper>
+                          <Schema open={isDataSourcesPanelOpen} />
+                          <SearchPanel
+                            ref={searchPanelRef}
+                            open={isSearchPanelOpen}
+                          />
+                        </Wrapper>
                       </Allotment.Pane>
                       <Allotment.Pane priority={LayoutPriority.High}>
                         <Editor />

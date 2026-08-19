@@ -84,7 +84,7 @@ export const FixQueryButton = () => {
 
   return (
     <FixButton
-      skin="gradient"
+      variant="gradient"
       gradientWeight="thin"
       onClick={handleFixQuery}
       title="Fix query with AI Assistant"

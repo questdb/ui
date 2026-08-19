@@ -1,7 +1,8 @@
 import React from "react"
 import styled from "styled-components"
-import { XSquareIcon, ArrowSquareOutIcon } from "@phosphor-icons/react"
+import { XSquareIcon } from "@phosphor-icons/react"
 import { Text, Button } from "../../../components"
+import { DocumentationLink } from "./DocumentationLink"
 import { SchemaAIButton } from "./SchemaAIButton"
 
 type Props = {
@@ -20,7 +21,7 @@ const BannerContainer = styled.div`
   width: 100%;
   overflow: hidden;
   border-radius: 0.6rem;
-  border: 0.1rem solid ${({ theme }) => theme.color.redSecondary};
+  border: 0.1rem solid ${({ theme }) => theme.color.statusDangerMuted};
   border-left-width: 0.3rem;
 `
 
@@ -40,12 +41,12 @@ const TitleRow = styled.div`
 `
 
 const RedText = styled(Text)`
-  color: #fa4d56;
+  color: ${({ theme }) => theme.color.statusDangerStrong};
 `
 
 const IconWrapper = styled.div`
   flex-shrink: 0;
-  color: rgb(220, 40, 40);
+  color: ${({ theme }) => theme.color.statusDangerMuted};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,36 +58,11 @@ const ActionsSection = styled.div`
   gap: 2rem;
   padding: 1.5rem 1.2rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border-top: 1px solid ${({ theme }) => theme.color.background};
+  background: ${({ theme }) => theme.color.surfaceInset};
+  border-top: 1px solid ${({ theme }) => theme.color.borderDefault};
 `
 
-const ResumeButton = styled(Button).attrs({
-  skin: "gradient",
-})`
-  border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  &:hover:not([disabled]) {
-    border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  }
-`
-
-const DocsLink = styled.a`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: transparent;
-  border: none;
-  color: ${({ theme }) => theme.color.cyan};
-  cursor: pointer;
-  font-size: ${({ theme }) => theme.fontSize.sm};
-  font-weight: 600;
-  padding: 0;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`
+const ResumeButton = styled(Button).attrs({ variant: "gradient" })``
 
 export const ErrorBanner = ({
   title,
@@ -112,7 +88,7 @@ export const ErrorBanner = ({
       <ActionsSection>
         {showResumeButton && onResume && (
           <ResumeButton
-            skin="gradient"
+            variant="gradient"
             onClick={onResume}
             data-hook="table-details-resume-wal-button"
           >
@@ -126,15 +102,12 @@ export const ErrorBanner = ({
           Ask AI
         </SchemaAIButton>
         {docsUrl && (
-          <DocsLink
+          <DocumentationLink
             href={docsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             data-hook="table-details-error-docs-link"
           >
             View explanation in docs
-            <ArrowSquareOutIcon size={14} />
-          </DocsLink>
+          </DocumentationLink>
         )}
       </ActionsSection>
     </BannerContainer>

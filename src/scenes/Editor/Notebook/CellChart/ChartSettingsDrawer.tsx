@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
-import { Button, Input } from "../../../../components"
-import { Select } from "../../../../components/Select"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import {
+  Button,
+  Input,
+  SelectMenuControl,
+  TabButton,
+} from "../../../../components"
 import type { ChartConfig, QueryChart } from "./chartTypes"
+import type {
+  ChartSettingsCancelMethod,
+  ChartSettingsTelemetry,
+} from "./chartSettingsTelemetry"
 import { groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
@@ -30,22 +36,47 @@ const Backdrop = styled.div`
   position: absolute;
   inset: 0;
   z-index: 3;
-  background: rgba(0, 0, 0, 0.35);
+  background: ${({ theme }) => theme.color.shadowMedium};
   animation: ${fadeIn} 0.2s ease both;
 `
 
-const Panel = styled.div`
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(36rem, 90%);
-  z-index: 4;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border-left: 1px solid ${({ theme }) => theme.color.selection};
+type Presentation = "drawer" | "panel"
+
+const Panel = styled.div<{ $presentation: Presentation }>`
+  position: ${({ $presentation }) =>
+    $presentation === "drawer" ? "absolute" : "relative"};
+  top: ${({ $presentation }) => ($presentation === "drawer" ? "0" : "auto")};
+  right: ${({ $presentation }) => ($presentation === "drawer" ? "0" : "auto")};
+  bottom: ${({ $presentation }) => ($presentation === "drawer" ? "0" : "auto")};
+  width: ${({ $presentation }) =>
+    $presentation === "drawer"
+      ? "min(36rem, 90%)"
+      : "clamp(26rem, 30%, 34rem)"};
+  flex: ${({ $presentation }) =>
+    $presentation === "drawer" ? "0 0 auto" : "0 0 clamp(26rem, 30%, 34rem)"};
+  min-width: 0;
+  min-height: 0;
+  z-index: ${({ $presentation }) => ($presentation === "drawer" ? "4" : "1")};
+  background: ${({ theme, $presentation }) =>
+    $presentation === "drawer"
+      ? theme.color.surfaceInset
+      : theme.color.surfaceRaised};
+  border-left: ${({ theme, $presentation }) =>
+    $presentation === "drawer"
+      ? `1px solid ${theme.color.interactionNeutral}`
+      : "none"};
+  border-right: ${({ theme, $presentation }) =>
+    $presentation === "panel"
+      ? `1px solid ${theme.color.borderSubtle}`
+      : "none"};
   display: flex;
   flex-direction: column;
-  animation: ${slideIn} 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-name: ${({ $presentation }) =>
+    $presentation === "drawer" ? slideIn : "none"};
+  animation-duration: ${({ $presentation }) =>
+    $presentation === "drawer" ? "0.25s" : "0s"};
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: both;
 `
 
 const Header = styled.div`
@@ -53,14 +84,14 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.2rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+  border-bottom: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const Title = styled.h3`
   margin: 0;
   font-size: 1.4rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const Body = styled.form`
@@ -70,22 +101,6 @@ const Body = styled.form`
   display: flex;
   flex-direction: column;
   gap: 1.4rem;
-
-  /* [aria-haspopup="menu"] covers the MultiSelect trigger (a styled menu
-     button) so it matches the native inputs/selects in this form. */
-  input,
-  select,
-  textarea,
-  [aria-haspopup="menu"] {
-    font-size: 1.4rem;
-    font-weight: 400;
-    background: ${({ theme }) => theme.color.inputBackground};
-    border-color: ${({ theme }) => theme.color.selection};
-
-    &:focus {
-      background: ${({ theme }) => theme.color.inputBackground};
-    }
-  }
 `
 
 const Row = styled.div`
@@ -99,43 +114,29 @@ const Row = styled.div`
 
 const Footer = styled.div`
   padding: 1rem 1.2rem;
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
   display: flex;
   justify-content: flex-end;
   gap: 0.8rem;
 `
 
 const Divider = styled.div`
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const TabStrip = styled.div`
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+  border-bottom: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
-const Tab = styled.button<{ active: boolean }>`
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
-  padding: 0.8rem 1.4rem;
-  border: none;
-  border-bottom: 2px solid
-    ${({ active, theme }) => (active ? theme.color.pink : "transparent")};
-  margin-bottom: -1px;
-  background: ${({ active, theme }) =>
-    active ? theme.color.backgroundLighter : "transparent"};
-  color: ${({ active, theme }) =>
-    active ? theme.color.foreground : theme.color.gray2};
-  cursor: pointer;
-  font-size: 1.3rem;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
+const Tab = styled(TabButton)`
+  && {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 0.8rem 1.4rem;
+    margin-bottom: -1px;
   }
 `
 
@@ -151,35 +152,45 @@ const candlestickMissingOhlc = (q: QueryChart | null): boolean => {
   return new Set([o.open, o.high, o.low, o.close]).size !== 4
 }
 
-type Props = {
-  open: boolean
-  onClose: () => void
+type SharedProps = {
   tabs: QueryTab[]
   config: ChartConfig
   onSave: (next: ChartConfig) => void
+  telemetry?: ChartSettingsTelemetry
 }
 
-export const ChartSettingsDrawer: React.FC<Props> = ({
+type SettingsProps = SharedProps & {
+  presentation: Presentation
+  open: boolean
+  onClose?: () => void
+}
+
+const ChartSettings: React.FC<SettingsProps> = ({
+  presentation,
   open,
   onClose,
   tabs,
   config,
   onSave,
+  telemetry,
 }) => {
   const [draft, setDraft] = useState<ChartConfig>(config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
+  const visible = presentation === "panel" || open
+
+  const resetDraft = () => {
+    setDraft(config)
+    setActiveIndex(tabs[0]?.index ?? 0)
+    setSaveAttempted(false)
+  }
 
   useEffect(() => {
-    if (open) {
-      setDraft(config)
-      setActiveIndex(tabs[0]?.index ?? 0)
-      setSaveAttempted(false)
-    }
-  }, [open])
+    if (visible) resetDraft()
+  }, [open, presentation])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || presentation !== "drawer") return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
       if (
@@ -187,17 +198,15 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
       ) {
         return
       }
-      void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, {
-        method: "escape",
-      })
-      onClose()
+      telemetry?.onCancel?.("escape")
+      onClose?.()
       e.stopImmediatePropagation()
     }
     window.addEventListener("keydown", onKey, { capture: true })
     return () => window.removeEventListener("keydown", onKey, { capture: true })
-  }, [open, onClose])
+  }, [open, onClose, presentation, telemetry])
 
-  if (!open) return null
+  if (!visible) return null
 
   const anchorTab = tabs[0]
   const anchorGroups = anchorTab
@@ -232,23 +241,21 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
       queries: d.queries.map((q, i) => (i === index ? next : q)),
     }))
 
-  const dismiss = (method: "backdrop" | "close" | "button") => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, { method })
-    onClose()
+  const dismiss = (method: Exclude<ChartSettingsCancelMethod, "escape">) => {
+    telemetry?.onCancel?.(method)
+    onClose?.()
   }
 
   const commit = () => {
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
     if (badIdx >= 0) {
-      void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SAVE_BLOCKED, {
-        reason: "ohlc_incomplete",
-      })
+      telemetry?.onSaveBlocked?.("ohlc_incomplete")
       setSaveAttempted(true)
       setActiveIndex(badIdx)
       return
     }
     const primary = anchorTab != null ? draft.queries[anchorTab.index] : null
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_SAVE, {
+    telemetry?.onSave?.({
       chartType: primary?.type,
       seriesCount: primary?.yColumns.length ?? 0,
       queryCount: draft.queries.filter((q) => q != null).length,
@@ -256,23 +263,36 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
       partitioned: draft.queries.some((q) => q?.partitionByColumn != null),
     })
     onSave(draft)
-    onClose()
+    if (presentation === "drawer") onClose?.()
   }
 
   return (
     <>
-      <Backdrop onClick={() => dismiss("backdrop")} aria-hidden />
-      <Panel role="dialog" aria-label="Chart settings">
+      {presentation === "drawer" && (
+        <Backdrop onClick={() => dismiss("backdrop")} aria-hidden />
+      )}
+      <Panel
+        $presentation={presentation}
+        role={presentation === "drawer" ? "dialog" : "region"}
+        aria-label="Chart settings"
+        data-hook={
+          presentation === "drawer"
+            ? "chart-settings-drawer"
+            : "chart-settings-panel"
+        }
+      >
         <Header>
           <Title>Chart settings</Title>
-          <Button
-            skin="transparent"
-            type="button"
-            onClick={() => dismiss("close")}
-            aria-label="Close chart settings"
-          >
-            <XIcon size={18} />
-          </Button>
+          {presentation === "drawer" && (
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => dismiss("close")}
+              aria-label="Close chart settings"
+            >
+              <XIcon size={18} />
+            </Button>
+          )}
         </Header>
 
         <Body
@@ -283,11 +303,12 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
         >
           <Field>
             <FieldLabel>X-axis</FieldLabel>
-            <Select
+            <SelectMenuControl
               name="x-axis"
               value={draft.xColumn ?? ""}
-              onChange={(e) =>
-                setDraft((d) => ({ ...d, xColumn: e.target.value || null }))
+              placeholder="Select column"
+              onValueChange={(value) =>
+                setDraft((d) => ({ ...d, xColumn: value || null }))
               }
               options={xCandidates.map((c) => ({
                 label: c.name,
@@ -349,12 +370,13 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
             <>
               <Divider />
               <FieldLabel>Queries</FieldLabel>
-              <TabStrip>
+              <TabStrip role="tablist" aria-label="Chart queries">
                 {tabs.map((t) => (
                   <Tab
                     key={t.index}
                     type="button"
-                    active={t.index === activeIndex}
+                    $active={t.index === activeIndex}
+                    role="tab"
                     onClick={() => setActiveIndex(t.index)}
                     title={
                       t.compatible
@@ -381,6 +403,7 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
               ohlcError={saveAttempted && candlestickMissingOhlc(query)}
               onUpdateQuery={(patch) => updateQuery(activeTab.index, patch)}
               onSetQuery={(next) => setQuery(activeTab.index, next)}
+              telemetry={telemetry}
             />
           )}
         </Body>
@@ -388,16 +411,27 @@ export const ChartSettingsDrawer: React.FC<Props> = ({
         <Footer>
           <Button
             type="button"
-            skin="secondary"
-            onClick={() => dismiss("button")}
+            variant="secondary"
+            onClick={() => {
+              if (presentation === "drawer") dismiss("button")
+              else resetDraft()
+            }}
           >
-            Cancel
+            {presentation === "drawer" ? "Cancel" : "Reset changes"}
           </Button>
-          <Button type="button" skin="primary" onClick={commit}>
-            Save
+          <Button type="button" variant="primary" onClick={commit}>
+            {presentation === "drawer" ? "Save" : "Apply"}
           </Button>
         </Footer>
       </Panel>
     </>
   )
 }
+
+export const ChartSettingsDrawer: React.FC<
+  SharedProps & { open: boolean; onClose: () => void }
+> = (props) => <ChartSettings {...props} presentation="drawer" />
+
+export const ChartSettingsPanel: React.FC<SharedProps> = (props) => (
+  <ChartSettings {...props} presentation="panel" open />
+)

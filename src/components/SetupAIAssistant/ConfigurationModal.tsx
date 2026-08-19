@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react"
-import styled, { css } from "styled-components"
+import styled, { useTheme } from "styled-components"
 import { Dialog } from "../Dialog"
 import { MultiStepModal, Step } from "../MultiStepModal"
 import { Box } from "../Box"
 import { Input } from "../Input"
 import { Switch } from "../Switch"
 import { Text } from "../Text"
+import { IconButton } from "../IconButton"
+import { SelectableCardButton } from "../SelectableCardButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/ai/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -25,8 +27,7 @@ import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
-import { PlusIcon, Plugs as PlugsIcon } from "@phosphor-icons/react"
-import { theme } from "../../theme"
+import { PlusIcon, Plugs as PlugsIcon, XIcon } from "@phosphor-icons/react"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
@@ -67,39 +68,24 @@ const ModalTitle = styled(Dialog.Title)`
   font-weight: 600;
   margin: 0;
   padding: 0;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   border: 0;
 `
 
 const ModalSubtitle = styled(Dialog.Description)`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   margin: 0;
   padding: 0;
 `
 
-const StyledCloseButton = styled.button`
-  background: transparent;
-  border: none;
-  cursor: pointer;
+const StyledCloseButton = styled(IconButton)`
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.gray1};
-  border-radius: 0.4rem;
-  flex-shrink: 0;
-  width: 2.2rem;
-  height: 2.2rem;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const Separator = styled.div`
   height: 0.1rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const ContentSection = styled(Box).attrs({
@@ -113,13 +99,13 @@ const ContentSection = styled(Box).attrs({
 const SectionTitle = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const SectionDescription = styled(Text)`
   font-size: 1.3rem;
-  font-weight: 300;
-  color: ${({ theme }) => theme.color.gray2};
+  font-weight: 400;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const ProviderCardsContainer = styled(Box).attrs({
@@ -130,11 +116,7 @@ const ProviderCardsContainer = styled(Box).attrs({
   width: 100%;
 `
 
-const ProviderCard = styled.button<{ $selected: boolean }>`
-  background: ${({ theme }) => theme.color.inputBackground};
-  border: 0.1rem solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.8rem;
-  cursor: pointer;
+const ProviderCard = styled(SelectableCardButton)`
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -142,30 +124,12 @@ const ProviderCard = styled.button<{ $selected: boolean }>`
   padding: 1.2rem 2rem;
   width: 10rem;
   height: 8.5rem;
-  transition: all 0.2s;
-
-  ${({ $selected, theme }) =>
-    $selected &&
-    `
-    border-color: ${theme.color.foreground};
-    box-shadow: 0 0 0 0.1rem ${theme.color.foreground};
-    background: ${theme.color.midnight};
-  `}
-
-  &:hover {
-    border-color: ${({ theme }) => theme.color.foreground};
-  }
-
-  &:focus-visible {
-    outline: 0.2rem solid ${({ theme }) => theme.color.foreground};
-    outline-offset: 0.2rem;
-  }
 `
 
 const ProviderName = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
-  color: rgba(249, 250, 251, 0.8);
+  color: ${({ theme }) => theme.color.contentSecondary};
   text-align: center;
 `
 
@@ -179,38 +143,18 @@ const InputSection = styled(Box).attrs({
 const InputLabel = styled(Text)`
   font-size: 1.6rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-const StyledInput = styled(Input)<{ $hasError?: boolean; disabled?: boolean }>`
+const StyledInput = styled(Input)`
   width: 100%;
-  background: ${({ theme }) => theme.color.inputBackground};
-  border: 0.1rem solid
-    ${({ theme, $hasError }) =>
-      $hasError ? theme.color.red : theme.color.inputBorder};
-  border-radius: 0.8rem;
-  cursor: ${({ disabled }) => (disabled ? "not-allowed" : "text")};
-  font-size: 1.4rem;
-  min-height: 3rem;
   text-security: disc;
   -webkit-text-security: disc;
   -moz-text-security: disc;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
-    font-family: inherit;
-  }
-
-  ${({ disabled }) =>
-    disabled &&
-    css`
-      opacity: 0.6;
-      cursor: not-allowed;
-    `}
 `
 
 const ErrorText = styled(Text)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
   font-size: 1.3rem;
 `
 
@@ -230,17 +174,17 @@ const ProviderBadge = styled(Box).attrs({
   gap: "0.6rem",
   align: "center",
 })`
-  background: #2d303e;
+  background: ${({ theme }) => theme.color.controlSurface};
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
-  box-shadow: inset 0 0.1rem 0.4rem rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 0.1rem 0.4rem ${({ theme }) => theme.color.shadowSubtle};
 `
 
 const ProviderBadgeText = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.foreground};
-  font-family: "Open Sans", sans-serif;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-family: inherit;
 `
 
 const EnableModelsSection = styled(Box).attrs({
@@ -261,7 +205,7 @@ const EnableModelsHeader = styled(Box).attrs({
 const EnableModelsTitle = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const ModelToggleRow = styled(Box).attrs({
@@ -289,29 +233,26 @@ const ModelInfoRow = styled(Box).attrs({
 
 const ModelDescriptionText = styled(Text)`
   font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   flex: 1;
 `
 
 const ModelNameText = styled(Text)`
   font-size: 1.4rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const WarningText = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   padding: 2.4rem;
   text-align: left;
 `
 
-const AddCustomProviderCard = styled.button`
-  background: transparent;
-  border: 0.1rem dashed ${({ theme }) => theme.color.gray2};
-  border-radius: 0.8rem;
-  cursor: pointer;
+const AddCustomProviderCard = styled(SelectableCardButton)`
+  border-style: dashed;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -320,18 +261,6 @@ const AddCustomProviderCard = styled.button`
   padding: 1.2rem 2rem;
   width: 10rem;
   height: 8.5rem;
-  transition: all 0.2s;
-  color: ${({ theme }) => theme.color.gray2};
-
-  &:hover {
-    border-color: ${({ theme }) => theme.color.foreground};
-    color: ${({ theme }) => theme.color.foreground};
-  }
-
-  &:focus-visible {
-    outline: 0.2rem solid ${({ theme }) => theme.color.foreground};
-    outline-offset: 0.2rem;
-  }
 `
 
 type ConfigurationModalProps = {
@@ -367,22 +296,13 @@ const DEFAULT_PERMISSIONS: Permissions = {
 
 const CloseButton = ({ onClick }: { onClick: () => void }) => {
   return (
-    <StyledCloseButton onClick={onClick}>
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M15 5L5 15M5 5L15 15"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+    <StyledCloseButton
+      label="Close"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
+    >
+      <XIcon size={20} />
     </StyledCloseButton>
   )
 }
@@ -396,6 +316,7 @@ const StepOneContent = ({
   onApiKeyChange,
   onAddCustomProvider,
 }: StepOneContentProps) => {
+  const theme = useTheme()
   const navigation = useModalNavigation()
   const handleClose: () => void = navigation.handleClose
 
@@ -424,7 +345,7 @@ const StepOneContent = ({
               providers later.
             </SectionDescription>
           </Box>
-          <ProviderCardsContainer>
+          <ProviderCardsContainer role="group" aria-label="AI model provider">
             <ProviderCard
               $selected={selectedProvider === "openai"}
               onClick={() => onProviderSelect("openai")}
@@ -434,7 +355,7 @@ const StepOneContent = ({
               <OpenAIIcon
                 width="40"
                 height="40"
-                color={theme.color.foreground}
+                color={theme.color.contentPrimary}
               />
               <ProviderName>{getProviderName("openai")}</ProviderName>
             </ProviderCard>
@@ -447,7 +368,7 @@ const StepOneContent = ({
               <AnthropicIcon
                 width="40"
                 height="40"
-                color={theme.color.foreground}
+                color={theme.color.contentPrimary}
               />
               <ProviderName>{getProviderName("anthropic")}</ProviderName>
             </ProviderCard>
@@ -473,7 +394,7 @@ const StepOneContent = ({
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
                 placeholder={`Enter${providerName ? ` ${providerName}` : ""} API key`}
-                $hasError={!!error}
+                variant={error ? "error" : undefined}
                 data-hook="ai-settings-api-key"
               />
               {error && (
@@ -502,6 +423,7 @@ const StepTwoContent = ({
   onModelToggle,
   onPermissionsChange,
 }: StepTwoContentProps) => {
+  const theme = useTheme()
   const navigation = useModalNavigation()
   const handleClose: () => void = navigation.handleClose
   const currentProvider = selectedProvider
@@ -534,11 +456,19 @@ const StepTwoContent = ({
                 <EnableModelsTitle>Enable Models</EnableModelsTitle>
                 <ProviderBadge>
                   {currentProvider === "anthropic" ? (
-                    <AnthropicIcon width="16" height="16" color="#fff" />
+                    <AnthropicIcon
+                      width="16"
+                      height="16"
+                      color={theme.color.contentPrimary}
+                    />
                   ) : currentProvider === "openai" ? (
-                    <OpenAIIcon width="16" height="16" color="#fff" />
+                    <OpenAIIcon
+                      width="16"
+                      height="16"
+                      color={theme.color.contentPrimary}
+                    />
                   ) : (
-                    <PlugsIcon size={16} color="#fff" />
+                    <PlugsIcon size={16} color={theme.color.contentPrimary} />
                   )}
                   <ProviderBadgeText>
                     {getProviderName(currentProvider)}
@@ -558,7 +488,7 @@ const StepTwoContent = ({
                         <ModelNameText>{model.label}</ModelNameText>
                         {model.isSlow && (
                           <ModelInfoRow>
-                            <BrainIcon color="#bbb" />
+                            <BrainIcon color={theme.color.contentSecondary} />
                             <ModelDescriptionText>
                               Due to advanced reasoning &amp; thinking
                               capabilities, responses using this model can be

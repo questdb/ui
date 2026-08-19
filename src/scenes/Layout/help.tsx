@@ -1,16 +1,6 @@
 import React, { useEffect } from "react"
-import {
-  Chat3,
-  Command,
-  ExternalLink,
-  Question,
-} from "@styled-icons/remix-line"
-import {
-  Discourse,
-  Github,
-  Slack,
-  StackOverflow,
-} from "@styled-icons/boxicons-logos"
+import { Chat3, Command, ExternalLink, Question } from "../../components/icons"
+import { Discourse, Github, Slack, StackOverflow } from "../../components/icons"
 import {
   DropdownMenu,
   toast,
@@ -20,7 +10,7 @@ import {
   Box,
 } from "../../components"
 import { MenuItemIcon } from "../../components/menuStyles"
-import { BUTTON_ICON_SIZE } from "../../consts"
+import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { IconWithTooltip } from "../../components"
 import { useKeyPress } from "../../hooks"
 import { useState, useCallback, useContext } from "react"
@@ -43,8 +33,8 @@ const TooltipWrapper = styled(Box).attrs({ justifyContent: "center" })`
 
 const ShortcutsWrapper = styled.div`
   position: fixed;
-  right: 0;
-  margin-top: 4.5rem;
+  right: 1.2rem;
+  margin-top: 4.2rem;
 `
 
 const MenuLink = styled.a`
@@ -126,13 +116,14 @@ export const Help = () => {
       >
         <DropdownMenu.Trigger asChild>
           <HelpButton
+            aria-label="Help"
             {...(open && { selected: true })}
             data-hook="help-panel-button"
           >
             <IconWithTooltip
               icon={
                 <TooltipWrapper>
-                  <Question size={BUTTON_ICON_SIZE} />
+                  <Question size={SIDEBAR_ICON_SIZE} />
                 </TooltipWrapper>
               }
               placement="left"

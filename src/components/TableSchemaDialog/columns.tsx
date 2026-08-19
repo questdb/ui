@@ -6,7 +6,7 @@ import { Form } from "../Form"
 import { Text } from ".."
 import { Drawer } from "../Drawer"
 import { VirtualList } from "../VirtualList"
-import { Information } from "@styled-icons/remix-line"
+import { Information } from "../icons"
 import { Action, SchemaColumn } from "./types"
 import { Column } from "./column"
 
@@ -16,7 +16,7 @@ const Disclaimer = styled(Box).attrs({ align: "center", gap: "1.5rem" })<{
   width: 100%;
   padding: 2rem;
   color: ${({ theme, isEditLocked }) =>
-    theme.color[isEditLocked ? "orange" : "foreground"]};
+    theme.color[isEditLocked ? "statusWarning" : "contentPrimary"]};
 `
 
 const SchemaRoot = styled.div`
@@ -82,7 +82,7 @@ export const Columns = ({
       {action === "import" && !isEditLocked && (
         <Disclaimer isEditLocked={false}>
           <Information size="20px" />
-          <Text color="foreground">
+          <Text color="contentPrimary">
             Column names have to match the CSV header.
             <br />
             Order is not important.
@@ -95,7 +95,7 @@ export const Columns = ({
           : [schemaColumnsErrors]
         ).map((error) => (
           <Error key={error?.message}>
-            <Text color="red">{error?.message}</Text>
+            <Text color="statusDanger">{error?.message}</Text>
           </Error>
         ))}
       <SchemaRoot>

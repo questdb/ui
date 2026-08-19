@@ -60,16 +60,18 @@ describe("questdb import", () => {
       "timestamp",
     )
 
-    cy.get("select[name='schemaColumns.0.type']")
-      .get("option[value='TIMESTAMP_NS']")
-      .should("be.selected")
+    cy.get("[aria-label='schemaColumns.0.type']").should(
+      "contain",
+      "TIMESTAMP_NS",
+    )
 
     cy.getByDataHook("table-schema-dialog-column-0-designated-button").click()
     cy.getByDataHook("form-submit-button").click()
 
     cy.getByDataHook("create-table-panel").should("not.be.visible")
 
-    cy.get('select[name="overwrite"]').select("true")
+    cy.getByDataHook("import-write-mode-trigger").click()
+    cy.getByDataHook("import-write-mode-overwrite").click()
 
     cy.getByDataHook("import-upload-button").should("be.enabled")
     cy.getByDataHook("import-upload-button").click()

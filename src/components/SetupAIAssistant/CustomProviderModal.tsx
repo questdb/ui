@@ -5,6 +5,8 @@ import type { Step } from "../MultiStepModal"
 import { useModalNavigation } from "../MultiStepModal"
 import { Box } from "../Box"
 import { Dialog } from "../Dialog"
+import { IconButton } from "../IconButton"
+import { XIcon } from "@phosphor-icons/react"
 import type {
   ProviderType,
   CustomProviderDefinition,
@@ -56,39 +58,24 @@ const ModalTitle = styled(Dialog.Title)`
   font-weight: 600;
   margin: 0;
   padding: 0;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   border: 0;
 `
 
 const ModalSubtitle = styled(Dialog.Description)`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   margin: 0;
   padding: 0;
 `
 
-const StyledCloseButton = styled.button`
-  background: transparent;
-  border: none;
-  cursor: pointer;
+const StyledCloseButton = styled(IconButton)`
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.gray1};
-  border-radius: 0.4rem;
-  flex-shrink: 0;
-  width: 2.2rem;
-  height: 2.2rem;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const Separator = styled.div`
   height: 0.1rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const ContentSection = styled(Box).attrs({
@@ -105,44 +92,9 @@ const PasswordInput = styled(StyledInput)`
   -moz-text-security: disc;
 `
 
-const StyledSelect = styled(Select)`
-  width: 100%;
-  background: ${({ theme }) => theme.color.inputBackground};
-  color: ${({ theme }) => theme.color.foreground};
-  border: 0.1rem solid ${({ theme }) => theme.color.inputBorder};
-  border-radius: 0.8rem;
-  min-height: 3.2rem;
-  padding: 0 0.75rem;
-  cursor: pointer;
-
-  &:focus {
-    border-color: ${({ theme }) => theme.color.pink};
-    outline: none;
-  }
-
-  option {
-    background: ${({ theme }) => theme.color.backgroundDarker};
-    color: ${({ theme }) => theme.color.foreground};
-  }
-`
-
 const CloseButton = ({ onClick }: { onClick: () => void }) => (
-  <StyledCloseButton onClick={onClick}>
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M15 5L5 15M5 5L15 15"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+  <StyledCloseButton label="Close" variant="ghost" size="sm" onClick={onClick}>
+    <XIcon size={20} />
   </StyledCloseButton>
 )
 
@@ -198,7 +150,7 @@ const StepOneContent = ({
         </InputSection>
         <InputSection align="flex-start">
           <InputLabel>Provider Type</InputLabel>
-          <StyledSelect
+          <Select
             data-hook="custom-provider-type-select"
             name="providerType"
             value={providerType}

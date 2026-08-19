@@ -2,13 +2,10 @@ import React, { useContext, useEffect, useState, useCallback } from "react"
 import styled from "styled-components"
 import { QuestContext, useAuth, useSettings } from "../../providers"
 import * as QuestDB from "../../utils/questdb"
-import type { DefaultTheme } from "styled-components"
-import { User as UserIcon, LogoutCircle, Edit } from "@styled-icons/remix-line"
-import { InfoCircle, Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { Tools, ShieldCheck } from "@styled-icons/bootstrap"
-import { Flask } from "@styled-icons/boxicons-solid"
+import { User as UserIcon, LogoutCircle, Edit } from "../icons"
+import { Error as ErrorIcon } from "../icons"
 import { toast } from "../Toast"
-import { Box, Button } from "../../components"
+import { Badge as StatusBadge, Box, Button } from "../../components"
 import { Text } from "../Text"
 import { selectors } from "../../store"
 import { useSelector } from "react-redux"
@@ -19,70 +16,93 @@ import {
 } from "../../modules/OAuth2/utils"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { InstanceSettingsPopper } from "./InstanceSettingsPopper"
-import { Preferences, InstanceType } from "../../utils"
+import { pickReadableTextColor, Preferences } from "../../utils"
 import { PopperHover, Placement } from "../"
 import { useTheme } from "styled-components"
 import { TelemetryTable } from "../../consts"
 import { TelemetryConfigShape } from "../../store/Telemetry/types"
 import { sendServerInfoTelemetry } from "../../utils/telemetry"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { InstanceTypeIcon } from "./InstanceTypeIcon"
 
 const EnvIconWrapper = styled.div<{ $background?: string }>`
   display: flex;
+  width: 4rem;
+  height: 4rem;
   align-items: center;
-  padding: 0.3rem;
-  background: ${({ $background }) => $background ?? "inherit"};
-  border-radius: 0.4rem;
+  justify-content: center;
+  flex-shrink: 0;
+  background: ${({ $background, theme }) =>
+    $background ?? theme.color.surfaceRaised};
+  border-radius: 0.6rem;
 `
 
 const Root = styled(Box).attrs({ align: "center" })`
-  gap: 0.8rem;
-  padding-left: 1.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 1rem;
+  padding-left: 0;
   white-space: nowrap;
   display: flex;
   overflow: hidden;
 `
 
-const CustomTooltipWrapper = styled.div<{
-  $badgeColors: { primary: string; secondary: string }
-}>`
+const CustomTooltipWrapper = styled.div`
   display: flex;
   flex-direction: column;
-  padding: 1.5rem 0;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  font-size: 1.4rem;
+  min-width: 26rem;
+  max-width: min(36rem, calc(100vw - 2rem));
+  overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceInset};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.8rem;
-  border: 1px solid ${({ $badgeColors }) => $badgeColors.primary};
-  box-shadow: ${({ theme }) => theme.color.background} 5px 5px 8px;
+  box-shadow:
+    0 1.4rem 3.4rem ${({ theme }) => theme.color.shadowMedium},
+    0 0.3rem 0.8rem ${({ theme }) => theme.color.shadowSoft};
 `
 
-const FlexRow = styled.div`
-  display: flex;
+const TooltipHeader = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 1rem;
+  padding: 1.4rem;
 `
 
-const Title = styled.h4`
+const TooltipIdentity = styled.div`
   display: flex;
-  align-items: center;
-  border-bottom: 1px solid ${({ theme }) => theme.color.gray1};
-  padding: 0 1.5rem 1.5rem;
-  gap: 0.8rem;
-  font-size: 1.4rem;
-  margin-bottom: 0;
-`
-
-const FlexCol = styled.div`
-  display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.3rem;
 `
 
-const Info = styled.div`
-  display: flex;
-  flex-direction: column;
-  padding: 0 1.5rem;
-  gap: 1rem;
+const TooltipType = styled.span`
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+`
+
+const TooltipName = styled.strong`
+  overflow: hidden;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const TooltipDescription = styled.p`
+  margin: 0;
+  padding: 1.2rem 1.4rem 1.4rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.3rem;
+  line-height: 1.5;
+  white-space: normal;
 `
 
 const Badge = styled(Box)<{
@@ -90,49 +110,62 @@ const Badge = styled(Box)<{
 }>`
   display: flex;
   align-items: center;
-  padding: 0 1rem;
-  padding-left: 0.3rem;
-  height: 3rem;
-  border-radius: 0.4rem;
-  flex-shrink: 1;
+  flex: 0 1 auto;
+  padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+  height: 4rem;
   min-width: 0;
-  gap: 0;
+  gap: 0.5rem;
+  border-radius: 4px;
   transition: opacity 0.1s ease;
 
-  ${({ $badgeColors }) => `
+  ${({ $badgeColors, theme }) => `
     background: ${$badgeColors.primary};
 
     .instance-name {
       color: ${$badgeColors.secondary};
     }
 
-    .edit-icon {
+    && .edit-icon {
       color: ${$badgeColors.secondary};
 
-      &:hover {
-        color: ${$badgeColors.primary};
+      &:hover:not(:disabled):not([aria-disabled="true"]) {
+        color: ${
+          $badgeColors.primary === theme.color.transparent
+            ? theme.color.surfaceBase
+            : $badgeColors.primary
+        };
         background: ${$badgeColors.secondary};
       }
     }
   `}
 
   .instance-name {
-    font-size: 1.6rem;
-    display: inline-flex;
+    display: flex;
+    flex: 1 1 auto;
+    max-width: 100%;
+    flex-direction: column;
     gap: 0;
-    align-items: center;
+    align-items: flex-start;
+    justify-content: center;
     vertical-align: middle;
     overflow: hidden;
-    flex-shrink: 1;
-    margin-left: 0.3rem;
+    min-width: 0;
+    margin-left: 0;
+    line-height: 1.1;
 
     &-text {
+      display: block;
+      width: 100%;
+      max-width: 100%;
       text-overflow: ellipsis;
       overflow: hidden;
       white-space: nowrap;
       flex-shrink: 1;
+      line-height: 1.2;
       min-width: 0;
       color: inherit;
+      font-size: 1.4rem;
+      font-weight: 600;
     }
 
     &-type {
@@ -141,46 +174,65 @@ const Badge = styled(Box)<{
       white-space: nowrap;
       flex-shrink: 0;
       color: inherit;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.66;
     }
 
     &.placeholder {
-      color: ${({ theme }) => theme.color.orange};
+      color: ${({ theme }) => theme.color.statusWarning};
     }
   }
 
-  .edit-icon {
+  && .edit-icon {
     cursor: pointer;
-    display: inline;
-    width: 2.2rem;
-    margin-left: 1rem;
-    padding: 0.1rem;
-    background: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.8rem;
+    min-width: 2.8rem;
+    height: 2.8rem;
+    margin-left: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
     border-radius: 0.4rem;
     flex-shrink: 0;
     user-select: none;
 
     &.placeholder {
-      color: ${({ theme }) => theme.color.orange};
+      color: ${({ theme }) => theme.color.statusWarning};
 
-      &:hover {
-        color: ${({ theme }) => theme.color.backgroundLighter};
-        background: ${({ theme }) => theme.color.orange};
+      &:hover:not(:disabled):not([aria-disabled="true"]) {
+        color: ${({ theme }) => theme.color.surfaceRaised};
+        background: ${({ theme }) => theme.color.statusWarning};
       }
     }
   }
 `
+
+const InstanceIconSlot = styled(Box)`
+  flex: 0 0 auto;
+`
+
+const AccountActions = styled(Box).attrs({ gap: "0.8rem" })`
+  flex: 0 0 auto;
+`
+
 const User = styled(Box).attrs({ gap: "0.5rem" })`
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.controlSurface};
   border-radius: 0.4rem;
   height: 3rem;
   padding: 0 1rem;
   font-weight: 600;
 `
-const EnterpriseBadge = styled.span`
-  padding: 0 4px;
-  background: ${({ theme }) => theme.color.pinkDarker};
-  border-radius: 2px;
-  color: ${({ theme }) => theme.color.foreground};
+const EnterpriseBadge = styled(StatusBadge).attrs({
+  variant: "accent",
+  size: "sm",
+})`
+  height: 1.8rem;
 
   &:not(:last-child) {
     margin-right: 0.25rem;
@@ -188,7 +240,7 @@ const EnterpriseBadge = styled.span`
 `
 
 const Separator = styled.span<{ $color: string }>`
-  display: inline-block;
+  display: none;
   flex-shrink: 0;
   width: 0.15rem;
   margin: 0 1rem;
@@ -196,114 +248,38 @@ const Separator = styled.span<{ $color: string }>`
   background: ${({ $color }) => $color};
 `
 
-const getSecondaryBadgeColor = (
-  primaryColor: string | null,
-  theme: DefaultTheme,
-): string => {
-  if (!primaryColor || !primaryColor.startsWith("rgb")) {
-    return theme?.color.foreground || "inherit"
-  }
-
-  const matches = primaryColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
-  if (matches) {
-    const r = parseInt(matches[1], 10) / 255
-    const g = parseInt(matches[2], 10) / 255
-    const b = parseInt(matches[3], 10) / 255
-
-    // Convert RGB to sRGB for better perceptual accuracy
-    const R = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4)
-    const G = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4)
-    const B = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4)
-
-    // Calculate relative luminance using WCAG formula
-    const luminance = 0.2126 * R + 0.7152 * G + 0.0722 * B
-
-    if (luminance < 0.25) {
-      return theme?.color.foreground
-    } else if (luminance < 0.5) {
-      return theme?.color.gray2
-    } else if (luminance < 0.75) {
-      return theme?.color.gray1
-    } else {
-      return theme?.color.background
-    }
-  }
-  return theme?.color.foreground || "inherit"
-}
-
 const useBadgeColors = (instance_rgb: string | null) => {
   const theme = useTheme()
-  if (!instance_rgb) {
-    return {
-      primary: theme.color.backgroundLighter,
-      secondary: theme.color.foreground,
-    }
-  }
 
-  if (instance_rgb.startsWith("rgb")) {
-    return {
-      primary: instance_rgb,
-      secondary: getSecondaryBadgeColor(instance_rgb, theme),
-    }
+  // The badge fill is theme-invariant (a preset or a user-chosen color), so
+  // its text must be picked against the fill itself rather than the theme.
+  const badgeColors = (background: string) => ({
+    primary: background,
+    secondary: pickReadableTextColor(background, [
+      theme.color.contentInverse,
+      theme.color.neutralInk,
+    ]),
+  })
+
+  if (instance_rgb?.startsWith("rgb")) {
+    return badgeColors(instance_rgb)
   }
 
   if (instance_rgb === "r") {
-    return {
-      primary: "rgb(199, 7, 45)",
-      secondary: theme.color.foreground,
-    }
+    return badgeColors(theme.color.instancePreset1)
   }
 
   if (instance_rgb === "g") {
-    return {
-      primary: "rgb(0, 170, 59)",
-      secondary: theme.color.foreground,
-    }
+    return badgeColors(theme.color.instancePreset2)
   }
 
   if (instance_rgb === "b") {
-    return {
-      primary: "rgb(0, 122, 255)",
-      secondary: theme.color.foreground,
-    }
+    return badgeColors(theme.color.instancePreset3)
   }
 
   return {
-    primary: theme.color.backgroundLighter,
-    secondary: theme.color.foreground,
-  }
-}
-
-const EnvironmentIcon = ({
-  instanceType,
-  color,
-  style,
-}: {
-  instanceType: InstanceType | undefined
-  color?: string
-  style?: React.CSSProperties
-}) => {
-  switch (instanceType) {
-    case "development":
-      return <Tools size="18px" color={color} style={{ ...style }} />
-    case "production":
-      return <ShieldCheck size="18px" color={color} style={{ ...style }} />
-    case "testing":
-      return (
-        <Flask
-          size="18px"
-          color={color}
-          style={{ transform: "scale(1.2)", ...style }}
-        />
-      )
-    default:
-      return (
-        <InfoCircle
-          size="18px"
-          style={{ transform: "translateY(-0.2rem)", ...style }}
-          color={color}
-        />
-      )
+    primary: theme.color.transparent,
+    secondary: theme.color.contentPrimary,
   }
 }
 
@@ -320,43 +296,29 @@ const CustomIconWithTooltip = ({
 
   return (
     <PopperHover placement={placement} trigger={icon}>
-      <CustomTooltipWrapper $badgeColors={badgeColors}>
-        <FlexCol>
-          {shownValues?.instance_type && (
-            <Title>
-              <EnvIconWrapper $background={badgeColors.primary}>
-                <EnvironmentIcon
-                  color={badgeColors.secondary}
-                  instanceType={shownValues?.instance_type}
-                />
-              </EnvIconWrapper>
-              <Text color="foreground" weight={400}>
-                You are connected to a QuestDB instance for{" "}
-                {shownValues?.instance_type}
-              </Text>
-            </Title>
-          )}
-          <Info>
-            <FlexRow>
-              <Text color="foreground" weight={600}>
-                Instance Name:
-              </Text>
-              <Text color="foreground" size="md">
-                {shownValues?.instance_name}
-              </Text>
-            </FlexRow>
-            {shownValues?.instance_description && (
-              <FlexRow>
-                <Text color="foreground" weight={600}>
-                  Description:
-                </Text>
-                <Text color="foreground" size="md">
-                  {shownValues?.instance_description}
-                </Text>
-              </FlexRow>
+      <CustomTooltipWrapper>
+        <TooltipHeader>
+          <EnvIconWrapper $background={badgeColors.primary}>
+            <InstanceTypeIcon
+              color={badgeColors.secondary}
+              instanceType={shownValues?.instance_type}
+              size={20}
+            />
+          </EnvIconWrapper>
+          <TooltipIdentity>
+            {shownValues?.instance_type && (
+              <TooltipType>{shownValues.instance_type}</TooltipType>
             )}
-          </Info>
-        </FlexCol>
+            <TooltipName>
+              {shownValues?.instance_name || "Unnamed instance"}
+            </TooltipName>
+          </TooltipIdentity>
+        </TooltipHeader>
+        {shownValues?.instance_description && (
+          <TooltipDescription>
+            {shownValues.instance_description}
+          </TooltipDescription>
+        )}
       </CustomTooltipWrapper>
     </PopperHover>
   )
@@ -553,36 +515,27 @@ export const Toolbar = () => {
 
   return (
     <Root>
-      <Box gap="0.5rem">
-        <Text color="foreground" margin="0 1rem 0 0">
-          Web Console
-        </Text>
-        {settings["release.type"] === "EE" && (
-          <IconWithTooltip
-            icon={<EnterpriseBadge>EE</EnterpriseBadge>}
-            tooltip="QuestDB Enterprise Edition"
-            placement="bottom"
-          />
-        )}
-      </Box>
+      {settings["release.type"] === "EE" && (
+        <IconWithTooltip
+          icon={<EnterpriseBadge>EE</EnterpriseBadge>}
+          tooltip="QuestDB Enterprise Edition"
+          placement="bottom"
+        />
+      )}
       {preferences && (
         <Badge $badgeColors={badgeColors} data-hook="topbar-instance-badge">
-          <Box>
+          <InstanceIconSlot>
             {shownValues?.instance_type ? (
               <CustomIconWithTooltip
                 icon={
                   <div
                     data-hook="topbar-instance-icon"
-                    style={{ padding: "0.7rem" }}
+                    style={{ padding: "0.5rem 0.15rem", display: "flex" }}
                   >
-                    <EnvironmentIcon
+                    <InstanceTypeIcon
                       instanceType={shownValues?.instance_type}
                       color={badgeColors.secondary}
-                      style={
-                        shownValues?.instance_type === "production"
-                          ? { transform: "translateY(-0.1rem)" }
-                          : {}
-                      }
+                      size={24}
                     />
                   </div>
                 }
@@ -590,15 +543,15 @@ export const Toolbar = () => {
                 shownValues={shownValues}
               />
             ) : (
-              <div style={{ padding: "0.7rem" }}>
+              <div style={{ padding: "0.5rem 0.15rem", display: "flex" }}>
                 <ErrorIcon
-                  size="18px"
-                  color={theme.color.orange}
-                  style={{ transform: "scale(1.3) translateY(-0.1rem)" }}
+                  size="24px"
+                  color={theme.color.statusWarning}
+                  style={{ transform: "scale(1.15)" }}
                 />
               </div>
             )}
-          </Box>
+          </InstanceIconSlot>
           {shownValues?.instance_name ? (
             <Box data-hook="topbar-instance-name" className="instance-name">
               <Text className="instance-name-type">{instanceTypeReadable}</Text>
@@ -623,34 +576,40 @@ export const Toolbar = () => {
               onSave={handleSaveSettings}
               onValuesChange={setPreviewValues}
               trigger={
-                <Edit
-                  data-hook="topbar-instance-edit-icon"
-                  size="18px"
+                <Button
+                  dataHook="topbar-instance-edit-icon"
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Edit instance settings"
+                  aria-expanded={settingsPopperActive}
                   className={`edit-icon ${shownValues?.instance_name ? "" : "placeholder"}`}
-                />
+                >
+                  <Edit size="18px" />
+                </Button>
               }
             />
           )}
         </Badge>
       )}
-      <Box gap="0.8rem">
+      <AccountActions>
         {settings["acl.enabled"] && currentUser && (
           <User>
             <UserIcon size="18px" />
-            <Text color="foreground">{currentUser}</Text>
+            <Text color="contentPrimary">{currentUser}</Text>
           </User>
         )}
         {hasUIAuth(settings) && (
           <Button
             onClick={() => logout({ reload: true, clearSSOSession: true })}
             prefixIcon={<LogoutCircle size="18px" />}
-            skin="secondary"
+            variant="secondary"
             data-hook="button-logout"
           >
             Logout
           </Button>
         )}
-      </Box>
+      </AccountActions>
     </Root>
   )
 }

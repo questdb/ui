@@ -8,14 +8,9 @@ import {
 } from "../../../providers/AIStatusProvider"
 
 const AIButtonStyled = styled(Button).attrs({
-  skin: "gradient",
+  variant: "gradient",
   prefixIcon: <AISparkle size={14} variant="hollow" />,
-})`
-  border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  &:hover:not([disabled]) {
-    border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  }
-`
+})``
 
 export const SchemaAIButton = ({
   onClick,

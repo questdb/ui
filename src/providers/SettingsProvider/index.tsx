@@ -10,8 +10,8 @@ import isEqual from "lodash.isequal"
 import styled from "styled-components"
 import { ConsoleConfig, Settings, Warning } from "./types"
 import { CenteredLayout, Box, Text, Button } from "../../components"
-import { Refresh } from "@styled-icons/remix-line"
-import { CloseOutline } from "@styled-icons/evaicons-outline"
+import { Refresh } from "../../components/icons"
+import { CloseOutline } from "../../components/icons"
 import { setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { Preferences } from "../../utils"
@@ -76,7 +76,7 @@ const Whoops = styled.img`
   }
 `
 
-const ErrorMessage = styled(Text).attrs({ color: "red", size: "md" })`
+const ErrorMessage = styled(Text).attrs({ color: "statusDanger", size: "md" })`
   height: 3rem;
   align-self: center;
   display: flex;
@@ -85,16 +85,16 @@ const ErrorMessage = styled(Text).attrs({ color: "red", size: "md" })`
 `
 
 const CloseOutlineIcon = styled(CloseOutline)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
   flex-shrink: 0;
 `
 
 const connectionError = (
   <Box flexDirection="column" gap="0">
-    <Text align="center" size="lg" color="offWhite" weight={600}>
+    <Text align="center" size="lg" color="contentSecondary" weight={600}>
       It appears we can&apos;t connect to the database.
     </Text>
-    <Text align="center" size="lg" color="offWhite">
+    <Text align="center" size="lg" color="contentSecondary">
       Please, check if the server is running correctly.
     </Text>
   </Box>
@@ -102,10 +102,10 @@ const connectionError = (
 
 const consoleConfigError = (
   <Box flexDirection="column" gap="0">
-    <Text align="center" size="lg" color="offWhite" weight={600}>
+    <Text align="center" size="lg" color="contentSecondary" weight={600}>
       It appears we can&apos;t connect to the database.
     </Text>
-    <Text align="center" size="lg" color="offWhite">
+    <Text align="center" size="lg" color="contentSecondary">
       Error loading the console configuration file.
     </Text>
   </Box>
@@ -195,16 +195,21 @@ export const SettingsProvider = ({
           <TextContainer>
             {state.errorMessage ?? (
               <Box flexDirection="column" gap="0">
-                <Text align="center" size="lg" color="offWhite" weight={600}>
+                <Text
+                  align="center"
+                  size="lg"
+                  color="contentSecondary"
+                  weight={600}
+                >
                   It appears we can&apos;t connect to the database.
                 </Text>
-                <Text align="center" size="lg" color="offWhite">
+                <Text align="center" size="lg" color="contentSecondary">
                   Please, check if the server is running correctly.
                 </Text>
               </Box>
             )}
             <RefreshButton
-              skin="primary"
+              variant="primary"
               prefixIcon={<Refresh size="18px" />}
               onClick={() => {
                 void fetchAll(false)

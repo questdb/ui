@@ -7,7 +7,7 @@ import {
   PlugsIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
-import { Button, LoadingSpinner } from "../../../components"
+import { Button, LoadingSpinner, TextButton } from "../../../components"
 import type { AgentChanges } from "./useAgentChanges"
 import { Input } from "../../../components/Input"
 import { useMCPBridge } from "../../../providers/MCPBridgeProvider"
@@ -24,6 +24,7 @@ import { Tone, accentColor, deriveTone } from "./tone"
 import { BridgeUpgradeNotice } from "./BridgeUpgradeNotice"
 import { BridgeSetupNotice } from "./BridgeSetupNotice"
 import { PermissionsSection } from "./PermissionsSection"
+import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 
 const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
   a.grantSchemaAccess === b.grantSchemaAccess &&
@@ -35,10 +36,7 @@ const SUCCESS_AUTOCLOSE_MS = 3_000
 const DEFAULT_WS_URL_PREFIX = "ws://127.0.0.1:"
 
 const Root = styled.div`
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.8rem;
-  box-shadow: 0 12px 32px -8px ${({ theme }) => theme.color.black};
+  ${floatingSurfaceStyles}
   width: min(38rem, calc(100vw - 2rem));
   z-index: 200;
   display: flex;
@@ -75,14 +73,14 @@ const HeaderText = styled.div`
 const Title = styled.div`
   font-weight: 600;
   font-size: 1.5rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const Lede = styled.p`
   margin: 0;
   font-size: 1.2rem;
   line-height: 1.4;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   word-break: break-word;
 `
 
@@ -91,28 +89,6 @@ const Body = styled.div`
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-
-  input,
-  select,
-  textarea,
-  [aria-haspopup="menu"] {
-    font-size: 1.4rem;
-    font-weight: 400;
-    background: ${({ theme }) => theme.color.inputBackground};
-    border-color: ${({ theme }) => theme.color.selection};
-
-    &:focus {
-      background: ${({ theme }) => theme.color.inputBackground};
-    }
-  }
-
-  input,
-  select,
-  textarea {
-    height: auto;
-    line-height: normal;
-    padding: 0.6rem 0.75rem;
-  }
 `
 
 const Field = styled.label`
@@ -123,7 +99,7 @@ const Field = styled.label`
 
 const FieldLabel = styled.span`
   font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   text-transform: uppercase;
   font-weight: 600;
 `
@@ -141,65 +117,52 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   padding: 1.6rem;
   background: ${({ theme, $tone }) =>
     $tone === "danger"
-      ? `${theme.color.red}1f`
+      ? `${theme.color.statusDanger}1f`
       : $tone === "warning"
-        ? theme.color.orange10
-        : theme.color.backgroundDarker};
+        ? theme.color.statusWarningSurface
+        : theme.color.surfaceInset};
   color: ${({ theme, $tone }) =>
-    $tone === "info" ? theme.color.gray2 : theme.color.foreground};
+    $tone === "info"
+      ? theme.color.contentSecondary
+      : theme.color.contentPrimary};
 
   & > svg {
     flex-shrink: 0;
     color: ${({ theme, $tone }) =>
       $tone === "danger"
-        ? theme.color.red
+        ? theme.color.statusDanger
         : $tone === "warning"
-          ? theme.color.orange
-          : theme.color.pinkPrimary};
+          ? theme.color.statusWarning
+          : theme.color.contentAccentStrong};
   }
 
   strong {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     font-weight: 600;
   }
 `
 
 const AgentChangesRow = styled(StatusRow)`
-  background: ${({ theme }) => theme.color.cyan10};
-  color: ${({ theme }) => theme.color.foreground};
+  background: ${({ theme }) => theme.color.statusInfoSurface};
+  color: ${({ theme }) => theme.color.contentPrimary};
 
   strong {
     line-height: 1.1;
   }
 
   & > svg {
-    color: ${({ theme }) => theme.color.cyan};
+    color: ${({ theme }) => theme.color.statusInfo};
   }
 `
 
-const AgentChangesViewButton = styled.button`
+const AgentChangesViewButton = styled(TextButton)`
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-shrink: 0;
   margin-left: auto;
-  border: none;
-  background: transparent;
   line-height: 1.3;
-  color: ${({ theme }) => theme.color.cyan};
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
   align-self: center;
-
-  &:hover {
-    text-decoration: underline;
-  }
-
-  &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.cyan};
-    outline-offset: 2px;
-  }
 `
 
 const AgentChangesMessage = styled.span`
@@ -218,7 +181,7 @@ const StatusText = styled.div`
 
 const StatusDetail = styled.span`
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   word-break: break-word;
 `
 
@@ -228,7 +191,7 @@ const Footer = styled.div`
   align-items: center;
   gap: 0.8rem;
   padding: 1.2rem 1.6rem;
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
+  border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const RightActions = styled.div`
@@ -565,7 +528,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           <Footer>
             {canDisconnect && (
               <Button
-                skin="danger"
+                variant="danger"
                 onClick={onDisconnect}
                 dataHook="mcp-pair-disconnect"
               >
@@ -574,14 +537,14 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
             )}
             <RightActions>
               <Button
-                skin="secondary"
+                variant="secondary"
                 onClick={onCancel}
                 dataHook="mcp-pair-cancel"
               >
                 Cancel
               </Button>
               <Button
-                skin="primary"
+                variant="primary"
                 onClick={onConnect}
                 disabled={!submitEnabled}
                 dataHook="mcp-pair-submit"

@@ -1,36 +1,32 @@
 import styled, { css } from "styled-components"
+import { floatingSurfaceStyles } from "./overlayStyles"
 
 export const menuContainerStyles = css`
-  background-color: ${({ theme }) => theme.color.dropdownBackground};
-  border-radius: 0.6rem;
-  border: 1px solid ${({ theme }) => theme.color.dropdownBorder};
+  ${floatingSurfaceStyles}
   padding: 0.8rem 0.4rem;
-  box-shadow:
-    0 0.2rem 0.2rem -0.1rem rgba(10, 13, 18, 0.04),
-    0 0.4rem 0.6rem -0.2rem rgba(10, 13, 18, 0.03),
-    0 1.2rem 1.6rem -0.4rem rgba(10, 13, 18, 0.08);
   z-index: 9999;
   min-width: 16rem;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.2rem;
 `
 
 export const menuItemStyles = css`
   font-size: 1.4rem;
   line-height: 1.5;
   cursor: pointer;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   display: flex;
   gap: 0.6rem;
   align-items: center;
-  padding: 0.4rem 0.8rem;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.8rem;
   border-radius: 0.4rem;
   user-select: none;
   outline: none;
 
   &[data-highlighted] {
-    background: ${({ theme }) => theme.color.background};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 
   &[data-disabled] {
@@ -61,5 +57,5 @@ export const MenuItemBody = styled.span`
 
 export const MenuItemSubtitle = styled.span`
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `

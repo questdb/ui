@@ -4289,7 +4289,7 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-provider-ollama").click()
 
     // Click Edit button to make input editable, then type API key
-    cy.get('button[title="Edit API key"]').click()
+    cy.getByDataHook("ai-settings-edit-api-key").click()
     cy.getByDataHook("ai-settings-api-key").type("sk-custom-key-123")
 
     // Intercept validation request to custom endpoint

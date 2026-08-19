@@ -63,18 +63,18 @@ export const createUplotOptions = ({
 }: Params): UplotOptions => {
   const DISTR_LOG = 3 as uPlot.Scale.Distr
   const baseAxisConfig: uPlot.Axis = {
-    stroke: theme.color.gray2,
+    stroke: theme.color.contentSecondary,
     labelFont: `600 12px ${theme.font}`,
     font: `14px ${theme.font}`,
     ticks: {
       show: false,
-      stroke: theme.color.gray1,
+      stroke: theme.color.borderDefault,
       width: 0.8,
       dash: [],
       size: 10,
     },
     grid: {
-      stroke: theme.color.selectionDarker,
+      stroke: theme.color.dataGrid,
     },
   }
 

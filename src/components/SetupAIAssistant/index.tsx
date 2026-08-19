@@ -1,5 +1,4 @@
 import React, { useState, useRef } from "react"
-import styled from "styled-components"
 import { Button } from "../Button"
 import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
@@ -10,14 +9,6 @@ import { ModelDropdown } from "./ModelDropdown"
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-
-const SettingsButton = styled(Button)`
-  padding: 0.6rem;
-
-  &:focus-visible {
-    outline: 2px solid ${({ theme }) => theme.color.cyan};
-  }
-`
 
 export const SetupAIAssistant = () => {
   const [configModalOpen, setConfigModalOpen] = useState(false)
@@ -43,11 +34,12 @@ export const SetupAIAssistant = () => {
 
   return (
     <>
-      <Box gap="0.8rem" align="center">
+      <Box gap="1.2rem" align="center">
         <ModelDropdown />
         <div ref={configureButtonRef as React.RefObject<HTMLDivElement>}>
-          <SettingsButton
-            skin={isConfigured ? "secondary" : "gradient"}
+          <Button
+            size="md"
+            variant={isConfigured ? "secondary" : "gradient"}
             gradientStyle="vertical"
             gradientWeight="thick"
             onClick={handleSettingsClick}
@@ -56,7 +48,7 @@ export const SetupAIAssistant = () => {
             title="AI Assistant Settings"
           >
             {isConfigured ? "AI Settings" : "Configure"}
-          </SettingsButton>
+          </Button>
         </div>
       </Box>
       <AIAssistantPromo

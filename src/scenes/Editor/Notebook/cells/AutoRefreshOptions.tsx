@@ -1,5 +1,5 @@
 import React from "react"
-import { DropdownMenu } from "../../../../components"
+import { SelectMenu } from "../../../../components"
 import { AUTO_REFRESH_OPTIONS, autoRefreshLabel } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
 
@@ -16,14 +16,14 @@ type Props = {
 }
 
 export const AutoRefreshOptions: React.FC<Props> = ({ value, onSelect }) => (
-  <DropdownMenu.RadioGroup
+  <SelectMenu.RadioGroup
     value={optionKey(value)}
     onValueChange={(key) => onSelect(fromKey(key))}
   >
     {AUTO_REFRESH_OPTIONS.map((option) => (
-      <DropdownMenu.RadioItem key={optionKey(option)} value={optionKey(option)}>
+      <SelectMenu.Item key={optionKey(option)} value={optionKey(option)}>
         {autoRefreshLabel(option)}
-      </DropdownMenu.RadioItem>
+      </SelectMenu.Item>
     ))}
-  </DropdownMenu.RadioGroup>
+  </SelectMenu.RadioGroup>
 )

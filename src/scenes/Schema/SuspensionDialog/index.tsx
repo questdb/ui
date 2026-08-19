@@ -2,7 +2,6 @@ import React from "react"
 import {
   Box,
   Text,
-  Link,
   Form,
   Dialog,
   ForwardRef,
@@ -12,12 +11,12 @@ import {
   CopyButton,
 } from "../../../components"
 import { getTableKindLabel } from "../VirtualTables"
-import { Undo, CheckCircle } from "@styled-icons/boxicons-regular"
+import { Undo, CheckCircle, Database2, Files } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import styled from "styled-components"
 import * as QuestDB from "../../../utils/questdb"
-import { ExternalLink, Restart, Table } from "@styled-icons/remix-line"
+import { Restart, Table } from "../../../components/icons"
 import { useState, useContext, useEffect, useCallback } from "react"
 import { QuestContext } from "../../../providers"
 import { eventBus } from "../../../modules/EventBus"
@@ -26,10 +25,11 @@ import { ErrorResult } from "../../../utils"
 import { errorWorkarounds } from "../../../utils/errorWorkarounds"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import Joi from "joi"
+import { DocumentationLink } from "../TableDetailsDrawer/DocumentationLink"
 
 const StyledDialogContent = styled(Dialog.Content)<{ $success?: boolean }>`
   border-color: ${({ $success, theme }) =>
-    $success ? theme.color.green : theme.color.red};
+    $success ? theme.color.statusSuccess : theme.color.statusDanger};
 `
 
 const StyledDescription = styled(Dialog.Description)`
@@ -57,18 +57,17 @@ const TransactionInput = styled(Form.Input)`
 
 const Icon = styled(Box)`
   height: 4.8rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const StyledInput = styled(Input)`
   width: 100%;
   font-family: ${({ theme }) => theme.fontMonospace};
-  background: #313340;
-  border-color: ${({ theme }) => theme.color.selection};
 `
 
 const StyledTable = styled(Table)<{ $success?: boolean }>`
   color: ${({ $success, theme }) =>
-    $success ? theme.color.green : theme.color.red};
+    $success ? theme.color.statusSuccess : theme.color.statusDanger};
 `
 
 const LoadingContainer = styled(Box).attrs({
@@ -212,14 +211,14 @@ export const SuspensionDialog = ({
             {loading ? (
               <LoadingContainer>
                 <CircleNotchSpinner size={24} />
-                <Text color="gray2">Loading WAL status...</Text>
+                <Text color="contentSecondary">Loading WAL status...</Text>
               </LoadingContainer>
             ) : walTableData ? (
               <Box gap="3rem" flexDirection="column" align="center">
-                {error && <Text color="red">{error}</Text>}
+                {error && <Text color="statusDanger">{error}</Text>}
 
                 {isSubmitted && (
-                  <Text color="green" size="lg">
+                  <Text color="statusSuccess" size="lg">
                     WAL resumed successfully!
                   </Text>
                 )}
@@ -228,7 +227,7 @@ export const SuspensionDialog = ({
                   !isSubmitted &&
                   errorWorkarounds[walTableData.errorTag] && (
                     <Text
-                      color="red"
+                      color="statusDanger"
                       data-hook="schema-suspension-dialog-error-message"
                       size="lg"
                       align="center"
@@ -240,14 +239,9 @@ export const SuspensionDialog = ({
                 <Box gap="2rem" align="flex-start">
                   <Box gap="1rem" flexDirection="column" align="center">
                     <Icon>
-                      <img
-                        src="assets/icon-copy.svg"
-                        alt="Copy icon"
-                        width="48"
-                        height="48"
-                      />
+                      <Files size={48} aria-label="File icon" />
                     </Icon>
-                    <Text color="foreground" size="lg">
+                    <Text color="contentPrimary" size="lg">
                       {walTableData.sequencerTxn}
                     </Text>
                   </Box>
@@ -261,20 +255,15 @@ export const SuspensionDialog = ({
                   </Icon>
                   <Box gap="1rem" flexDirection="column" align="center">
                     <Icon>
-                      <img
-                        src="assets/icon-database.svg"
-                        alt="Database icon"
-                        width="36"
-                        height="38"
-                      />
+                      <Database2 size={38} aria-label="Database icon" />
                     </Icon>
-                    <Text color="foreground" size="lg">
+                    <Text color="contentPrimary" size="lg">
                       {walTableData.writerTxn}
                     </Text>
                   </Box>
                 </Box>
 
-                <Text color="foreground" size="lg">
+                <Text color="contentPrimary" size="lg">
                   {txnLag} transaction
                   {txnLag === 1 ? "" : "s"} behind
                 </Text>
@@ -285,7 +274,7 @@ export const SuspensionDialog = ({
                     gap="1rem"
                     style={{ width: "100%" }}
                   >
-                    <Text color="foreground">Server message:</Text>
+                    <Text color="contentPrimary">Server message:</Text>
                     <Box gap="0.5rem" style={{ width: "100%" }}>
                       <StyledInput
                         name="server_message"
@@ -303,27 +292,20 @@ export const SuspensionDialog = ({
                 {walTableData.errorTag &&
                   errorWorkarounds[walTableData.errorTag] && (
                     <ContentBlockBox gap="0.5rem">
-                      <Text color="foreground">
+                      <Text color="contentPrimary">
                         Workarounds and documentation:
                       </Text>
-                      <Link
-                        color="cyan"
-                        hoverColor="cyan"
+                      <DocumentationLink
                         href={errorWorkarounds[walTableData.errorTag].link}
-                        rel="noreferrer"
-                        target="_blank"
                         data-hook="schema-suspension-dialog-error-link"
                       >
-                        <Box align="center" gap="0.25rem">
-                          <ExternalLink size="16px" />
-                          {errorWorkarounds[walTableData.errorTag].title}
-                        </Box>
-                      </Link>
+                        {errorWorkarounds[walTableData.errorTag].title}
+                      </DocumentationLink>
                     </ContentBlockBox>
                   )}
 
                 <ContentBlockBox gap="2rem">
-                  <Text color="gray2">
+                  <Text color="contentSecondary">
                     If you have addressed the issue, restart the process:
                   </Text>
                   <Form<FormValues>
@@ -357,7 +339,7 @@ export const SuspensionDialog = ({
               </Box>
             ) : (
               <LoadingContainer>
-                <Text color="red">Failed to load WAL data</Text>
+                <Text color="statusDanger">Failed to load WAL data</Text>
               </LoadingContainer>
             )}
           </StyledDescription>
@@ -368,7 +350,7 @@ export const SuspensionDialog = ({
                 prefixIcon={
                   isSubmitted ? <CheckCircle size={18} /> : <Undo size={18} />
                 }
-                skin={isSubmitted ? "success" : "secondary"}
+                variant="secondary"
                 data-hook="schema-suspension-dialog-dismiss"
                 onClick={() => onOpenChange(false)}
               >

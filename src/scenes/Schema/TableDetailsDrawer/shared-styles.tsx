@@ -11,7 +11,7 @@ export const Section = styled(Box).attrs<{
   align: "stretch",
 })<{ $squishBottom?: boolean; $squishTop?: boolean }>`
   padding: 2rem 1.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundLighter};
+  border-bottom: 1px solid ${({ theme }) => theme.color.surfaceRaised};
   width: 100%;
   ${({ $squishBottom }) =>
     $squishBottom &&
@@ -40,7 +40,7 @@ export const SectionTitleContainer = styled(Box).attrs({
 `
 
 export const SectionTitle = styled(Text).attrs({
-  color: "foreground",
+  color: "contentPrimary",
   size: "lg",
   weight: 600,
 })`

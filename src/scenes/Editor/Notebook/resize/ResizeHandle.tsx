@@ -20,8 +20,7 @@ const Handle = styled.div<{
   z-index: 10;
   flex-shrink: 0;
   outline: none;
-  color: ${color("pinkPrimary")};
-  --chip-bg: ${color("backgroundDarker")};
+  color: ${color("contentAccentStrong")};
 
   ${({ $overlay, $doubleView, $background, theme }) =>
     $overlay
@@ -38,7 +37,7 @@ const Handle = styled.div<{
       : `
     position: relative;
     height: ${$doubleView ? "6px" : "10px"};
-    background: ${$background ?? theme.color.backgroundLighter};
+    background: ${$background ?? theme.color.surfaceRaised};
   `}
 
   .resize-line,
@@ -62,7 +61,7 @@ const Handle = styled.div<{
     top: 50%;
     transform: translateY(-50%);
     height: 2px;
-    background: ${color("pinkPrimary")};
+    background: ${color("contentAccentStrong")};
   }
 
   .resize-chip {

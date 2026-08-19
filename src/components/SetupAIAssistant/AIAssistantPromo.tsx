@@ -3,7 +3,7 @@ import ReactDOM from "react-dom"
 import { usePopper } from "react-popper"
 import { CSSTransition } from "react-transition-group"
 import styled from "styled-components"
-import { Close } from "@styled-icons/remix-line"
+import { Close } from "../icons"
 import {
   RowsPlusBottomIcon,
   StethoscopeIcon,
@@ -12,10 +12,12 @@ import {
   FileSqlIcon,
 } from "@phosphor-icons/react"
 import { Button } from "../Button"
+import { IconButton } from "../IconButton"
 import { Text } from "../Text"
 import { Box } from "../Box"
 import { AISparkle } from "../AISparkle"
 import { TransitionDuration } from "../Transition"
+import { floatingSurfaceStyles } from "../overlayStyles"
 
 const TooltipContainer = styled.div<{ $positionReady: boolean }>`
   position: relative;
@@ -41,8 +43,8 @@ const Arrow = styled.div<{ $styles?: React.CSSProperties }>`
     height: 0.6rem;
     background: linear-gradient(
       to bottom,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.2) 100%
+      ${({ theme }) => theme.color.transparent} 0%,
+      ${({ theme }) => theme.color.borderDefault} 100%
     );
     clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
     transform: rotate(180deg);
@@ -58,14 +60,12 @@ const Arrow = styled.div<{ $styles?: React.CSSProperties }>`
     transform: translateX(-50%);
     border-left: 0.7rem solid transparent;
     border-right: 0.7rem solid transparent;
-    border-bottom: 0.5rem solid ${({ theme }) => theme.color.backgroundDarker};
+    border-bottom: 0.5rem solid ${({ theme }) => theme.color.surfaceOverlay};
   }
 `
 
 const Content = styled.div`
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 0.1rem solid transparent;
-  border-radius: 0.4rem;
+  ${floatingSurfaceStyles}
   width: 38.3rem;
   padding: 1.2rem;
   display: flex;
@@ -91,32 +91,22 @@ const TitleText = styled(Text)`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.6rem;
   text-transform: uppercase;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   line-height: 2.25rem;
 `
 
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
-  cursor: pointer;
+const CloseButton = styled(IconButton).attrs({
+  label: "Close",
+  variant: "ghost",
+  size: "sm",
+})`
   padding: 0.4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.gray2};
-  width: 2.8rem;
-  height: 2.8rem;
-  flex-shrink: 0;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const Description = styled(Text)`
   font-size: 1.3rem;
   line-height: 1.857rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   padding-right: 0.8rem;
 `
 
@@ -138,7 +128,7 @@ const IconContainer = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background: ${({ theme }) => theme.color.selectionDarker};
+  background: ${({ theme }) => theme.color.interactionNeutralHover};
   border-radius: 0.4rem;
   padding: 0.8rem;
   width: 4.8rem;
@@ -152,7 +142,7 @@ const ModeIconWrapper = styled(Box).attrs({
 })`
   width: 2.4rem;
   height: 2.4rem;
-  color: ${({ theme }) => theme.color.pink};
+  color: ${({ theme }) => theme.color.contentAccent};
 `
 
 const ModeContent = styled(Box).attrs({
@@ -175,13 +165,13 @@ const ModeTitle = styled(Text)`
   font-size: 1.4rem;
   line-height: 1.8rem;
   text-align: left;
-  color: ${({ theme }) => theme.color.white};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const ModeDescription = styled(Text)`
   font-size: 1.3rem;
   line-height: 1.857rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const Footer = styled(Box).attrs({
@@ -193,9 +183,8 @@ const Footer = styled(Box).attrs({
 `
 
 const SetupButton = styled(Button).attrs({
-  skin: "primary",
+  variant: "primary",
 })`
-  background: ${({ theme }) => theme.color.pinkDarker};
   margin-left: auto;
 `
 

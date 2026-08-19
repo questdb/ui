@@ -94,11 +94,16 @@ const SettingRow = ({
 }: SettingRowProps) => (
   <ItemRow>
     <ItemText>
-      <Text color="foreground" lineHeight="1" type="label" htmlFor={controlId}>
+      <Text
+        color="contentPrimary"
+        lineHeight="1"
+        type="label"
+        htmlFor={controlId}
+      >
         {label}
       </Text>
       <div id={settingDescriptionId(controlId)}>
-        <Text color="gray2" size="xs">
+        <Text color="contentSecondary" size="xs">
           {description}
         </Text>
       </div>
@@ -184,7 +189,7 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
                 }
                 data-hook={MAX_COLUMN_WIDTH_ID}
               />
-              <Text color="gray2" size="sm">
+              <Text color="contentSecondary" size="sm">
                 px
               </Text>
             </WidthInputRow>
@@ -194,7 +199,7 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
                 role="alert"
                 data-hook={MAX_COLUMN_WIDTH_ERROR_ID}
               >
-                <Text color="red" size="sm">
+                <Text color="statusDanger" size="sm">
                   Must be a number between {MAX_COLUMN_WIDTH_BOUNDS.min} and{" "}
                   {MAX_COLUMN_WIDTH_BOUNDS.max}
                 </Text>
@@ -205,14 +210,14 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
       </Body>
       <Dialog.ActionButtons>
         <Button
-          skin="secondary"
+          variant="secondary"
           type="button"
           onClick={onClose}
           dataHook="editor-settings-cancel"
         >
           Cancel
         </Button>
-        <Button skin="primary" type="submit" dataHook="editor-settings-save">
+        <Button variant="primary" type="submit" dataHook="editor-settings-save">
           Save
         </Button>
       </Dialog.ActionButtons>

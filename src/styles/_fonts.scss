@@ -1,0 +1,82 @@
+/*!******************************************************************************
+ *     ___                  _   ____  ____
+ *    / _ \ _   _  ___  ___| |_|  _ \| __ )
+ *   | | | | | | |/ _ \/ __| __| | | |  _ \
+ *   | |_| | |_| |  __/\__ \ |_| |_| | |_) |
+ *    \__\_\\__,_|\___||___/\__|____/|____/
+ *
+ *  Copyright (c) 2014-2019 Appsicle
+ *  Copyright (c) 2019-2022 QuestDB
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
+/*
+ * Font faces must remain in a static stylesheet. Registering them through a
+ * createGlobalStyle component causes the browser to re-evaluate the faces when
+ * theme-reactive global rules are replaced, briefly falling back to a system
+ * font during ordinary interactions.
+ */
+
+/* open-sans-300 - latin */
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src:
+    local("Open Sans Light"),
+    local("OpenSans-Light"),
+    url("fonts/open-sans/open-sans-v13-latin-300.woff2") format("woff2"),
+    url("fonts/open-sans/open-sans-v13-latin-300.woff") format("woff");
+}
+
+/* open-sans-regular - latin */
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local("Open Sans"),
+    local("OpenSans"),
+    url("fonts/open-sans/open-sans-v13-latin-regular.woff2") format("woff2"),
+    url("fonts/open-sans/open-sans-v13-latin-regular.woff") format("woff");
+}
+
+/* open-sans-600 - latin */
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src:
+    local("Open Sans Semibold"),
+    local("OpenSans-Semibold"),
+    url("fonts/open-sans/open-sans-v13-latin-600.woff2") format("woff2"),
+    url("fonts/open-sans/open-sans-v13-latin-600.woff") format("woff");
+}
+
+/* open-sans-700 - latin */
+@font-face {
+  font-family: "Open Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local("Open Sans Bold"),
+    local("OpenSans-Bold"),
+    url("fonts/open-sans/open-sans-v13-latin-700.woff2") format("woff2"),
+    url("fonts/open-sans/open-sans-v13-latin-700.woff") format("woff");
+}

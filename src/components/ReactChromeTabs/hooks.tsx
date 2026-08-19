@@ -54,6 +54,56 @@ const ChromeTabsWrapper = forwardRef<
   }
   return (
     <div ref={ref} className={classList.join(" ")}>
+      <svg
+        className="chrome-tabs-filter-defs"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <filter
+            className="chrome-tabs-liquid-filter"
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            colorInterpolationFilters="sRGB"
+          >
+            <feImage
+              className="chrome-tabs-liquid-map"
+              x="0"
+              y="0"
+              width="100%"
+              height="100%"
+              preserveAspectRatio="none"
+              result="liquid-map"
+            />
+            <feGaussianBlur
+              in="liquid-map"
+              stdDeviation="0.35"
+              result="soft-liquid-map"
+            />
+            <feDisplacementMap
+              className="chrome-tabs-liquid-displacement"
+              in="SourceGraphic"
+              in2="soft-liquid-map"
+              scale="26"
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+        </defs>
+      </svg>
+      <div className="chrome-tabs-selection-layer" aria-hidden="true">
+        <div className="chrome-tabs-selection-glass" />
+      </div>
+      <div
+        className="chrome-tabs-overflow-shadow chrome-tabs-overflow-shadow-left"
+        aria-hidden="true"
+      />
+      <div
+        className="chrome-tabs-overflow-shadow chrome-tabs-overflow-shadow-right"
+        aria-hidden="true"
+      />
       <div className="chrome-tabs-content" />
     </div>
   )

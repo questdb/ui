@@ -23,7 +23,7 @@
  ******************************************************************************/
 
 import React from "react"
-import styled, { css, keyframes } from "styled-components"
+import styled, { css, keyframes, useTheme } from "styled-components"
 import * as RadixTooltip from "@radix-ui/react-tooltip"
 import type { Placement } from "@popperjs/core"
 
@@ -94,43 +94,45 @@ const StyledArrowSvg = styled.svg`
 `
 
 // Custom arrow with border - using asChild to replace default polygon
-const ArrowWithBorder = React.forwardRef<SVGSVGElement>((props, ref) => (
-  <StyledArrowSvg
-    {...props}
-    ref={ref}
-    width={14}
-    height={7}
-    viewBox="0 0 14 7"
-    preserveAspectRatio="none"
-  >
-    <polygon points="0,0 14,0 7,7" fill="var(--tooltip-bg)" />
-    <polyline
-      points="0,0 7,7 14,0"
-      fill="none"
-      stroke="var(--tooltip-border)"
-      strokeWidth="1"
-    />
-  </StyledArrowSvg>
-))
+const ArrowWithBorder = React.forwardRef<SVGSVGElement>((props, ref) => {
+  const theme = useTheme()
+
+  return (
+    <StyledArrowSvg
+      {...props}
+      ref={ref}
+      width={14}
+      height={7}
+      viewBox="0 0 14 7"
+      preserveAspectRatio="none"
+    >
+      <polygon points="0,0 14,0 7,7" fill={theme.color.surfaceInset} />
+      <polyline
+        points="0,0 7,7 14,0"
+        fill="none"
+        stroke={theme.color.contentDisabled}
+        strokeWidth="1"
+      />
+    </StyledArrowSvg>
+  )
+})
 
 // Overreaches the arrow gap (arrow height + sideOffset) so the bridge overlaps
 // slightly into the trigger, leaving no seam between them.
 const HOVER_BRIDGE_PX = 10
+const TOOLTIP_Z_INDEX = 2147483647
 
 const TooltipContent = styled(RadixTooltip.Content)<{
   $maxWidth?: string
   $hoverBridge?: boolean
 }>`
-  --tooltip-bg: ${color("backgroundDarker")};
-  --tooltip-border: ${color("gray1")};
-
   position: relative;
   max-width: ${({ $maxWidth }) => $maxWidth ?? "460px"};
   padding: 1rem;
-  background: var(--tooltip-bg);
-  border: 1px solid var(--tooltip-border);
+  background: ${color("surfaceInset")};
+  border: 1px solid ${color("contentDisabled")};
   border-radius: 6px;
-  z-index: 1000;
+  z-index: ${TOOLTIP_Z_INDEX};
   animation-duration: 200ms;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform, opacity;
@@ -238,7 +240,7 @@ export const Tooltip = ({
           collisionBoundary={collisionBoundary}
           collisionPadding={collisionPadding}
         >
-          <Text color="offWhite2" data-hook="tooltip">
+          <Text color="contentSecondary" data-hook="tooltip">
             {content}
           </Text>
           <RadixTooltip.Arrow asChild width={14} height={7}>

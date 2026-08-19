@@ -27,11 +27,11 @@ import styled from "styled-components"
 import { Wrapper, Content, SideContent } from "../styles"
 import { Timestamp } from "../Timestamp"
 import { NotificationShape } from "../../../../types"
-import { InfoOutline } from "@styled-icons/evaicons-outline"
+import { InfoOutline } from "../../../../components/icons"
 import { color } from "../../../../utils"
 
 const InfoOutlineIcon = styled(InfoOutline)`
-  color: ${color("yellow")};
+  color: ${color("statusAttention")};
   flex-shrink: 0;
 `
 

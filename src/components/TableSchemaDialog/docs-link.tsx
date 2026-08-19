@@ -1,5 +1,5 @@
 import React from "react"
-import { Information } from "@styled-icons/remix-line"
+import { Information } from "../icons"
 import { Button, Tooltip } from "../../components"
 
 export const DocsLink = ({
@@ -13,7 +13,7 @@ export const DocsLink = ({
 }) => (
   <Tooltip placement="bottom" content={tooltipText}>
     <a href={url} target="_blank" rel="noopener noreferrer">
-      <Button skin="transparent" type="button">
+      <Button variant="ghost" type="button">
         <Information size="14" />
         {text && <span>{text}</span>}
       </Button>

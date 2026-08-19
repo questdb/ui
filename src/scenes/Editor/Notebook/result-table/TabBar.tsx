@@ -1,5 +1,5 @@
 import React from "react"
-import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
+import { CheckmarkOutline, CloseOutline } from "../../../../components/icons"
 import { Queue } from "@phosphor-icons/react"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"

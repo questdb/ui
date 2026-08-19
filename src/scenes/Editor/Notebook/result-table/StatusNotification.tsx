@@ -1,5 +1,5 @@
 import React from "react"
-import { Stop } from "@styled-icons/remix-line"
+import { Stop } from "../../../../components/icons"
 import { Queue } from "@phosphor-icons/react"
 import { Box, Text } from "../../../../components"
 import Notification from "../../../Notifications/Notification"
@@ -65,10 +65,10 @@ export const StatusNotification: React.FC<Props> = ({
         {...baseProps}
         content={
           <Box gap="1rem" align="center">
-            <Text color="foreground">Running...</Text>
+            <Text color="contentPrimary">Running...</Text>
             {onCancelQuery && (
               <CancelButton
-                skin="error"
+                variant="dangerGhost"
                 onClick={() => {
                   void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN_CANCEL)
                   onCancelQuery(activeIndex)
@@ -89,7 +89,7 @@ export const StatusNotification: React.FC<Props> = ({
         content={
           <Box gap="1rem" align="center">
             <Queue size={16} />
-            <Text color="foreground">Queued</Text>
+            <Text color="contentPrimary">Queued</Text>
           </Box>
         }
         type={NotificationType.INFO}

@@ -1,7 +1,7 @@
 import React from "react"
 import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
 import { CaretRightIcon } from "@phosphor-icons/react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import {
   menuContainerStyles,
   menuItemStyles,
@@ -18,15 +18,33 @@ const SubContent = styled(RadixDropdownMenu.SubContent)`
   ${menuContainerStyles}
 `
 
-const StyledItem = styled(RadixDropdownMenu.Item)`
+type ItemTone = "default" | "accent" | "danger"
+
+const StyledItem = styled(RadixDropdownMenu.Item)<{ $tone?: ItemTone }>`
   ${menuItemStyles}
+
+  ${({ $tone, theme }) =>
+    $tone === "danger" &&
+    css`
+      color: ${theme.color.statusDanger};
+
+      &[data-highlighted] {
+        background: ${theme.color.statusDangerSurface};
+      }
+    `}
+
+  ${({ $tone, theme }) =>
+    $tone === "accent" &&
+    css`
+      color: ${theme.color.contentAccent};
+    `}
 `
 
 const RadioItem = styled(RadixDropdownMenu.RadioItem)`
   ${menuItemStyles}
 
   &[data-state="checked"] {
-    background: ${({ theme }) => theme.color.background};
+    background: ${({ theme }) => theme.color.interactionNeutral};
   }
 `
 
@@ -35,21 +53,22 @@ type ItemProps = React.ComponentPropsWithoutRef<
 > & {
   icon?: React.ReactNode
   subtitle?: React.ReactNode
+  tone?: ItemTone
 }
 
 const Item = React.forwardRef<
   React.ElementRef<typeof RadixDropdownMenu.Item>,
   ItemProps
->(({ icon, subtitle, children, ...props }, ref) => {
+>(({ icon, subtitle, tone = "default", children, ...props }, ref) => {
   if (props.asChild) {
     return (
-      <StyledItem ref={ref} {...props}>
+      <StyledItem ref={ref} $tone={tone} {...props}>
         {children}
       </StyledItem>
     )
   }
   return (
-    <StyledItem ref={ref} {...props}>
+    <StyledItem ref={ref} $tone={tone} {...props}>
       {icon != null && <MenuItemIcon>{icon}</MenuItemIcon>}
       {subtitle != null ? (
         <MenuItemBody>
@@ -70,7 +89,7 @@ const StyledSubTrigger = styled(RadixDropdownMenu.SubTrigger)`
   justify-content: space-between;
 
   &[data-state="open"] {
-    background: ${({ theme }) => theme.color.background};
+    background: ${({ theme }) => theme.color.interactionNeutral};
   }
 `
 
@@ -104,7 +123,7 @@ export const DropdownMenu = {
   Content,
 
   Arrow: styled(RadixDropdownMenu.Arrow)`
-    fill: ${({ theme }) => theme.color.black40};
+    fill: ${({ theme }) => theme.color.surfaceScrim};
   `,
 
   Item,
@@ -121,7 +140,7 @@ export const DropdownMenu = {
 
   Divider: styled.div`
     height: 1px;
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ theme }) => theme.color.interactionNeutral};
     margin: 0.5rem 0.4rem;
   `,
 }

@@ -25,12 +25,14 @@ import React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import { CSSTransition } from "react-transition-group"
-import styled from "styled-components"
-import { Add, Close as _CloseIcon } from "@styled-icons/remix-line"
-import { Menu as _MenuIcon } from "@styled-icons/remix-fill"
+import styled, { css, keyframes } from "styled-components"
+import { CalendarCheckIcon } from "@phosphor-icons/react"
+import { Add, Close as _CloseIcon } from "../../../components/icons"
+import { Menu as _MenuIcon } from "../../../components/icons"
 
 import {
   Button,
+  type ButtonProps,
   PaneMenu,
   PopperToggle,
   TransitionDuration,
@@ -44,14 +46,32 @@ import { useLocalStorage } from "../../../providers/LocalStorageProvider"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { DocSearch } from "@docsearch/react"
 import { useSettings } from "../../../providers"
+import { ThemeModeSelector } from "./ThemeModeSelector"
+import {
+  SIDEBAR_BUTTON_SIZE,
+  SIDEBAR_ICON_SIZE,
+  SIDEBAR_WIDTH,
+} from "../../../consts"
 
-import "@docsearch/css"
-
-const Wrapper = styled(PaneMenu)<{ _display: string }>`
+const Wrapper = styled(PaneMenu)<{
+  _display: string
+  $isSmallScreen: boolean
+}>`
   background: transparent;
   z-index: 15;
   padding-right: 1rem;
   flex-shrink: 0;
+
+  ${({ $isSmallScreen }) =>
+    $isSmallScreen &&
+    css`
+      width: ${SIDEBAR_WIDTH};
+      min-width: ${SIDEBAR_WIDTH};
+      height: 100%;
+      padding: 0;
+      border-left: 1px solid transparent;
+      justify-content: center;
+    `}
 
   .algolia-autocomplete {
     display: ${({ _display }) => _display} !important;
@@ -63,34 +83,50 @@ const Separator = styled.div`
   flex: 1;
 `
 
-const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
-  position: relative;
-  flex: 0 0 auto;
-  margin-right: 0.5rem;
-
-  @keyframes pulse {
+const queryPickerPulse = (pulseColor: string) => keyframes`
     0% {
-      box-shadow: 0 0 0 0px ${color("cyan")};
+      box-shadow: 0 0 0 0 ${pulseColor};
     }
+
     75% {
       box-shadow: 0 0 0 5px transparent;
     }
-  }
+  `
 
-  animation: ${({ $firstTimeVisitor }) =>
-    $firstTimeVisitor ? "pulse 2s infinite" : "none"};
+const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
+  position: relative;
+  flex: 0 0 auto;
+
+  ${({ $firstTimeVisitor, theme }) =>
+    $firstTimeVisitor
+      ? css`
+          animation: ${queryPickerPulse(theme.color.gridFocus)} 2s infinite;
+        `
+      : css`
+          animation: none;
+        `}
 `
 
 const MenuIcon = styled(_MenuIcon)`
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const CloseIcon = styled(_CloseIcon)`
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const SideMenuMenuButton = styled(Button)`
-  padding: 0;
+  width: ${SIDEBAR_BUTTON_SIZE};
+  min-width: ${SIDEBAR_BUTTON_SIZE};
+  height: ${SIDEBAR_BUTTON_SIZE};
+  min-height: ${SIDEBAR_BUTTON_SIZE};
+  padding: 0.7rem;
+
+  svg {
+    width: ${SIDEBAR_ICON_SIZE}px;
+    height: ${SIDEBAR_ICON_SIZE}px;
+    flex: 0 0 ${SIDEBAR_ICON_SIZE}px;
+  }
 
   .fade-enter {
     opacity: 0;
@@ -111,27 +147,22 @@ const SideMenuMenuButton = styled(Button)`
   }
 `
 
-const CTAButton = styled.a`
-  height: 3rem;
-  padding: 0 0.8rem;
-  border: 1px solid ${color("pinkPrimary")};
-  border-radius: 0.4rem;
-  color: ${color("white")};
+const LinkButton = (props: ButtonProps) => <Button {...props} as="a" />
+
+const BookDemoButton = styled(LinkButton).attrs({
+  variant: "primary",
+  size: "md",
+})`
+  flex: 0 0 auto;
   text-decoration: none;
   font-weight: 600;
-  line-height: 2.7rem;
-
-  &:hover {
-    background: ${color("pinkPrimary")};
-    color: ${color("white")};
-  }
 `
 
-const MenuItems = styled.div`
-  display: grid;
+const MenuItems = styled.div<{ $hidden: boolean }>`
+  display: ${({ $hidden }) => ($hidden ? "none" : "grid")};
   grid-auto-flow: column;
   align-items: center;
-  gap: 1.6rem;
+  gap: 1.2rem;
 `
 
 const Menu = () => {
@@ -166,34 +197,41 @@ const Menu = () => {
   }, [dispatch, opened, isSmallScreen])
 
   return (
-    <Wrapper _display={isSmallScreen ? "none" : "inline"}>
-      <Separator />
+    <Wrapper
+      _display={isSmallScreen ? "none" : "inline"}
+      $isSmallScreen={isSmallScreen}
+    >
+      {!isSmallScreen && <Separator />}
 
-      {consoleConfig.savedQueries && consoleConfig.savedQueries.length > 0 && (
-        <PopperToggle
-          active={queriesPopperActive}
-          onToggle={handleQueriesToggle}
-          trigger={
-            <QueryPickerButton
-              skin="secondary"
-              $firstTimeVisitor={!exampleQueriesVisited}
+      <MenuItems $hidden={isSmallScreen}>
+        {consoleConfig.savedQueries &&
+          consoleConfig.savedQueries.length > 0 && (
+            <PopperToggle
+              active={queriesPopperActive}
+              onToggle={handleQueriesToggle}
+              placement="bottom-end"
+              modifiers={[
+                { name: "offset", options: { offset: [0, 6] } },
+                { name: "preventOverflow", options: { padding: 8 } },
+              ]}
+              trigger={
+                <QueryPickerButton
+                  variant="secondary"
+                  $firstTimeVisitor={!exampleQueriesVisited}
+                >
+                  <Add size="18px" />
+                  <span>Example queries</span>
+                </QueryPickerButton>
+              }
             >
-              <Add size="18px" />
-              <span>Example queries</span>
-            </QueryPickerButton>
-          }
-        >
-          <QueryPicker
-            hidePicker={handleHidePicker}
-            queries={consoleConfig.savedQueries ?? []}
-          />
-        </PopperToggle>
-      )}
-      <SetupAIAssistant />
-
-      <Separator />
-
-      <MenuItems>
+              <QueryPicker
+                hidePicker={handleHidePicker}
+                queries={consoleConfig.savedQueries ?? []}
+              />
+            </PopperToggle>
+          )}
+        <ThemeModeSelector />
+        <SetupAIAssistant />
         <DocSearch
           appId="QL9L2YL7AQ"
           apiKey="2f67aeacbe73ad08a49efb9214ea27f3"
@@ -212,18 +250,23 @@ const Menu = () => {
           }}
         />
         {consoleConfig.ctaBanner && (
-          <CTAButton
+          <BookDemoButton
             href="https://questdb.com/enterprise/contact"
             target="_blank"
+            rel="noreferrer"
+            prefixIcon={<CalendarCheckIcon size={17} weight="bold" />}
           >
             Book a demo
-          </CTAButton>
+          </BookDemoButton>
         )}
       </MenuItems>
 
       {isSmallScreen && (
         <SideMenuMenuButton
-          skin="transparent"
+          variant="ghost"
+          aria-controls="mobile-data-sources-panel"
+          aria-expanded={opened}
+          aria-label={opened ? "Close data sources" : "Open data sources"}
           onClick={handleSideMenuButtonClick}
         >
           <CSSTransition

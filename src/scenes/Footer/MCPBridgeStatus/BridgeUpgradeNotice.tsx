@@ -18,7 +18,7 @@ const Text = styled.div`
 
 const Detail = styled.span`
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   word-break: break-word;
 `
 

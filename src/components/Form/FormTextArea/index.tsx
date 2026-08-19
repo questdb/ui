@@ -1,14 +1,6 @@
 import React, { useEffect } from "react"
-import styled from "styled-components"
-import { Input as UnstyledInput } from "../../Input"
 import { useFormContext } from "react-hook-form"
-
-const TextArea = styled(UnstyledInput).attrs({
-  as: "textarea",
-})<React.TextareaHTMLAttributes<HTMLTextAreaElement>>`
-  width: 100%;
-  height: inherit;
-`
+import { TextArea } from "../../TextArea"
 
 type TextAreaProps = {
   rows?: number
@@ -24,7 +16,8 @@ export const FormTextArea = ({
   autoFocus,
   ...rest
 }: TextAreaProps) => {
-  const { register, setFocus } = useFormContext()
+  const { formState, getFieldState, register, setFocus } = useFormContext()
+  const hasError = getFieldState(name, formState).error != null
 
   useEffect(() => {
     if (autoFocus) {
@@ -38,6 +31,9 @@ export const FormTextArea = ({
       rows={rows ?? 4}
       placeholder={placeholder}
       {...rest}
+      id={name}
+      aria-invalid={hasError || undefined}
+      aria-describedby={hasError ? `${name}-error` : undefined}
     />
   )
 }

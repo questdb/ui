@@ -25,66 +25,136 @@
 import "styled-components"
 
 export type ColorShape = {
-  black: string
-  black70: string
-  overlayBackground: string
-  black40: string
-  black32: string
-  black20: string
-  gray1: string
-  gray2: string
-  backgroundLighter: string
-  inputBackground: string
-  chatBackground: string
-  backgroundDarker: string
-  background: string
-  foreground: string
-  selection: string
-  inputBorder: string
-  selectionDarker: string
-  baseGrey: string
-  dropdownBackground: string
-  dropdownBorder: string
-  comment: string
-  midnight: string
-  red: string
-  redDark: string
-  redSecondary: string
-  dangerBackground: string
-  dangerBackgroundHover: string
-  dangerForeground: string
-  loginBackground: string
-  orange10: string
-  orangeDark: string
-  orange: string
-  yellow: string
-  green: string
-  greenDarker: string
-  purple: string
-  cyan: string
-  cyan10: string
-  pink: string
-  pink50: string
-  pinkPrimary: string
-  pinkDarker: string
-  pinkLighter: string
-  pinkBadge: string
+  surfaceCanvas: string
+  surfaceStage: string
+  surfaceBase: string
+  surfaceInset: string
+  surfaceRaised: string
+  surfaceInput: string
+  surfaceOverlay: string
+  surfaceValue: string
+  surfaceScrim: string
+  surfaceTabRail: string
   transparent: string
-  white: string
-  inherit: string
-  tooltipBackground: string
-  tableSelection: string
-  graphLegend: string
-  offWhite: string
-  offWhite2: string
-  editorBackground: string
-  aiStopButtonBg: string
-  aiStopButtonFg: string
-  aiBadgeIconBg: string
-  aiBadgeIconBorder: string
-  dividerAccent: string
-  mutedLabel: string
-  pinkGradientEnd: string
+  contentPrimary: string
+  contentSecondary: string
+  contentMuted: string
+  contentDisabled: string
+  contentInverse: string
+  contentOnWarning: string
+  neutralInk: string
+  contentAccent: string
+  contentAccentStrong: string
+  contentObject: string
+  contentSearchMatch: string
+  borderSubtle: string
+  borderDefault: string
+  borderStrong: string
+  borderAccent: string
+  borderAccentStrong: string
+  interactionNeutral: string
+  interactionNeutralHover: string
+  interactionHover: string
+  interactionAccentHover: string
+  interactionAccentActive: string
+  interactionGuide: string
+  scrollbarThumb: string
+  controlSurface: string
+  controlSurfaceHover: string
+  controlTrack: string
+  actionPrimary: string
+  actionPrimaryHover: string
+  statusDanger: string
+  statusDangerStrong: string
+  statusDangerMuted: string
+  statusDangerSurface: string
+  statusDangerSurfaceHover: string
+  statusDangerBorder: string
+  statusSuccess: string
+  statusSuccessStrong: string
+  statusSuccessSurface: string
+  statusSuccessBorder: string
+  statusWarning: string
+  statusWarningSurface: string
+  statusWarningSurfaceHover: string
+  statusAttention: string
+  statusInfo: string
+  statusInfoSurface: string
+  statusFeature: string
+  statusAssistant: string
+  statusAssistantStrong: string
+  shadowSubtle: string
+  shadowSoft: string
+  shadowMedium: string
+  shadowStrong: string
+  shadowOverlay: string
+  glassSurface: string
+  glassBorder: string
+  glassEdge: string
+  brandGradientStart: string
+  brandGradientEnd: string
+  aiGradientStart: string
+  aiGradientEnd: string
+  gridRow: string
+  gridHeader: string
+  gridSelection: string
+  gridFocus: string
+  editorCanvas: string
+  editorBorder: string
+  editorSelection: string
+  editorSelectionAccent: string
+  editorActiveLine: string
+  editorActiveLineBorder: string
+  editorSuggestionMatchActive: string
+  editorRun: string
+  editorSyntaxString: string
+  editorSyntaxNumber: string
+  editorSyntaxKeyword: string
+  editorSyntaxType: string
+  editorSyntaxConstant: string
+  editorSyntaxVariable: string
+  editorErrorHighlight: string
+  editorSuccessHighlight: string
+  editorSearchHighlight: string
+  editorAiHighlight: string
+  dataGrid: string
+  dataArea: string
+  dataSeries1: string
+  dataSeries2: string
+  dataSeries3: string
+  dataSeries4: string
+  dataSeries5: string
+  dataSeries6: string
+  dataSeries7: string
+  dataSeries8: string
+  dataSeries9: string
+  dataSeries10: string
+  dataPositive: string
+  dataNegative: string
+  authBackdrop: string
+  authAccent: string
+  authAccentMuted: string
+  authBorder: string
+  authVersionContent: string
+  onboardingSurface: string
+  onboardingDivider: string
+  onboardingClose: string
+  onboardingCommand: string
+  onboardingInput: string
+  onboardingPrompt: string
+  onboardingAccent: string
+  instancePreset1: string
+  instancePreset2: string
+  instancePreset3: string
+  windowControlClose: string
+  windowControlMinimize: string
+  windowControlExpand: string
+  pickerHue0: string
+  pickerHue1: string
+  pickerHue2: string
+  pickerHue3: string
+  pickerHue4: string
+  pickerHue5: string
 }
 
 export type FontSizeShape = {
@@ -99,10 +169,15 @@ export type FontSizeShape = {
 
 export type Color = keyof ColorShape
 
+export type ThemeMode = "dark" | "light"
+
+export type ThemePreference = ThemeMode | "system"
+
 export type FontSize = keyof FontSizeShape
 
 declare module "styled-components" {
   interface DefaultTheme {
+    mode: ThemeMode
     baseFontSize: string
     color: ColorShape
     font: string

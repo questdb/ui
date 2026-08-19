@@ -1,13 +1,14 @@
 import React, { ReactNode, useState, createContext, useContext } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import styled, { css } from "styled-components"
-import { ArrowLeft } from "@styled-icons/remix-line"
+import { ArrowLeft } from "../icons"
 import { Overlay } from "../Overlay"
 import { Box } from "../Box"
 import { Button } from "../Button"
 import { Text } from "../Text"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { ForwardRef } from "../ForwardRef"
+import { modalSurfaceStyles } from "../overlayStyles"
 
 type NavigationContextType = {
   handleNext: () => void | Promise<void>
@@ -58,9 +59,7 @@ const dialogHide = css`
 `
 
 const StyledContent = styled(RadixDialog.Content)<{ maxwidth?: string }>`
-  background-color: ${({ theme }) => theme.color.backgroundDarker};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  box-shadow: 0 0.7rem 3rem -1rem ${({ theme }) => theme.color.black};
+  ${modalSurfaceStyles}
   position: fixed;
   top: 50%;
   left: 50%;
@@ -69,7 +68,6 @@ const StyledContent = styled(RadixDialog.Content)<{ maxwidth?: string }>`
   max-width: ${({ maxwidth }) => maxwidth ?? "50rem"};
   max-height: 85vh;
   padding: 0;
-  border: 0.1rem solid ${({ theme }) => theme.color.selection};
   z-index: 101;
   display: flex;
   flex-direction: column;
@@ -84,10 +82,6 @@ const StyledContent = styled(RadixDialog.Content)<{ maxwidth?: string }>`
   &[data-state="closed"] {
     animation: dialogHide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
-
-  &:focus {
-    outline: none;
-  }
 `
 
 const StepIndicatorContainer = styled(Box).attrs({
@@ -95,10 +89,10 @@ const StepIndicatorContainer = styled(Box).attrs({
   align: "center",
 })`
   backdrop-filter: blur(0.6rem);
-  background: rgba(255, 255, 255, 0.06);
+  background: ${({ theme }) => theme.color.interactionHover};
   padding: 0.4rem;
   border-radius: 10rem;
-  box-shadow: 0 0.1rem 0.2rem rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0.1rem 0.2rem ${({ theme }) => theme.color.shadowSubtle};
   width: fit-content;
 `
 
@@ -106,14 +100,14 @@ const StepBadge = styled.div`
   backdrop-filter: blur(0.6rem);
   padding: 0.2rem 0.8rem;
   border-radius: 10rem;
-  background: rgba(255, 255, 255, 0.16);
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const StepBadgeText = styled(Text)`
   font-size: 1.2rem;
   font-weight: 500;
   text-transform: uppercase;
-  color: ${({ theme }) => theme.color.cyan};
+  color: ${({ theme }) => theme.color.contentAccent};
   padding: 0.2rem 0.8rem;
 `
 
@@ -121,7 +115,7 @@ const StepBadgeLabel = styled(RadixDialog.Title)`
   font-size: 1.2rem;
   font-weight: 400;
   line-height: 1.5;
-  color: ${({ theme }) => theme.color.white};
+  color: ${({ theme }) => theme.color.contentPrimary};
   margin: 0;
 `
 
@@ -136,7 +130,7 @@ const FooterSection = styled(Box).attrs({
 })`
   padding: 2.4rem;
   width: 100%;
-  border-top: 0.1rem solid ${({ theme }) => theme.color.selection};
+  border-top: 0.1rem solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const FooterButtons = styled(Box).attrs({
@@ -148,7 +142,7 @@ const FooterButtons = styled(Box).attrs({
 `
 
 const ValidationError = styled(Text)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
   font-size: 1.3rem;
   text-align: right;
   width: 100%;
@@ -338,13 +332,13 @@ export const MultiStepModal = ({
                 <CancelButton
                   data-hook="multi-step-modal-cancel-button"
                   onClick={isFirstStep ? handleClose : handlePrevious}
-                  skin="transparent"
+                  variant="ghost"
                 >
                   {!isFirstStep && <ArrowLeft size="1.4rem" />}
                   {isFirstStep ? "Cancel" : "Back"}
                 </CancelButton>
                 <NextButton
-                  skin="primary"
+                  variant="primary"
                   data-hook="multi-step-modal-next-button"
                   disabled={
                     isValidating ||

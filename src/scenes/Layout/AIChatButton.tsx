@@ -6,6 +6,7 @@ import { useAIConversationActions } from "../../providers/AIConversationProvider
 import { useAIStatus } from "../../providers/AIStatusProvider"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
+import { SIDEBAR_ICON_SIZE } from "../../consts"
 
 const ChatButton = styled(PrimaryToggleButton)`
   padding: 0;
@@ -21,13 +22,14 @@ export const AIChatButton = () => {
     useAIConversationActions()
   const { canUse } = useAIStatus()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
+  const isActive = activeSidebar?.type === "aiChat"
 
   if (!canUse) {
     return null
   }
 
   const handleClick = () => {
-    if (activeSidebar?.type === "aiChat") {
+    if (isActive) {
       closeChatWindow()
     } else {
       void openOrCreateBlankChatWindow()
@@ -36,14 +38,16 @@ export const AIChatButton = () => {
 
   return (
     <ChatButton
-      selected={activeSidebar?.type === "aiChat"}
+      aria-label={isActive ? "Close AI Assistant" : "Open AI Assistant"}
+      aria-pressed={isActive}
+      selected={isActive}
       onClick={handleClick}
       data-hook="ai-chat-button"
     >
       <IconWithTooltip
         icon={
           <TooltipWrapper>
-            <AISparkle size={24} variant="filled" />
+            <AISparkle size={SIDEBAR_ICON_SIZE} variant="filled" />
           </TooltipWrapper>
         }
         placement="left"

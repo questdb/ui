@@ -3,12 +3,15 @@ import styled, { css } from "styled-components"
 import type { DefaultTheme } from "styled-components"
 import { Tooltip } from "../Tooltip"
 import type { FontSize } from "../../types"
-import type { Skin } from "./skin"
-import { makeSkin } from "./skin"
+import type { ButtonVariant } from "./variants"
+import { makeButtonVariant } from "./variants"
 import {
-  pinkLinearGradientHorizontal,
-  pinkLinearGradientVertical,
+  brandLinearGradientHorizontal,
+  brandLinearGradientVertical,
 } from "../../theme"
+import { BUTTON_HEIGHTS } from "./tokens"
+
+export { BUTTON_HEIGHTS, TOOLBAR_CONTROL_HEIGHT } from "./tokens"
 
 export const sizes = ["sm", "md", "lg"] as const
 export type Size = (typeof sizes)[number]
@@ -16,8 +19,8 @@ type Type = "button" | "submit"
 
 const getPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) =>
   props.gradientStyle === "vertical"
-    ? pinkLinearGradientVertical
-    : pinkLinearGradientHorizontal
+    ? brandLinearGradientVertical(props.theme.color)
+    : brandLinearGradientHorizontal(props.theme.color)
 
 const getHoverPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) => {
   const base = getPinkGradient(props)
@@ -31,8 +34,13 @@ const getBorderWidth = (props: ButtonProps) =>
 
 const getFillColor = (props: ButtonProps & { theme: DefaultTheme }) =>
   "gradientWeight" in props && props.gradientWeight === "thick"
-    ? props.theme.color.selectionDarker
-    : props.theme.color.backgroundDarker
+    ? props.theme.color.controlSurface
+    : props.theme.color.surfaceInset
+
+const getHoverFillColor = (props: ButtonProps & { theme: DefaultTheme }) =>
+  "gradientWeight" in props && props.gradientWeight === "thick"
+    ? props.theme.color.controlSurfaceHover
+    : props.theme.color.surfaceInset
 
 type BaseButtonProps = {
   as?: React.ElementType
@@ -46,6 +54,8 @@ type BaseButtonProps = {
   onMouseDown?: (event: MouseEvent) => void
   onMouseEnter?: (event: MouseEvent) => void
   onMouseLeave?: (event: MouseEvent) => void
+  onDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void
+  onDragEnd?: (event: React.DragEvent<HTMLButtonElement>) => void
   onFocus?: (event: FocusEvent) => void
   onBlur?: (event: FocusEvent) => void
   size?: Size
@@ -54,38 +64,57 @@ type BaseButtonProps = {
   title?: string
   rounded?: boolean
   prefixIcon?: React.ReactNode
+  leadingIcon?: React.ReactNode
+  trailingIcon?: React.ReactNode
   dataHook?: string
+  id?: string
+  href?: string
+  target?: string
+  rel?: string
+  download?: string | boolean
+  draggable?: boolean
+  "aria-label"?: string
+  "aria-pressed"?: boolean
+  "aria-expanded"?: boolean
+  "aria-controls"?: string
 }
 
-type GradientOnlyProps = {
-  skin: "gradient"
+type VariantProps = {
+  variant?: ButtonVariant
   gradientWeight?: "thin" | "thick"
   gradientStyle?: "horizontal" | "vertical"
 }
 
-type NonGradientProps = {
-  skin?: Exclude<Skin, "gradient">
-  gradientWeight?: never
-  gradientStyle?: never
-}
-
-export type ButtonProps = BaseButtonProps &
-  (GradientOnlyProps | NonGradientProps)
+export type ButtonProps = BaseButtonProps & VariantProps
 
 const Prefix = styled.div<{ disabled?: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-right: 0.5rem;
   pointer-events: none;
   filter: ${({ disabled }) => (disabled ? "grayscale(100%)" : "none")};
-  opacity: ${({ disabled }) => (disabled ? 0.5 : 1)};
 `
 
+const Suffix = Prefix
+
 export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
-  ({ as, children, prefixIcon, disabled, disabledTooltip, ...props }, ref) => {
-    const type = as === "button" ? { type: "button" } : {}
+  (
+    {
+      as,
+      children,
+      prefixIcon,
+      leadingIcon,
+      trailingIcon,
+      disabled,
+      disabledTooltip,
+      ...props
+    },
+    ref,
+  ) => {
+    const type =
+      as == null || as === "button" ? { type: props.type ?? "button" } : {}
     const { style } = props as { style?: React.CSSProperties }
+    const startIcon = leadingIcon ?? prefixIcon
     const button = (
       <StyledButton
         ref={ref}
@@ -95,8 +124,9 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
         {...props}
         {...type}
       >
-        {prefixIcon && <Prefix disabled={disabled}>{prefixIcon}</Prefix>}
+        {startIcon && <Prefix disabled={disabled}>{startIcon}</Prefix>}
         {children}
+        {trailingIcon && <Suffix disabled={disabled}>{trailingIcon}</Suffix>}
       </StyledButton>
     )
 
@@ -123,23 +153,63 @@ export const Button: React.FunctionComponent<ButtonProps> = React.forwardRef(
   },
 )
 
-const StyledButton = styled.button<ButtonProps>`
+// The one sanctioned native-button wrapper every other control extends.
+// eslint-disable-next-line no-restricted-syntax
+export const ButtonBase = styled.button.attrs<{
+  as?: React.ElementType
+  type?: Type
+}>(({ as, type }) =>
+  as == null || as === "button" ? { type: type ?? "button" } : {},
+)`
+  appearance: none;
+  box-sizing: border-box;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease,
+    filter 120ms ease;
+
+  &&:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline-offset: 2px;
+  }
+
+  &&:disabled,
+  &&[aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: brightness(0.9);
+  }
+`
+
+const StyledButton = styled(ButtonBase)<ButtonProps>`
   display: inline-flex;
   height: ${getSize};
-  padding: 0 1rem;
+  padding: ${getPadding};
+  gap: 0.6rem;
   align-items: center;
   justify-content: center;
   background: transparent;
   border-radius: 4px;
   border: 1px solid transparent;
-  outline: 0;
-  font-weight: 400;
+  font-weight: 500;
+  font-size: ${({ fontSize, theme }) => theme.fontSize[fontSize ?? "sm"]};
+  letter-spacing: 0.01em;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    filter 150ms ease;
   line-height: 1.15;
   cursor: pointer;
-
-  svg + span {
-    margin-left: 0.5rem;
-  }
 
   ${(props) =>
     props.rounded &&
@@ -162,37 +232,46 @@ const StyledButton = styled.button<ButtonProps>`
       width: 100%;
     `}
 
-  ${(props) => makeSkin(props.skin ?? "primary")}
+  ${(props) => makeButtonVariant(props.variant ?? "primary")}
 
   ${(props) =>
-    props.skin === "gradient" &&
+    props.variant === "gradient" &&
     css`
-      border: ${getBorderWidth} solid transparent;
-      background:
-        linear-gradient(${getFillColor}, ${getFillColor}) padding-box,
-        ${getPinkGradient} border-box;
-      color: ${props.theme.color.white};
-
-      &:hover:not([disabled]) {
+      && {
+        border: ${getBorderWidth} solid transparent;
         background:
           linear-gradient(${getFillColor}, ${getFillColor}) padding-box,
-          ${getHoverPinkGradient} border-box;
-        filter: brightness(120%);
+          ${getPinkGradient} border-box;
+        color: ${props.theme.color.contentPrimary};
       }
 
-      &:disabled {
-        border: ${getBorderWidth(props)} solid ${props.theme.color.gray1};
-        background: ${props.theme.color.backgroundLighter};
-        color: ${props.theme.color.gray1};
+      &&:hover:not(:disabled):not([aria-disabled="true"]) {
+        background:
+          linear-gradient(${getHoverFillColor}, ${getHoverFillColor})
+            padding-box,
+          ${getHoverPinkGradient} border-box;
+        color: ${props.theme.color.contentPrimary};
+      }
+
+      &&:disabled,
+      &&[aria-disabled="true"] {
+        border: ${getBorderWidth(props)} solid ${props.theme.color.borderSubtle};
+        background: ${props.theme.color.surfaceRaised};
+        color: ${props.theme.color.contentDisabled};
       }
     `}
 `
 
 function getSize({ size }: { size?: Size }) {
-  const sizes = {
-    sm: "2rem",
-    md: "3rem",
-    lg: "5rem",
+  return BUTTON_HEIGHTS[size ?? "md"]
+}
+
+function getPadding({ size, rounded }: { size?: Size; rounded?: boolean }) {
+  if (rounded) return "0"
+  const paddings = {
+    sm: "0 0.8rem",
+    md: "0 1.2rem",
+    lg: "0 1.6rem",
   }
-  return sizes[size ?? "md"]
+  return paddings[size ?? "md"]
 }

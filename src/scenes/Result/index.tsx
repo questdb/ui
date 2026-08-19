@@ -32,13 +32,13 @@ import React, {
 } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import { Download2, Refresh } from "@styled-icons/remix-line"
-import { Reset } from "@styled-icons/boxicons-regular"
-import { HandPointLeft } from "@styled-icons/fa-regular"
-import { TableFreezeColumn } from "@styled-icons/fluentui-system-filled"
-import { Markdown } from "@styled-icons/bootstrap/Markdown"
-import { Check } from "@styled-icons/bootstrap/Check"
-import { ArrowDownS } from "@styled-icons/remix-line"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
+import { Download2, Play, ResetGrid } from "../../components/icons"
+import { MoveColumnToFront } from "../../components/icons"
+import { TableFreezeColumn } from "../../components/icons"
+import { Markdown } from "../../components/icons"
+import { Check } from "../../components/icons"
+import { ArrowDownS } from "../../components/icons"
 import { grid } from "../../js/console/grid"
 import { quickVis } from "../../js/console/quick-vis"
 import {
@@ -71,11 +71,14 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
+import { CELL_FONT_SIZE_PX } from "../../components/ResultGrid"
+import { ResultChart } from "./ResultChart"
 
 const Root = styled.div`
   display: flex;
   flex: 1;
   width: 100%;
+  background: ${({ theme }) => theme.color.surfaceBase};
 `
 
 const Wrapper = styled(PaneWrapper)`
@@ -84,26 +87,38 @@ const Wrapper = styled(PaneWrapper)`
 
 const Content = styled(PaneContent)`
   flex: 1 1 0;
-  color: ${color("foreground")};
-
-  *::selection {
-    background: ${color("red")};
-    color: ${color("foreground")};
-  }
+  color: ${color("contentPrimary")};
 `
 
 const Actions = styled.div`
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
+  display: flex;
   gap: 0.5rem;
   align-items: center;
   justify-content: flex-end;
   padding: 0 1rem;
   width: 100%;
-  height: 4.5rem;
-  border-bottom: 2px solid ${({ theme }) => theme.color.backgroundDarker};
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  height: 5.2rem;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  background: ${({ theme }) => theme.color.surfaceRaised};
+`
+
+const ResultCountBadge = styled.span`
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  gap: 0.4rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: ${CELL_FONT_SIZE_PX}px;
+  line-height: 1.2;
+  white-space: nowrap;
+`
+
+const ResultCount = styled.span`
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 `
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
@@ -114,11 +129,6 @@ const StyledPrimaryToggleButton = styled(PrimaryToggleButton)`
   padding: 0 1rem;
   height: 3rem;
   width: 4rem;
-`
-
-const RowCount = styled(Text)`
-  margin-right: 1rem;
-  line-height: 1.285;
 `
 
 const DownloadButton = styled(Button)`
@@ -150,7 +160,6 @@ const DownloadMenuItem = styled(Button)`
   width: 100%;
   height: 3rem;
   padding: 0 1rem;
-  font-size: 1.4rem;
 `
 
 const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
@@ -165,7 +174,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
   const [downloadMenuActive, setDownloadMenuActive] = useState<boolean>(false)
-  const { useNewGrid } = useLocalStorage()
+  const { useNewGrid, useQuickVis } = useLocalStorage()
   const dispatch = useDispatch()
 
   // Shared by both grids. On a failed fetch it surfaces a notification and never
@@ -185,7 +194,9 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
         dispatch(
           actions.query.addNotification({
             query: `${sql}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
-            content: <Text color="red">{(err as ErrorResult).error}</Text>,
+            content: (
+              <Text color="statusDanger">{(err as ErrorResult).error}</Text>
+            ),
             sideContent: <QueryInNotification query={sql} />,
             type: NotificationType.ERROR,
             updateActiveNotification: true,
@@ -208,12 +219,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       gridRef.current = grid(document.getElementById("grid"), paginationFn)
     }
 
-    quickVis(
-      $("#quick-vis"),
-      window.bus as unknown as ReturnType<typeof $>,
-      quest,
-      questExecution,
-    )
+    if (useQuickVis) {
+      quickVis(
+        $("#quick-vis"),
+        window.bus as unknown as ReturnType<typeof $>,
+        quest,
+        questExecution,
+      )
+    }
 
     const _grid = gridRef.current
     if (!_grid) return
@@ -243,20 +256,17 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   }, [result])
 
   useEffect(() => {
-    const chart = document.getElementById("quick-vis")
-
-    if (!chart) {
-      return
-    }
-
     if (viewMode === "grid") {
-      chart.style.display = "none"
       gridRef?.current?.show()
     } else {
       gridRef?.current?.hide()
-      chart.style.display = "flex"
     }
-  }, [viewMode])
+
+    if (useQuickVis) {
+      const chart = document.getElementById("quick-vis")
+      if (chart) chart.style.display = viewMode === "grid" ? "none" : "flex"
+    }
+  }, [viewMode, useQuickVis])
 
   useEffect(() => {
     gridRef?.current?.render()
@@ -270,7 +280,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           data-hook="grid-toolbar-markdown"
-          skin="transparent"
+          variant="ghost"
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_MARKDOWN_COPY)
             void copyToClipboard(
@@ -308,7 +318,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           data-hook="grid-toolbar-move-front"
-          skin="transparent"
+          variant="ghost"
           disabled={!gridHasSelection}
           // Do not lose focus of the grid
           onMouseDown={(e) => e.preventDefault()}
@@ -317,7 +327,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             gridRef?.current?.shuffleFocusedColumnToFront()
           }}
         >
-          <HandPointLeft size="18px" />
+          <MoveColumnToFront size="18px" weight="regular" />
         </Button>
       ),
     },
@@ -326,7 +336,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
       trigger: (
         <Button
           data-hook="grid-toolbar-reset"
-          skin="transparent"
+          variant="ghost"
           // Keep the grid's keyboard focus and cell selection on the action.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
@@ -334,16 +344,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             gridRef?.current?.clearCustomLayout()
           }}
         >
-          <Reset size="18px" />
+          <ResetGrid size="18px" weight="regular" />
         </Button>
       ),
     },
     {
-      tooltipText: "Refresh",
+      tooltipText: "Re-run query",
       trigger: (
         <Button
           data-hook="grid-toolbar-refresh"
-          skin="transparent"
+          variant="ghost"
           disabled={activeQueryExecution !== null}
           onClick={() => {
             void trackEvent(ConsoleEvent.GRID_REFRESH)
@@ -353,7 +363,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             }
           }}
         >
-          <Refresh size="18px" />
+          <ArrowClockwiseIcon size="18px" weight="regular" />
         </Button>
       ),
     },
@@ -385,10 +395,13 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     <Root>
       <Wrapper>
         <Actions>
-          {count && (
-            <RowCount color="foreground">
-              {`${count.toLocaleString()} row${count > 1 ? "s" : ""}`}
-            </RowCount>
+          {count !== undefined && (
+            <ResultCountBadge
+              aria-label={`${count.toLocaleString()} ${count === 1 ? "row" : "rows"}`}
+            >
+              <ResultCount>{count.toLocaleString()}</ResultCount>
+              {count === 1 ? "row" : "rows"}
+            </ResultCountBadge>
           )}
           {viewMode === "grid" &&
             gridActions.map((action) => (
@@ -406,7 +419,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
 
           <Box gap="0">
             <DownloadButton
-              skin="secondary"
+              variant="secondary"
               data-hook="download-parquet-button"
               onClick={() => handleDownload("parquet")}
             >
@@ -429,8 +442,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
               ]}
               trigger={
                 <DownloadDropdownButton
-                  skin="secondary"
+                  variant="secondary"
                   data-hook="download-dropdown-button"
+                  aria-label={
+                    downloadMenuActive
+                      ? "Close download options"
+                      : "Open download options"
+                  }
+                  aria-expanded={downloadMenuActive}
                 >
                   <ArrowIcon size="18px" $open={downloadMenuActive} />
                 </DownloadDropdownButton>
@@ -438,7 +457,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             >
               <DownloadMenuItem
                 data-hook="download-csv-button"
-                skin="secondary"
+                variant="secondary"
                 onClick={() => handleDownload("csv")}
               >
                 Download as CSV
@@ -454,44 +473,52 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             <div id="grid" />
           )}
 
-          <div id="quick-vis">
-            <div className="quick-vis-controls">
-              <form className="v-fit">
-                <div className="form-group">
-                  <label htmlFor="_qvis_frm_chart_type">Chart type</label>
-                  <select id="_qvis_frm_chart_type">
-                    <option>bar</option>
-                    <option>line</option>
-                    <option>area</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label htmlFor="_qvis_frm_axis_x">Labels</label>
-                  <select
-                    id="_qvis_frm_axis_x"
-                    data-hook="chart-panel-labels-select"
-                  />
-                </div>
-                <div className="form-group">
-                  <label htmlFor="_qvis_frm_axis_y">Series</label>
-                  <select
-                    id="_qvis_frm_axis_y"
-                    data-hook="chart-panel-series-select"
-                    multiple
-                  />
-                </div>
-                <button
-                  className="button-primary js-chart-draw"
-                  id="_qvis_frm_draw"
-                  data-hook="chart-panel-draw-button"
-                >
-                  <i className="icon icon-play" />
-                  <span>Draw</span>
-                </button>
-              </form>
+          {useQuickVis ? (
+            <div id="quick-vis">
+              <div className="quick-vis-controls">
+                <form className="v-fit">
+                  <div className="form-group">
+                    <label htmlFor="_qvis_frm_chart_type">Chart type</label>
+                    <select id="_qvis_frm_chart_type">
+                      <option>bar</option>
+                      <option>line</option>
+                      <option>area</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="_qvis_frm_axis_x">Labels</label>
+                    <select
+                      id="_qvis_frm_axis_x"
+                      data-hook="chart-panel-labels-select"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="_qvis_frm_axis_y">Series</label>
+                    <select
+                      id="_qvis_frm_axis_y"
+                      data-hook="chart-panel-series-select"
+                      multiple
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    className="js-chart-draw"
+                    id="_qvis_frm_draw"
+                    data-hook="chart-panel-draw-button"
+                  >
+                    <Play size="16px" weight="fill" />
+                    <span>Draw</span>
+                  </Button>
+                </form>
+              </div>
+              <div className="quick-vis-canvas" />
             </div>
-            <div className="quick-vis-canvas" />
-          </div>
+          ) : (
+            <ResultChart
+              result={result?.type === QuestDB.Type.DQL ? result : null}
+              visible={viewMode === "chart"}
+            />
+          )}
         </Content>
       </Wrapper>
     </Root>

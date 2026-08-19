@@ -23,6 +23,7 @@
  ******************************************************************************/
 
 import "core-js/features/promise"
+import "./styles/_fonts.scss"
 import "./js/console"
 import "./utils/monacoInit"
 import "./js/console/cryptoPolyfill"
@@ -38,8 +39,9 @@ import ReactDOM from "react-dom"
 import { Provider } from "react-redux"
 import { applyMiddleware, compose, createStore } from "redux"
 import { createEpicMiddleware } from "redux-observable"
-import { ThemeProvider } from "styled-components"
 import { GlobalStyle } from "./theme/global-styles"
+import { ThemeCssVariables } from "./theme/css-variables"
+import { VendorGlobalStyle } from "./theme/vendor-global-styles"
 import {
   createGlobalFadeTransition,
   TransitionDuration,
@@ -51,13 +53,13 @@ import { rootEpic, rootReducer } from "./store"
 import { StoreAction, StoreShape } from "./types"
 
 import Layout from "./scenes/Layout"
-import { theme } from "./theme"
 import { LocalStorageProvider } from "./providers/LocalStorageProvider"
 import {
   AuthProvider,
   QuestProvider,
   SettingsProvider,
   PosthogProviderWrapper,
+  ThemeModeProvider,
 } from "./providers"
 
 const epicMiddleware = createEpicMiddleware<
@@ -78,7 +80,10 @@ const FadeSlow = createGlobalFadeTransition(
 )
 
 ReactDOM.render(
-  <ThemeProvider theme={theme}>
+  <ThemeModeProvider>
+    <VendorGlobalStyle />
+    <ThemeCssVariables />
+    <GlobalStyle />
     <TooltipProvider delayDuration={200}>
       <ScreenSizeProvider>
         <Provider store={store}>
@@ -86,7 +91,6 @@ ReactDOM.render(
             <PosthogProviderWrapper>
               <AuthProvider>
                 <QuestProvider>
-                  <GlobalStyle />
                   {ReactDOM.createPortal(<ToastContainer />, document.body)}
                   <LocalStorageProvider>
                     <FadeSlow />
@@ -100,6 +104,6 @@ ReactDOM.render(
         </Provider>
       </ScreenSizeProvider>
     </TooltipProvider>
-  </ThemeProvider>,
+  </ThemeModeProvider>,
   document.getElementById("root"),
 )

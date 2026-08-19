@@ -1,5 +1,5 @@
 import React from "react"
-import { Loader as Icon } from "@styled-icons/remix-line"
+import { Loader as Icon } from "../icons"
 import styled, { keyframes } from "styled-components"
 
 const spinAnimation = keyframes`

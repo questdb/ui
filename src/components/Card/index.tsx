@@ -13,7 +13,7 @@ const Root = styled.div<Pick<Props, "hover">>`
   display: flex;
   flex-direction: column;
   flex: 1;
-  background-color: ${({ theme }) => theme.color.backgroundLighter};
+  background-color: ${({ theme }) => theme.color.surfaceRaised};
   border-radius: ${({ theme }) => theme.borderRadius};
   border: 1px solid transparent;
 
@@ -21,7 +21,7 @@ const Root = styled.div<Pick<Props, "hover">>`
     hover &&
     ` 
       &:hover {
-        border-color: ${theme.color.selection};
+        border-color: ${theme.color.interactionNeutral};
       }
   `};
 `
@@ -43,7 +43,7 @@ const CardFooter = styled.div.attrs<CardFooterProps, CardFooterProps>(
   align-items: center;
   gap: 1rem;
   padding: 1rem 2rem;
-  border-top: 1px ${({ theme }) => theme.color.selectionDarker} solid;
+  border-top: 1px ${({ theme }) => theme.color.interactionNeutralHover} solid;
 `
 
 export const Card = ({ className, children, hover }: Props) => (

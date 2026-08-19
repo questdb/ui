@@ -20,7 +20,7 @@ describe("instance information in enterprise", () => {
     cy.getByDataHook("topbar-instance-badge").should(
       "have.css",
       "background-color",
-      "rgb(40, 42, 54)",
+      "rgba(0, 0, 0, 0)",
     )
     cy.getEditor().should("be.visible")
 

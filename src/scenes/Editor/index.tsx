@@ -30,7 +30,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import { DiffEditor, Editor as MonacoEditor } from "@monaco-editor/react"
 
 import { PaneWrapper, PaneContent, Box, Button, Key } from "../../components"
@@ -61,6 +61,7 @@ import {
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { getLastTurnWithUnactionedDiff } from "../../utils/ai/turnView"
+import { ensureMonacoThemes, getMonacoThemeName } from "../../utils/monacoInit"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -133,7 +134,7 @@ const DiffViewWrapper = styled(PaneContent)`
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: ${color("editorBackground")};
+  background: ${color("editorCanvas")};
 `
 
 const DiffEditorContainer = styled.div`
@@ -148,8 +149,8 @@ const ButtonBar = styled(Box)`
   flex-shrink: 0;
   width: fit-content;
   margin: 1rem auto;
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
+  background: ${color("surfaceInset")};
+  border: 1px solid ${color("interactionNeutral")};
   border-radius: 0.4rem;
 `
 
@@ -157,28 +158,13 @@ const KeyContainer = styled(Box).attrs({ alignItems: "center", gap: "0.3rem" })`
   margin-left: 1rem;
 `
 
-const RejectButton = styled(Button)`
-  background: ${color("background")};
-  color: ${color("foreground")};
+const RejectButton = styled(Button).attrs({ variant: "secondary" })`
   flex: 1;
-  border: 1px solid transparent;
-  &:hover:not(:disabled) {
-    border-color: transparent;
-    background: ${color("selection")};
-  }
   width: 13.5rem;
 `
 
-const AcceptButton = styled(Button)`
-  background: ${({ theme }) => theme.color.pinkDarker};
-  color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+const AcceptButton = styled(Button).attrs({ variant: "primary" })`
   flex: 1;
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.pink};
-    border-color: ${({ theme }) => theme.color.pink};
-    filter: brightness(1.1);
-  }
   width: 13.5rem;
 `
 
@@ -186,6 +172,7 @@ const Editor = ({
   innerRef,
   ...rest
 }: Props & { innerRef: Ref<HTMLDivElement> }) => {
+  const theme = useTheme()
   const dispatch = useDispatch()
   const { activeBuffer, addBuffer, cleanupExecutionRefs, executionRefs } =
     useEditor()
@@ -400,7 +387,8 @@ const Editor = ({
                     keepCurrentOriginalModel
                     keepCurrentModifiedModel
                     language={QuestDBLanguageName}
-                    theme="dracula"
+                    theme={getMonacoThemeName(theme.mode)}
+                    beforeMount={ensureMonacoThemes}
                     options={{
                       readOnly: true,
                       renderSideBySide: false,
@@ -433,8 +421,7 @@ const Editor = ({
                       <KeyContainer>
                         <Key
                           keyString="Esc"
-                          color={color("pinkPrimary")}
-                          hoverColor={color("pinkPrimary")}
+                          color={color("contentAccentStrong")}
                         />
                       </KeyContainer>
                     </RejectButton>
@@ -446,13 +433,11 @@ const Editor = ({
                       <KeyContainer>
                         <Key
                           keyString={ctrlCmd}
-                          color={color("pinkPrimary")}
-                          hoverColor={color("pinkPrimary")}
+                          color={color("contentAccentStrong")}
                         />
                         <Key
                           keyString="Enter"
-                          color={color("pinkPrimary")}
-                          hoverColor={color("pinkPrimary")}
+                          color={color("contentAccentStrong")}
                         />
                       </KeyContainer>
                     </AcceptButton>
@@ -469,7 +454,8 @@ const Editor = ({
                       (activeBuffer.previewContent as { value: string }).value
                     }
                     language={QuestDBLanguageName}
-                    theme="dracula"
+                    theme={getMonacoThemeName(theme.mode)}
+                    beforeMount={ensureMonacoThemes}
                     options={{
                       readOnly: true,
                       minimap: { enabled: false },

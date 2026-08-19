@@ -10,9 +10,9 @@ export const CellWrapper = styled.div.attrs({
   $gridMode?: boolean
 }>`
   position: relative;
-  border: 1px solid ${color("baseGrey")};
-  background: ${color("backgroundLighter")};
-  border-radius: 0.6rem;
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
+  background: ${color("surfaceRaised")};
+  border-radius: 0.8rem;
   overflow: hidden;
   min-width: 0;
   transition: all 0.15s ease;
@@ -20,16 +20,18 @@ export const CellWrapper = styled.div.attrs({
   ${({ $focused }) =>
     $focused &&
     css`
-      border-color: ${color("pinkDarker")};
-      /* pinkPrimary @ 30% — selected-cell glow ring */
-      box-shadow: 0 0 0 3px rgba(201, 50, 97, 0.3);
+      border-color: ${color("contentAccent")};
+      box-shadow:
+        0 0 0 3px ${color("interactionAccentActive")},
+        0 18px 50px ${color("shadowMedium")};
     `}
 
   ${({ $focused }) =>
     !$focused &&
     css`
       &:hover {
-        box-shadow: 0px 0px 10px 1px ${color("backgroundDarker")};
+        border-color: ${color("borderDefault")};
+        box-shadow: 0 16px 44px ${color("shadowSoft")};
       }
     `}
 

@@ -32,6 +32,37 @@ import prettierConfig from 'eslint-config-prettier'
 import globals from 'globals'
 import { Linter } from 'eslint'
 
+const restrictedControlSyntax = [
+  {
+    selector: 'JSXAttribute[name.name="skin"]',
+    message:
+      'Use the semantic Button variant API; the legacy skin API is removed.',
+  },
+  {
+    selector: 'JSXOpeningElement[name.name="button"]',
+    message:
+      'Use Button, IconButton, TextButton, TabButton, or another shared control primitive.',
+  },
+  {
+    selector:
+      'TaggedTemplateExpression > MemberExpression[object.name="styled"][property.name="button"]',
+    message:
+      'Do not create styled.button controls; extend a shared control primitive instead.',
+  },
+  {
+    selector:
+      'CallExpression[callee.object.object.name="styled"][callee.object.property.name="button"]',
+    message:
+      'Do not create styled.button controls; extend a shared control primitive instead.',
+  },
+  {
+    selector:
+      'CallExpression[callee.name="styled"][arguments.0.value="button"]',
+    message:
+      'Do not create styled.button controls; extend a shared control primitive instead.',
+  },
+]
+
 export default [
   {
     ignores: ['dist/', 'node_modules/', 'eslint.config.ts'],
@@ -150,6 +181,7 @@ export default [
       'object-shorthand': ['error', 'always'],
       'no-unused-vars': 'off', // Use @typescript-eslint/no-unused-vars instead
       'no-var': ['error'],
+      'no-restricted-syntax': ['error', ...restrictedControlSyntax],
       'no-void': 'off',
       'no-console': [
         'warn',
@@ -163,6 +195,13 @@ export default [
       'jsx-a11y/no-autofocus': 'off',
       'jsx-a11y/click-events-have-key-events': 'warn',
       'jsx-a11y/no-static-element-interactions': 'warn',
+    },
+  },
+
+  {
+    files: ['src/**/*.{js,jsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', ...restrictedControlSyntax],
     },
   },
 

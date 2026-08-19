@@ -4,10 +4,11 @@ import {
   Text,
   Link,
   Box,
-  Select,
   Button,
   ForwardRef,
   IconWithTooltip,
+  SelectMenu,
+  Tooltip,
 } from "../../../components"
 import type { Buffer } from "../../../store/buffers"
 import { useEditor } from "../../../providers"
@@ -18,14 +19,14 @@ import {
   getAutoRefreshRate,
 } from "./utils"
 import type { MetricsRefreshPayload } from "./types"
-import { GridAlt, Menu, Refresh } from "@styled-icons/boxicons-regular"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
 import { AddMetricDialog } from "./add-metric-dialog"
 import type { Metric } from "../../../store/buffers"
 import { Metric as MetricComponent } from "./metric"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
-import { ExternalLink } from "@styled-icons/remix-line"
-import { AddChart } from "@styled-icons/material"
+import { ExternalLink } from "../../../components/icons"
+import { AddChart } from "../../../components/icons"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { formatISO } from "date-fns"
@@ -35,13 +36,22 @@ import { widgets } from "./widgets"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { PaneContent } from "../../../components"
+import {
+  EditorRefreshButton,
+  EditorRefreshControlGroup,
+  EditorRefreshIntervalTrigger,
+} from "../ToolbarRefreshControls"
+import { editorStageSurfaceStyles } from "../sharedStyles"
+import { NotebookLayoutToggle } from "../Notebook/NotebookViewToggle"
+import { useTriggerTooltip } from "../Notebook/cells/useTriggerTooltip"
+import { toMetricColorToken } from "./metricColors"
 
 const Root = styled(PaneContent)`
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #2c2e3d;
+  ${editorStageSurfaceStyles}
 `
 
 const Toolbar = styled(Box).attrs({
@@ -49,27 +59,30 @@ const Toolbar = styled(Box).attrs({
   justifyContent: "space-between",
 })`
   width: 100%;
-  height: 4.5rem;
-  padding: 0 2.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.backgroundDarker};
-  box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
+  min-height: 6.4rem;
+  padding: 1rem 2rem;
+  background: ${({ theme }) => theme.color.surfaceBase};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  box-shadow: 0 12px 24px ${({ theme }) => theme.color.shadowSoft};
   white-space: nowrap;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 `
 
 const Header = styled(Text)`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   margin-bottom: 1rem;
 `
 
 const Charts = styled.div<{ $hasMetrics: boolean; $viewMode: MetricViewMode }>`
-  padding: 2.5rem;
+  padding: 3rem;
   overflow-y: auto;
   height: 100%;
   width: 100%;
-  gap: 2.5rem;
+  gap: 2.4rem;
 
   display: grid;
   grid-template-columns: ${({ $viewMode, $hasMetrics }) =>
@@ -87,8 +100,8 @@ const GlobalInfo = styled(Box).attrs({
   margin: auto;
 
   code {
-    background: #505368;
-    color: ${({ theme }) => theme.color.foreground};
+    background: ${({ theme }) => theme.color.interactionNeutralHover};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 `
 
@@ -97,20 +110,20 @@ const MetricsUnavailable = () => {
     <GlobalInfo>
       <Box gap="1.5rem" flexDirection="column">
         <Header>Metrics unavailable</Header>
-        <Text color="foreground">
+        <Text color="contentPrimary">
           Enable Telemetry to access WAL table metrics.
         </Text>
-        <Text color="foreground">
+        <Text color="contentPrimary">
           Set <code>telemetry.enabled=true</code> in your server.conf file and
           restart the server.
         </Text>
-        <Text color="foreground">
+        <Text color="contentPrimary">
           Alternatively, set <code>QDB_TELEMETRY_ENABLED=true</code> ENV var for
           the same effect.
         </Text>
         <Link
-          color="cyan"
-          hoverColor="cyan"
+          color="statusInfo"
+          hoverColor="contentAccent"
           href="https://questdb.io/docs/configuration/#telemetry"
           rel="noreferrer"
           target="_blank"
@@ -133,6 +146,7 @@ export const Metrics = () => {
   const telemetryEnabled = telemetryConfig && telemetryConfig.enabled
   const metricsFilteredRef = useRef<boolean>(false)
   const intervalRef = useRef<ReturnType<typeof setInterval>>()
+  const refreshTooltip = useTriggerTooltip()
 
   const defaultDateFromRef = useRef(
     formatISO(new Date(Date.now() - 15 * 60 * 1000)),
@@ -150,6 +164,7 @@ export const Metrics = () => {
     viewMode: metricViewMode = MetricViewMode.GRID,
   } = buffer?.metricsViewState ?? {}
   const metrics = buffer?.metricsViewState?.metrics ?? []
+  const selectedRefreshRate = refreshRate ?? RefreshRate.OFF
 
   const dateFromRef = useRef(dateFrom)
   const dateToRef = useRef(dateTo)
@@ -173,6 +188,18 @@ export const Metrics = () => {
     },
     [buffer?.id, buffer?.metricsViewState, updateBuffer],
   )
+
+  useEffect(() => {
+    const normalized = metrics.map((metric) => ({
+      ...metric,
+      color: toMetricColorToken(metric.color),
+    }))
+    if (
+      normalized.some((metric, index) => metric.color !== metrics[index].color)
+    ) {
+      updateMetrics(normalized)
+    }
+  }, [metrics, updateMetrics])
 
   const refreshMetricsData = useCallback(() => {
     eventBus.publish<MetricsRefreshPayload>(EventType.METRICS_REFRESH_DATA, {
@@ -242,6 +269,37 @@ export const Metrics = () => {
       }
     },
     [buffer?.id, buffer?.metricsViewState, updateBuffer, refreshMetricsData],
+  )
+
+  const handleRefreshRateChange = useCallback(
+    (nextRefreshRate: RefreshRate) => {
+      if (!buffer?.id) return
+
+      void trackEvent(ConsoleEvent.METRIC_REFRESH_RATE_CHANGE, {
+        refreshRate: nextRefreshRate,
+      })
+      void updateBuffer(buffer.id, {
+        metricsViewState: {
+          ...buffer.metricsViewState,
+          refreshRate: nextRefreshRate,
+        },
+      })
+    },
+    [buffer?.id, buffer?.metricsViewState, updateBuffer],
+  )
+
+  const handleViewModeChange = useCallback(
+    (mode: "list" | "grid") => {
+      if (!buffer?.id) return
+
+      void updateBuffer(buffer.id, {
+        metricsViewState: {
+          ...buffer.metricsViewState,
+          viewMode: mode === "grid" ? MetricViewMode.GRID : MetricViewMode.LIST,
+        },
+      })
+    },
+    [buffer?.id, buffer?.metricsViewState, updateBuffer],
   )
 
   const [elementRef, isVisible] = useElementVisibility(1000)
@@ -329,48 +387,47 @@ export const Metrics = () => {
         <>
           <Toolbar>
             <AddMetricDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-            <Box align="center" gap="1rem">
-              <Box gap="0.5rem" style={{ flexShrink: 0 }}>
-                <IconWithTooltip
-                  icon={
-                    <Button skin="secondary" onClick={refreshMetricsData}>
-                      <Refresh size="20px" />
-                    </Button>
-                  }
-                  tooltip="Refresh all widgets"
-                  placement="bottom"
-                />
-                <IconWithTooltip
-                  icon={
-                    <Select
-                      name="refresh_rate"
-                      value={refreshRate}
-                      options={Object.values(RefreshRate).map((rate) => ({
-                        label: `Refresh: ${rate}`,
-                        value: rate,
-                      }))}
-                      onChange={(e) => {
-                        if (buffer?.id) {
-                          void trackEvent(
-                            ConsoleEvent.METRIC_REFRESH_RATE_CHANGE,
-                            {
-                              refreshRate: e.target.value as RefreshRate,
-                            },
-                          )
-                          void updateBuffer(buffer.id, {
-                            metricsViewState: {
-                              ...buffer?.metricsViewState,
-                              refreshRate: e.target.value as RefreshRate,
-                            },
-                          })
-                        }
-                      }}
+            <Box align="center" gap="0.8rem">
+              <EditorRefreshControlGroup>
+                <Tooltip content="Refresh all widgets">
+                  <EditorRefreshButton
+                    variant="secondary"
+                    type="button"
+                    onClick={refreshMetricsData}
+                    aria-label="Refresh all widgets"
+                  >
+                    <ArrowClockwiseIcon />
+                  </EditorRefreshButton>
+                </Tooltip>
+                <SelectMenu.Root onOpenChange={refreshTooltip.onMenuOpenChange}>
+                  <Tooltip
+                    content="Widget refresh rate"
+                    {...refreshTooltip.tooltipProps}
+                  >
+                    <EditorRefreshIntervalTrigger
+                      label={`Refresh: ${selectedRefreshRate}`}
+                      type="button"
+                      aria-label="Widget refresh rate"
                     />
-                  }
-                  tooltip="Widget refresh rate"
-                  placement="bottom"
-                />
-              </Box>
+                  </Tooltip>
+                  <SelectMenu.Portal>
+                    <SelectMenu.Content align="end" sideOffset={4}>
+                      <SelectMenu.RadioGroup
+                        value={selectedRefreshRate}
+                        onValueChange={(value) =>
+                          handleRefreshRateChange(value as RefreshRate)
+                        }
+                      >
+                        {Object.values(RefreshRate).map((rate) => (
+                          <SelectMenu.Item key={rate} value={rate}>
+                            {rate}
+                          </SelectMenu.Item>
+                        ))}
+                      </SelectMenu.RadioGroup>
+                    </SelectMenu.Content>
+                  </SelectMenu.Portal>
+                </SelectMenu.Root>
+              </EditorRefreshControlGroup>
               <IconWithTooltip
                 icon={
                   <ForwardRef>
@@ -384,40 +441,10 @@ export const Metrics = () => {
                 tooltip="Time duration"
                 placement="top"
               />
-              <IconWithTooltip
-                icon={
-                  <Button
-                    skin="secondary"
-                    onClick={() => {
-                      if (buffer?.id) {
-                        void updateBuffer(buffer.id, {
-                          metricsViewState: {
-                            ...buffer?.metricsViewState,
-                            viewMode:
-                              metricViewMode === MetricViewMode.GRID
-                                ? MetricViewMode.LIST
-                                : MetricViewMode.GRID,
-                          },
-                        })
-                      }
-                    }}
-                  >
-                    {metricViewMode === MetricViewMode.LIST ? (
-                      <GridAlt size="18px" />
-                    ) : (
-                      <Menu size="18px" />
-                    )}
-                  </Button>
-                }
-                tooltip={
-                  <>
-                    Toggle view mode
-                    <br />
-                    to{" "}
-                    {metricViewMode === MetricViewMode.GRID ? "column" : "grid"}
-                  </>
-                }
-                placement="bottom"
+              <NotebookLayoutToggle
+                mode={metricViewMode === MetricViewMode.GRID ? "grid" : "list"}
+                onChange={handleViewModeChange}
+                ariaLabel="Metrics layout"
               />
             </Box>
           </Toolbar>
@@ -427,7 +454,7 @@ export const Metrics = () => {
                 <Box gap="1.5rem" flexDirection="column">
                   <Header>Add your first widget to see metrics</Header>
                   <Button
-                    skin="secondary"
+                    variant="secondary"
                     onClick={() => setDialogOpen(true)}
                     prefixIcon={<AddChart size="18px" />}
                   >
