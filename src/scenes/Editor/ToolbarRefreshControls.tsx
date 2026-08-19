@@ -1,7 +1,5 @@
 import styled from "styled-components"
-import { Button, SelectMenu } from "../../components"
-
-export const EDITOR_REFRESH_CONTROL_HEIGHT = "3.4rem"
+import { Button, SelectMenu, TOOLBAR_CONTROL_HEIGHT } from "../../components"
 
 export const EditorRefreshControlGroup = styled.div`
   display: flex;
@@ -13,7 +11,7 @@ export const EditorRefreshControlGroup = styled.div`
 export const EditorRefreshButton = styled(Button)`
   && {
     display: flex;
-    height: ${EDITOR_REFRESH_CONTROL_HEIGHT};
+    height: ${TOOLBAR_CONTROL_HEIGHT};
     align-items: center;
     gap: 0.5rem;
     padding: 0 1.1rem;
@@ -29,8 +27,8 @@ export const EditorRefreshButton = styled(Button)`
 
 export const EditorRefreshIntervalTrigger = styled(SelectMenu.Trigger)`
   && {
-    height: ${EDITOR_REFRESH_CONTROL_HEIGHT};
-    min-height: ${EDITOR_REFRESH_CONTROL_HEIGHT};
+    height: ${TOOLBAR_CONTROL_HEIGHT};
+    min-height: ${TOOLBAR_CONTROL_HEIGHT};
   }
 `
 
@@ -38,7 +36,7 @@ export const EditorRefreshIntervalTriggerButton = styled(
   SelectMenu.TriggerButton,
 )`
   && {
-    height: ${EDITOR_REFRESH_CONTROL_HEIGHT};
-    min-height: ${EDITOR_REFRESH_CONTROL_HEIGHT};
+    height: ${TOOLBAR_CONTROL_HEIGHT};
+    min-height: ${TOOLBAR_CONTROL_HEIGHT};
   }
 `

@@ -61,7 +61,7 @@ import {
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { getLastTurnWithUnactionedDiff } from "../../utils/ai/turnView"
-import { ensureMonacoThemes, getMonacoThemeName } from "../../utils/monacoInit"
+import { getMonacoThemeName } from "../../utils/monacoInit"
 
 type Props = Readonly<{
   style?: CSSProperties
@@ -388,7 +388,6 @@ const Editor = ({
                     keepCurrentModifiedModel
                     language={QuestDBLanguageName}
                     theme={getMonacoThemeName(theme.mode)}
-                    beforeMount={ensureMonacoThemes}
                     options={{
                       readOnly: true,
                       renderSideBySide: false,
@@ -455,7 +454,6 @@ const Editor = ({
                     }
                     language={QuestDBLanguageName}
                     theme={getMonacoThemeName(theme.mode)}
-                    beforeMount={ensureMonacoThemes}
                     options={{
                       readOnly: true,
                       minimap: { enabled: false },

@@ -37,7 +37,7 @@ export {
   Copy as CopyAlt,
   Database as Database2,
   Trash as DeleteBin2,
-  ChatsCircle as Discourse,
+  UsersThreeIcon as Discourse,
   DownloadSimple as Download2,
   PencilSimple as Edit,
   EnvelopeSimple as Envelope,

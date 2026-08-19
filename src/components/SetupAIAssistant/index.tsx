@@ -16,6 +16,13 @@ export const SetupAIAssistant = () => {
   const [showPromo, setShowPromo] = useState(false)
   const configureButtonRef = useRef<HTMLElement>(null)
   const { isConfigured } = useAIStatus()
+  const configureButtonVariantProps = isConfigured
+    ? ({ variant: "secondary" } as const)
+    : ({
+        variant: "gradient",
+        gradientStyle: "vertical",
+        gradientWeight: "thick",
+      } as const)
 
   const handleSettingsClick = () => {
     if (isConfigured) {
@@ -39,9 +46,7 @@ export const SetupAIAssistant = () => {
         <div ref={configureButtonRef as React.RefObject<HTMLDivElement>}>
           <Button
             size="md"
-            variant={isConfigured ? "secondary" : "gradient"}
-            gradientStyle="vertical"
-            gradientWeight="thick"
+            {...configureButtonVariantProps}
             onClick={handleSettingsClick}
             prefixIcon={<AISparkle size={16} variant="hollow" />}
             data-hook="ai-assistant-settings-button"

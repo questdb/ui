@@ -24,20 +24,14 @@
 
 import Draggabilly from "draggabilly"
 import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
+import { clamp } from "../../utils/clamp"
+import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 
 const TAB_CONTENT_MIN_WIDTH = 150
 const TAB_CONTENT_MAX_WIDTH = 240
 const NEW_TAB_BUTTON_AREA = 90
 const LIQUID_GLASS_HEIGHT = 48
 const LIQUID_GLASS_RADIUS = 10
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value))
-
-let reduceMotionQuery: MediaQueryList | null = null
-const prefersReducedMotion = () =>
-  (reduceMotionQuery ??= window.matchMedia("(prefers-reduced-motion: reduce)"))
-    .matches
 
 const closest = (value: number, array: number[]) => {
   let closestDist = Infinity

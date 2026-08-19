@@ -81,13 +81,20 @@ type BaseButtonProps = {
   "aria-controls"?: string
 }
 
-type VariantProps = {
-  variant?: ButtonVariant
+type GradientVariantProps = {
+  variant: "gradient"
   gradientWeight?: "thin" | "thick"
   gradientStyle?: "horizontal" | "vertical"
 }
 
-export type ButtonProps = BaseButtonProps & VariantProps
+type NonGradientVariantProps = {
+  variant?: Exclude<ButtonVariant, "gradient">
+  gradientWeight?: never
+  gradientStyle?: never
+}
+
+export type ButtonProps = BaseButtonProps &
+  (GradientVariantProps | NonGradientVariantProps)
 
 const Prefix = styled.div<{ disabled?: boolean }>`
   display: inline-flex;

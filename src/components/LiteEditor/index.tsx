@@ -11,7 +11,7 @@ import { copyToClipboard } from "../../utils/copyToClipboard"
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
-import { ensureMonacoThemes, getMonacoThemeName } from "../../utils/monacoInit"
+import { getMonacoThemeName } from "../../utils/monacoInit"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
@@ -255,7 +255,6 @@ const LiteEditorContent = React.memo(
           original={props.original}
           modified={props.modified}
           theme={theme}
-          beforeMount={ensureMonacoThemes}
           onMount={(editor) => {
             setContentHeight(editor.getModifiedEditor().getContentHeight())
             editor.getModifiedEditor().onDidContentSizeChange((e) => {
@@ -315,7 +314,6 @@ const LiteEditorContent = React.memo(
         language={language}
         value={value}
         theme={theme}
-        beforeMount={ensureMonacoThemes}
         onMount={(editor, monaco) => {
           setContentHeight(editor.getContentHeight())
           editor.onDidContentSizeChange((e) => {

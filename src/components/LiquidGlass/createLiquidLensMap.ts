@@ -1,3 +1,5 @@
+import { clamp } from "../../utils/clamp"
+
 type LiquidLensMapOptions = {
   width: number
   height: number
@@ -9,9 +11,6 @@ const WIDTH_BUCKET_PX = 8
 const MAX_CACHE_ENTRIES = 32
 
 const liquidLensMapCache = new Map<string, string>()
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value))
 
 /**
  * Creates the normal map consumed by an SVG displacement filter. Red bends

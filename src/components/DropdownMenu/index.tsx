@@ -1,6 +1,6 @@
 import React from "react"
 import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
-import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react"
+import { CaretRightIcon } from "@phosphor-icons/react"
 import styled, { css } from "styled-components"
 import {
   menuContainerStyles,
@@ -39,57 +39,6 @@ const StyledItem = styled(RadixDropdownMenu.Item)<{ $tone?: ItemTone }>`
       color: ${theme.color.contentAccent};
     `}
 `
-
-const StyledRadioItem = styled(RadixDropdownMenu.RadioItem)`
-  ${menuItemStyles}
-`
-
-// The checked background alone is the same token as the highlighted one, so
-// selection and keyboard focus are otherwise indistinguishable. The slot is
-// always rendered to keep every label on one left edge.
-const RadioItemIndicator = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 1.8rem;
-  color: ${({ theme }) => theme.color.contentAccent};
-
-  span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  svg {
-    width: 1.6rem;
-    height: 1.6rem;
-  }
-`
-
-type RadioItemProps = React.ComponentPropsWithoutRef<
-  typeof RadixDropdownMenu.RadioItem
-> & {
-  // Shares the checkmark's slot: a row showing one is never the checked row.
-  indicator?: React.ReactNode
-}
-
-const RadioItem = React.forwardRef<
-  React.ElementRef<typeof RadixDropdownMenu.RadioItem>,
-  RadioItemProps
->(({ indicator, children, ...props }, ref) => (
-  <StyledRadioItem ref={ref} {...props}>
-    <RadioItemIndicator>
-      <RadixDropdownMenu.ItemIndicator>
-        <CheckIcon weight="bold" />
-      </RadixDropdownMenu.ItemIndicator>
-      {indicator}
-    </RadioItemIndicator>
-    {children}
-  </StyledRadioItem>
-))
-
-RadioItem.displayName = "DropdownMenuRadioItem"
 
 type ItemProps = React.ComponentPropsWithoutRef<
   typeof RadixDropdownMenu.Item
@@ -170,10 +119,6 @@ export const DropdownMenu = {
   `,
 
   Item,
-
-  RadioGroup: RadixDropdownMenu.RadioGroup,
-
-  RadioItem,
 
   Sub: RadixDropdownMenu.Sub,
 

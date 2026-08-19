@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 
-import { Button, ButtonProps, Size } from "../Button"
+import { BUTTON_HEIGHTS, Button, ButtonProps, Size } from "../Button"
 import { Tooltip } from "../Tooltip"
 
 export type IconButtonProps = Omit<
@@ -13,15 +13,11 @@ export type IconButtonProps = Omit<
   tooltip?: string
 }
 
-const dimensions: Record<Size, string> = {
-  sm: "2.8rem",
-  md: "3.4rem",
-  lg: "4rem",
-}
-
+// Square by construction: the icon button's width tracks the shared button
+// height scale, so the two cannot drift apart.
 const Root = styled(Button)<{ size?: Size }>`
-  width: ${({ size = "md" }) => dimensions[size]};
-  min-width: ${({ size = "md" }) => dimensions[size]};
+  width: ${({ size = "md" }) => BUTTON_HEIGHTS[size]};
+  min-width: ${({ size = "md" }) => BUTTON_HEIGHTS[size]};
   padding: 0;
   flex-shrink: 0;
 

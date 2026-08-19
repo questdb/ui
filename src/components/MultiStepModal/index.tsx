@@ -89,7 +89,6 @@ const StepIndicatorContainer = styled(Box).attrs({
   align: "center",
 })`
   backdrop-filter: blur(0.6rem);
-  background: ${({ theme }) => theme.color.interactionHover};
   padding: 0.4rem;
   border-radius: 10rem;
   box-shadow: 0 0.1rem 0.2rem ${({ theme }) => theme.color.shadowSubtle};
@@ -107,7 +106,7 @@ const StepBadgeText = styled(Text)`
   font-size: 1.2rem;
   font-weight: 500;
   text-transform: uppercase;
-  color: ${({ theme }) => theme.color.contentAccent};
+  color: ${({ theme }) => theme.color.contentSecondary};
   padding: 0.2rem 0.8rem;
 `
 

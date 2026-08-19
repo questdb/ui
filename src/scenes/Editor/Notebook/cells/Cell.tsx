@@ -51,10 +51,7 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
-import {
-  ensureMonacoThemes,
-  getMonacoThemeName,
-} from "../../../../utils/monacoInit"
+import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
   overflow: hidden;
@@ -506,7 +503,6 @@ const CellInner: React.FC<Props> = ({
               defaultValue={cell.value}
               language={QuestDBLanguageName}
               theme={getMonacoThemeName(theme.mode)}
-              beforeMount={ensureMonacoThemes}
               // Default is the literal text "loading..."; the container already
               // shows the editor background, so render nothing until Monaco mounts
               // instead of a flashing placeholder.

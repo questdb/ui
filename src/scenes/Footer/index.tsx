@@ -71,7 +71,12 @@ const RightContainer = styled.div`
   }
 `
 
-const GithubLinkButton = (props: ButtonProps) => (
+type GithubLinkButtonProps = Omit<
+  ButtonProps,
+  "variant" | "gradientWeight" | "gradientStyle"
+>
+
+const GithubLinkButton = (props: GithubLinkButtonProps) => (
   <Button {...props} as="a" variant="tertiary" />
 )
 

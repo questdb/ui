@@ -38,10 +38,7 @@ import type { NotificationShape } from "../../../store/Query/types"
 import { NotificationType } from "../../../types"
 import type { ErrorResult } from "../../../utils"
 import { color } from "../../../utils"
-import {
-  ensureMonacoThemes,
-  getMonacoThemeName,
-} from "../../../utils/monacoInit"
+import { getMonacoThemeName } from "../../../utils/monacoInit"
 import * as QuestDB from "../../../utils/questdb"
 import Loader from "../Loader"
 import QueryResult from "../QueryResult"
@@ -2356,7 +2353,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         <EditorWrapper>
           <Editor
             defaultLanguage={QuestDBLanguageName}
-            beforeMount={ensureMonacoThemes}
             onMount={onMount}
             saveViewState={false}
             onChange={handleBufferContentChange}

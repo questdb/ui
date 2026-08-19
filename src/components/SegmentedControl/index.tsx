@@ -8,6 +8,8 @@ import React, {
 import styled, { css } from "styled-components"
 
 import { ButtonBase } from "../Button"
+import { clamp } from "../../utils/clamp"
+import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
 
 export type SegmentedControlTone = "neutral" | "success" | "info"
@@ -15,9 +17,6 @@ export type SegmentedControlTone = "neutral" | "success" | "info"
 export type SegmentedControlActiveTone = "accent" | "neutral"
 
 export type SegmentedControlSize = "xs" | "sm" | "md"
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value))
 
 const SegmentedControlRoot = styled.div`
   position: relative;
@@ -91,11 +90,6 @@ const GlassSelection = styled.div`
 `
 
 let segmentedControlInstance = 0
-
-let reduceMotionQuery: MediaQueryList | null = null
-const prefersReducedMotion = () =>
-  (reduceMotionQuery ??= window.matchMedia("(prefers-reduced-motion: reduce)"))
-    .matches
 
 type SegmentedControlProps = React.HTMLAttributes<HTMLDivElement>
 

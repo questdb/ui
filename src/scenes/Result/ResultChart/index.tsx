@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
 import styled from "styled-components"
-import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
@@ -14,8 +13,10 @@ import { ChartSettingsPanel } from "../../Editor/Notebook/CellChart/ChartSetting
 import type { ChartSettingsTelemetry } from "../../Editor/Notebook/CellChart/chartSettingsTelemetry"
 import type { ChartConfig } from "../../Editor/Notebook/CellChart/chartTypes"
 import { resolveDraw } from "../../Editor/Notebook/DrawCanvas/drawCanvasUtils"
+import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
 import type { QueryRawResult } from "../../../utils/questdb"
 import { Type } from "../../../utils/questdb"
+import { useChartQuery } from "./useChartQuery"
 
 type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
 
@@ -94,7 +95,7 @@ const SettingsPlaceholder = styled.aside`
   }
 `
 
-const EmptyState = styled.div`
+const EmptyState = styled.div<{ $tone?: "danger" }>`
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -107,7 +108,10 @@ const EmptyState = styled.div`
   text-align: center;
 
   svg {
-    color: ${({ theme }) => theme.color.contentDisabled};
+    color: ${({ $tone, theme }) =>
+      $tone === "danger"
+        ? theme.color.statusDanger
+        : theme.color.contentDisabled};
   }
 `
 
@@ -118,32 +122,21 @@ const resultChartTelemetry: ChartSettingsTelemetry = {
 }
 
 export const ResultChart: React.FC<Props> = ({ result, visible }) => {
-  const [hasBeenVisible, setHasBeenVisible] = useState(visible)
+  const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
   const [zoomStart, setZoomStart] = useState(0)
   const [zoomEnd, setZoomEnd] = useState(100)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
-  if (visible && !hasBeenVisible) {
-    setHasBeenVisible(true)
-  }
-
   const queryKey = result ? normalizeQueryText(result.query) : ""
   const config =
     savedConfig?.queryKey === queryKey ? savedConfig.value : undefined
 
-  const chartResult = useMemo<QueryExecResult | null>(() => {
-    if (!result) return null
-    return {
-      type: "dql",
-      query: result.query,
-      columns: result.columns,
-      dataset: result.dataset,
-      count: result.count,
-      timestamp: result.timestamp,
-      timings: result.timings,
-    }
-  }, [result])
+  // Both the inferred config and the plotted rows come from the chart's own
+  // deeper fetch. Inferring from the grid's 1000-row page instead would let the
+  // chart restructure once the fuller result arrives, because partitioning is
+  // decided by distinct-value counts over the rows in hand.
+  const chartResult = chartQuery.status === "ready" ? chartQuery.result : null
 
   const resolution = useMemo(
     () =>
@@ -188,6 +181,59 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
     emptyMessage = "This result has no chartable columns."
   }
 
+  const canDraw =
+    option !== null &&
+    chartResult !== null &&
+    chartResult.dataset.length > 0 &&
+    hasChartableColumns
+
+  let body: React.ReactNode
+  if (chartQuery.status === "loading") {
+    body = (
+      <EmptyState data-hook="result-chart-loading">
+        <CircleNotchSpinner size={32} />
+        <span>Loading chart data…</span>
+      </EmptyState>
+    )
+  } else if (chartQuery.status === "error") {
+    body = (
+      <EmptyState $tone="danger" data-hook="result-chart-error">
+        <WarningIcon size={32} weight="fill" aria-hidden />
+        <span>{chartQuery.message}</span>
+      </EmptyState>
+    )
+  } else if (canDraw) {
+    body = (
+      <Canvas>
+        {isTruncated && (
+          <TruncationNotice role="status" data-hook="result-chart-truncated">
+            <WarningIcon size={14} weight="fill" aria-hidden />
+            <span>
+              First {shownRowCount.toLocaleString()} of{" "}
+              {totalRowCount.toLocaleString()} rows are shown.
+            </span>
+          </TruncationNotice>
+        )}
+        <ChartArea>
+          <ChartRenderer
+            ref={chartRendererRef}
+            option={option}
+            onZoomChange={handleZoomChange}
+            animateEntry={false}
+            zoomWindow={{ start: zoomStart, end: zoomEnd }}
+          />
+        </ChartArea>
+      </Canvas>
+    )
+  } else {
+    body = (
+      <EmptyState>
+        <ChartLineIcon size={32} weight="regular" aria-hidden />
+        <span>{emptyMessage}</span>
+      </EmptyState>
+    )
+  }
+
   return (
     <Root $visible={visible} data-hook="result-chart" aria-hidden={!visible}>
       {resolution ? (
@@ -199,43 +245,13 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
           telemetry={resultChartTelemetry}
         />
       ) : (
-        <SettingsPlaceholder data-hook="chart-settings-panel">
+        <SettingsPlaceholder data-hook="chart-settings-placeholder">
           <strong>Chart settings</strong>
           <span>Run a query to configure the chart.</span>
         </SettingsPlaceholder>
       )}
 
-      {hasBeenVisible &&
-      option &&
-      chartResult &&
-      chartResult.dataset.length > 0 &&
-      hasChartableColumns ? (
-        <Canvas>
-          {isTruncated && (
-            <TruncationNotice role="status" data-hook="result-chart-truncated">
-              <WarningIcon size={14} weight="fill" aria-hidden />
-              <span>
-                First {shownRowCount.toLocaleString()} of{" "}
-                {totalRowCount.toLocaleString()} rows are shown.
-              </span>
-            </TruncationNotice>
-          )}
-          <ChartArea>
-            <ChartRenderer
-              ref={chartRendererRef}
-              option={option}
-              onZoomChange={handleZoomChange}
-              animateEntry={false}
-              zoomWindow={{ start: zoomStart, end: zoomEnd }}
-            />
-          </ChartArea>
-        </Canvas>
-      ) : (
-        <EmptyState>
-          <ChartLineIcon size={32} weight="regular" aria-hidden />
-          <span>{emptyMessage}</span>
-        </EmptyState>
-      )}
+      {body}
     </Root>
   )
 }
