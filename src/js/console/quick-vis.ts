@@ -88,6 +88,7 @@ export function quickVis(
       },
     ],
   }
+  let currentChartOptions = blankChartOptions
 
   let cachedResponse: any
   let cachedQuery: AnyIfEmpty
@@ -221,6 +222,7 @@ export function quickVis(
           },
           series,
         }
+        currentChartOptions = option
         echart.setOption(option, true)
       }
     } finally {
@@ -344,7 +346,15 @@ export function quickVis(
   }
 
   function clearChart() {
-    echart.setOption(blankChartOptions, true)
+    currentChartOptions = blankChartOptions
+    echart.setOption(currentChartOptions, true)
+  }
+
+  function refreshTheme() {
+    echart.dispose()
+    echart = echarts.init(viewport, createMacaronsTheme())
+    echart.setOption(currentChartOptions, true)
+    resize()
   }
 
   function updatePickers(data: { columns: any; query: any }) {
@@ -383,10 +393,15 @@ export function quickVis(
     // @ts-ignore
     echart = echarts.init(viewport, createMacaronsTheme())
     eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
+    eventBus.subscribe(EventType.MSG_THEME_CHANGED, refreshTheme)
     btnDraw.click(btnDrawClick)
     clearChart()
   }
 
   bind()
   resize()
+
+  return () => {
+    eventBus.unsubscribe(EventType.MSG_THEME_CHANGED, refreshTheme)
+  }
 }

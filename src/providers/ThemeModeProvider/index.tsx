@@ -13,6 +13,8 @@ import type { ThemeMode, ThemePreference } from "../../types"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
 import { applyMonacoTheme, monacoPromise } from "../../utils/monacoInit"
+import { eventBus } from "../../modules/EventBus"
+import { EventType } from "../../modules/EventBus/types"
 
 type ThemeModeContextValue = {
   preference: ThemePreference
@@ -96,6 +98,7 @@ export const ThemeModeProvider = ({
     document.documentElement.dataset.theme = mode
     document.documentElement.style.colorScheme = mode
     void monacoPromise.then((monaco) => applyMonacoTheme(monaco, mode))
+    eventBus.publish(EventType.MSG_THEME_CHANGED, mode)
   }, [mode])
 
   const value = useMemo(

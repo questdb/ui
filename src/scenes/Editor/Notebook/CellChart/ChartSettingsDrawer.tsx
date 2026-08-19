@@ -178,6 +178,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
   const drawerWasOpenRef = useRef(false)
+  const popperOpenAtPointerDownRef = useRef(false)
   const visible = presentation === "panel" || open
 
   const resetDraft = useCallback(() => {
@@ -264,6 +265,19 @@ const ChartSettings: React.FC<SettingsProps> = ({
     onClose?.()
   }
 
+  // A dropdown in the drawer is non-modal, so the click that closes it also
+  // reaches the backdrop. Radix unmounts the popper during pointerdown, so
+  // whether one was open has to be read before that click arrives.
+  const handleBackdropPointerDown = () => {
+    popperOpenAtPointerDownRef.current =
+      document.querySelector("[data-radix-popper-content-wrapper]") !== null
+  }
+
+  const handleBackdropClick = () => {
+    if (popperOpenAtPointerDownRef.current) return
+    dismiss("backdrop")
+  }
+
   const commit = () => {
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
     if (badIdx >= 0) {
@@ -287,7 +301,11 @@ const ChartSettings: React.FC<SettingsProps> = ({
   return (
     <>
       {presentation === "drawer" && (
-        <Backdrop onClick={() => dismiss("backdrop")} aria-hidden />
+        <Backdrop
+          onPointerDown={handleBackdropPointerDown}
+          onClick={handleBackdropClick}
+          aria-hidden
+        />
       )}
       <Panel
         $presentation={presentation}

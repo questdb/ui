@@ -53,7 +53,7 @@ export const slideAnimation = css`
     90deg,
     ${color("contentSecondary")} 0%,
     ${color("contentSecondary")} 40%,
-    ${color("contentInverse")} 50%,
+    ${color("contentPrimary")} 50%,
     ${color("contentSecondary")} 60%,
     ${color("contentSecondary")} 100%
   );

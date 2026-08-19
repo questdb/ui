@@ -350,3 +350,23 @@ describe("buildEchartsOption — step over a temporal x", () => {
     ])
   })
 })
+
+describe("buildEchartsOption — timestamps render in UTC, like the result grid", () => {
+  it("marks a temporal x-axis as UTC so labels and tooltips match the grid", () => {
+    // Given a designated timestamp plotted against a numeric column
+    const columns = [col("ts", "TIMESTAMP"), col("price", "DOUBLE")]
+    const dataset: (number | null)[][] = [
+      [1704067200000, 42],
+      [1704153600000, 43],
+    ]
+
+    // When the chart option is built
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({ columns, dataset, xColumn: "ts", yColumns: ["price"] }),
+    ])
+
+    // Then echarts is told to format in UTC rather than the browser's timezone
+    expect(firstAxis(opt.xAxis).type).toBe("time")
+    expect(opt.useUTC).toBe(true)
+  })
+})

@@ -215,12 +215,14 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   }, [running])
 
   useEffect(() => {
+    let disposeQuickVis: (() => void) | undefined
+
     if (!useNewGrid) {
       gridRef.current = grid(document.getElementById("grid"), paginationFn)
     }
 
     if (useQuickVis) {
-      quickVis(
+      disposeQuickVis = quickVis(
         $("#quick-vis"),
         window.bus as unknown as ReturnType<typeof $>,
         quest,
@@ -229,7 +231,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     }
 
     const _grid = gridRef.current
-    if (!_grid) return
+    if (!_grid) return disposeQuickVis
 
     const onSelectionChange = (event: CustomEvent<{ hasSelection: boolean }>) =>
       setGridHasSelection(event.detail.hasSelection)
@@ -242,6 +244,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     _grid.addEventListener("freeze.state", onFreezeState)
 
     return () => {
+      disposeQuickVis?.()
       _grid.removeEventListener?.("selection.change", onSelectionChange)
       _grid.removeEventListener?.("yield.focus", onYieldFocus)
       _grid.removeEventListener?.("freeze.state", onFreezeState)

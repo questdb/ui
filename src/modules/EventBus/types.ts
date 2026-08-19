@@ -30,4 +30,5 @@ export enum EventType {
   NOTEBOOK_CELL_RESET_ZOOM = "notebook.cell.reset.zoom",
   NOTEBOOK_CELL_RUN = "notebook.cell.run",
   NOTEBOOK_CELL_DRAW = "notebook.cell.draw",
+  MSG_THEME_CHANGED = "theme.changed",
 }

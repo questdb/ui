@@ -22,7 +22,7 @@ export const badgeVariants = [
 
 export type BadgeVariant = (typeof badgeVariants)[number]
 
-type Props = {
+type Props = React.ComponentPropsWithoutRef<"span"> & {
   type?: BadgeType
   variant?: BadgeVariant
   size?: "sm" | "md"
@@ -118,24 +118,34 @@ const Icon = styled.div<{ hasGap: boolean }>`
   }
 `
 
-export const Badge: React.FunctionComponent<Props> = ({
-  type,
-  variant,
-  size = "md",
-  icon,
-  pulsate,
-  children,
-  className,
-  "data-hook": dataHook,
-}) => (
-  <Root
-    className={className}
-    $variant={getVariant(variant, type)}
-    $size={size}
-    pulsate={pulsate}
-    data-hook={dataHook}
-  >
-    {icon && <Icon hasGap={React.Children.count(children) > 0}>{icon}</Icon>}
-    {children}
-  </Root>
+export const Badge = React.forwardRef<HTMLSpanElement, Props>(
+  (
+    {
+      type,
+      variant,
+      size = "md",
+      icon,
+      pulsate,
+      children,
+      className,
+      "data-hook": dataHook,
+      ...rest
+    },
+    ref,
+  ) => (
+    <Root
+      {...rest}
+      ref={ref}
+      className={className}
+      $variant={getVariant(variant, type)}
+      $size={size}
+      pulsate={pulsate}
+      data-hook={dataHook}
+    >
+      {icon && <Icon hasGap={React.Children.count(children) > 0}>{icon}</Icon>}
+      {children}
+    </Root>
+  ),
 )
+
+Badge.displayName = "Badge"

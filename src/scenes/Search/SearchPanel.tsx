@@ -99,6 +99,11 @@ const ToggleButtonsContainer = styled.div`
 const ToggleButton = styled(SegmentedControlButton)`
   && {
     width: 2rem;
+    border: 1px solid transparent;
+  }
+
+  &&[aria-pressed="true"] {
+    border-color: ${({ theme }) => theme.color.borderAccentStrong};
   }
 `
 
