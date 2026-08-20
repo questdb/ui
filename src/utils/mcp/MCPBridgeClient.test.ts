@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { MCPBridgeClient } from "./MCPBridgeClient"
-import { EXPECTED_BRIDGE_VERSION } from "./protocolVersion"
+import { EXPECTED_MCP_VERSION } from "./protocolVersion"
 import { WS_CLOSE_CODES, type HelloMessage, type ToolSchema } from "./types"
 
 // A version within the same major as expected — drifted enough to read as a
-// mismatch, yet never equal to EXPECTED_BRIDGE_VERSION whatever it's bumped to.
+// mismatch, yet never equal to EXPECTED_MCP_VERSION whatever it's bumped to.
 const [expectedMajor, expectedMinor, expectedPatch] =
-  EXPECTED_BRIDGE_VERSION.split(".").map(Number)
+  EXPECTED_MCP_VERSION.split(".").map(Number)
 const SAME_MAJOR_DRIFT = `${expectedMajor}.${expectedMinor + 1}.${expectedPatch}`
 
 class FakeWebSocket {
@@ -104,7 +104,7 @@ const handshake = (
 ) => {
   socket.open()
   socket.receive({
-    v: EXPECTED_BRIDGE_VERSION,
+    v: EXPECTED_MCP_VERSION,
     type: "hello_ack",
     sessionId,
     heartbeatIntervalMs: 5_000,
@@ -128,7 +128,7 @@ describe("MCPBridgeClient", () => {
     expect(hello.tools.length).toBe(1)
     expect(client.status).toBe("connecting")
     socket().receive({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "hello_ack",
       sessionId: "s-1",
       heartbeatIntervalMs: 5_000,
@@ -146,7 +146,7 @@ describe("MCPBridgeClient", () => {
     client.connect()
     handshake(client, socket())
     socket().receive({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "tool_call",
       requestId: "r1",
       name: "add_cell",
@@ -162,7 +162,7 @@ describe("MCPBridgeClient", () => {
     handshake(client, socket())
     socket().sent.length = 0
     socket().receive({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "ping",
       nonce: "abc",
     })
@@ -177,7 +177,7 @@ describe("MCPBridgeClient", () => {
     handshake(client, socket())
     expect(() =>
       socket().receive({
-        v: EXPECTED_BRIDGE_VERSION,
+        v: EXPECTED_MCP_VERSION,
         type: "future_unknown_message",
         payload: { whatever: 1 },
       }),
@@ -212,7 +212,7 @@ describe("MCPBridgeClient", () => {
     socket().dropFromServer()
     expect(client.status).toBe("reconnecting")
     client.sendToolResult({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "tool_result",
       requestId: "r1",
       content: [{ type: "text", text: "{}" }],
@@ -291,7 +291,7 @@ describe("MCPBridgeClient", () => {
     }
     expect(ping.type).toBe("ping")
     socket().receive({
-      v: EXPECTED_BRIDGE_VERSION,
+      v: EXPECTED_MCP_VERSION,
       type: "pong",
       nonce: ping.nonce,
     })

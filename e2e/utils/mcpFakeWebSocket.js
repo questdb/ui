@@ -1,4 +1,4 @@
-// Fake MCP-bridge WebSocket shared by the bridge e2e specs. Installed before
+// Fake mcp-server-questdb WebSocket shared by the MCP e2e specs. Installed before
 // the app boots; the instance is exposed on `win.__mcpFakeWS`.
 
 const TEST_BRIDGE_URL = "ws://127.0.0.1:57123"

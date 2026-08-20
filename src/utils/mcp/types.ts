@@ -1,4 +1,4 @@
-// Wire-protocol types for the MCP Bridge WebSocket — must stay in sync
+// Wire-protocol types for the MCP server WebSocket — must stay in sync
 // with the bridge's own types. The `v` field on every frame carries the
 // bridge semver; same-major drift is tolerated, different majors hard-
 // reject with close 4004.
@@ -102,7 +102,7 @@ export type CloseReason =
   | "user_disconnect"
 
 // Application-range (4000+) WS close codes. Must stay in sync with
-// `mcp-bridge/src/types.ts WS_CLOSE_CODES`. Bridge originates 4001/4002/
+// `mcp-server-questdb/src/types.ts WS_CLOSE_CODES`. Bridge originates 4001/4002/
 // 4004/4005; UI may originate 4006/4007 (bridge accepts only). Origin
 // rejection happens pre-upgrade at the HTTP layer (403), no close code.
 export const WS_CLOSE_CODES = {

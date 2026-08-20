@@ -19,13 +19,18 @@ const Command = styled.code`
   border: 1px solid ${({ theme }) => theme.color.selection};
   border-radius: 0.4rem;
   padding: 0.6rem 0.8rem;
-  word-break: break-all;
+  white-space: normal;
+  overflow-wrap: anywhere;
   user-select: all;
+`
+
+const CopyAction = styled(CopyButton)`
+  flex-shrink: 0;
 `
 
 export const CopyableCommand = ({ command }: { command: string }) => (
   <Row>
     <Command>{command}</Command>
-    <CopyButton text={command} iconOnly size="sm" />
+    <CopyAction text={command} iconOnly size="sm" />
   </Row>
 )

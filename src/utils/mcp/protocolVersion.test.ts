@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
-  EXPECTED_BRIDGE_VERSION,
+  EXPECTED_MCP_VERSION,
   isBridgeVersionMismatch,
 } from "./protocolVersion"
 
 // Derive drifts from the expected version so these stay correct across bumps.
-const [major, minor, patch] = EXPECTED_BRIDGE_VERSION.split(".").map(Number)
+const [major, minor, patch] = EXPECTED_MCP_VERSION.split(".").map(Number)
 const bumped = (index: number): string => {
   const parts = [major, minor, patch]
   parts[index] += 1
@@ -17,14 +17,14 @@ describe("isBridgeVersionMismatch", () => {
     // Given the bridge reports the expected version
     // When compared
     // Then it is not a mismatch
-    expect(isBridgeVersionMismatch(EXPECTED_BRIDGE_VERSION)).toBe(false)
+    expect(isBridgeVersionMismatch(EXPECTED_MCP_VERSION)).toBe(false)
   })
 
   it("ignores pre-release / build suffixes on an otherwise-equal version", () => {
     // Given a version equal in major.minor.patch but with a suffix
     // When compared
     // Then it is not a mismatch
-    expect(isBridgeVersionMismatch(`${EXPECTED_BRIDGE_VERSION}-beta.1`)).toBe(
+    expect(isBridgeVersionMismatch(`${EXPECTED_MCP_VERSION}-beta.1`)).toBe(
       false,
     )
   })
