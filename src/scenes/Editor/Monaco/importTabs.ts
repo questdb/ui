@@ -312,7 +312,6 @@ const sanitizeNotebookSettings = (
   }
   if (isAutoRefresh(item.autoRefreshDefault))
     settings.autoRefreshDefault = item.autoRefreshDefault
-  if (item.autoRefreshMigrated === true) settings.autoRefreshMigrated = true
   return settings
 }
 
