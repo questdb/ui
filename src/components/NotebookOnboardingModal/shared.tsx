@@ -12,7 +12,7 @@ export const LeftPane = styled.div<{ $center?: boolean }>`
   min-height: 0;
   flex-direction: column;
   gap: 2rem;
-  padding: 3.2rem 3.2rem 2.8rem;
+  padding: 3.2rem 2.5rem 2.8rem;
   overflow-y: auto;
   ${({ $center }) => $center && "justify-content: safe center;"}
 `

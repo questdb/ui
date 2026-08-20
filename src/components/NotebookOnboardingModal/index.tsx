@@ -36,7 +36,7 @@ const Content = styled(RadixDialog.Content)<{ $tall?: boolean }>`
   z-index: 101;
   display: flex;
   width: 90vw;
-  max-width: 96rem;
+  max-width: 100rem;
   min-height: ${({ $tall }) =>
     $tall ? "min(66.6rem, 85vh)" : "min(41.6rem, 85vh)"};
   max-height: 85vh;

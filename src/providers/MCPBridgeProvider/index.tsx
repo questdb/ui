@@ -13,7 +13,7 @@ import { dispatchMCPTool } from "../../utils/mcp/dispatchMCPTool"
 import { createNotebookFreshness } from "../../utils/notebooks/notebookFreshness"
 import { mcpTools } from "../../utils/tools/tools"
 import {
-  EXPECTED_BRIDGE_VERSION,
+  EXPECTED_MCP_VERSION,
   type BridgeVersionMismatch,
 } from "../../utils/mcp/protocolVersion"
 import type { ToolCallMessage } from "../../utils/mcp/types"
@@ -243,7 +243,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
         if (!aborter.signal.aborted) return false
         if (aborter.signal.reason === PERMISSIONS_REVOKED_REASON) {
           client.sendToolResult({
-            v: EXPECTED_BRIDGE_VERSION,
+            v: EXPECTED_MCP_VERSION,
             type: "tool_result",
             requestId: call.requestId,
             content: [
@@ -282,7 +282,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
             })
           }
           client.sendToolResult({
-            v: EXPECTED_BRIDGE_VERSION,
+            v: EXPECTED_MCP_VERSION,
             type: "tool_result",
             requestId: call.requestId,
             content: result.content,
@@ -307,7 +307,7 @@ export const MCPBridgeProvider: React.FC<{ children: React.ReactNode }> = ({
           const message =
             err instanceof Error ? err.message : "tool dispatch failed"
           client.sendToolResult({
-            v: EXPECTED_BRIDGE_VERSION,
+            v: EXPECTED_MCP_VERSION,
             type: "tool_result",
             requestId: call.requestId,
             content: [{ type: "text", text: `dispatch_error: ${message}` }],

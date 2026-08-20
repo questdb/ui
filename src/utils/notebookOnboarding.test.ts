@@ -29,7 +29,7 @@ describe("notebook onboarding visibility", () => {
       expect(shouldShowNotebookModal(onboarding)).toBe(false)
     })
 
-    it("stays hidden once an MCP bridge has ever connected", () => {
+    it("stays hidden once an MCP server has ever connected", () => {
       // Given the bridge has connected before, even if the flag is untouched
       const onboarding = { ...freshInstall, mcpEverConnected: true }
       // When deciding whether to show the modal
@@ -54,7 +54,7 @@ describe("notebook onboarding visibility", () => {
       expect(shouldShowMcpPromo(onboarding)).toBe(false)
     })
 
-    it("stays hidden once an MCP bridge has ever connected", () => {
+    it("stays hidden once an MCP server has ever connected", () => {
       // Given the bridge has connected before
       const onboarding = { ...freshInstall, mcpEverConnected: true }
       // When deciding whether to show the section

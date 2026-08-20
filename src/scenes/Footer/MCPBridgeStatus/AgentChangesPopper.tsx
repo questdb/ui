@@ -89,7 +89,7 @@ export const AgentChangesPopper: React.FC<Props> = ({
   // document body; return it to the pill the toast points at.
   const focusAnchorPill = useCallback(() => {
     anchorEl
-      ?.querySelector<HTMLElement>('[data-hook="mcp-bridge-status-pill"]')
+      ?.querySelector<HTMLElement>('[data-hook="mcp-status-pill"]')
       ?.focus()
   }, [anchorEl])
 

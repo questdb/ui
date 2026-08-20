@@ -99,7 +99,7 @@ const Pill = forwardRef<
       type="button"
       title={title}
       aria-label={label}
-      data-hook="mcp-bridge-status-pill"
+      data-hook="mcp-status-pill"
       $tone={tone}
       $blink={blink}
       $newChanges={newChanges}
@@ -149,14 +149,14 @@ export const MCPBridgeStatus: React.FC = () => {
       "Click to enter MCP credentials manually, or ask Claude / Codex to pair this console."
   } else if (tone === "connected") {
     label = "MCP connected"
-    title = "Paired with the MCP bridge. Click to manage."
+    title = "Paired with the MCP server. Click to manage."
   } else if (tone === "warning") {
     label = "MCP connected"
     title =
-      "Connected, but the bridge version differs from what this console expects. Click to see the upgrade command."
+      "Connected, but the MCP server version differs from what this console expects. Click to see the upgrade command."
   } else if (tone === "connecting") {
     label = "MCP connecting…"
-    title = "Connecting to the bridge. Click to manage."
+    title = "Connecting to the MCP server. Click to manage."
   } else {
     label = "MCP disconnected"
     title =

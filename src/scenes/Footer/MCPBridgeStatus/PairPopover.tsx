@@ -378,7 +378,7 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
 
     const canDisconnect = isPaired && status === "connected"
 
-    const title = succeeded ? "MCP Bridge connected" : "MCP Bridge"
+    const title = succeeded ? "MCP server connected" : "MCP server"
 
     const lede = succeeded
       ? "You can track the connection status from the bottom bar."
@@ -481,10 +481,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
             <WarningIcon size={16} weight="duotone" />
             <StatusText>
-              <strong>Could not connect to MCP bridge</strong>
+              <strong>Could not connect to MCP server</strong>
               <StatusDetail>
                 {lastError ??
-                  `Bridge stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+                  `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
               </StatusDetail>
             </StatusText>
           </StatusRow>

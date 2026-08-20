@@ -1,6 +1,6 @@
 /// <reference types="cypress" />
 
-// E2E coverage for the MCP bridge permission system.
+// E2E coverage for the MCP server permission system.
 
 const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
 const baseUrl = `http://localhost:9999${contextPath}`
@@ -63,7 +63,7 @@ const waitForPaired = () => {
     expect(win.__mcpFakeWS.framesOfType("hello").length).to.be.greaterThan(0)
   })
   cy.window().then((win) => win.__mcpFakeWS.helloAck())
-  cy.getByDataHook("mcp-bridge-status-pill", { timeout: 10000 }).should(
+  cy.getByDataHook("mcp-status-pill", { timeout: 10000 }).should(
     "contain",
     "MCP connected",
   )
@@ -74,7 +74,7 @@ const lastToolResult = (win, requestId) => {
   return results.find((r) => r.requestId === requestId)
 }
 
-describe("MCP bridge permissions (e2e)", () => {
+describe("MCP server permissions (e2e)", () => {
   beforeEach(() => {
     installValidateIntercept()
   })
@@ -104,10 +104,7 @@ describe("MCP bridge permissions (e2e)", () => {
       })
 
       cy.window().then((win) => win.__mcpFakeWS.helloAck())
-      cy.getByDataHook("mcp-bridge-status-pill").should(
-        "contain",
-        "MCP connected",
-      )
+      cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
       cy.window().then((win) => {
         expect(
           JSON.parse(win.localStorage.getItem("mcp:permissions")),
@@ -270,7 +267,7 @@ describe("MCP bridge permissions (e2e)", () => {
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 
-      cy.getByDataHook("mcp-bridge-status-pill").click()
+      cy.getByDataHook("mcp-status-pill").click()
       cy.getByDataHook("mcp-pair-popover").should("be.visible")
 
       cy.window().then((win) => {
@@ -289,7 +286,7 @@ describe("MCP bridge permissions (e2e)", () => {
         ).to.deep.equal({ grantSchemaAccess: true, read: true, write: false })
       })
 
-      cy.getByDataHook("mcp-bridge-status-pill").click()
+      cy.getByDataHook("mcp-status-pill").click()
       cy.getByDataHook("permissions-trigger").should("contain", "Read")
     })
 
@@ -298,7 +295,7 @@ describe("MCP bridge permissions (e2e)", () => {
       cy.getByDataHook("mcp-pair-consent-connect").click()
       waitForPaired()
 
-      cy.getByDataHook("mcp-bridge-status-pill").click()
+      cy.getByDataHook("mcp-status-pill").click()
       cy.getByDataHook("permissions-trigger").click()
       cy.getByDataHook("permission-level-write").click()
       cy.getByDataHook("mcp-pair-submit").should("contain", "Connect").click()
@@ -309,10 +306,7 @@ describe("MCP bridge permissions (e2e)", () => {
         ).to.deep.equal({ grantSchemaAccess: true, read: true, write: true })
         expect(win.__mcpFakeWS.framesOfType("hello")).to.have.length(1)
       })
-      cy.getByDataHook("mcp-bridge-status-pill").should(
-        "contain",
-        "MCP connected",
-      )
+      cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
     })
   })
 
@@ -344,10 +338,7 @@ describe("MCP bridge permissions (e2e)", () => {
         })
         win.__mcpFakeWS.helloAck()
       })
-      cy.getByDataHook("mcp-bridge-status-pill").should(
-        "contain",
-        "MCP connected",
-      )
+      cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
     })
   })
 })
