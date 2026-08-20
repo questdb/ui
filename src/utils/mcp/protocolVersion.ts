@@ -1,30 +1,32 @@
-// Bridge semver this console build was verified against. Stamped on every
+// MCP server semver this console build was verified against. Stamped on every
 // WS frame as `v` and echoed in `hello.expectedBridgeVersion`. Bridge
 // compares same-major (connect + warning) vs different-major (close 4004).
 // Bump in lockstep with verified bridge releases.
-export const EXPECTED_BRIDGE_VERSION = "0.3.0"
+export const EXPECTED_MCP_VERSION = "0.4.0"
 
 export type BridgeVersionMismatch = "major" | "minor"
 
-export const BRIDGE_UPGRADE_COMMAND = `npx @questdb/mcp-bridge@${EXPECTED_BRIDGE_VERSION} upgrade`
+export const MCP_PACKAGE = "@questdb/mcp-server-questdb"
 
-export const BRIDGE_SETUP_COMMAND = `npx @questdb/mcp-bridge@${EXPECTED_BRIDGE_VERSION} setup`
+export const MCP_UPGRADE_COMMAND = `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION} upgrade`
 
-export const BRIDGE_VERSION_MISMATCH_COPY: Record<
+export const MCP_SETUP_COMMAND = `npx ${MCP_PACKAGE}@${EXPECTED_MCP_VERSION} setup`
+
+export const MCP_VERSION_MISMATCH_COPY: Record<
   BridgeVersionMismatch,
   { title: string; message: string }
 > = {
   major: {
-    title: "MCP bridge version mismatch",
+    title: "MCP server version mismatch",
     message:
-      `This MCP bridge is incompatible with what this console expects (${EXPECTED_BRIDGE_VERSION}). ` +
-      `Upgrade your bridge with the following command and re-pair:`,
+      `This MCP server is incompatible with what this console expects (${EXPECTED_MCP_VERSION}). ` +
+      `Upgrade your MCP server with the following command and re-pair:`,
   },
   minor: {
-    title: "Update your MCP bridge",
+    title: "Update your MCP server",
     message:
-      `Connected successfully, but the bridge version doesn't match what this console expects ` +
-      `(${EXPECTED_BRIDGE_VERSION}). Some tools may not work as intended until you upgrade. ` +
+      `Connected successfully, but the MCP server version doesn't match what this console expects ` +
+      `(${EXPECTED_MCP_VERSION}). Some tools may not work as intended until you upgrade. ` +
       `Run this command and re-pair:`,
   },
 }
@@ -37,7 +39,7 @@ const parseSemver = (version: string): [number, number, number] | null => {
 
 export const isBridgeVersionMismatch = (bridgeVersion: string): boolean => {
   const bridge = parseSemver(bridgeVersion)
-  const expected = parseSemver(EXPECTED_BRIDGE_VERSION)
+  const expected = parseSemver(EXPECTED_MCP_VERSION)
   if (!bridge || !expected) return false
   return (
     bridge[0] !== expected[0] ||

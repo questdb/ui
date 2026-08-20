@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
 import { TerminalWindowIcon } from "@phosphor-icons/react"
-import { BRIDGE_SETUP_COMMAND } from "../../../utils/mcp/protocolVersion"
+import { MCP_SETUP_COMMAND } from "../../../utils/mcp/protocolVersion"
 import { CopyableCommand } from "./CopyableCommand"
 
 const Root = styled.div`
@@ -34,6 +34,6 @@ export const BridgeSetupNotice = () => (
       <TerminalWindowIcon size={16} weight="duotone" />
       <span>Haven&apos;t installed yet? Set it up in your terminal:</span>
     </Header>
-    <CopyableCommand command={BRIDGE_SETUP_COMMAND} />
+    <CopyableCommand command={MCP_SETUP_COMMAND} />
   </Root>
 )

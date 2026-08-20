@@ -37,7 +37,7 @@ import {
 } from "../tools/permissions"
 import type { ValidateQueryResult } from "../questdb/types"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
-import { EXPECTED_BRIDGE_VERSION } from "../mcp/protocolVersion"
+import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
 
@@ -2626,7 +2626,7 @@ describe("dispatchTool — run_query replay guard (sqlWriteExecuted)", () => {
 // inlines a richer payload there.
 describe("dispatchMCPTool — data-leak invariant", () => {
   const callOf = (name: string, args: Record<string, unknown> = {}) => ({
-    v: EXPECTED_BRIDGE_VERSION,
+    v: EXPECTED_MCP_VERSION,
     type: "tool_call" as const,
     requestId: "r-" + name,
     name,
