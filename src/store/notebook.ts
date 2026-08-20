@@ -134,7 +134,6 @@ export type NotebookSettings = {
   layout?: CellLayoutItem[]
   variables?: NotebookVariable[]
   autoRefreshDefault?: AutoRefresh
-  autoRefreshMigrated?: true
 }
 
 export type NotebookViewState = {
@@ -191,28 +190,3 @@ export const migrateLegacyCellNames = (
   state.cells.some(hasLegacyChartName)
     ? { ...state, cells: state.cells.map(migrateCellName) }
     : state
-
-// Charts drawn before the uniform-Off fallback polled through an implicit
-// per-view Auto. The migration writes that liveness as an explicit Auto
-// override so they keep polling; grids never polled, and stay off. No
-// notebook default is ever synthesized. The marker makes the write one-time:
-// on a migrated view an undefined autoRefresh is a deliberate "inherit".
-export const migrateImplicitChartAutoRefresh = (
-  state: NotebookViewState,
-): NotebookViewState => {
-  if (state.settings?.autoRefreshMigrated) return state
-  const legacyLiveChart = (cell: NotebookCell) =>
-    cell.mode === "draw" &&
-    cell.autoRefresh === undefined &&
-    state.settings?.autoRefreshDefault === undefined
-  const cells = state.cells.some(legacyLiveChart)
-    ? state.cells.map((cell) =>
-        legacyLiveChart(cell) ? { ...cell, autoRefresh: true as const } : cell,
-      )
-    : state.cells
-  return {
-    ...state,
-    cells,
-    settings: { ...state.settings, autoRefreshMigrated: true },
-  }
-}

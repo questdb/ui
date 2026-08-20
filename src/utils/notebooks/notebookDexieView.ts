@@ -6,7 +6,6 @@ import {
   dropLegacyChartConfigs,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
-  migrateImplicitChartAutoRefresh,
   migrateLegacyCellNames,
 } from "../../store/notebook"
 import type {
@@ -28,9 +27,7 @@ type NotebookBufferMeta =
   | { kind: "not_a_notebook" }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  migrateImplicitChartAutoRefresh(
-    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
-  )
+  dropLegacyChartConfigs(migrateLegacyCellNames(view))
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

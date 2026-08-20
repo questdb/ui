@@ -2,9 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   dropLegacyChartConfigs,
   migrateCellName,
-  migrateImplicitChartAutoRefresh,
   migrateLegacyCellNames,
-  type AutoRefresh,
   type NotebookCell,
   type NotebookViewState,
 } from "./notebook"
@@ -14,13 +12,6 @@ const cell = (over: Partial<NotebookCell> & { id: string }): NotebookCell => ({
   value: "",
   ...over,
 })
-
-const chart = (id: string, autoRefresh?: AutoRefresh): NotebookCell =>
-  cell(
-    autoRefresh === undefined
-      ? { id, mode: "draw" }
-      : { id, mode: "draw", autoRefresh },
-  )
 
 describe("migrateCellName", () => {
   it("promotes a legacy chartConfig.name to the cell name and drops the old copy", () => {
@@ -53,69 +44,6 @@ describe("migrateCellName", () => {
     // When migrated
     // Then the explicit name wins and the cell is returned unchanged
     expect(migrateCellName(input)).toBe(input)
-  })
-})
-
-describe("migrateImplicitChartAutoRefresh", () => {
-  it("stamps an explicit Auto onto implicit charts so they keep polling under the Off fallback", () => {
-    // Given a legacy notebook whose charts polled through the implicit fallback
-    const state: NotebookViewState = {
-      cells: [chart("a"), chart("b", "5s"), cell({ id: "r", mode: "run" })],
-    }
-
-    // When the notebook loads
-    const result = migrateImplicitChartAutoRefresh(state)
-
-    // Then only the implicit chart gains the stamp; explicit and run cells
-    // stay untouched
-    expect(result.cells[0].autoRefresh).toBe(true)
-    expect(result.cells[1].autoRefresh).toBe("5s")
-    expect(result.cells[2].autoRefresh).toBeUndefined()
-  })
-
-  it("never synthesizes a notebook default", () => {
-    // Given an untouched chart-only notebook
-    const result = migrateImplicitChartAutoRefresh({ cells: [chart("a")] })
-
-    // Then the chart is stamped but the notebook stays unconfigured
-    expect(result.cells[0].autoRefresh).toBe(true)
-    expect(result.settings?.autoRefreshDefault).toBeUndefined()
-  })
-
-  it("yields to a stored notebook default so implicit charts inherit it", () => {
-    // Given a notebook whose owner chose a notebook-wide cadence
-    const state: NotebookViewState = {
-      cells: [chart("a")],
-      settings: { autoRefreshDefault: "30s" },
-    }
-
-    // When the notebook loads
-    const result = migrateImplicitChartAutoRefresh(state)
-
-    // Then the cells stay exactly as-is and the default survives
-    expect(result.cells).toBe(state.cells)
-    expect(result.settings?.autoRefreshDefault).toBe("30s")
-  })
-
-  it("marks the view migrated so the stamp runs only once", () => {
-    // Given an unmigrated notebook
-    const result = migrateImplicitChartAutoRefresh({ cells: [chart("a")] })
-
-    // Then the view carries the marker and a second pass is identity
-    expect(result.settings?.autoRefreshMigrated).toBe(true)
-    expect(migrateImplicitChartAutoRefresh(result)).toBe(result)
-  })
-
-  it("never re-stamps a migrated view, so a cleared chart override survives a reload", () => {
-    // Given a migrated notebook whose chart the user reset to "inherit"
-    const state: NotebookViewState = {
-      cells: [chart("a")],
-      settings: { autoRefreshMigrated: true },
-    }
-
-    // When the notebook loads again
-    // Then the chart stays inherited instead of reverting to Auto
-    expect(migrateImplicitChartAutoRefresh(state)).toBe(state)
   })
 })
 
