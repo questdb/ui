@@ -25,24 +25,25 @@
 import React from "react"
 import styled from "styled-components"
 
-import { color } from "../../utils"
 import { Text } from "../../components/Text"
 
 export const Root = styled.div<{ shadow?: boolean; $titleColor?: string }>`
   position: relative;
   display: flex;
   justify-content: space-between;
-  height: 4.6rem;
-  min-height: 4.6rem;
-  padding: 0 1rem;
+  height: 5.2rem;
+  min-height: 5.2rem;
+  padding: 0 1.4rem;
   align-items: center;
-  background: ${({ $titleColor }) => $titleColor ?? color("backgroundLighter")};
+  background: ${({ $titleColor, theme }) =>
+    $titleColor ?? theme.color.surfaceRaised};
   z-index: 5;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
 
-  ${({ shadow }) =>
+  ${({ shadow, theme }) =>
     shadow &&
     `
-      box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.65)
+      box-shadow: 0 2px 10px 0 ${theme.color.shadowStrong}
   `}
 `
 
@@ -50,7 +51,12 @@ const Title = styled(Text)`
   display: flex;
   align-items: center;
   padding-left: 1rem;
-  font-size: 1.6rem;
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 export const Header = ({
@@ -66,7 +72,7 @@ export const Header = ({
 }) => (
   <Root shadow={shadow} $titleColor={titleColor}>
     {title && typeof title === "string" ? (
-      <Title color="foreground" ellipsis>
+      <Title color="contentPrimary" ellipsis>
         {title}
       </Title>
     ) : (

@@ -1,7 +1,7 @@
 import React from "react"
 import { ProcessedFile } from "./types"
 import type { TableProps } from "../../../components"
-import { Search } from "@styled-icons/remix-line"
+import { Search } from "../../../components/icons"
 import { Text, Button, Box, Drawer, Table } from "../../../components"
 import styled from "styled-components"
 import { UploadResultColumn } from "../../../utils"
@@ -9,7 +9,7 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const SearchIcon = styled(Search)`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const StyledTable = styled(Table)`
@@ -21,7 +21,7 @@ const StyledTable = styled(Table)`
 
   th {
     padding: 0 1.5rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 
   td {
@@ -29,7 +29,7 @@ const StyledTable = styled(Table)`
   }
 
   tbody td {
-    background: #242531;
+    background: ${({ theme }) => theme.color.surfaceRaised};
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};
@@ -61,7 +61,7 @@ const NotificationCircle = styled.span`
   width: 0.8rem;
   height: 0.8rem;
   border-radius: 50%;
-  background-color: ${({ theme }) => theme.color.red};
+  background-color: ${({ theme }) => theme.color.statusDanger};
 `
 
 type Props = {
@@ -101,12 +101,12 @@ export const UploadResultDialog = ({ file }: Props) => {
       title={
         <Box>
           <SearchIcon size={20} />
-          <Text color="foreground">Import details for {name}</Text>
+          <Text color="contentPrimary">Import details for {name}</Text>
         </Box>
       }
       trigger={
         <DetailsButton
-          skin="success"
+          variant="success"
           prefixIcon={<Search size="14px" />}
           onClick={() => void trackEvent(ConsoleEvent.IMPORT_DETAILS_OPEN)}
         >
@@ -116,35 +116,39 @@ export const UploadResultDialog = ({ file }: Props) => {
       }
       withCloseButton
     >
-      <Box flexDirection="column" gap="0">
+      <Drawer.ContentWrapper>
         {stats.map((stat) => (
           <Drawer.GroupItem key={stat.label} direction="column">
             <Stat>
-              <Text color="gray2">{stat.label}</Text>
-              <Text color="foreground">{stat.value}</Text>
+              <Text color="contentSecondary">{stat.label}</Text>
+              <Text color="contentPrimary">{stat.value}</Text>
             </Stat>
           </Drawer.GroupItem>
         ))}
         <Drawer.GroupHeader>
-          <Text color="foreground">Table schema</Text>
+          <Text color="contentPrimary">Table schema</Text>
         </Drawer.GroupHeader>
         <StyledTable<React.FunctionComponent<TableProps<UploadResultColumn>>>
           columns={[
             {
               header: "Name",
-              render: ({ data }) => <Text color="foreground">{data.name}</Text>,
+              render: ({ data }) => (
+                <Text color="contentPrimary">{data.name}</Text>
+              ),
             },
             {
               header: "Type",
               align: "flex-end",
-              render: ({ data }) => <Text color="foreground">{data.type}</Text>,
+              render: ({ data }) => (
+                <Text color="contentPrimary">{data.type}</Text>
+              ),
             },
             {
               header: "Size",
               width: "100px",
               align: "flex-end",
               render: ({ data }) => (
-                <Text color="foreground">{data.size.toLocaleString()}</Text>
+                <Text color="contentPrimary">{data.size.toLocaleString()}</Text>
               ),
             },
             {
@@ -152,7 +156,9 @@ export const UploadResultDialog = ({ file }: Props) => {
               width: "100px",
               align: "flex-end",
               render: ({ data }) => (
-                <Text color={data.errors > 0 ? "red" : "foreground"}>
+                <Text
+                  color={data.errors > 0 ? "statusDanger" : "contentPrimary"}
+                >
                   {data.errors.toLocaleString()}
                 </Text>
               ),
@@ -160,7 +166,7 @@ export const UploadResultDialog = ({ file }: Props) => {
           ]}
           rows={file.uploadResult?.columns ?? []}
         />
-      </Box>
+      </Drawer.ContentWrapper>
     </Drawer>
   )
 }

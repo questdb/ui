@@ -8,7 +8,7 @@ import {
   DatabaseIcon,
   XCircleIcon,
 } from "@phosphor-icons/react"
-import { Box, Text, CopyButton } from "../../../components"
+import { Box, Text, CopyButton, TextButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import type {
   Table,
@@ -57,7 +57,7 @@ const ColumnNameBox = styled(Box)`
 `
 
 const ColumnType = styled(Text).attrs({
-  color: "gray2",
+  color: "contentSecondary",
   size: "sm",
 })`
   flex-shrink: 0;
@@ -70,29 +70,21 @@ const SchemaRow = styled(Box).attrs({
 })`
   max-width: 100%;
   padding: 0.5rem 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+  border-bottom: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 
   &:last-child {
     border-bottom: none;
   }
 
   &:hover {
-    background: ${({ theme }) => theme.color.backgroundLighter};
+    background: ${({ theme }) => theme.color.surfaceRaised};
   }
 `
 
-const BaseTableLinkButton = styled.button<{ $disabled?: boolean }>`
+const BaseTableLinkButton = styled(TextButton)`
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: transparent;
-  border: none;
-  cursor: ${({ $disabled }) => ($disabled ? "default" : "pointer")};
-  color: ${({ theme }) => theme.color.foreground};
-
-  &:hover {
-    text-decoration: ${({ $disabled }) => ($disabled ? "none" : "underline")};
-  }
 `
 
 const MetricsGrid = styled.div<{ $columns: number }>`
@@ -111,17 +103,16 @@ const MetricCard = styled(Box).attrs<{ $background?: string }>({
   justifyContent: "space-between",
 })<{ $background?: string }>`
   padding: 1rem 1.5rem;
-  background: ${({ $background, theme }) =>
-    $background ?? theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceValue};
 `
 
 const MetricLabel = styled(Text).attrs({
-  color: "gray2",
+  color: "contentSecondary",
   size: "sm",
 })``
 
 const MetricValue = styled(Text).attrs({
-  color: "foreground",
+  color: "contentPrimary",
   size: "md",
 })`
   min-width: 0;
@@ -130,21 +121,14 @@ const MetricValue = styled(Text).attrs({
   white-space: nowrap;
 `
 
-const StyledCopyButton = styled(CopyButton)`
-  margin-left: auto;
-  background: transparent;
-`
-
-const ColumnCopyButton = styled(CopyButton)`
+const ColumnCopyButtonSlot = styled.span`
+  display: inline-flex;
   visibility: hidden;
-  background: transparent;
-  padding: 0.3rem;
+  margin-right: 0.5rem;
 
   ${SchemaRow}:hover & {
     visibility: visible;
   }
-
-  margin-right: 0.5rem;
 `
 
 const ButtonsContainer = styled(Box).attrs({
@@ -187,16 +171,17 @@ export const DetailsTab = ({
     <>
       {isMatView && matViewData && (
         <HorizontalSection data-hook="table-details-base-table-section">
-          <Text color="gray2" size="sm" lineHeight="1.7">
+          <Text color="contentSecondary" size="sm" lineHeight="1.7">
             Base Table
           </Text>
           <BaseTableLinkButton
-            $disabled={baseTableExists === false}
+            disabled={baseTableExists === false}
             onClick={onNavigateToBaseTable}
             data-hook="table-details-base-table-link"
-            data-disabled={baseTableExists === false}
           >
-            <Text color={baseTableExists ? "foreground" : "gray2"}>
+            <Text
+              color={baseTableExists ? "contentPrimary" : "contentSecondary"}
+            >
               {matViewData.base_table_name}
             </Text>
             {baseTableExists && (
@@ -233,9 +218,10 @@ export const DetailsTab = ({
             >
               Explain with AI
             </SchemaAIButton>
-            <StyledCopyButton
+            <CopyButton
               text={ddl}
               iconOnly
+              size="sm"
               data-hook="table-details-copy-ddl"
               onCopy={() =>
                 void trackEvent(ConsoleEvent.TABLE_DETAILS_COPY_DDL)
@@ -300,15 +286,17 @@ export const DetailsTab = ({
                       isDesignatedTimestamp={col.designated}
                       type={col.type}
                     />
-                    <Text color="foreground" ellipsis>
+                    <Text color="contentPrimary" ellipsis>
                       {col.column}
                     </Text>
-                    <ColumnCopyButton
-                      size="sm"
-                      text={col.column}
-                      iconOnly
-                      data-hook="table-details-copy-column-name"
-                    />
+                    <ColumnCopyButtonSlot>
+                      <CopyButton
+                        size="sm"
+                        text={col.column}
+                        iconOnly
+                        data-hook="table-details-copy-column-name"
+                      />
+                    </ColumnCopyButtonSlot>
                   </ColumnNameBox>
                   <ColumnType>{col.type}</ColumnType>
                 </SchemaRow>
@@ -330,20 +318,20 @@ export const DetailsTab = ({
             /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 2 : 3}>
               {hasTtl && (
-                <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricCard $background={theme.color.surfaceInset}>
                   <MetricLabel>TTL</MetricLabel>
                   <MetricValue>
                     {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
                   </MetricValue>
                 </MetricCard>
               )}
-              <MetricCard $background={theme.color.backgroundDarker}>
+              <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
                   {tableData.dedup ? "Enabled" : "Disabled"}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.backgroundDarker}>
+              <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Partitioning</MetricLabel>
                 <MetricValue>
                   {tableData.partitionBy === "NONE"
@@ -352,7 +340,7 @@ export const DetailsTab = ({
                       tableData.partitionBy.slice(1).toLowerCase()}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.backgroundDarker}>
+              <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Refresh Type</MetricLabel>
                 <MetricValue>
                   {matViewData.refresh_type.charAt(0).toUpperCase() +
@@ -364,20 +352,20 @@ export const DetailsTab = ({
             /* Table: 3 cards (1 row) when TTL is configured, 2 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 3 : 2}>
               {hasTtl && (
-                <MetricCard $background={theme.color.backgroundDarker}>
+                <MetricCard $background={theme.color.surfaceInset}>
                   <MetricLabel>TTL</MetricLabel>
                   <MetricValue>
                     {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
                   </MetricValue>
                 </MetricCard>
               )}
-              <MetricCard $background={theme.color.backgroundDarker}>
+              <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
                   {tableData.dedup ? "Enabled" : "Disabled"}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.backgroundDarker}>
+              <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Partitioning</MetricLabel>
                 <MetricValue>
                   {tableData.partitionBy === "NONE"
@@ -402,7 +390,7 @@ export const DetailsTab = ({
               {storagePolicyClauses.map((clause) => (
                 <MetricCard
                   key={clause.action}
-                  $background={theme.color.backgroundDarker}
+                  $background={theme.color.surfaceInset}
                 >
                   <MetricLabel>{clause.action}</MetricLabel>
                   <MetricValue>{clause.duration}</MetricValue>
@@ -414,9 +402,9 @@ export const DetailsTab = ({
               <XCircleIcon
                 size="16px"
                 weight="fill"
-                color={theme.color.gray2}
+                color={theme.color.contentSecondary}
               />
-              <Text color="gray2">Not configured</Text>
+              <Text color="contentSecondary">Not configured</Text>
             </Box>
           )}
         </Section>

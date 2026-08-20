@@ -23,28 +23,28 @@
  ******************************************************************************/
 
 // Basic Colors
-$navy: #1ab394; // Primary color
-$dark-gray: #c2c2c2; // Default color
-$blue: #1c84c6; // Success color
-$lazur: #23c6c8; // Info color
-$yellow: #f8ac59; // Warrning color
-$red: #ed5565; // Danger color
+$navy: theme-color(statusSuccessStrong); // Primary color
+$dark-gray: theme-color(contentSecondary); // Default color
+$blue: theme-color(statusInfo); // Success color
+$lazur: theme-color(statusInfo); // Info color
+$yellow: theme-color(statusWarning); // Warning color
+$red: theme-color(statusDanger); // Danger color
 
 // Various colors
-$text-color: #676a6c; // Body text
-$gray: #f3f3f4; // Background wrapper color
-$light-gray: #d1dade; // Default label, badget
-$label-badget-color: #5e5e5e;
-$light-blue: #f3f6fb;
+$text-color: theme-color(contentPrimary); // Body text
+$gray: theme-color(contentPrimary); // Background wrapper color
+$light-gray: theme-color(contentSecondary); // Default label, badge
+$label-badget-color: theme-color(contentMuted);
+$light-blue: theme-color(contentPrimary);
 
 // Spiner color and margin
 $spin-color: $navy;
 $spin-margin: 0 auto;
 
 // IBOX colors ( default panel colors)
-$border-color: #e7eaec; // IBox border
-$ibox-title-bg: #ffffff; // IBox Background header
-$ibox-content-bg: #ffffff; // IBox Background content
+$border-color: theme-color(borderStrong); // IBox border
+$ibox-title-bg: theme-color(contentPrimary); // IBox Background header
+$ibox-content-bg: theme-color(contentPrimary); // IBox Background content
 $border-radius: 3px; // IBox boder radius
 
 //Sidebar width
@@ -57,5 +57,5 @@ $boxed-width: 1200px;
 $btn-border-radius: 3px;
 
 //Navigation
-$nav-bg: #2f4050;
-$nav-text-color: #a7b1c2;
+$nav-bg: theme-color(borderDefault);
+$nav-text-color: theme-color(contentSecondary);

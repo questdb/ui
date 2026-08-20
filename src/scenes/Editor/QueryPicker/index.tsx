@@ -24,11 +24,10 @@
 
 import React, { forwardRef, Ref, useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { DownArrowSquare, UpArrowSquare } from "@styled-icons/boxicons-solid"
 
-import { Text } from "../../../components"
+import { Key, Text } from "../../../components"
+import { menuContainerStyles } from "../../../components/menuStyles"
 import { useKeyPress } from "../../../hooks"
-import { color } from "../../../utils"
 
 import QueryRow from "./Row"
 import { useEditor } from "../../../providers"
@@ -41,29 +40,29 @@ type Props = {
 }
 
 const Wrapper = styled.div`
+  ${menuContainerStyles}
+
+  width: min(60rem, calc(100vw - 2rem));
+  max-height: min(65rem, calc(100vh - 6rem));
+  overflow-y: auto;
+`
+
+const Helper = styled.div`
   display: flex;
-  max-height: 650px;
-  width: 600px;
-  max-width: 100vw;
-  padding: 0.6rem 0;
-  flex-direction: column;
-  background: ${color("backgroundDarker")};
-  box-shadow: ${color("black")} 0px 5px 8px;
-  border: 1px solid ${color("black")};
-  border-radius: 4px;
-  overflow: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.6rem;
+  padding: 0.4rem 0.8rem 0.8rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.2rem;
 `
 
-const Helper = styled(Text)`
-  padding: 1rem;
-  text-align: center;
-  opacity: 0.5;
-`
-
-const Esc = styled(Text)`
-  padding: 0 2px;
-  background: ${color("foreground")};
-  border-radius: 2px;
+const HelperGroup = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 `
 
 type QueryListItem =
@@ -101,18 +100,25 @@ const prepareQueriesList = (queries: Props["queries"]) => {
 
 const isQuery = ({ type }: QueryListItem) => type === "query"
 
+const GroupHeader = styled.div`
+  padding: 1rem 0.8rem 0.7rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+`
+
 const Title = styled(Text)`
-  padding: 0.6rem 1.2rem 0.4rem;
-  margin-top: 0.6rem;
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
-  background: ${({ theme }) => theme.color.black40};
+  display: block;
+  margin-bottom: 0.2rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.3rem;
+  font-weight: 600;
 `
 
 const Description = styled(Text)`
-  padding: 0 1.2rem 1rem;
-  color: ${({ theme }) => theme.color.foreground};
-  opacity: 0.7;
-  background: ${({ theme }) => theme.color.black40};
+  display: block;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.2rem;
+  line-height: 1.45;
 `
 
 const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
@@ -172,12 +178,16 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
 
   return (
     <Wrapper ref={ref}>
-      <Helper _style="italic" color="foreground" size="xs">
-        Navigate the list with <UpArrowSquare size="16px" />
-        <DownArrowSquare size="16px" /> keys, exit with&nbsp;
-        <Esc _style="normal" size="ms" weight={700}>
-          Esc
-        </Esc>
+      <Helper>
+        <HelperGroup>
+          Navigate
+          <Key keyString="↑" />
+          <Key keyString="↓" />
+        </HelperGroup>
+        <HelperGroup>
+          Close
+          <Key keyString="Esc" />
+        </HelperGroup>
       </Helper>
 
       {queryList.map((entry) => {
@@ -198,12 +208,10 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
 
         const { title, description } = entry.data
         return (
-          <React.Fragment key={entry.id}>
-            <Title color="foreground" size="md">
-              {title}
-            </Title>
-            <Description color="foreground">{description}</Description>
-          </React.Fragment>
+          <GroupHeader key={entry.id}>
+            <Title>{title}</Title>
+            <Description>{description}</Description>
+          </GroupHeader>
         )
       })}
     </Wrapper>

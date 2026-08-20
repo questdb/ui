@@ -1,5 +1,5 @@
 import styled, { css, keyframes } from "styled-components"
-import { Notification2 } from "@styled-icons/remix-line"
+import { Notification2 } from "../../components/icons"
 
 const angle = "10deg"
 const swingFrames = keyframes`
@@ -23,7 +23,7 @@ const swing = css`
 
 export const Bell = styled(Notification2)<{ $unread: boolean }>`
   color: ${({ theme, $unread }) =>
-    theme.color[$unread ? "foreground" : "inherit"]};
+    $unread ? theme.color.contentPrimary : "inherit"};
 
   ${({ $unread }) => $unread && swing}
 `

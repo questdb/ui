@@ -1,12 +1,12 @@
 import Editor from "@monaco-editor/react"
 import type { Monaco } from "@monaco-editor/react"
-import { Stop } from "@styled-icons/remix-line"
-import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
+import { Stop } from "../../../components/icons"
+import { Error as ErrorIcon } from "../../../components/icons"
 import type { editor } from "monaco-editor"
 import React, { useContext, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import type { ExecutionInfo } from "../../Editor"
 import {
   Box,
@@ -23,6 +23,7 @@ import {
 import { formatTiming } from "../QueryResult"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
+import { withAlpha } from "../../../theme"
 import { QuestContext, useEditor } from "../../../providers"
 import {
   useAIStatus,
@@ -34,10 +35,10 @@ import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { MAX_CELL_LINES } from "../../../store/notebook"
 import type { NotificationShape } from "../../../store/Query/types"
-import { theme } from "../../../theme"
 import { NotificationType } from "../../../types"
 import type { ErrorResult } from "../../../utils"
 import { color } from "../../../utils"
+import { getMonacoThemeName } from "../../../utils/monacoInit"
 import * as QuestDB from "../../../utils/questdb"
 import Loader from "../Loader"
 import QueryResult from "../QueryResult"
@@ -109,7 +110,7 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #2c2e3d;
+  background: ${color("editorCanvas")};
   height: 100%;
   width: 100%;
 
@@ -124,20 +125,20 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   `}
   .monaco-editor .squiggly-error {
     background: none;
-    border-bottom: 0.3rem ${color("red")} solid;
+    border-bottom: 0.3rem ${color("statusDanger")} solid;
   }
 
   .monaco-scrollable-element > .scrollbar > .slider {
-    background: ${color("selection")};
+    background: ${color("interactionNeutral")};
   }
 
   .cursorQueryDecoration {
     width: 0.2rem !important;
-    background: ${color("green")};
+    background: ${color("statusSuccess")};
     margin-left: 0.5rem;
 
     &.hasError {
-      background: ${color("red")};
+      background: ${color("statusDanger")};
     }
   }
 
@@ -189,41 +190,36 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
       }
     }
     &.active {
-      border: 1px solid transparent;
+      border: 1px solid ${({ theme }) => theme.color.borderAccent};
       box-shadow: none;
-      background:
-        linear-gradient(#2c2e3d, #2c2e3d) padding-box,
-        linear-gradient(90deg, #d14671 0%, #892c6c 100%) border-box;
+      background: ${({ theme }) => theme.color.interactionAccentActive};
     }
 
     &.highlight {
-      border: 1px solid #d14671;
-      background: linear-gradient(
-        90deg,
-        rgba(209, 70, 113, 0.24) 0%,
-        rgba(137, 44, 108, 0.24) 100%
-      );
+      border: 1px solid ${({ theme }) => theme.color.brandGradientStart};
+      background: ${({ theme }) =>
+        `linear-gradient(90deg, ${withAlpha(theme.color.brandGradientStart, theme.mode === "dark" ? 0.24 : 0.18)} 0%, ${withAlpha(theme.color.brandGradientEnd, theme.mode === "dark" ? 0.24 : 0.18)} 100%)`};
       box-shadow: none;
     }
   }
 
   .selectionErrorHighlight {
-    background-color: rgba(255, 85, 85, 0.15);
+    background-color: ${({ theme }) => theme.color.editorErrorHighlight};
     border-radius: 2px;
   }
 
   .selectionSuccessHighlight {
-    background-color: rgba(80, 250, 123, 0.15);
+    background-color: ${({ theme }) => theme.color.editorSuccessHighlight};
     border-radius: 2px;
   }
 
   .searchHighlight {
-    background-color: rgba(255, 184, 108, 0.5);
+    background-color: ${({ theme }) => theme.color.editorSearchHighlight};
     border-radius: 2px;
   }
 
   .aiQueryHighlight {
-    background-color: rgba(241, 250, 140, 0.5);
+    background-color: ${({ theme }) => theme.color.editorAiHighlight};
     border-radius: 2px;
   }
 
@@ -246,14 +242,15 @@ const EditorWrapper = styled.div`
   flex: 1;
   overflow: hidden;
   position: relative;
-  padding: 8px 0 0 0;
+  padding: 0;
+  background: ${color("editorCanvas")};
 `
 
 const ShareLinkDescription = styled.div`
   font-size: 1.4rem;
   margin-top: 2rem;
   padding: 0 2rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   max-height: 70vh;
   overflow-y: auto;
 `
@@ -269,6 +266,7 @@ const getDefaultLineNumbersMinChars = (canUseAI: boolean) => {
 }
 
 const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
+  const theme = useTheme()
   const editorContext = useEditor()
   const { executionRefs, cleanupExecutionRefs } = editorContext
   const {
@@ -342,6 +340,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     new Map(),
   )
   const highlightedLineNumberRef = useRef<number | null>(null)
+  const loadingGlyphLineNumberRef = useRef<number | null>(null)
   const visibleLinesRef = useRef<{ startLine: number; endLine: number }>({
     startLine: 1,
     endLine: 1,
@@ -1404,7 +1403,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         query: `${activeBufferRef.current.label}@${0}-${0}`,
         content: (
           <Box gap="1rem" align="center">
-            <Text color="foreground">
+            <Text color="contentPrimary">
               Running query &quot;
               {effectiveQueryText.length > 30
                 ? `${effectiveQueryText.slice(0, 30)}...`
@@ -1450,7 +1449,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         notification = {
           query: queryKey,
           content: (
-            <Text color="foreground" ellipsis title={effectiveQueryText}>
+            <Text color="contentPrimary" ellipsis title={effectiveQueryText}>
               {result.notice}
               {effectiveQueryText !== undefined &&
                 effectiveQueryText !== "" &&
@@ -1516,7 +1515,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       notification = {
         query: queryKey,
-        content: <Text color="red">{error.error}</Text>,
+        content: <Text color="statusDanger">{error.error}</Text>,
         sideContent: <QueryInNotification query={query.query} />,
         type: NotificationType.ERROR,
       }
@@ -1646,11 +1645,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         column: query.column,
       })
 
+      loadingGlyphLineNumberRef.current = lineNumber
       toggleGlyphWidgetLoading(lineNumber, true)
 
       const result = await runIndividualQuery(query, i === queries.length - 1)
 
       toggleGlyphWidgetLoading(lineNumber, false)
+      loadingGlyphLineNumberRef.current = null
 
       individualQueryResults.push(result)
       if (result.success) {
@@ -1742,7 +1743,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         {
           query: `${activeBufferRef.current.label}@${LINE_NUMBER_HARD_LIMIT + 1}-${LINE_NUMBER_HARD_LIMIT + 1}`,
           content: (
-            <Text color="foreground">
+            <Text color="contentPrimary">
               {notificationPrefix}
               {successfulQueries > 0 ? `${successfulQueries} successful` : ""}
               {successfulQueries > 0 && failedQueries > 0 ? " and " : ""}
@@ -1915,9 +1916,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   isExplain: isRunningExplain,
                   content: (
                     <Box gap="1rem" align="center">
-                      <Text color="foreground">Running...</Text>
+                      <Text color="contentPrimary">Running...</Text>
                       <CancelButton
-                        skin="error"
+                        variant="dangerGhost"
                         onClick={() => toggleRunning()}
                       >
                         <Stop size="18px" />
@@ -2031,7 +2032,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                     query: currentQueryKey,
                     isExplain: isRunningExplain,
                     content: (
-                      <Text color="foreground" ellipsis title={queryToRun}>
+                      <Text color="contentPrimary" ellipsis title={queryToRun}>
                         {result.notice}
                         {queryToRun !== undefined &&
                           queryToRun !== "" &&
@@ -2159,7 +2160,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   {
                     query: currentQueryKey,
                     isExplain: isRunningExplain,
-                    content: <Text color="red">{error.error}</Text>,
+                    content: <Text color="statusDanger">{error.error}</Text>,
                     sideContent: <QueryInNotification query={queryToRun} />,
                     type: NotificationType.ERROR,
                   },
@@ -2288,6 +2289,24 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }, [])
 
   useEffect(() => {
+    const editor = editorRef.current
+    const monaco = monacoRef.current
+    if (!editor || !monaco) return
+
+    glyphWidgetsRef.current.forEach((widget) => {
+      editor.removeGlyphMarginWidget(widget)
+    })
+    glyphWidgetsRef.current.clear()
+    applyGlyphsAndLineMarkings(monaco, editor)
+
+    // The script loop's spinner lives on the widget DOM, not in the options
+    // the rebuild reads from, so the executing line must get it back.
+    if (loadingGlyphLineNumberRef.current !== null) {
+      toggleGlyphWidgetLoading(loadingGlyphLineNumberRef.current, true)
+    }
+  }, [theme.mode])
+
+  useEffect(() => {
     return () => {
       if (editorQueryIdRef.current !== null) {
         quest.abort(editorQueryIdRef.current)
@@ -2372,7 +2391,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               wordBasedSuggestions: "off",
               matchOnWordStartOnly: false,
             }}
-            theme="dracula"
+            theme={getMonacoThemeName(theme.mode)}
           />
         </EditorWrapper>
         <Loader show={!!request || !tables} />
@@ -2425,13 +2444,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                   gap="0.8rem"
                   data-hook="run-all-queries-warning"
                 >
-                  <ErrorIcon size="16px" color={theme.color.orange} />
-                  <Text color="orange">
+                  <ErrorIcon size="16px" color={theme.color.statusWarning} />
+                  <Text color="statusWarning">
                     Current query execution will be aborted.
                   </Text>
                 </Box>
               )}
-              <Text color="foreground">
+              <Text color="contentPrimary">
                 {isPendingSelectionRun
                   ? `You are about to run ${queriesToRunRef.current.length} selected queries. This action may modify or delete your data permanently.`
                   : "You are about to run all queries in this tab. This action may modify or delete your data permanently."}
@@ -2455,7 +2474,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
                       id="stop-after-failure"
                       data-hook="stop-after-failure-checkbox"
                     />
-                    <Text color="foreground">
+                    <Text color="contentPrimary">
                       Stop running after a failed query
                     </Text>
                   </label>
@@ -2465,13 +2484,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
             <Dialog.ActionButtons>
               <Dialog.Close asChild>
-                <DialogButton skin="secondary" onClick={handleCloseDialog}>
+                <DialogButton variant="secondary" onClick={handleCloseDialog}>
                   Cancel
                 </DialogButton>
               </Dialog.Close>
 
               <DialogButton
-                skin="primary"
+                variant="primary"
                 data-hook="run-all-queries-confirm"
                 onClick={handleConfirmRunScript}
               >
@@ -2509,8 +2528,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
             <ShareLinkDescription>
               <Box margin="0 0 2rem 0" gap="0.5rem">
-                <StyledErrorIcon size="16px" color={theme.color.orange} />
-                <Text color="orange">
+                <StyledErrorIcon
+                  size="16px"
+                  color={theme.color.statusWarning}
+                />
+                <Text color="statusWarning">
                   {shareLinkConfirmation?.unclassified
                     ? "Could not classify the shared SQL. Review it before running."
                     : `This link contains ${
@@ -2531,7 +2553,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             <Dialog.ActionButtons>
               <Dialog.Close asChild>
                 <DialogButton
-                  skin="secondary"
+                  variant="secondary"
                   onClick={handleCancelShareLinkRun}
                   data-hook="share-link-confirmation-cancel"
                 >
@@ -2540,7 +2562,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               </Dialog.Close>
 
               <DialogButton
-                skin="primary"
+                variant="primary"
                 data-hook="share-link-confirmation-confirm"
                 onClick={handleConfirmShareLinkRun}
               >

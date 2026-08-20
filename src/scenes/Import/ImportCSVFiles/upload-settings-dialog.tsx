@@ -8,17 +8,17 @@ import {
   Drawer,
   Input,
   Switch,
-  Select,
+  SelectMenuControl,
 } from "../../../components"
-import { Settings4 } from "@styled-icons/remix-line"
-import { Undo } from "@styled-icons/boxicons-regular"
+import { Settings4 } from "../../../components/icons"
+import { Undo } from "../../../components/icons"
 import { UploadModeSettings } from "../../../utils"
 import { MAX_UNCOMMITTED_ROWS } from "./const"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const SettingsIcon = styled(Settings4)`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const Row = styled(Box).attrs({ justifyContent: "space-between", gap: "2rem" })`
@@ -39,7 +39,7 @@ const Option = styled(Drawer.GroupItem)`
   width: 100%;
 
   &:nth-child(even) {
-    background: #242531;
+    background: ${({ theme }) => theme.color.surfaceRaised};
   }
 `
 
@@ -202,12 +202,14 @@ export const UploadSettingsDialog = ({
       title={
         <Box>
           <SettingsIcon size="20px" />
-          <Text color="foreground">Settings for {file.fileObject.name}</Text>
+          <Text color="contentPrimary">
+            Settings for {file.fileObject.name}
+          </Text>
         </Box>
       }
       trigger={
         <Button
-          skin="secondary"
+          variant="secondary"
           prefixIcon={<Settings4 size="18px" />}
           onClick={() => onOpenChange(true)}
         >
@@ -222,7 +224,7 @@ export const UploadSettingsDialog = ({
         <Box gap="1rem">
           <Button
             prefixIcon={<Undo size={18} />}
-            skin="secondary"
+            variant="secondary"
             onClick={() => {
               setSettings(initialState)
               onOpenChange(false)
@@ -234,7 +236,7 @@ export const UploadSettingsDialog = ({
 
           <Button
             prefixIcon={<Settings4 size={18} />}
-            skin="success"
+            variant="primary"
             onClick={() => {
               void trackEvent(ConsoleEvent.IMPORT_SETTINGS_CHANGE)
               onSubmit(settings)
@@ -258,11 +260,11 @@ export const UploadSettingsDialog = ({
                     align="flex-start"
                     justifyContent="flex-start"
                   >
-                    <Text color="foreground" weight={600}>
+                    <Text color="contentPrimary" weight={600}>
                       {option.label}
                     </Text>
                     {option.description && (
-                      <Text color="gray2" size="sm">
+                      <Text color="contentSecondary" size="sm">
                         {option.description}
                       </Text>
                     )}
@@ -282,16 +284,24 @@ export const UploadSettingsDialog = ({
                       />
                     )}
                     {option.type === "select" && (
-                      <Select
+                      <SelectMenuControl
                         name={option.name}
-                        defaultValue={option.defaultValue}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                        ariaLabel={
+                          typeof option.label === "string"
+                            ? option.label
+                            : option.name
+                        }
+                        value={option.defaultValue}
+                        onValueChange={(value) =>
                           setSettings({
                             ...settings,
-                            [option.name]: e.target.value,
+                            [option.name]: value,
                           })
                         }
-                        options={option.options}
+                        options={option.options.map((item) => ({
+                          ...item,
+                          value: String(item.value),
+                        }))}
                       />
                     )}
                     {option.type === "switch" && (

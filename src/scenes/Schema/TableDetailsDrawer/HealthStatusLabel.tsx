@@ -18,13 +18,13 @@ const LabelContainer = styled.div<{ $severity: HealthSeverity }>`
   background: ${({ theme, $severity }) => {
     switch ($severity) {
       case "critical":
-        return `${theme.color.red}1F`
+        return `${theme.color.statusDanger}1F`
       case "warning":
-        return `${theme.color.orange}1F`
+        return `${theme.color.statusWarning}1F`
       case "recovering":
       case "healthy":
       default:
-        return `${theme.color.green}1F`
+        return `${theme.color.statusSuccess}1F`
     }
   }};
 `
@@ -85,32 +85,33 @@ const StatusSquare = styled(Square)<{ $severity: HealthSeverity }>`
   color: ${({ theme, $severity }) => {
     switch ($severity) {
       case "critical":
-        return theme.color.red
+        return theme.color.statusDanger
       case "warning":
-        return theme.color.orange
+        return theme.color.statusWarning
       case "recovering":
       case "healthy":
       default:
-        return theme.color.green
+        return theme.color.statusSuccess
     }
   }};
 `
 
 export const HealthStatusLabel = ({ severity }: Props) => {
+  const statusText =
+    severity === "critical"
+      ? "Error"
+      : severity === "warning"
+        ? "Warning"
+        : "Healthy"
+
   return (
-    <Tooltip
-      content={
-        severity === "critical"
-          ? "Error"
-          : severity === "warning"
-            ? "Warning"
-            : "Healthy"
-      }
-    >
+    <Tooltip content={statusText}>
       <LabelContainer
         $severity={severity}
+        aria-label={statusText}
         data-hook="table-details-health-status"
         data-severity={severity}
+        tabIndex={0}
       >
         <StatusSquare $severity={severity} />
       </LabelContainer>

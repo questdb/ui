@@ -2,13 +2,14 @@ import React, { useState, useCallback, useMemo, useRef, useEffect } from "react"
 import styled from "styled-components"
 import type { SearchMatch } from "../../utils/textSearch"
 import { useEditor } from "../../providers"
-import { ChevronRight, ChevronDown } from "@styled-icons/boxicons-solid"
 import {
+  CaretDownIcon,
+  CaretRightIcon,
   FileTextIcon,
   ChartLineIcon,
   NotebookIcon,
 } from "@phosphor-icons/react"
-import { Text } from "../../components"
+import { IconButton, Text } from "../../components"
 import {
   VirtualizedTree,
   VirtualizedTreeHandle,
@@ -33,34 +34,41 @@ const ItemWrapper = styled.div<{
   display: flex;
   align-items: center;
   padding: 0.5rem 0;
-  padding-left: ${(props) => (props.$level || 0) * 1.5 + 1}rem;
+  padding-left: ${(props) =>
+    (props.$level || 0) * 1.5 + 1 + (props.$isHeader ? 0.5 : 0)}rem;
   padding-right: 1rem;
   user-select: none;
   border: 1px solid transparent;
-  border-radius: 0.4rem;
+  border-radius: 0;
   width: 100%;
   min-height: 3.2rem;
+
+  &:hover {
+    background: ${({ theme }) => theme.color.interactionAccentHover};
+  }
 
   ${({ $focused, theme }) =>
     $focused &&
     `
     outline: none;
-    background: ${theme.color.tableSelection};
-    border: 1px solid ${theme.color.cyan};
+    background: ${theme.color.interactionAccentActive};
+    border: 1px solid ${theme.color.borderAccent};
   `}
 `
 
-const ChevronIcon = styled.div`
+const ExpandButton = styled(IconButton)`
   position: absolute;
-  left: 0.5rem;
-  color: ${({ theme }) => theme.color.gray2};
-  display: flex;
-  align-items: center;
-  cursor: pointer;
+  left: 0.1rem;
 
-  svg {
-    width: 1.5rem;
-    height: 1.5rem;
+  && {
+    width: 2.4rem;
+    min-width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+  }
+
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: none;
   }
 `
 
@@ -72,6 +80,7 @@ const FileIcon = styled.div`
   svg {
     width: 1.4rem;
     height: 1.4rem;
+    color: ${({ theme }) => theme.color.contentAccent};
   }
 `
 
@@ -79,53 +88,51 @@ const ItemText = styled(Text)<{ $isArchived?: boolean }>`
   flex: 1;
   font-weight: 500;
   color: ${({ theme, $isArchived }) =>
-    $isArchived ? theme.color.gray2 : theme.color.foreground};
+    $isArchived ? theme.color.contentSecondary : theme.color.contentPrimary};
   font-style: ${(props) => (props.$isArchived ? "italic" : "normal")};
   display: flex;
   align-items: center;
   gap: 0.8rem;
 
   .highlight {
-    background-color: ${({ theme }) => theme.color.selection};
-    color: ${({ theme }) => theme.color.foreground};
+    background-color: ${({ theme }) => theme.color.interactionNeutral};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 
   mark {
-    background-color: rgb(163, 127, 96);
+    background-color: ${({ theme }) => theme.color.contentSearchMatch};
     border-radius: 0.2rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     padding: 0.2rem;
   }
 `
 
 const BufferStatus = styled.span`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1rem;
   margin-left: 0.4rem;
   padding: 0.2rem 0.4rem;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.2rem;
 `
 
 const MatchCount = styled.span`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.1rem;
   margin-left: 0.8rem;
 `
 
 const LineNumber = styled.span`
-  color: ${({ theme }) => theme.color.comment};
+  color: ${({ theme }) => theme.color.contentMuted};
   margin-right: 0.5rem;
   text-align: left;
-  font-family:
-    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.1rem;
   min-width: 3.4rem;
 `
 
 const MatchType = styled.span`
-  color: ${({ theme }) => theme.color.comment};
+  color: ${({ theme }) => theme.color.contentMuted};
   margin-right: 0.8rem;
   text-align: left;
   font-size: 1.1rem;
@@ -134,24 +141,22 @@ const MatchType = styled.span`
 `
 
 const MatchText = styled.span`
-  color: ${({ theme }) => theme.color.foreground};
-  font-family:
-    SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-family: ${({ theme }) => theme.fontMonospace};
   white-space: pre;
   font-size: 1.1rem;
 
   mark {
-    background-color: rgb(163, 127, 96);
+    background-color: ${({ theme }) => theme.color.contentSearchMatch};
     border-radius: 0.2rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     padding: 0.2rem;
   }
 `
 
 const NoResults = styled.div`
   padding: 2rem 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.3rem;
   text-align: center;
 `
@@ -553,15 +558,23 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
             aria-level={1}
             aria-label={`${item.bufferLabel} ${item.isArchived ? "closed" : ""} - ${item.matchCount} ${item.matchCount > 1 ? "results" : "result"}`}
           >
-            <ChevronIcon
+            <ExpandButton
+              label={
+                isExpanded ? "Collapse result group" : "Expand result group"
+              }
+              size="sm"
+              aria-expanded={isExpanded}
               onClick={(e) => {
                 e.stopPropagation()
                 toggleBufferExpansion(item.bufferId)
               }}
-              aria-hidden="true"
             >
-              {isExpanded ? <ChevronDown /> : <ChevronRight />}
-            </ChevronIcon>
+              {isExpanded ? (
+                <CaretDownIcon size={15} />
+              ) : (
+                <CaretRightIcon size={15} />
+              )}
+            </ExpandButton>
             <FileIcon aria-hidden="true">{renderResultIcon(item)}</FileIcon>
             <ItemText $isArchived={item.isArchived}>
               {item.titleMatch

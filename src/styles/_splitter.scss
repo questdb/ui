@@ -33,7 +33,7 @@
   height: 6px;
   margin: 3px 0;
   border: none;
-  background: #585858;
+  background: theme-color(contentDisabled);
 }
 
 .splitter.qs-dragging {
@@ -41,11 +41,11 @@
 }
 
 .splitter:hover {
-  background: #6a6a6a;
+  background: theme-color(contentDisabled);
 }
 
 .qs-ghost {
-  background: #6a6a6a;
+  background: theme-color(contentDisabled);
   opacity: 0.4;
   z-index: 10;
 }

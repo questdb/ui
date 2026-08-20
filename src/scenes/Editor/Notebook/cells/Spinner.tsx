@@ -8,6 +8,6 @@ const spin = keyframes`
 
 // Neutral (non-brand) spinner for toolbar controls.
 export const Spinner = styled(CircleNotchIcon)`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   animation: ${spin} 0.8s linear infinite;
 `

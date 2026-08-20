@@ -1,6 +1,6 @@
 import React from "react"
-import styled from "styled-components"
-import { Information } from "@styled-icons/remix-line"
+import styled, { useTheme } from "styled-components"
+import { Information } from "../../../components/icons"
 import { LinkSimpleIcon } from "@phosphor-icons/react"
 import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
@@ -43,6 +43,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
   onCopyQueryLink,
   onAskAIRef,
 }) => {
+  const theme = useTheme()
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen)
   }
@@ -96,7 +97,9 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                         key={`run-${query.query}-${index}`}
                         onClick={() => onRunQuery(query)}
                         data-hook={`dropdown-item-run-query-${index}`}
-                        icon={<PlayFilled size={16} color="#fff" />}
+                        icon={
+                          <PlayFilled size={16} color={theme.color.editorRun} />
+                        }
                       >
                         Run {extractQueryTextToRun(query)}
                       </DropdownMenu.Item>,
@@ -134,7 +137,9 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     key="run"
                     onClick={() => onRunQuery(queriesRef.current[0])}
                     data-hook="dropdown-item-run-query"
-                    icon={<PlayFilled size={16} color="#fff" />}
+                    icon={
+                      <PlayFilled size={16} color={theme.color.editorRun} />
+                    }
                   >
                     Run {extractQueryTextToRun(queriesRef.current[0])}
                   </DropdownMenu.Item>,

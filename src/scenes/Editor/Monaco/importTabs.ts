@@ -26,6 +26,10 @@ import {
   MAX_CELL_NAME_LENGTH,
   exceedsCellLineLimit,
 } from "../../../store/notebook"
+import {
+  DEFAULT_METRIC_COLOR_TOKEN,
+  toMetricColorToken,
+} from "../Metrics/metricColors"
 
 type ValidationResult = true | string
 
@@ -36,8 +40,7 @@ const REFRESH_RATE_VALUES = Object.values(RefreshRate)
 
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"])
 
-const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/
-export const DEFAULT_METRIC_COLOR = "#FF6B6B"
+export const DEFAULT_METRIC_COLOR: string = DEFAULT_METRIC_COLOR_TOKEN
 
 const validateMetric = (item: unknown, index: number): ValidationResult => {
   if (typeof item !== "object" || item === null)
@@ -176,8 +179,8 @@ export const validateBufferItem = (item: unknown): ValidationResult => {
 
 const sanitizeMetric = (item: Record<string, unknown>): Metric => {
   const color =
-    typeof item.color === "string" && HEX_COLOR_REGEX.test(item.color)
-      ? item.color
+    typeof item.color === "string"
+      ? toMetricColorToken(item.color)
       : DEFAULT_METRIC_COLOR
 
   const metric: Metric = {

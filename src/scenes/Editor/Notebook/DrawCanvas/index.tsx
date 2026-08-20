@@ -24,8 +24,29 @@ import {
   getChartZoom,
   setChartZoom,
 } from "../cellVirtualization/chartZoomStore"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
 
 const NO_RESULTS: QueryExecResult[] = []
+
+const notebookChartSettingsTelemetry: ChartSettingsTelemetry = {
+  onCancel: (method) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_CANCEL, { method })
+  },
+  onSave: (payload) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_SAVE, payload)
+  },
+  onSaveBlocked: (reason) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SAVE_BLOCKED, { reason })
+  },
+  onTypeChange: (from, to) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_TYPE_CHANGE, { from, to })
+  },
+  onResetAuto: (chartType) => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, { chartType })
+  },
+}
 
 const Wrapper = styled.div`
   display: flex;
@@ -33,13 +54,15 @@ const Wrapper = styled.div`
   flex: 1;
   min-height: 0;
   position: relative;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceInset};
 `
 
 const Canvas = styled.div`
   flex: 1;
   min-height: 0;
   position: relative;
+  overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceInset};
 `
 
 const EmptyState = styled.div`
@@ -47,7 +70,7 @@ const EmptyState = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: ${({ theme }) => theme.fontSize.sm};
 `
 
@@ -209,6 +232,7 @@ export const DrawCanvas: React.FC<Props> = ({
         tabs={resolution.tabs}
         config={resolution.effectiveConfig}
         onSave={onConfigChange}
+        telemetry={notebookChartSettingsTelemetry}
       />
     </Wrapper>
   )

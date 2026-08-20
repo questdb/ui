@@ -1,15 +1,13 @@
 import React, { useEffect, useRef, useState } from "react"
-import styled, { css } from "styled-components"
-import { Box, Button, Tooltip } from "../../../components"
+import styled from "styled-components"
+import { Box, Button, IconButton, Tooltip } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import {
   DownloadSimpleIcon,
-  ListIcon,
   NotebookIcon,
   PencilSimpleLineIcon,
-  SquaresFourIcon,
 } from "@phosphor-icons/react"
-import { CopyAlt } from "@styled-icons/boxicons-regular"
+import { CopyAlt } from "../../../components/icons"
 import { Spinner } from "./cells/Spinner"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
@@ -28,16 +26,26 @@ import {
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
 import { VariablesPopover } from "./globals/VariablesPopover"
 import { NotebookRefreshControl } from "./NotebookRefreshControl"
+import { NotebookLayoutToggle } from "./NotebookViewToggle"
+import { NotebookRenameInput } from "./NotebookRenameInput"
 
 const Toolbar = styled(Box).attrs({
   align: "center",
   justifyContent: "space-between",
 })`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 1rem;
   width: 100%;
-  padding: 0.8rem 2.5rem;
-  background: ${color("midnight")};
-  border-bottom: 1px solid ${color("baseGrey")};
-  box-shadow: 0 2px 10px 0 rgba(23, 23, 23, 0.35);
+  max-width: 100%;
+  min-width: 0;
+  min-height: 6.4rem;
+  box-sizing: border-box;
+  padding: 1rem 2rem;
+  background: ${color("surfaceBase")};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  box-shadow: 0 12px 24px ${({ theme }) => theme.color.shadowSoft};
+  overflow: hidden;
   flex-shrink: 0;
   position: relative;
   z-index: 1;
@@ -49,67 +57,65 @@ const Toolbar = styled(Box).attrs({
   }
 `
 
-const NotebookGlyph = styled(NotebookIcon)`
+const NotebookGlyph = styled(NotebookIcon).attrs({
+  size: 20,
+  weight: "regular",
+})`
+  display: block;
   flex-shrink: 0;
-  color: ${color("pinkPrimary")};
+  color: ${color("contentObject")};
+`
+
+const NotebookIdentity = styled(Box).attrs({ align: "center", gap: "1rem" })`
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 `
 
 const TitleContainer = styled(Box).attrs({ align: "center", gap: "0.5rem" })`
   min-width: 0;
+  max-width: 100%;
+  min-height: 3.2rem;
+  overflow: hidden;
+  line-height: 1;
 `
 
 const Name = styled.span`
+  display: block;
   min-width: 0;
   max-width: 40rem;
   font-size: 1.6rem;
   font-weight: 600;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
+  padding-top: 0.1rem;
 `
 
-const NameInput = styled.input`
-  min-width: 0;
-  font-family: inherit;
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: ${color("foreground")};
-  background: transparent;
-  border: 1px solid ${color("pinkDarker")};
-  border-radius: 4px;
-  outline: none;
-  padding: 0.2rem 0.6rem;
-
-  &::selection {
-    background: ${color("pinkPrimary")};
-  }
+const ToolbarRenameInput = styled(NotebookRenameInput)`
+  flex: 1 1 auto;
+  width: 0;
+  max-width: 40rem;
 `
 
-const EditButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const ToolbarActions = styled(Box).attrs({ align: "center", gap: "0.8rem" })`
+  flex: 0 0 auto;
+  min-width: max-content;
+  justify-self: end;
+`
+
+const EditButton = styled(IconButton).attrs({
+  label: "Rename notebook",
+  variant: "ghost",
+  size: "sm",
+})`
   flex-shrink: 0;
   padding: 0.3rem;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: ${color("gray2")};
-  cursor: pointer;
-
-  &:hover {
-    color: ${color("foreground")};
-    background: ${color("selection")};
-  }
 `
 
-// Mirrors SchemaAIButton's skin; kept inline because SchemaAIButton carries schema-access gating that doesn't apply here.
-const BuildWithAIButton = styled(Button).attrs({ skin: "gradient" })`
-  border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  &:hover:not([disabled]) {
-    border: 1px solid ${({ theme }) => theme.color.pinkDarker};
-  }
+const BuildWithAIButton = styled(Button).attrs({ variant: "gradient" })`
   &:disabled {
     svg {
       filter: grayscale(100%);
@@ -127,46 +133,6 @@ const TooltipButton: React.FC<{
     <span style={{ display: "inline-flex" }}>{children}</span>
   </Tooltip>
 )
-
-const ToggleGroup = styled.div`
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  background: ${color("backgroundLighter")};
-  border: 1px solid rgba(68, 71, 90, 0.5);
-  border-radius: 0.4rem;
-`
-
-const ToggleButton = styled.button<{ $active: boolean }>`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  padding: 0 2rem;
-  height: 3rem;
-  font-size: 1.4rem;
-  border: none;
-  background: transparent;
-  color: ${color("gray2")};
-  cursor: pointer;
-  transition: all 0.1s;
-  border-radius: 0.4rem;
-
-  &:hover {
-    background: ${color("selectionDarker")};
-    color: ${color("foreground")};
-  }
-
-  ${({ $active }) =>
-    $active &&
-    css`
-      background: ${color("selection")};
-      color: ${color("foreground")};
-      &:hover {
-        background: ${color("selection")};
-      }
-    `}
-`
 
 export const NotebookToolbar: React.FC = () => {
   const { cells, settings } = useNotebookState()
@@ -298,11 +264,11 @@ export const NotebookToolbar: React.FC = () => {
   }
 
   return (
-    <Toolbar>
-      <Box align="center" gap="1rem">
-        <NotebookGlyph size={20} weight="fill" />
+    <Toolbar data-hook="notebook-toolbar">
+      <NotebookIdentity data-hook="notebook-toolbar-identity">
+        <NotebookGlyph aria-hidden="true" />
         {isRenaming ? (
-          <NameInput
+          <ToolbarRenameInput
             ref={nameInputRef}
             value={draftName}
             maxLength={MAX_BUFFER_NAME_LENGTH}
@@ -314,7 +280,9 @@ export const NotebookToolbar: React.FC = () => {
           />
         ) : (
           <TitleContainer>
-            <Name title={label}>{label}</Name>
+            <Name title={label} data-hook="notebook-toolbar-name">
+              {label}
+            </Name>
             {hasBuffer && (
               <Tooltip content="Rename notebook">
                 <EditButton
@@ -328,8 +296,8 @@ export const NotebookToolbar: React.FC = () => {
             )}
           </TitleContainer>
         )}
-      </Box>
-      <Box align="center" gap="0.8rem">
+      </NotebookIdentity>
+      <ToolbarActions data-hook="notebook-toolbar-actions">
         <TooltipButton tooltip={aiTooltip}>
           <BuildWithAIButton
             disabled={!canUse || isOperationInProgress || !hasBuffer}
@@ -341,7 +309,7 @@ export const NotebookToolbar: React.FC = () => {
         </TooltipButton>
         <TooltipButton tooltip="Duplicate notebook">
           <Button
-            skin="secondary"
+            variant="secondary"
             disabled={!hasBuffer || isArchived || isDuplicating}
             onClick={() => void handleDuplicate()}
             aria-label="Duplicate notebook"
@@ -356,7 +324,7 @@ export const NotebookToolbar: React.FC = () => {
         </TooltipButton>
         <TooltipButton tooltip="Export notebook">
           <Button
-            skin="secondary"
+            variant="secondary"
             disabled={!hasBuffer}
             onClick={handleExport}
             aria-label="Export notebook"
@@ -366,25 +334,12 @@ export const NotebookToolbar: React.FC = () => {
         </TooltipButton>
         <VariablesPopover />
         <NotebookRefreshControl />
-        <ToggleGroup>
-          <ToggleButton
-            $active={mode === "list"}
-            onClick={() => handleModeChange("list")}
-            title="List layout"
-          >
-            <ListIcon size={18} />
-            List
-          </ToggleButton>
-          <ToggleButton
-            $active={mode === "grid"}
-            onClick={() => handleModeChange("grid")}
-            title="Grid layout"
-          >
-            <SquaresFourIcon size={18} />
-            Grid
-          </ToggleButton>
-        </ToggleGroup>
-      </Box>
+        <NotebookLayoutToggle
+          mode={mode}
+          onChange={handleModeChange}
+          ariaLabel="Notebook layout"
+        />
+      </ToolbarActions>
     </Toolbar>
   )
 }

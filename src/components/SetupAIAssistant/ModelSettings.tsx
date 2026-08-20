@@ -12,6 +12,9 @@ import { Input } from "../Input"
 import { Checkbox } from "../Checkbox"
 import { Text } from "../Text"
 import { LoadingSpinner } from "../LoadingSpinner"
+import { Button } from "../Button"
+import { IconButton } from "../IconButton"
+import { TextButton } from "../TextButton"
 import { WarningIcon, XIcon } from "@phosphor-icons/react"
 import { createProviderByType } from "../../utils/ai/registry"
 import type { ProviderType } from "../../utils/ai/settings"
@@ -28,29 +31,17 @@ export const InputSection = styled(Box).attrs({
 export const InputLabel = styled(Text)`
   font-size: 1.6rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-export const StyledInput = styled(Input)<{ $hasError?: boolean }>`
+export const StyledInput = styled(Input)`
   width: 100%;
-  background: ${({ theme }) => theme.color.inputBackground};
-  border: 0.1rem solid
-    ${({ theme, $hasError }) =>
-      $hasError ? theme.color.red : theme.color.inputBorder};
-  border-radius: 0.8rem;
-  font-size: 1.4rem;
-  min-height: 3rem;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
-    font-family: inherit;
-  }
 `
 
 export const HelperText = styled(Text)`
   font-size: 1.3rem;
-  font-weight: 300;
-  color: ${({ theme }) => theme.color.gray2};
+  font-weight: 400;
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const WarningBanner = styled(Box).attrs({
@@ -59,15 +50,15 @@ const WarningBanner = styled(Box).attrs({
   align: "center",
 })`
   width: 100%;
-  background: ${({ theme }) => theme.color.orange10};
-  border: 0.1rem solid ${({ theme }) => theme.color.orange};
+  background: ${({ theme }) => theme.color.statusWarningSurface};
+  border: 0.1rem solid ${({ theme }) => theme.color.statusWarning};
   border-radius: 0.8rem;
   padding: 0.75rem;
 `
 
 const WarningText = styled(Text)`
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.orange};
+  color: ${({ theme }) => theme.color.statusWarning};
 `
 
 const ModelListContainer = styled.div`
@@ -76,7 +67,7 @@ const ModelListContainer = styled.div`
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  border: 0.1rem solid ${({ theme }) => theme.color.inputBorder};
+  border: 0.1rem solid ${({ theme }) => theme.color.borderStrong};
   border-radius: 0.4rem;
   width: 100%;
 `
@@ -88,10 +79,10 @@ const ModelRow = styled.label`
   padding: 0.6rem 0.8rem;
   cursor: pointer;
   font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 
   &:hover {
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ theme }) => theme.color.interactionNeutral};
   }
 `
 
@@ -105,26 +96,18 @@ const ModelChip = styled.div`
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.4rem;
   padding: 0.4rem 0.8rem;
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
-const ChipRemoveButton = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
+const ChipRemoveButton = styled(IconButton)`
   padding: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  color: ${({ theme }) => theme.color.gray2};
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
 `
 
 const AddModelRow = styled(Box).attrs({
@@ -134,26 +117,11 @@ const AddModelRow = styled(Box).attrs({
   width: 100%;
 `
 
-const AddModelButton = styled.button`
+const AddModelButton = styled(Button).attrs({ variant: "secondary" })`
   height: 3rem;
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
-  background: ${({ theme }) => theme.color.background};
-  color: ${({ theme }) => theme.color.foreground};
-  border-radius: 0.4rem;
   padding: 0 1.2rem;
   font-size: 1.4rem;
-  font-weight: 500;
-  cursor: pointer;
   white-space: nowrap;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.pinkDarker};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
 `
 
 const SelectAllRow = styled(Box).attrs({
@@ -164,17 +132,8 @@ const SelectAllRow = styled(Box).attrs({
   margin-left: auto;
 `
 
-const SelectAllLink = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.cyan};
+const SelectAllLink = styled(TextButton)`
   font-size: 1.4rem;
-  padding: 0;
-
-  &:hover {
-    text-decoration: underline;
-  }
 `
 
 const ContentSection = styled(Box).attrs({
@@ -188,7 +147,7 @@ const ContentSection = styled(Box).attrs({
 const Separator = styled.div`
   height: 0.1rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const LoadingContainer = styled(Box).attrs({
@@ -429,7 +388,7 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
               <WarningIcon
                 size="16px"
                 weight="bold"
-                color={theme.color.orange}
+                color={theme.color.statusWarning}
               />
               <WarningText>
                 Could not fetch models automatically from this provider. Please
@@ -519,6 +478,8 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
                       >
                         {model}
                         <ChipRemoveButton
+                          label={`Remove ${model}`}
+                          variant="ghost"
                           data-hook="custom-provider-remove-model"
                           type="button"
                           onClick={() => handleToggleModel(model)}
@@ -535,10 +496,11 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
                   <ModelChip key={model} data-hook="custom-provider-model-chip">
                     {model}
                     <ChipRemoveButton
+                      label={`Remove ${model}`}
+                      variant="ghost"
                       data-hook="custom-provider-remove-model"
                       type="button"
                       onClick={() => handleRemoveManualModel(model)}
-                      title={`Remove ${model}`}
                     >
                       <XIcon size="12" weight="bold" />
                     </ChipRemoveButton>

@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled, { css, useTheme } from "styled-components"
-import { CloseCircle } from "@styled-icons/remix-fill"
-import { Table } from "@styled-icons/remix-line"
+import { CloseCircle } from "../icons"
+import { Table } from "../icons"
 import { CheckIcon as CheckIconRaw, FileTextIcon } from "@phosphor-icons/react"
-import { ChevronRight } from "@styled-icons/boxicons-solid"
+import { ChevronRight } from "../icons"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
   AIOperationStatus,
@@ -64,7 +64,7 @@ const ModeChevron = styled.div<{ $expanded?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   cursor: pointer;
   transition:
     color 0.2s,
@@ -75,7 +75,7 @@ const ModeChevron = styled.div<{ $expanded?: boolean }>`
 const ModeTitle = styled.div<{ $isActive: boolean; $isTopLevel?: boolean }>`
   font-weight: 500;
   font-size: 1.4rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   text-align: center;
   margin-right: auto;
   transition: color 0.2s;
@@ -85,7 +85,7 @@ const ModeTitle = styled.div<{ $isActive: boolean; $isTopLevel?: boolean }>`
   ${({ $isTopLevel }) =>
     $isTopLevel &&
     css`
-      color: ${color("foreground")};
+      color: ${color("contentPrimary")};
     `}
 `
 
@@ -113,8 +113,20 @@ const ModeHeaderTop = styled.div<{
     css`
       cursor: pointer;
       user-select: none;
+      border-radius: 0.4rem;
+      transition: background-color 120ms ease;
+
+      &:hover {
+        background: ${color("surfaceRaised")};
+      }
+
+      &:focus-visible {
+        outline: 1px solid ${color("contentAccent")};
+        outline-offset: 2px;
+      }
+
       &:hover ${ModeTitle}, &:hover ${ModeChevron} {
-        color: ${color("foreground")};
+        color: ${color("contentPrimary")};
       }
     `}
 `
@@ -163,7 +175,7 @@ const ReasoningIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const ReasoningText = styled.div`
@@ -178,12 +190,12 @@ const ReasoningText = styled.div`
 const ReasoningTextPart = styled.span`
   font-weight: 400;
   font-size: 1.4rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const CodeBadge = styled.div`
-  background: ${color("background")};
-  border: 1px solid ${color("selection")};
+  background: ${color("surfaceRaised")};
+  border: 1px solid ${color("interactionNeutral")};
   border-radius: 0.4rem;
   padding: 0 0.4rem;
   display: flex;
@@ -195,18 +207,18 @@ const CodeBadge = styled.div`
 const CodeBadgeText = styled.span`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.2rem;
-  color: ${color("purple")};
+  color: ${color("statusFeature")};
 `
 
 const CheckIcon = styled(CheckIconRaw)`
   width: 1.6rem;
   height: 1.6rem;
-  color: ${color("pink")};
+  color: ${color("statusAssistant")};
   flex-shrink: 0;
 `
 
 const CloseCircleIcon = styled(CloseCircle)`
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   flex-shrink: 0;
 `
 
@@ -219,7 +231,7 @@ const CollapsedSectionsWrapper = styled.div`
 
 const DurationText = styled.span`
   font-size: 1.2rem;
-  color: ${color("graphLegend")};
+  color: ${color("contentMuted")};
   font-family: ${({ theme }) => theme.fontMonospace};
   font-weight: 400;
   flex-shrink: 0;
@@ -245,7 +257,7 @@ const formatDetailedStatusMessage = (
 
 const ThinkingContent = styled.div`
   font-size: 1.3rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   padding: 0 2.8rem;
   white-space: pre-wrap;
   word-break: break-word;
@@ -461,7 +473,10 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
                     return (
                       <ReasoningItem key={opKey}>
                         <ReasoningIcon>
-                          <Table size={14} color={theme.color.gray2} />
+                          <Table
+                            size={14}
+                            color={theme.color.contentSecondary}
+                          />
                         </ReasoningIcon>
                         <ReasoningText>
                           <ReasoningTextPart>Investigating</ReasoningTextPart>
@@ -492,7 +507,7 @@ export const AssistantModesCompact: React.FC<AssistantModesCompactProps> = ({
                                 <ReasoningIcon>
                                   <FileTextIcon
                                     size={14}
-                                    color={theme.color.gray2}
+                                    color={theme.color.contentSecondary}
                                   />
                                 </ReasoningIcon>
                                 <ReasoningText>

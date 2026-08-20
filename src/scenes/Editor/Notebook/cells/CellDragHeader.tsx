@@ -5,6 +5,7 @@ import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
+import { editorCardHeaderStyles } from "../../sharedStyles"
 
 // The cell's top bar: it is the grid drag handle (`cell-drag-handle`), the
 // double-click-to-expand-width target, and the mount point for CellToolbar.
@@ -15,13 +16,7 @@ import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 // a content-driven height would shift the whole cell's geometry on every
 // swap. CELL_BASE_CHROME_PX builds on this 42px.
 const HeaderBar = styled.div`
-  height: 4.2rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  ${editorCardHeaderStyles}
   cursor: grab;
 
   &:active {
@@ -44,11 +39,11 @@ const LeftSide = styled(Side)`
 `
 
 // The right cluster holds the Run/Draw toggles, the toolbar (maximize + more
-// options), and a markdown cell's Apply/Edit button. A small gap evenly spaces
-// them; flex-shrink:0 keeps the cluster intact within the cell width while the
-// name on the left shrinks first.
+// options), and a markdown cell's Apply/Edit button. The wider gap keeps each
+// control group visually distinct; flex-shrink:0 keeps the cluster intact
+// within the cell width while the name on the left shrinks first.
 const RightSide = styled(Side)`
-  gap: 0.5rem;
+  gap: 0.8rem;
   flex-shrink: 0;
 `
 

@@ -25,11 +25,11 @@
 import { QuestContext } from "../../../providers"
 import React, { useContext, useEffect, useState } from "react"
 import styled from "styled-components"
-import { ExternalLink, ArrowUpCircle } from "@styled-icons/remix-line"
+import { ExternalLink, ArrowUpCircle } from "../../../components/icons"
 import { Release } from "../../../utils/questdb"
-import { Team } from "@styled-icons/remix-line"
-import { BuildingMultiple } from "@styled-icons/fluentui-system-filled"
-import { ShieldLockFill } from "@styled-icons/bootstrap/ShieldLockFill"
+import { Team } from "../../../components/icons"
+import { BuildingMultiple } from "../../../components/icons"
+import { ShieldLockFill } from "../../../components/icons"
 import { Versions } from "../../../providers/QuestProvider/types"
 import { getCanUpgrade } from "./services"
 import { Button } from "../../../components"
@@ -44,19 +44,17 @@ const Wrapper = styled.div`
     margin-right: 1rem;
   }
 `
-const ReleaseNotesButton = styled(Button)<{ enterprise?: boolean }>`
+const ReleaseNotesButton = styled(Button).attrs({
+  forwardedAs: "a",
+  variant: "tertiary",
+})`
   position: relative;
   gap: 0.5rem;
-  border-radius: 0.25rem;
-  border-color: rgba(255, 255, 255, 0.15);
-  border-bottom-width: 2px;
-  background: ${({ enterprise }) => (enterprise ? "#322733" : "transparent")};
-
-  &:hover:not([disabled]) {
-    background: ${({ enterprise }) =>
-      enterprise ? "#322733" : "rgba(255, 255, 255, 0.05)"};
-    border-color: rgba(255, 255, 255, 0.3);
-  }
+  height: 3.2rem;
+  padding: 0 1rem;
+  border-radius: 0.6rem;
+  font-size: 1.25rem;
+  text-decoration: none;
 `
 
 const QuestDBLogo = styled.img`
@@ -64,16 +62,12 @@ const QuestDBLogo = styled.img`
   height: auto;
 `
 
-const ReleaseLink = styled.a`
-  text-decoration: none;
-`
-
 const UpgradeIcon = styled(ArrowUpCircle)`
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const NewestRelease = styled.span`
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
   font-size: ${({ theme }) => theme.fontSize.xs};
 `
 
@@ -143,33 +137,28 @@ const BuildVersion = () => {
 
   return (
     <Wrapper>
-      <ReleaseLink
+      <ReleaseNotesButton
         href={enterpriseVersion ? "https://questdb.io/enterprise" : releaseUrl}
         rel="noopener noreferrer"
         target="_blank"
+        title={
+          ["dev", "oss"].includes(buildVersion.type)
+            ? `Show ${buildVersion ? "release notes" : "commit details"}`
+            : ""
+        }
       >
-        <ReleaseNotesButton
-          skin="secondary"
-          enterprise={enterpriseVersion}
-          title={
-            ["dev", "oss"].includes(buildVersion.type)
-              ? `Show ${buildVersion ? "release notes" : "commit details"}`
-              : ""
-          }
-        >
-          {icon}
-          {label}
-          {buildVersion.version ? ` ${buildVersion.version}` : ""}
+        {icon}
+        {label}
+        {buildVersion.version ? ` ${buildVersion.version}` : ""}
 
-          {!enterpriseVersion && <ExternalLink size="16px" />}
-          {upgradeAvailable && (
-            <>
-              <UpgradeIcon size="18px" />
-              <NewestRelease>{newestRelease?.name}</NewestRelease>
-            </>
-          )}
-        </ReleaseNotesButton>
-      </ReleaseLink>
+        {!enterpriseVersion && <ExternalLink size="16px" />}
+        {upgradeAvailable && (
+          <>
+            <UpgradeIcon size="18px" />
+            <NewestRelease>{newestRelease?.name}</NewestRelease>
+          </>
+        )}
+      </ReleaseNotesButton>
     </Wrapper>
   )
 }

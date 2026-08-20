@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { Box, Button, Form, IconWithTooltip, Text } from "../../components"
+import { Box, Form, IconWithTooltip, Switch, Text } from "../../components"
 import { DEFAULT_TIMESTAMP_FORMAT } from "../../scenes/Import/ImportCSVFiles/const"
 import styled from "styled-components"
 import { SchemaColumn } from "utils"
@@ -32,14 +32,15 @@ const supportedColumnTypes: { label: string; value: string }[] = [
   { label: "UUID", value: "UUID" },
 ]
 
-const IndexNumber = styled(Text).attrs({ color: "foreground" })``
+const IndexNumber = styled(Text).attrs({ color: "contentPrimary" })``
 
 const Root = styled.div<{ odd: boolean; disabled: boolean }>`
   display: grid;
   gap: 1rem;
   grid-template-columns: 40px auto;
   padding: 2rem;
-  ${({ odd }) => odd && "background-color: #242531;"};
+  background-color: ${({ odd, theme }) =>
+    odd ? theme.color.surfaceRaised : theme.color.transparent};
 `
 
 const Index = styled(Box).attrs({
@@ -53,6 +54,21 @@ const Index = styled(Box).attrs({
 
 const TimestampControls = styled(Controls)`
   justify-items: flex-start;
+`
+
+const DesignatedToggle = styled.div`
+  display: inline-flex;
+  min-height: 3.4rem;
+  align-items: center;
+  gap: 0.8rem;
+`
+
+const DesignatedLabel = styled.label<{ $disabled: boolean }>`
+  color: ${({ $disabled, theme }) =>
+    theme.color[$disabled ? "contentDisabled" : "contentPrimary"]};
+  cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 500;
 `
 
 export const Column = ({
@@ -75,6 +91,10 @@ export const Column = ({
   lastFocusedIndex?: number
 }) => {
   const [name, setName] = useState(column.name)
+  const designatedToggleId = `table-schema-column-${index}-designated`
+  const isDesignated =
+    timestamp !== "" && column.name !== "" && timestamp === column.name
+  const isDesignatedDisabled = disabled || name === ""
 
   if (!column) {
     return null
@@ -89,7 +109,7 @@ export const Column = ({
       onFocus={() => onFocus(index)}
     >
       <Index>
-        <IndexNumber color="foreground">{index + 1}</IndexNumber>
+        <IndexNumber color="contentPrimary">{index + 1}</IndexNumber>
       </Index>
 
       <Box flexDirection="column" gap="1rem" align="stretch">
@@ -109,6 +129,7 @@ export const Column = ({
 
           <Form.Item name={`schemaColumns.${index}.type`}>
             <Form.Select
+              dataHook={`table-schema-dialog-column-${index}-type`}
               defaultValue={action === "import" ? column.type : "VARCHAR"}
               name={`schemaColumns.${index}.type`}
               options={supportedColumnTypes.filter((type) =>
@@ -138,39 +159,29 @@ export const Column = ({
 
               <IconWithTooltip
                 icon={
-                  <Button
-                    disabled={name === ""}
-                    data-hook={`table-schema-dialog-column-${index}-designated-button`}
-                    skin={
-                      timestamp !== "" &&
-                      column.name !== "" &&
-                      timestamp === column.name
-                        ? "success"
-                        : "secondary"
-                    }
-                    onClick={() => onSetTimestamp(column.name)}
-                    type="button"
-                    prefixIcon={
-                      <input
-                        type="checkbox"
-                        checked={
-                          timestamp !== "" &&
-                          column.name !== "" &&
-                          timestamp === column.name
-                        }
-                        onChange={() => {}}
-                      />
-                    }
-                  >
-                    Designated
-                  </Button>
+                  <DesignatedToggle>
+                    <Switch
+                      id={designatedToggleId}
+                      checked={isDesignated}
+                      disabled={isDesignatedDisabled}
+                      onChange={() => onSetTimestamp(column.name)}
+                      dataHook={`table-schema-dialog-column-${index}-designated-button`}
+                      aria-label="Designated timestamp"
+                    />
+                    <DesignatedLabel
+                      htmlFor={designatedToggleId}
+                      $disabled={isDesignatedDisabled}
+                    >
+                      Designated
+                    </DesignatedLabel>
+                  </DesignatedToggle>
                 }
                 tooltip="Mark this column as a designated timestamp"
                 placement="top"
               />
             </TimestampControls>
             {action === "import" && (
-              <Text color="gray2">
+              <Text color="contentSecondary">
                 Example: {DEFAULT_TIMESTAMP_FORMAT}
                 <br />
                 <DocsLink

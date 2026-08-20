@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react"
 import styled, { css, useTheme } from "styled-components"
-import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle, CloseCircle } from "../icons"
 import { SidebarSimpleIcon, XIcon } from "@phosphor-icons/react"
 import {
   useAIStatus,
@@ -10,7 +10,7 @@ import {
 import { color } from "../../utils"
 import { slideAnimation } from "../Animation"
 import { AISparkle } from "../AISparkle"
-import { pinkLinearGradientHorizontal } from "../../theme"
+import { brandLinearGradientHorizontal } from "../../theme"
 import { getAllModelOptions } from "../../utils/ai"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
@@ -20,6 +20,7 @@ import { AssistantModes, buildOperationSections } from "./AssistantModes"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import { useSelector } from "react-redux"
 import { selectors } from "../../store"
+import { floatingSurfaceStyles } from "../overlayStyles"
 
 const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
   const theme = useTheme()
@@ -48,8 +49,8 @@ const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
           y2="15"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor={theme.color.pink} />
-          <stop offset="1" stopColor={theme.color.pinkGradientEnd} />
+          <stop stopColor={theme.color.contentAccent} />
+          <stop offset="1" stopColor={theme.color.brandGradientEnd} />
         </linearGradient>
       </defs>
     </svg>
@@ -57,24 +58,21 @@ const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
 }
 
 const Container = styled.div`
+  ${floatingSurfaceStyles}
   position: absolute;
   bottom: 2rem;
   right: 2rem;
   width: 38.3rem;
-  background: ${color("backgroundDarker")};
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0.8rem;
   padding: 1.2rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
   z-index: 1000;
-  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.3);
   max-height: 50vh;
 `
 
 const ChatStreaming = styled.div`
-  background: ${color("backgroundLighter")};
+  background: ${color("surfaceRaised")};
   border-radius: 0.4rem;
   padding: 2rem;
   display: flex;
@@ -88,25 +86,18 @@ const ChatStreaming = styled.div`
   flex-shrink: 0;
 `
 
-const CloseButton = styled(Button).attrs({ skin: "transparent" })`
+const CloseButton = styled(Button).attrs({ variant: "ghost" })`
   width: 2.4rem;
   height: 2.4rem;
   padding: 0;
   flex-shrink: 0;
-
-  &:hover {
-    background: transparent !important;
-    svg {
-      color: ${color("foreground")};
-    }
-  }
 `
 
 const ChatStreamingOverlay = styled.div`
   background: linear-gradient(
     180deg,
-    ${color("backgroundLighter")} 0%,
-    rgba(40, 42, 54, 0) 60%
+    ${color("surfaceRaised")} 0%,
+    ${({ theme }) => theme.color.transparent} 60%
   );
   position: absolute;
   top: 0;
@@ -129,16 +120,16 @@ const ThoughtStream = styled.div<{
   $abort: boolean
   $level: number
 }>`
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   border: 1px solid transparent;
   background:
-    linear-gradient(${color("backgroundDarker")}, ${color("backgroundDarker")})
+    linear-gradient(${color("surfaceInset")}, ${color("surfaceInset")})
       padding-box,
-    ${pinkLinearGradientHorizontal} border-box;
+    ${({ theme }) => brandLinearGradientHorizontal(theme.color)} border-box;
   ${({ $abort }) =>
     $abort &&
     css`
-      background: ${color("red")};
+      background: ${color("statusDanger")};
     `}
   border-radius: 1rem;
   display: flex;
@@ -162,7 +153,7 @@ const ThoughtStream = styled.div<{
 const ThoughtStreamContent = styled.div`
   display: flex;
   align-items: center;
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   gap: 0.8rem;
   width: 100%;
   height: 100%;
@@ -173,19 +164,19 @@ const ThoughtStreamContent = styled.div`
 const CheckIcon = styled(CheckboxCircle)`
   width: 2.4rem;
   height: 2.4rem;
-  color: ${color("pink")};
+  color: ${color("statusAssistant")};
   flex-shrink: 0;
 `
 
 const CloseCircleIcon = styled(CloseCircle)`
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   flex-shrink: 0;
 `
 
 const ThoughtText = styled.div<{ $active: boolean }>`
   font-weight: 500;
   font-size: 1.6rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   ${({ $active }) => $active && slideAnimation}
 `
 
@@ -210,19 +201,16 @@ const HeaderLeft = styled.div`
 const WorkingText = styled.div`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.6rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   text-transform: uppercase;
 `
 
-const ViewChatButton = styled(Button).attrs({ skin: "transparent" })`
+const ViewChatButton = styled(Button).attrs({ variant: "ghost" })`
   gap: 1rem;
 `
 
-const ChevronButton = styled(Button).attrs({ skin: "transparent" })`
-  background: none;
-  border: none;
+const ChevronButton = styled(Button).attrs({ variant: "ghost" })`
   padding: 0;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -230,14 +218,6 @@ const ChevronButton = styled(Button).attrs({ skin: "transparent" })`
   height: 2.4rem;
   flex-shrink: 0;
   margin-right: 1rem;
-  color: ${color("foreground")};
-
-  &:hover {
-    background: transparent !important;
-    svg {
-      filter: brightness(1.2);
-    }
-  }
 `
 
 const ExtendedThinkingLabel = styled.div`
@@ -262,7 +242,7 @@ const ExtendedThinkingText = styled.p`
   flex: 1 0 0;
   font-weight: 400;
   font-size: 1.1rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   min-height: 0;
   min-width: 0;
   margin: 0;
@@ -280,7 +260,7 @@ const AssistantModesContainer = styled.div`
   min-height: 0;
   flex: 1 1 auto;
   max-height: 100%;
-  box-shadow: inset 0 0.1rem 0.4rem rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0.1rem 0.4rem ${({ theme }) => theme.color.shadowMedium};
 `
 
 export const AIStatusIndicator: React.FC = () => {
@@ -430,7 +410,7 @@ export const AIStatusIndicator: React.FC = () => {
           )}
         </ChevronButton>
         {!isAborted && (
-          <CloseButton skin="transparent" onClick={handleClose}>
+          <CloseButton variant="ghost" onClick={handleClose}>
             <XIcon size={16} weight="bold" />
           </CloseButton>
         )}

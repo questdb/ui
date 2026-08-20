@@ -9,6 +9,7 @@ import { color } from "../../../utils"
 import type { ConversationMeta } from "../../../store/db"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { IconButton } from "../../../components"
 
 const Container = styled.div<{ $disabled?: boolean }>`
   display: flex;
@@ -23,20 +24,19 @@ const Container = styled.div<{ $disabled?: boolean }>`
   width: 100%;
   text-align: left;
 
-  &:hover,
-  &:focus-visible {
+  &:hover {
     background: ${({ $disabled }) =>
-      $disabled ? "transparent" : color("selection")};
+      $disabled ? "transparent" : color("surfaceRaised")};
 
     .chat-title {
       color: ${({ $disabled }) =>
-        $disabled ? color("offWhite") : color("foreground")};
+        $disabled ? color("contentSecondary") : color("contentPrimary")};
     }
   }
 
   &:focus-visible {
-    outline: 2px solid ${color("pink")};
-    outline-offset: -2px;
+    outline: 1px solid ${color("contentAccent")};
+    outline-offset: 2px;
   }
 `
 
@@ -45,7 +45,7 @@ const IconWrapper = styled.div`
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const Content = styled.div`
@@ -59,7 +59,7 @@ const Content = styled.div`
 const Title = styled.div.attrs({ className: "chat-title" })`
   padding: 0.2rem 0.4rem;
   border: 1px solid transparent;
-  color: ${color("offWhite")};
+  color: ${color("contentSecondary")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -67,9 +67,9 @@ const Title = styled.div.attrs({ className: "chat-title" })`
 `
 
 const TitleInput = styled.input`
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   background: transparent;
-  border: 1px solid ${color("pinkDarker")};
+  border: 1px solid ${color("actionPrimary")};
   border-radius: 6px;
   outline: none;
   padding: 0.2rem 0.4rem;
@@ -79,22 +79,12 @@ const TitleInput = styled.input`
   &:focus {
     outline: none;
   }
-
-  &::selection {
-    background: ${color("pinkPrimary")};
-  }
-  &::-moz-selection {
-    background: ${color("pinkPrimary")};
-  }
-  &::-webkit-selection {
-    background: ${color("pinkPrimary")};
-  }
 `
 
 const Subtitle = styled.div`
   font-size: 1.2rem;
   line-height: 1.5;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -107,16 +97,7 @@ const ActionsContainer = styled.div`
   flex-shrink: 0;
 `
 
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.4rem;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: ${color("foreground")};
+const ActionButton = styled(IconButton)`
   opacity: 0;
 
   ${Container}:hover &,
@@ -126,19 +107,13 @@ const ActionButton = styled.button`
 
   &:focus-visible {
     opacity: 1;
-    outline: 2px solid ${color("pink")};
-    outline-offset: -2px;
-  }
-
-  &:hover {
-    background: ${color("backgroundDarker")};
   }
 `
 
 const CurrentIndicator = styled.span`
   font-size: 1.2rem;
   line-height: 1.5rem;
-  color: ${color("mutedLabel")};
+  color: ${color("contentMuted")};
   white-space: nowrap;
 `
 
@@ -257,6 +232,8 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
         {!isEditing && (
           <>
             <ActionButton
+              label="Edit title"
+              size="sm"
               onClick={handleEditClick}
               title="Edit title"
               data-hook="chat-history-edit"
@@ -265,6 +242,9 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
             </ActionButton>
             {!hasOngoingProcess && (
               <ActionButton
+                label="Delete conversation"
+                size="sm"
+                variant="dangerGhost"
                 onClick={handleDeleteClick}
                 title="Delete"
                 data-hook="chat-history-delete"

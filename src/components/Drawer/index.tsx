@@ -7,7 +7,7 @@ import { GroupHeader } from "./group-header"
 import { GroupItem } from "./group-item"
 import { Actions } from "./actions"
 import { ForwardRef, Overlay } from "../../components"
-import { Button } from "../Button"
+import { IconButton } from "../IconButton"
 import { ContentWrapper } from "./content-wrapper"
 import { Panel } from "../../components/Panel"
 import { XIcon, ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react"
@@ -59,8 +59,9 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
 }>`
   display: flex;
   flex-direction: column;
-  background-color: ${({ theme }) => theme.color.chatBackground};
-  border-left: 0.2rem ${({ theme }) => theme.color.background} solid;
+  background-color: ${({ theme }) => theme.color.surfaceBase};
+  border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  box-shadow: -18px 0 52px ${({ theme }) => theme.color.shadowSoft};
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
@@ -89,12 +90,10 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
   `};
 `
 
-export const StyledClose = styled(Button).attrs({
-  "aria-label": "Close",
-  skin: "transparent",
+export const StyledClose = styled(IconButton).attrs({
+  label: "Close",
+  variant: "ghost",
 })`
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.foreground};
   padding: 0.6rem;
 `
 
@@ -112,7 +111,7 @@ const NavigationButtons = styled.div`
   flex-shrink: 0;
 `
 
-const NavButton = styled(Button)`
+const NavButton = styled(IconButton)`
   padding: 0.4rem;
 `
 
@@ -156,13 +155,29 @@ export const Drawer = ({
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
 
+  const closeButton = (
+    <StyledClose
+      {...(onDismiss ? { onClick: onDismiss } : {})}
+      data-hook="sidebar-close-button"
+    >
+      <XIcon size={16} weight="bold" />
+    </StyledClose>
+  )
+
+  const closeControl = onDismiss ? (
+    closeButton
+  ) : (
+    <RadixDialog.Close asChild>{closeButton}</RadixDialog.Close>
+  )
+
   const titleWithNavigation =
     mode === "side" ? (
       <TitleWrapper>
         {showNavigation && (
           <NavigationButtons>
             <NavButton
-              skin="transparent"
+              label="Go back"
+              variant="ghost"
               title="Go back"
               disabled={!canGoBack}
               onClick={handleNavigateBack}
@@ -171,7 +186,8 @@ export const Drawer = ({
               <ArrowLeftIcon size={16} weight="bold" />
             </NavButton>
             <NavButton
-              skin="transparent"
+              label="Go forward"
+              variant="ghost"
               title="Go forward"
               disabled={!canGoForward}
               onClick={handleNavigateForward}
@@ -238,12 +254,7 @@ export const Drawer = ({
                 afterTitle: (
                   <AfterTitleContainer>
                     {afterTitle}
-                    <StyledClose
-                      {...(onDismiss ? { onClick: onDismiss } : {})}
-                      data-hook="sidebar-close-button"
-                    >
-                      <XIcon size={16} weight="bold" />
-                    </StyledClose>
+                    {closeControl}
                   </AfterTitleContainer>
                 ),
               })}

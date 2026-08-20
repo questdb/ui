@@ -5,10 +5,14 @@ import {
   ArrowsOutLineVerticalIcon,
   ArrowsInLineVerticalIcon,
 } from "@phosphor-icons/react"
-import { Reset } from "@styled-icons/boxicons-regular"
+import { Reset } from "../../../../components/icons"
 import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import { Tooltip } from "../../../../components"
+import { IconButton, Tooltip } from "../../../../components"
+import {
+  NotebookViewToggle,
+  NotebookViewToggleSegment,
+} from "../NotebookViewToggle"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
@@ -18,47 +22,22 @@ import type { CellView } from "../notebookUtils"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
-const Container = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem;
-  border-radius: 0.6rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 1px solid ${({ theme }) => `${theme.color.selection}80`};
-`
-
 const DimSpinner = styled(Spinner)`
   opacity: 0.5;
 `
 
-const Segment = styled.button<{ $active?: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+// This control predates the general 3.4rem icon-button size and sits beside
+// the cell toolbar in a tightly constrained header. Preserve its original
+// 3rem height so the two control groups retain their vertical separation.
+const ViewIconButton = styled(IconButton)`
+  width: 4rem;
+  min-width: 4rem;
   height: 3rem;
-  padding: 0 0.8rem;
-  border: none;
-  border-radius: 0.4rem;
-  background: ${({ $active, theme }) =>
-    $active ? theme.color.selection : "transparent"};
-  color: ${({ theme }) => theme.color.foreground};
-  font-size: 1.4rem;
-  cursor: pointer;
+  min-height: 3rem;
 
   svg {
     width: 1.8rem;
     height: 1.8rem;
-  }
-
-  &:hover:not(:disabled) {
-    background: ${({ $active, theme }) =>
-      $active ? theme.color.selection : `${theme.color.selection}80`};
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.4;
   }
 `
 
@@ -66,29 +45,7 @@ const Divider = styled.div`
   width: 1px;
   align-self: stretch;
   margin: 0.2rem 0;
-  background: ${({ theme }) => theme.color.selection};
-`
-
-const IconButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 3rem;
-  padding: 0 1.1rem;
-  border: none;
-  border-radius: 0.4rem;
-  background: transparent;
-  color: ${({ theme }) => theme.color.foreground};
-  cursor: pointer;
-
-  svg {
-    width: 1.8rem;
-    height: 1.8rem;
-  }
-
-  &:hover {
-    background: ${({ theme }) => `${theme.color.selection}80`};
-  }
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 type Props = {
@@ -161,11 +118,13 @@ export const CellViewToggle: React.FC<Props> = ({
   }
 
   return (
-    <Container>
+    <NotebookViewToggle role="group" aria-label="Cell result view">
       <Tooltip content="Table">
-        <Segment
+        <NotebookViewToggleSegment
           type="button"
+          $size="md"
           $active={view === "grid"}
+          $activeTone="neutral"
           aria-pressed={view === "grid"}
           aria-busy={view === "grid" && isGridLoading}
           disabled={isRunning}
@@ -178,12 +137,14 @@ export const CellViewToggle: React.FC<Props> = ({
             <TableIcon />
           )}
           {showLabels && "Table"}
-        </Segment>
+        </NotebookViewToggleSegment>
       </Tooltip>
       <Tooltip content="Chart">
-        <Segment
+        <NotebookViewToggleSegment
           type="button"
+          $size="md"
           $active={view === "chart"}
+          $activeTone="neutral"
           aria-pressed={view === "chart"}
           aria-busy={view === "chart" && isChartLoading}
           disabled={isRunning}
@@ -196,33 +157,28 @@ export const CellViewToggle: React.FC<Props> = ({
             <ChartIcon />
           )}
           {showLabels && "Chart"}
-        </Segment>
+        </NotebookViewToggleSegment>
       </Tooltip>
       <Divider />
       <Tooltip content={isViewMaximized ? "Split view" : "Maximize view"}>
-        <IconButton
-          type="button"
+        <ViewIconButton
+          label={isViewMaximized ? "Split view" : "Maximize view"}
           onClick={handleSplit}
-          aria-label={isViewMaximized ? "Split view" : "Maximize view"}
         >
           {isViewMaximized ? (
             <ArrowsInLineVerticalIcon />
           ) : (
             <ArrowsOutLineVerticalIcon />
           )}
-        </IconButton>
+        </ViewIconButton>
       </Tooltip>
       {view === "chart" && chartZoomed && (
         <Tooltip content="Reset zoom">
-          <IconButton
-            type="button"
-            onClick={handleResetZoom}
-            aria-label="Reset zoom"
-          >
+          <ViewIconButton label="Reset zoom" onClick={handleResetZoom}>
             <Reset />
-          </IconButton>
+          </ViewIconButton>
         </Tooltip>
       )}
-    </Container>
+    </NotebookViewToggle>
   )
 }

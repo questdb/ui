@@ -1,10 +1,11 @@
 import React, { useState } from "react"
-import styled, { css, useTheme } from "styled-components"
-import { User, Building, Close } from "@styled-icons/remix-line"
-import { ErrorWarning } from "@styled-icons/remix-fill"
-import { XSquare } from "@styled-icons/boxicons-solid"
+import styled, { useTheme } from "styled-components"
+import { User, Building } from "../../../components/icons"
+import { ErrorWarning } from "../../../components/icons"
+import { XSquare } from "../../../components/icons"
+import { XIcon } from "@phosphor-icons/react"
 import Joi from "joi"
-import { Text, Form, Button } from "../../../components"
+import { Badge, Text, Form, Button, IconButton } from "../../../components"
 import { setValue } from "../../../utils/localStorage"
 import { StoreKey } from "../../../utils/localStorage/types"
 import { useSettings } from "../../../providers"
@@ -20,7 +21,7 @@ const LoginContainer = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: ${({ theme }) => theme.color.loginBackground};
+  background: ${({ theme }) => theme.color.authBackdrop};
   overflow-y: auto;
 `
 
@@ -29,7 +30,7 @@ const LogoContainer = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+  border-bottom: 1px solid ${({ theme }) => theme.color.authBorder};
 `
 
 const QuestDBLogo = styled.img`
@@ -43,7 +44,7 @@ const PlugsContainer = styled.div`
   height: 4.8rem;
   padding: 1.2rem;
   border-radius: 0.4rem;
-  background: rgba(220, 40, 40, 0.64);
+  background: ${({ theme }) => theme.color.statusDangerMuted};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,32 +57,27 @@ const PlugsContainer = styled.div`
   }
 `
 
-const CloseContainer = styled.div`
-  border: 1px solid ${({ theme }) => theme.color.inputBorder};
-  border-radius: 4px;
-  padding: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  &:hover {
-    background: ${({ theme }) => theme.color.inputBorder};
-  }
+const ErrorCloseButton = styled(IconButton)`
+  flex-shrink: 0;
 `
 
 const Container = styled.div<{ $hasRedirectError: boolean }>`
   position: relative;
   z-index: 1;
   margin: ${({ $hasRedirectError }) => ($hasRedirectError ? "0 auto" : "auto")};
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceCanvas};
   width: 560px;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.color.selection};
+  border: 1px solid ${({ theme }) => theme.color.authBorder};
+  box-shadow:
+    0 1px 2px ${({ theme }) => theme.color.shadowMedium},
+    0 1.8rem 4.8rem ${({ theme }) => theme.color.shadowSoft},
+    inset 0 1px 0 ${({ theme }) => theme.color.borderSubtle};
   font-size: 16px;
 `
 const Title = styled.h2`
   width: 100%;
-  color: white;
+  color: ${({ theme }) => theme.color.contentPrimary};
   font-weight: 600;
   font-size: 33.75px;
   text-align: center;
@@ -98,7 +94,7 @@ const FormBody = styled.div`
 
 const Separator = styled.div`
   height: 1px;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.authBorder};
   width: 100%;
 `
 
@@ -127,17 +123,10 @@ const Card = styled.div`
   transition: height 0.5s ease;
 
   button[type="submit"] {
-    background: ${({ theme }) => theme.color.pinkDarker};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
     padding-top: 2rem;
     padding-bottom: 2rem;
     border-radius: 5px;
     width: 100%;
-
-    &:hover {
-      background: ${({ theme }) => theme.color.pinkPrimary};
-      border-color: ${({ theme }) => theme.color.pinkPrimary};
-    }
   }
 
   button {
@@ -152,18 +141,8 @@ const Card = styled.div`
     height: 4.5rem;
     align-items: center;
     align-self: stretch;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.color.inputBorder};
-    background: ${({ theme }) => theme.color.background};
     font-size: 1.4rem;
     line-height: 1.5;
-
-    &:focus,
-    &:active,
-    &:focus-visible {
-      background: ${({ theme }) => theme.color.background} !important;
-      border-color: ${({ theme }) => theme.color.pinkPrimary} !important;
-    }
   }
 
   label {
@@ -179,8 +158,8 @@ const ErrorContainer = styled.div`
   gap: 1.5rem;
   padding: 1.2rem 2.4rem 1.2rem 1.8rem;
   border-radius: 0.8rem;
-  border: 1.5px solid ${({ theme }) => theme.color.redSecondary};
-  border-left: 6px solid ${({ theme }) => theme.color.redSecondary};
+  border: 1.5px solid ${({ theme }) => theme.color.statusDangerMuted};
+  border-left: 6px solid ${({ theme }) => theme.color.statusDangerMuted};
 `
 
 const RedirectErrorContainer = styled(ErrorContainer)`
@@ -188,37 +167,16 @@ const RedirectErrorContainer = styled(ErrorContainer)`
   margin-bottom: 3.2rem;
   position: relative;
   z-index: 1;
-  border-color: rgba(220, 40, 40);
+  border-color: ${({ theme }) => theme.color.statusDanger};
   width: 560px;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceCanvas};
+  box-shadow:
+    0 1px 2px ${({ theme }) => theme.color.shadowMedium},
+    0 1.2rem 3.2rem ${({ theme }) => theme.color.shadowSoft};
 `
 
-const StyledButton = styled(Button)<{ skin: string }>`
+const StyledButton = styled(Button)`
   margin: 0 !important;
-  ${({ skin }) =>
-    skin === "primary" &&
-    css`
-      background: ${({ theme }) => theme.color.pinkDarker} !important;
-      border-color: ${({ theme }) => theme.color.pinkDarker} !important;
-
-      &:hover {
-        background: ${({ theme }) => theme.color.pinkPrimary} !important;
-        border-color: ${({ theme }) => theme.color.pinkPrimary} !important;
-      }
-    `}
-
-  ${({ skin }) =>
-    skin === "secondary" &&
-    css`
-      border-radius: 4px !important;
-      border: 1px solid ${({ theme }) => theme.color.inputBorder} !important;
-      background: transparent !important;
-
-      &:hover {
-        background: ${({ theme }) => theme.color.inputBorder} !important;
-        border-color: ${({ theme }) => theme.color.inputBorder} !important;
-      }
-    `}
 `
 
 const Line = styled.div`
@@ -234,12 +192,12 @@ const Line = styled.div`
     left: 0;
     width: 100%;
     height: 1px;
-    background: ${({ theme }) => theme.color.selection};
+    background: ${({ theme }) => theme.color.interactionNeutral};
     background: linear-gradient(
       90deg,
-      rgba(55, 65, 81, 0) 0%,
-      #374151 50%,
-      rgba(55, 65, 81, 0) 100%
+      ${({ theme }) => theme.color.transparent} 0%,
+      ${({ theme }) => theme.color.authBorder} 50%,
+      ${({ theme }) => theme.color.transparent} 100%
     );
   }
 `
@@ -253,8 +211,8 @@ export const TooltipArrow = styled.div`
     left: 50%;
     content: "";
     transform: rotate(45deg);
-    background: gray;
-    border-left: 1px solid gray;
+    background: ${({ theme }) => theme.color.contentDisabled};
+    border-left: 1px solid ${({ theme }) => theme.color.contentDisabled};
     border-radius: 1px;
     border-right: none;
     border-bottom: none;
@@ -264,7 +222,7 @@ export const TooltipArrow = styled.div`
 const LineText = styled(Text)`
   position: relative;
   z-index: 1;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceCanvas};
   padding: 0 2.4rem;
   font-family: monospace;
   text-transform: uppercase;
@@ -280,14 +238,25 @@ const Footer = styled.div`
   margin: 2rem 0;
 `
 
-const VersionBadge = styled.div`
-  display: flex;
-  padding: 0.6rem 1.1rem;
-  justify-content: center;
-  align-items: center;
-  border-radius: 0.4rem;
-  border: 0.075rem solid #521427;
-  background: #290a13;
+const VersionBadge = styled(Badge).attrs({
+  variant: "neutral",
+  size: "md",
+})`
+  && {
+    background: ${({ theme }) => theme.color.actionPrimary};
+    color: ${({ theme }) => theme.color.authVersionContent};
+  }
+
+  label {
+    color: inherit;
+  }
+`
+
+const VersionBadgeText = styled.span`
+  color: ${({ theme }) => theme.color.authVersionContent};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 500;
+  line-height: 1;
 `
 
 const schema = Joi.object({
@@ -401,26 +370,27 @@ export const Login = ({
               ) : (
                 <ErrorWarning
                   size="24px"
-                  color={theme.color.foreground}
+                  color={theme.color.contentPrimary}
                   style={{ flexShrink: "0" }}
                 />
               )}
             </PlugsContainer>
             <Box flexDirection="column" gap="0" align="flex-start">
-              <Text size="lg" weight={600} color="red">
+              <Text size="lg" weight={600} color="statusDanger">
                 {redirectErrorTitle ?? "Something went wrong."}
               </Text>
-              <Text size="lg" color="red">
+              <Text size="lg" color="statusDanger">
                 {redirectErrorMessage ?? "Error logging in. Please try again."}
               </Text>
             </Box>
-            <CloseContainer role="presentation" onClick={resetErrors}>
-              <Close
-                size="24px"
-                color={theme.color.foreground}
-                style={{ flexShrink: "0" }}
-              />
-            </CloseContainer>
+            <ErrorCloseButton
+              label="Dismiss sign-in error"
+              size="lg"
+              variant="secondary"
+              onClick={resetErrors}
+            >
+              <XIcon size={24} />
+            </ErrorCloseButton>
           </RedirectErrorContainer>
         )}
         <Container
@@ -441,7 +411,7 @@ export const Login = ({
                 {!!ssoUsername && (
                   <StyledButton
                     data-hook="button-sso-continue"
-                    skin="primary"
+                    variant="primary"
                     prefixIcon={<User size="18px" />}
                     onClick={() => onOAuthLogin(false)}
                   >
@@ -450,7 +420,7 @@ export const Login = ({
                 )}
                 <StyledButton
                   data-hook="button-sso-login"
-                  skin={ssoUsername ? "secondary" : "primary"}
+                  variant={ssoUsername ? "secondary" : "primary"}
                   prefixIcon={
                     ssoUsername ? undefined : <Building size="18px" />
                   }
@@ -461,7 +431,7 @@ export const Login = ({
                     : "Single Sign-On (SSO)"}
                 </StyledButton>
                 <Line>
-                  <LineText color="gray2">or</LineText>
+                  <LineText color="contentSecondary">or</LineText>
                 </Line>
               </SSOCard>
             )}
@@ -486,14 +456,14 @@ export const Login = ({
                   <ErrorContainer>
                     <XSquare
                       size="15px"
-                      color={theme.color.red}
+                      color={theme.color.statusDanger}
                       style={{ flexShrink: "0" }}
                     />
                     <Box flexDirection="column" gap="0" align="flex-start">
-                      <Text size="lg" weight={600} color="red">
+                      <Text size="lg" weight={600} color="statusDanger">
                         Sign in failed.
                       </Text>
-                      <Text size="lg" color="red">
+                      <Text size="lg" color="statusDanger">
                         {errorMessage}
                       </Text>
                     </Box>
@@ -504,7 +474,7 @@ export const Login = ({
               <FormFooter>
                 <Form.Submit variant="primary">
                   {loading ? (
-                    <LoadingSpinner color="foreground" size="18px" />
+                    <LoadingSpinner color="contentPrimary" size="18px" />
                   ) : (
                     "Sign In"
                   )}
@@ -514,14 +484,14 @@ export const Login = ({
           </Card>
         </Container>
         <Footer>
-          <Text size="sm" color="gray2">
+          <Text size="sm" color="contentSecondary">
             Copyright &copy; {new Date().getFullYear()} QuestDB. All rights
             reserved.
           </Text>
           <VersionBadge>
-            <Text size="sm" color="gray2">
+            <VersionBadgeText>
               QuestDB {isEE ? "Enterprise" : ""} {version}
-            </Text>
+            </VersionBadgeText>
           </VersionBadge>
         </Footer>
       </LoginContainer>

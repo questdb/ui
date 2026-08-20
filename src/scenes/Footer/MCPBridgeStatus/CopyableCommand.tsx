@@ -14,9 +14,9 @@ const Command = styled.code`
   min-width: 0;
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.foreground};
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
+  color: ${({ theme }) => theme.color.contentPrimary};
+  background: ${({ theme }) => theme.color.surfaceInset};
+  border: 1px solid ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.4rem;
   padding: 0.6rem 0.8rem;
   white-space: normal;

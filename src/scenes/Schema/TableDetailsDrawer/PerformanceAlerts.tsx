@@ -1,14 +1,16 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import {
-  WarningIcon,
-  ArrowSquareOutIcon,
-  CaretRightIcon,
-  BellSimpleRingingIcon,
-} from "@phosphor-icons/react"
+import { WarningIcon, BellSimpleRingingIcon } from "@phosphor-icons/react"
 import { Text } from "../../../components"
+import { DocumentationLink } from "./DocumentationLink"
 import { type HealthIssue, ISSUE_DOCS_URLS } from "./healthCheck"
 import { SchemaAIButton } from "./SchemaAIButton"
+import {
+  CaretIcon,
+  SectionTitle,
+  SectionTitleClickable,
+  SectionTitleContainer,
+} from "./shared-styles"
 
 type Props = {
   warnings: HealthIssue[]
@@ -24,34 +26,10 @@ const SectionContainer = styled.div`
   gap: 2rem;
 `
 
-const SectionHeader = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  width: 100%;
-`
-
-const CaretIcon = styled(CaretRightIcon)<{ $expanded: boolean }>`
-  color: ${({ theme }) => theme.color.foreground};
-  transition: transform 0.2s ease;
-  transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
-  flex-shrink: 0;
-`
-
 const BellIcon = styled(BellSimpleRingingIcon)`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   flex-shrink: 0;
 `
-
-const SectionTitle = styled(Text).attrs({
-  color: "foreground",
-  size: "lg",
-  weight: 600,
-})``
 
 const AlertsContainer = styled.div`
   display: flex;
@@ -74,7 +52,7 @@ const OrangeBorder = styled.div`
   width: 0.2rem;
   flex-shrink: 0;
   align-self: stretch;
-  background: ${({ theme }) => theme.color.orange};
+  background: ${({ theme }) => theme.color.statusWarning};
 `
 
 const AlertContent = styled.div`
@@ -94,7 +72,7 @@ const AlertHeaderRow = styled.div`
 `
 
 const AlertTitle = styled(Text).attrs({
-  color: "foreground",
+  color: "contentPrimary",
   size: "sm",
   weight: 600,
 })`
@@ -129,7 +107,7 @@ const MetricBox = styled.div`
   flex: 1;
   min-width: 0;
   padding: 1rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceValue};
 `
 
 const ActionsRow = styled.div`
@@ -139,30 +117,8 @@ const ActionsRow = styled.div`
   width: 100%;
 `
 
-const DocsLink = styled.a`
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  background: transparent;
-  border: none;
-  color: ${({ theme }) => theme.color.cyan};
-  cursor: pointer;
-  font-size: ${({ theme }) => theme.fontSize.sm};
-  font-weight: 600;
-  padding: 0;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
-
-  svg {
-    flex-shrink: 0;
-  }
-`
-
 const WarningIconStyled = styled(WarningIcon)`
-  color: ${({ theme }) => theme.color.orange};
+  color: ${({ theme }) => theme.color.statusWarning};
   flex-shrink: 0;
 `
 
@@ -229,14 +185,16 @@ export const PerformanceAlerts = ({
 
   return (
     <SectionContainer data-hook="table-details-performance-alerts">
-      <SectionHeader
+      <SectionTitleClickable
         onClick={() => setExpanded(!expanded)}
         data-hook="table-details-performance-alerts-toggle"
       >
-        <CaretIcon size={14} weight="bold" $expanded={expanded} />
-        <BellIcon size={16} weight="bold" />
-        <SectionTitle>Performance Alerts</SectionTitle>
-      </SectionHeader>
+        <SectionTitleContainer>
+          <CaretIcon size={14} weight="bold" $expanded={expanded} />
+          <BellIcon size={16} weight="bold" />
+          <SectionTitle>Performance Alerts</SectionTitle>
+        </SectionTitleContainer>
+      </SectionTitleClickable>
 
       {expanded && (
         <AlertsContainer>
@@ -256,32 +214,31 @@ export const PerformanceAlerts = ({
                     {details.optimalValue && (
                       <MetricsRow>
                         <MetricBox>
-                          <Text color="gray2" size="sm">
+                          <Text color="contentSecondary" size="sm">
                             {details.currentLabel ?? "Current"}
                           </Text>
-                          <Text color="foreground">
+                          <Text color="contentPrimary">
                             {warning.currentValue ?? "N/A"}
                           </Text>
                         </MetricBox>
                         <MetricBox>
-                          <Text color="gray2" size="sm">
+                          <Text color="contentSecondary" size="sm">
                             {details.optimalLabel ?? "Optimal"}
                           </Text>
-                          <Text color="foreground">{details.optimalValue}</Text>
+                          <Text color="contentPrimary">
+                            {details.optimalValue}
+                          </Text>
                         </MetricBox>
                       </MetricsRow>
                     )}
                     <ActionsRow>
                       {ISSUE_DOCS_URLS[warning.id] && (
-                        <DocsLink
+                        <DocumentationLink
                           href={ISSUE_DOCS_URLS[warning.id]}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           data-hook="table-details-warning-docs-link"
                         >
                           View explanation in docs
-                          <ArrowSquareOutIcon size={14} />
-                        </DocsLink>
+                        </DocumentationLink>
                       )}
                       <SchemaAIButton
                         onClick={() => onAskAI(warning)}

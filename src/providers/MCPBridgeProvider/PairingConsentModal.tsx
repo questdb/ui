@@ -18,8 +18,6 @@ import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/Permissi
 const CONNECT_HOOK = "mcp-pair-consent-connect"
 
 const StyledContent = styled(AlertDialog.Content)`
-  background-color: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -40,9 +38,13 @@ const IconBadge = styled.div<{ $tone?: "neutral" | "success" }>`
   border-radius: 0.8rem;
   border: 1px solid
     ${({ theme, $tone }) =>
-      $tone === "success" ? theme.color.green : theme.color.pinkPrimary};
+      $tone === "success"
+        ? theme.color.statusSuccess
+        : theme.color.contentAccentStrong};
   color: ${({ theme, $tone }) =>
-    $tone === "success" ? theme.color.green : theme.color.pinkPrimary};
+    $tone === "success"
+      ? theme.color.statusSuccess
+      : theme.color.contentAccentStrong};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,12 +55,12 @@ const Title = styled(AlertDialog.Title)`
   margin: 0;
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const Lede = styled(AlertDialog.Description)`
   margin: 0;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   line-height: 1.5;
   font-size: 1.4rem;
 `
@@ -72,11 +74,11 @@ const Body = styled.div`
   [aria-haspopup="menu"] {
     font-size: 1.4rem;
     font-weight: 400;
-    background: ${({ theme }) => theme.color.inputBackground};
-    border-color: ${({ theme }) => theme.color.selection};
+    background: ${({ theme }) => theme.color.surfaceInput};
+    border-color: ${({ theme }) => theme.color.interactionNeutral};
 
     &:focus {
-      background: ${({ theme }) => theme.color.inputBackground};
+      background: ${({ theme }) => theme.color.surfaceInput};
     }
   }
 `
@@ -86,8 +88,8 @@ const Fields = styled.dl`
   grid-template-columns: 1fr;
   gap: 1.5rem;
   margin: 0;
-  padding: 1.6rem 0;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  padding: 1.6rem;
+  background: ${({ theme }) => theme.color.surfaceInset};
 
   @media (min-width: 32em) {
     grid-template-columns: max-content 1fr;
@@ -98,7 +100,7 @@ const Fields = styled.dl`
 
   dt {
     font-size: 1.1rem;
-    color: ${({ theme }) => theme.color.gray2};
+    color: ${({ theme }) => theme.color.contentSecondary};
     text-transform: uppercase;
     font-weight: 600;
     margin: 0;
@@ -108,7 +110,7 @@ const Fields = styled.dl`
     margin: 0;
     font-family: ${({ theme }) => theme.fontMonospace};
     font-size: 1.3rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     word-break: break-all;
     line-height: 1.5;
   }
@@ -118,15 +120,15 @@ const TrustNote = styled.div`
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 
   svg {
     flex-shrink: 0;
-    color: ${({ theme }) => theme.color.green};
+    color: ${({ theme }) => theme.color.statusSuccess};
   }
 
   strong {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     font-weight: 600;
   }
 `
@@ -139,12 +141,14 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   width: 100%;
   background: ${({ theme, $tone }) =>
     $tone === "danger"
-      ? `${theme.color.red}1f`
+      ? `${theme.color.statusDanger}1f`
       : $tone === "warning"
-        ? theme.color.orange10
-        : theme.color.backgroundDarker};
+        ? theme.color.statusWarningSurface
+        : theme.color.surfaceInset};
   color: ${({ theme, $tone }) =>
-    $tone === "info" ? theme.color.gray2 : theme.color.foreground};
+    $tone === "info"
+      ? theme.color.contentSecondary
+      : theme.color.contentPrimary};
 
   padding: 0.8rem 2.4rem;
 
@@ -152,15 +156,15 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
     flex-shrink: 0;
     color: ${({ theme, $tone }) =>
       $tone === "danger"
-        ? theme.color.red
+        ? theme.color.statusDanger
         : $tone === "warning"
-          ? theme.color.orange
-          : theme.color.pinkPrimary};
+          ? theme.color.statusWarning
+          : theme.color.contentAccentStrong};
     margin-top: 0.2rem;
   }
 
   strong {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     font-weight: 600;
   }
 `
@@ -175,7 +179,7 @@ const StatusText = styled.div`
 
 const StatusDetail = styled.span`
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   word-break: break-word;
 `
 
@@ -352,7 +356,7 @@ export const PairingConsentModal: React.FC<Props> = ({
           <Actions>
             <AlertDialog.Cancel asChild>
               <Button
-                skin="secondary"
+                variant="secondary"
                 onClick={onCancel}
                 data-hook="mcp-pair-consent-cancel"
               >
@@ -362,7 +366,7 @@ export const PairingConsentModal: React.FC<Props> = ({
             {!succeeded && (
               <AlertDialog.Action asChild>
                 <Button
-                  skin="primary"
+                  variant="primary"
                   onClick={handleConnectClick}
                   disabled={isConnecting}
                   data-hook={CONNECT_HOOK}

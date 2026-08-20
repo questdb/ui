@@ -16,6 +16,7 @@ import {
   Overlay,
   ForwardRef,
   Input,
+  IconButton,
 } from "../../../components"
 import { ChatHistoryItem } from "./ChatHistoryItem"
 import { DateSeparator } from "./DateSeparator"
@@ -28,7 +29,7 @@ const Container = styled.div`
   height: 100%;
   width: 100%;
   padding: 2rem 1rem 4rem 1rem;
-  background: ${color("chatBackground")};
+  background: ${({ theme }) => theme.color.surfaceBase};
   overflow: hidden;
 `
 
@@ -44,42 +45,24 @@ const SearchIcon = styled.div`
   left: 1.2rem;
   display: flex;
   align-items: center;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   pointer-events: none;
   z-index: 1;
 `
 
-const ClearButton = styled.button`
+const ClearButton = styled(IconButton).attrs({
+  label: "Clear search",
+  variant: "ghost",
+  size: "sm",
+})`
   position: absolute;
   right: 0.8rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 0.2rem;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  color: ${color("gray2")};
-
-  &:hover {
-    color: ${color("foreground")};
-  }
 `
 
 const SearchInput = styled(Input)`
   width: 100%;
-  background: transparent;
-  color: ${color("foreground")};
   padding: 0.8rem 3.6rem 0.8rem 3.6rem;
-  border: 1px solid ${color("gray2")}4d;
-  height: 3rem;
-  border-radius: 0.6rem;
-
-  &:focus {
-    background: transparent;
-    border-color: ${color("pinkDarker")};
-  }
 `
 
 const ListContainer = styled.div`
@@ -98,14 +81,10 @@ const EmptyState = styled.div`
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   font-size: 1.3rem;
   text-align: center;
   padding: 2rem;
-`
-
-const AlertDialogContent = styled(AlertDialog.Content)`
-  background: ${color("chatBackground")};
 `
 
 const DialogHeader = styled.div`
@@ -113,13 +92,13 @@ const DialogHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid ${color("selection")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
 `
 
 const DialogTitle = styled.h3`
   margin: 0;
   font-weight: 500;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const DialogDescription = styled.p`
@@ -135,17 +114,9 @@ const DialogButtons = styled.div`
   padding: 0 2rem 0 2rem;
 `
 
-const CancelButton = styled(Button).attrs({ skin: "secondary" })``
+const CancelButton = styled(Button).attrs({ variant: "secondary" })``
 
-const DeleteButton = styled(Button)`
-  background: ${color("red")};
-  border-color: ${color("red")};
-
-  &:hover:not(:disabled) {
-    background: ${color("red")};
-    filter: brightness(1.1);
-  }
-`
+const DeleteButton = styled(Button).attrs({ variant: "danger" })``
 
 type ChatHistoryViewProps = {
   currentConversationId: ConversationId | null
@@ -319,7 +290,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
           <ForwardRef>
             <Overlay primitive={AlertDialog.Overlay} />
           </ForwardRef>
-          <AlertDialogContent maxwidth="40rem">
+          <AlertDialog.Content maxwidth="40rem">
             <DialogHeader>
               <DialogTitle>Delete conversation</DialogTitle>
             </DialogHeader>
@@ -337,7 +308,7 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
                 </DeleteButton>
               </AlertDialog.Action>
             </DialogButtons>
-          </AlertDialogContent>
+          </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>
     </Container>

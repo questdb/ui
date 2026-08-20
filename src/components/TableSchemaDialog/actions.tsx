@@ -1,12 +1,12 @@
 import React from "react"
 import { Button } from "../Button"
 import { Box } from "../Box"
-import { DeleteBin2, Table as TableIcon } from "@styled-icons/remix-line"
+import { DeleteBin2, Table as TableIcon } from "../icons"
 import { Form } from "../Form"
 import { Tooltip } from "../Tooltip"
 import { useFieldArray, useFormContext } from "react-hook-form"
 import type { Action, SchemaColumn } from "./types"
-import { InsertRowBottom, InsertRowTop } from "@styled-icons/remix-editor"
+import { InsertRowBottom, InsertRowTop } from "../icons"
 import { XIcon } from "@phosphor-icons/react"
 import { StyledClose } from "../Drawer"
 
@@ -55,7 +55,7 @@ export const Actions = ({
                 watchSchemaColumns.length === 0 ||
                 lastFocusedIndex === undefined
               }
-              skin="secondary"
+              variant="secondary"
               type="button"
               onClick={() => {
                 setValue(
@@ -83,7 +83,7 @@ export const Actions = ({
                 watchSchemaColumns.length === 0 ||
                 lastFocusedIndex === undefined
               }
-              skin="secondary"
+              variant="secondary"
               type="button"
               onClick={() => {
                 const index =
@@ -107,7 +107,7 @@ export const Actions = ({
             }
           >
             <Button
-              skin="secondary"
+              variant="secondary"
               type="button"
               onClick={() => {
                 const index =
@@ -123,7 +123,7 @@ export const Actions = ({
           </Tooltip>
         </React.Fragment>
       )}
-      <Form.Submit prefixIcon={<TableIcon size={18} />} variant="success">
+      <Form.Submit prefixIcon={<TableIcon size={18} />} variant="primary">
         {ctaText}
       </Form.Submit>
       <StyledClose {...(onDismiss ? { onClick: onDismiss } : {})}>

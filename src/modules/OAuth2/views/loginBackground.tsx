@@ -57,13 +57,13 @@ const Noise = styled.div`
   font-weight: 400;
   letter-spacing: ${designPx(1.674)};
   line-height: 1.475;
-  color: rgba(144, 137, 252, 0.64);
+  color: ${({ theme }) => theme.color.authAccentMuted};
   white-space: pre-wrap;
   word-break: break-word;
 `
 
 const Query = styled.span`
-  color: #9089fc;
+  color: ${({ theme }) => theme.color.authAccent};
 `
 
 export const LoginBackground = () => (

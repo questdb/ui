@@ -1,7 +1,7 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import { ArrowClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react"
-import { DropdownMenu, Tooltip } from "../../../components"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
+import { DropdownMenu, SelectMenu, Tooltip } from "../../../components"
 import { AutoRefreshOptions } from "./cells/AutoRefreshOptions"
 import { useTriggerTooltip } from "./cells/useTriggerTooltip"
 import {
@@ -16,19 +16,18 @@ import {
   resolveCellView,
 } from "./notebookUtils"
 import type { AutoRefresh } from "../../../store/notebook"
-import {
-  IntervalLabel,
-  OverrideDot,
-  SplitButtonContainer,
-  SplitDivider,
-  SplitSide,
-} from "./refreshSplitButton"
+import { OverrideDot } from "./refreshSplitButton"
 import {
   emitUserAction,
   signalUserEdit,
 } from "../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import {
+  EditorRefreshButton,
+  EditorRefreshControlGroup,
+  EditorRefreshIntervalTrigger,
+} from "../ToolbarRefreshControls"
 
 const ResetItemTitle = styled.span`
   display: inline-flex;
@@ -39,7 +38,7 @@ const ResetItemTitle = styled.span`
 const MenuHint = styled.div`
   max-width: 24rem;
   padding: 0.4rem 1rem 0.6rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: ${({ theme }) => theme.fontSize.sm};
 `
 
@@ -95,49 +94,43 @@ export const NotebookRefreshControl: React.FC = () => {
   }
 
   return (
-    <SplitButtonContainer>
+    <EditorRefreshControlGroup>
       <Tooltip
         content={
           refreshableCellCount === 0 ? "No cells to refresh" : "Refresh cells"
         }
       >
-        <SplitSide
-          skin="transparent"
+        <EditorRefreshButton
+          variant="secondary"
           type="button"
           onClick={handleRefreshAll}
           aria-label="Refresh cells"
-          aria-disabled={refreshableCellCount === 0}
+          aria-disabled={refreshableCellCount === 0 || undefined}
         >
           <ArrowClockwiseIcon />
-        </SplitSide>
+        </EditorRefreshButton>
       </Tooltip>
-      <SplitDivider />
-      <DropdownMenu.Root onOpenChange={handleMenuOpenChange}>
+      <SelectMenu.Root onOpenChange={handleMenuOpenChange}>
         <Tooltip
           content="Notebook auto-refresh"
           {...intervalTooltip.tooltipProps}
         >
-          <DropdownMenu.Trigger asChild>
-            <SplitSide
-              skin="transparent"
-              type="button"
-              aria-label={intervalAriaLabel}
-            >
-              {overrideCount > 0 && <OverrideDot />}
-              <IntervalLabel>{defaultLabel}</IntervalLabel>
-              <CaretDownIcon />
-            </SplitSide>
-          </DropdownMenu.Trigger>
+          <EditorRefreshIntervalTrigger
+            label={defaultLabel}
+            leadingIcon={overrideCount > 0 ? <OverrideDot /> : undefined}
+            type="button"
+            aria-label={intervalAriaLabel}
+          />
         </Tooltip>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content align="end" sideOffset={4}>
+        <SelectMenu.Portal>
+          <SelectMenu.Content align="end" sideOffset={4}>
             <AutoRefreshOptions
               value={storedDefault ?? false}
               onSelect={handleSelectDefault}
             />
             {overrideCount > 0 && (
               <>
-                <DropdownMenu.Divider />
+                <SelectMenu.Divider />
                 <DropdownMenu.Item
                   onSelect={resetAutoRefreshOverrides}
                   subtitle={`${overrideCount} ${
@@ -155,7 +148,7 @@ export const NotebookRefreshControl: React.FC = () => {
             )}
             {writeBlockedCount > 0 && (
               <>
-                <DropdownMenu.Divider />
+                <SelectMenu.Divider />
                 <MenuHint>
                   {writeBlockedCount === 1
                     ? "1 cell contains DDL/DML and is excluded from auto-refresh."
@@ -163,9 +156,9 @@ export const NotebookRefreshControl: React.FC = () => {
                 </MenuHint>
               </>
             )}
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </SplitButtonContainer>
+          </SelectMenu.Content>
+        </SelectMenu.Portal>
+      </SelectMenu.Root>
+    </EditorRefreshControlGroup>
   )
 }

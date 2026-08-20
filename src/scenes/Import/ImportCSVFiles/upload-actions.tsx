@@ -1,7 +1,7 @@
 import React, { useState } from "react"
 import { ProcessedFile } from "./types"
 import { Box, Button, Tooltip } from "../../../components"
-import { Close, Upload2 } from "@styled-icons/remix-line"
+import { Close, Upload2 } from "../../../components/icons"
 import { UploadSettingsDialog } from "./upload-settings-dialog"
 import { UploadModeSettings } from "../../../utils"
 
@@ -30,7 +30,7 @@ export const UploadActions = ({
       <Button
         disabled={file.isUploading}
         data-hook="import-upload-button"
-        skin="primary"
+        variant="primary"
         prefixIcon={<Upload2 size="18px" />}
         onClick={() => onUpload(file.id)}
       >
@@ -39,7 +39,7 @@ export const UploadActions = ({
       <Tooltip placement="top" content="Remove file from queue">
         <Button
           disabled={file.isUploading}
-          skin="secondary"
+          variant="secondary"
           onClick={() => {
             onRemove(file.id)
           }}

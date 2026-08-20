@@ -24,11 +24,10 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled, { useTheme, keyframes, css } from "styled-components"
-import { SortDown, Bracket, InfoCircle } from "@styled-icons/boxicons-regular"
-import { ChevronRight } from "@styled-icons/boxicons-solid"
-import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { CheckboxBlankCircle, Loader4 } from "@styled-icons/remix-line"
-import type { StyledIcon } from "@styled-icons/styled-icon"
+import { SortDown, Bracket, InfoCircle } from "../../../components/icons"
+import { Error as ErrorIcon } from "../../../components/icons"
+import { CheckboxBlankCircle, Loader4 } from "../../../components/icons"
+import type { StyledIcon } from "../../../components/icons"
 import {
   OneHundredTwentyThree,
   CalendarMinus,
@@ -36,7 +35,7 @@ import {
   GeoAlt,
   Type as CharIcon,
   Tag,
-} from "@styled-icons/bootstrap"
+} from "../../../components/icons"
 import * as QuestDB from "../../../utils/questdb"
 import Highlighter from "react-highlight-words"
 import { TableIcon } from "../table-icon"
@@ -46,6 +45,7 @@ import {
   IconWithTooltip,
   spinAnimation,
   Button,
+  IconButton,
   toast,
 } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -61,8 +61,7 @@ import {
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
-import { InfoIcon } from "@phosphor-icons/react"
-import { theme } from "../../../theme"
+import { CaretRightIcon, InfoIcon } from "@phosphor-icons/react"
 
 export type TreeNodeKind =
   | "column"
@@ -92,12 +91,12 @@ type Props = Readonly<{
   value?: string | React.ReactNode
 }>
 
-const copyPulse = keyframes`
+const copyPulse = (pink: string) => keyframes`
   0% {
-    box-shadow: ${theme.color.cyan} 0 0 0 1px;
+    box-shadow: ${pink} 0 0 0 1px;
   }
   75% {
-    box-shadow: #f1fa8c00 0 0 0 16px;
+    box-shadow: transparent 0 0 0 16px;
   }
 `
 
@@ -108,8 +107,8 @@ const Type = styled(Text)`
 
 const Title = styled(Text)`
   .highlight {
-    background-color: ${({ theme }) => theme.color.selection};
-    color: ${({ theme }) => theme.color.foreground};
+    background-color: ${({ theme }) => theme.color.contentAccentStrong};
+    color: ${({ theme }) => theme.color.contentInverse};
   }
 `
 
@@ -123,9 +122,9 @@ const Wrapper = styled.div<{
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 0.5rem 0;
+  padding: 0.65rem 0;
   user-select: none;
-  border-radius: 0.4rem;
+  border-radius: 0;
   min-width: fit-content;
   width: 100%;
   flex-grow: 1;
@@ -135,11 +134,11 @@ const Wrapper = styled.div<{
   ${({ $level }) =>
     $level &&
     `
-    padding-left: ${$level * 1.5 + 1}rem;
+    padding-left: ${$level * 2 + 1}rem;
   `}
 
   &:hover {
-    background: ${({ theme }) => theme.color.tableSelection}4D;
+    background: ${({ theme }) => theme.color.interactionAccentHover};
     .table-menu-button {
       opacity: 1;
     }
@@ -149,14 +148,14 @@ const Wrapper = styled.div<{
     $focused &&
     `
     outline: none;
-    background: ${theme.color.tableSelection};
-    box-shadow: inset 0 0 0 1px ${theme.color.cyan};
+    background: ${theme.color.interactionAccentActive};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
     .table-menu-button {
       opacity: 1;
     }
 
     &:hover {
-      background: ${theme.color.tableSelection};
+      background: ${theme.color.interactionAccentActive};
     }
   `}
 
@@ -166,28 +165,23 @@ const Wrapper = styled.div<{
     padding-right: 3rem;
   `}
 
-  ${({ $isPulsing }) =>
+  ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${copyPulse} 1000ms 0.1s;
+      animation: ${copyPulse(theme.color.contentAccent)} 1000ms 0.1s;
     `}
 `
 
-const DetailsDrawerButton = styled(Button)`
+const DetailsDrawerButton = styled(Button).attrs({ variant: "ghost" })`
   position: absolute;
   right: 1rem;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0;
   padding: 0.5rem;
-  background: transparent;
-  border: 0;
 
-  &:hover {
-    background: transparent !important;
-    svg {
-      filter: brightness(1.2);
-    }
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: none;
   }
 `
 
@@ -198,14 +192,15 @@ const StyledTitle = styled(Title)`
   z-index: 1;
   flex-shrink: 0;
   margin-right: 1rem;
+  font-weight: 500;
 
   .highlight {
-    background-color: ${({ theme }) => theme.color.selection};
-    color: ${({ theme }) => theme.color.foreground};
+    background-color: ${({ theme }) => theme.color.contentAccentStrong};
+    color: ${({ theme }) => theme.color.contentInverse};
   }
 
   svg {
-    color: ${color("cyan")};
+    color: ${color("contentAccent")};
   }
 `
 
@@ -232,30 +227,36 @@ const Spacer = styled.span`
 `
 
 const SortDownIcon = styled(SortDown)`
-  color: ${color("green")};
+  color: ${color("contentAccent")};
   margin-right: 0.8rem;
   flex-shrink: 0;
 `
 
-const ChevronRightIcon = styled(ChevronRight)<{ $expanded?: boolean }>`
-  color: ${color("gray2")};
-  margin-right: 1.5rem;
-  cursor: pointer;
-  flex-shrink: 0;
-  width: 1.5rem;
+const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
   transform: rotateZ(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
   position: absolute;
-  left: -2rem;
+  left: -2.9rem;
+
+  && {
+    width: 2.4rem;
+    min-width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+  }
+
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: none;
+  }
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   margin-right: 1rem;
 `
 
 const Loader = styled(Loader4)`
   margin-left: 1rem;
-  color: ${color("orange")};
+  color: ${color("statusWarning")};
   ${spinAnimation};
 `
 
@@ -265,7 +266,7 @@ const ErrorIconWrapper = styled.div`
   align-self: center;
 
   svg {
-    color: #f47474;
+    color: ${({ theme }) => theme.color.statusDanger};
   }
 `
 
@@ -275,16 +276,11 @@ const ErrorItem = styled.div`
   gap: 0.5rem;
 `
 
-const TypeIcon = styled.div<{ $type?: string }>`
+const TypeIcon = styled.div`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("cyan")};
-
-  svg {
-    color: ${({ $type }) =>
-      $type === "SYMBOL" ? color("yellow") : color("cyan")};
-  }
+  color: ${color("contentAccent")};
 `
 
 const TYPE_ICONS = {
@@ -336,13 +332,11 @@ const TYPE_ICONS = {
 const IconWrapper = ({
   icon: Icon,
   size = "14px",
-  type,
 }: {
   icon: StyledIcon
   size?: string
-  type?: string
 }) => (
-  <TypeIcon $type={type}>
+  <TypeIcon>
     <Icon size={size} />
   </TypeIcon>
 )
@@ -352,7 +346,7 @@ const getIcon = (type: string) => {
     types.some((t) => t === mapColumnTypeToUI(type)),
   )
 
-  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} type={type} />
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
 }
 
 export const ColumnIcon = ({
@@ -589,11 +583,15 @@ const Row = ({
         )}
         <FlexRow $selectOpen={selectOpen} $isTableKind={isTableKind}>
           {isExpandable && (!selectOpen || !isTableKind) && (
-            <ChevronRightIcon
-              size="15px"
+            <ExpandButton
+              label={expanded ? `Collapse ${name}` : `Expand ${name}`}
+              size="sm"
               $expanded={expanded}
+              aria-expanded={expanded}
               onClick={handleExpandCollapse}
-            />
+            >
+              <CaretRightIcon size={15} />
+            </ExpandButton>
           )}
 
           {kind === "column" && (
@@ -604,7 +602,7 @@ const Row = ({
           )}
 
           <StyledTitle
-            color="foreground"
+            color="contentPrimary"
             ellipsis
             data-hook={`schema-${kind}-title`}
           >
@@ -629,13 +627,13 @@ const Row = ({
           </StyledTitle>
 
           {type && (
-            <Type color="gray2" transform="lowercase" ellipsis>
+            <Type color="contentSecondary" transform="lowercase" ellipsis>
               ({type})
             </Type>
           )}
 
           {kind === "detail" && !isLoading && (
-            <Text color="gray2">{value}</Text>
+            <Text color="contentSecondary">{value}</Text>
           )}
 
           {showLoader && <Loader size="18px" />}
@@ -653,11 +651,11 @@ const Row = ({
                         <ErrorIconWrapper>
                           <ErrorIcon size="18px" />
                         </ErrorIconWrapper>
-                        <Text color="foreground">{error}</Text>
+                        <Text color="contentPrimary">{error}</Text>
                       </ErrorItem>
                     ))
                   ) : (
-                    <Text color="foreground">{errors[0]}</Text>
+                    <Text color="contentPrimary">{errors[0]}</Text>
                   )
                 }
               >
@@ -671,14 +669,14 @@ const Row = ({
       </Box>
       {!selectOpen && onOpenDetailsDrawer && (
         <DetailsDrawerButton
-          skin="secondary"
+          aria-label="Open table details"
           size="sm"
           className="table-menu-button"
           data-hook="table-menu-button"
           onClick={onOpenDetailsDrawer}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <InfoIcon size={18} color={theme.color.cyan} />
+          <InfoIcon size={18} color={theme.color.contentAccent} />
         </DetailsDrawerButton>
       )}
     </Wrapper>

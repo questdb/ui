@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from "react"
-import styled from "styled-components"
+import styled, { useTheme } from "styled-components"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
@@ -7,12 +7,15 @@ import { Input } from "../Input"
 import { Switch } from "../Switch"
 import { Text } from "../Text"
 import { Button } from "../Button"
+import { IconButton } from "../IconButton"
+import { TabButton } from "../TabButton"
+import { TextButton } from "../TextButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { testApiKey } from "../../utils/ai/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
-import { Edit } from "@styled-icons/remix-line"
-import { TrashIcon, PlugsIcon, PlusIcon } from "@phosphor-icons/react"
+import { Edit } from "../icons"
+import { TrashIcon, PlugsIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
 import { BrainIcon } from "./BrainIcon"
@@ -37,7 +40,7 @@ import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/Permissi
 import type { Permissions } from "../../utils/tools/permissions"
 import { ForwardRef } from "../ForwardRef"
 import { Badge, BadgeType } from "../../components/Badge"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle } from "../icons"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
@@ -90,39 +93,28 @@ const ModalTitle = styled(Dialog.Title)`
   font-weight: 600;
   margin: 0;
   padding: 0;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   border: 0;
 `
 
 const ModalSubtitle = styled(Dialog.Description)`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   margin: 0;
   padding: 0;
 `
 
-const CloseButton = styled.button`
-  background: transparent;
-  border: none;
-  cursor: pointer;
+const CloseButton = styled(IconButton).attrs({
+  label: "Close",
+  variant: "ghost",
+  size: "sm",
+})`
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.gray1};
-  border-radius: 0.4rem;
-  flex-shrink: 0;
-  width: 2.2rem;
-  height: 2.2rem;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const Separator = styled.div`
   height: 0.1rem;
   width: 100%;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
 const MainContentArea = styled(Box)`
@@ -147,23 +139,28 @@ const Sidebar = styled(Box).attrs({
   overflow-y: auto;
 `
 
-const ProviderTab = styled.button<{ $active: boolean }>`
+const ProviderTabList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.2rem 2.4rem;
-  background: ${({ $active, theme }) =>
-    $active ? theme.color.midnight : "transparent"};
-  border: none;
-  border-bottom: ${({ $active, theme }) =>
-    $active ? "0.2rem solid " + theme.color.pinkPrimary : "none"};
-  cursor: pointer;
-  align-items: flex-start;
-  width: 100%;
+  gap: 1.2rem;
+`
 
-  &:hover {
+const ProviderTab = styled(TabButton)`
+  && {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.2rem 2.4rem;
+    align-items: flex-start;
+    width: 100%;
     background: ${({ $active, theme }) =>
-      $active ? theme.color.midnight : theme.color.selection};
+      $active ? theme.color.interactionNeutralHover : theme.color.transparent};
+  }
+
+  &&:hover:not(:disabled) {
+    background: ${({ $active, theme }) =>
+      $active
+        ? theme.color.interactionNeutralHover
+        : theme.color.controlSurfaceHover};
   }
 `
 
@@ -182,17 +179,8 @@ const ProviderTabName = styled(Text)<{ $active: boolean }>`
   font-size: 1.6rem;
   font-weight: ${({ $active }) => ($active ? 600 : 400)};
   color: ${({ theme, $active }) =>
-    $active ? theme.color.foreground : theme.color.gray2};
+    $active ? theme.color.contentPrimary : theme.color.contentSecondary};
   text-align: left;
-`
-
-const StatusBadge = styled(Box).attrs({
-  gap: "0.4rem",
-  align: "center",
-})<{ $enabled: boolean }>`
-  background: ${({ $enabled }) => ($enabled ? "transparent" : "#2d303e")};
-  padding: 0.3rem;
-  border-radius: 0.2rem;
 `
 
 const StatusDot = styled.div<{ $enabled: boolean }>`
@@ -200,18 +188,19 @@ const StatusDot = styled.div<{ $enabled: boolean }>`
   height: 0.6rem;
   border-radius: 50%;
   background: ${({ $enabled, theme }) =>
-    $enabled ? theme.color.green : theme.color.gray2};
+    $enabled ? theme.color.statusSuccess : theme.color.contentSecondary};
 `
 
 const StatusText = styled(Text)<{ $enabled: boolean }>`
   font-size: 1rem;
   font-weight: 400;
-  color: ${({ $enabled, theme }) => ($enabled ? theme.color.green : "#bbbbbb")};
+  color: ${({ $enabled, theme }) =>
+    $enabled ? theme.color.statusSuccess : theme.color.contentSecondary};
 `
 
 const VerticalSeparator = styled.div`
   width: 0.1rem;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
   flex-shrink: 0;
   align-self: stretch;
 `
@@ -239,12 +228,12 @@ const ContentSection = styled(Box).attrs({
 const SectionTitle = styled(Text)`
   font-size: 1.6rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const SectionDescription = styled(Text)`
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const InputWrapper = styled(Box)`
@@ -253,46 +242,24 @@ const InputWrapper = styled(Box)`
 `
 
 const StyledInput = styled(Input)<{
-  $hasError?: boolean
   $showEditButton?: boolean
 }>`
   width: 100%;
-  background: ${({ theme }) => theme.color.background};
-  border: 0.1rem solid
-    ${({ theme, $hasError }) =>
-      $hasError ? theme.color.red : theme.color.inputBorder};
-  border-radius: 0.8rem;
-  padding: 1.2rem;
   padding-right: ${({ $showEditButton }) =>
-    $showEditButton ? "4rem" : "1.2rem"};
-  color: ${({ theme }) => theme.color.foreground};
-  font-size: 1.4rem;
-
-  &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
-    font-family: inherit;
-  }
+    $showEditButton ? "4rem" : "1rem"};
 `
 
-const EditButton = styled.button`
+const EditButton = styled(IconButton).attrs({
+  label: "Edit API key",
+  dataHook: "ai-settings-edit-api-key",
+  variant: "ghost",
+  size: "sm",
+})`
   position: absolute;
   right: 1.2rem;
   top: 50%;
   transform: translateY(-50%);
-  background: transparent;
-  border: none;
-  cursor: pointer;
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.gray1};
-  width: 2rem;
-  height: 2rem;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const ValidatedBadge = styled(Badge).attrs({
@@ -306,50 +273,31 @@ const ValidatedBadge = styled(Badge).attrs({
 `
 
 const APIKeyLink = styled.a`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 
   &:hover {
     text-decoration: underline;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
   }
 `
 
 const ErrorText = styled(Text)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
   font-size: 1.3rem;
 `
 
-const ValidateRemoveButton = styled.button`
+const ValidateRemoveButton = styled(Button).attrs({ variant: "secondary" })`
   height: 3rem;
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
-  background: ${({ theme }) => theme.color.background};
-  color: ${({ theme }) => theme.color.foreground};
-  border-radius: 0.4rem;
   padding: 0.6rem 1.2rem;
   font-size: 1.4rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   gap: 0.8rem;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.pinkDarker};
-    color: ${({ theme }) => theme.color.foreground};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
 `
 
 const ModelsPlaceholder = styled(Box).attrs({
   flexDirection: "column",
   gap: "1rem",
 })`
-  background: rgba(68, 71, 90, 0.56);
+  background: ${({ theme }) => theme.color.surfaceScrim};
   padding: 0.75rem;
   border-radius: 0.4rem;
   width: 100%;
@@ -357,7 +305,7 @@ const ModelsPlaceholder = styled(Box).attrs({
 
 const ModelsPlaceholderText = styled(Text)`
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const ModelList = styled(Box).attrs({ flexDirection: "column", gap: "1.6rem" })`
@@ -389,45 +337,24 @@ const ModelInfoRow = styled(Box).attrs({
 
 const ModelDescriptionText = styled(Text)`
   font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   flex: 1;
 `
 
 const ModelNameText = styled(Text)`
   font-size: 1.4rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 const EnableModelsTitle = styled(Text)`
   font-size: 1.6rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
-const ManageModelsButton = styled.button`
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.cyan};
+const ManageModelsButton = styled(TextButton)`
   font-size: 1.3rem;
-  padding: 0;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`
-
-const RemoveProviderButton = styled(Button)`
-  border: 0.1rem solid ${({ theme }) => theme.color.red};
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  color: ${({ theme }) => theme.color.foreground};
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.background};
-    border: 0.1rem solid ${({ theme }) => theme.color.red};
-    color: ${({ theme }) => theme.color.foreground};
-  }
 `
 
 const FooterSection = styled(Box).attrs({
@@ -468,24 +395,18 @@ const SaveButton = styled(Button)`
   width: 100%;
 `
 
-const AddProviderButton = styled.button`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.8rem 1.6rem;
-  background: none;
-  border: 0.1rem dashed ${({ theme }) => theme.color.gray2};
-  border-radius: 0.4rem;
-  color: ${({ theme }) => theme.color.gray2};
-  cursor: pointer;
-  font-size: 1.3rem;
-  justify-content: center;
-  margin: 0 1rem;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.color.foreground};
-    color: ${({ theme }) => theme.color.foreground};
+const AddProviderButton = styled(Button).attrs({ variant: "tertiary" })`
+  && {
+    display: flex;
+    height: auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.6rem;
+    border-style: dashed;
+    font-size: 1.3rem;
+    justify-content: center;
+    margin: 0 1rem;
   }
 `
 
@@ -515,6 +436,7 @@ const getProvidersWithApiKeys = (
 }
 
 export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
+  const theme = useTheme()
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
   const initializeProviderState = useCallback(
     <T,>(
@@ -991,7 +913,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const renderProviderIcon = (provider: ProviderId, isActive: boolean) => {
-    const color = isActive ? "#f8f8f2" : "#9ca3af"
+    const color = isActive
+      ? theme.color.contentPrimary
+      : theme.color.contentSecondary
     switch (provider) {
       case "openai":
         return <OpenAIIcon width="20" height="20" color={color} />
@@ -1024,56 +948,50 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     </ModalSubtitle>
                   </HeaderText>
                   <CloseButton onClick={handleClose}>
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M15 5L5 15M5 5L15 15"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <XIcon size={20} />
                   </CloseButton>
                 </HeaderTitleRow>
               </HeaderSection>
               <Separator />
               <MainContentArea>
                 <Sidebar>
-                  {allProviders.map((provider) => {
-                    const isActive = selectedProvider === provider
-                    return (
-                      <ProviderTab
-                        key={provider}
-                        $active={isActive}
-                        onClick={() => handleProviderSelect(provider)}
-                        data-hook={`ai-settings-provider-${provider}`}
-                      >
-                        <ProviderTabTitle>
-                          {renderProviderIcon(provider, isActive)}
-                          <ProviderTabName $active={isActive}>
-                            {getProviderName(provider, localSettings)}
-                          </ProviderTabName>
-                        </ProviderTabTitle>
-                        <StatusBadge $enabled={validatedApiKeys[provider]}>
-                          <StatusDot $enabled={validatedApiKeys[provider]} />
-                          <StatusText
-                            data-hook="ai-settings-provider-status"
-                            $enabled={validatedApiKeys[provider]}
+                  <ProviderTabList role="tablist" aria-label="AI providers">
+                    {allProviders.map((provider) => {
+                      const isActive = selectedProvider === provider
+                      return (
+                        <ProviderTab
+                          key={provider}
+                          $active={isActive}
+                          role="tab"
+                          onClick={() => handleProviderSelect(provider)}
+                          data-hook={`ai-settings-provider-${provider}`}
+                        >
+                          <ProviderTabTitle>
+                            {renderProviderIcon(provider, isActive)}
+                            <ProviderTabName $active={isActive}>
+                              {getProviderName(provider, localSettings)}
+                            </ProviderTabName>
+                          </ProviderTabTitle>
+                          <Badge
+                            variant={
+                              validatedApiKeys[provider] ? "success" : "neutral"
+                            }
+                            size="sm"
                           >
-                            {validatedApiKeys[provider]
-                              ? "Enabled"
-                              : "Inactive"}
-                          </StatusText>
-                        </StatusBadge>
-                      </ProviderTab>
-                    )
-                  })}
+                            <StatusDot $enabled={validatedApiKeys[provider]} />
+                            <StatusText
+                              data-hook="ai-settings-provider-status"
+                              $enabled={validatedApiKeys[provider]}
+                            >
+                              {validatedApiKeys[provider]
+                                ? "Enabled"
+                                : "Inactive"}
+                            </StatusText>
+                          </Badge>
+                        </ProviderTab>
+                      )
+                    })}
+                  </ProviderTabList>
                   <AddProviderButton
                     type="button"
                     data-hook="ai-settings-add-custom-provider"
@@ -1106,7 +1024,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                               </ValidatedBadge>
                             )}
                           {!isCustomProvider && (
-                            <Text size="sm" color="gray2">
+                            <Text size="sm" color="contentSecondary">
                               Get your API key from{" "}
                               <APIKeyLink
                                 href={
@@ -1147,7 +1065,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                 ? "This provider does not have an API key"
                                 : `Enter ${getProviderName(selectedProvider, localSettings)} API key`
                             }
-                            $hasError={!!currentProviderError}
+                            variant={currentProviderError ? "error" : undefined}
                             $showEditButton={showEditButton}
                             readOnly={maskInput || noApiKeyReadonly}
                             onFocus={() => {
@@ -1188,7 +1106,6 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                 )
                                 inputRef.current?.focus()
                               }}
-                              title="Edit API key"
                             >
                               <Edit size="20px" />
                             </EditButton>
@@ -1265,7 +1182,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                   <ModelNameText>{model.label}</ModelNameText>
                                   {model.isSlow && (
                                     <ModelInfoRow>
-                                      <BrainIcon color="#bbb" />
+                                      <BrainIcon
+                                        color={theme.color.contentSecondary}
+                                      />
                                       <ModelDescriptionText>
                                         Due to advanced reasoning &amp; thinking
                                         capabilities, responses using this model
@@ -1318,15 +1237,15 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     />
                   </ContentSection>
                   <ContentSection style={{ alignItems: "flex-start" }}>
-                    <RemoveProviderButton
-                      skin="error"
+                    <Button
+                      variant="dangerGhost"
                       prefixIcon={<TrashIcon size={16} />}
                       type="button"
                       data-hook="ai-settings-remove-provider"
                       onClick={() => handleRemoveProvider(selectedProvider)}
                     >
                       {isCustomProvider ? "Remove Provider" : "Reset Provider"}
-                    </RemoveProviderButton>
+                    </Button>
                   </ContentSection>
                 </ContentPanel>
               </MainContentArea>
@@ -1335,14 +1254,14 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                 <FooterButtons>
                   <CancelButton
                     onClick={handleClose}
-                    skin="transparent"
+                    variant="ghost"
                     data-hook="ai-settings-cancel"
                   >
                     Cancel
                   </CancelButton>
                   <SaveButton
                     onClick={handleSave}
-                    skin="primary"
+                    variant="primary"
                     data-hook="ai-settings-save"
                   >
                     Save Settings

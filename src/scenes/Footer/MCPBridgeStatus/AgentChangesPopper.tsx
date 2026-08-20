@@ -7,21 +7,19 @@ import { InfoIcon, XIcon } from "@phosphor-icons/react"
 import { usePopperStyles, useTransition } from "../../../hooks"
 import { OVERLAY_Z_INDEX } from "../../../components/Overlay"
 import { TransitionDuration } from "../../../components/Transition"
+import { IconButton, TextButton } from "../../../components"
+import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 
 const Card = styled.div`
+  ${floatingSurfaceStyles}
   display: flex;
   align-items: center;
   gap: 0.8rem;
   max-width: min(34rem, calc(100vw - 2rem));
   padding: 1.2rem 1.4rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.8rem;
-  box-shadow: 0 12px 32px -8px ${({ theme }) => theme.color.black};
-
   & > svg {
     flex-shrink: 0;
-    color: ${({ theme }) => theme.color.cyan};
+    color: ${({ theme }) => theme.color.statusInfo};
   }
 `
 
@@ -29,7 +27,7 @@ const Message = styled.span`
   flex: 1 1 auto;
   min-width: 0;
   font-size: 1.3rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   overflow-wrap: anywhere;
 
   b {
@@ -37,45 +35,17 @@ const Message = styled.span`
   }
 `
 
-const ViewLink = styled.button`
+const ViewLink = styled(TextButton)`
   flex-shrink: 0;
-  border: none;
-  background: transparent;
-  padding: 0.2rem 0.4rem;
-  color: ${({ theme }) => theme.color.cyan};
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-
-  &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.cyan};
-    outline-offset: 2px;
-  }
 `
 
-const CloseButton = styled.button`
+const CloseButton = styled(IconButton).attrs({
+  label: "Dismiss agent changes notification",
+  variant: "ghost",
+  size: "sm",
+})`
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
   padding: 0.2rem;
-  color: ${({ theme }) => theme.color.gray2};
-  cursor: pointer;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
-
-  &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.cyan};
-    outline-offset: 2px;
-  }
 `
 
 const MODIFIERS = [{ name: "offset", options: { offset: [0, 8] } }]

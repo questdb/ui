@@ -7,7 +7,9 @@ import React, {
 } from "react"
 import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption } from "echarts"
-import { echarts, QUESTDB_THEME } from "./echartsSetup"
+import { useTheme } from "styled-components"
+import { echarts } from "./echartsSetup"
+import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
   settleChartEntryAnimation,
@@ -23,6 +25,7 @@ type Props = {
   height?: number | string
   onZoomChange?: (start: number, end: number) => void
   isFocused?: boolean
+  animateEntry?: boolean
   zoomWindow: { start: number; end: number }
 }
 
@@ -71,16 +74,30 @@ type DataZoomEvent = {
 
 export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
   function ChartRenderer(
-    { option, height = "100%", onZoomChange, isFocused = true, zoomWindow },
+    {
+      option,
+      height = "100%",
+      onZoomChange,
+      isFocused = true,
+      animateEntry = true,
+      zoomWindow,
+    },
     ref,
   ) {
     const bufferId = useNotebookBufferId()
+    const theme = useTheme()
+    const chartTheme = useMemo(
+      () => createQuestdbTheme(theme.color),
+      [theme.color],
+    )
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const zoomWindowRef = useRef(zoomWindow)
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
-    const animateEntryRef = useRef(shouldAnimateChartEntry(bufferId))
+    const animateEntryRef = useRef(
+      animateEntry && shouldAnimateChartEntry(bufferId),
+    )
     const firstInstanceDoneRef = useRef(false)
 
     useEffect(() => {
@@ -204,11 +221,11 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         }}
       >
         <ReactECharts
-          key={key}
+          key={`${theme.mode}:${key}`}
           ref={reactEchartsRef}
           echarts={echarts}
           option={renderOption}
-          theme={QUESTDB_THEME}
+          theme={chartTheme}
           notMerge={false}
           lazyUpdate
           autoResize={false}

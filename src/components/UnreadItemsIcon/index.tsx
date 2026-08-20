@@ -12,7 +12,7 @@ const Tick = styled.span`
   width: 1.3rem;
   height: 1.3rem;
   border-radius: 50%;
-  background-color: ${({ theme }) => theme.color.red};
+  background-color: ${({ theme }) => theme.color.statusDanger};
 `
 
 const Count = styled.span`
@@ -21,8 +21,8 @@ const Count = styled.span`
   top: -50%;
   font-size: ${({ theme }) => theme.fontSize.ms};
   border-radius: 6px;
-  background-color: #c64242;
-  color: ${({ theme }) => theme.color.white};
+  background-color: ${({ theme }) => theme.color.statusDanger};
+  color: ${({ theme }) => theme.color.contentInverse};
   padding: 0.2rem 0.4rem;
 `
 

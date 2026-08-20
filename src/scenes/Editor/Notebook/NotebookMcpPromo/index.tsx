@@ -12,45 +12,25 @@ import {
   shouldShowMcpPromo,
 } from "../../../../utils/notebookOnboarding"
 import { color } from "../../../../utils"
+import { IconButton as SharedIconButton } from "../../../../components"
 
 const Container = styled.div`
   display: flex;
   align-items: flex-start;
   gap: 0.8rem;
   padding: 1.2rem;
-  border: 1.5px dashed ${color("pinkPrimary")};
+  border: 1.5px dashed ${color("contentAccent")};
   border-radius: 0.4rem;
 `
 
-const IconButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
+const PromoIconButton = styled(SharedIconButton)`
   padding: 0.4rem;
-  background: transparent;
-  border: none;
-  border-radius: 0.4rem;
-  color: ${color("offWhite")};
-  cursor: pointer;
-
-  &:hover {
-    background: ${color("selection")};
-    color: ${color("foreground")};
-  }
-`
-
-const CaretButton = styled(IconButton)`
-  color: ${color("pinkBadge")};
-
-  &:hover {
-    background: ${color("selection")};
-    color: ${color("pinkBadge")};
-  }
 `
 
 const Content = styled.div`
   display: flex;
   flex: 1;
+  margin-top: 0.25rem;
   min-width: 0;
   flex-direction: column;
   gap: 2rem;
@@ -61,7 +41,7 @@ const Title = styled.h2`
   font-size: 2rem;
   font-weight: 600;
   line-height: 1.4;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const Header = styled.div`
@@ -74,7 +54,7 @@ const Description = styled.p`
   margin: 0;
   font-size: 1.6rem;
   line-height: 1.5;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const Actions = styled.div`
@@ -90,17 +70,17 @@ const CommandBox = styled.div`
   width: fit-content;
   max-width: 100%;
   padding: 0.5rem 0.6rem 0.5rem 1.7rem;
-  background: #1a1b23;
-  border: 1px solid rgba(252, 252, 252, 0.15);
+  background: ${({ theme }) => theme.color.surfaceRaised};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.4rem;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 1px ${({ theme }) => theme.color.shadowSubtle};
 `
 
 const FootNote = styled.p`
   margin: 0;
   font-size: 1.28rem;
   line-height: 1.5;
-  color: ${color("mutedLabel")};
+  color: ${color("contentMuted")};
 `
 
 export const NotebookMcpPromo = () => {
@@ -125,28 +105,37 @@ export const NotebookMcpPromo = () => {
   if (isCollapsed) {
     return (
       <Container>
-        <CaretButton
+        <PromoIconButton
+          label="Expand"
+          variant="ghost"
           title="Expand"
           onClick={() => updateNotebookOnboarding({ collapseMcpPromo: false })}
         >
           <CaretRightIcon size={20} weight="fill" />
-        </CaretButton>
+        </PromoIconButton>
         <Content>{title}</Content>
-        <IconButton title="Dismiss" onClick={close}>
+        <PromoIconButton
+          label="Dismiss"
+          variant="ghost"
+          title="Dismiss"
+          onClick={close}
+        >
           <XIcon size={20} />
-        </IconButton>
+        </PromoIconButton>
       </Container>
     )
   }
 
   return (
     <Container>
-      <CaretButton
+      <PromoIconButton
+        label="Collapse"
+        variant="ghost"
         title="Collapse"
         onClick={() => updateNotebookOnboarding({ collapseMcpPromo: true })}
       >
         <CaretDownIcon size={20} weight="fill" />
-      </CaretButton>
+      </PromoIconButton>
       <Content>
         <Header>
           {title}
@@ -166,9 +155,14 @@ export const NotebookMcpPromo = () => {
           </FootNote>
         </Actions>
       </Content>
-      <IconButton title="Dismiss" onClick={close}>
+      <PromoIconButton
+        label="Dismiss"
+        variant="ghost"
+        title="Dismiss"
+        onClick={close}
+      >
         <XIcon size={20} />
-      </IconButton>
+      </PromoIconButton>
     </Container>
   )
 }

@@ -42,7 +42,7 @@ export const Timestamp = ({ createdAt }: Props) => {
   const userLocale = useMemo(fetchUserLocale, [])
 
   return (
-    <TimestampText color="gray2">
+    <TimestampText color="contentSecondary">
       [
       {format(createdAt, "pppp", { locale: getLocaleFromLanguage(userLocale) })}
       ]

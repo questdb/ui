@@ -1,6 +1,6 @@
 import React from "react"
-import { ArrowClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react"
-import { DropdownMenu, Tooltip } from "../../../../components"
+import { ArrowClockwiseIcon } from "@phosphor-icons/react"
+import { SelectMenu, Tooltip } from "../../../../components"
 import { Spinner } from "./Spinner"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
@@ -8,18 +8,18 @@ import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import { autoRefreshLabel, resolveAutoRefresh } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
-import {
-  IntervalLabel,
-  OverrideDot,
-  SplitButtonContainer,
-  SplitDivider,
-  SplitSide,
-} from "../refreshSplitButton"
+import { OverrideDot } from "../refreshSplitButton"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import {
+  EditorRefreshButton,
+  EditorRefreshControlGroup,
+  EditorRefreshIntervalTrigger,
+  EditorRefreshIntervalTriggerButton,
+} from "../../ToolbarRefreshControls"
 
 const WRITE_BLOCK_TOOLTIP =
   "This cell contains DDL/DML, auto-refresh is disabled"
@@ -77,10 +77,10 @@ export const CellRefreshButton: React.FC<Props> = ({
   }
 
   return (
-    <SplitButtonContainer>
+    <EditorRefreshControlGroup>
       <Tooltip content={isChart ? "Refresh chart" : "Refresh"}>
-        <SplitSide
-          skin="transparent"
+        <EditorRefreshButton
+          variant="secondary"
           type="button"
           onClick={handleRefresh}
           aria-label="Refresh"
@@ -90,23 +90,19 @@ export const CellRefreshButton: React.FC<Props> = ({
           aria-disabled={refreshing || undefined}
         >
           {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
-        </SplitSide>
+        </EditorRefreshButton>
       </Tooltip>
-      <SplitDivider />
       {writeBlocked ? (
         <Tooltip content={WRITE_BLOCK_TOOLTIP}>
-          <SplitSide
-            skin="transparent"
+          <EditorRefreshIntervalTriggerButton
+            label="Off"
             type="button"
             aria-label={WRITE_BLOCK_TOOLTIP}
             aria-disabled
-          >
-            <IntervalLabel>Off</IntervalLabel>
-            <CaretDownIcon />
-          </SplitSide>
+          />
         </Tooltip>
       ) : (
-        <DropdownMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
+        <SelectMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
           <Tooltip
             content={
               hasOverride
@@ -115,23 +111,18 @@ export const CellRefreshButton: React.FC<Props> = ({
             }
             {...intervalTooltip.tooltipProps}
           >
-            <DropdownMenu.Trigger asChild>
-              <SplitSide
-                skin="transparent"
-                type="button"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Auto-refresh interval: ${autoRefreshLabel(
-                  autoRefresh,
-                )}${hasOverride ? " (overrides notebook default)" : ""}`}
-              >
-                {hasOverride && <OverrideDot />}
-                <IntervalLabel>{autoRefreshLabel(autoRefresh)}</IntervalLabel>
-                <CaretDownIcon />
-              </SplitSide>
-            </DropdownMenu.Trigger>
+            <EditorRefreshIntervalTrigger
+              label={autoRefreshLabel(autoRefresh)}
+              leadingIcon={hasOverride ? <OverrideDot /> : undefined}
+              type="button"
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Auto-refresh interval: ${autoRefreshLabel(
+                autoRefresh,
+              )}${hasOverride ? " (overrides notebook default)" : ""}`}
+            />
           </Tooltip>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content align="end" sideOffset={4}>
+          <SelectMenu.Portal>
+            <SelectMenu.Content align="end" sideOffset={4}>
               <AutoRefreshOptions
                 value={cellAutoRefresh}
                 onSelect={handleSelect}
@@ -140,10 +131,10 @@ export const CellRefreshButton: React.FC<Props> = ({
                   autoRefreshDefault,
                 )}
               />
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+            </SelectMenu.Content>
+          </SelectMenu.Portal>
+        </SelectMenu.Root>
       )}
-    </SplitButtonContainer>
+    </EditorRefreshControlGroup>
   )
 }

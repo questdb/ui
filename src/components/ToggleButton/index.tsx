@@ -23,13 +23,12 @@
  ******************************************************************************/
 
 import React, { forwardRef, Ref } from "react"
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 
-import type { Color, FontSize } from "../../types"
-import { color } from "../../utils"
+import type { FontSize } from "../../types"
 
 import { ButtonProps } from "../Button"
-import { bezierTransition } from "../Transition"
+import { SegmentedControlButton } from "../SegmentedControl"
 
 type Direction = "top" | "right" | "bottom" | "left"
 
@@ -60,64 +59,30 @@ type Props = Readonly<{
 
 type RenderRefProps = Omit<Props, keyof DefaultProps> & Partial<DefaultProps>
 
-type ThemeShape = {
-  background: Color
-}
-
-const baseStyles = css<Props>`
+const PrimaryToggleButtonStyled = styled(SegmentedControlButton)<Props>`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: ${({ selected }) => (selected ? "#2d303e" : "transparent")};
-  border: none;
-  outline: 0;
-  font-size: ${({ fontSize, theme }) =>
-    fontSize ? theme.fontSize[fontSize] : theme.fontSize.md};
-  font-weight: 400;
-  line-height: 1.15;
   width: 3.5rem;
   height: 3.5rem;
-  border-radius: 0.4rem;
-  cursor: pointer;
-  ${bezierTransition};
+  font-size: ${({ fontSize, theme }) =>
+    fontSize ? theme.fontSize[fontSize] : theme.fontSize.md};
+
   ${({ disabled }) => disabled && "cursor: default; pointer-events: none;"};
-  color: ${({ selected, theme }) =>
-    theme.color[selected ? "green" : "offWhite"]};
 
   svg + span,
   img + span {
     margin-left: 1rem;
   }
-`
 
-const getTheme = (normal: ThemeShape, hover: ThemeShape) => css<Props>`
-  &:hover:not([disabled]) {
-    background: ${color(hover.background)};
-    opacity: 1;
-  }
-
-  &:active:not([disabled]) {
-    filter: brightness(90%);
-  }
-
-  ${({ readOnly }) =>
+  ${({ readOnly, theme }) =>
     readOnly &&
     `
-      filter: brightness(0.5);
-      cursor: default;
+      background: transparent;
+      color: ${theme.color.contentDisabled};
+      filter: none;
+      cursor: not-allowed;
     `}
-`
-
-const PrimaryToggleButtonStyled = styled.button<Props>`
-  ${baseStyles};
-  ${getTheme(
-    {
-      background: "backgroundDarker",
-    },
-    {
-      background: "comment",
-    },
-  )};
 `
 
 const PrimaryToggleButtonWithRef = (
@@ -128,6 +93,8 @@ const PrimaryToggleButtonWithRef = (
     {...defaultProps}
     {...props}
     ref={ref}
+    $size="md"
+    $active={props.selected}
     data-selected={props.selected}
   />
 )

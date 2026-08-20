@@ -29,15 +29,15 @@ const FooterButton = styled(Button)`
 
 const CreateButton = styled(FooterButton)`
   && {
-    background: ${color("backgroundDarker")};
-    border-color: ${color("black")};
-    color: ${color("gray2")};
+    background: ${color("surfaceInset")};
+    border-color: ${color("borderDefault")};
+    color: ${color("contentSecondary")};
   }
 
   &&:hover:not([disabled]) {
-    background: ${color("selection")};
-    border-color: ${color("black")};
-    color: ${color("foreground")};
+    background: ${color("interactionNeutral")};
+    border-color: ${color("borderDefault")};
+    color: ${color("contentPrimary")};
   }
 `
 
@@ -82,11 +82,11 @@ export const Step1 = ({
         label="Plus, AI agents can build it for you"
       />
       <ButtonRow>
-        <CreateButton skin="secondary" onClick={onCreateNotebook}>
+        <CreateButton variant="secondary" onClick={onCreateNotebook}>
           Create notebook
         </CreateButton>
         <FooterButton
-          skin="primary"
+          variant="primary"
           onClick={onNext}
           dataHook={PRIMARY_BUTTON_HOOK}
         >

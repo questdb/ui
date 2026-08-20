@@ -1,4 +1,4 @@
-import { SchemaColumn } from "components/TableSchemaDialog/types"
+import { SchemaColumn } from "../../../components/TableSchemaDialog/types"
 import { DEFAULT_TIMESTAMP_FORMAT, DEFAULT_TIMESTAMP_FORMAT_NS } from "./const"
 
 export const isGeoHash = (type: string) => type.startsWith("GEOHASH")

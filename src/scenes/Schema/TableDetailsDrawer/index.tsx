@@ -6,7 +6,7 @@ import React, {
   useMemo,
 } from "react"
 import { useSelector, useDispatch } from "react-redux"
-import styled, { css, useTheme } from "styled-components"
+import styled from "styled-components"
 import { selectors, actions } from "../../../store"
 import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
 import {
@@ -17,6 +17,8 @@ import {
   CopyButton,
   TableSelector,
   type TableOption,
+  Badge,
+  TabButton,
 } from "../../../components"
 import {
   hideColumnsFromTableDDL,
@@ -48,19 +50,8 @@ import { DetailsTab } from "./DetailsTab"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
-const TypeBadge = styled.span`
-  background: transparent;
-  color: ${({ theme }) => theme.color.gray2};
-  padding: 0.3rem 0;
-  border-radius: 4px;
-  font-size: 1.2rem;
-  font-weight: 500;
+const TypeBadge = styled(Badge).attrs({ variant: "neutral", size: "sm" })`
   flex-shrink: 0;
-  text-wrap: nowrap;
-  height: 2.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 `
 
 const LoadingContainer = styled(Box).attrs({
@@ -88,14 +79,14 @@ const EmptyStateHeading = styled.h2`
   font-size: 2rem;
   font-weight: 600;
   text-align: left;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   margin: 0;
 `
 
 const EmptyStateSubheading = styled.p`
   font-size: 1.4rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   text-align: left;
   margin: 0;
   line-height: 1.5;
@@ -107,13 +98,14 @@ const TitleContainer = styled(Dialog.Title).attrs({})`
   border: 0;
   gap: 1rem;
   align-items: center;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow: visible;
   margin-right: 1rem;
 `
 
-const StyledCopyButton = styled(CopyButton)`
-  background: transparent;
+const CopyButtonSlot = styled.span`
+  display: inline-flex;
   flex-shrink: 0;
 `
 
@@ -124,7 +116,6 @@ const TabsContainer = styled.div`
   flex-direction: column;
   align-items: stretch;
   width: 100%;
-  padding-top: 0.375rem;
 `
 
 const TabsNav = styled.div`
@@ -137,54 +128,21 @@ const TabsNav = styled.div`
 const TabsSeparator = styled.div`
   width: 100%;
   height: 0.1rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
-const Tab = styled.button<{ $active: boolean }>`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.2rem;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid
-    ${({ theme, $active }) => ($active ? theme.color.pink : "transparent")};
-  color: ${({ theme, $active }) =>
-    $active ? theme.color.foreground : theme.color.gray2};
-  font-size: ${({ theme }) => theme.fontSize.lg};
-  font-weight: ${({ $active }) => ($active ? 600 : 400)};
-  cursor: pointer;
-  transition: all 150ms ease;
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
+const Tab = styled(TabButton)`
+  && {
+    min-height: 4.4rem;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
+    font-size: ${({ theme }) => theme.fontSize.lg};
+    line-height: 1.4;
   }
-
-  ${({ $active }) =>
-    !$active &&
-    css`
-      &:hover {
-        border-bottom: 2px solid ${({ theme }) => theme.color.background};
-      }
-    `}
 `
 
-const TabBadge = styled.span<{ $type: "warning" | "error" }>`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.3rem;
+const TabBadge = styled(Badge)`
   height: 1.8rem;
-  padding: 0 0.6rem;
-  border-radius: 10px;
-  font-size: 1.2rem;
-  background: ${({ theme, $type }) =>
-    $type === "error" ? `${theme.color.red}30` : `${theme.color.orange}30`};
-  color: ${({ theme, $type }) =>
-    $type === "error" ? theme.color.red : theme.color.orange};
-  border: 1px solid
-    ${({ theme, $type }) =>
-      $type === "error" ? theme.color.red : theme.color.orange};
 `
 
 export const TableDetailsDrawer = () => {
@@ -236,7 +194,6 @@ export const TableDetailsDrawer = () => {
   const { quest } = useContext(QuestContext)
   const { settings } = useSettings()
   const isEnterprise = settings["release.type"] === "EE"
-  const theme = useTheme()
   const [tableData, setTableData] = useState<Table | null>(null)
   const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
   const [viewData, setViewData] = useState<View | null>(null)
@@ -671,12 +628,14 @@ export const TableDetailsDrawer = () => {
           defaultOpen={!hasTarget}
         />
         {hasTarget && (
-          <StyledCopyButton
-            size="sm"
-            text={tableName}
-            iconOnly
-            data-hook="table-details-copy-name"
-          />
+          <CopyButtonSlot>
+            <CopyButton
+              size="sm"
+              text={tableName}
+              iconOnly
+              data-hook="table-details-copy-name"
+            />
+          </CopyButtonSlot>
         )}
       </TitleContainer>
     ),
@@ -698,13 +657,6 @@ export const TableDetailsDrawer = () => {
         if (!open) handleClose()
       }}
       withCloseButton
-      titleColor={
-        hasTarget && isMatView
-          ? theme.color.loginBackground
-          : isView
-            ? theme.color.tableSelection
-            : theme.color.backgroundLighter
-      }
       title={drawerTitle}
       afterTitle={
         hasTarget ? (
@@ -716,11 +668,11 @@ export const TableDetailsDrawer = () => {
       onDismiss={handleClose}
       trigger={<span />}
     >
-      <Drawer.ContentWrapper mode="side" data-hook="table-details-drawer">
+      <Drawer.ContentWrapper data-hook="table-details-drawer">
         {hasTarget && loading ? (
           <LoadingContainer data-hook="table-details-loading">
             <CircleNotchSpinner size={24} />
-            <Text color="gray2" size="md">
+            <Text color="contentSecondary" size="md">
               Loading table details...
             </Text>
           </LoadingContainer>
@@ -728,9 +680,10 @@ export const TableDetailsDrawer = () => {
           <>
             {!isView && (
               <TabsContainer>
-                <TabsNav>
+                <TabsNav role="tablist" aria-label="Table details sections">
                   <Tab
                     $active={activeTab === "monitoring"}
+                    role="tab"
                     onClick={() => {
                       void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
                         tab: "monitoring",
@@ -743,7 +696,8 @@ export const TableDetailsDrawer = () => {
                     Monitoring
                     {monitoringIssuesCounts.errors > 0 && (
                       <TabBadge
-                        $type="error"
+                        variant="danger"
+                        size="sm"
                         data-hook="table-details-tab-error-badge"
                       >
                         <XSquareIcon size={12} weight="fill" />
@@ -753,7 +707,8 @@ export const TableDetailsDrawer = () => {
                     {monitoringIssuesCounts.errors === 0 &&
                       monitoringIssuesCounts.warnings > 0 && (
                         <TabBadge
-                          $type="warning"
+                          variant="warning"
+                          size="sm"
                           data-hook="table-details-tab-warning-badge"
                         >
                           <WarningIcon size={12} weight="fill" />
@@ -763,6 +718,7 @@ export const TableDetailsDrawer = () => {
                   </Tab>
                   <Tab
                     $active={activeTab === "details"}
+                    role="tab"
                     onClick={() => {
                       void trackEvent(ConsoleEvent.TABLE_DETAILS_TAB_SWITCH, {
                         tab: "details",

@@ -23,8 +23,8 @@ const Divider = styled.div`
   height: 1px;
   background: linear-gradient(
     90deg,
-    ${color("dividerAccent")} 0%,
-    rgba(54, 14, 26, 0) 100%
+    ${color("borderAccent")} 0%,
+    ${({ theme }) => theme.color.transparent} 100%
   );
   margin-bottom: 1rem;
 `
@@ -44,7 +44,7 @@ const AssistantHeader = styled(Box).attrs({
 
 const AssistantLabel = styled(Text).attrs({ className: "assistant-label" })`
   font-size: 1.4rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const TokenDisplay = styled(Box).attrs({ className: "token-display" })`
@@ -71,7 +71,7 @@ const StreamingCursor = styled.span`
   display: inline-block;
   width: 2px;
   height: 1.4em;
-  background: ${color("foreground")};
+  background: ${color("contentPrimary")};
   margin-left: 2px;
   margin-right: auto;
   vertical-align: text-bottom;
@@ -173,8 +173,8 @@ export const AssistantMessageContent = memo<AssistantMessageContentProps>(
         <AssistantLabel>{anchorMessage.model || "Assistant"}</AssistantLabel>
         {tokenDisplay && (
           <TokenDisplay className="token-display">
-            <GaugeIcon size="16px" color={theme.color.gray2} />
-            <Text size="sm" color="gray2">
+            <GaugeIcon size="16px" color={theme.color.contentSecondary} />
+            <Text size="sm" color="contentSecondary">
               {tokenDisplay}
             </Text>
           </TokenDisplay>

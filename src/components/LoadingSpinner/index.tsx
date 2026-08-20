@@ -1,6 +1,6 @@
 import React from "react"
 import styled, { useTheme } from "styled-components"
-import { Loader3 } from "@styled-icons/remix-line"
+import { Loader3 } from "../icons"
 import { Color } from "../../types"
 import { spinAnimation } from "../../components/Animation"
 
@@ -8,7 +8,7 @@ const StyledLoader = styled(Loader3)<{ $size: string; $color: Color }>`
   width: ${({ $size }) => $size};
   height: ${({ $size }) => $size};
   color: ${({ $color, theme }) =>
-    $color ? theme.color[$color] : theme.color.pink};
+    $color ? theme.color[$color] : theme.color.contentAccent};
   ${spinAnimation};
 `
 
@@ -17,7 +17,10 @@ type Props = {
   color?: Color
 }
 
-export const LoadingSpinner = ({ size = "18px", color = "pink" }: Props) => {
+export const LoadingSpinner = ({
+  size = "18px",
+  color = "contentAccent",
+}: Props) => {
   const theme = useTheme()
   return (
     <StyledLoader

@@ -17,12 +17,14 @@ const Code = styled.span`
   background: transparent;
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.3rem;
-  color: ${color("offWhite2")};
-  overflow-wrap: anywhere;
+  color: ${color("contentSecondary")};
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `
 
 const Package = styled.span`
-  color: ${color("cyan")};
+  color: ${color("statusInfo")};
 `
 
 const CopyCommandButton = styled(CopyButton)`
@@ -34,12 +36,12 @@ const CopyCommandButton = styled(CopyButton)`
     background: transparent;
     border: none;
     box-shadow: none;
-    color: ${color("mutedLabel")};
+    color: ${color("contentMuted")};
   }
 
   &&:hover:not([disabled]) {
     background: transparent;
-    color: ${color("foreground")};
+    color: ${color("contentPrimary")};
   }
 
   &[data-copied] > svg:first-child {
@@ -66,7 +68,7 @@ export const McpSetupCommand = ({
     </Code>
     <CopyCommandButton
       iconOnly
-      skin="transparent"
+      variant="ghost"
       size="sm"
       text={MCP_SETUP_COMMAND}
       icon={<CopyCommand size={iconSize} />}

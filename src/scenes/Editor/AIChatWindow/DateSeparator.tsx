@@ -14,14 +14,14 @@ const Container = styled.div`
 const Line = styled.div`
   flex: 1;
   height: 1px;
-  background: ${color("selection")};
+  background: ${color("interactionNeutral")};
 `
 
 const LabelContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 const Label = styled.span`

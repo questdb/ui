@@ -5,15 +5,15 @@ import {
   Box,
   Button,
   Heading,
-  Select,
+  SelectMenuControl,
   Table,
   Text,
   Tooltip,
 } from "../../../components"
 import { bytesWithSuffix } from "../../../utils/bytesWithSuffix"
 import { FileStatus } from "./file-status"
-import { Grid, Information } from "@styled-icons/remix-line"
-import { FiletypeCsv } from "@styled-icons/bootstrap/FiletypeCsv"
+import { Grid, Information, Search2 } from "../../../components/icons"
+import { FiletypeCsv } from "../../../components/icons"
 import { ProcessedFile } from "./types"
 import { UploadActions } from "./upload-actions"
 import { RenameTableDialog } from "./rename-table-dialog"
@@ -43,7 +43,7 @@ const StyledTable = styled(Table)`
   }
 
   tbody td {
-    background: #242531;
+    background: ${({ theme }) => theme.color.surfaceRaised};
 
     &:first-child {
       border-top-left-radius: ${({ theme }) => theme.borderRadius};
@@ -59,7 +59,7 @@ const StyledTable = styled(Table)`
 
 const EmptyState = styled(Box).attrs({ justifyContent: "center" })`
   width: 100%;
-  background: #242531;
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-radius: ${({ theme }) => theme.borderRadius};
   padding: 1rem;
 `
@@ -68,13 +68,11 @@ const FileTextBox = styled(Box)`
   padding: 0 1.1rem;
 `
 
-const BrowseTextLink = styled.span`
-  text-decoration: underline;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: none;
-  }
+const AddFilesRow = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
 `
 
 type Props = {
@@ -124,11 +122,11 @@ export const FilesToUpload = ({
       render: ({ data }) => {
         const file = (
           <FileTextBox align="center" gap="1rem">
-            <Text color="foreground">
+            <Text color="contentPrimary">
               {shortenText(data.fileObject.name, 20)}
             </Text>
 
-            <Text color="gray2" size="sm">
+            <Text color="contentSecondary" size="sm">
               {bytesWithSuffix(data.fileObject.size)}
             </Text>
           </FileTextBox>
@@ -149,7 +147,7 @@ export const FilesToUpload = ({
                   <React.Fragment>
                     <UploadResultDialog file={data} />
                     <Button
-                      skin="secondary"
+                      variant="secondary"
                       prefixIcon={<Grid size="18px" />}
                       onClick={() => {
                         void trackEvent(ConsoleEvent.IMPORT_RESULTS_OPEN)
@@ -170,14 +168,14 @@ export const FilesToUpload = ({
                   >
                     {data.uploadResult &&
                       data.uploadResult.rowsRejected > 0 && (
-                        <Text color="orange" size="sm">
+                        <Text color="statusWarning" size="sm">
                           {data.uploadResult.rowsRejected.toLocaleString()} row
                           {data.uploadResult.rowsRejected > 1 ? "s" : ""}{" "}
                           rejected
                         </Text>
                       )}
                     {data.error && (
-                      <Text color="red" size="sm">
+                      <Text color="statusDanger" size="sm">
                         {data.error}
                       </Text>
                     )}
@@ -229,12 +227,14 @@ export const FilesToUpload = ({
       align: "center",
       width: "150px",
       render: ({ data }) => (
-        <Select
+        <SelectMenuControl
           name="table_owner"
-          defaultValue={ownedByList[0] ?? ""}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+          ariaLabel="Table owner"
+          value={data.table_owner || ownedByList[0] || ""}
+          modal={false}
+          onValueChange={(value) =>
             onFilePropertyChange(data.id, {
-              table_owner: e.target.value,
+              table_owner: value,
             })
           }
           options={Object.values(ownedByList).map((entity) => ({
@@ -320,33 +320,46 @@ export const FilesToUpload = ({
       ),
       align: "center",
       width: "150px",
-      render: ({ data }) => (
-        <Select
-          name="overwrite"
-          defaultValue={data.settings.overwrite ? "true" : "false"}
-          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-            void trackEvent(ConsoleEvent.IMPORT_CHANGE_WRITE_MODE, {
-              type: e.target.value === "true" ? "overwrite" : "append",
-            })
-            onFilePropertyChange(data.id, {
-              settings: {
-                ...data.settings,
-                overwrite: e.target.value === "true",
+      render: ({ data }) => {
+        const writeMode = data.settings.overwrite ? "overwrite" : "append"
+
+        return (
+          <SelectMenuControl
+            name="write_mode"
+            ariaLabel="Write mode"
+            value={writeMode}
+            dataHook="import-write-mode-trigger"
+            modal={false}
+            onValueChange={(value) => {
+              const overwrite = value === "overwrite"
+
+              void trackEvent(ConsoleEvent.IMPORT_CHANGE_WRITE_MODE, {
+                type: value,
+              })
+              onFilePropertyChange(data.id, {
+                settings: {
+                  ...data.settings,
+                  overwrite,
+                },
+              })
+            }}
+            options={[
+              {
+                label: "Append",
+                value: "append",
+                dataHook: "import-write-mode-append",
+                description: "Add rows to the existing table.",
               },
-            })
-          }}
-          options={[
-            {
-              label: "Append",
-              value: "false",
-            },
-            {
-              label: "Overwrite",
-              value: "true",
-            },
-          ]}
-        />
-      ),
+              {
+                label: "Overwrite",
+                value: "overwrite",
+                dataHook: "import-write-mode-overwrite",
+                description: "Replace the existing table and its data.",
+              },
+            ]}
+          />
+        )
+      },
     },
     {
       align: "flex-end",
@@ -386,18 +399,23 @@ export const FilesToUpload = ({
             style={{ display: "none" }}
             value=""
           />
-          <Text color="foreground">
-            You can drag and drop more files or{" "}
-            <BrowseTextLink
+          <AddFilesRow>
+            <Text color="contentPrimary">
+              You can drag and drop more files or
+            </Text>
+            <Button
               onClick={() => {
                 uploadInputRef.current?.click()
               }}
+              prefixIcon={<Search2 size="18px" />}
+              variant="secondary"
+              data-hook="import-browse-more-from-disk"
             >
-              browse from disk
-            </BrowseTextLink>
-          </Text>
+              Browse from disk
+            </Button>
+          </AddFilesRow>
           {duplicates.length > 0 && (
-            <Text color="red">
+            <Text color="statusDanger">
               File{duplicates.length > 1 ? "s" : ""} already added to queue:{" "}
               {duplicates.map((f) => f.name).join(", ")}. Change target table
               name and try again.
@@ -409,7 +427,7 @@ export const FilesToUpload = ({
           />
           {files.length === 0 && (
             <EmptyState>
-              <Text color="gray2" align="center">
+              <Text color="contentSecondary" align="center">
                 No files in queue
               </Text>
             </EmptyState>

@@ -5,7 +5,7 @@ import { Button } from "../../Button"
 type Props = {
   children: React.ReactNode
   disabled?: boolean
-  variant?: "error" | "success" | "warning" | "primary" | "secondary"
+  variant?: ButtonProps["variant"]
   prefixIcon?: ButtonProps["prefixIcon"]
 }
 
@@ -19,7 +19,7 @@ export const FormSubmit = ({
   <Button
     type="submit"
     disabled={disabled}
-    skin={variant ?? "primary"}
+    variant={variant ?? "primary"}
     prefixIcon={prefixIcon}
     dataHook="form-submit-button"
     {...rest}

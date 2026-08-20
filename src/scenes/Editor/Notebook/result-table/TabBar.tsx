@@ -1,5 +1,5 @@
 import React from "react"
-import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
+import { CheckmarkOutline, CloseOutline } from "../../../../components/icons"
 import { ArrowClockwiseIcon, MinusIcon, Queue } from "@phosphor-icons/react"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"

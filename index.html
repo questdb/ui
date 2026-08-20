@@ -1,20 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      ;(() => {
+        const preferenceKey = "appearance.themePreference"
+        let preference = "system"
 
-<head>
-  <meta charset="utf-8">
-  <link rel="icon" href="assets/favicon.ico">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description"
-    content="QuestDB live demo. Query three large datasets and more than 2 billion rows in milliseconds with SQL" />
-  <title>QuestDB · Console</title>
-</head>
+        try {
+          const storedPreference = localStorage.getItem(preferenceKey)
 
-<body class="mini-navbar pace-done">
-  <div id="root"></div>
-  <div id="sideMenu"></div>
-  <script type="module" src="/src/index.tsx"></script>
-</body>
+          if (
+            storedPreference === "system" ||
+            storedPreference === "light" ||
+            storedPreference === "dark"
+          ) {
+            preference = storedPreference
+          }
+        } catch {
+          // Storage can be unavailable in privacy-restricted browser contexts.
+        }
 
+        const mode =
+          preference === "system"
+            ? matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : preference
+
+        document.documentElement.dataset.theme = mode
+        document.documentElement.style.colorScheme = mode
+      })()
+    </script>
+    <link rel="icon" href="assets/favicon.ico" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="QuestDB live demo. Query three large datasets and more than 2 billion rows in milliseconds with SQL"
+    />
+    <title>QuestDB · Console</title>
+  </head>
+
+  <body class="mini-navbar pace-done">
+    <div id="root"></div>
+    <div id="sideMenu"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
 </html>

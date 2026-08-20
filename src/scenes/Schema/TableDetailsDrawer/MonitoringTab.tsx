@@ -14,7 +14,7 @@ import {
   ArrowRightIcon,
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
-import { Box, CopyButton, Text, Tooltip } from "../../../components"
+import { Badge, Box, CopyButton, Text, Tooltip } from "../../../components"
 import type { Table, MaterializedView } from "../../../utils/questdb/types"
 import {
   formatRelativeTimestamp,
@@ -59,12 +59,12 @@ const RowCountIndicatorInner = styled.div<{ $isMatView?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceValue};
   padding: 1rem 1.5rem;
   border-radius: 0.4rem;
   width: 100%;
   font-size: ${({ theme }) => theme.fontSize.md};
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   ${({ $isMatView }) =>
     $isMatView &&
     css`
@@ -81,7 +81,7 @@ const TimestampUnderline = styled.span`
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 0.1rem;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const MetricsGrid = styled.div<{ $isMatView?: boolean }>`
@@ -106,17 +106,16 @@ const MetricCard = styled(Box).attrs<{ $background?: string }>({
   justifyContent: "space-between",
 })<{ $background?: string }>`
   padding: 1rem 1.5rem;
-  background: ${({ $background, theme }) =>
-    $background ?? theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceValue};
 `
 
 const MetricLabel = styled(Text).attrs({
-  color: "gray2",
+  color: "contentSecondary",
   size: "sm",
 })``
 
 const MetricValue = styled(Text).attrs({
-  color: "foreground",
+  color: "contentPrimary",
   size: "md",
 })`
   min-width: 0;
@@ -178,32 +177,29 @@ const PulsingSquare = styled(SquareWithShadow).attrs({
   height: "12px",
 })`
   animation: ${pulseColor} 1.5s ease-in-out infinite;
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const TrendValueBox = styled(Box).attrs<{ $background?: string }>({
   gap: "0.4rem",
   align: "center",
-  justifyContent: "flex-start",
+  justifyContent: "space-between",
 })<{ $background?: string }>`
-  align: center;
   align-self: stretch;
-  justify-content: flex-start;
+  width: 100%;
+  justify-content: space-between;
   border-radius: 0.4rem;
-  background: ${({ $background }) => $background};
+  background: ${({ theme }) => theme.color.surfaceValue};
   padding: 0.8rem 0.6rem;
 `
 
-const TrendBadge = styled.span<{ $direction: "increasing" | "decreasing" }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
+const TrendBadge = styled(Badge)`
+  flex-shrink: 0;
 `
 
 const TrendValueText = styled(Text)<{ $color?: string }>`
-  color: ${({ $color, theme }) => $color ?? theme.color.gray2};
+  min-width: 0;
+  color: ${({ $color, theme }) => $color ?? theme.color.contentSecondary};
 `
 
 const DisabledOverlay = styled.div<{ $disabled: boolean }>`
@@ -212,52 +208,44 @@ const DisabledOverlay = styled.div<{ $disabled: boolean }>`
   transition: opacity 150ms ease;
 `
 
-const StyledCopyButton = styled(CopyButton).attrs({
-  iconOnly: true,
-  size: "sm",
-})`
-  margin-left: auto;
-  background: transparent;
-`
-
 const getSeverityColor = (
   theme: { color: Record<string, string> },
   severity: HealthSeverity | undefined,
 ): string => {
   switch (severity) {
     case "critical":
-      return theme.color.red
+      return theme.color.statusDanger
     case "warning":
-      return theme.color.orange
+      return theme.color.statusWarning
     case "recovering":
-      return theme.color.green
+      return theme.color.statusSuccess
     default:
-      return theme.color.foreground
+      return theme.color.contentPrimary
   }
 }
 
 export const HELPER_TEXT = {
   pendingRows: (
     <>
-      <Text color="offWhite2">
+      <Text color="contentSecondary">
         Rows waiting in WAL to be written to table storage. Unbounded growth
         risks disk full or OOM errors, causing table suspension.
       </Text>
       <br />
       <br />
       <Box gap="0.5rem" align="center">
-        <ArrowUpRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">
+        <ArrowUpRightIcon size={16} />
+        <Text color="contentSecondary">
           Increasing = Writer can&apos;t keep up with ingestion rate
         </Text>
       </Box>
       <Box gap="0.5rem" align="center">
-        <ArrowDownRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">Decreasing = Backlog is clearing</Text>
+        <ArrowDownRightIcon size={16} />
+        <Text color="contentSecondary">Decreasing = Backlog is clearing</Text>
       </Box>
       <Box gap="0.5rem" align="center">
-        <ArrowRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">
+        <ArrowRightIcon size={16} />
+        <Text color="contentSecondary">
           Stable = Writer is keeping pace with ingestion
         </Text>
       </Box>
@@ -265,23 +253,25 @@ export const HELPER_TEXT = {
   ),
   transactionLag: (
     <>
-      <Text color="offWhite2">
+      <Text color="contentSecondary">
         Transactions committed to WAL but not yet applied to table storage. Data
         in pending transactions is not visible to queries.
       </Text>
       <br />
       <br />
       <Box gap="0.5rem" align="center">
-        <ArrowUpRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">Increasing = Ingestion exceeds apply rate</Text>
+        <ArrowUpRightIcon size={16} />
+        <Text color="contentSecondary">
+          Increasing = Ingestion exceeds apply rate
+        </Text>
       </Box>
       <Box gap="0.5rem" align="center">
-        <ArrowDownRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">Decreasing = Backlog is clearing</Text>
+        <ArrowDownRightIcon size={16} />
+        <Text color="contentSecondary">Decreasing = Backlog is clearing</Text>
       </Box>
       <Box gap="0.5rem" align="center">
-        <ArrowRightIcon size={16} color="#d1d5db" />
-        <Text color="offWhite2">
+        <ArrowRightIcon size={16} />
+        <Text color="contentSecondary">
           Stable = Apply rate is keeping pace with ingestion
         </Text>
       </Box>
@@ -295,21 +285,21 @@ const getTrendAssets = (
 ): { color: string; background: string; icon: React.ReactNode | null } => {
   if (direction === "increasing") {
     return {
-      color: theme.color.orange,
-      background: `${theme.color.orange}20`,
-      icon: <TrendUpIcon size={16} color={theme.color.orange} />,
+      color: theme.color.statusWarning,
+      background: `${theme.color.statusWarning}20`,
+      icon: <TrendUpIcon size={16} color={theme.color.statusWarning} />,
     }
   }
   if (direction === "decreasing") {
     return {
-      color: theme.color.green,
-      background: `${theme.color.green}20`,
-      icon: <TrendDownIcon size={16} color={theme.color.green} />,
+      color: theme.color.statusSuccess,
+      background: `${theme.color.statusSuccess}20`,
+      icon: <TrendDownIcon size={16} color={theme.color.statusSuccess} />,
     }
   }
   return {
-    color: theme.color.foreground,
-    background: theme.color.background,
+    color: theme.color.contentPrimary,
+    background: theme.color.surfaceRaised,
     icon: null,
   }
 }
@@ -365,10 +355,17 @@ const ConfigItemWithHealth = ({
     >
       <TrendValueText $color={trendAssets?.color}>{value}</TrendValueText>
       {showTrend && trend && (
-        <TrendBadge $direction={trend.direction as "increasing" | "decreasing"}>
+        <TrendBadge
+          variant={trend.direction === "increasing" ? "warning" : "success"}
+          size="sm"
+        >
           {trendAssets?.icon}
           <RateText
-            color={trend.direction === "increasing" ? "orange" : "green"}
+            color={
+              trend.direction === "increasing"
+                ? "statusWarning"
+                : "statusSuccess"
+            }
             size="xs"
           >
             {trend.rate > 0 ? "+" : "-"}
@@ -382,12 +379,12 @@ const ConfigItemWithHealth = ({
   return (
     <ConfigItem>
       <Box gap="0.5rem" align="center">
-        <Text color="gray2" size="sm">
+        <Text color="contentSecondary" size="sm">
           {label}
         </Text>
         {helperText && (
           <Tooltip content={helperText}>
-            <InfoIcon size={12} color={theme.color.foreground} />
+            <InfoIcon size={12} color={theme.color.contentPrimary} />
           </Tooltip>
         )}
         {issue && <WarningIcon size={12} weight="fill" color={iconColor} />}
@@ -402,7 +399,7 @@ const ConfigItemWithHealth = ({
         )
       ) : (
         <Box>
-          <Text color="foreground">{value}</Text>
+          <Text color="contentPrimary">{value}</Text>
         </Box>
       )}
     </ConfigItem>
@@ -473,13 +470,13 @@ export const MonitoringTab = ({
           </RowCountBold>
           rows
           {lastWriteTimestamp && (
-            <Box gap="0.5rem" color="gray2">
-              <Text color="gray2">{"(updated "}</Text>
+            <Box gap="0.5rem" color="contentSecondary">
+              <Text color="contentSecondary">{"(updated "}</Text>
               <Tooltip
                 content={
                   <Box gap="1rem" align="center">
                     {lastWriteTimestamp}
-                    <StyledCopyButton text={lastWriteTimestamp} />
+                    <CopyButton text={lastWriteTimestamp} iconOnly size="sm" />
                   </Box>
                 }
                 placement="bottom"
@@ -507,9 +504,9 @@ export const MonitoringTab = ({
                     <CheckCircleIcon
                       size={16}
                       weight="fill"
-                      color={theme.color.green}
+                      color={theme.color.statusSuccess}
                     />
-                    <Text color="green">Valid</Text>
+                    <Text color="statusSuccess">Valid</Text>
                   </>
                 ) : matViewData.view_status === "refreshing" ? (
                   <MetricValue>Refreshing</MetricValue>
@@ -518,9 +515,9 @@ export const MonitoringTab = ({
                     <XSquareIcon
                       size={16}
                       weight="fill"
-                      color={theme.color.red}
+                      color={theme.color.statusDanger}
                     />
-                    <Text color="red">Invalid</Text>
+                    <Text color="statusDanger">Invalid</Text>
                   </>
                 )}
               </Box>
@@ -535,9 +532,9 @@ export const MonitoringTab = ({
                       <CheckCircleIcon
                         size={16}
                         weight="fill"
-                        color={theme.color.green}
+                        color={theme.color.statusSuccess}
                       />
-                      <Text color="green">Valid</Text>
+                      <Text color="statusSuccess">Valid</Text>
                     </>
                   )}
                   {(baseTableStatus === "Suspended" ||
@@ -546,9 +543,9 @@ export const MonitoringTab = ({
                       <XSquareIcon
                         size={16}
                         weight="fill"
-                        color={theme.color.red}
+                        color={theme.color.statusDanger}
                       />
-                      <Text color="red">{baseTableStatus}</Text>
+                      <Text color="statusDanger">{baseTableStatus}</Text>
                     </>
                   )}
                 </Box>
@@ -572,7 +569,7 @@ export const MonitoringTab = ({
                 {isIngestionActive && (
                   <IngestionIndicator data-hook="table-details-ingestion-active">
                     <PulsingSquare />
-                    <Text color="gray2" size="sm" weight={400}>
+                    <Text color="contentSecondary" size="sm" weight={400}>
                       Ingesting...
                     </Text>
                   </IngestionIndicator>
@@ -612,10 +609,10 @@ export const MonitoringTab = ({
                     dataHook="table-details-transaction-lag-trend"
                   />
                   <ConfigItem>
-                    <Text color="gray2" size="sm">
+                    <Text color="contentSecondary" size="sm">
                       WAL Transaction Number
                     </Text>
-                    <Text color="foreground" weight={500}>
+                    <Text color="contentPrimary" weight={500}>
                       {tableData.wal_txn != null
                         ? tableData.wal_txn.toLocaleString()
                         : "N/A"}
@@ -629,10 +626,10 @@ export const MonitoringTab = ({
                     issue={healthStatus?.fieldIssues.get("memoryPressure")}
                   />
                   <ConfigItem>
-                    <Text color="gray2" size="sm">
+                    <Text color="contentSecondary" size="sm">
                       Deduped Rows
                     </Text>
-                    <Text color="foreground" weight={500}>
+                    <Text color="contentPrimary" weight={500}>
                       {formatRowCount(
                         tableData.wal_dedup_row_count_since_start,
                       )}
@@ -680,7 +677,7 @@ export const MonitoringTab = ({
               {isIngestionActive && (
                 <IngestionIndicator>
                   <PulsingSquare />
-                  <Text color="gray2" size="sm" weight={400}>
+                  <Text color="contentSecondary" size="sm" weight={400}>
                     Ingesting...
                   </Text>
                 </IngestionIndicator>
@@ -691,9 +688,11 @@ export const MonitoringTab = ({
                 <XCircleIcon
                   size={16}
                   weight="fill"
-                  color={theme.color.gray2}
+                  color={theme.color.contentSecondary}
                 />
-                <Text color="gray2">Write-Ahead Log is disabled</Text>
+                <Text color="contentSecondary">
+                  Write-Ahead Log is disabled
+                </Text>
               </Box>
             </IngestionStatusContainer>
           </>

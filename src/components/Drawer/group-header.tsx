@@ -5,5 +5,5 @@ export const GroupHeader = styled.div`
   justify-content: center;
   width: 100%;
   padding: 2rem 0;
-  border-bottom: 0.1rem ${({ theme }) => theme.color.selection} solid;
+  border-bottom: 0.1rem ${({ theme }) => theme.color.interactionNeutral} solid;
 `

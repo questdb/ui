@@ -27,11 +27,11 @@ import styled from "styled-components"
 import { Wrapper, Content, SideContent } from "../styles"
 import { Timestamp } from "../Timestamp"
 import { NotificationShape } from "../../../../types"
-import { CloseOutline } from "@styled-icons/evaicons-outline"
+import { CloseOutline } from "../../../../components/icons"
 import { color } from "../../../../utils"
 
 const CloseOutlineIcon = styled(CloseOutline)`
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   flex-shrink: 0;
 `
 

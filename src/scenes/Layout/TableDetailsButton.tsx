@@ -1,9 +1,10 @@
 import React from "react"
 import styled from "styled-components"
 import { PrimaryToggleButton, IconWithTooltip, Box } from "../../components"
-import { Table as TableIcon } from "@styled-icons/remix-line"
+import { Table as TableIcon } from "../../components/icons"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../store"
+import { SIDEBAR_ICON_SIZE } from "../../consts"
 
 const ToggleButton = styled(PrimaryToggleButton)`
   padding: 0;
@@ -36,6 +37,7 @@ export const TableDetailsButton = () => {
 
   return (
     <ToggleButton
+      aria-label="Table details"
       selected={activeSidebar?.type === "tableDetails"}
       onClick={handleClick}
       data-hook="table-details-toggle-button"
@@ -43,7 +45,7 @@ export const TableDetailsButton = () => {
       <IconWithTooltip
         icon={
           <TooltipWrapper>
-            <TableIcon size={24} />
+            <TableIcon size={SIDEBAR_ICON_SIZE} />
           </TooltipWrapper>
         }
         placement="left"
