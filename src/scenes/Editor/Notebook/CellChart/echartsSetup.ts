@@ -15,7 +15,6 @@ import {
   TitleComponent,
 } from "echarts/components"
 import { CanvasRenderer } from "echarts/renderers"
-import { questdbTheme } from "./questdbTheme"
 
 echarts.use([
   BarChart,
@@ -31,9 +30,6 @@ echarts.use([
   TitleComponent,
   CanvasRenderer,
 ])
-
-export const QUESTDB_THEME = "questdb"
-echarts.registerTheme(QUESTDB_THEME, questdbTheme)
 
 // Pair with `echarts-for-react/lib/core` — importing the default wrapper
 // instead would pull the full echarts catalog and undo the tree-shaking.

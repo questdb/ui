@@ -129,7 +129,7 @@ const GridCell = React.memo(function GridCell({
         position: frozen ? "sticky" : "absolute",
         left,
         width,
-        ...(frozen && { zIndex: 2 }),
+        ...(isPulsing ? { zIndex: 4 } : frozen ? { zIndex: 2 } : {}),
       }}
       $isNull={loaded && rawValue === null}
       $isTimestamp={isDesignatedTimestamp}
@@ -691,6 +691,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       ) => {
         const col = header.column.columnDef.meta?.col
         const colType = col?.type ?? ""
+        const formattedType = col ? formatColumnType(col) : colType
         const align = isLeftAligned(colType) ? "left" : "right"
         return (
           <HeaderCell
@@ -724,10 +725,11 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 onCopy={onColumnCopy}
                 iconOnly
                 size="sm"
-                skin="transparent"
+                variant="ghost"
+                copiedMode="replace"
               />
             </HeaderNameRow>
-            <HeaderType>{col ? formatColumnType(col) : colType}</HeaderType>
+            <HeaderType title={formattedType}>{formattedType}</HeaderType>
             {!pos.frozen && renderResizer(header)}
           </HeaderCell>
         )

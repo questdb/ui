@@ -1,5 +1,5 @@
-import { Error } from "@styled-icons/boxicons-regular"
-import { Information } from "@styled-icons/remix-line"
+import { Error } from "../../../components/icons"
+import { Information } from "../../../components/icons"
 import React, { useContext, useEffect, useRef, useState, useMemo } from "react"
 import styled, { ThemeContext } from "styled-components"
 import uPlot from "uplot"
@@ -13,6 +13,7 @@ import {
   getXAxisFormat,
   hasData,
 } from "./utils"
+import { editorCardHeaderStyles } from "../sharedStyles"
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -20,36 +21,59 @@ const Root = styled(Box).attrs({
   gap: 0,
 })`
   position: relative;
-  background-color: ${({ theme }) => theme.color.backgroundLighter};
-  padding: 0.5rem;
-  border-radius: 0.4rem;
+  background-color: ${({ theme }) => theme.color.surfaceRaised};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
+  border-radius: 0.8rem;
+  padding: 0;
   min-height: 0;
   overflow: hidden;
   overflow-y: auto;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.color.borderDefault};
+    box-shadow: 0 16px 44px ${({ theme }) => theme.color.shadowSoft};
+  }
 `
 
 const Header = styled(Box)`
+  ${editorCardHeaderStyles}
   position: relative;
   width: 100%;
   gap: 1.5rem;
-  padding: 0.5rem 1rem;
-  align-items: flex-start;
-  justify-content: space-between;
 `
 
 const HeaderMeta = styled(Box)`
-  flex-shrink: 1;
+  align-items: center;
+  flex: 1 1 auto;
   min-width: 0;
-  flex-wrap: wrap;
+  overflow: hidden;
 `
 
 const BeforeLabel = styled.div`
+  flex: 0 1 12rem;
+  width: 12rem;
   min-width: 0;
   overflow: hidden;
-  max-width: 100%;
+`
+
+const TitleInfo = styled(Box).attrs({
+  align: "center",
+  gap: "0.8rem",
+})`
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0.6rem;
 `
 
 const HeaderText = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: ${({ theme }) => theme.color.contentPrimary};
   font-size: 1.4rem;
   line-height: 1.14;
   font-weight: 600;
@@ -60,7 +84,10 @@ const GraphWrapper = styled(Box).attrs({
   align: "center",
 })`
   position: relative;
-  padding: 1rem 0;
+  width: 100%;
+  padding: 0.4rem 0 0;
+  overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceInset};
 `
 
 const GraphOverlay = styled(Box).attrs({
@@ -83,11 +110,11 @@ const Label = styled.div`
 `
 
 const LabelValue = styled.span`
-  color: ${({ theme }) => theme.color.cyan};
+  color: ${({ theme }) => theme.color.contentAccent};
 `
 
 const ErrorIcon = styled(Error)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
 `
 
 type Props = DateRange & {
@@ -166,7 +193,7 @@ export const Graph = ({
         theme,
       }),
     )
-  }, [data, colorsString])
+  }, [data, colorsString, theme])
 
   const graphRootRef = useRef<HTMLDivElement>(null)
 
@@ -204,14 +231,14 @@ export const Graph = ({
       <Header>
         <HeaderMeta>
           <BeforeLabel>{beforeLabel}</BeforeLabel>
-          <Box gap="0.8rem" margin="0 0 0 0.6rem">
+          <TitleInfo>
             <HeaderText>{chartTitle}</HeaderText>
             <IconWithTooltip
               icon={
                 <Information
                   size="16px"
                   style={{ flexShrink: 0 }}
-                  color={theme.color.gray2}
+                  color={theme.color.contentSecondary}
                 />
               }
               tooltip={widgetConfig.getDescription({
@@ -220,7 +247,7 @@ export const Graph = ({
               })}
               placement="bottom"
             />
-          </Box>
+          </TitleInfo>
           {delayedLoading && <Loader size="18px" spin />}
           {hasError && (
             <IconWithTooltip
@@ -236,16 +263,18 @@ export const Graph = ({
         {!hasData(data) && (
           <GraphOverlay>
             {isTableMetric && !tableName ? (
-              <Text color="gray2">
+              <Text color="contentSecondary">
                 {tableId
                   ? "Table does not exist. Please select another one"
                   : "Select a table to see metrics"}
               </Text>
             ) : (
-              <Text color="gray2">No data available for this period</Text>
+              <Text color="contentSecondary">
+                No data available for this period
+              </Text>
             )}
             {canZoomToData && (
-              <Button skin="secondary" onClick={onZoomToData}>
+              <Button variant="secondary" onClick={onZoomToData}>
                 Zoom to data
               </Button>
             )}

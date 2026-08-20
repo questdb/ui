@@ -1,125 +1,212 @@
 import React from "react"
-import styled from "styled-components"
-import { Close } from "@styled-icons/remix-line"
+import styled, { keyframes } from "styled-components"
+import {
+  ArrowUpRightIcon,
+  DownloadSimpleIcon,
+  RocketLaunchIcon,
+  XIcon,
+} from "@phosphor-icons/react"
 
-import { color } from "../../../utils"
+import { Button, IconButton, type ButtonProps } from "../../../components"
+import { FOOTER_HEIGHT } from "../../../consts"
 
 type Props = Readonly<{
   onClick: () => void
 }>
 
+const bannerAttention = (
+  borderColor: string,
+  glowColor: string,
+  mediumShadow: string,
+  overlayShadow: string,
+) => keyframes`
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px ${borderColor},
+      0 0.8rem 1.8rem -0.5rem ${mediumShadow},
+      0 2rem 4.8rem -1.2rem ${overlayShadow};
+  }
+
+  45% {
+    box-shadow:
+      0 0 0 1px ${borderColor},
+      0 0 2.4rem ${glowColor},
+      0 0.8rem 1.8rem -0.5rem ${mediumShadow},
+      0 2rem 4.8rem -1.2rem ${overlayShadow};
+  }
+`
+
 const Wrapper = styled.div`
-  box-sizing: content-box;
   position: fixed;
+  z-index: 30;
+  box-sizing: border-box;
   display: flex;
-  bottom: 1.6rem;
+  bottom: calc(${FOOTER_HEIGHT} + 1.2rem);
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.4rem 1.5rem;
+  width: min(75rem, calc(100vw - 3.2rem));
+  padding: 0.9rem 1rem 0.9rem 1.2rem;
+  gap: 1.2rem;
   align-items: center;
-  justify-content: center;
-  background: ${color("pinkPrimary")};
+  background: ${({ theme }) => theme.color.surfaceOverlay};
+  border: 1px solid ${({ theme }) => theme.color.actionPrimary};
+  border-radius: 0.8rem;
+  box-shadow:
+    0 0 0 1px ${({ theme }) => theme.color.borderAccent},
+    0 0.8rem 1.8rem -0.5rem ${({ theme }) => theme.color.shadowMedium},
+    0 2rem 4.8rem -1.2rem ${({ theme }) => theme.color.shadowOverlay};
+  color: ${({ theme }) => theme.color.contentPrimary};
+  will-change: transform, opacity;
   overflow: hidden;
-  border-radius: 10rem;
-  max-width: none;
-  white-space: nowrap;
-  min-width: fit-content;
-`
-
-const Text = styled.p`
-  font-size: 1.5rem;
-  color: ${color("white")};
-  margin: 0 5rem 0 0;
+  animation: ${({ theme }) =>
+      bannerAttention(
+        theme.color.borderAccentStrong,
+        theme.color.borderAccent,
+        theme.color.shadowMedium,
+        theme.color.shadowOverlay,
+      )}
+    2.2s ease-in-out 500ms 1;
 
   @media (max-width: 700px) {
-    display: none;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: calc(100vw - 2rem);
+    bottom: calc(${FOOTER_HEIGHT} + 0.8rem);
+    gap: 0.8rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
   }
 `
 
-const DownloadLink = styled.a`
-  display: inline-flex;
-  height: 3rem;
-  padding: 0 1.3rem;
+const BrandMark = styled.div`
+  display: flex;
+  width: 3.8rem;
+  min-width: 3.8rem;
+  height: 3.8rem;
   align-items: center;
   justify-content: center;
-  background: ${color("white")};
-  border-radius: 4px;
-  border: 1px solid ${color("white")};
-  outline: 0;
-  font-weight: 700;
-  line-height: 1.15;
-  cursor: pointer;
-  text-decoration: none;
-  margin-right: 2rem;
-  font-size: 13.13px;
-  color: ${color("black")};
+  background: ${({ theme }) => theme.color.actionPrimary};
+  border: 1px solid ${({ theme }) => theme.color.actionPrimaryHover};
+  border-radius: 0.6rem;
+  color: ${({ theme }) => theme.color.contentInverse};
 
-  &:hover {
-    background: ${color("white")} !important;
-    border-color: ${color("white")} !important;
-    text-decoration: underline;
-    color: ${color("black")} !important;
-  }
-
-  @media (max-width: 700px) {
-    margin-left: 1rem;
-  }
-`
-
-const EnterpriseLink = styled.a`
-  font-size: 13.13px;
-  font-weight: 700;
-  color: ${color("white")};
-  text-decoration: none;
-  margin-right: 2rem;
-
-  &:hover {
-    text-decoration: underline;
-  }
-
-  @media (max-width: 700px) {
-    display: none;
-  }
-`
-
-const EnterpriseLinkSmall = styled(EnterpriseLink)`
-  display: none;
-
-  @media (max-width: 700px) {
+  svg {
     display: block;
   }
 `
 
-const CloseIcon = styled(Close)`
-  color: ${color("white")};
-  cursor: pointer;
+const Message = styled.div`
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+`
+
+const Title = styled.p`
+  margin: 0;
+  overflow: hidden;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`
+
+const Description = styled.p`
+  margin: 0;
+  overflow: hidden;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.2rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @media (max-width: 700px) {
+    display: none;
+  }
+`
+
+const Actions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+
+  @media (max-width: 700px) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+
+    & > * {
+      flex: 1;
+    }
+  }
+`
+
+const LinkButton = (props: ButtonProps) => <Button {...props} as="a" />
+
+const DownloadLink = styled(LinkButton).attrs({
+  variant: "primary",
+  size: "md",
+})`
+  text-decoration: none;
+`
+
+const EnterpriseLink = styled(LinkButton).attrs({
+  variant: "tertiary",
+  size: "md",
+})`
+  text-decoration: none;
+`
+
+const CloseButton = styled(IconButton)`
+  color: ${({ theme }) => theme.color.contentSecondary};
+
+  @media (max-width: 700px) {
+    grid-column: 3;
+    grid-row: 1;
+  }
 `
 
 const CtaBanner = ({ onClick }: Props) => (
   <Wrapper>
-    <Text>Ready to get started?</Text>
-    <DownloadLink
-      href="https://questdb.com/download"
-      target="_blank"
-      rel="noopener noreferrer"
+    <BrandMark aria-hidden="true">
+      <RocketLaunchIcon size={20} weight="duotone" />
+    </BrandMark>
+    <Message>
+      <Title>Ready to build with QuestDB?</Title>
+      <Description>
+        Start locally, or explore Enterprise for production workloads.
+      </Description>
+    </Message>
+    <Actions>
+      <DownloadLink
+        href="https://questdb.com/download"
+        target="_blank"
+        rel="noopener noreferrer"
+        prefixIcon={<DownloadSimpleIcon size={17} weight="bold" />}
+      >
+        Download
+      </DownloadLink>
+      <EnterpriseLink
+        href="https://questdb.com/enterprise"
+        target="_blank"
+        rel="noopener noreferrer"
+        trailingIcon={<ArrowUpRightIcon size={16} weight="bold" />}
+      >
+        Explore Enterprise
+      </EnterpriseLink>
+    </Actions>
+    <CloseButton
+      label="Dismiss banner"
+      variant="ghost"
+      size="sm"
+      onClick={onClick}
     >
-      Download
-    </DownloadLink>
-    <EnterpriseLink
-      href="https://questdb.com/enterprise"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      Learn more about QuestDB Enterprise &rarr;
-    </EnterpriseLink>
-    <EnterpriseLinkSmall
-      href="https://questdb.com/enterprise"
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      QuestDB Enterprise &rarr;
-    </EnterpriseLinkSmall>
-    <CloseIcon onClick={onClick} size="22px" />
+      <XIcon size={18} />
+    </CloseButton>
   </Wrapper>
 )
 

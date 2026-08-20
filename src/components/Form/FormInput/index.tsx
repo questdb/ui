@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react"
 import { useFormContext } from "react-hook-form"
 import styled, { css } from "styled-components"
-import { Button } from "../../Button"
+import { IconButton } from "../../IconButton"
 import { Input as UnstyledInput } from "../../Input"
-import { Eye, EyeOff } from "@styled-icons/remix-line"
+import { Eye, EyeOff } from "../../icons"
 
 export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string
@@ -48,7 +48,6 @@ const Wrapper = styled.div<{
 const Input = styled(UnstyledInput)<
   FormInputProps & { $inputType: FormInputProps["type"] }
 >`
-  ${(props) => props.disabled && `opacity: 0.7;`}
   ${({ $inputType }) =>
     $inputType === "password" &&
     css`
@@ -57,20 +56,9 @@ const Input = styled(UnstyledInput)<
     `}
 `
 
-const ToggleButton = styled(Button)`
-  cursor: pointer;
-  border-radius: 0;
+const ToggleButton = styled(IconButton)`
   position: absolute;
   right: 1.2rem;
-  padding: 0;
-
-  &:hover {
-    background: transparent !important;
-
-    svg {
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
 `
 
 export const FormInput = ({
@@ -83,9 +71,10 @@ export const FormInput = ({
   autoComplete,
   ...rest
 }: FormInputProps) => {
-  const { register, setFocus } = useFormContext()
+  const { formState, getFieldState, register, setFocus } = useFormContext()
 
   const [passwordShown, setPasswordShown] = useState(showPassword)
+  const hasError = getFieldState(name, formState).error != null
 
   const handleTogglePassword = useCallback(() => {
     setPasswordShown(!passwordShown)
@@ -111,12 +100,15 @@ export const FormInput = ({
         showPassword={showPassword}
         autoComplete={autoComplete}
         {...rest}
+        id={name}
+        aria-invalid={hasError || undefined}
+        aria-describedby={hasError ? `${name}-error` : undefined}
       />
       {type === "password" && (
         <ToggleButton
-          skin="transparent"
+          label="Toggle password visibility"
+          variant="ghost"
           onClick={handleTogglePassword}
-          title="Toggle password visibility"
           type="button"
         >
           {passwordShown ? <Eye size="20px" /> : <EyeOff size="20px" />}

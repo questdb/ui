@@ -1,53 +1,78 @@
 import React, { useEffect, useState } from "react"
 import styled from "styled-components"
 import { useSettings } from "../../providers"
-import { Close, ErrorWarning, ExternalLink } from "@styled-icons/remix-line"
+import { Close, ErrorWarning, ExternalLink } from "../../components/icons"
 import { errorWorkarounds } from "../../utils/errorWorkarounds"
-import { Box } from "../../components"
+import { IconButton } from "../../components"
 import { ErrorTag } from "utils"
 
-const WarningRoot = styled(Box).attrs({
-  align: "center",
-  justifyContent: "space-between",
-})`
-  width: 100%;
-  height: 4rem;
-  background: #f8a24d;
-  color: #000;
-`
-
-const Content = styled(Box).attrs({ gap: "0.5rem" })`
-  padding: 0 1.5rem;
-`
-
-const CloseButton = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  border: 0;
-  cursor: pointer;
-  width: 4.5rem;
-  height: 4.5rem;
-`
-
-const WarningText = styled.span`
-  font-weight: 600;
-`
-
-const WorkaroundLink = styled.a`
+const WarningsRoot = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-left: 0.5rem;
-  color: #000;
+  flex-direction: column;
+  width: 100%;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderDefault};
+  background: ${({ theme }) => theme.color.surfaceBase};
+`
 
-  &:hover {
-    text-decoration: none;
+const WarningRoot = styled.div`
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  min-height: 4.8rem;
+  padding: 0.7rem 1rem 0.7rem 1.4rem;
+  background: ${({ theme }) => theme.color.statusWarningSurface};
+  color: ${({ theme }) => theme.color.contentPrimary};
+
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.color.borderDefault};
   }
 `
 
-const CloseIcon = styled(Close)`
-  color: #000;
+const WarningIcon = styled(ErrorWarning)`
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.color.statusWarning};
+`
+
+const Content = styled.div`
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  min-width: 0;
+  line-height: 1.45;
+`
+
+const WarningText = styled.span`
+  min-width: 0;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: ${({ theme }) => theme.fontSize.md};
+  font-weight: 500;
+`
+
+const WorkaroundLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: ${({ theme }) => theme.color.statusInfo};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline-offset: 2px;
+    border-radius: 0.2rem;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
 `
 
 export const Warnings = () => {
@@ -63,12 +88,7 @@ export const Warnings = () => {
   if (open.length === 0) return null
 
   return (
-    <Box
-      flexDirection="column"
-      gap="0.1rem"
-      style={{ width: "100%" }}
-      data-hook="warnings"
-    >
+    <WarningsRoot data-hook="warnings">
       {warnings
         .filter((warning) => open.includes(warning.tag))
         .map((warning) => (
@@ -76,9 +96,8 @@ export const Warnings = () => {
             key={`${warning.tag}-${warning.warning}`}
             data-hook="warning"
           >
+            <WarningIcon size={20} weight="fill" aria-hidden />
             <Content>
-              <ErrorWarning size="20px" />
-              Warning:{" "}
               <WarningText data-hook="warning-text">
                 {warning.warning}
               </WarningText>
@@ -89,21 +108,24 @@ export const Warnings = () => {
                   target="_blank"
                   data-hook="warning-workaround-link"
                 >
-                  <ExternalLink size="16px" />
                   {errorWorkarounds[warning.tag].title}
+                  <ExternalLink size={14} />
                 </WorkaroundLink>
               )}
             </Content>
-            <CloseButton
-              data-hook="warning-close-button"
+            <IconButton
+              label="Dismiss warning"
+              variant="ghost"
+              size="sm"
+              dataHook="warning-close-button"
               onClick={() =>
                 setOpen(open.filter((errorTag) => errorTag !== warning.tag))
               }
             >
-              <CloseIcon size="20px" />
-            </CloseButton>
+              <Close size={16} />
+            </IconButton>
           </WarningRoot>
         ))}
-    </Box>
+    </WarningsRoot>
   )
 }

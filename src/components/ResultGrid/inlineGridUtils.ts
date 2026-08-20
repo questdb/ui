@@ -27,9 +27,10 @@ const HEADER_CHROME_PX =
 
 const CELL_CHROME_PX = CELL_PADDING_PX + CELL_BORDER_PX
 
-const CELL_FONT = `${CELL_FONT_SIZE_PX}px ${theme.font}`
+const CELL_FONT = `${CELL_FONT_SIZE_PX}px ${theme.fontMonospace}`
 const HEADER_NAME_FONT = `${HEADER_NAME_FONT_SIZE_PX}px ${theme.font}`
 const HEADER_TYPE_FONT = `${HEADER_TYPE_FONT_SIZE_PX}px ${theme.font}`
+const TEXT_MEASUREMENT_SAFETY_PX = 4
 
 // No glyph in the cell font is narrower than punctuation, so available width
 // over this advance bounds how many chars can fit.
@@ -143,7 +144,10 @@ const isArrayColumn = (col: ColumnDefinition): boolean => col.type === "ARRAY"
 
 const cellWidth = (text: string): number => {
   const width = fastCellTextWidth(text) ?? measureTextWidth(text, CELL_FONT)
-  return Math.max(MIN_COLUMN_WIDTH, Math.ceil(width) + CELL_CHROME_PX)
+  return Math.max(
+    MIN_COLUMN_WIDTH,
+    Math.ceil(width) + CELL_CHROME_PX + TEXT_MEASUREMENT_SAFETY_PX,
+  )
 }
 
 const getArrayString = (value: unknown): string => {
@@ -274,7 +278,7 @@ export const sampleColumnWidths = (
     )
     let width = Math.max(
       MIN_COLUMN_WIDTH,
-      Math.ceil(headerTextPx) + HEADER_CHROME_PX,
+      Math.ceil(headerTextPx) + HEADER_CHROME_PX + TEXT_MEASUREMENT_SAFETY_PX,
     )
 
     for (const row of rows) {

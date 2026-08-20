@@ -6,7 +6,7 @@ import { useFormContext } from "react-hook-form"
 type Props<TFormValues> = {
   children: React.ReactNode
   disabled?: boolean
-  variant?: "warning" | "secondary"
+  variant?: ButtonProps["variant"]
   prefixIcon?: ButtonProps["prefixIcon"]
   defaultValues?: TFormValues
   onClick?: () => void
@@ -32,7 +32,7 @@ export const FormCancel = <TFormValues extends Record<string, unknown>>({
         }
       }}
       disabled={disabled}
-      skin={variant ?? "secondary"}
+      variant={variant ?? "secondary"}
       prefixIcon={prefixIcon}
       dataHook="form-cancel-button"
     >

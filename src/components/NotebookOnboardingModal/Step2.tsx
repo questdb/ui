@@ -32,7 +32,7 @@ const Instruction = styled.p`
   margin: 0;
   font-size: 1.4rem;
   line-height: 1.4;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const CommandBox = styled.div`
@@ -41,10 +41,10 @@ const CommandBox = styled.div`
   gap: 1.2rem;
   width: 100%;
   padding: 0.7rem 0.7rem 0.7rem 1.7rem;
-  background: #111111;
-  border: 1px solid rgba(252, 252, 252, 0.2);
+  background: ${({ theme }) => theme.color.onboardingCommand};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.5rem;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 1px ${({ theme }) => theme.color.shadowSubtle};
 `
 
 const CreateButton = styled(Button)`
@@ -103,7 +103,7 @@ export const Step2 = ({
       />
 
       <CreateButton
-        skin="primary"
+        variant="primary"
         onClick={onCreateNotebook}
         dataHook={PRIMARY_BUTTON_HOOK}
       >

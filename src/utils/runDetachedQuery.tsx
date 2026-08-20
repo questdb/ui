@@ -84,7 +84,7 @@ export async function runDetachedQuery(
           {
             query: queryKey,
             content: (
-              <Text color="foreground" ellipsis title={normalizedSQL}>
+              <Text color="contentPrimary" ellipsis title={normalizedSQL}>
                 {result.notice}
                 {normalizedSQL !== "" ? `: ${normalizedSQL}` : ""}
               </Text>
@@ -137,7 +137,7 @@ export async function runDetachedQuery(
         {
           query: queryKey,
           content: (
-            <Text color="red">
+            <Text color="statusDanger">
               {error.error || error.message || "Query execution failed"}
             </Text>
           ),

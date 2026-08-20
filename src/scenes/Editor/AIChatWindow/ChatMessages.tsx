@@ -10,7 +10,12 @@ import { useDispatch, useSelector } from "react-redux"
 import { actions, selectors } from "../../../store"
 import styled, { css, useTheme, type DefaultTheme } from "styled-components"
 import { LiteEditor } from "../../../components/LiteEditor"
-import { Box, Text, Button } from "../../../components"
+import {
+  Box,
+  Text,
+  Button,
+  IconButton as SharedIconButton,
+} from "../../../components"
 import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
 import { color, getTableKind } from "../../../utils"
 import type {
@@ -37,9 +42,9 @@ import {
   XSquareIcon,
   WarningIcon,
 } from "@phosphor-icons/react"
-import { CloseCircle } from "@styled-icons/remix-fill"
-import { Stop } from "@styled-icons/remix-line"
-import { CheckmarkOutline, CloseOutline } from "@styled-icons/evaicons-outline"
+import { CloseCircle } from "../../../components/icons"
+import { Stop } from "../../../components/icons"
+import { CheckmarkOutline, CloseOutline } from "../../../components/icons"
 import { TableIcon } from "../../Schema/table-icon"
 import { AssistantMessageContent } from "./AssistantMessageContent"
 import type { QueryNotifications } from "../../../store/Query/types"
@@ -79,8 +84,8 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   border-radius: 0.8rem;
   width: 100%;
   align-self: flex-end;
-  background: ${color("loginBackground")};
-  border: 1px solid ${color("black32")};
+  background: ${color("authBackdrop")};
+  border: 1px solid ${color("borderDefault")};
   flex-shrink: 0;
 `
 
@@ -91,8 +96,8 @@ const UserRequestBox = styled(Box)`
   padding: 0.8rem;
   width: 100%;
   align-self: flex-end;
-  background: ${color("loginBackground")};
-  border: 1px solid ${color("black32")};
+  background: ${color("authBackdrop")};
+  border: 1px solid ${color("borderDefault")};
   border-radius: 0.6rem;
   flex-shrink: 0;
 `
@@ -133,8 +138,8 @@ const BadgeIconContainer = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background: ${color("aiBadgeIconBg")};
-  border: 1px solid ${color("aiBadgeIconBorder")};
+  background: ${color("interactionAccentActive")};
+  border: 1px solid ${color("borderAccent")};
   border-radius: 0.4rem;
   padding: 0.8rem;
   width: 4.8rem;
@@ -148,7 +153,7 @@ const BadgeIconWrapper = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.color.pink};
+  color: ${({ theme }) => theme.color.contentAccent};
 
   svg {
     width: 100%;
@@ -160,7 +165,7 @@ const BadgeTitle = styled(Text)`
   font-weight: 500;
   font-size: 1.6rem;
   line-height: 1.6rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const BadgeDescriptionContainer = styled(Box)`
@@ -173,7 +178,7 @@ const BadgeDescriptionContainer = styled(Box)`
 const BadgeDescriptionText = styled(Text)`
   font-size: 1.4rem;
   line-height: 2.1rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const BadgeDescriptionIssueText = styled(Text)<{
@@ -190,31 +195,23 @@ const IssueMessageRow = styled(Box)`
   gap: 0.5rem;
 `
 
-const SchemaNameDisplay = styled(Button)`
+const SchemaNameDisplay = styled(Button).attrs({ variant: "tertiary" })`
   margin-left: 0.4rem;
   padding: 0.5rem 1rem;
   align-items: center;
   gap: 1rem;
   border-radius: 0.6rem;
-  border: 1px solid ${color("selection")};
-  background: ${color("backgroundDarker")};
-
-  &:hover,
-  &:active {
-    background: ${color("backgroundLighter")} !important;
-    border-color: ${color("cyan")} !important;
-  }
 `
 
 const SchemaName = styled(Text)`
   font-size: 1.4rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const MessageContent = styled(Text)`
   font-size: 1.4rem;
   line-height: 1.8rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   white-space: pre-wrap;
   word-wrap: break-word;
 `
@@ -258,9 +255,9 @@ const ErrorContainer = styled.div`
   flex-shrink: 0;
   gap: 0.5rem;
   padding: 0.4rem 0.4rem 0.4rem 0.8rem;
-  border: 1px solid ${color("red")};
+  border: 1px solid ${color("statusDanger")};
   border-radius: 0.6rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   font-size: 1.4rem;
   line-height: 2rem;
   width: 100%;
@@ -285,9 +282,9 @@ const DiffContainer = styled(Box)`
   gap: 1rem;
   margin-top: 1rem;
   padding: 0.8rem 1.2rem;
-  border: 1px solid ${color("selection")};
+  border: 1px solid ${color("interactionNeutral")};
   border-radius: 0.8rem;
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   width: 100%;
 `
 
@@ -296,7 +293,7 @@ const DiffHeader = styled(Box)<{ $isExpanded?: boolean }>`
   align-items: center;
   justify-content: space-between;
   padding-bottom: 0.8rem;
-  border-bottom: 1px solid ${color("selectionDarker")};
+  border-bottom: 1px solid ${color("interactionNeutralHover")};
   width: 100%;
   ${({ $isExpanded }) =>
     !$isExpanded &&
@@ -315,7 +312,7 @@ const DiffHeaderLeft = styled(Box)`
 
 const DiffHeaderLabel = styled.span`
   font-size: 1.4rem;
-  color: ${color("offWhite")};
+  color: ${color("contentSecondary")};
 `
 
 const DiffHeaderRight = styled(Box)`
@@ -334,10 +331,10 @@ const DiffHeaderStatus = styled(Box)<{
   align-items: center;
   gap: 0.8rem;
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
-    if ($isRejected) return color("red")
-    if ($isRejectedWithFollowUp) return color("cyan")
-    if ($isAccepted) return color("greenDarker")
-    return color("gray2")
+    if ($isRejected) return color("statusDanger")
+    if ($isRejectedWithFollowUp) return color("statusInfo")
+    if ($isAccepted) return color("statusSuccessStrong")
+    return color("contentSecondary")
   }};
   font-size: 1.3rem;
 `
@@ -350,24 +347,15 @@ const StatusIcon = styled.span<{
   display: flex;
   align-items: center;
   color: ${({ $isAccepted, $isRejected, $isRejectedWithFollowUp }) => {
-    if ($isRejected) return color("red")
-    if ($isRejectedWithFollowUp) return color("cyan")
-    if ($isAccepted) return color("greenDarker")
-    return color("gray2")
+    if ($isRejected) return color("statusDanger")
+    if ($isRejectedWithFollowUp) return color("statusInfo")
+    if ($isAccepted) return color("statusSuccessStrong")
+    return color("contentSecondary")
   }};
 `
 
-const IconButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  height: 2.2rem;
-  width: 2.2rem;
-  color: ${color("gray2")};
+const IconButton = styled(SharedIconButton)`
+  color: ${color("contentSecondary")};
 
   &:hover:not(:disabled) {
     svg {
@@ -398,34 +386,17 @@ const ButtonBar = styled(Box)`
   flex-shrink: 0;
   width: fit-content;
   margin: 0 auto;
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
+  background: ${color("surfaceInset")};
+  border: 1px solid ${color("interactionNeutral")};
   border-radius: 0.4rem;
 `
 
-const AcceptButton = styled(Button)`
-  background: ${({ theme }) => theme.color.pinkDarker};
-  color: ${color("foreground")};
-  border: 0.1rem solid ${({ theme }) => theme.color.pinkDarker};
+const AcceptButton = styled(Button).attrs({ variant: "primary" })`
   width: 10rem;
-
-  &:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.pinkDarker};
-    border-color: ${({ theme }) => theme.color.pinkDarker};
-    filter: brightness(1.2);
-  }
 `
 
-const RejectButton = styled(Button)`
-  background: ${color("background")};
-  color: ${color("foreground")};
-  border: 1px solid transparent;
+const RejectButton = styled(Button).attrs({ variant: "secondary" })`
   width: 10rem;
-
-  &:hover:not(:disabled) {
-    background: ${color("selection")};
-    border-color: transparent;
-  }
 `
 
 export type OpenInEditorContent =
@@ -502,7 +473,7 @@ const getOperationBadgeInfo = (
 const getQueryStatusIcon = (status: QueryRunStatus, theme: DefaultTheme) => {
   switch (status) {
     case "loading":
-      return <Stop size={24} color={theme.color.red} />
+      return <Stop size={24} color={theme.color.statusDanger} />
     case "success":
       return <SuccessIcon />
     case "error":
@@ -766,17 +737,21 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                             <XSquareIcon
                               size={14}
                               weight="fill"
-                              color={theme.color.red}
+                              color={theme.color.statusDanger}
                             />
                           ) : (
                             <WarningIcon
                               size={14}
                               weight="fill"
-                              color={theme.color.orange}
+                              color={theme.color.statusWarning}
                             />
                           )}
                           <BadgeDescriptionIssueText
-                            color={severity === "critical" ? "red" : "orange"}
+                            color={
+                              severity === "critical"
+                                ? "statusDanger"
+                                : "statusWarning"
+                            }
                           >
                             {message.displayHealthIssueData.issueMessage}
                           </BadgeDescriptionIssueText>
@@ -943,7 +918,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               <DiffContainer data-hook="inline-diff-container">
                 <DiffHeader $isExpanded={isExpanded}>
                   <DiffHeaderLeft>
-                    <CodeIcon size={22} color={theme.color.offWhite} />
+                    <CodeIcon size={22} color={theme.color.contentSecondary} />
                     <DiffHeaderLabel>Suggested change</DiffHeaderLabel>
                   </DiffHeaderLeft>
                   {isSQLUnchanged && (
@@ -990,6 +965,12 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                     )}
                   <DiffHeaderRight>
                     <IconButton
+                      label={
+                        queryRunStatus === "loading"
+                          ? "Cancel query"
+                          : "Run this query"
+                      }
+                      size="sm"
                       onClick={(e) => {
                         e.stopPropagation()
                         if (queryRunStatus === "loading" && message.sql) {
@@ -1021,6 +1002,8 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                       !(originalIndex === latestDiffIndex && isAccepted) &&
                       !isCurrentQuery && (
                         <IconButton
+                          label="Apply to editor"
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (
@@ -1041,11 +1024,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
                         >
                           <KeyReturnIcon
                             size={22}
-                            color={theme.color.offWhite}
+                            color={theme.color.contentSecondary}
                           />
                         </IconButton>
                       )}
                     <ExpandButton
+                      label={
+                        isExpanded ? "Collapse diff view" : "Expand diff view"
+                      }
+                      size="sm"
                       title="Expand diff view"
                       aria-label={
                         isExpanded ? "Collapse diff view" : "Expand diff view"
@@ -1114,14 +1101,14 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               <ErrorContainer role="alert" data-hook="chat-message-error">
                 <CloseCircle
                   size={16}
-                  color={theme.color.red}
+                  color={theme.color.statusDanger}
                   style={{ flexShrink: 0 }}
                 />
                 {message.error}
                 {showRetry && onRetry && (
                   <RetryButton
                     size="sm"
-                    skin="secondary"
+                    variant="secondary"
                     prefixIcon={<ArrowCounterClockwiseIcon size={12} />}
                     onClick={() => {
                       const userMessageIndex = messages

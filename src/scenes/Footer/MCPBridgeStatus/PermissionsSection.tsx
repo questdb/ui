@@ -1,8 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { CaretDown } from "@styled-icons/boxicons-regular"
-import { Button } from "../../../components"
-import { DropdownMenu } from "../../../components/DropdownMenu"
+import { SelectMenu } from "../../../components"
 import type { Permissions } from "../../../utils/tools/permissions"
 
 type Level = "none" | "schema" | "read" | "write"
@@ -59,7 +57,7 @@ const Field = styled.div`
 `
 
 const FieldLabel = styled.span`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   text-transform: uppercase;
   font-weight: 600;
 `
@@ -67,67 +65,7 @@ const FieldLabel = styled.span`
 const RichTitle = styled.span`
   font-size: 1.8rem;
   font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const TriggerButton = styled(Button).attrs({ skin: "secondary" })`
-  justify-content: space-between;
-  width: 100%;
-  height: 5.5rem;
-  padding: 0.6rem 1.2rem;
-  gap: 1.2rem;
-  font-weight: 400;
-`
-
-const TriggerLabel = styled.span`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  min-width: 0;
-  text-align: left;
-`
-
-const TriggerTitle = styled.span`
-  font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const TriggerHint = styled.span`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.gray2};
-`
-
-const Content = styled(DropdownMenu.Content)`
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
-  padding: 0.4rem;
-  min-width: var(--radix-dropdown-menu-trigger-width);
-`
-
-const ItemRoot = styled.div`
-  position: relative;
-`
-
-const Item = styled(DropdownMenu.Item)`
-  padding: 0.8rem 2.4rem 0.8rem 1rem;
-`
-
-const ItemLabel = styled.span`
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme.color.foreground};
-`
-
-const Check = styled.span`
-  position: absolute;
-  right: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${({ theme }) => theme.color.pinkPrimary};
-  font-size: 1.3rem;
-  pointer-events: none;
+  color: ${({ theme }) => theme.color.contentPrimary};
 `
 
 type Props = {
@@ -146,49 +84,51 @@ export const PermissionsSection: React.FC<Props> = ({
   const currentLevel = levelFromPermissions(value)
   const current = OPTIONS.find((o) => o.level === currentLevel) ?? OPTIONS[0]
 
-  const handleSelect = (level: Level) => {
-    onChange(PERMISSIONS_BY_LEVEL[level])
+  const handleSelect = (level: string) => {
+    onChange(PERMISSIONS_BY_LEVEL[level as Level])
   }
 
   const trigger = (
-    <DropdownMenu.Trigger asChild>
-      <TriggerButton disabled={disabled} dataHook="permissions-trigger">
-        <TriggerLabel>
-          <TriggerTitle>{current.label}</TriggerTitle>
-          <TriggerHint>{current.hint}</TriggerHint>
-        </TriggerLabel>
-        <CaretDown size={16} />
-      </TriggerButton>
-    </DropdownMenu.Trigger>
+    <SelectMenu.Trigger
+      disabled={disabled}
+      dataHook="permissions-trigger"
+      label={current.label}
+      description={current.hint}
+      fullWidth
+      rich
+    />
   )
 
   const content = (
-    <DropdownMenu.Portal>
-      <Content sideOffset={4} align="start">
-        {OPTIONS.map((opt) => (
-          <ItemRoot key={opt.level}>
-            <Item
-              onSelect={() => handleSelect(opt.level)}
+    <SelectMenu.Portal>
+      <SelectMenu.Content sideOffset={4} align="start">
+        <SelectMenu.RadioGroup
+          value={currentLevel}
+          onValueChange={handleSelect}
+        >
+          {OPTIONS.map((opt) => (
+            <SelectMenu.Item
+              key={opt.level}
+              value={opt.level}
+              description={opt.hint}
               data-hook={`permission-level-${opt.level}`}
-              subtitle={opt.hint}
             >
-              <ItemLabel>{opt.label}</ItemLabel>
-            </Item>
-            {opt.level === currentLevel && <Check>✓</Check>}
-          </ItemRoot>
-        ))}
-      </Content>
-    </DropdownMenu.Portal>
+              {opt.label}
+            </SelectMenu.Item>
+          ))}
+        </SelectMenu.RadioGroup>
+      </SelectMenu.Content>
+    </SelectMenu.Portal>
   )
 
   if (variant === "rich") {
     return (
       <Field data-hook="permissions">
         <RichTitle>Permissions</RichTitle>
-        <DropdownMenu.Root modal={false}>
+        <SelectMenu.Root modal={false}>
           {trigger}
           {content}
-        </DropdownMenu.Root>
+        </SelectMenu.Root>
       </Field>
     )
   }
@@ -196,10 +136,10 @@ export const PermissionsSection: React.FC<Props> = ({
   return (
     <Field data-hook="permissions">
       <FieldLabel>Permissions</FieldLabel>
-      <DropdownMenu.Root modal={false}>
+      <SelectMenu.Root modal={false}>
         {trigger}
         {content}
-      </DropdownMenu.Root>
+      </SelectMenu.Root>
     </Field>
   )
 }

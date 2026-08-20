@@ -1,7 +1,7 @@
 import React from "react"
 import styled from "styled-components"
-import { ErrorWarning } from "@styled-icons/remix-fill"
-import { useFormContext, FieldError } from "react-hook-form"
+import { ErrorWarning } from "../../icons"
+import { useFormContext } from "react-hook-form"
 import { Box } from "../../../components/Box"
 import { Text } from "../../../components/Text"
 
@@ -26,7 +26,7 @@ const Root = styled.div<Pick<Props, "disabled" | "border">>`
   ${({ border, theme }) =>
     border &&
     `
-    border-bottom: 1px ${theme.color.background} solid;
+    border-bottom: 1px ${theme.color.borderSubtle} solid;
   `}
 `
 
@@ -45,15 +45,15 @@ const LabelWrapper = styled.div`
 `
 
 const Label = styled.label<{ htmlFor: string }>`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const AfterLabel = styled.span`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 const ErrorIcon = styled(ErrorWarning)`
-  color: ${({ theme }) => theme.color.red};
+  color: ${({ theme }) => theme.color.statusDanger};
 `
 
 export const FormItem = ({
@@ -67,11 +67,9 @@ export const FormItem = ({
   border,
   required,
 }: Props) => {
-  const {
-    formState: { errors },
-  } = useFormContext()
+  const { formState, getFieldState } = useFormContext()
 
-  const error = errors[name] as FieldError | undefined
+  const error = getFieldState(name, formState).error
 
   return (
     <Root className={className} disabled={disabled} border={border}>
@@ -80,7 +78,7 @@ export const FormItem = ({
           <LabelWrapper>
             <Label htmlFor={name}>
               {label}
-              {required ? <Text color="red"> *</Text> : ""}
+              {required ? <Text color="statusDanger"> *</Text> : ""}
             </Label>
             <AfterLabel>{afterLabel}</AfterLabel>
           </LabelWrapper>
@@ -92,7 +90,7 @@ export const FormItem = ({
         !error &&
         helperText &&
         (typeof helperText === "string" ? (
-          <Text color="comment" size="sm">
+          <Text color="contentMuted" size="sm">
             {helperText}
           </Text>
         ) : (
@@ -100,9 +98,9 @@ export const FormItem = ({
         ))}
 
       {name && error && (
-        <Box align="center" gap="1rem">
+        <Box id={`${name}-error`} align="center" gap="1rem" role="alert">
           <ErrorIcon size="20px" />
-          <Text color="red" size="sm">
+          <Text color="statusDanger" size="sm">
             {error.message}
           </Text>
         </Box>

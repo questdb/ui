@@ -30,9 +30,14 @@ html {
 }
 
 body {
-  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto,
+  font-family:
+    "Open Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    Helvetica,
+    Roboto,
     sans-serif;
-  background-color: #21222c;
+  background-color: theme-color(surfaceCanvas);
   font-size: 13px;
   color: $text-color;
   overflow-x: hidden;
@@ -50,25 +55,6 @@ body {
   left: 0;
 }
 
-::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-  background: #21222c;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #44475a;
-}
-
-::-webkit-scrollbar-corner {
-  background: rgba(0, 0, 0, 0);
-}
-
-* {
-  scrollbar-color: #44475a #21222c;
-  scrollbar-width: thin;
-}
-
 html,
 body {
   height: 100%;
@@ -80,12 +66,12 @@ body #page-wrapper {
 }
 
 body.boxed-layout #wrapper {
-  background-color: #191a21;
+  background-color: theme-color(editorBorder);
   max-width: $boxed-width;
   margin: 0 auto;
-  -webkit-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.75);
-  -moz-box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.75);
-  box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.75);
+  -webkit-box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
+  -moz-box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
+  box-shadow: 0 0 5px 0 theme-color(shadowOverlay);
 }
 
 .top-navigation.boxed-layout #wrapper,
@@ -142,14 +128,14 @@ textarea {
 
 .hr-line-dashed {
   border-top: 1px dashed $border-color;
-  color: #ffffff;
-  background-color: #ffffff;
+  color: theme-color(contentInverse);
+  background-color: theme-color(contentInverse);
   height: 1px;
   margin: 20px 0;
 }
 
 .hr-line-solid {
-  background-color: rgba(0, 0, 0, 0);
+  background-color: theme-color(transparent);
   border-style: solid $border-color !important;
   margin-top: 15px;
   margin-bottom: 15px;
@@ -233,7 +219,7 @@ ol.unstyled {
 
 .big-icon {
   font-size: 160px !important;
-  color: #e5e6e7;
+  color: theme-color(contentPrimary);
 }
 
 /* FOOTER */
@@ -241,11 +227,12 @@ ol.unstyled {
 #footer {
   position: relative;
   display: flex;
-  background: #21222c;
-  flex: 0 0 4rem;
-  height: 4rem;
-  color: #f8f8f2;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: theme-color(surfaceBase);
+  background-image: none;
+  flex: 0 0 4.6rem;
+  height: 4.6rem;
+  color: theme-color(contentPrimary);
+  border-top: 1px solid theme-color(borderSubtle);
 }
 
 .footer.fixed_full {
@@ -255,7 +242,7 @@ ol.unstyled {
   right: 0;
   z-index: 1000;
   padding: 10px 20px;
-  background: white;
+  background: theme-color(contentPrimary);
   border-top: 1px solid $border-color;
 }
 
@@ -266,7 +253,7 @@ ol.unstyled {
   right: 0;
   z-index: 1000;
   padding: 10px 20px;
-  background: white;
+  background: theme-color(contentPrimary);
   border-top: 1px solid $border-color;
   margin-left: $sidebar-width;
 }
@@ -308,12 +295,12 @@ body.body-small .footer.fixed {
 /* TABLES */
 
 .table-bordered {
-  border: 1px solid #ebebeb;
+  border: 1px solid theme-color(borderStrong);
 }
 
 .table-bordered > thead > tr > th,
 .table-bordered > thead > tr > td {
-  background-color: #f5f5f6;
+  background-color: theme-color(contentPrimary);
   border-bottom-width: 1px;
 }
 
@@ -323,11 +310,11 @@ body.body-small .footer.fixed {
 .table-bordered > thead > tr > td,
 .table-bordered > tbody > tr > td,
 .table-bordered > tfoot > tr > td {
-  border: 1px solid #e7e7e7;
+  border: 1px solid theme-color(borderStrong);
 }
 
 .table > thead > tr > th {
-  border-bottom: 1px solid #dddddd;
+  border-bottom: 1px solid theme-color(contentSecondary);
   vertical-align: bottom;
 }
 
@@ -362,12 +349,13 @@ body.body-small .footer.fixed {
   -moz-border-right-colors: none;
   -moz-border-top-colors: none;
   //background: none;
-  border-color: #dddddd #dddddd rgba(0, 0, 0, 0);
+  border-color: theme-color(contentSecondary) theme-color(contentSecondary)
+    theme-color(transparent);
   //border-bottom: $gray;
   border-image: none;
   border-style: solid;
   border-width: 1px;
-  color: #555555;
+  color: theme-color(contentDisabled);
   cursor: default;
 }
 
@@ -377,7 +365,7 @@ body.body-small .footer.fixed {
 }
 
 .nav-tabs > li > a {
-  color: #a7b1c2;
+  color: theme-color(contentSecondary);
   font-weight: 600;
   padding: 10px 20px 10px 25px;
 }
@@ -454,13 +442,13 @@ body.mini-navbar .branding {
 }
 
 img.circle-border {
-  border: 6px solid #ffffff;
+  border: 6px solid theme-color(contentInverse);
   border-radius: 50%;
 }
 
 .branding {
   float: left;
-  color: #ffffff;
+  color: theme-color(contentInverse);
   font-size: 18px;
   font-weight: 600;
   padding: 17px 20px;
@@ -484,7 +472,7 @@ img.circle-border {
 }
 
 .icons-box .infont a {
-  color: #a6a8a9;
+  color: theme-color(contentSecondary);
 }
 
 .icons-box .infont a {
@@ -499,7 +487,7 @@ img.circle-border {
 }
 
 .breadcrumb {
-  background-color: #ffffff;
+  background-color: theme-color(contentInverse);
   padding: 0;
   margin-bottom: 0;
 }
@@ -513,9 +501,9 @@ img.circle-border {
 }
 
 code {
-  background-color: #f9f2f4;
+  background-color: theme-color(statusDangerSurface);
   border-radius: 4px;
-  color: #ca4440;
+  color: theme-color(statusDanger);
   font-size: 90%;
   padding: 2px 4px;
   white-space: nowrap;
@@ -551,7 +539,7 @@ table.table-mail tr td {
 }
 
 .unread td {
-  background-color: #f9f8f8;
+  background-color: theme-color(contentPrimary);
 }
 
 /* BACKGROUNDS */
@@ -561,36 +549,36 @@ table.table-mail tr td {
 }
 
 .white-bg {
-  background-color: #ffffff;
+  background-color: theme-color(contentInverse);
 }
 
 .navy-bg {
   background-color: $navy;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .blue-bg {
   background-color: $blue;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .lazur-bg {
   background-color: $lazur;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .yellow-bg {
   background-color: $yellow;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .red-bg {
   background-color: $red;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .black-bg {
-  background-color: #262626;
+  background-color: theme-color(surfaceInset);
 }
 
 .panel-primary {
@@ -609,7 +597,7 @@ table.table-mail tr td {
 .panel-success > .panel-heading {
   background-color: $blue;
   border-color: $blue;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .panel-info {
@@ -619,7 +607,7 @@ table.table-mail tr td {
 .panel-info > .panel-heading {
   background-color: $lazur;
   border-color: $lazur;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .panel-warning {
@@ -629,7 +617,7 @@ table.table-mail tr td {
 .panel-warning > .panel-heading {
   background-color: $yellow;
   border-color: $yellow;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .panel-danger {
@@ -639,7 +627,7 @@ table.table-mail tr td {
 .panel-danger > .panel-heading {
   background-color: $red;
   border-color: $red;
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .progress-bar {
@@ -663,7 +651,7 @@ table.table-mail tr td {
 }
 
 .progress-bar-navy-light {
-  background-color: #3dc7ab;
+  background-color: theme-color(statusSuccess);
 }
 
 .progress-bar-success {
@@ -713,16 +701,16 @@ table.table-mail tr td {
 }
 
 .text-muted {
-  color: #888888;
+  color: theme-color(contentSecondary);
 }
 
 .text-white {
-  color: #ffffff;
+  color: theme-color(contentInverse);
 }
 
 .simple_tag {
   background-color: $gray;
-  border: 1px solid #e7eaec;
+  border: 1px solid theme-color(borderStrong);
   border-radius: 2px;
   color: inherit;
   font-size: 10px;
@@ -733,9 +721,9 @@ table.table-mail tr td {
 }
 
 .img-shadow {
-  -webkit-box-shadow: 0 0 3px 0 rgba(145, 145, 145, 1);
-  -moz-box-shadow: 0 0 3px 0 rgba(145, 145, 145, 1);
-  box-shadow: 0 0 3px 0 rgba(145, 145, 145, 1);
+  -webkit-box-shadow: 0 0 3px 0 theme-color(shadowStrong);
+  -moz-box-shadow: 0 0 3px 0 theme-color(shadowStrong);
+  box-shadow: 0 0 3px 0 theme-color(shadowStrong);
 }
 
 /* For handle different bg color in AngularJS version */
@@ -748,7 +736,7 @@ table.table-mail tr td {
 .metrics nav.navbar,
 .metrics\.index nav.navbar,
 .dashboards\.dashboard_5 nav.navbar {
-  background: #fff;
+  background: theme-color(contentInverse);
 }
 
 /* For handle different bg color in MVC version */
@@ -760,7 +748,7 @@ table.table-mail tr td {
 .Inbox .navbar.navbar-static-top,
 .Metrics .navbar.navbar-static-top,
 .Dashboard_5 .navbar.navbar-static-top {
-  background: #fff;
+  background: theme-color(contentInverse);
 }
 
 a.close-canvas-menu {
@@ -768,11 +756,11 @@ a.close-canvas-menu {
   top: 10px;
   right: 15px;
   z-index: 1011;
-  color: #a7b1c2;
+  color: theme-color(contentSecondary);
 }
 
 a.close-canvas-menu:hover {
-  color: #fff;
+  color: theme-color(contentInverse);
 }
 
 .close-canvas-menu {
@@ -784,7 +772,7 @@ a.close-canvas-menu:hover {
 }
 
 .light-navbar .navbar.navbar-static-top {
-  background-color: #fff;
+  background-color: theme-color(contentInverse);
 }
 
 /* FULL HEIGHT */
@@ -806,7 +794,7 @@ a.close-canvas-menu:hover {
 }
 
 .fh-column {
-  background: #fff;
+  background: theme-color(contentInverse);
   height: 100%;
   width: 240px;
   float: left;
@@ -822,7 +810,6 @@ a.close-canvas-menu:hover {
 body.modal-open {
   padding-right: inherit !important;
 }
-
 
 /* Show profile dropdown on fixed sidebar */
 body.mini-navbar.fixed-sidebar .profile-element,
@@ -861,16 +848,4 @@ label {
   background-position: center center;
   background-repeat: no-repeat;
   background-size: contain;
-}
-
-.icon-play {
-  background-image: url("/assets/icon-play.svg");
-  width: 14px;
-  height: 14px;
-}
-
-.icon-stop {
-  background-image: url("/assets/icon-stop.svg");
-  width: 14px;
-  height: 14px;
 }

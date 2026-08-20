@@ -1,69 +1,87 @@
 import React from "react"
 import styled from "styled-components"
 import { color } from "../../../utils"
-import { Text } from "../../../components"
+import { Key } from "../../../components"
+import { menuContainerStyles } from "../../../components/menuStyles"
 import { ctrlCmd, altOption } from "../../../utils/platform"
-import { keys } from "ramda"
 
 type ShortcutsList = { keys: string[][]; title: string }[]
 
 const Wrapper = styled.div`
-  display: flex;
-  max-height: 650px;
-  width: 300px;
-  max-width: 100vw;
-  flex-direction: column;
-  background: ${color("backgroundDarker")};
-  box-shadow: ${color("black")} 0px 5px 8px;
-  border: 1px solid ${color("black")};
-  border-radius: 4px;
-  overflow: auto;
-`
-const List = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
+  ${menuContainerStyles}
+  width: 38rem;
+  max-width: calc(100vw - 2.4rem);
+  max-height: min(68rem, calc(100vh - 8rem));
+  padding: 0.6rem;
+  gap: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 `
 
-const ListTitle = styled(Text)`
-  padding: 0.6rem 1.2rem;
-  margin-bottom: 0.6rem;
-  border-top: 1px solid ${({ theme }) => theme.color.selection};
-  background: ${({ theme }) => theme.color.black40};
+const List = styled.section`
+  display: flex;
+  flex-direction: column;
   width: 100%;
+
+  & + & {
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  }
+`
+
+const ListTitle = styled.h3`
+  margin: 0;
+  padding: 0.7rem 0.8rem 0.6rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
 `
 
 const Item = styled.div`
   display: flex;
   align-items: center;
-  padding: 0.6rem 1.2rem;
+  min-height: 4rem;
+  padding: 0.7rem 0.8rem;
+  gap: 1.6rem;
+  border-radius: 0.4rem;
 
-  &:not(:last-child) {
-    border-bottom: 1px solid ${color("background")};
+  & + & {
+    border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   }
+`
+
+const ItemTitle = styled.span`
+  min-width: 0;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.3rem;
+  font-weight: 500;
+  line-height: 1.4;
 `
 
 const ItemKeys = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.6rem;
   margin-left: auto;
 `
 
-const KeyGroup = styled.span`
-  color: ${color("gray2")};
+const KeyGroup = styled.div`
+  display: inline-flex;
+  align-items: center;
+  color: ${color("contentSecondary")};
 
-  &:not(:last-child):after {
+  & + &::before {
     content: "or";
-    padding: 0 0.5rem;
-  }
-`
-
-const Key = styled.span`
-  padding: 0 4px;
-  background: ${color("gray2")};
-  border-radius: 2px;
-  color: ${color("black")};
-
-  &:not(:last-child) {
-    margin-right: 0.25rem;
+    margin-right: 0.6rem;
+    color: ${({ theme }) => theme.color.contentMuted};
+    font-size: 1.1rem;
+    line-height: 1;
   }
 `
 
@@ -129,21 +147,19 @@ const ShortcutsGroup = ({
   title: string
 }) => (
   <List>
-    <ListTitle>
-      <Text color="gray2">{title}</Text>
-    </ListTitle>
+    <ListTitle>{title}</ListTitle>
     {list.map((shortcutItem) => (
-      <Item key={`shortcut-${keys.toString()}`}>
-        <Text color="white">{shortcutItem.title}</Text>
+      <Item key={`shortcut-${shortcutItem.title}`}>
+        <ItemTitle>{shortcutItem.title}</ItemTitle>
         <ItemKeys>
           {shortcutItem.keys.map((keyGroup) => (
-            <KeyGroup key={`keyGroup-${keyGroup.toString()}}`}>
+            <KeyGroup key={`${shortcutItem.title}-${keyGroup.join("-")}`}>
               {keyGroup.map((key) => (
-                <Key key={`shortcutItem-key-${keyGroup.toString()}`}>
-                  <Text color="black" size="xs" weight={600}>
-                    {key}
-                  </Text>
-                </Key>
+                <Key
+                  key={`${shortcutItem.title}-${keyGroup.join("-")}-${key}`}
+                  keyString={key}
+                  color={color("contentSecondary")}
+                />
               ))}
             </KeyGroup>
           ))}

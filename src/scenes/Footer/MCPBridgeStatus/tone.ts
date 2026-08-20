@@ -3,27 +3,20 @@
 
 import type { MCPBridgeClientStatus } from "../../../utils/mcp/MCPBridgeClient"
 import type { BridgeVersionMismatch } from "../../../utils/mcp/protocolVersion"
+import type { ColorShape } from "../../../types"
 
 export type Tone = "connected" | "connecting" | "error" | "warning" | "idle"
 
-export const hexToRgba = (hex: string, alpha: number) => {
-  const value = hex.replace("#", "")
-  const r = parseInt(value.slice(0, 2), 16)
-  const g = parseInt(value.slice(2, 4), 16)
-  const b = parseInt(value.slice(4, 6), 16)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
-export const accentColor = (tone: Tone) =>
+export const accentColor = (tone: Tone): keyof ColorShape =>
   tone === "connected"
-    ? "green"
+    ? "statusSuccess"
     : tone === "connecting"
-      ? "pinkPrimary"
+      ? "contentAccentStrong"
       : tone === "error"
-        ? "red"
+        ? "statusDanger"
         : tone === "warning"
-          ? "orange"
-          : "gray2"
+          ? "statusWarning"
+          : "contentSecondary"
 
 export const deriveTone = (
   paired: boolean,

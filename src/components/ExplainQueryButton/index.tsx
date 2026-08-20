@@ -18,7 +18,7 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
-  color: ${({ theme }) => theme.color.pinkPrimary};
+  color: ${({ theme }) => theme.color.contentAccentStrong};
 `
 
 const shortcutTitle = `${ctrlCmd}+E`
@@ -83,7 +83,7 @@ export const ExplainQueryButton = ({
 
   return (
     <ExplainButton
-      skin="gradient"
+      variant="gradient"
       gradientWeight="thin"
       onClick={handleExplainQuery}
       title={`Explain query with AI Assistant (${shortcutTitle})`}
@@ -92,16 +92,8 @@ export const ExplainQueryButton = ({
       <AISparkle size={12} variant="hollow" />
       Explain query
       <KeyBinding>
-        <Key
-          keyString={ctrlCmd}
-          color={color("pinkPrimary")}
-          hoverColor={color("pinkPrimary")}
-        />
-        <Key
-          keyString="E"
-          color={color("pinkPrimary")}
-          hoverColor={color("pinkPrimary")}
-        />
+        <Key keyString={ctrlCmd} color={color("contentAccentStrong")} />
+        <Key keyString="E" color={color("contentAccentStrong")} />
       </KeyBinding>
     </ExplainButton>
   )

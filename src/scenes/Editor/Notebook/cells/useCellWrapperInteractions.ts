@@ -84,6 +84,10 @@ export const useCellWrapperInteractions = ({
   const onMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement
+      // React events from portalled menus still bubble through the component
+      // tree. They are not cell-canvas interactions: handling them here steals
+      // focus on mousedown before Radix can commit the selected menu item.
+      if (!e.currentTarget.contains(target)) return
       if (!target.closest?.(".cell-drag-handle")) {
         e.stopPropagation()
       }

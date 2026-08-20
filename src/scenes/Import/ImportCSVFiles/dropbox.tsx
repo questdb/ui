@@ -20,9 +20,11 @@ const Root = styled(Box).attrs({ flexDirection: "column" })<{
   width: 100%;
   padding: 4rem 0 0;
   gap: 2rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 3px dashed ${({ isDragging }) => (isDragging ? "#7f839b" : "#333543")};
-  box-shadow: inset 0 0 10px 0 #1b1c23;
+  background: ${({ theme }) => theme.color.surfaceBase};
+  border: 2px dashed
+    ${({ isDragging, theme }) =>
+      isDragging ? theme.color.borderAccent : theme.color.borderDefault};
+  box-shadow: none;
   transition: all 0.15s ease-in-out;
 `
 

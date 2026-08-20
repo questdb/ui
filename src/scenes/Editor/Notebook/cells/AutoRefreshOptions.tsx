@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { DropdownMenu } from "../../../../components"
+import { SelectMenu } from "../../../../components"
 import { AUTO_REFRESH_OPTIONS, autoRefreshLabel } from "../notebookUtils"
 import { OverrideDot } from "../refreshSplitButton"
 import type { AutoRefresh } from "../../../../store/notebook"
@@ -16,7 +16,7 @@ const fromKey = (key: string): AutoRefresh | undefined =>
     ? undefined
     : (AUTO_REFRESH_OPTIONS.find((option) => optionKey(option) === key) ?? true)
 
-const OptionsGroup = styled(DropdownMenu.RadioGroup)`
+const OptionsGroup = styled(SelectMenu.RadioGroup)`
   min-width: 20rem;
 `
 
@@ -37,19 +37,19 @@ export const AutoRefreshOptions: React.FC<Props> = ({
   >
     {inheritedValue !== undefined && (
       <>
-        <DropdownMenu.RadioItem
+        <SelectMenu.Item
           value={INHERIT_KEY}
           indicator={value !== undefined ? <OverrideDot /> : undefined}
         >
           {`Notebook default (${autoRefreshLabel(inheritedValue)})`}
-        </DropdownMenu.RadioItem>
-        <DropdownMenu.Divider />
+        </SelectMenu.Item>
+        <SelectMenu.Divider />
       </>
     )}
     {AUTO_REFRESH_OPTIONS.map((option) => (
-      <DropdownMenu.RadioItem key={optionKey(option)} value={optionKey(option)}>
+      <SelectMenu.Item key={optionKey(option)} value={optionKey(option)}>
         {autoRefreshLabel(option)}
-      </DropdownMenu.RadioItem>
+      </SelectMenu.Item>
     ))}
   </OptionsGroup>
 )

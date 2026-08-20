@@ -36,7 +36,7 @@ import {
 const Body = styled.div`
   min-height: 0;
   overflow: auto;
-  background: ${color("editorBackground")};
+  background: ${color("editorCanvas")};
 `
 
 // Natural-height wrapper whose measured height feeds the grid row sizing
@@ -55,7 +55,7 @@ const TextArea = styled.textarea`
   overflow: hidden;
   box-sizing: border-box;
   background: transparent;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 14px;
   line-height: 24px;
@@ -64,14 +64,14 @@ const TextArea = styled.textarea`
   tab-size: 4;
 
   &::placeholder {
-    color: ${color("gray2")};
+    color: ${color("contentSecondary")};
   }
 `
 
 // Rendered markdown: clean prose on the shared editor canvas.
 const Rendered = styled.div`
   padding: 1rem 1.2rem 0.6rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   font-family: ${({ theme }) => theme.font};
   font-size: 1.4rem;
   line-height: 2.1rem;
@@ -122,7 +122,7 @@ const Rendered = styled.div`
   }
 
   a {
-    color: ${({ theme }) => theme.color.cyan};
+    color: ${({ theme }) => theme.color.statusInfo};
     text-decoration: none;
     &:hover {
       text-decoration: underline;
@@ -139,40 +139,40 @@ const Rendered = styled.div`
   }
 
   code {
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
+    background: ${color("surfaceInset")};
+    border: 1px solid ${color("interactionNeutral")};
     border-radius: 0.4rem;
     padding: 0.1rem 0.4rem;
     font-family: ${({ theme }) => theme.fontMonospace};
     font-size: 1.3rem;
-    color: ${color("purple")};
+    color: ${color("statusFeature")};
     white-space: pre-wrap;
   }
   pre {
     margin: 1rem 0;
     padding: 1rem 1.2rem;
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
+    background: ${color("surfaceInset")};
+    border: 1px solid ${color("interactionNeutral")};
     border-radius: 0.6rem;
     overflow-x: auto;
     code {
       background: transparent;
       border: none;
       padding: 0;
-      color: ${color("foreground")};
+      color: ${color("contentPrimary")};
     }
   }
 
   blockquote {
-    border-left: 3px solid ${color("selection")};
+    border-left: 3px solid ${color("interactionNeutral")};
     margin: 1rem 0;
     padding-left: 1rem;
-    color: ${color("gray2")};
+    color: ${color("contentSecondary")};
   }
 
   hr {
     border: none;
-    border-top: 1px solid ${color("selection")};
+    border-top: 1px solid ${color("interactionNeutral")};
     margin: 1.6rem 0;
   }
 
@@ -185,18 +185,18 @@ const Rendered = styled.div`
   th,
   td {
     padding: 0.6rem 0.8rem;
-    border: 1px solid ${color("selection")};
+    border: 1px solid ${color("interactionNeutral")};
     text-align: left;
   }
   th {
-    background: ${color("backgroundDarker")};
+    background: ${color("surfaceInset")};
     font-weight: 600;
   }
 `
 
 const EmptyHint = styled.div`
   padding: 1rem 1.2rem 0.6rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   font-style: italic;
   cursor: default;
 `
@@ -380,7 +380,7 @@ const MarkdownCellInner: React.FC<Props> = ({
           editing ? (
             <Tooltip content={`Apply (${ctrlCmd}+Enter)`}>
               <Button
-                skin="transparent"
+                variant="ghost"
                 onClick={() => apply("button")}
                 aria-label="Apply"
               >
@@ -389,7 +389,7 @@ const MarkdownCellInner: React.FC<Props> = ({
             </Tooltip>
           ) : (
             <Tooltip content="Edit">
-              <Button skin="transparent" onClick={edit} aria-label="Edit">
+              <Button variant="ghost" onClick={edit} aria-label="Edit">
                 <PencilSimpleIcon size={20} />
               </Button>
             </Tooltip>

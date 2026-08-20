@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useEffect } from "react"
 import styled, { css } from "styled-components"
-import { CheckboxCircle, CloseCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle, CloseCircle } from "../icons"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import {
   AIOperationStatus,
@@ -20,7 +20,7 @@ const Container = styled.div`
 `
 
 const ModeHeader = styled.div<{ $abort: boolean }>`
-  border: 1px solid ${color("selection")};
+  border: 1px solid ${color("interactionNeutral")};
   border-radius: 0.4rem;
   display: flex;
   align-items: center;
@@ -29,7 +29,7 @@ const ModeHeader = styled.div<{ $abort: boolean }>`
   ${({ $abort }) =>
     $abort &&
     css`
-      border-color: ${color("red")};
+      border-color: ${color("statusDanger")};
     `}
   width: 100%;
 `
@@ -37,7 +37,7 @@ const ModeHeader = styled.div<{ $abort: boolean }>`
 const ModeTitle = styled.div`
   font-weight: 500;
   font-size: 1.4rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   text-align: center;
   margin-right: auto;
 `
@@ -49,18 +49,18 @@ const ReasoningIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
 `
 
 const CheckIcon = styled(CheckboxCircle)`
   width: 1.6rem;
   height: 1.6rem;
-  color: ${color("pink")};
+  color: ${color("statusAssistant")};
   flex-shrink: 0;
 `
 
 const CloseCircleIcon = styled(CloseCircle)`
-  color: ${color("red")};
+  color: ${color("statusDanger")};
   flex-shrink: 0;
 `
 
@@ -142,7 +142,7 @@ export const getSectionDuration = (
 const DurationText = styled.span`
   font-size: 1.2rem;
   font-family: ${({ theme }) => theme.fontMonospace};
-  color: ${color("graphLegend")};
+  color: ${color("contentMuted")};
   font-weight: 400;
   flex-shrink: 0;
 `

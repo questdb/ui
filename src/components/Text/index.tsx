@@ -56,7 +56,7 @@ const defaultProps: Readonly<{
   color: Color
   type: Type
 }> = {
-  color: "black",
+  color: "neutralInk",
   type: "span",
 }
 

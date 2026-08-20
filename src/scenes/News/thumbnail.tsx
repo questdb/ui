@@ -9,9 +9,9 @@ const Root = styled.div`
   max-width: 100%;
   margin: 2rem 0;
   border-radius: ${({ theme }) => theme.borderRadius};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
+  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.shadowMedium};
   overflow: hidden;
-  background: ${({ theme }) => theme.color.backgroundDarker};
+  background: ${({ theme }) => theme.color.surfaceInset};
 
   svg {
     position: absolute;

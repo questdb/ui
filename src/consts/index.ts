@@ -38,4 +38,10 @@ export const API = `https://${BASE}.questdb.io`
 // the console will understand
 export const API_VERSION = "2"
 
-export const BUTTON_ICON_SIZE = "26px"
+export const SIDEBAR_ICON_SIZE = 26
+export const BUTTON_ICON_SIZE = `${SIDEBAR_ICON_SIZE}px`
+export const SIDEBAR_WIDTH = "5.6rem"
+export const SIDEBAR_BUTTON_SIZE = "4rem"
+
+export const TOP_BAR_HEIGHT = "5.6rem"
+export const FOOTER_HEIGHT = "4.6rem"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react"
-import styled, { css, keyframes } from "styled-components"
+import styled, { css, keyframes, useTheme } from "styled-components"
 
 const MAX_SPEECH_MS = 2500
 const CALL_STEP_MS = 500
@@ -22,8 +22,8 @@ const Frame = styled.div`
   height: 100%;
   overflow: hidden;
   padding: 1px;
-  background: #151515;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: ${({ theme }) => theme.color.onboardingCommand};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 1.2rem;
   font-family: ${({ theme }) => theme.fontMonospace};
 `
@@ -50,7 +50,7 @@ const Dot = styled.span<{ $color: string }>`
 const RepoName = styled.span`
   padding-left: 0.6rem;
   font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.mutedLabel};
+  color: ${({ theme }) => theme.color.contentMuted};
 `
 
 const Body = styled.div`
@@ -69,13 +69,13 @@ const PromptRow = styled.div`
   gap: 1rem;
   padding: 0.7rem 1.2rem 0.8rem;
   border-radius: 0.3rem;
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+  background: ${({ theme }) => theme.color.interactionHover};
+  box-shadow: inset 0 1px 0 0 ${({ theme }) => theme.color.borderSubtle};
 `
 
 const PromptCaret = styled.span`
   font-size: 1.2rem;
-  color: #93adff;
+  color: ${({ theme }) => theme.color.onboardingPrompt};
 `
 
 const PromptText = styled.span`
@@ -83,7 +83,7 @@ const PromptText = styled.span`
   min-width: 0;
   font-size: 1.1rem;
   line-height: 1.6;
-  color: #93adff;
+  color: ${({ theme }) => theme.color.onboardingPrompt};
 `
 
 const Line = styled.div<{ $hidden?: boolean; $blink?: boolean }>`
@@ -103,14 +103,14 @@ const Diamond = styled.span<{ $muted?: boolean }>`
   font-size: 1rem;
   line-height: 1.6rem;
   color: ${({ $muted, theme }) =>
-    $muted ? theme.color.purple : theme.color.foreground};
+    $muted ? theme.color.statusFeature : theme.color.contentPrimary};
 `
 
 const LineText = styled.span<{ $muted?: boolean }>`
   font-size: 1.1rem;
   line-height: 1.6;
   color: ${({ $muted, theme }) =>
-    $muted ? theme.color.mutedLabel : theme.color.foreground};
+    $muted ? theme.color.contentMuted : theme.color.contentPrimary};
 `
 
 const Cursor = styled.span`
@@ -137,15 +137,15 @@ const InputBox = styled.div`
   align-items: center;
   margin-top: 1.2rem;
   padding: 0.9rem 1.7rem;
-  background: #202020;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: ${({ theme }) => theme.color.onboardingInput};
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.4rem;
 `
 
 const InputCaret = styled.span`
   font-size: 0.9rem;
   line-height: 1.6rem;
-  color: #29c6be;
+  color: ${({ theme }) => theme.color.onboardingAccent};
 `
 
 type TranscriptLine =
@@ -202,6 +202,7 @@ const callText = (calls: number) =>
     : `Called questdb ${calls} times (ctrl+o to expand)`
 
 export const AgentTranscript = () => {
+  const theme = useTheme()
   const [activeIndex, setActiveIndex] = useState(0)
   const [typedChars, setTypedChars] = useState(0)
   const [callCount, setCallCount] = useState(1)
@@ -249,9 +250,9 @@ export const AgentTranscript = () => {
     <Frame>
       <TitleBar>
         <Dots>
-          <Dot $color="#ff5f57" />
-          <Dot $color="#febc2e" />
-          <Dot $color="#28c840" />
+          <Dot $color={theme.color.windowControlClose} />
+          <Dot $color={theme.color.windowControlMinimize} />
+          <Dot $color={theme.color.windowControlExpand} />
         </Dots>
         <RepoName>questdb/trading-data</RepoName>
       </TitleBar>

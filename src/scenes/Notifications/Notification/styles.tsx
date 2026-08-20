@@ -36,7 +36,7 @@ export const Wrapper = styled.div<{
   height: ${({ $isMinimized, $compact }) =>
     $compact ? "4rem" : $isMinimized ? "auto" : "4.5rem"};
   border-bottom: ${({ $isMinimized, theme }) =>
-    $isMinimized ? "none" : `1px solid ${theme.color.backgroundDarker}`};
+    $isMinimized ? "none" : `1px solid ${theme.color.surfaceInset}`};
   padding: 0 1rem;
   flex-shrink: 0;
   width: 100%;

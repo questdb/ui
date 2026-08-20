@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
-import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
+import { Error as ErrorIcon } from "../../components/icons"
 import styled, { css } from "styled-components"
 import {
   Checkbox,
@@ -7,6 +7,7 @@ import {
   LoadingSpinner,
   PaneWrapper,
   PaneContent,
+  SegmentedControlButton,
 } from "../../components"
 import { SearchService, SearchResult } from "./service"
 import { SearchOptions, SearchMatch } from "../../utils/textSearch"
@@ -62,8 +63,8 @@ const Content = styled(PaneContent)`
 `
 
 const SearchInputContainer = styled.div`
-  padding: 0 1rem 0.5rem 1rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.selection};
+  padding: 1.2rem 1.4rem 1rem;
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 const InputWrapper = styled.div`
@@ -82,12 +83,7 @@ const StyledInput = styled(Input)`
   text-overflow: ellipsis;
 
   &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
-  }
-
-  &::selection {
-    background: rgba(255, 255, 255, 0.3);
-    color: inherit;
+    color: ${({ theme }) => theme.color.contentSecondary};
   }
 `
 
@@ -100,25 +96,15 @@ const ToggleButtonsContainer = styled.div`
   gap: 0.2rem;
 `
 
-const ToggleButton = styled.button<{ active: boolean }>`
-  background: transparent;
-  border: 1px solid transparent;
-  color: ${({ theme }) => theme.color.foreground};
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border-radius: 0.2rem;
-  font-size: 1.2rem;
+const ToggleButton = styled(SegmentedControlButton)`
+  && {
+    width: 2rem;
+    border: 1px solid transparent;
+  }
 
-  ${({ active, theme }) =>
-    active &&
-    `
-    background: ${theme.color.background};
-    border: 1px solid ${theme.color.pink};
-  `}
+  &&[aria-pressed="true"] {
+    border-color: ${({ theme }) => theme.color.borderAccentStrong};
+  }
 `
 
 const SearchSummary = styled.div`
@@ -126,9 +112,11 @@ const SearchSummary = styled.div`
   align-items: center;
   justify-content: space-between;
   height: 4rem;
-  padding: 1rem;
-  color: ${({ theme }) => theme.color.gray2};
-  font-size: 1.1rem;
+  padding: 1rem 1.4rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-family: ${({ theme }) => theme.fontMonospace};
+  font-size: 1rem;
+  letter-spacing: 0.04em;
 `
 
 const CheckboxWrapper = styled.div`
@@ -142,7 +130,7 @@ const CheckboxWrapper = styled.div`
 `
 
 const CheckboxLabel = styled.label`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   font-size: 1.2rem;
   margin-left: 0.6rem;
   cursor: pointer;
@@ -158,14 +146,14 @@ const SearchError = styled.div`
 
   border-radius: 0.4rem;
   margin: 0.5rem 0 1rem 0;
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1.2rem;
   align-items: center;
   gap: 0.8rem;
 
   svg {
     display: inline;
-    color: ${({ theme }) => theme.color.red};
+    color: ${({ theme }) => theme.color.statusDanger};
     align-self: flex-start;
     width: 1.6rem;
     height: 1.6rem;
@@ -181,7 +169,7 @@ const LoaderContainer = styled.div`
   justify-content: center;
   margin-left: auto;
   gap: 0.5rem;
-  color: ${color("offWhite")};
+  color: ${color("contentSecondary")};
 `
 
 const DelayedLoader = () => {
@@ -797,7 +785,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
               />
               <ToggleButtonsContainer>
                 <ToggleButton
-                  active={searchOptions.caseSensitive || false}
+                  $size="xs"
+                  $active={searchOptions.caseSensitive || false}
                   onClick={() => toggleOption("caseSensitive")}
                   title="Match Case (Alt+C)"
                   aria-label="Match Case"
@@ -807,7 +796,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
                   Aa
                 </ToggleButton>
                 <ToggleButton
-                  active={searchOptions.wholeWord || false}
+                  $size="xs"
+                  $active={searchOptions.wholeWord || false}
                   onClick={() => toggleOption("wholeWord")}
                   title="Match Whole Word (Alt+W)"
                   aria-label="Match Whole Word"
@@ -817,7 +807,8 @@ export const SearchPanel = React.forwardRef<SearchPanelRef, SearchPanelProps>(
                   W
                 </ToggleButton>
                 <ToggleButton
-                  active={searchOptions.useRegex || false}
+                  $size="xs"
+                  $active={searchOptions.useRegex || false}
                   onClick={() => toggleOption("useRegex")}
                   title="Use Regular Expression (Alt+R)"
                   aria-label="Use Regular Expression"

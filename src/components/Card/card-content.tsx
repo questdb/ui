@@ -13,7 +13,9 @@ export const CardContent = styled.div.attrs<Props, Props>((props) => ({
 }))`
   padding: ${({ gap }) => gap};
   background-color: ${({ theme, background }) =>
-    theme.color[background ?? "inherit"]};
+    background == null || background === "transparent"
+      ? "transparent"
+      : theme.color[background]};
   flex-grow: 1;
 
   ${({ centered }) =>

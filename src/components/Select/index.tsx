@@ -1,7 +1,7 @@
 import React from "react"
 import styled, { css } from "styled-components"
 import { Input } from "../Input"
-import { ArrowDropDown } from "@styled-icons/remix-line"
+import { ArrowDropDown } from "../icons"
 
 export type SelectProps = {
   name: string
@@ -23,7 +23,7 @@ const Root = styled.div<{ disabled?: boolean }>`
       .prefixIcon,
       .arrowDownIcon {
         opacity: 0.5;
-        color: ${({ theme }) => theme.color.selection};
+        color: ${({ theme }) => theme.color.interactionNeutral};
       }
     `}
 
@@ -41,7 +41,7 @@ const Root = styled.div<{ disabled?: boolean }>`
     top: 50%;
     transform: translate(0, -50%);
     pointer-events: none;
-    fill: ${({ theme }) => theme.color.white};
+    fill: ${({ theme }) => theme.color.contentPrimary};
   }
 `
 
@@ -55,20 +55,6 @@ const StyledSelect = styled(Input).attrs({ as: "select" })<{
   padding-right: 2.4rem;
 
   ${({ withPrefixIcon }) => withPrefixIcon && `padding-left: 3rem;`}
-
-  &:focus {
-    border-color: ${({ theme }) => theme.color.pink};
-    background: ${({ theme }) => theme.color.selection};
-  }
-
-  ${(props) =>
-    props.disabled &&
-    css`
-      cursor: default;
-      background: ${({ theme }) => theme.color.selection};
-      border-color: ${({ theme }) => theme.color.gray1};
-      color: ${({ theme }) => theme.color.gray1};
-    `}
 `
 
 export const Select = React.forwardRef(

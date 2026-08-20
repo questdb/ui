@@ -16,7 +16,7 @@ const MarkdownContent = styled.div`
   font-family: ${({ theme }) => theme.font};
   font-size: 1.4rem;
   line-height: 2.1rem;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   word-break: break-word;
 
   p {
@@ -27,19 +27,19 @@ const MarkdownContent = styled.div`
   }
 
   code {
-    background: ${color("background")};
-    border: 1px solid ${color("selection")};
+    background: ${color("surfaceInset")};
+    border: 1px solid ${color("interactionNeutral")};
     border-radius: 0.4rem;
     padding: 0.1rem 0.4rem;
     font-family: ${({ theme }) => theme.fontMonospace};
     font-size: 1.3rem;
-    color: ${color("purple")};
+    color: ${color("statusFeature")};
     white-space: pre-wrap;
   }
 
   strong {
     font-weight: 600;
-    color: ${color("foreground")};
+    color: ${color("contentPrimary")};
   }
 
   em {
@@ -57,7 +57,7 @@ const MarkdownContent = styled.div`
   }
 
   a {
-    color: ${({ theme }) => theme.color.cyan};
+    color: ${({ theme }) => theme.color.statusInfo};
     text-decoration: none;
     &:hover {
       text-decoration: underline;
@@ -86,10 +86,10 @@ const MarkdownContent = styled.div`
   }
 
   blockquote {
-    border-left: 3px solid ${color("selection")};
+    border-left: 3px solid ${color("interactionNeutral")};
     margin: 1rem 0;
     padding-left: 1rem;
-    color: ${color("gray2")};
+    color: ${color("contentSecondary")};
   }
 
   .table-wrapper {
@@ -106,13 +106,13 @@ const MarkdownContent = styled.div`
   th,
   td {
     padding: 0.6rem 0.8rem;
-    border: 1px solid ${color("selection")};
+    border: 1px solid ${color("interactionNeutral")};
     text-align: left;
     white-space: nowrap;
   }
 
   th {
-    background: ${color("backgroundDarker")};
+    background: ${color("surfaceInset")};
     font-weight: 600;
   }
 

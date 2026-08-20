@@ -13,8 +13,7 @@ const Handle = styled.div<{ $axis: string }>`
   position: absolute;
   z-index: 10;
   outline: none;
-  color: ${color("pinkPrimary")};
-  --chip-bg: ${color("backgroundDarker")};
+  color: ${color("contentAccentStrong")};
 
   /* Visuals are hidden until the handle is hovered; corner handles are also
      revealed when the cell is selected (rule lives on the grid container). */
@@ -28,7 +27,7 @@ const Handle = styled.div<{ $axis: string }>`
   .edge-line {
     position: absolute;
     pointer-events: none;
-    background: ${color("pinkPrimary")};
+    background: ${color("contentAccentStrong")};
   }
 
   .edge-chip {

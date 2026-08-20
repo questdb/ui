@@ -1,8 +1,7 @@
 import React from "react"
 import styled, { useTheme } from "styled-components"
-import { Stop as StopFill } from "@styled-icons/remix-fill"
-import { color } from "../../utils"
-import { Button } from "../Button"
+import { Stop as StopFill } from "../icons"
+import { IconButton } from "../IconButton"
 
 type Props = {
   size?: "sm" | "md"
@@ -18,24 +17,16 @@ const SIZES = {
   md: "2.6rem",
 } as const
 
-const StyledButton = styled(Button)<{ $size: keyof typeof SIZES }>`
+const StyledButton = styled(IconButton)<{ $size: keyof typeof SIZES }>`
   width: ${({ $size }) => SIZES[$size]};
+  min-width: ${({ $size }) => SIZES[$size]};
   height: ${({ $size }) => SIZES[$size]};
   flex-shrink: 0;
   border-radius: 100%;
-  background: ${color("aiStopButtonBg")};
-  border: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-
-  &:hover {
-    background: ${({ theme }) => theme.color.red} !important;
-    svg {
-      color: ${({ theme }) => theme.color.foreground};
-    }
-  }
 `
 
 export const AIStopButton: React.FC<Props> = ({
@@ -49,6 +40,8 @@ export const AIStopButton: React.FC<Props> = ({
   const theme = useTheme()
   return (
     <StyledButton
+      label={ariaLabel ?? title ?? "Stop"}
+      variant="dangerGhost"
       $size={size}
       title={title}
       aria-label={ariaLabel}
@@ -56,7 +49,7 @@ export const AIStopButton: React.FC<Props> = ({
       data-hook={dataHook}
       className={className}
     >
-      <StopFill size="14px" color={theme.color.aiStopButtonFg} />
+      <StopFill size="14px" color={theme.color.statusDangerStrong} />
     </StyledButton>
   )
 }

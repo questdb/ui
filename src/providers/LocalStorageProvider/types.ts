@@ -54,6 +54,7 @@ export type LocalConfig = {
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
   useNewGrid: boolean
+  useQuickVis: boolean
   runWithSelection: boolean
   maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState

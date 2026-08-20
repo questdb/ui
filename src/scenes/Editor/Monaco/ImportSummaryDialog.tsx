@@ -48,13 +48,13 @@ const SkippedItem = styled(Box).attrs({
   gap: "1rem",
 })`
   padding: 1rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-radius: 0.4rem;
-  border-left: 3px solid ${({ theme }) => theme.color.orange};
+  border-left: 3px solid ${({ theme }) => theme.color.statusWarning};
 `
 
 const TabLabel = styled(Text).attrs({
-  color: "foreground",
+  color: "contentPrimary",
   ellipsis: true,
 })`
   flex: 1;
@@ -65,7 +65,7 @@ const SummaryStats = styled(Box).attrs({
   gap: "2rem",
 })`
   padding: 1rem;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-radius: 0.4rem;
 `
 
@@ -75,11 +75,11 @@ const StatItem = styled(Box).attrs({
 })``
 
 const BufferStatus = styled.span`
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: 1rem;
   margin-left: 0.4rem;
   padding: 0.2rem 0.4rem;
-  background: ${({ theme }) => theme.color.selection};
+  background: ${({ theme }) => theme.color.interactionNeutral};
   border-radius: 0.2rem;
 `
 
@@ -115,9 +115,9 @@ export const ImportSummaryDialog = ({
                 <CheckCircleIcon
                   size={20}
                   weight="fill"
-                  color={theme.color.green}
+                  color={theme.color.statusSuccess}
                 />
-                <Text color="green" size="md">
+                <Text color="statusSuccess" size="md">
                   {importedCount} tab{importedCount === 1 ? "" : "s"} imported
                 </Text>
               </StatItem>
@@ -125,9 +125,9 @@ export const ImportSummaryDialog = ({
                 <WarningCircleIcon
                   size={20}
                   weight="fill"
-                  color={theme.color.orange}
+                  color={theme.color.statusWarning}
                 />
-                <Text color="orange" size="md">
+                <Text color="statusWarning" size="md">
                   {skippedTabs.length} tab{skippedTabs.length === 1 ? "" : "s"}{" "}
                   skipped
                 </Text>
@@ -141,15 +141,18 @@ export const ImportSummaryDialog = ({
                   data-hook="import-summary-skipped-item"
                 >
                   {tab.isMetricsTab ? (
-                    <ChartLineIcon size={18} color={theme.color.cyan} />
+                    <ChartLineIcon size={18} color={theme.color.statusInfo} />
                   ) : (
-                    <FileTextIcon size={18} color={theme.color.foreground} />
+                    <FileTextIcon
+                      size={18}
+                      color={theme.color.contentPrimary}
+                    />
                   )}
                   <TabLabel title={tab.label}>{tab.label}</TabLabel>
                   {tab.isExistingArchived && (
                     <BufferStatus>closed</BufferStatus>
                   )}
-                  <Text color="orange" size="sm">
+                  <Text color="statusWarning" size="sm">
                     {tab.reason}
                   </Text>
                 </SkippedItem>
@@ -160,7 +163,7 @@ export const ImportSummaryDialog = ({
           <Dialog.ActionButtons>
             <Dialog.Close asChild>
               <Button
-                skin="secondary"
+                variant="secondary"
                 data-hook="import-summary-close"
                 onClick={() => onOpenChange(false)}
               >

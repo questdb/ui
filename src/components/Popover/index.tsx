@@ -1,29 +1,30 @@
 import styled from "styled-components"
 import * as RadixPopover from "@radix-ui/react-popover"
 import type { PopoverProps } from "@radix-ui/react-popover"
-import { X } from "@styled-icons/bootstrap/X"
+import { X } from "../icons"
 import React from "react"
 import { Heading } from "../Heading"
+import { IconButton } from "../IconButton"
+import { floatingSurfaceStyles } from "../overlayStyles"
 
 export type Align = "start" | "center" | "end"
 
 const StyledPopoverContent = styled(RadixPopover.Content)`
+  ${floatingSurfaceStyles}
   display: flex;
   flex-direction: column;
-  background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
-  outline: none;
-  z-index: 1000;
+  max-width: calc(100vw - 1.6rem);
+  max-height: calc(100vh - 1.6rem);
+  overflow: hidden;
+  z-index: 9999;
 `
 
-const StyledPopoverClose = styled(RadixPopover.Close).attrs({
-  "aria-label": "Close",
-  asChild: true,
+const PopoverCloseButton = styled(IconButton).attrs({
+  label: "Close",
+  variant: "ghost",
+  size: "sm",
 })`
-  appearance: initial;
   margin-left: auto;
-  cursor: pointer;
 `
 
 const Header = styled.div`
@@ -31,11 +32,12 @@ const Header = styled.div`
   padding: 2rem;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 0.1rem ${({ theme }) => theme.color.background} solid;
+  border-bottom: 0.1rem ${({ theme }) => theme.color.borderSubtle} solid;
 `
 
 const ContentWrapper = styled.div`
   width: 100%;
+  min-width: 0;
 `
 
 type Props = {
@@ -65,15 +67,18 @@ export const Popover = ({
       <StyledPopoverContent
         style={{ width: width ?? "auto" }}
         align={align}
-        sideOffset={10}
+        sideOffset={8}
+        collisionPadding={8}
       >
         {(title || withCloseButton) && (
           <Header>
             {title && <Heading level={5}>{title}</Heading>}
             {withCloseButton && (
-              <StyledPopoverClose>
-                <X size="18px" />
-              </StyledPopoverClose>
+              <RadixPopover.Close asChild>
+                <PopoverCloseButton>
+                  <X size="18px" />
+                </PopoverCloseButton>
+              </RadixPopover.Close>
             )}
           </Header>
         )}

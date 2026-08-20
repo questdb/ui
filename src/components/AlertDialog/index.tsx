@@ -1,5 +1,6 @@
 import * as RadixAlertDialog from "@radix-ui/react-alert-dialog"
 import styled, { css } from "styled-components"
+import { modalSurfaceStyles } from "../overlayStyles"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -29,9 +30,7 @@ export const AlertDialog = {
   Trigger: RadixAlertDialog.Trigger,
   Portal: RadixAlertDialog.Portal,
   Content: styled(RadixAlertDialog.Content)<{ maxwidth?: string }>`
-    background-color: ${({ theme }) => theme.color.background};
-    border-radius: ${({ theme }) => theme.borderRadius};
-    box-shadow: 0 7px 30px -10px ${({ theme }) => theme.color.black};
+    ${modalSurfaceStyles}
     position: fixed;
     top: 50%;
     left: 50%;
@@ -40,12 +39,11 @@ export const AlertDialog = {
     max-width: ${({ maxwidth }) => maxwidth ?? "50rem"};
     max-height: 85vh;
     padding: 0 0 2rem 0;
-    border: 1px ${({ theme }) => theme.color.selection} solid;
     z-index: 101;
 
     ${dialogShow}
     ${dialogHide}
-    
+
     &[data-state="open"] {
       animation: dialogShow 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -53,30 +51,27 @@ export const AlertDialog = {
     &[data-state="closed"] {
       animation: dialogHide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     }
-
-    &:focus {
-      outline: none;
-    }
   `,
   Title: styled(RadixAlertDialog.Title)`
     margin: 0;
     font-size: 1.6rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
   `,
   Description: styled.div`
     margin-top: 2rem;
     padding: 0 2rem;
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
   `,
   ActionButtons: styled.div`
     display: flex;
     width: 100%;
     justify-content: flex-end;
+    gap: 0.8rem;
     padding: 0 2rem;
     margin-top: 2rem;
 
     > button:not(:last-child) {
-      margin-right: 1rem;
+      margin-right: 0;
     }
   `,
   Cancel: RadixAlertDialog.Cancel,

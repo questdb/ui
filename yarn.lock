@@ -1428,7 +1428,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.18.3, @babel/runtime@npm:^7.19.0, @babel/runtime@npm:^7.20.7, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.8.7, @babel/runtime@npm:^7.9.2":
+"@babel/runtime@npm:^7.18.3, @babel/runtime@npm:^7.5.5, @babel/runtime@npm:^7.8.7, @babel/runtime@npm:^7.9.2":
   version: 7.28.4
   resolution: "@babel/runtime@npm:7.28.4"
   checksum: 10/6c9a70452322ea80b3c9b2a412bcf60771819213a67576c8cec41e88a95bb7bf01fc983754cda35dc19603eef52df22203ccbf7777b9d6316932f9fb77c25163
@@ -2526,20 +2526,6 @@ __metadata:
     "@radix-ui/react-popover": "npm:^1.1.0"
     "@radix-ui/react-switch": "npm:^1.2.6"
     "@radix-ui/react-tooltip": "npm:^1.2.8"
-    "@styled-icons/bootstrap": "npm:10.47.0"
-    "@styled-icons/boxicons-logos": "npm:10.47.0"
-    "@styled-icons/boxicons-regular": "npm:10.47.0"
-    "@styled-icons/boxicons-solid": "npm:10.47.0"
-    "@styled-icons/entypo": "npm:10.46.0"
-    "@styled-icons/evaicons-outline": "npm:10.46.0"
-    "@styled-icons/evaicons-solid": "npm:10.46.0"
-    "@styled-icons/fa-regular": "npm:10.47.0"
-    "@styled-icons/fluentui-system-filled": "npm:10.47.0"
-    "@styled-icons/material": "npm:10.47.0"
-    "@styled-icons/remix-editor": "npm:^10.46.0"
-    "@styled-icons/remix-fill": "npm:10.46.0"
-    "@styled-icons/remix-line": "npm:10.46.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
     "@tanstack/react-table": "npm:^8.21.3"
     "@tanstack/react-virtual": "npm:^3.14.2"
     "@types/babel__core": "npm:^7"
@@ -3509,187 +3495,6 @@ __metadata:
   version: 0.3.0
   resolution: "@standard-schema/utils@npm:0.3.0"
   checksum: 10/7084f875d322792f2e0a5904009434c8374b9345b09ba89828b68fd56fa3c2b366d35bf340d9e8c72736ef01793c2f70d350c372ed79845dc3566c58d34b4b51
-  languageName: node
-  linkType: hard
-
-"@styled-icons/bootstrap@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/bootstrap@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/cfa5aa1d6a19a1efb5624fc4d51763243ad293a2262c5339e56f90536991360e022166fcdf582e4b4f7ca315a5ba615d2ad2c64f043ba2f50a4d9ea47fe9ce80
-  languageName: node
-  linkType: hard
-
-"@styled-icons/boxicons-logos@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/boxicons-logos@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/882aed855ec6d1e0ff0db370dce3bf57a15f8d8db387086e2460f1db79b53772c3bd70916ff5bd70b6abf63ce703f7d46fa03fe477c048471dc7fb7787f53c19
-  languageName: node
-  linkType: hard
-
-"@styled-icons/boxicons-regular@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/boxicons-regular@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/8b80bd7a49da3f24b4bc9d6ef3a2656d6ad628584c18d9d87da169001fd9b52fc0a48b321abf8314a774161d2ffaa47947f862f92918ed52ff1ab76f58c9f1c7
-  languageName: node
-  linkType: hard
-
-"@styled-icons/boxicons-solid@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/boxicons-solid@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/6ea2a15163d88a871c943d846a2b33d90abc80273615201bb9788e2c0516a9694c9769b9de77e676716b96f6e43976c8fe9e2a1c3adff58bcc12cecbd3127395
-  languageName: node
-  linkType: hard
-
-"@styled-icons/entypo@npm:10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/entypo@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/aa5dca3eee185c353b2742819323b44a30ff3b0d9ecfede4bd3d328f99bf50b7e4e408771828436e6c9951e65370d1a98046982fd837b27e0e64393eac5237b3
-  languageName: node
-  linkType: hard
-
-"@styled-icons/evaicons-outline@npm:10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/evaicons-outline@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/d54919967530fad18f36d1836f41cb366bd9e6ad27fb44b9e7f678e1477c19bf4797bf594ebfe103edc1ec564590d0bdc1f6edd460cfee8e88ee20f02b13e6d7
-  languageName: node
-  linkType: hard
-
-"@styled-icons/evaicons-solid@npm:10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/evaicons-solid@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/bea4caab9c26f9265f0301faa7994a0d61ceb1a6430c7bd403f045f49835405bc2af58042014f424fbdc5cdc961bc78ac6250292adf67a996c3dab9b5075ae0a
-  languageName: node
-  linkType: hard
-
-"@styled-icons/fa-regular@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/fa-regular@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/1babac803d2255128d759e40c6dc67a4faf035ad63deaecefabe99aa3265b91af44004e82846e8169622f85553a5a444e3a2153a075e471aa71cebda454ca02c
-  languageName: node
-  linkType: hard
-
-"@styled-icons/fluentui-system-filled@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/fluentui-system-filled@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/cf95c375d8c40975e9f4e8e1ec10150fb0350a032f563e1ea5149046c63fc9f86ae78b5b31b9d5e0ac76a03bedf05dcc46e7f8f0971e50cf6736b5ace9d418e6
-  languageName: node
-  linkType: hard
-
-"@styled-icons/material@npm:10.47.0":
-  version: 10.47.0
-  resolution: "@styled-icons/material@npm:10.47.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/0937bd73f281f6b4746b944a46ebc884b3aed09e7a46e5831f11c5c56783420ce0c09b37fd6cf33694ee9d1b54cb228ebfa664a13f4d01c3fb16e8aea98e419e
-  languageName: node
-  linkType: hard
-
-"@styled-icons/remix-editor@npm:^10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/remix-editor@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/c06e1f359936fffa00db3faa71e365a99e8e72d09a2ad044236b28d84ce04b43777d2918581adeb33cb552e743d41c139b5d1f01f9a4de00c6f564f803c658e1
-  languageName: node
-  linkType: hard
-
-"@styled-icons/remix-fill@npm:10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/remix-fill@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/b0355916db1b4224085d4976ae00709945442793adbbeb494fe16eef9e9e4515a8dfd90c00be842674e1eeff784c7e3e793b96587662db67a1075235278b6c9a
-  languageName: node
-  linkType: hard
-
-"@styled-icons/remix-line@npm:10.46.0":
-  version: 10.46.0
-  resolution: "@styled-icons/remix-line@npm:10.46.0"
-  dependencies:
-    "@babel/runtime": "npm:^7.19.0"
-    "@styled-icons/styled-icon": "npm:^10.7.0"
-  peerDependencies:
-    react: "*"
-    styled-components: "*"
-  checksum: 10/146e6f965ed1f68dc73db9593ae8aed3242f75f35a2d18432aae450c11761458af101df07dd8f0727e02f687f04e5f3e583c0c1e961a1a9b6a05c78eb5948ff3
-  languageName: node
-  linkType: hard
-
-"@styled-icons/styled-icon@npm:^10.7.0":
-  version: 10.7.1
-  resolution: "@styled-icons/styled-icon@npm:10.7.1"
-  dependencies:
-    "@babel/runtime": "npm:^7.20.7"
-  peerDependencies:
-    react: "*"
-    styled-components: ">=4.1.0"
-  checksum: 10/feeb87c652810f956c16c2f0809e2ceb51155ae8626b71fe713bfaeff82ed8afb5d1fecd1bbe7685acac85093a81496046400ae975e2ea1cde10eb97510e8336
   languageName: node
   linkType: hard
 

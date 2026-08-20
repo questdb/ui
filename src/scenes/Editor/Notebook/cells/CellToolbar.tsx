@@ -6,7 +6,7 @@ import {
   CopyAlt,
   Trash,
   Reset,
-} from "@styled-icons/boxicons-regular"
+} from "../../../../components/icons"
 import {
   DotsThreeVerticalIcon,
   CornersOutIcon,
@@ -20,7 +20,7 @@ import {
   PlayIcon,
   FileSqlIcon,
 } from "@phosphor-icons/react"
-import { DropdownMenu, Button, Tooltip } from "../../../../components"
+import { DropdownMenu, IconButton, Tooltip } from "../../../../components"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import {
@@ -49,7 +49,7 @@ const ToolbarWrapper = styled.div<{
 }>`
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.8rem;
   flex-shrink: 0;
 
   ${({ $inline, $forceVisible }) =>
@@ -63,22 +63,6 @@ const ToolbarWrapper = styled.div<{
           opacity: ${$forceVisible ? 1 : 0};
           transition: opacity 0.1s;
         `}
-`
-
-// Maximize / more-actions match the Run/Draw toggles: a `selection` hover fill
-// instead of the transparent skin's default.
-const ToolbarButton = styled(Button)`
-  &&:hover:not([disabled]) {
-    background: ${({ theme }) => theme.color.selection};
-  }
-`
-
-// Delete adopts the Button "danger" skin on hover — destructive actions read red.
-const DangerItem = styled(DropdownMenu.Item)`
-  &[data-highlighted] {
-    background: ${({ theme }) => theme.color.dangerBackground};
-    color: ${({ theme }) => theme.color.dangerForeground};
-  }
 `
 
 type Props = {
@@ -293,17 +277,17 @@ export const CellToolbar: React.FC<Props> = ({
       $forceVisible={menuOpen}
     >
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
-        <ToolbarButton
-          skin="transparent"
+        <IconButton
+          label={isMaximized ? "Restore" : "Maximize"}
+          variant="ghost"
           onClick={handleMaximizeCell}
-          aria-label={isMaximized ? "Restore" : "Maximize"}
         >
           {isMaximized ? (
             <CornersInIcon size={20} />
           ) : (
             <CornersOutIcon size={20} />
           )}
-        </ToolbarButton>
+        </IconButton>
       </Tooltip>
       {!isMaximized && (
         <DropdownMenu.Root
@@ -314,9 +298,9 @@ export const CellToolbar: React.FC<Props> = ({
         >
           <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
-              <ToolbarButton skin="transparent" aria-label="More actions">
+              <IconButton label="More actions" variant="ghost">
                 <DotsThreeVerticalIcon size={20} weight="bold" />
-              </ToolbarButton>
+              </IconButton>
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>
@@ -443,9 +427,13 @@ export const CellToolbar: React.FC<Props> = ({
                 </DropdownMenu.Item>
               )}
               {showDelete && (
-                <DangerItem onSelect={handleDelete} icon={<Trash size={16} />}>
+                <DropdownMenu.Item
+                  tone="danger"
+                  onSelect={handleDelete}
+                  icon={<Trash size={16} />}
+                >
                   Delete
-                </DangerItem>
+                </DropdownMenu.Item>
               )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

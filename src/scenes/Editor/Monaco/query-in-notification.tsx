@@ -19,9 +19,10 @@ export const QueryInNotification = ({ query }: { query: string }) => {
       <CopyButton
         text={query}
         iconOnly
+        size="sm"
         onCopy={() => void trackEvent(ConsoleEvent.QUERY_LOG_QUERY_COPY)}
       />
-      <StyledText color="foreground" title={query}>
+      <StyledText color="contentPrimary" title={query}>
         {query}
       </StyledText>
     </Box>

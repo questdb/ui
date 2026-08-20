@@ -15,15 +15,15 @@ const Header = styled.div`
   align-items: flex-start;
   gap: 0.6rem;
   font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
 
   svg {
     flex-shrink: 0;
-    color: ${({ theme }) => theme.color.gray2};
+    color: ${({ theme }) => theme.color.contentSecondary};
   }
 
   strong {
-    color: ${({ theme }) => theme.color.foreground};
+    color: ${({ theme }) => theme.color.contentPrimary};
     font-weight: 600;
   }
 `

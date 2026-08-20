@@ -26,15 +26,15 @@ import * as QuestDB from "../../../utils/questdb"
 import { getTableKind } from "../../../utils/questdb/types"
 import { Graph } from "./graph"
 import uPlot from "uplot"
-import styled from "styled-components"
-import { Error, Palette, Trash } from "@styled-icons/boxicons-regular"
+import styled, { useTheme } from "styled-components"
+import { Error, Palette, Trash } from "../../../components/icons"
 import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { TableIcon } from "../../Schema/table-icon"
 import {
   Box,
-  Button,
   ForwardRef,
+  IconButton,
   IconWithTooltip,
   Popover,
   TableSelector,
@@ -42,6 +42,7 @@ import {
 } from "../../../components"
 
 import { ColorPalette } from "./color-palette"
+import { toMetricColorToken } from "./metricColors"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -51,17 +52,16 @@ const MetricInfoRoot = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background-color: ${({ theme }) => theme.color.backgroundLighter};
-`
-
-const ActionButton = styled(Button)`
-  padding: 0;
-  width: 3rem;
+  background-color: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const StyledTableSelector = styled(TableSelector)`
+  width: 100%;
   min-width: 0;
-  margin-left: 0.6rem;
+
+  input {
+    width: 100%;
+  }
 `
 
 export const Metric = ({
@@ -78,6 +78,7 @@ export const Metric = ({
   onColorChange: (metric: MetricItem, color: string) => void
 }) => {
   const { quest } = useContext(QuestContext)
+  const theme = useTheme()
   const [loading, setLoading] = useState(metric.tableId !== undefined)
   const [lastNotNull, setLastNotNull] = useState<number>()
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
@@ -92,6 +93,8 @@ export const Metric = ({
   dateToRef.current = dateTo
 
   const tables = useSelector(selectors.query.getTables)
+
+  const colorToken = toMetricColorToken(metric.color)
 
   const selectedTable = tables.find((t): boolean => t.id === metric.tableId)
   const tableName = selectedTable?.table_name
@@ -229,7 +232,7 @@ export const Metric = ({
       }
       canZoomToData={canZoomToData}
       onZoomToData={handleZoomToData}
-      colors={[metric.color]}
+      colors={[theme.color[colorToken]]}
       loading={loading}
       tableId={metric.tableId}
       tableName={tableName}
@@ -249,9 +252,7 @@ export const Metric = ({
                 designatedTimestamp={selectedTable?.designatedTimestamp}
                 size="18px"
               />
-            ) : (
-              <div style={{ width: "18px" }} />
-            )
+            ) : undefined
           }
         />
       }
@@ -264,9 +265,9 @@ export const Metric = ({
                   open={colorPickerOpen}
                   onOpenChange={setColorPickerOpen}
                   trigger={
-                    <ActionButton skin="transparent">
+                    <IconButton label="Choose series color" variant="ghost">
                       <Palette size="18px" />
-                    </ActionButton>
+                    </IconButton>
                   }
                   align="center"
                 >
@@ -275,7 +276,7 @@ export const Metric = ({
                       onColorChange(metric, color)
                       setColorPickerOpen(false)
                     }}
-                    selectedColor={metric.color}
+                    selectedToken={colorToken}
                   />
                 </Popover>
               </ForwardRef>
@@ -285,15 +286,16 @@ export const Metric = ({
           />
           <IconWithTooltip
             icon={
-              <ActionButton
-                skin="transparent"
+              <IconButton
+                label="Remove metric"
+                variant="ghost"
                 onClick={() => {
                   void trackEvent(ConsoleEvent.METRIC_REMOVE)
                   onRemove(metric)
                 }}
               >
                 <Trash size="18px" />
-              </ActionButton>
+              </IconButton>
             }
             tooltip="Remove metric"
             placement="top"

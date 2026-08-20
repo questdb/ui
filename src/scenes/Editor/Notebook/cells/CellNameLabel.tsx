@@ -1,52 +1,52 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled, { css } from "styled-components"
 import { MAX_CELL_NAME_LENGTH } from "../../../../store/notebook"
+import { ButtonBase } from "../../../../components"
+import {
+  NotebookRenameInput,
+  notebookRenameFieldStyles,
+} from "../NotebookRenameInput"
 
-const Label = styled.button<{ $placeholder: boolean }>`
-  min-width: 0;
+const Label = styled(ButtonBase)<{ $placeholder: boolean }>`
+  ${notebookRenameFieldStyles}
+
+  border-color: transparent;
+  height: 2.4rem;
   max-width: 100%;
-  font-family: inherit;
-  font-size: 1.6rem;
-  font-weight: 600;
   text-align: left;
-  color: ${({ theme }) => theme.color.foreground};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: text;
   user-select: none;
-  padding: 0 0.4rem;
   flex-shrink: 1;
-  background: transparent;
 
-  border: 1px solid transparent;
-  border-radius: 0.3rem;
-  outline: none;
+  && {
+    cursor: text;
+  }
 
   &:hover,
   &:focus-visible {
-    border-color: ${({ theme }) => `${theme.color.selection}80`};
+    border-color: ${({ theme }) => theme.color.contentAccent};
   }
 
   ${({ $placeholder, theme }) =>
     $placeholder &&
     css`
-      color: ${theme.color.gray2};
+      color: ${theme.color.contentSecondary};
       font-weight: 400;
     `}
 `
 
-const Input = styled.input`
+const Input = styled(NotebookRenameInput)`
   min-width: 8rem;
+  height: 2.4rem;
   flex: 1;
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.color.foreground};
-  background: ${({ theme }) => theme.color.backgroundLighter};
-  border: 1px solid ${({ theme }) => theme.color.selection};
-  border-radius: 0.3rem;
-  padding: 0 0.4rem;
-  outline: none;
+  border-color: ${({ theme }) => theme.color.contentAccent};
+
+  &:focus,
+  &:focus-visible {
+    border-color: ${({ theme }) => theme.color.contentAccent};
+  }
 `
 
 type Props = {

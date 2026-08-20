@@ -8,7 +8,7 @@ import React, {
 } from "react"
 import { useSelector } from "react-redux"
 import styled from "styled-components"
-import { Box } from "../../../components"
+import { Box, Button, IconButton, TextArea } from "../../../components"
 import { Text } from "../../../components/Text"
 import { color } from "../../../utils"
 import { ArrowUpIcon, CodeBlockIcon, NotebookIcon } from "@phosphor-icons/react"
@@ -18,7 +18,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { slideAnimation } from "../../../components/Animation"
-import { pinkLinearGradientHorizontal } from "../../../theme"
+import { brandLinearGradientHorizontal } from "../../../theme"
 import { TableIcon } from "../../Schema/table-icon"
 import { getTableKind } from "../../../utils/questdb/types"
 import { selectors } from "../../../store"
@@ -33,7 +33,7 @@ const InputContainer = styled(Box)`
   flex-shrink: 0;
   width: 100%;
   margin-top: auto;
-  border-top: 1px solid ${color("selection")};
+  border-top: 1px solid ${color("interactionNeutral")};
 `
 
 const InputWrapper = styled(Box)`
@@ -43,7 +43,7 @@ const InputWrapper = styled(Box)`
   overflow: hidden;
 `
 
-const StyledTextArea = styled.textarea<{ $hasContext: boolean }>`
+const StyledTextArea = styled(TextArea)<{ $hasContext: boolean }>`
   flex: 1;
   min-height: 8rem;
   max-height: 30rem;
@@ -52,39 +52,13 @@ const StyledTextArea = styled.textarea<{ $hasContext: boolean }>`
     $hasContext
       ? "4.4rem 4.5rem 1.2rem 1.2rem"
       : "1.2rem 4.5rem 1.2rem 1.2rem"};
-  background: ${color("backgroundDarker")};
-  border: 1px solid ${color("selection")};
-  border-radius: 0.6rem;
-  color: ${color("foreground")};
-  font-size: 1.4rem;
-  font-family: ${({ theme }) => theme.font};
   resize: none;
-  outline: none;
-
-  &:focus {
-    border-color: ${color("pinkDarker")};
-  }
-
-  &::placeholder {
-    color: ${color("gray2")};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-  }
 `
 
-const ActionButton = styled.button`
+const SendButton = styled(IconButton)`
   position: absolute;
   right: 0.8rem;
   bottom: 0.8rem;
-  padding: 0.6rem;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.4rem;
-  cursor: pointer;
 `
 
 const ContextBadgeContainer = styled.div`
@@ -95,54 +69,31 @@ const ContextBadgeContainer = styled.div`
   left: 1px;
   width: calc(100% - 0.2rem);
   display: inline-flex;
-  background: ${color("backgroundDarker")};
 `
 
-const ContextBadge = styled.button<{ $warn?: boolean }>`
+const ContextBadge = styled(Button).attrs<{ $warn?: boolean }>((props) => ({
+  variant: props.$warn ? "dangerGhost" : "tertiary",
+}))<{ $warn?: boolean }>`
   display: flex;
   padding: 0.3rem 0.6rem;
   align-items: center;
   gap: 0.4rem;
   line-height: 1.4;
   border-radius: 0.6rem;
-  border: 1px solid
-    ${({ $warn, theme }) => ($warn ? theme.color.red : theme.color.selection)};
-  background: ${color("chatBackground")};
-  color: ${({ theme }) => theme.color.gray2};
   font-size: 1.3rem;
   user-select: none;
-  cursor: ${({ $warn }) => ($warn ? "default" : "pointer")};
-  font-family: inherit;
-
-  &:hover {
-    border: 1px solid
-      ${({ $warn, theme }) => ($warn ? theme.color.red : theme.color.offWhite)};
-    color: ${({ theme }) => theme.color.offWhite};
-  }
+  height: unset;
 `
 
 const ContextBadgeIcon = styled.div<{ $warn?: boolean }>`
   display: flex;
   align-items: center;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   flex-shrink: 0;
 
   svg {
-    color: ${({ $warn, theme }) => ($warn ? theme.color.red : color("gray2"))};
-  }
-`
-
-const SendButton = styled(ActionButton)`
-  background: ${color("pinkDarker")};
-  color: ${color("foreground")};
-
-  &:hover:not(:disabled) {
-    background: ${color("pink")};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    color: ${({ $warn, theme }) =>
+      $warn ? theme.color.statusDanger : color("contentSecondary")};
   }
 `
 
@@ -150,12 +101,12 @@ const ThoughtStream = styled.div`
   display: flex;
   position: relative;
   width: 100%;
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   border: 1px solid transparent;
   background:
-    linear-gradient(${color("backgroundDarker")}, ${color("backgroundDarker")})
+    linear-gradient(${color("surfaceInset")}, ${color("surfaceInset")})
       padding-box,
-    ${pinkLinearGradientHorizontal} border-box;
+    ${({ theme }) => brandLinearGradientHorizontal(theme.color)} border-box;
   border-radius: 0.6rem;
   height: 4rem;
 `
@@ -163,7 +114,7 @@ const ThoughtStream = styled.div`
 const ThoughtStreamContent = styled.div`
   display: flex;
   align-items: center;
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
   gap: 0.8rem;
   width: 100%;
   height: 100%;
@@ -175,7 +126,7 @@ const ThoughtStreamContent = styled.div`
 const ThoughtText = styled.div`
   font-weight: 500;
   font-size: 1.4rem;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   ${slideAnimation}
 `
 
@@ -370,17 +321,18 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               data-hook="chat-input-textarea"
             />
             <SendButton
+              label="Send message"
+              variant="primary"
               onClick={handleSend}
               disabled={!input.trim() || disabled}
               title="Send (Enter) • New line (Shift+Enter)"
-              aria-label="Send message"
               data-hook="chat-send-button"
             >
               <ArrowUpIcon size={20} weight="bold" />
             </SendButton>
           </InputWrapper>
         )}
-        <Text color="gray2" size="sm" align="center">
+        <Text color="contentSecondary" size="sm" align="center">
           Chats are connected to a single query to improve responses.
         </Text>
       </InputContainer>

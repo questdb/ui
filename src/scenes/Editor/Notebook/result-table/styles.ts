@@ -1,6 +1,6 @@
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 import { color } from "../../../../utils"
-import { Button, PrimaryToggleButton } from "../../../../components"
+import { Button, PrimaryToggleButton, TabButton } from "../../../../components"
 
 export const ResultWrapper = styled.div`
   overflow: hidden;
@@ -12,9 +12,9 @@ export const ResultWrapper = styled.div`
 
 export const SuccessMessage = styled.div`
   padding: 0.6rem 0.8rem;
-  color: ${color("green")};
+  color: ${color("statusSuccess")};
   font-size: ${({ theme }) => theme.fontSize.sm};
-  background: ${color("backgroundDarker")};
+  background: ${color("surfaceInset")};
 `
 
 export const TabBarWrapper = styled.div`
@@ -23,7 +23,9 @@ export const TabBarWrapper = styled.div`
   overflow-x: auto;
   gap: 0;
   height: 4rem;
-  border-top: 1px solid ${color("backgroundDarker")};
+  border-top: 1px solid ${color("surfaceInset")};
+
+  scrollbar-width: none;
 
   &::-webkit-scrollbar {
     height: 0;
@@ -37,48 +39,25 @@ export const TabLabel = styled.span`
   white-space: nowrap;
 `
 
-export const Tab = styled.button<{ $active: boolean }>`
-  display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border: none;
-  background: transparent;
-  color: ${color("gray2")};
-  cursor: pointer;
-  max-width: 20rem;
-  min-width: 15rem;
-  border-bottom: 2px solid transparent;
-
-  border-right: 1px solid ${color("selection")};
-  flex-shrink: 0;
-  gap: 0.8rem;
-  overflow: hidden;
-  position: relative;
-  transition: all 0.2s ease;
-
-  ${({ $active }) =>
-    $active &&
-    css`
-      color: ${color("foreground")};
-      background: ${color("selection")};
-      border-bottom: 2px solid ${color("pinkPrimary")};
-    `}
-
-  ${({ $active }) =>
-    !$active &&
-    css`
-      &:hover {
-        background: ${color("selectionDarker")};
-        border-bottom: 2px solid ${color("selection")};
-      }
-    `}
+export const Tab = styled(TabButton)`
+  && {
+    padding: 0.5rem 1rem;
+    max-width: 20rem;
+    min-width: 15rem;
+    border-right: 1px solid ${color("interactionNeutral")};
+    flex-shrink: 0;
+    gap: 0.8rem;
+    overflow: hidden;
+    position: relative;
+  }
 `
 
 export const TabStatusIcon = styled.span<{ $success: boolean }>`
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: ${({ $success }) => ($success ? color("green") : color("red"))};
+  color: ${({ $success }) =>
+    $success ? color("statusSuccess") : color("statusDanger")};
 `
 
 export const TabSpinner = styled.span`
@@ -106,7 +85,7 @@ export const CancelledIcon = styled.span`
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
 `
 
 export const CancelButton = styled(Button)`
@@ -114,8 +93,8 @@ export const CancelButton = styled(Button)`
 `
 
 export const NotificationContainer = styled.div`
-  border-top: 1px solid ${color("backgroundDarker")};
-  border-bottom: 1px solid ${color("backgroundDarker")};
+  border-top: 1px solid ${color("surfaceInset")};
+  border-bottom: 1px solid ${color("surfaceInset")};
 `
 
 export const LiveRegion = styled.div`
@@ -138,8 +117,10 @@ export const ActionsBar = styled.div`
   height: 3.6rem;
   padding: 0 0.8rem;
   overflow-x: auto;
-  background: ${color("backgroundDarker")};
-  border-bottom: 1px solid ${color("selection")};
+  background: ${color("surfaceInset")};
+  border-bottom: 1px solid ${color("interactionNeutral")};
+
+  scrollbar-width: none;
 
   &::-webkit-scrollbar {
     height: 0;

@@ -540,6 +540,9 @@ export const buildEchartsOption = (
   }
 
   return {
+    // The server sends UTC and every result grid prints it verbatim, so the
+    // axis and tooltip must not re-render those instants in the browser's zone.
+    useUTC: true,
     tooltip,
     legend: baseLegend,
     grid,

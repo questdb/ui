@@ -6,7 +6,7 @@ import React, {
   useEffect,
 } from "react"
 import type { MutableRefObject } from "react"
-import styled, { css } from "styled-components"
+import styled from "styled-components"
 import { Button, Box, Drawer, Text } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import { ExplainQueryButton } from "../../../components/ExplainQueryButton"
@@ -58,7 +58,7 @@ import { NotificationType } from "../../../store/Query/types"
 import type { QueryKey } from "../../../store/Query/types"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
-import { Stop } from "@styled-icons/remix-line"
+import { Stop } from "../../../components/icons"
 import { CircleNotchSpinner } from "../Monaco/icons"
 import { getBufferActionSeq } from "../../../utils/notebooks/notebookAIBridge"
 import { buildSnapshot } from "../../../utils/ai/notebookSnapshot"
@@ -91,20 +91,8 @@ const HeaderTitle = styled.span`
   font-size: 1.6rem;
 `
 
-const HeaderButton = styled(Button).attrs(
-  ({ $active }: { $active: boolean }) => ({
-    skin: "transparent",
-    $active,
-  }),
-)`
-  color: ${color("foreground")};
+const HeaderButton = styled(Button).attrs({ variant: "ghost" })`
   padding: 0.6rem;
-
-  ${({ $active }) =>
-    $active &&
-    css`
-      background: ${color("selection")};
-    `}
 `
 
 const HeaderRight = styled.div`
@@ -119,6 +107,7 @@ const ChatWindowContent = styled.div`
   height: 100%;
   width: 100%;
   overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceBase};
 `
 
 const InitialQueryContainer = styled.div`
@@ -173,14 +162,14 @@ const BlankChatHeading = styled.h2`
   font-size: 2rem;
   font-weight: 600;
   text-align: left;
-  color: ${color("foreground")};
+  color: ${color("contentPrimary")};
   margin: 0;
 `
 
 const BlankChatSubheading = styled.p`
   font-size: 1.4rem;
   font-weight: 400;
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   text-align: left;
   margin: 0;
   line-height: 1.5;
@@ -193,6 +182,7 @@ const ChatPanel = styled(Box)`
   height: 100%;
   width: 100%;
   gap: 0;
+  background: ${({ theme }) => theme.color.surfaceBase};
 `
 
 const AIChatWindow: React.FC = () => {
@@ -548,9 +538,9 @@ const AIChatWindow: React.FC = () => {
                   type: NotificationType.LOADING,
                   content: (
                     <Box gap="1rem" align="center">
-                      <Text color="foreground">Running...</Text>
+                      <Text color="contentPrimary">Running...</Text>
                       <CancelButton
-                        skin="error"
+                        variant="dangerGhost"
                         onClick={() => {
                           questExecution.cancelActive()
                         }}
@@ -997,7 +987,6 @@ const AIChatWindow: React.FC = () => {
               <PlusIcon size={16} weight="bold" />
             </HeaderButton>
             <HeaderButton
-              $active={isHistoryOpen}
               onClick={handleHistoryToggle}
               title={isHistoryOpen ? "Back to chat" : "Chat history"}
               aria-label={isHistoryOpen ? "Back to chat" : "Chat history"}

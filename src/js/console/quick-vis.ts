@@ -30,11 +30,14 @@ import "echarts/lib/component/tooltip"
 import "echarts/lib/component/title"
 import * as echarts from "echarts/lib/echarts"
 import { LegendComponent, GridComponent } from "echarts/components"
+import React from "react"
+import ReactDOM from "react-dom"
+import { PlayIcon, StopIcon } from "@phosphor-icons/react"
 
 import $ from "jquery"
 import SlimSelect from "slim-select"
 
-import eChartsMacarons from "./utils/macarons"
+import { createMacaronsTheme } from "./utils/macarons"
 import { arrayEquals } from "./array-equals"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -85,6 +88,7 @@ export function quickVis(
       },
     ],
   }
+  let currentChartOptions = blankChartOptions
 
   let cachedResponse: any
   let cachedQuery: AnyIfEmpty
@@ -92,17 +96,31 @@ export function quickVis(
   let executionToken = 0
   let activeQueryId: QuestDB.QueryId | null = null
 
-  const chartTypePicker = new SlimSelect({
-    select: "#_qvis_frm_chart_type",
-  })
+  const renderDrawButton = (Icon: typeof PlayIcon, label: string) => {
+    ReactDOM.render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(Icon, {
+          size: 16,
+          weight: "fill",
+          "aria-hidden": true,
+        }),
+        React.createElement("span", null, label),
+      ),
+      btnDraw[0],
+    )
+  }
 
-  const xAxisPicker = new SlimSelect({
-    select: "#_qvis_frm_axis_x",
-  })
+  const createPicker = (select: string, showSearch = true) => {
+    const picker = new SlimSelect({ select, addToBody: true, showSearch })
+    picker.slim.content.classList.add("quick-vis-select-menu")
+    return picker
+  }
 
-  const yAxisPicker = new SlimSelect({
-    select: "#_qvis_frm_axis_y",
-  })
+  const chartTypePicker = createPicker("#_qvis_frm_chart_type", false)
+  const xAxisPicker = createPicker("#_qvis_frm_axis_x")
+  const yAxisPicker = createPicker("#_qvis_frm_axis_y")
 
   function resize() {
     echart.resize()
@@ -115,12 +133,12 @@ export function quickVis(
   }
 
   function setDrawBtnToCancel() {
-    btnDraw.html('<i class="icon icon-stop"></i><span>Cancel</span>')
+    renderDrawButton(StopIcon, "Cancel")
     btnDraw.removeClass("js-chart-draw").addClass("js-chart-cancel")
   }
 
   function setDrawBtnToDraw() {
-    btnDraw.html('<i class="icon icon-play"></i><span>Draw</span>')
+    renderDrawButton(PlayIcon, "Draw")
     btnDraw.removeClass("js-chart-cancel").addClass("js-chart-draw")
   }
 
@@ -204,6 +222,7 @@ export function quickVis(
           },
           series,
         }
+        currentChartOptions = option
         echart.setOption(option, true)
       }
     } finally {
@@ -327,7 +346,15 @@ export function quickVis(
   }
 
   function clearChart() {
-    echart.setOption(blankChartOptions, true)
+    currentChartOptions = blankChartOptions
+    echart.setOption(currentChartOptions, true)
+  }
+
+  function refreshTheme() {
+    echart.dispose()
+    echart = echarts.init(viewport, createMacaronsTheme())
+    echart.setOption(currentChartOptions, true)
+    resize()
   }
 
   function updatePickers(data: { columns: any; query: any }) {
@@ -364,12 +391,17 @@ export function quickVis(
     $(window).resize(resize)
     eventBus.subscribe(EventType.MSG_ACTIVE_SIDEBAR, resize)
     // @ts-ignore
-    echart = echarts.init(viewport, eChartsMacarons)
+    echart = echarts.init(viewport, createMacaronsTheme())
     eventBus.subscribe(EventType.MSG_QUERY_DATASET, updatePickers)
+    eventBus.subscribe(EventType.MSG_THEME_CHANGED, refreshTheme)
     btnDraw.click(btnDrawClick)
     clearChart()
   }
 
   bind()
   resize()
+
+  return () => {
+    eventBus.unsubscribe(EventType.MSG_THEME_CHANGED, refreshTheme)
+  }
 }

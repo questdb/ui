@@ -16,7 +16,7 @@ import { db } from "../../store/db"
 import { UnreadItemsIcon } from "../../components/UnreadItemsIcon"
 import { Thumbnail } from "./thumbnail"
 import { Bell } from "./bell"
-import { BUTTON_ICON_SIZE } from "../../consts"
+import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
@@ -32,6 +32,7 @@ const Items = styled.div`
   display: grid;
   width: 100%;
   overflow: auto;
+  background: ${({ theme }) => theme.color.surfaceBase};
 `
 
 const Item = styled.div<{ unread?: boolean }>`
@@ -40,7 +41,7 @@ const Item = styled.div<{ unread?: boolean }>`
   padding: 2rem;
 
   &:not(:last-child) {
-    border-bottom: 1px solid ${({ theme }) => theme.color.backgroundLighter};
+    border-bottom: 1px solid ${({ theme }) => theme.color.surfaceRaised};
   }
 `
 
@@ -49,9 +50,9 @@ const Title = styled.h2`
   font-size: 2rem;
 `
 
-const NewsText = styled(Text).attrs({ color: "foreground" })`
+const NewsText = styled(Text).attrs({ color: "contentPrimary" })`
   a {
-    color: ${({ theme }) => theme.color.cyan};
+    color: ${({ theme }) => theme.color.statusInfo};
   }
 
   h2 {
@@ -69,10 +70,14 @@ const NewsText = styled(Text).attrs({ color: "foreground" })`
   }
 
   code {
-    background-color: ${({ theme }) => theme.color.selection};
-    color: ${({ theme }) => theme.color.pink};
-    padding: 0.2rem 0.4rem;
-    border-radius: 0.2rem;
+    background: ${({ theme }) => theme.color.surfaceInset};
+    border: 1px solid ${({ theme }) => theme.color.interactionNeutral};
+    border-radius: 0.4rem;
+    padding: 0.1rem 0.4rem;
+    font-family: ${({ theme }) => theme.fontMonospace};
+    font-size: 1.3rem;
+    color: ${({ theme }) => theme.color.statusFeature};
+    white-space: pre-wrap;
   }
 
   li:not(:last-child) {
@@ -193,6 +198,7 @@ const News = () => {
         <IconWithTooltip
           icon={
             <PrimaryToggleButton
+              aria-label={newsOpened ? "Close news" : "Open news"}
               data-hook="news-panel-button"
               onClick={() => {
                 if (!newsOpened) {
@@ -203,7 +209,7 @@ const News = () => {
               selected={newsOpened}
             >
               <UnreadItemsIcon
-                icon={<Bell size={BUTTON_ICON_SIZE} $unread={hasUnreadNews} />}
+                icon={<Bell size={SIDEBAR_ICON_SIZE} $unread={hasUnreadNews} />}
                 tick={hasUnreadNews}
               />
             </PrimaryToggleButton>
@@ -213,17 +219,17 @@ const News = () => {
         />
       }
     >
-      <Drawer.ContentWrapper mode="side">
+      <Drawer.ContentWrapper>
         <Items>
           {isLoading && !enterpriseNews && (
             <Loading>
-              <Text color="foreground">Loading news...</Text>
+              <Text color="contentPrimary">Loading news...</Text>
               <Loader />
             </Loading>
           )}
           {hasError && (
             <Loading>
-              <Text color="red">
+              <Text color="statusDanger">
                 Error loading news. Please try again shortly.
               </Text>
             </Loading>
@@ -239,7 +245,7 @@ const News = () => {
                 }
               >
                 <Title>{newsItem.title}</Title>
-                <Text color="gray2">{newsItem.date}</Text>
+                <Text color="contentSecondary">{newsItem.date}</Text>
                 {newsItem.thumbnail &&
                   newsItem.thumbnail.length > 0 &&
                   newsItem.thumbnail[0].thumbnails.large && (

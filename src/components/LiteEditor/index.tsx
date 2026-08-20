@@ -5,28 +5,29 @@ import { QuestDBLanguageName } from "../../scenes/Editor/Monaco/utils"
 import styled, { useTheme } from "styled-components"
 import { Button } from "../Button"
 import { CornersOutIcon } from "@phosphor-icons/react"
-import { FileCopy } from "@styled-icons/remix-line"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { FileCopy } from "../icons"
+import { CheckboxCircle } from "../icons"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { SquareSplitHorizontalIcon } from "@phosphor-icons/react"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
+import { getMonacoThemeName } from "../../utils/monacoInit"
 
 const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   position: relative;
   padding: ${({ $noBorder }) => ($noBorder ? 0 : "0 1.2rem")};
   border-radius: 8px;
   border: ${({ $noBorder, theme }) =>
-    $noBorder ? "none" : `1px solid ${theme.color.selection}`};
-  background: ${({ theme }) => theme.color.backgroundDarker};
+    $noBorder ? "none" : `1px solid ${theme.color.interactionNeutral}`};
+  background: ${({ theme }) => theme.color.editorCanvas};
   overflow-y: hidden;
 
   .monaco-editor-background {
-    background: ${({ theme }) => theme.color.backgroundDarker};
+    background: ${({ theme }) => theme.color.editorCanvas};
   }
 
   .monaco-editor {
-    background: ${({ theme }) => theme.color.backgroundDarker};
+    background: ${({ theme }) => theme.color.editorCanvas};
   }
 
   .editor.original {
@@ -77,18 +78,15 @@ const EditorWrapper = styled.div<{ $noBorder?: boolean }>`
   }
 `
 
-const OpenInEditorButton = styled(Button).attrs({ skin: "transparent" })`
+const OpenInEditorButton = styled(Button).attrs({ variant: "ghost" })`
   gap: 1rem;
   font-size: 1.2rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 0;
-  color: ${({ theme }) => theme.color.offWhite};
 `
 
 const SuccessIcon = styled(CheckboxCircle)`
   position: absolute;
   transform: translate(75%, -75%);
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const ButtonsContainer = styled.div`
@@ -102,10 +100,8 @@ const ButtonsContainer = styled.div`
   z-index: 10;
 `
 
-const CopyButtonBase = styled(Button)`
-  color: #e5e7eb;
+const CopyButtonBase = styled(Button).attrs({ variant: "ghost" })`
   padding: 0 0.6rem;
-  background: ${({ theme }) => theme.color.backgroundDarker};
 `
 
 const CopyButtonFloating = styled(CopyButtonBase)`
@@ -174,15 +170,15 @@ const LiteEditorToolbar = ({
         data-hook="ai-open-in-editor-button"
       >
         {!compact && label}
-        <Icon size="1.8rem" color={appTheme.color.offWhite} />
+        <Icon size="1.8rem" color={appTheme.color.contentSecondary} />
       </OpenInEditorButton>
       {!compact && (
         <CopyButtonBase
-          skin="transparent"
+          variant="ghost"
           onClick={onCopy}
           title="Copy to clipboard"
         >
-          {copied && <SuccessIcon size="1rem" />}
+          {copied && <SuccessIcon size="1rem" weight="fill" />}
           <FileCopy size="1.8rem" />
         </CopyButtonBase>
       )}
@@ -367,6 +363,7 @@ const LiteEditorContent = React.memo(
       prevProps.diffEditor === nextProps.diffEditor &&
       prevProps.original === nextProps.original &&
       prevProps.modified === nextProps.modified &&
+      prevProps.theme === nextProps.theme &&
       prevProps.grayedOutLines?.[0] === nextProps.grayedOutLines?.[0] &&
       prevProps.grayedOutLines?.[1] === nextProps.grayedOutLines?.[1]
     )
@@ -375,13 +372,15 @@ const LiteEditorContent = React.memo(
 
 export const LiteEditor: React.FC<LiteEditorProps> = ({
   language = QuestDBLanguageName,
-  theme = "dracula",
+  theme: explicitTheme,
   fontSize = 12,
   lineHeight = 20,
   maxHeight,
   compactToolbar = false,
   ...props
 }) => {
+  const appTheme = useTheme()
+  const monacoTheme = explicitTheme ?? getMonacoThemeName(appTheme.mode)
   const [copied, setCopied] = useState(false)
   const [contentHeight, setContentHeight] = useState(1)
   const handleCopy = (value: string) => {
@@ -416,7 +415,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           original={props.original}
           modified={props.modified}
           language={language}
-          theme={theme}
+          theme={monacoTheme}
           fontSize={fontSize}
           lineHeight={lineHeight}
           setContentHeight={setContentHeight}
@@ -437,11 +436,11 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
         />
       ) : (
         <CopyButtonFloating
-          skin="transparent"
+          variant="ghost"
           onClick={() => handleCopy(props.value ?? "")}
           title="Copy to clipboard"
         >
-          {copied && <SuccessIcon size="1rem" />}
+          {copied && <SuccessIcon size="1rem" weight="fill" />}
           <FileCopy size="1.8rem" />
         </CopyButtonFloating>
       )}
@@ -449,7 +448,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
         diffEditor={false}
         value={props.value}
         language={language}
-        theme={theme}
+        theme={monacoTheme}
         fontSize={fontSize}
         lineHeight={lineHeight}
         setContentHeight={setContentHeight}

@@ -2,7 +2,7 @@ import React from "react"
 import styled from "styled-components"
 import { Box } from "../../components"
 import { color } from "../../utils"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle } from "../../components/icons"
 
 const Root = styled(Box).attrs({
   align: "center",
@@ -20,7 +20,7 @@ const Unchecked = styled.div`
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 1px solid ${color("gray2")};
+  border: 1px solid ${color("contentSecondary")};
   cursor: pointer;
 `
 

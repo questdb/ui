@@ -1,8 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { Button, type ButtonProps } from "../Button"
-import { FileCopy } from "@styled-icons/remix-line"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { Check, FileCopy } from "../icons"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 
 const StyledButton = styled(Button)`
@@ -10,12 +9,20 @@ const StyledButton = styled(Button)`
   position: relative;
 `
 
-const StyledCheckboxCircle = styled(CheckboxCircle)`
+const CopiedIndicator = styled.span<{ $size: string }>`
   position: absolute;
   top: 0;
   right: 0;
   transform: translate(50%, -50%);
-  color: ${({ theme }) => theme.color.green};
+  display: inline-flex;
+  width: ${({ $size }) => $size};
+  height: ${({ $size }) => $size};
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: ${({ theme }) => theme.color.statusSuccess};
+  color: ${({ theme }) => theme.color.controlSurface};
+  pointer-events: none;
 `
 
 export const CopyButton = ({
@@ -23,6 +30,7 @@ export const CopyButton = ({
   iconOnly,
   icon,
   size = "md",
+  copiedMode = "badge",
   onCopy,
   ...props
 }: {
@@ -30,6 +38,7 @@ export const CopyButton = ({
   iconOnly?: boolean
   icon?: React.ReactNode
   size?: ButtonProps["size"]
+  copiedMode?: "badge" | "replace"
   onCopy?: () => void
 } & ButtonProps) => {
   const [copied, setCopied] = useState(false)
@@ -49,7 +58,7 @@ export const CopyButton = ({
 
   return (
     <StyledButton
-      skin="secondary"
+      variant="secondary"
       size={size}
       data-hook="copy-value"
       data-copied={copied || undefined}
@@ -64,13 +73,32 @@ export const CopyButton = ({
       {...(!iconOnly && { prefixIcon: displayIcon })}
       {...props}
     >
-      {copied && (
-        <StyledCheckboxCircle
+      {copied && copiedMode === "badge" && (
+        <CopiedIndicator
           data-copy-check
-          size={size === "sm" ? "8px" : "14px"}
-        />
+          $size={size === "sm" ? "10px" : "14px"}
+        >
+          <Check
+            aria-hidden
+            weight="bold"
+            size={size === "sm" ? "7px" : "10px"}
+          />
+        </CopiedIndicator>
       )}
-      {iconOnly ? displayIcon : "Copy"}
+      {iconOnly ? (
+        copied && copiedMode === "replace" ? (
+          <Check
+            data-copy-check
+            color="currentColor"
+            weight="bold"
+            size={size === "sm" ? "12px" : "16px"}
+          />
+        ) : (
+          displayIcon
+        )
+      ) : (
+        "Copy"
+      )}
     </StyledButton>
   )
 }

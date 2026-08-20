@@ -1,8 +1,8 @@
 import React from "react"
 import styled from "styled-components"
-import { Close } from "@styled-icons/remix-line"
-import { Error as ErrorIcon } from "@styled-icons/boxicons-regular"
-import { Box, Button, Tooltip, Input } from "../../../components"
+import { Error as ErrorIcon } from "../../../components/icons"
+import { XIcon } from "@phosphor-icons/react"
+import { Box, Button, IconButton, Tooltip, Input } from "../../../components"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { useSchema } from "../SchemaContext"
@@ -14,7 +14,8 @@ const Root = styled(Box).attrs({
   alignItems: "center",
 })`
   width: 100%;
-  padding-right: 2rem;
+  padding-right: 1rem;
+  min-width: 14rem;
 `
 
 const Filter = styled.div`
@@ -23,7 +24,7 @@ const Filter = styled.div`
   width: 100%;
 `
 
-const CloseIcon = styled(Close)`
+const ClearButton = styled(IconButton)`
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -36,30 +37,7 @@ const StyledInput = styled(Input)`
   width: 100%;
 
   &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
-  }
-
-  &::selection {
-    background: rgba(255, 255, 255, 0.3);
-    color: inherit;
-  }
-`
-
-const StyledButton = styled(Button)`
-  &:disabled {
-    border: none;
-  }
-`
-
-const Error = styled(Box).attrs({ gap: "0.5rem" })<{
-  suspendedTablesCount: number
-}>`
-  &,
-  button {
-    color: ${({ theme, suspendedTablesCount }) =>
-      theme.color[`${suspendedTablesCount > 0 ? "red" : "gray1"}`]};
-    cursor: ${({ suspendedTablesCount }) =>
-      suspendedTablesCount > 0 ? "pointer" : "default"};
+    color: ${({ theme }) => theme.color.contentSecondary};
   }
 `
 
@@ -80,8 +58,9 @@ export const Toolbar = ({
     <Root>
       <Filter>
         {queryRef.current?.value && (
-          <CloseIcon
-            size="20px"
+          <ClearButton
+            label="Clear schema filter"
+            size="sm"
             onClick={() => {
               setQuery("")
               if (queryRef.current?.value) {
@@ -89,7 +68,9 @@ export const Toolbar = ({
               }
             }}
             data-hook="schema-search-clear-button"
-          />
+          >
+            <XIcon size={18} />
+          </ClearButton>
         )}
         <StyledInput
           ref={queryRef}
@@ -116,10 +97,10 @@ export const Toolbar = ({
         />
       </Filter>
       {suspendedTablesCount > 0 && (
-        <Error suspendedTablesCount={suspendedTablesCount}>
+        <Box gap="0.5rem">
           <Tooltip placement="bottom" content="Show suspended tables">
-            <StyledButton
-              skin="transparent"
+            <Button
+              variant="dangerGhost"
               onClick={() => {
                 void trackEvent(ConsoleEvent.SCHEMA_FILTER_SUSPENDED, {
                   enabled: !filterSuspendedOnly,
@@ -130,9 +111,9 @@ export const Toolbar = ({
               data-hook="schema-filter-suspended-button"
             >
               {suspendedTablesCount}
-            </StyledButton>
+            </Button>
           </Tooltip>
-        </Error>
+        </Box>
       )}
     </Root>
   )

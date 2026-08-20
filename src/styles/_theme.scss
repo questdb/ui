@@ -1,0 +1,12 @@
+// Legacy SCSS reads the palette through CSS custom properties so that
+// `main.scss` stays a real stylesheet, linked in <head> and applied before the
+// bundle executes. `ThemeCssVariables` declares every property from the same
+// `src/theme/index.ts` palette the styled-components theme uses, so there is
+// still exactly one source of truth for colour.
+@function theme-color($name) {
+  @return var(--qdb-color-#{$name});
+}
+
+@function theme-font($name) {
+  @return var(--qdb-font-#{$name});
+}

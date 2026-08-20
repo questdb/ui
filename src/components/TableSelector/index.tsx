@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import styled from "styled-components"
 import * as RadixPopover from "@radix-ui/react-popover"
 import Highlighter from "react-highlight-words"
-import { Close } from "@styled-icons/remix-line"
+import { XIcon } from "@phosphor-icons/react"
 import { TableIcon } from "../../scenes/Schema/table-icon"
 import type { PartitionBy } from "../../utils/questdb"
 import {
@@ -10,6 +10,8 @@ import {
   type VirtualizedTreeHandle,
   type VirtualizedTreeItem,
 } from "../VirtualizedTree"
+import { IconButton } from "../IconButton"
+import { floatingSurfaceStyles } from "../overlayStyles"
 
 export type TableOption = {
   label: string
@@ -52,7 +54,8 @@ const TriggerContainer = styled.div`
 
   &:hover,
   &:focus-within {
-    border-color: ${({ theme }) => theme.color.cyan};
+    border-color: ${({ theme }) => theme.color.borderAccent};
+    background: ${({ theme }) => theme.color.interactionAccentHover};
   }
 `
 
@@ -60,7 +63,7 @@ const TriggerInput = styled.input<{ $isOpen: boolean }>`
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.6rem;
   font-weight: 400;
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
   background: transparent;
   border: none;
   outline: none;
@@ -72,32 +75,24 @@ const TriggerInput = styled.input<{ $isOpen: boolean }>`
   padding-right: ${({ $isOpen }) => ($isOpen ? "2rem" : "0")};
 
   &::placeholder {
-    color: ${({ theme }) => theme.color.gray2};
+    color: ${({ theme }) => theme.color.contentSecondary};
   }
 `
 
 const DropdownContent = styled(RadixPopover.Content)`
+  ${floatingSurfaceStyles}
   display: flex;
   flex-direction: column;
-  background: ${({ theme }) => theme.color.backgroundDarker};
-  border: 1px solid ${({ theme }) => theme.color.background};
-  border-radius: 0.6rem;
-  box-shadow: 0 0.5rem 1rem 0 ${({ theme }) => theme.color.black40};
-  z-index: 1000;
+  z-index: 9999;
   width: 30rem;
-  padding: 0.1rem;
+  max-width: calc(100vw - 1.6rem);
+  padding: 0.4rem;
   overflow: hidden;
 `
 
-const ClearIcon = styled(Close)`
+const ClearButton = styled(IconButton)`
   position: absolute;
-  right: 0.5rem;
-  cursor: pointer;
-  color: ${({ theme }) => theme.color.gray2};
-
-  &:hover {
-    color: ${({ theme }) => theme.color.foreground};
-  }
+  right: 0;
 `
 
 const Item = styled.div<{ $active: boolean; $disabled?: boolean }>`
@@ -113,26 +108,29 @@ const Item = styled.div<{ $active: boolean; $disabled?: boolean }>`
   min-width: 0;
   cursor: ${({ $disabled }) => ($disabled ? "not-allowed" : "pointer")};
   color: ${({ theme, $disabled }) =>
-    $disabled ? theme.color.gray1 : theme.color.foreground};
-  background: ${({ theme, $active }) =>
-    $active ? theme.color.tableSelection : "transparent"};
+    $disabled ? theme.color.contentDisabled : theme.color.contentPrimary};
+  background: ${({ $active, theme }) =>
+    $active ? theme.color.interactionAccentActive : "transparent"};
   border: 1px solid
-    ${({ theme, $active }) => ($active ? theme.color.cyan : "transparent")};
+    ${({ $active, theme }) =>
+      $active ? theme.color.borderAccent : "transparent"};
 
   &:hover {
-    background: ${({ theme, $disabled, $active }) =>
+    background: ${({ $disabled, $active, theme }) =>
       $disabled
         ? "transparent"
         : $active
-          ? theme.color.tableSelection
-          : `${theme.color.tableSelection}4D`};
+          ? theme.color.interactionAccentActive
+          : theme.color.interactionAccentHover};
   }
 
   .highlight {
     background-color: ${({ theme, $disabled }) =>
-      $disabled ? `${theme.color.selection}80` : theme.color.selection};
+      $disabled
+        ? `${theme.color.interactionNeutral}80`
+        : theme.color.interactionNeutral};
     color: ${({ theme, $disabled }) =>
-      $disabled ? theme.color.gray1 : theme.color.foreground};
+      $disabled ? theme.color.contentDisabled : theme.color.contentPrimary};
   }
 `
 
@@ -145,7 +143,7 @@ const ItemLabel = styled.span`
 const NoResults = styled.div`
   padding: 1.2rem;
   font-size: ${({ theme }) => theme.fontSize.md};
-  color: ${({ theme }) => theme.color.gray2};
+  color: ${({ theme }) => theme.color.contentSecondary};
 `
 
 export const TableSelector = ({
@@ -403,8 +401,9 @@ export const TableSelector = ({
             data-hook={titleDataHook ?? "table-selector-input"}
           />
           {open && query && (
-            <ClearIcon
-              size="16px"
+            <ClearButton
+              label="Clear table search"
+              size="sm"
               onClick={(e) => {
                 e.stopPropagation()
                 setQuery("")
@@ -412,7 +411,9 @@ export const TableSelector = ({
                 inputRef.current?.focus()
               }}
               data-hook="table-selector-clear"
-            />
+            >
+              <XIcon size={16} />
+            </ClearButton>
           )}
         </TriggerContainer>
       </RadixPopover.Anchor>

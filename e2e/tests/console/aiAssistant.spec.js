@@ -481,7 +481,7 @@ describe("ai assistant", () => {
           cy.getByDataHook("ai-settings-model-item").contains(modelLabel)
         })
       })
-      cy.getByDataHook("ai-settings-model-dropdown").click() // close dropdown
+      cy.get("body").type("{esc}") // close dropdown
 
       // When - Open settings and configure Anthropic provider
       interceptTokenValidation("anthropic", true)
@@ -3497,7 +3497,7 @@ describe("custom providers", () => {
     cy.contains("llama3").should("be.visible")
     cy.contains("mistral").should("be.visible")
     cy.contains("codellama").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
@@ -3514,7 +3514,7 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-model-item").should("have.length", 2)
     cy.contains("llama3").should("be.visible")
     cy.contains("codellama").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").click()
@@ -3526,7 +3526,7 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
     cy.getByDataHook("ai-settings-model-item").should("have.length", 3)
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-add-custom-provider")
@@ -3559,7 +3559,7 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
     cy.getByDataHook("ai-settings-model-item").should("have.length", 4)
     cy.contains("gpt-4o").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").click()
@@ -3574,7 +3574,7 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
     cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
     cy.contains("gpt-4o").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
   })
 
   it("should show error on 401, retry successfully, and show error on network failure", () => {
@@ -4155,7 +4155,7 @@ describe("custom providers", () => {
     cy.contains("llama3").should("be.visible")
     cy.contains("mistral").should("be.visible")
     cy.contains("custom-finetune").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
   })
 
   it("should auto-enable new models from manage models and preserve unsaved toggle state", () => {
@@ -4229,7 +4229,7 @@ describe("custom providers", () => {
     cy.contains("model-a").should("be.visible")
     cy.contains("model-c").should("be.visible")
     cy.contains("model-d").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
   })
 
   it("should handle no-API-key custom provider: models visible, no validated badge, schema toggle enabled, and allow adding an API key", () => {
@@ -4289,7 +4289,7 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-provider-ollama").click()
 
     // Click Edit button to make input editable, then type API key
-    cy.get('button[title="Edit API key"]').click()
+    cy.getByDataHook("ai-settings-edit-api-key").click()
     cy.getByDataHook("ai-settings-api-key").type("sk-custom-key-123")
 
     // Intercept validation request to custom endpoint
@@ -4330,6 +4330,6 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
     cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
     cy.contains("llama3").should("be.visible")
-    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.get("body").type("{esc}") // close dropdown
   })
 })

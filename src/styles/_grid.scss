@@ -26,8 +26,10 @@
   height: 100%;
   width: 100%;
   flex-direction: column;
-  font-family: "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono",
-  "Courier New", monospace;
+  background: theme-color(surfaceInset);
+  font-family:
+    "Open Sans", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   overflow: hidden;
 }
 
@@ -36,7 +38,8 @@ $drag-handle-z-index: 1;
 $panel-left-z-index: ($drag-handle-z-index + 1);
 $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
-.qg-header-row, .qg-header-left-row {
+.qg-header-row,
+.qg-header-left-row {
   display: flex;
   overflow: hidden;
   min-height: $row-height;
@@ -49,11 +52,11 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 }
 
 .qg-timestamp {
-  color: #50fa7b;
+  color: theme-color(editorSyntaxNumber);
 }
 
 .qg-null {
-  color: #939393;
+  color: theme-color(contentSecondary);
 }
 
 .qg-header-row {
@@ -63,15 +66,16 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 .qg-r {
   white-space: pre;
   display: flex;
-  border-bottom: 1px solid #44475a;
+  background: theme-color(gridRow);
+  border-bottom: 1px solid theme-color(borderSubtle);
   position: absolute;
   left: 0;
   right: 0;
 }
 
-$active-row-background: #44475a;
-$row-hover-background: #333544;
-$table-selection-background: #043c5c;
+$active-row-background: theme-color(interactionNeutral);
+$row-hover-background: theme-color(interactionNeutralHover);
+$table-selection-background: theme-color(gridSelection);
 
 .qg-r-hover {
   background-color: $row-hover-background;
@@ -82,12 +86,12 @@ $table-selection-background: #043c5c;
 }
 
 .qg-last-col {
-  border-right: thin dotted #44475a;
+  border-right: thin dotted theme-color(editorSelection);
 }
 
 .qg-hover .qg-r-active:hover {
   background-color: $active-row-background;
-  color: #f8f8f2;
+  color: theme-color(contentPrimary);
 }
 
 .qg-r-active {
@@ -110,7 +114,7 @@ $table-selection-background: #043c5c;
   -moz-user-select: none; /* Old versions of Firefox */
   -ms-user-select: none; /* Internet Explorer/Edge */
   user-select: none;
-  background: #21222c;
+  background: theme-color(gridHeader);
   position: relative;
 }
 
@@ -138,14 +142,14 @@ $drag-handle-margin: 2px;
   display: none;
   padding: 2px;
   cursor: pointer;
-  color: #bbb;
+  color: theme-color(contentSecondary);
   border-radius: 3px;
   line-height: 0;
   flex-shrink: 0;
   position: relative;
 
   &:hover {
-    color: #f8f8f2;
+    color: theme-color(contentPrimary);
   }
 }
 
@@ -158,11 +162,12 @@ $drag-handle-margin: 2px;
   position: absolute;
   margin-top: 10px;
   height: 25px;
-  border-left: thin dashed #6272a4;
+  border-left: thin dashed theme-color(interactionGuide);
   right: 0;
 }
 
-.qg-header-l .qg-header-name, .qg-header-l .qg-header-type {
+.qg-header-l .qg-header-name,
+.qg-header-l .qg-header-type {
   text-align: left;
 }
 
@@ -185,7 +190,7 @@ $drag-handle-margin: 2px;
 }
 
 .qg-col-resize-hysteresis-enter {
-  background-color: #6272a4;
+  background-color: theme-color(interactionGuide);
   width: 5px;
   margin-top: 10px;
   margin-left: 8px;
@@ -196,7 +201,7 @@ $drag-handle-margin: 2px;
 .qg-col-resize-ghost {
   position: absolute;
   width: $drag-handle-margin;
-  background-color: #6272a4;
+  background-color: theme-color(interactionGuide);
   height: 0;
   top: 0;
   left: 0;
@@ -204,22 +209,24 @@ $drag-handle-margin: 2px;
   z-index: $col-resize-ghost-z-index;
 }
 
-.qg-header-name, .qg-header-type {
+.qg-header-name,
+.qg-header-type {
   display: block;
   margin-left: $visible-drag-handle-margin + 3;
   padding: 0;
   text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .qg-header-name {
-  color: #8be9fd !important;
+  color: theme-color(contentObject) !important;
   font-size: medium;
 }
 
 .qg-header-type {
-  color: #bbbbbb;
+  color: theme-color(contentMuted);
   font-size: x-small;
 }
 
@@ -237,6 +244,7 @@ $drag-handle-margin: 2px;
 .qg-viewport {
   overflow: auto;
   height: 100%;
+  background: theme-color(surfaceInset);
 }
 
 .qg-canvas {
@@ -250,26 +258,26 @@ $drag-handle-margin: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  border-left: thin dotted #44475a;
+  border-left: 1px solid theme-color(borderSubtle);
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 1px #8be9fd;
+  box-shadow: inset 0 0 0 1px theme-color(gridFocus);
   background: $table-selection-background;
   border-radius: 0.4rem;
 }
 
 .qg-c-active-pulse {
   animation: pulse 1000ms 0.1s;
-  z-index: 1;
+  z-index: 4;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: #8be9fd 0 0 0 1px;
+    box-shadow: theme-color(gridFocus) 0 0 0 1px;
   }
   75% {
-    box-shadow: #f1fa8c00 0 0 0 16px;
+    box-shadow: theme-color(transparent) 0 0 0 16px;
   }
 }
 
@@ -278,7 +286,7 @@ $drag-handle-margin: 2px;
   position: absolute;
   top: 0;
   left: 0;
-  background: #282a36;
+  background: theme-color(surfaceInset);
   // z-index of the panel must be greater than z-index of the drag handle
   z-index: $panel-left-z-index;
   // this is to make last column hysteresis fully visible (it is transparent)
@@ -289,7 +297,7 @@ $drag-handle-margin: 2px;
   width: 100%;
   height: 100%;
   position: relative;
-  border-right: thin solid #98999f;
+  border-right: thin solid theme-color(contentSecondary);
   overflow-x: hidden;
   overflow-y: auto;
   // hide scrollbar for IE, Edge and Firefox
@@ -303,8 +311,8 @@ $drag-handle-margin: 2px;
   display: none;
 }
 
-$left-shadow: 10px 0 30px -4px rgba(0, 0, 0, 0.75);
-$top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
+$left-shadow: 10px 0 30px -4px theme-color(shadowOverlay);
+$top-shadow: 0 2px 5px 0 theme-color(shadowOverlay);
 
 .qg-panel-scrolled-left {
   -webkit-box-shadow: $left-shadow;
@@ -318,7 +326,10 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   box-shadow: $top-shadow;
 }
 
-.qg-panel-left-ghost, .qg-panel-left-hysteresis, .qg-panel-left-snap-ghost, .qg-panel-left-initial-hysteresis {
+.qg-panel-left-ghost,
+.qg-panel-left-hysteresis,
+.qg-panel-left-snap-ghost,
+.qg-panel-left-initial-hysteresis {
   position: absolute;
   top: 0;
   margin-top: 54px;
@@ -327,13 +338,13 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
 }
 
 .qg-panel-left-ghost {
-  background-color: #98999f;
+  background-color: theme-color(contentSecondary);
   width: 2px;
   display: none;
 }
 
 .qg-panel-left-snap-ghost {
-  background-color: #6272a4;
+  background-color: theme-color(interactionGuide);
   width: 2px;
   display: none;
 }
@@ -358,7 +369,7 @@ $top-shadow: 0 2px 5px 0 rgba(23, 23, 23, 0.86);
   left: 0;
   width: 6px;
   height: 30px;
-  background-color: #6272a4;
+  background-color: theme-color(interactionGuide);
   border-radius: 3px;
   margin-left: -2px;
   cursor: grab;

@@ -47,7 +47,7 @@ const Wrapper = styled.div`
 
   svg {
     margin-right: 0.2rem;
-    color: ${color("foreground")};
+    color: ${color("contentPrimary")};
   }
 `
 
@@ -64,7 +64,7 @@ const DetailsText = styled(Text)`
 `
 
 const TruncatedTag = styled.span`
-  color: ${color("orange")};
+  color: ${color("statusWarning")};
 `
 
 const roundTiming = (time: number): number =>
@@ -72,10 +72,10 @@ const roundTiming = (time: number): number =>
 
 const addColor = (timing: string) => {
   if (timing === "0") {
-    return <Text color="gray2">0</Text>
+    return <Text color="contentSecondary">0</Text>
   }
 
-  return <Text color="orange">{timing}</Text>
+  return <Text color="statusWarning">{timing}</Text>
 }
 
 export const formatTiming = (nanos: number) => {
@@ -112,7 +112,7 @@ const QueryResult = ({
   return (
     <Wrapper _height={95} duration={TransitionDuration.FAST}>
       <div>
-        <Text color="gray2">
+        <Text color="contentSecondary">
           {truncated ? (
             <>
               {rowCount.toLocaleString()} of {totalRowCount.toLocaleString()}{" "}
@@ -131,26 +131,26 @@ const QueryResult = ({
 
       <Details>
         <DetailsColumn>
-          <DetailsText color="foreground">
+          <DetailsText color="contentPrimary">
             Execute: {addColor(formatTiming(execute))}
           </DetailsText>
-          <DetailsText color="foreground">
+          <DetailsText color="contentPrimary">
             Network:&nbsp;
             {addColor(formatTiming(fetch - execute))}
           </DetailsText>
-          <DetailsText color="foreground">
+          <DetailsText color="contentPrimary">
             Total:&nbsp;
             {addColor(formatTiming(fetch))}
           </DetailsText>
         </DetailsColumn>
         <DetailsColumn>
-          <DetailsText align="right" color="gray2" size="sm">
+          <DetailsText align="right" color="contentSecondary" size="sm">
             Count: {formatTiming(count)}
           </DetailsText>
-          <DetailsText align="right" color="gray2" size="sm">
+          <DetailsText align="right" color="contentSecondary" size="sm">
             Authentication: {formatTiming(authentication)}
           </DetailsText>
-          <DetailsText align="right" color="gray2" size="sm">
+          <DetailsText align="right" color="contentSecondary" size="sm">
             Compile: {formatTiming(compiler)}
           </DetailsText>
         </DetailsColumn>

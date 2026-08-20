@@ -41,7 +41,7 @@ import {
   Close,
   FileCopy,
   Refresh,
-} from "@styled-icons/remix-line"
+} from "../../components/icons"
 import {
   Box,
   Button,
@@ -62,7 +62,7 @@ import VirtualTables from "./VirtualTables"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { Checkbox } from "./checkbox"
-import { AddChart } from "@styled-icons/material"
+import { AddChart } from "../../components/icons"
 import { useEditor } from "../../providers/EditorProvider"
 import {
   metricDurations,
@@ -369,7 +369,7 @@ const Schema = ({
           <div
             style={{
               display: "flex",
-              marginRight: "1rem",
+              marginRight: "0.4rem",
               justifyContent: "space-between",
               flex: 1,
             }}
@@ -388,7 +388,8 @@ const Schema = ({
                     content="Copy schemas to clipboard"
                   >
                     <Button
-                      skin="transparent"
+                      aria-label="Add metrics"
+                      variant="ghost"
                       data-hook="schema-copy-to-clipboard-button"
                       disabled={selectedTables.length === 0}
                       onClick={copySchemasToClipboard}
@@ -412,7 +413,7 @@ const Schema = ({
                     }
                   >
                     <Button
-                      skin="transparent"
+                      variant="ghost"
                       data-hook="schema-select-all-button"
                       onClick={() => {
                         if (
@@ -438,7 +439,7 @@ const Schema = ({
                   <Tooltip delay={350} placement="bottom" content="Cancel">
                     <Button
                       data-hook="schema-cancel-select-button"
-                      skin="transparent"
+                      variant="ghost"
                       onClick={() => {
                         setSelectedTables([])
                         setSelectOpen(false)
@@ -451,18 +452,20 @@ const Schema = ({
 
                 {!selectOpen && (
                   <Tooltip delay={350} placement="bottom" content="Add metrics">
-                    <Button
+                    <ToolbarToggleButton
+                      aria-label="Add metrics"
                       data-hook="schema-add-metrics-button"
-                      skin="transparent"
                       onClick={handleAddMetricsBuffer}
+                      selected={false}
                     >
                       <AddChart size="20px" />
-                    </Button>
+                    </ToolbarToggleButton>
                   </Tooltip>
                 )}
                 {!selectOpen && (
                   <Tooltip delay={350} placement="right" content="Select">
                     <ToolbarToggleButton
+                      aria-label="Select tables"
                       data-hook="schema-select-button"
                       onClick={() => {
                         if (selectOpen) {
@@ -486,6 +489,9 @@ const Schema = ({
                     content={`Auto refresh ${autoRefreshTables ? "enabled" : "disabled"}`}
                   >
                     <ToolbarToggleButton
+                      aria-label={`Auto refresh ${
+                        autoRefreshTables ? "enabled" : "disabled"
+                      }`}
                       data-hook="schema-auto-refresh-button"
                       onClick={() => {
                         updateSettings(

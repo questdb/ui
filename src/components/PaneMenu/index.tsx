@@ -24,8 +24,6 @@
 
 import styled from "styled-components"
 
-import { color } from "../../utils"
-
 export const PaneMenu = styled.div`
   position: relative;
   display: flex;
@@ -33,6 +31,6 @@ export const PaneMenu = styled.div`
   height: 4.5rem;
   padding: 0 1rem;
   align-items: center;
-  background: ${color("backgroundLighter")};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-top: 1px solid transparent;
 `

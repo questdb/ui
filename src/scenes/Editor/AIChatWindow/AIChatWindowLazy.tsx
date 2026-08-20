@@ -5,14 +5,13 @@ import { useSelector } from "react-redux"
 import { selectors } from "../../../store"
 import { AIChatErrorBoundary } from "./AIChatErrorBoundary"
 import { CircleNotchSpinner } from "../Monaco/icons"
-import { color } from "../../../utils"
 
 const AIChatWindow = lazy(() => import("./index"))
 
 const LoaderContainer = styled.div`
   display: flex;
   align-items: center;
-  background: ${color("chatBackground")};
+  background: ${({ theme }) => theme.color.surfaceBase};
   justify-content: center;
   height: 100%;
   width: 100%;

@@ -9,13 +9,10 @@ import {
 } from "react-toastify"
 import { useNotificationCenter as RTNotificationCenter } from "react-toastify/addons/use-notification-center"
 import { BadgeType } from "../../scenes/Import/ImportCSVFiles/types"
-import {
-  CloseCircle,
-  ErrorWarning,
-  Information,
-} from "@styled-icons/remix-line"
-import { CheckmarkOutline } from "@styled-icons/evaicons-outline"
-import { theme } from "../../theme"
+import { CloseCircle, ErrorWarning, Information } from "../icons"
+import { CheckmarkOutline } from "../icons"
+import { useTheme } from "styled-components"
+import { getThemeColor } from "../../theme/runtime"
 
 import "react-toastify/dist/ReactToastify.css"
 import "../../styles/_toast.scss"
@@ -36,18 +33,34 @@ export const ToastIcon = ({
 }: StyledIconProps & {
   type: BadgeType
 }) => {
+  const theme = useTheme()
+
   switch (type) {
     case BadgeType.SUCCESS:
       return (
-        <CheckmarkOutline {...props} size={size} color={theme.color.green} />
+        <CheckmarkOutline
+          {...props}
+          size={size}
+          color={theme.color.statusSuccess}
+        />
       )
     case BadgeType.WARNING:
-      return <ErrorWarning {...props} size={size} color={theme.color.orange} />
+      return (
+        <ErrorWarning
+          {...props}
+          size={size}
+          color={theme.color.statusWarning}
+        />
+      )
     case BadgeType.ERROR:
-      return <CloseCircle {...props} size={size} color={theme.color.red} />
+      return (
+        <CloseCircle {...props} size={size} color={theme.color.statusDanger} />
+      )
     case BadgeType.INFO:
     default:
-      return <Information {...props} size={size} color={theme.color.cyan} />
+      return (
+        <Information {...props} size={size} color={theme.color.statusInfo} />
+      )
   }
 }
 
@@ -57,11 +70,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.INFO} />,
       className: "toast-info-container",
       progressStyle: {
-        background: theme.color.cyan,
+        background: getThemeColor("statusInfo"),
       },
       style: {
-        borderColor: theme.color.cyan,
-        background: theme.color.backgroundLighter,
+        borderColor: getThemeColor("statusInfo"),
+        background: getThemeColor("surfaceRaised"),
+        color: getThemeColor("contentPrimary"),
       },
       ...options,
     })
@@ -71,11 +85,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.SUCCESS} />,
       className: "toast-success-container",
       progressStyle: {
-        background: theme.color.green,
+        background: getThemeColor("statusSuccess"),
       },
       style: {
-        borderColor: theme.color.green,
-        background: theme.color.backgroundLighter,
+        borderColor: getThemeColor("statusSuccess"),
+        background: getThemeColor("surfaceRaised"),
+        color: getThemeColor("contentPrimary"),
       },
       ...options,
     })
@@ -85,11 +100,12 @@ const toast = {
       icon: <ToastIcon type={BadgeType.WARNING} />,
       className: "toast-warning-container",
       progressStyle: {
-        background: theme.color.orange,
+        background: getThemeColor("statusWarning"),
       },
       style: {
-        borderColor: theme.color.orange,
-        background: theme.color.backgroundLighter,
+        borderColor: getThemeColor("statusWarning"),
+        background: getThemeColor("surfaceRaised"),
+        color: getThemeColor("contentPrimary"),
       },
       ...options,
     })
@@ -98,12 +114,13 @@ const toast = {
     return rtToast.error(content, {
       icon: <ToastIcon type={BadgeType.ERROR} />,
       progressStyle: {
-        background: theme.color.red,
+        background: getThemeColor("statusDanger"),
       },
       className: "toast-error-container",
       style: {
-        borderColor: theme.color.red,
-        background: theme.color.backgroundLighter,
+        borderColor: getThemeColor("statusDanger"),
+        background: getThemeColor("surfaceRaised"),
+        color: getThemeColor("contentPrimary"),
       },
       ...options,
     })
@@ -115,11 +132,12 @@ const toast = {
 export { toast }
 
 export const ToastContainer = (props?: ToastContainerProps) => {
+  const theme = useTheme()
   const mergedProps: ToastContainerProps = {
     autoClose: 3000,
     draggable: false,
     position: "top-right",
-    theme: "dark",
+    theme: theme.mode,
     transition: Slide,
     hideProgressBar: false,
     closeButton: true,

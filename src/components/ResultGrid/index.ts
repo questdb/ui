@@ -19,5 +19,5 @@ export {
   isLeftAligned,
 } from "./inlineGridUtils"
 export { buildResultPageMarkdown } from "./resultPageMarkdown"
-export { HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
+export { CELL_FONT_SIZE_PX, HEADER_HEIGHT, ROW_HEIGHT } from "./dimensions"
 export { toAbsoluteIndex } from "./virtualRowMapping"

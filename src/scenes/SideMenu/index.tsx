@@ -29,19 +29,20 @@ import styled from "styled-components"
 
 import { TransitionDuration } from "../../components"
 import { actions, selectors } from "../../store"
-import { color } from "../../utils"
+import { FOOTER_HEIGHT, TOP_BAR_HEIGHT } from "../../consts"
 
 import Schema from "../Schema"
 
 const WIDTH = 280
+const RESPONSIVE_WIDTH = `min(${WIDTH}px, calc(100vw - 1.6rem))`
 
 const Backdrop = styled.div`
   position: fixed;
-  top: 4rem;
+  top: ${TOP_BAR_HEIGHT};
   right: 0;
-  bottom: 0;
+  bottom: ${FOOTER_HEIGHT};
   left: 0;
-  background: rgba(0, 0, 0, 0.3);
+  background: ${({ theme }) => theme.color.shadowMedium};
   z-index: 24;
 
   &:hover {
@@ -51,12 +52,14 @@ const Backdrop = styled.div`
 
 const Wrapper = styled.div`
   position: fixed;
-  top: 4rem;
+  top: ${TOP_BAR_HEIGHT};
   right: 0;
-  bottom: 0;
-  width: ${WIDTH}px;
-  background: ${color("backgroundDarker")};
-  border-left: 1px solid ${color("black")};
+  bottom: ${FOOTER_HEIGHT};
+  width: ${RESPONSIVE_WIDTH};
+  min-height: 0;
+  overflow: hidden;
+  background: ${({ theme }) => theme.color.surfaceBase};
+  border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
   z-index: 25;
 
   &.side-menu-slide-enter {
@@ -64,12 +67,12 @@ const Wrapper = styled.div`
   }
 
   &.side-menu-slide-enter-active {
-    width: ${WIDTH}px;
+    width: ${RESPONSIVE_WIDTH};
     transition: width ${TransitionDuration.REG}ms;
   }
 
   &.side-menu-slide-exit {
-    width: ${WIDTH}px;
+    width: ${RESPONSIVE_WIDTH};
   }
 
   &.side-menu-slide-exit-active {
@@ -102,8 +105,8 @@ const SideMenu = () => {
         timeout={TransitionDuration.REG}
         unmountOnExit
       >
-        <Wrapper>
-          <Schema />
+        <Wrapper id="mobile-data-sources-panel">
+          <Schema open />
         </Wrapper>
       </CSSTransition>
     </>

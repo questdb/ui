@@ -3,10 +3,10 @@ import { FileCheckStatus as FileStatusType } from "../../../utils"
 import { Box, Badge } from "../../../components"
 import { BadgeType, ProcessedFile } from "./types"
 import styled from "styled-components"
-import { CheckboxCircle } from "@styled-icons/remix-fill"
+import { CheckboxCircle } from "../../../components/icons"
 
 const CheckboxCircleIcon = styled(CheckboxCircle)`
-  color: ${({ theme }) => theme.color.green};
+  color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const StyledBox = styled(Box)`

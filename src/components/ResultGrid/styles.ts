@@ -1,6 +1,5 @@
 import styled, { css, keyframes } from "styled-components"
 import { color } from "../../utils"
-import { theme } from "../../theme"
 import { CopyButton } from "../CopyButton"
 import {
   CELL_BORDER_PX,
@@ -26,21 +25,23 @@ export const GridContainer = styled.div`
   font-size: ${({ theme }) => theme.fontSize.xs};
   position: relative;
   isolation: isolate;
+  background: ${color("surfaceInset")};
 `
 
 export const ScrollContainer = styled.div<{ $scrollable: boolean }>`
   flex: 1;
   overflow: ${({ $scrollable }) => ($scrollable ? "auto" : "hidden")};
+  background: ${color("surfaceInset")};
 `
 
 export const HeaderRow = styled.div<{ $shadowBottom: boolean }>`
   display: flex;
-  background: ${color("backgroundDarker")};
-  border-bottom: 1px solid ${color("selection")};
+  background: ${color("gridHeader")};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   flex-shrink: 0;
   height: ${HEADER_HEIGHT}px;
-  box-shadow: ${({ $shadowBottom }) =>
-    $shadowBottom ? "0 2px 4px rgba(0, 0, 0, 0.3)" : "none"};
+  box-shadow: ${({ $shadowBottom, theme }) =>
+    $shadowBottom ? `0 2px 4px ${theme.color.shadowMedium}` : "none"};
   transition: box-shadow 0.15s;
 `
 
@@ -53,12 +54,13 @@ export const HeaderCell = styled.div<{ $align: string; $frozen?: boolean }>`
   justify-content: center;
   user-select: none;
   text-align: ${({ $align }) => $align};
-  border-right: ${HEADER_BORDER_PX}px solid ${color("selection")};
+  border-right: ${HEADER_BORDER_PX}px solid
+    ${({ theme }) => theme.color.borderSubtle};
   /* Sticky-left: opaque background so scrolled-under headers don't show through. */
   ${({ $frozen }) =>
     $frozen &&
     css`
-      background: ${color("backgroundDarker")};
+      background: ${color("gridHeader")};
       justify-content: flex-start;
     `}
 
@@ -78,7 +80,7 @@ export const HeaderNameRow = styled.div<{ $align: string }>`
 `
 
 export const HeaderName = styled.span`
-  color: ${color("cyan")};
+  color: ${color("contentObject")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -87,7 +89,7 @@ export const HeaderName = styled.span`
 `
 
 export const HeaderType = styled.span`
-  color: ${color("gray2")};
+  color: ${color("contentSecondary")};
   font-size: ${HEADER_TYPE_FONT_SIZE_PX}px;
   white-space: nowrap;
   text-transform: lowercase;
@@ -96,14 +98,17 @@ export const HeaderType = styled.span`
 export const StyledCopyButton = styled(CopyButton)`
   visibility: hidden;
   flex-shrink: 0;
+  height: 2rem;
   padding: 0;
 
   &:hover {
     background: transparent !important;
   }
 
-  && [data-copy-check] {
-    transform: translate(50%, calc(-50% + 2px));
+  &&[data-copied],
+  &&[data-copied]:hover,
+  &&[data-copied]:focus-visible {
+    color: ${({ theme }) => theme.color.statusSuccess};
   }
 `
 
@@ -133,7 +138,7 @@ export const ColResizer = styled.div`
   }
 
   &:hover::after {
-    background: ${color("cyan")};
+    background: ${color("contentAccent")};
   }
 `
 
@@ -152,7 +157,7 @@ export const ResizeGhost = styled.div`
   top: 0;
   bottom: 0;
   width: 2px;
-  background: ${color("cyan")};
+  background: ${color("contentAccent")};
   pointer-events: none;
   /* Above the resizer overlay (z-index 6) so the drag line isn't clipped. */
   z-index: 7;
@@ -161,29 +166,40 @@ export const ResizeGhost = styled.div`
 export const Row = styled.div<{ $active: boolean }>`
   display: flex;
   height: ${ROW_HEIGHT}px;
+  background: ${color("gridRow")};
 
-  ${({ $active }) =>
+  ${({ $active, theme }) =>
     $active &&
     css`
-      background: ${color("selectionDarker")};
+      background: ${theme.color.gridSelection};
     `}
 
-  ${({ $active }) =>
+  ${({ $active, theme }) =>
     !$active &&
     css`
       &:hover {
-        background: ${color("selectionDarker")};
+        background:
+          linear-gradient(
+            ${theme.color.interactionAccentHover},
+            ${theme.color.interactionAccentHover}
+          ),
+          ${theme.color.surfaceInset};
 
         [data-frozen="true"] {
-          background: ${color("selectionDarker")};
+          background:
+            linear-gradient(
+              ${theme.color.interactionAccentHover},
+              ${theme.color.interactionAccentHover}
+            ),
+            ${theme.color.surfaceInset};
         }
       }
     `}
 `
 
-const pulseAnim = keyframes`
-  0% { box-shadow: ${theme.color.cyan} 0 0 0 1px; }
-  75% { box-shadow: ${theme.color.yellow}00 0 0 0 16px; }
+const pulseAnim = (pink: string, transparent: string) => keyframes`
+  0% { box-shadow: ${pink} 0 0 0 1px; }
+  75% { box-shadow: ${transparent} 0 0 0 16px; }
 `
 
 export const Cell = styled.div<{
@@ -203,36 +219,37 @@ export const Cell = styled.div<{
   font-size: ${CELL_FONT_SIZE_PX}px;
   color: ${({ $isNull, $isTimestamp }) =>
     $isNull
-      ? color("mutedLabel")
+      ? color("contentMuted")
       : $isTimestamp
-        ? color("green")
-        : color("foreground")};
-  border-right: ${CELL_BORDER_PX}px solid ${color("selection")};
-  border-bottom: 1px solid ${color("selection")};
+        ? color("statusSuccess")
+        : color("contentPrimary")};
+  border-right: ${CELL_BORDER_PX}px solid
+    ${({ theme }) => theme.color.borderSubtle};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  font-family: ${({ theme }) => theme.fontMonospace};
   box-sizing: border-box;
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
   contain: layout;
 
-  ${({ $frozen, $rowActive }) =>
+  ${({ $frozen, $rowActive, theme }) =>
     $frozen &&
     css`
-      background: ${$rowActive
-        ? color("selectionDarker")
-        : color("background")};
+      background: ${$rowActive ? theme.color.gridSelection : color("gridRow")};
     `}
 
-  ${({ $isActive }) =>
+  ${({ $isActive, theme }) =>
     $isActive &&
     css`
-      background: ${color("tableSelection")};
-      box-shadow: inset 0 0 0 1px ${color("cyan")};
-      border-radius: 0.4rem;
+      background: ${theme.color.gridSelection};
+      box-shadow: inset 0 0 0 1px ${theme.color.gridFocus};
+      border-radius: 0;
     `}
 
-  ${({ $isPulsing }) =>
+  ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${pulseAnim} 1s ease-out;
+      animation: ${pulseAnim(theme.color.gridFocus, theme.color.transparent)} 1s
+        ease-out;
     `}
 `
 
@@ -264,7 +281,7 @@ export const CellTooltipValue = styled.div`
 
 export const CellTooltipNote = styled.div`
   margin-top: 0.6rem;
-  color: ${color("mutedLabel")};
+  color: ${color("contentMuted")};
   font-size: ${({ theme }) => theme.fontSize.xs};
 `
 
@@ -281,7 +298,8 @@ export const FrozenShadow = styled.div`
   top: 0;
   bottom: 0;
   width: 16px;
-  background: linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+  background: ${({ theme }) =>
+    `linear-gradient(to right, ${theme.color.surfaceScrim}, ${theme.color.transparent})`};
   pointer-events: none;
   z-index: 3;
 `
@@ -332,7 +350,7 @@ export const FreezeHandle = styled.div<{
     !$dragging &&
     css`
       &:hover::after {
-        background: ${color("cyan")};
+        background: ${color("contentAccent")};
       }
     `}
 `

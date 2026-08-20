@@ -5,11 +5,11 @@ import styled, { keyframes } from "styled-components"
 // frame, and a placeholder-heavy notebook holds thousands of bars.
 export const ShimmerBar = styled.div`
   border-radius: 2px;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   /* the 14 suffix is ~8% alpha on the theme hex */
   background-image: linear-gradient(
-    ${({ theme }) => theme.color.comment}14,
-    ${({ theme }) => theme.color.comment}14
+    ${({ theme }) => theme.color.contentMuted}14,
+    ${({ theme }) => theme.color.contentMuted}14
   );
 `
 
@@ -40,7 +40,7 @@ export const ShimmerSweep = styled.div`
   background: linear-gradient(
     90deg,
     transparent,
-    ${({ theme }) => theme.color.comment}22,
+    ${({ theme }) => theme.color.contentMuted}22,
     transparent
   );
   animation: ${sweep} 1.6s ease-in-out infinite;

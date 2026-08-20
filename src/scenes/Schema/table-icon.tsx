@@ -1,6 +1,6 @@
 import React, { FC } from "react"
 import styled from "styled-components"
-import { Table } from "@styled-icons/remix-line"
+import { Table } from "../../components/icons"
 import { Tooltip } from "../../components/Tooltip"
 import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
@@ -23,7 +23,7 @@ const Root = styled.div<{ $size: string }>`
   position: relative;
   flex-shrink: 0;
   svg {
-    color: ${color("cyan")};
+    color: ${color("contentAccent")};
   }
 `
 
@@ -33,7 +33,7 @@ const Asterisk = styled.span`
   right: -0.3rem;
   font-size: 1rem;
   line-height: 1.8rem;
-  color: ${color("orange")};
+  color: ${color("statusWarning")};
 `
 
 const NonPartitionedTableIcon = ({

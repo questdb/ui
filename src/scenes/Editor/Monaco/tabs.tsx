@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useState, useMemo } from "react"
 import styled, { css } from "styled-components"
 import { Tabs as ReactChromeTabs } from "../../../components/ReactChromeTabs"
 import { useEditor, MAX_TABS } from "../../../providers"
-import { History, LineChart, Trash } from "@styled-icons/boxicons-regular"
+import { History, LineChart, Trash } from "../../../components/icons"
 import {
   DotsThreeVerticalIcon,
   DownloadSimpleIcon,
@@ -26,9 +26,9 @@ import { ImportSummaryDialog, SkippedTab } from "./ImportSummaryDialog"
 import { EditorSettingsModal } from "../../../components/EditorSettingsModal"
 import {
   Box,
-  Button,
   DropdownMenu,
   ForwardRef,
+  IconButton,
   Text,
 } from "../../../components"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
@@ -44,7 +44,7 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 type Tab = {
   id: string
   title: string
-  favicon: string
+  faviconClass: string
   active: boolean
   className?: string
 }
@@ -55,8 +55,26 @@ const Root = styled(Box).attrs({
 })<{ $tabsDisabled: boolean }>`
   width: 100%;
   display: flex;
-  background: ${({ theme }) => theme.color.backgroundLighter};
+  position: relative;
+  z-index: 12;
+  isolation: isolate;
+  background: transparent;
+  border-bottom: 0;
+  box-shadow: 0 8px 20px ${({ theme }) => theme.color.shadowSoft};
   padding-right: 1rem;
+  gap: 0.4rem;
+
+  &::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: ${({ theme }) => theme.color.surfaceTabRail};
+    backdrop-filter: blur(16px) saturate(135%);
+    -webkit-backdrop-filter: blur(16px) saturate(135%);
+    content: "";
+    pointer-events: none;
+  }
+
   ${({ $tabsDisabled }) =>
     $tabsDisabled &&
     css`
@@ -65,9 +83,19 @@ const Root = styled(Box).attrs({
     `}
 `
 
-const HistoryButton = styled(Button)`
-  &.active {
-    background: ${({ theme }) => theme.color.comment};
+const HistoryButton = styled(IconButton)`
+  flex: 0 0 auto;
+  width: 4rem;
+  height: 4rem;
+  padding: 0;
+  border-radius: 0.7rem;
+
+  &[aria-pressed="true"] {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+    border-color: ${({ theme }) => theme.color.borderDefault};
+    box-shadow:
+      inset 0 1px 0 ${({ theme }) => theme.color.borderSubtle},
+      0 4px 12px ${({ theme }) => theme.color.shadowSoft};
   }
 `
 
@@ -93,15 +121,15 @@ const NewTabAnchor = styled(DropdownMenu.Trigger)`
 
 const mapTabIconToType = (buffer: Buffer) => {
   if (buffer.notebookViewState) {
-    return "assets/icon-notebook.svg"
+    return "chrome-tab-favicon--notebook"
   }
   if (buffer.metricsViewState) {
-    return "assets/icon-chart.svg"
+    return "chrome-tab-favicon--metrics"
   }
   if (buffer.isPreviewBuffer) {
-    return "assets/icon-compare.svg"
+    return "chrome-tab-favicon--preview"
   }
-  return "assets/icon-file.svg"
+  return "chrome-tab-favicon--sql"
 }
 
 export const Tabs = () => {
@@ -478,6 +506,18 @@ export const Tabs = () => {
     setTabsVisible(true)
   }, [])
 
+  useLayoutEffect(() => {
+    const button = document.querySelector<HTMLButtonElement>(
+      ".chrome-tabs .new-tab-button",
+    )
+
+    if (button) {
+      const open = String(newTabMenuOpen)
+      button.setAttribute("aria-expanded", open)
+      button.setAttribute("aria-pressed", open)
+    }
+  }, [newTabMenuOpen])
+
   if (!tabsVisible) {
     return null
   }
@@ -532,7 +572,7 @@ export const Tabs = () => {
 
             return {
               id: buffer.id?.toString(),
-              favicon: mapTabIconToType(buffer),
+              faviconClass: mapTabIconToType(buffer),
               title: buffer.label,
               active: activeBuffer.id === buffer.id,
               className,
@@ -551,9 +591,11 @@ export const Tabs = () => {
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
             <HistoryButton
-              skin="transparent"
+              label="Tab history"
+              variant="ghost"
+              aria-pressed={historyOpen}
+              aria-expanded={historyOpen}
               data-hook="editor-tabs-history-button"
-              {...(historyOpen ? { className: "active" } : {})}
             >
               <History size="20px" />
             </HistoryButton>
@@ -563,7 +605,7 @@ export const Tabs = () => {
           <DropdownMenuContent data-hook="editor-tabs-history">
             {archivedBuffers.length === 0 ? (
               <div style={{ padding: "0.5rem 1.4rem" }}>
-                <Text color="gray2">History is empty</Text>
+                <Text color="contentSecondary">History is empty</Text>
               </div>
             ) : (
               <ArchivedBuffersList>
@@ -611,7 +653,7 @@ export const Tabs = () => {
                       ) : undefined
                     }
                   >
-                    <Text color="foreground" ellipsis>
+                    <Text color="contentPrimary" ellipsis>
                       {buffer.label.substring(0, 30)}
                       {buffer.label.length > 30 ? "..." : ""}
                     </Text>
@@ -630,7 +672,7 @@ export const Tabs = () => {
                   data-hook="editor-tabs-history-clear"
                   icon={<Trash size="16px" />}
                 >
-                  <Text color="foreground">Clear history</Text>
+                  <Text color="contentPrimary">Clear history</Text>
                 </DropdownMenu.Item>
               </>
             )}
@@ -641,9 +683,11 @@ export const Tabs = () => {
         <DropdownMenu.Trigger asChild>
           <ForwardRef>
             <HistoryButton
-              skin="transparent"
+              label="Editor options"
+              variant="ghost"
+              aria-pressed={menuOpen}
+              aria-expanded={menuOpen}
               data-hook="editor-tabs-menu-button"
-              {...(menuOpen ? { className: "active" } : {})}
             >
               <DotsThreeVerticalIcon size={20} weight="bold" />
             </HistoryButton>
@@ -656,14 +700,14 @@ export const Tabs = () => {
               data-hook="editor-tabs-menu-import"
               icon={<UploadSimpleIcon size={16} />}
             >
-              <Text color="foreground">Import tabs</Text>
+              <Text color="contentPrimary">Import tabs</Text>
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onClick={handleExportTabs}
               data-hook="editor-tabs-menu-export"
               icon={<DownloadSimpleIcon size={16} />}
             >
-              <Text color="foreground">Export tabs</Text>
+              <Text color="contentPrimary">Export tabs</Text>
             </DropdownMenu.Item>
             <DropdownMenu.Divider />
             <DropdownMenu.Item
@@ -671,7 +715,7 @@ export const Tabs = () => {
               data-hook="editor-tabs-menu-settings"
             >
               <GearSixIcon size={18} />
-              <Text color="foreground">Editor settings</Text>
+              <Text color="contentPrimary">Editor settings</Text>
             </DropdownMenu.Item>
           </DropdownMenuContent>
         </DropdownMenu.Portal>

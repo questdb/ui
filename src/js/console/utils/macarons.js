@@ -21,146 +21,148 @@
  *  limitations under the License.
  *
  ******************************************************************************/
+import { getThemeColor } from "../../../theme/runtime"
 
-const contrastColor = "#eee"
-const axisCommon = function () {
-  return {
-    axisLine: {
-      lineStyle: {
-        color: contrastColor,
+export const createMacaronsTheme = () => {
+  const contrastColor = getThemeColor("contentSecondary")
+  const axisCommon = function () {
+    return {
+      axisLine: {
+        lineStyle: {
+          color: contrastColor,
+        },
       },
-    },
-    axisTick: {
-      lineStyle: {
-        color: contrastColor,
+      axisTick: {
+        lineStyle: {
+          color: contrastColor,
+        },
       },
-    },
-    axisLabel: {
-      textStyle: {
-        color: contrastColor,
-      },
-    },
-    splitLine: {
-      lineStyle: {
-        type: "dashed",
-        color: "#aaa",
-      },
-    },
-    splitArea: {
-      areaStyle: {
-        color: contrastColor,
-      },
-    },
-  }
-}
-
-const colorPalette = [
-  "#dd6b66",
-  "#759aa0",
-  "#e69d87",
-  "#8dc1a9",
-  "#ea7e53",
-  "#eedd78",
-  "#73a373",
-  "#73b9bc",
-  "#7289ab",
-  "#91ca8c",
-  "#f49f42",
-]
-
-const theme = {
-  color: colorPalette,
-  backgroundColor: "#282a36",
-  tooltip: {
-    axisPointer: {
-      lineStyle: {
-        color: contrastColor,
-      },
-      crossStyle: {
-        color: contrastColor,
-      },
-    },
-  },
-  legend: {
-    textStyle: {
-      color: contrastColor,
-    },
-  },
-  textStyle: {
-    color: contrastColor,
-  },
-  title: {
-    textStyle: {
-      color: contrastColor,
-    },
-  },
-  toolbox: {
-    iconStyle: {
-      normal: {
-        borderColor: contrastColor,
-      },
-    },
-  },
-  dataZoom: {
-    textStyle: {
-      color: contrastColor,
-    },
-  },
-  timeline: {
-    lineStyle: {
-      color: contrastColor,
-    },
-    itemStyle: {
-      normal: {
-        color: colorPalette[1],
-      },
-    },
-    label: {
-      normal: {
+      axisLabel: {
         textStyle: {
           color: contrastColor,
         },
       },
-    },
-    controlStyle: {
-      normal: {
-        color: contrastColor,
-        borderColor: contrastColor,
+      splitLine: {
+        lineStyle: {
+          type: "dashed",
+          color: getThemeColor("dataGrid"),
+        },
+      },
+      splitArea: {
+        areaStyle: {
+          color: [getThemeColor("transparent"), getThemeColor("dataArea")],
+        },
+      },
+    }
+  }
+
+  const colorPalette = [
+    getThemeColor("chartSeries1"),
+    getThemeColor("chartSeries2"),
+    getThemeColor("chartSeries3"),
+    getThemeColor("chartSeries4"),
+    getThemeColor("chartSeries5"),
+    getThemeColor("chartSeries6"),
+    getThemeColor("chartSeries7"),
+    getThemeColor("chartSeries8"),
+  ]
+
+  const theme = {
+    color: colorPalette,
+    backgroundColor: getThemeColor("surfaceInset"),
+    tooltip: {
+      axisPointer: {
+        lineStyle: {
+          color: contrastColor,
+        },
+        crossStyle: {
+          color: contrastColor,
+        },
       },
     },
-  },
-  timeAxis: axisCommon(),
-  logAxis: axisCommon(),
-  valueAxis: axisCommon(),
-  categoryAxis: axisCommon(),
-
-  line: {
-    symbol: "circle",
-  },
-  graph: {
-    color: colorPalette,
-  },
-  gauge: {
+    legend: {
+      textStyle: {
+        color: contrastColor,
+      },
+    },
+    textStyle: {
+      color: contrastColor,
+    },
     title: {
       textStyle: {
         color: contrastColor,
       },
     },
-  },
-  candlestick: {
-    itemStyle: {
-      normal: {
-        color: "#FD1050",
-        color0: "#0CF49B",
-        borderColor: "#FD1050",
-        borderColor0: "#0CF49B",
+    toolbox: {
+      iconStyle: {
+        normal: {
+          borderColor: contrastColor,
+        },
       },
     },
-  },
-  textStyle: {
-    fontFamily:
-      '"Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto, sans-serif',
-  },
+    dataZoom: {
+      textStyle: {
+        color: contrastColor,
+      },
+    },
+    timeline: {
+      lineStyle: {
+        color: contrastColor,
+      },
+      itemStyle: {
+        normal: {
+          color: colorPalette[1],
+        },
+      },
+      label: {
+        normal: {
+          textStyle: {
+            color: contrastColor,
+          },
+        },
+      },
+      controlStyle: {
+        normal: {
+          color: contrastColor,
+          borderColor: contrastColor,
+        },
+      },
+    },
+    timeAxis: axisCommon(),
+    logAxis: axisCommon(),
+    valueAxis: axisCommon(),
+    categoryAxis: axisCommon(),
+
+    line: {
+      symbol: "circle",
+    },
+    graph: {
+      color: colorPalette,
+    },
+    gauge: {
+      title: {
+        textStyle: {
+          color: contrastColor,
+        },
+      },
+    },
+    candlestick: {
+      itemStyle: {
+        normal: {
+          color: getThemeColor("dataPositive"),
+          color0: getThemeColor("dataNegative"),
+          borderColor: getThemeColor("dataPositive"),
+          borderColor0: getThemeColor("dataNegative"),
+        },
+      },
+    },
+    textStyle: {
+      fontFamily:
+        '"Open Sans", -apple-system, BlinkMacSystemFont, Helvetica, Roboto, sans-serif',
+    },
+  }
+
+  return theme
 }
 
-export default theme
+export default createMacaronsTheme

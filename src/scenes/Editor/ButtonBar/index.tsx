@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useEffect, useRef } from "react"
 import styled, { css } from "styled-components"
 import { useDispatch, useSelector } from "react-redux"
-import { Stop } from "@styled-icons/remix-line"
+import { Stop } from "../../../components/icons"
 import { Key } from "../../../components"
-import { ChevronDown } from "@styled-icons/boxicons-solid"
+import { ChevronDown } from "../../../components/icons"
 import { Box, Button, PopperToggle } from "../../../components"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
@@ -27,7 +27,7 @@ const ButtonBarWrapper = styled.div<{
       : $searchWidgetType === "find"
         ? "calc(5.3rem + 8px)"
         : "1rem"};
-    right: 2.4rem;
+    right: 2rem;
     z-index: 1;
     transition: top 0.1s linear;
     display: flex;
@@ -44,81 +44,40 @@ const ButtonGroup = styled.div`
   display: flex;
   gap: 0;
   margin-left: auto;
+  border-radius: 0.6rem;
+  overflow: hidden;
+
+  > button {
+    border-radius: 0;
+  }
+
+  > button:first-child {
+    border-top-left-radius: inherit;
+    border-bottom-left-radius: inherit;
+  }
+
+  > button:last-child {
+    border-top-right-radius: inherit;
+    border-bottom-right-radius: inherit;
+  }
 `
 
 const SuccessButton = styled(Button)`
   margin-left: auto;
-  background-color: ${color("greenDarker")};
-  border-color: ${color("greenDarker")};
-  color: ${color("foreground")};
-
-  &:hover:not(:disabled) {
-    background-color: ${color("green")};
-    border-color: ${color("green")};
-    color: ${color("selectionDarker")};
-  }
-
-  &:disabled {
-    background-color: ${color("greenDarker")};
-    border-color: ${color("greenDarker")};
-    color: ${color("foreground")};
-    opacity: 0.6;
-  }
-
-  svg {
-    color: ${color("foreground")};
-  }
-
-  &:hover:not(:disabled) svg {
-    color: ${color("gray1")};
-  }
-
-  &:disabled svg {
-    color: ${color("foreground")};
-  }
+  font-size: 1.5rem;
 `
 
 const StopButton = styled(Button)`
   margin-left: auto;
-  background-color: ${color("red")};
-  border-color: ${color("red")};
-  color: ${color("foreground")};
-
-  &:hover:not(:disabled) {
-    background-color: ${color("red")};
-    border-color: ${color("red")};
-    color: ${color("foreground")};
-    filter: brightness(1.2);
-  }
-
-  &:disabled {
-    background-color: ${color("red")};
-    border-color: ${color("red")};
-    color: ${color("foreground")};
-    opacity: 0.6;
-  }
-
-  svg {
-    color: ${color("foreground")};
-  }
-
-  &:hover:not(:disabled) svg {
-    color: ${color("foreground")};
-  }
-
-  &:disabled svg {
-    color: ${color("foreground")};
-  }
+  font-size: 1.5rem;
 `
 
 const MainRunButton = styled(SuccessButton)`
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  border-right: 0;
+  overflow: hidden;
 `
 
 const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
   padding: 0 0.5rem;
   min-width: auto;
   svg {
@@ -127,40 +86,37 @@ const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
 `
 
 const CopyLinkMenuButton = styled(Button)`
-  background-color: ${color("backgroundDarker")};
-  border-color: ${color("backgroundDarker")};
-  color: ${color("foreground")};
-
-  &:hover:not(:disabled) {
-    background-color: ${color("selection")};
-    border-color: ${color("selection")};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-  }
-
-  svg {
-    color: ${color("foreground")};
-  }
+  justify-content: space-between;
+  border-radius: 0;
+  font-size: 1.5rem;
 `
 
 const DropdownMenu = styled.div`
-  background: ${color("backgroundDarker")};
-  border-radius: 0.4rem;
-  box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.3);
+  background: ${color("surfaceInset")};
+  border: 1px solid ${color("borderDefault")};
+  border-radius: 0.7rem;
+  box-shadow:
+    0 1.2rem 3rem ${({ theme }) => theme.color.shadowMedium},
+    0 0.2rem 0.6rem ${({ theme }) => theme.color.shadowSoft};
   overflow: hidden;
   transform: translateX(-7rem) translateY(0.5rem);
   padding: 0;
   min-width: unset;
-  border: 0;
   display: flex;
   flex-direction: column;
 
-  > * {
+  > button {
     justify-content: space-between;
     width: 100%;
-    font-size: 1.4rem;
+    min-height: 4rem;
+    padding: 0.7rem 1.2rem;
+    border: 0;
+    border-radius: 0;
+    font-size: 1.5rem;
+  }
+
+  > button + button {
+    border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   }
 `
 
@@ -280,7 +236,7 @@ const ButtonBar = ({
     if (running === RunningType.SCRIPT) {
       return (
         <StopButton
-          skin="error"
+          variant="danger"
           data-hook="button-cancel-script"
           onClick={handleClickScriptButton}
           prefixIcon={<Stop size="18px" />}
@@ -292,7 +248,7 @@ const ButtonBar = ({
     }
     return (
       <CopyLinkMenuButton
-        skin="secondary"
+        variant="secondary"
         data-hook="button-run-script"
         title={shortcutTitles[RunningType.SCRIPT]}
         onClick={handleClickScriptButton}
@@ -305,21 +261,9 @@ const ButtonBar = ({
       >
         Run all queries
         <RunShortcut>
-          <Key
-            keyString={ctrlCmd}
-            color={color("foreground")}
-            hoverColor={color("foreground")}
-          />
-          <Key
-            keyString="⇧"
-            color={color("foreground")}
-            hoverColor={color("foreground")}
-          />
-          <Key
-            keyString="Enter"
-            color={color("foreground")}
-            hoverColor={color("foreground")}
-          />
+          <Key keyString={ctrlCmd} color={color("contentSecondary")} />
+          <Key keyString="⇧" color={color("contentSecondary")} />
+          <Key keyString="Enter" color={color("contentSecondary")} />
         </RunShortcut>
       </CopyLinkMenuButton>
     )
@@ -330,7 +274,7 @@ const ButtonBar = ({
       return (
         <ButtonGroup>
           <StopButton
-            skin="error"
+            variant="danger"
             data-hook="button-cancel-query"
             onClick={handleClickQueryButton}
             prefixIcon={<Stop size="18px" />}
@@ -355,7 +299,7 @@ const ButtonBar = ({
     return (
       <ButtonGroup>
         <MainRunButton
-          skin="success"
+          variant="primary"
           data-hook="button-run-query"
           title={shortcutTitles[RunningType.QUERY]}
           onClick={handleClickQueryButton}
@@ -368,16 +312,8 @@ const ButtonBar = ({
         >
           {getQueryButtonText()}
           <RunShortcut>
-            <Key
-              keyString={ctrlCmd}
-              color={color("green")}
-              hoverColor={color("green")}
-            />
-            <Key
-              keyString="Enter"
-              color={color("green")}
-              hoverColor={color("green")}
-            />
+            <Key keyString={ctrlCmd} color={color("contentSecondary")} />
+            <Key keyString="Enter" color={color("contentSecondary")} />
           </RunShortcut>
         </MainRunButton>
         <PopperToggle
@@ -386,7 +322,7 @@ const ButtonBar = ({
           placement="bottom"
           trigger={
             <DropdownButton
-              skin="success"
+              variant="primary"
               data-hook="button-run-query-dropdown"
               $open={dropdownActive}
               title="More run options"
@@ -402,7 +338,7 @@ const ButtonBar = ({
           <DropdownMenu id={RUN_DROPDOWN_MENU_ID} role="menu">
             {renderRunScriptButton(true)}
             <CopyLinkMenuButton
-              skin="secondary"
+              variant="secondary"
               data-hook="button-copy-query-link"
               title={copyLinkShortcutTitle}
               onClick={handleClickCopyLink}
@@ -411,21 +347,9 @@ const ButtonBar = ({
             >
               Copy link to all queries
               <RunShortcut>
-                <Key
-                  keyString={altOption}
-                  color={color("foreground")}
-                  hoverColor={color("foreground")}
-                />
-                <Key
-                  keyString="⇧"
-                  color={color("foreground")}
-                  hoverColor={color("foreground")}
-                />
-                <Key
-                  keyString="L"
-                  color={color("foreground")}
-                  hoverColor={color("foreground")}
-                />
+                <Key keyString={altOption} color={color("contentSecondary")} />
+                <Key keyString="⇧" color={color("contentSecondary")} />
+                <Key keyString="L" color={color("contentSecondary")} />
               </RunShortcut>
             </CopyLinkMenuButton>
           </DropdownMenu>

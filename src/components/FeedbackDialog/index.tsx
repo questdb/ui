@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import { AlertDialog } from "../AlertDialog"
 import { Box } from "../Box"
 import { Button } from "../Button"
+import { IconButton } from "../IconButton"
 import { Card } from "../Card"
 import { ForwardRef } from "../ForwardRef"
 import { Loader } from "../Loader"
@@ -10,9 +11,9 @@ import { Input } from "../Input"
 import { TextArea } from "../TextArea"
 import { Text } from "../Text"
 import Joi from "joi"
-import { Chat, Envelope, X } from "@styled-icons/bootstrap"
-import { Undo } from "@styled-icons/boxicons-regular"
-import styled from "styled-components"
+import { Chat, Envelope, X } from "../icons"
+import { Undo } from "../icons"
+import styled, { useTheme } from "styled-components"
 
 type Values = {
   email?: string
@@ -53,29 +54,71 @@ const FormControl = styled.div`
 `
 
 const Label = styled.label<{ htmlFor: string }>`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 `
 
 const ChatIcon = styled(Chat)`
-  color: ${({ theme }) => theme.color.foreground};
+  color: ${({ theme }) => theme.color.contentAccent};
+  box-sizing: content-box;
+  padding: 0.8rem;
+  border-radius: 0.8rem;
+  background: ${({ theme }) => theme.color.interactionAccentActive};
 `
 
 const StyledDialogContent = styled(AlertDialog.Content)`
   display: grid;
-  gap: 1rem;
-  background: #282a36;
+  gap: 0;
+  padding: 0;
+  max-width: 56rem;
+  overflow: hidden;
+
+  form > div {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+  }
 `
 
 const StyledCardContent = styled(Card.Content)<{ withAfterMessage: boolean }>`
   display: grid;
-  gap: 2rem;
+  gap: 1.8rem;
   width: 100%;
+  padding: 2.2rem 2.4rem;
   ${({ withAfterMessage }) => !withAfterMessage && `padding-bottom: 0`}
 `
 
+const StyledCardHeader = styled(Card.Header)`
+  background: ${({ theme }) => theme.color.editorCanvas};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  border-radius: 0;
+
+  > div {
+    min-height: 6.8rem;
+    padding: 1.2rem 2.4rem;
+  }
+`
+
+const DialogActions = styled(AlertDialog.ActionButtons)`
+  margin: 0;
+  padding: 1.4rem 2.4rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  background: ${({ theme }) => theme.color.editorCanvas};
+
+  button {
+    min-height: 3.4rem;
+    padding-inline: 1.4rem;
+    font-size: 1.3rem;
+  }
+`
+
 const StyledTextArea = styled(TextArea)`
-  min-height: 100px;
+  min-height: 140px;
   max-height: 250px;
+  line-height: 1.5;
 `
 
 const Footer = ({
@@ -88,10 +131,10 @@ const Footer = ({
   onConfirm?: () => void
 }) => {
   return (
-    <AlertDialog.ActionButtons>
+    <DialogActions>
       <AlertDialog.Cancel asChild>
         <Button
-          skin="transparent"
+          variant="ghost"
           prefixIcon={<Undo size={18} />}
           onClick={onConfirm}
         >
@@ -104,7 +147,7 @@ const Footer = ({
           <Button
             type="submit"
             disabled={isSubmitting || message.length === 0}
-            skin="success"
+            variant="primary"
             prefixIcon={
               isSubmitting ? <Loader size={18} /> : <Envelope size={18} />
             }
@@ -114,7 +157,7 @@ const Footer = ({
           </Button>
         </ForwardRef>
       </AlertDialog.Action>
-    </AlertDialog.ActionButtons>
+    </DialogActions>
   )
 }
 
@@ -147,6 +190,7 @@ export const FeedbackDialog = ({
   open,
   onOpenChange,
 }: Props) => {
+  const theme = useTheme()
   const [errors, setErrors] = useState<ErrorList>({})
   const [message, setMessage] = useState<string>(initialMessage ?? "")
   const [isOpen, setIsOpen] = useState(open)
@@ -208,17 +252,17 @@ export const FeedbackDialog = ({
               e.preventDefault()
               const form = e.target as HTMLFormElement
               const message = form.message as HTMLTextAreaElement
-              const email = form.email as HTMLInputElement
+              const email = form.email as HTMLInputElement | undefined
               const errors = validateFields(
                 schema,
-                { message: message.value, email: email.value },
-                ["email", "message"],
+                { message: message.value, email: email?.value ?? "" },
+                withEmailInput ? ["email", "message"] : ["message"],
               )
               if (Object.keys(errors).length === 0) {
                 try {
                   setIsSubmitting(true)
                   await onSubmit({
-                    email: withEmailInput ? email.value : undefined,
+                    email: withEmailInput ? email?.value : undefined,
                     message: message.value,
                   })
                   setIsOpen(false)
@@ -230,30 +274,32 @@ export const FeedbackDialog = ({
             }}
           >
             <Card>
-              <Card.Header
+              <StyledCardHeader
                 title={
-                  <AlertDialog.Title color="foreground">
-                    {title ?? "Get In Touch"}
+                  <AlertDialog.Title color="contentPrimary">
+                    {title ?? "Contact QuestDB"}
                   </AlertDialog.Title>
                 }
                 subtitle={
-                  <Text color="foreground">
+                  <Text color="contentPrimary">
                     {subtitle ??
-                      "Drop a message and we will come back to you soon"}
+                      "Tell us what you are working on. Our team will get back to you shortly."}
                   </Text>
                 }
                 beforeTitle={<ChatIcon size={24} />}
                 afterTitle={
-                  <Button
+                  <IconButton
                     type="button"
-                    skin="transparent"
+                    variant="ghost"
+                    size="sm"
+                    label="Close contact dialog"
                     onClick={() => {
                       setIsOpen(false)
                       onOpenChange(false)
                     }}
                   >
                     <X size={18} />
-                  </Button>
+                  </IconButton>
                 }
               />
 
@@ -268,11 +314,11 @@ export const FeedbackDialog = ({
                       autoFocus
                       autoComplete="off"
                     />
-                    <Text color="gray2">
+                    <Text color="contentSecondary">
                       Optional, if you want us to get back to you
                     </Text>
                     {errors && errors["email"] && (
-                      <Text color="red">{errors.email}</Text>
+                      <Text color="statusDanger">{errors.email}</Text>
                     )}
                   </FormControl>
                 )}
@@ -289,7 +335,7 @@ export const FeedbackDialog = ({
                     }}
                   />
                   {errors && errors["message"] && (
-                    <Text color="red">{errors.message}</Text>
+                    <Text color="statusDanger">{errors.message}</Text>
                   )}
                 </FormControl>
                 <Box
@@ -297,8 +343,8 @@ export const FeedbackDialog = ({
                   style={{
                     color:
                       message.length < minLength || message.length > maxLength
-                        ? "rgb(152, 79, 79)"
-                        : "#33874b",
+                        ? theme.color.statusDanger
+                        : theme.color.statusSuccessStrong,
                   }}
                 >
                   {message.length}/{maxLength}
