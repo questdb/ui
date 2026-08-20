@@ -17,6 +17,22 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.3 - 2026.08.20
+### Added
+- light/dark theme support, shared component style updates [#600](https://github.com/questdb/ui/pull/600)
+- notebook-level auto-refresh for charts and grids with per-cell overrides [#595](https://github.com/questdb/ui/pull/595)
+
+### Changed
+- bump @questdb/sql-parser to 0.1.17 [#599](https://github.com/questdb/ui/pull/599)
+
+### Removed
+- autoRefreshMigrated marker and implicit chart auto-refresh migration [#598](https://github.com/questdb/ui/pull/598)
+
+### Fixed
+- skip OIDC state check only if not required [#596](https://github.com/questdb/ui/pull/596)
+- 'MCP bridge' -> 'MCP server' occurrences across the console [#597](https://github.com/questdb/ui/pull/597)
+
+
 ## 2.0.2 - 2026.08.03
 ### Added
 - editor settings, remove readonly from single query run, smarter grid column widths [#584](https://github.com/questdb/ui/pull/584)
