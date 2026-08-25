@@ -2,6 +2,8 @@ import "../../test/stubBrowserGlobals"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { Client } from "./client"
 import { Type } from "./types"
+import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { AuthPayload } from "../../modules/OAuth2/types"
 
 const response = (body: Record<string, unknown>): Response =>
   ({
@@ -60,5 +62,46 @@ describe("Client queryRaw NOTICE timings", () => {
     // Then no partial timing object is invented
     expect(result.type).toBe(Type.NOTICE)
     expect(result).not.toHaveProperty("timings")
+  })
+})
+
+describe("Client token refresh", () => {
+  afterEach(() => {
+    ssoAuthState.clearAuthPayload()
+  })
+
+  it("does not deadlock when a token refresh fails at the transport level", async () => {
+    // Given an active SSO session whose token is inside the 30s refresh window
+    ssoAuthState.setAuthPayload({
+      access_token: "stale",
+      refresh_token: "refresh",
+      expires_at: new Date(new Date().getTime() + 10_000).toString(),
+    } as AuthPayload)
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(response({ notice: "hint applied" })),
+    )
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    // And a refresh that rejects, e.g. the token endpoint is unreachable or
+    // answers with a non-JSON body
+    const client = new Client()
+    client.refreshTokenMethod = () => Promise.reject(new Error("network down"))
+
+    // When a query runs, it must not hang waiting on a stuck refresh flag: the
+    // failure is swallowed and the request proceeds with the stale token (the
+    // server would then answer 401 and drive the normal re-auth flow).
+    const result = await client.queryRaw("SELECT 1")
+
+    expect(result.type).toBe(Type.NOTICE)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalled()
+
+    // And a subsequent query still goes through — the flag was reset
+    await client.queryRaw("SELECT 1")
+    expect(fetch).toHaveBeenCalledTimes(2)
+
+    errorSpy.mockRestore()
   })
 })
