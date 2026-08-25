@@ -61,26 +61,38 @@ export class Client {
 
   private refreshAuthToken = async () => {
     Client.refreshTokenPending = true
-    await new Promise((resolve) => {
-      const interval = setInterval(async () => {
-        if (Client.numOfPendingQueries === 0) {
-          clearInterval(interval)
-          const newToken = await this.refreshTokenMethod()
-          if (newToken.access_token) {
-            this.setCommonHeaders({
-              ...this.commonHeaders,
-              Authorization: `Bearer ${
-                newToken.groups_encoded_in_token
-                  ? newToken.id_token
-                  : newToken.access_token
-              }`,
-            })
+    try {
+      // Wait until all in-flight queries have finished before swapping the auth
+      // header, so we don't change it out from under a pending request.
+      await new Promise<void>((resolve) => {
+        const interval = setInterval(() => {
+          if (Client.numOfPendingQueries === 0) {
+            clearInterval(interval)
+            resolve()
           }
-          Client.refreshTokenPending = false
-          return resolve(true)
-        }
-      }, 50)
-    })
+        }, 50)
+      })
+      const newToken = await this.refreshTokenMethod()
+      if (newToken.access_token) {
+        this.setCommonHeaders({
+          ...this.commonHeaders,
+          Authorization: `Bearer ${
+            newToken.groups_encoded_in_token
+              ? newToken.id_token
+              : newToken.access_token
+          }`,
+        })
+      }
+    } catch (error) {
+      // A transport-level failure (token endpoint unreachable, non-JSON
+      // response, etc.) must not leave refreshTokenPending stuck true, which
+      // would deadlock every subsequent query. We keep the stale token in
+      // place; the next request will get a 401 and drive the normal re-auth
+      // flow, matching what happens when there is no refresh token at all.
+      console.error("Failed to refresh the auth token", error)
+    } finally {
+      Client.refreshTokenPending = false
+    }
   }
 
   static encodeParams = (
