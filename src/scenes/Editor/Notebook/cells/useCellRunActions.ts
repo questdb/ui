@@ -5,7 +5,12 @@ import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
-import { getQueryFromCursor, normalizeQueryText } from "../../Monaco/utils"
+import {
+  getQueriesToRun,
+  getQueryFromCursor,
+  getStatementOffsets,
+  normalizeQueryText,
+} from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
 import {
   emitUserAction,
@@ -51,7 +56,7 @@ export const useCellRunActions = ({
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const validateWithGlobals = useValidateWithGlobals()
-  const { runWithSelection } = useLocalStorage()
+  const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
   // A run from the Run toggle spins the Run segment; a run from the refresh
@@ -109,24 +114,28 @@ export const useCellRunActions = ({
   ])
 
   const tryRunSelection = useCallback(async (): Promise<boolean> => {
-    if (!runWithSelection) return false
+    if (runWithSelectionMode === "off") return false
     const ed = editorRef.current
     if (!ed) return false
     const selection = ed.getSelection()
     const model = ed.getModel()
     if (!selection || !model || selection.isEmpty()) return false
 
-    const selectedText = model.getValueInRange(selection)
-    const normalized = normalizeQueryText(selectedText)
-    if (!normalized) return false
+    const sql =
+      runWithSelectionMode === "complete"
+        ? getQueriesToRun(ed, getStatementOffsets(ed), "complete")
+            .map((request) => normalizeQueryText(request.query))
+            .join(";\n")
+        : normalizeQueryText(model.getValueInRange(selection))
+    if (!sql) return false
 
     clearHighlight()
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
-    const { ok } = await runCell(cell.id, normalized)
+    const { ok } = await runCell(cell.id, sql)
     applyHighlight(ok)
     return true
   }, [
-    runWithSelection,
+    runWithSelectionMode,
     cell.id,
     runCell,
     editorRef,

@@ -31,6 +31,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { MAX_CELL_LINES } from "../../../store/notebook"
@@ -282,7 +283,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   } = editorContext
   const { quest, questExecution } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
-  const { runWithSelection } = useLocalStorage()
+  const { runWithSelectionMode } = useLocalStorage()
   const {
     handleGlyphClick,
     hasConversationForQuery,
@@ -328,7 +329,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
   const canUseAIRef = useRef(canUseAI)
-  const runWithSelectionRef = useRef(runWithSelection)
+  const runWithSelectionModeRef = useRef(runWithSelectionMode)
   const shareLinkSelectionRunRef = useRef(false)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
@@ -522,13 +523,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     runQueryAction(query, RunningType.EXPLAIN)
   }
 
+  // Share links always carry complete queries, never selection fragments.
   const buildAndCopyShareLink = (requests: Request[]) => {
     if (requests.length === 0) {
       toast.error("Nothing to copy")
       return
     }
     const sql = requests
-      .map((r) => (r.selection ? r.selection.queryText : r.query))
+      .map((r) => r.query)
       .join(";\n\n")
       .concat(";")
 
@@ -553,12 +555,12 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const syncQueriesToRun = (
     editor: editor.IStandaloneCodeEditor,
-    runWithSelection: boolean,
+    selectionMode: RunWithSelectionMode,
   ): Request[] => {
     const queriesToRun = getQueriesToRun(
       editor,
       queryOffsetsRef.current ?? [],
-      runWithSelection,
+      selectionMode,
     )
     queriesToRunRef.current = queriesToRun
     dispatch(actions.query.setQueriesToRun(queriesToRun))
@@ -571,10 +573,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     })
     const editor = editorRef.current
     if (!editor) return
-    // Link sharing always honors the selection, independent of the
-    // run-with-selection setting.
+    // Link sharing always expands the selection to complete queries,
+    // independent of the run-with-selection setting.
     buildAndCopyShareLink(
-      getQueriesToRun(editor, queryOffsetsRef.current ?? [], true),
+      getQueriesToRun(editor, queryOffsetsRef.current ?? [], "complete"),
     )
   }
 
@@ -992,7 +994,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       cursorChangeTimeoutRef.current = window.setTimeout(() => {
-        syncQueriesToRun(editor, runWithSelectionRef.current)
+        syncQueriesToRun(editor, runWithSelectionModeRef.current)
 
         if (monacoRef.current && editorRef.current) {
           applyLineMarkings(monaco, editor, e.source)
@@ -1166,7 +1168,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         applyGlyphsAndLineMarkings(monaco, editor)
       }
 
-      syncQueriesToRun(editor, runWithSelectionRef.current)
+      syncQueriesToRun(editor, runWithSelectionModeRef.current)
 
       contentJustChangedRef.current = false
       if (notificationKeyUpdates.size > 0) {
@@ -1299,12 +1301,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       // Initial decoration setup
       applyGlyphsAndLineMarkings(monaco, editor)
-      // A ?query link selects its statements to run them all; that selection
-      // must be honored even when the run-with-selection setting is off.
+      // A ?query link selects its statements to run them all; the selection
+      // always expands to complete queries, even when the run-with-selection
+      // setting is off.
       const runsShareLinkSelection = Boolean(query && executeQuery)
       const queriesToRun = syncQueriesToRun(
         editor,
-        runsShareLinkSelection || runWithSelectionRef.current,
+        runsShareLinkSelection ? "complete" : runWithSelectionModeRef.current,
       )
 
       if (!query || !executeQuery) {
@@ -1771,11 +1774,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   useEffect(() => {
-    runWithSelectionRef.current = runWithSelection
+    runWithSelectionModeRef.current = runWithSelectionMode
     const editor = editorRef.current
     if (!editor) return
-    syncQueriesToRun(editor, runWithSelection)
-  }, [runWithSelection])
+    syncQueriesToRun(editor, runWithSelectionMode)
+  }, [runWithSelectionMode])
 
   useEffect(() => {
     canUseAIRef.current = canUseAI
@@ -1858,7 +1861,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
           : getQueryRequestFromEditor(
               editor,
-              honorShareLinkSelection || runWithSelectionRef.current,
+              honorShareLinkSelection
+                ? "complete"
+                : runWithSelectionModeRef.current,
             )
 
       const isRunningExplain = running === RunningType.EXPLAIN

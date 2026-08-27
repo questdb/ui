@@ -379,34 +379,68 @@ describe("isCursorInQuotedIdentifier", () => {
   })
 })
 
-describe("run with selection gating", () => {
+describe("run with selection modes", () => {
   // "SELECT 11" spans columns 1..10 on the single line; the cursor sits inside it.
   const TEXT = "SELECT 11; SELECT 22"
   const FIRST_STATEMENT_SELECTION = { startColumn: 1, endColumn: 10 }
+  const PARTIAL_FIRST_STATEMENT_SELECTION = { startColumn: 4, endColumn: 10 }
+  // "11; SELE" — cuts into both statements without covering either fully.
+  const CROSS_STATEMENT_SELECTION = { startColumn: 8, endColumn: 16 }
   const QUERY_OFFSETS = [
     { startOffset: 0, endOffset: 9 },
     { startOffset: 11, endOffset: 20 },
   ]
 
   describe("getQueriesToRun", () => {
-    it("runs only the selected text when enabled", () => {
-      // Given the first statement is selected and running with selection is enabled
+    it("runs only the selected text in partial mode", () => {
+      // Given the first statement is selected in partial mode
       const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
 
       // When resolving the queries to run
-      const result = getQueriesToRun(editor, QUERY_OFFSETS, true)
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, "partial")
 
       // Then the run carries the selection
       expect(result.length).toBeGreaterThan(0)
       expect(result.some((request) => request.selection)).toBe(true)
     })
 
-    it("ignores the selection and runs the cursor query when disabled", () => {
-      // Given the first statement is selected but running with selection is disabled
+    it("expands a partial cross-statement selection to both whole queries in complete mode", () => {
+      // Given a selection cutting into both statements in complete mode
+      const editor = makeSingleLineEditor(TEXT, 3, CROSS_STATEMENT_SELECTION)
+
+      // When resolving the queries to run
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, "complete")
+
+      // Then both statements run fully with no selection attached
+      expect(result.map((request) => request.query)).toEqual([
+        "SELECT 11",
+        "SELECT 22",
+      ])
+      expect(result.every((request) => !request.selection)).toBe(true)
+    })
+
+    it("expands a partial single-statement selection to its whole query in complete mode", () => {
+      // Given a selection covering part of the first statement in complete mode
+      const editor = makeSingleLineEditor(
+        TEXT,
+        3,
+        PARTIAL_FIRST_STATEMENT_SELECTION,
+      )
+
+      // When resolving the queries to run
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, "complete")
+
+      // Then only that statement runs fully with no selection attached
+      expect(result.map((request) => request.query)).toEqual(["SELECT 11"])
+      expect(result.every((request) => !request.selection)).toBe(true)
+    })
+
+    it("ignores the selection and runs the cursor query when off", () => {
+      // Given the first statement is selected but the mode is off
       const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
 
       // When resolving the queries to run
-      const result = getQueriesToRun(editor, QUERY_OFFSETS, false)
+      const result = getQueriesToRun(editor, QUERY_OFFSETS, "off")
 
       // Then it falls back to the cursor query with no selection attached
       expect(result).toEqual([getQueryFromCursor(editor)])
@@ -415,23 +449,39 @@ describe("run with selection gating", () => {
   })
 
   describe("getQueryRequestFromEditor", () => {
-    it("builds a selection request when enabled", () => {
-      // Given the first statement is selected and running with selection is enabled
+    it("builds a selection request in partial mode", () => {
+      // Given the first statement is selected in partial mode
       const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
 
       // When building the request from the editor
-      const request = getQueryRequestFromEditor(editor, true)
+      const request = getQueryRequestFromEditor(editor, "partial")
 
       // Then the request carries the selection
       expect(request?.selection).toBeDefined()
     })
 
-    it("ignores the selection and uses the cursor query when disabled", () => {
-      // Given the first statement is selected but running with selection is disabled
+    it("builds a whole-query request from a partial selection in complete mode", () => {
+      // Given a selection covering part of the first statement in complete mode
+      const editor = makeSingleLineEditor(
+        TEXT,
+        3,
+        PARTIAL_FIRST_STATEMENT_SELECTION,
+      )
+
+      // When building the request from the editor
+      const request = getQueryRequestFromEditor(editor, "complete")
+
+      // Then the request holds the full statement with no selection
+      expect(request?.query).toBe("SELECT 11")
+      expect(request?.selection).toBeUndefined()
+    })
+
+    it("ignores the selection and uses the cursor query when off", () => {
+      // Given the first statement is selected but the mode is off
       const editor = makeSingleLineEditor(TEXT, 3, FIRST_STATEMENT_SELECTION)
 
       // When building the request from the editor
-      const request = getQueryRequestFromEditor(editor, false)
+      const request = getQueryRequestFromEditor(editor, "off")
 
       // Then the request has no selection
       expect(request?.selection).toBeUndefined()

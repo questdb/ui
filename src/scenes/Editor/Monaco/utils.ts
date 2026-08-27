@@ -26,6 +26,7 @@ import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
 import type { ValidateQueryResult } from "../../../utils/questdb"
+import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -138,14 +139,14 @@ export const getSelectedText = (
 export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
   queryOffsets: { startOffset: number; endOffset: number }[],
-  runWithSelection: boolean,
+  selectionMode: RunWithSelectionMode,
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
 
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
-  if (!runWithSelection || !selection || !selectedText) {
+  if (selectionMode === "off" || !selection || !selectedText) {
     const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
@@ -190,13 +191,20 @@ export const getQueriesToRun = (
       }),
     })
     const clampedSelectionText = model.getValueInRange(clampedSelection)
-    return stripSQLComments(normalizeQueryText(clampedSelectionText))
-      ? {
-          query: query.query,
-          row: query.row,
-          column: query.column,
-          endRow: query.endRow,
-          endColumn: query.endColumn,
+    if (!stripSQLComments(normalizeQueryText(clampedSelectionText))) {
+      return undefined
+    }
+    const fullQueryRequest = {
+      query: query.query,
+      row: query.row,
+      column: query.column,
+      endRow: query.endRow,
+      endColumn: query.endColumn,
+    }
+    return selectionMode === "complete"
+      ? fullQueryRequest
+      : {
+          ...fullQueryRequest,
           selection: {
             startOffset: model.getOffsetAt({
               lineNumber: clampedSelection.startLineNumber,
@@ -209,7 +217,6 @@ export const getQueriesToRun = (
             queryText: clampedSelectionText,
           },
         }
-      : undefined
   })
   return requests.filter(Boolean) as Request[]
 }
@@ -649,6 +656,24 @@ export const getQueriesInRange = (
   return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
 }
 
+export const getStatementOffsets = (
+  editor: IStandaloneCodeEditor,
+): { startOffset: number; endOffset: number }[] => {
+  const model = editor.getModel()
+  if (!model) return []
+
+  return getAllQueries(editor).map((query) => ({
+    startOffset: model.getOffsetAt({
+      lineNumber: query.row + 1,
+      column: query.column,
+    }),
+    endOffset: model.getOffsetAt({
+      lineNumber: query.endRow + 1,
+      column: query.endColumn,
+    }),
+  }))
+}
+
 export const getQueriesStartingFromLine = (
   editor: IStandaloneCodeEditor,
   lineNumber: number,
@@ -726,7 +751,7 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
-  runWithSelection: boolean,
+  selectionMode: RunWithSelectionMode,
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
@@ -734,8 +759,17 @@ export const getQueryRequestFromEditor = (
     ? stripSQLComments(normalizeQueryText(selectedText))
     : undefined
 
-  if (runWithSelection && strippedNormalizedSelectedText) {
+  if (selectionMode !== "off" && strippedNormalizedSelectedText) {
     request = getQueryFromSelection(editor)
+    if (selectionMode === "complete" && request?.selection) {
+      request = {
+        query: request.query,
+        row: request.row,
+        column: request.column,
+        endRow: request.endRow,
+        endColumn: request.endColumn,
+      }
+    }
   } else {
     request = getQueryFromCursor(editor)
   }

@@ -443,6 +443,36 @@ Cypress.Commands.add("selectRange", (startPos, endPos) => {
   })
 })
 
+Cypress.Commands.add("createNotebook", () => {
+  cy.get(".chrome-tabs .new-tab-button").click()
+  cy.getByDataHook("new-tab-notebook").click()
+  cy.getByDataHook("notebook-toolbar").should("be.visible")
+  cy.getByDataHook("cell-editor-shimmer").should("not.exist")
+  cy.getByDataHook("cell-grid-shimmer").should("not.exist")
+  cy.get("[data-notebook-cell] .monaco-editor textarea").should("exist")
+})
+
+Cypress.Commands.add("focusNotebookCell", () => {
+  cy.get("[data-notebook-cell] .monaco-editor .view-lines").first().click()
+  cy.focused().should("have.class", "inputarea")
+})
+
+Cypress.Commands.add("withFocusedEditor", (fn) => {
+  cy.window().should((win) => {
+    const hasFocusedEditor = win.monaco.editor
+      .getEditors()
+      .some((candidate) => candidate.hasTextFocus())
+    expect(hasFocusedEditor, "a Monaco editor has focus").to.eq(true)
+  })
+  cy.window().then((win) =>
+    fn(
+      win.monaco.editor
+        .getEditors()
+        .find((candidate) => candidate.hasTextFocus()),
+    ),
+  )
+})
+
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"))
 
 Cypress.Commands.add("expandNotifications", () =>
