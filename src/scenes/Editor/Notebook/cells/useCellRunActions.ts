@@ -130,12 +130,15 @@ export const useCellRunActions = ({
             ),
           )
         : normalizeQueryText(model.getValueInRange(selection))
-    if (!sql) return false
+    if (!sql) {
+      if (runWithSelectionMode === "complete") clearHighlight()
+      return runWithSelectionMode === "complete"
+    }
 
     clearHighlight()
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
     const { ok } = await runCell(cell.id, sql)
-    applyHighlight(ok)
+    if (runWithSelectionMode === "partial") applyHighlight(ok)
     return true
   }, [
     runWithSelectionMode,

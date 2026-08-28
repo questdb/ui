@@ -88,6 +88,11 @@ export type Request = Readonly<{
   }
 }>
 
+const toCompleteQueryRequest = (request: Request): Request => {
+  const { selection: _selection, ...completeQueryRequest } = request
+  return completeQueryRequest
+}
+
 type SqlTextItem = {
   row: number
   col: number
@@ -194,17 +199,10 @@ export const getQueriesToRun = (
     if (!stripSQLComments(normalizeQueryText(clampedSelectionText))) {
       return undefined
     }
-    const fullQueryRequest = {
-      query: query.query,
-      row: query.row,
-      column: query.column,
-      endRow: query.endRow,
-      endColumn: query.endColumn,
-    }
     return selectionMode === "complete"
-      ? fullQueryRequest
+      ? toCompleteQueryRequest(query)
       : {
-          ...fullQueryRequest,
+          ...query,
           selection: {
             startOffset: model.getOffsetAt({
               lineNumber: clampedSelection.startLineNumber,
@@ -761,14 +759,8 @@ export const getQueryRequestFromEditor = (
 
   if (selectionMode !== "off" && strippedNormalizedSelectedText) {
     request = getQueryFromSelection(editor)
-    if (selectionMode === "complete" && request?.selection) {
-      request = {
-        query: request.query,
-        row: request.row,
-        column: request.column,
-        endRow: request.endRow,
-        endColumn: request.endColumn,
-      }
+    if (selectionMode === "complete" && request) {
+      request = toCompleteQueryRequest(request)
     }
   } else {
     request = getQueryFromCursor(editor)
@@ -1014,6 +1006,58 @@ export const joinQueryTexts = (queries: string[]): string =>
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
   model.findMatches(needle, true, false, true, null, true) ?? null
+
+export const isFullQueryMatch = (
+  editor: IStandaloneCodeEditor,
+  range: IRange,
+): boolean => {
+  const model = editor.getModel()
+  if (!model) return false
+
+  const matchStartOffset = model.getOffsetAt({
+    lineNumber: range.startLineNumber,
+    column: range.startColumn,
+  })
+  const matchEndOffset = model.getOffsetAt({
+    lineNumber: range.endLineNumber,
+    column: range.endColumn,
+  })
+  const queryRanges = getAllQueries(editor)
+    .map((query) => ({
+      startOffset: model.getOffsetAt({
+        lineNumber: query.row + 1,
+        column: query.column,
+      }),
+      endOffset: model.getOffsetAt({
+        lineNumber: query.endRow + 1,
+        column: query.endColumn,
+      }),
+    }))
+    .filter(
+      ({ startOffset, endOffset }) =>
+        startOffset < matchEndOffset && endOffset > matchStartOffset,
+    )
+
+  if (queryRanges.length === 0) return false
+
+  const firstQuery = queryRanges[0]
+  const lastQuery = queryRanges[queryRanges.length - 1]
+  if (
+    matchStartOffset !== firstQuery.startOffset ||
+    matchEndOffset < lastQuery.endOffset
+  ) {
+    return false
+  }
+
+  const trailingStart = model.getPositionAt(lastQuery.endOffset)
+  const trailingText = model.getValueInRange({
+    startLineNumber: trailingStart.lineNumber,
+    startColumn: trailingStart.column,
+    endLineNumber: range.endLineNumber,
+    endColumn: range.endColumn,
+  })
+  return getQueriesFromText(trailingText).length === 0
+}
 
 export const getLastPosition = (
   editor: IStandaloneCodeEditor,

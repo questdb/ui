@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import type { editor } from "monaco-editor"
+import type { editor, IRange } from "monaco-editor"
 import {
   getQueriesFromText,
   isCursorInComment,
@@ -13,6 +13,8 @@ import {
   isInflightQueryStillInPlace,
   shiftSelection,
   applyQueryKeyUpdates,
+  getStatementOffsets,
+  isFullQueryMatch,
   joinQueryTexts,
 } from "./utils"
 
@@ -40,6 +42,8 @@ const makeSingleLineEditor = (
       text.substring(range.startColumn - 1, range.endColumn - 1),
     getOffsetAt: (position: { column: number }) => position.column - 1,
     getPositionAt: (offset: number) => ({ lineNumber: 1, column: offset + 1 }),
+    getLineCount: () => 1,
+    getLineContent: () => text,
   }
 
   return {
@@ -54,6 +58,53 @@ const makeSingleLineEditor = (
         endColumn: range.endColumn,
       }
     },
+  } as unknown as editor.IStandaloneCodeEditor
+}
+
+const makeMultiLineEditor = (text: string) => {
+  const lines = text.split("\n")
+  const getOffsetAt = (position: { lineNumber: number; column: number }) =>
+    lines
+      .slice(0, position.lineNumber - 1)
+      .reduce((offset, line) => offset + line.length + 1, 0) +
+    position.column -
+    1
+  const getPositionAt = (offset: number) => {
+    let remaining = offset
+    for (let index = 0; index < lines.length; index++) {
+      if (remaining <= lines[index].length) {
+        return { lineNumber: index + 1, column: remaining + 1 }
+      }
+      remaining -= lines[index].length + 1
+    }
+    return {
+      lineNumber: lines.length,
+      column: lines[lines.length - 1].length + 1,
+    }
+  }
+  const model = {
+    getOffsetAt,
+    getPositionAt,
+    getValueInRange: (range: IRange) =>
+      text.substring(
+        getOffsetAt({
+          lineNumber: range.startLineNumber,
+          column: range.startColumn,
+        }),
+        getOffsetAt({
+          lineNumber: range.endLineNumber,
+          column: range.endColumn,
+        }),
+      ),
+    getLineCount: () => lines.length,
+    getLineContent: (lineNumber: number) => lines[lineNumber - 1],
+  }
+
+  return {
+    getModel: () => model,
+    getValue: () => text,
+    getPosition: () => getPositionAt(text.length),
+    getSelection: () => null,
   } as unknown as editor.IStandaloneCodeEditor
 }
 
@@ -466,6 +517,25 @@ describe("run with selection modes", () => {
       expect(result).toEqual([getQueryFromCursor(editor)])
       expect(result.every((request) => !request.selection)).toBe(true)
     })
+
+    it("keeps off and complete distinct for a cross-statement selection", () => {
+      // Given a valid selection that starts at the cursor and crosses into the
+      // second statement
+      const selection = { startColumn: 3, endColumn: 16 }
+      const editor = makeSingleLineEditor(TEXT, 3, selection)
+
+      // When resolving the same selection in each mode
+      const complete = getQueriesToRun(editor, QUERY_OFFSETS, "complete")
+      const off = getQueriesToRun(editor, QUERY_OFFSETS, "off")
+
+      // Then complete expands both touched statements while off uses only the
+      // cursor statement
+      expect(complete.map((request) => request.query)).toEqual([
+        "SELECT 11",
+        "SELECT 22",
+      ])
+      expect(off.map((request) => request.query)).toEqual(["SELECT 11"])
+    })
   })
 
   describe("getQueryRequestFromEditor", () => {
@@ -506,6 +576,75 @@ describe("run with selection modes", () => {
       // Then the request has no selection
       expect(request?.selection).toBeUndefined()
     })
+  })
+})
+
+describe("statement boundaries", () => {
+  it("accepts a match that covers a complete statement", () => {
+    const text = "SELECT 1; SELECT 2;"
+    const startColumn = text.indexOf("SELECT 2") + 1
+    const editor = makeSingleLineEditor(text, startColumn, null)
+
+    expect(
+      isFullQueryMatch(editor, {
+        startLineNumber: 1,
+        startColumn,
+        endLineNumber: 1,
+        endColumn: text.length + 1,
+      }),
+    ).toBe(true)
+  })
+
+  it("accepts complete statements followed by comments", () => {
+    const text = "SELECT 1;\n-- shared note"
+    const editor = makeMultiLineEditor(text)
+
+    expect(
+      isFullQueryMatch(editor, {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 2,
+        endColumn: 15,
+      }),
+    ).toBe(true)
+  })
+
+  it("accepts a match spanning multiple complete statements", () => {
+    const text = "SELECT 1;\n\nSELECT 2;"
+    const editor = makeMultiLineEditor(text)
+
+    expect(
+      isFullQueryMatch(editor, {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 3,
+        endColumn: 10,
+      }),
+    ).toBe(true)
+  })
+
+  it("rejects a match contained inside a larger statement", () => {
+    const text = "SELECT 1 UNION ALL SELECT 2;"
+    const startColumn = text.indexOf("SELECT 2") + 1
+    const editor = makeSingleLineEditor(text, startColumn, null)
+
+    expect(
+      isFullQueryMatch(editor, {
+        startLineNumber: 1,
+        startColumn,
+        endLineNumber: 1,
+        endColumn: text.length + 1,
+      }),
+    ).toBe(false)
+  })
+
+  it("calculates offsets for multiline statements", () => {
+    const editor = makeMultiLineEditor("SELECT\n  11;\nSELECT\n  22;")
+
+    expect(getStatementOffsets(editor)).toEqual([
+      { startOffset: 0, endOffset: 11 },
+      { startOffset: 13, endOffset: 24 },
+    ])
   })
 })
 

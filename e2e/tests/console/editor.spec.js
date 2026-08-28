@@ -994,29 +994,36 @@ describe("&query URL param", () => {
       params.set("executeQuery", "true")
       return `${baseUrl}/?${params.toString()}`
     }
+    const expectClipboardWrite = (callCount, sql) => {
+      cy.get("@clipboardWrite").should((writeText) => {
+        expect(writeText).to.have.callCount(callCount)
+        expect(writeText.lastCall.args).to.deep.eq([expectedUrl(sql)])
+      })
+    }
+    cy.window().then((win) => {
+      cy.stub(win.navigator.clipboard, "writeText")
+        .as("clipboardWrite")
+        .resolves()
+    })
 
     // When — glyph dropdown copies single full query
     cy.openRunDropdownInLine(1)
     cy.getByDataHook("dropdown-item-copy-query-link").click()
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;"))
+    expectClipboardWrite(1, "SELECT 1;")
 
     // When — glyph dropdown copies the complete query even with a
     // fragment selected inside it
     cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 7 })
     cy.getByDataHook("button-run-query").should("contain", "Run selected query")
     cy.openRunDropdownInLine(2)
-    cy.getByDataHook("dropdown-item-copy-query-link").click()
+    cy.getByDataHook("dropdown-item-copy-query-link")
+      .should("contain", 'Copy link to "SELECT 2"')
+      .click()
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 2;"))
+    expectClipboardWrite(2, "SELECT 2;")
 
     // When — Alt+L copies single query at cursor
     cy.clickLine(3)
@@ -1024,10 +1031,7 @@ describe("&query URL param", () => {
     cy.realPress(["Alt", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 3;"))
+    expectClipboardWrite(3, "SELECT 3;")
 
     // When — Alt+L copies selection spanning multiple queries
     cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 2, column: 9 })
@@ -1038,19 +1042,13 @@ describe("&query URL param", () => {
     cy.realPress(["Alt", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;"))
+    expectClipboardWrite(4, "SELECT 1;\n\nSELECT 2;")
 
     // When — Alt+Shift+L copies all queries in tab
     cy.realPress(["Alt", "Shift", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;\n\nSELECT 3;"))
+    expectClipboardWrite(5, "SELECT 1;\n\nSELECT 2;\n\nSELECT 3;")
   })
 })
 
@@ -2312,6 +2310,9 @@ describe("editor settings", () => {
       .should("have.attr", "title", `select a from ${table}`)
       .and("have.attr", "aria-selected", "true")
     cellResultTabs().eq(1).should("have.attr", "title", "select 33")
+    cy.get(".selectionSuccessHighlight, .selectionErrorHighlight").should(
+      "not.exist",
+    )
 
     // When the mode is off and the same selection is made
     setMode("off")
@@ -2338,7 +2339,40 @@ describe("editor settings", () => {
       .and("contain", "33")
   })
 
-  it("expands the share-link fragment to the complete query, with the setting off", () => {
+  it("does not run a notebook cell when complete selection has no query", () => {
+    // Given complete selection mode and a cell containing SQL plus a comment
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-complete").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type("select 1;\n-- note", { delay: 0 })
+    cy.withFocusedEditor((editor) =>
+      editor.setSelection({
+        startLineNumber: 2,
+        startColumn: 1,
+        endLineNumber: 2,
+        endColumn: 8,
+      }),
+    )
+
+    // When the comment-only selection is run
+    let execRequests = 0
+    cy.intercept({ url: "/exec*" }, (request) => {
+      execRequests += 1
+      request.continue()
+    })
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+
+    // Then it is a handled no-op rather than falling through to the whole cell
+    cy.wait(500)
+    cy.then(() => expect(execRequests).to.eq(0))
+    cy.get("[data-hook='result-grid-tanstack']:visible").should("not.exist")
+  })
+
+  it("isolates a shared fragment that only matches part of a query", () => {
     // Given the setting is turned off
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").click()
@@ -2355,10 +2389,13 @@ describe("editor settings", () => {
     )
     cy.getEditorContent().should("be.visible")
 
-    // Then the complete containing statement runs, not just the fragment
-    cy.getGridRows().should("have.length", 2)
-    cy.getGridRow(0).should("contain", "1")
-    cy.getGridRow(1).should("contain", "2")
+    // Then the fragment opens in its own buffer and only that SQL runs
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should("have.value", "select 2")
+    cy.getGridRows().should("have.length", 1)
+    cy.getGridRow(0).should("contain", "2")
   })
 
   it("caps column width at the configured maximum and returns to auto", () => {

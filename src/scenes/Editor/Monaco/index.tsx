@@ -53,6 +53,7 @@ import {
   clearModelMarkers,
   clearValidationMarkers,
   findMatches,
+  isFullQueryMatch,
   getErrorRange,
   getQueryFromCursor,
   getQueryRequestFromEditor,
@@ -523,7 +524,6 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     runQueryAction(query, RunningType.EXPLAIN)
   }
 
-  // Share links always carry complete queries, never selection fragments.
   const buildAndCopyShareLink = (requests: Request[]) => {
     if (requests.length === 0) {
       toast.error("Nothing to copy")
@@ -1273,11 +1273,14 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         const trimmedQuery = query.trim()
         // Find if the query is already in the editor
         const matches = findMatches(model, trimmedQuery)
-        if (matches && matches.length > 0) {
-          editor.setSelection(matches[0].range)
+        const fullQueryMatch = matches?.find((match) =>
+          isFullQueryMatch(editor, match.range),
+        )
+        if (fullQueryMatch) {
+          editor.setSelection(fullQueryMatch.range)
           editor.revealPositionInCenter({
-            lineNumber: matches[0].range.startLineNumber,
-            column: matches[0].range.startColumn,
+            lineNumber: fullQueryMatch.range.startLineNumber,
+            column: fullQueryMatch.range.startColumn,
           })
           // otherwise, open the query in a new buffer
         } else {
