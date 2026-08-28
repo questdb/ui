@@ -1009,6 +1009,9 @@ export const normalizeQueryText = (query: string) => {
   return result.trim()
 }
 
+export const joinQueryTexts = (queries: string[]): string =>
+  queries.join("\n;\n")
+
 export const findMatches = (model: editor.ITextModel, needle: string) =>
   model.findMatches(needle, true, false, true, null, true) ?? null
 

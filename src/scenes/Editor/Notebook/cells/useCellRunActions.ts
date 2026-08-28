@@ -9,6 +9,7 @@ import {
   getQueriesToRun,
   getQueryFromCursor,
   getStatementOffsets,
+  joinQueryTexts,
   normalizeQueryText,
 } from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
@@ -123,9 +124,11 @@ export const useCellRunActions = ({
 
     const sql =
       runWithSelectionMode === "complete"
-        ? getQueriesToRun(ed, getStatementOffsets(ed), "complete")
-            .map((request) => normalizeQueryText(request.query))
-            .join(";\n")
+        ? joinQueryTexts(
+            getQueriesToRun(ed, getStatementOffsets(ed), "complete").map(
+              (request) => normalizeQueryText(request.query),
+            ),
+          )
         : normalizeQueryText(model.getValueInRange(selection))
     if (!sql) return false
 

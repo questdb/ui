@@ -2260,12 +2260,15 @@ describe("editor settings", () => {
       cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
     const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
 
-    // Given exec responses slow enough to observe the run loaders
-    cy.intercept("/exec*", (req) => {
-      req.on("response", (res) => {
-        res.setDelay(300)
-      })
-    })
+    // Given the first exec request is held until the loader is observed
+    let releaseFirstExec
+    cy.intercept(
+      { url: "/exec*", times: 1 },
+      () =>
+        new Cypress.Promise((resolve) => {
+          releaseFirstExec = resolve
+        }),
+    ).as("heldExec")
 
     // And a resolved notebook whose focused cell holds two statements
     cy.createNotebook()
@@ -2281,6 +2284,11 @@ describe("editor settings", () => {
 
     // Then the table toggle spins while the fragment runs
     cy.get("[aria-label='View table'][aria-busy='true']").should("exist")
+    cy.wrap(null).should(() => {
+      expect(releaseFirstExec).to.be.a("function")
+    })
+    cy.then(() => releaseFirstExec())
+    cy.wait("@heldExec")
     cy.get("[aria-label='View table'][aria-busy='true']").should("not.exist")
 
     // And only the bare fragment ran: a single result with every column

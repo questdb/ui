@@ -13,6 +13,7 @@ import {
   isInflightQueryStillInPlace,
   shiftSelection,
   applyQueryKeyUpdates,
+  joinQueryTexts,
 } from "./utils"
 
 type SingleLineSelection = { startColumn: number; endColumn: number }
@@ -137,6 +138,25 @@ SELECT * FROM sampled;`
     expect(out[0]).toContain("BTC-USDT")
     expect(out[0]).toContain("WITH sampled")
     expect(out[1]).toContain("ETH-USDT")
+  })
+})
+
+describe("joinQueryTexts", () => {
+  it("keeps separators outside trailing line comments", () => {
+    const queries = [
+      "select ts, price\nfrom trades -- last hour",
+      "select count(*) from trades",
+      "select max(price) from trades -- final aggregate",
+    ]
+
+    const sql = joinQueryTexts(queries)
+
+    expect(sql).toBe(
+      "select ts, price\nfrom trades -- last hour\n;\n" +
+        "select count(*) from trades\n;\n" +
+        "select max(price) from trades -- final aggregate",
+    )
+    expect(getQueriesFromText(sql)).toEqual(queries)
   })
 })
 
