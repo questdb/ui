@@ -16,6 +16,7 @@ import {
   getStatementOffsets,
   isFullQueryMatch,
   joinQueryTexts,
+  resolveSelectionRun,
 } from "./utils"
 
 type SingleLineSelection = { startColumn: number; endColumn: number }
@@ -61,7 +62,7 @@ const makeSingleLineEditor = (
   } as unknown as editor.IStandaloneCodeEditor
 }
 
-const makeMultiLineEditor = (text: string) => {
+const makeMultiLineEditor = (text: string, selection?: IRange) => {
   const lines = text.split("\n")
   const getOffsetAt = (position: { lineNumber: number; column: number }) =>
     lines
@@ -104,7 +105,23 @@ const makeMultiLineEditor = (text: string) => {
     getModel: () => model,
     getValue: () => text,
     getPosition: () => getPositionAt(text.length),
-    getSelection: () => null,
+    getSelection: () =>
+      selection
+        ? {
+            ...selection,
+            getStartPosition: () => ({
+              lineNumber: selection.startLineNumber,
+              column: selection.startColumn,
+            }),
+            getEndPosition: () => ({
+              lineNumber: selection.endLineNumber,
+              column: selection.endColumn,
+            }),
+            isEmpty: () =>
+              selection.startLineNumber === selection.endLineNumber &&
+              selection.startColumn === selection.endColumn,
+          }
+        : null,
   } as unknown as editor.IStandaloneCodeEditor
 }
 
@@ -536,6 +553,34 @@ describe("run with selection modes", () => {
       ])
       expect(off.map((request) => request.query)).toEqual(["SELECT 11"])
     })
+
+    it("returns nothing when the selection covers only a comment line between statements", () => {
+      // Given a commented-out statement between two live statements, with a
+      // word inside the comment selected
+      const text =
+        "SELECT * FROM trades;\n-- old: DELETE FROM trades\nDROP TABLE trades;"
+      const commentWordSelection = {
+        startLineNumber: 2,
+        startColumn: 9,
+        endLineNumber: 2,
+        endColumn: 15,
+      }
+      const makeEditor = () => makeMultiLineEditor(text, commentWordSelection)
+      const offsets = getStatementOffsets(makeEditor())
+
+      // When resolving the queries to run in each selection mode
+      const complete = getQueriesToRun(makeEditor(), offsets, "complete")
+      const partial = getQueriesToRun(makeEditor(), offsets, "partial")
+      const off = getQueriesToRun(makeEditor(), offsets, "off")
+
+      // Then no mode runs or expands into a statement the user never touched;
+      // off falls back to the query at the cursor as always
+      expect(complete).toEqual([])
+      expect(partial).toEqual([])
+      expect(off.map((request) => request.query)).toEqual([
+        "DROP TABLE trades",
+      ])
+    })
   })
 
   describe("getQueryRequestFromEditor", () => {
@@ -575,6 +620,117 @@ describe("run with selection modes", () => {
 
       // Then the request has no selection
       expect(request?.selection).toBeUndefined()
+    })
+  })
+})
+
+describe("resolveSelectionRun", () => {
+  const TEXT = "SELECT 11; SELECT 22"
+  const FRAGMENT_SELECTION = { startColumn: 4, endColumn: 10 }
+
+  it("reports no selection when the mode is off", () => {
+    // Given a real selection but the mode is off
+    const editor = makeSingleLineEditor(TEXT, 3, FRAGMENT_SELECTION)
+
+    // When resolving the selection run
+    // Then the selection is ignored
+    expect(resolveSelectionRun(editor, "off")).toEqual({
+      kind: "no-selection",
+    })
+  })
+
+  it("reports no selection for a collapsed cursor", () => {
+    // Given a collapsed selection (a bare cursor)
+    const editor = makeSingleLineEditor(TEXT, 3, {
+      startColumn: 3,
+      endColumn: 3,
+    })
+
+    // When resolving in partial and complete modes
+    // Then neither treats the cursor as a selection
+    expect(resolveSelectionRun(editor, "partial")).toEqual({
+      kind: "no-selection",
+    })
+    expect(resolveSelectionRun(editor, "complete")).toEqual({
+      kind: "no-selection",
+    })
+  })
+
+  it("runs the fragment in partial mode", () => {
+    // Given a fragment of the first statement selected in partial mode
+    const editor = makeSingleLineEditor(TEXT, 3, FRAGMENT_SELECTION)
+
+    // When resolving the selection run
+    // Then the fragment itself is the sql
+    expect(resolveSelectionRun(editor, "partial")).toEqual({
+      kind: "run",
+      sql: "ECT 11",
+    })
+  })
+
+  it("blocks a comment-only selection in partial mode", () => {
+    // Given only a line comment is selected
+    const text = "SELECT 1;\n-- a note"
+    const editor = makeMultiLineEditor(text, {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
+    })
+
+    // When resolving the selection run
+    // Then there is nothing to run and the run is blocked
+    expect(resolveSelectionRun(editor, "partial")).toEqual({
+      kind: "no-query",
+    })
+  })
+
+  it("expands a cross-statement fragment in complete mode", () => {
+    // Given a selection cutting into both statements in complete mode
+    const editor = makeSingleLineEditor(TEXT, 3, {
+      startColumn: 8,
+      endColumn: 16,
+    })
+
+    // When resolving the selection run
+    // Then both whole statements join into one run
+    expect(resolveSelectionRun(editor, "complete")).toEqual({
+      kind: "run",
+      sql: "SELECT 11\n;\nSELECT 22",
+    })
+  })
+
+  it("blocks a comment-only selection in complete mode", () => {
+    // Given only the trailing comment line is selected in complete mode
+    const text = "SELECT 1;\n-- a note"
+    const editor = makeMultiLineEditor(text, {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
+    })
+
+    // When resolving the selection run
+    // Then no statement is touched and the run is blocked
+    expect(resolveSelectionRun(editor, "complete")).toEqual({
+      kind: "no-query",
+    })
+  })
+
+  it("blocks a comment-only selection between statements in complete mode", () => {
+    // Given a comment line between two statements, fully selected
+    const text = "SELECT 1;\n-- old: DELETE FROM t\nSELECT 2;"
+    const editor = makeMultiLineEditor(text, {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 22,
+    })
+
+    // When resolving the selection run in complete mode
+    // Then it does not expand into either neighbouring statement
+    expect(resolveSelectionRun(editor, "complete")).toEqual({
+      kind: "no-query",
     })
   })
 })

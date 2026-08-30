@@ -1453,6 +1453,42 @@ describe("computeResultBottomHeight", () => {
     expect(computeResultBottomHeight(make(50))).toBe(424)
   })
 
+  it("one executed DQL in a multi-statement cell adds tabs but tight-fits its rows", () => {
+    // The result array is compact (only SELECT 2 ran), but the rendered frame
+    // has two tabs: SELECT 1 is "Not run" and SELECT 2 owns the result.
+    const result = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "select 2",
+          columns: [{ name: "2", type: "INT" }],
+          dataset: [[2]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+
+    // 40 tab + 44 notification + 36 actions + 44 header + 1*30 row = 194.
+    expect(computeResultBottomHeight(result, ["select 1", "select 2"])).toBe(
+      194,
+    )
+  })
+
+  it("one executed non-grid result in a multi-statement cell still includes its tabs", () => {
+    expect(
+      computeResultBottomHeight(
+        {
+          results: [{ type: "ddl", query: "create table x (n int)" }],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+        ["create table x (n int)", "select * from x"],
+      ),
+    ).toBe(84)
+  })
+
   it("multi-statement, first DQL with rows → tab + notification + header + 10 rows", () => {
     // 40 + 44 + 36 + 44 + 10*30 = 464
     expect(
@@ -1473,8 +1509,9 @@ describe("computeResultBottomHeight", () => {
     ).toBe(464)
   })
 
-  it("multi-statement, first is error → tab + notification only (no grid to show)", () => {
-    // 40 + 44 = 84
+  it("multi-statement with any DQL tab reserves the full grid block", () => {
+    // The first tab is an error, but the active second tab renders a grid.
+    // Reserve the same stable multi-tab height: 40 + 44 + 36 + 44 + 10*30.
     expect(
       computeResultBottomHeight({
         results: [
@@ -1490,7 +1527,7 @@ describe("computeResultBottomHeight", () => {
         activeResultIndex: 1,
         timestamp: 0,
       }),
-    ).toBe(84)
+    ).toBe(464)
   })
 
   it("multi-statement, first DQL with columns but 0 rows → tab + full grid block", () => {

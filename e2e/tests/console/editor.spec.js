@@ -2230,6 +2230,22 @@ describe("editor settings", () => {
     cy.getGridRow(0).should("contain", "2")
   })
 
+  it("disables run while the selection covers only a comment between statements", () => {
+    // Given a commented-out statement between two live statements
+    cy.typeQueryDirectly("select 1;\n-- old: delete from t\nselect 2;")
+
+    // When a word inside the comment is selected
+    cy.selectRange({ lineNumber: 2, column: 9 }, { lineNumber: 2, column: 15 })
+
+    // Then the run button disables instead of targeting a neighbouring
+    // statement
+    cy.getByDataHook("button-run-query").should("be.disabled")
+
+    // And moving the cursor back into a statement enables it again
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("not.be.disabled")
+  })
+
   it("resolves the notebook cell selection per mode: partial, complete, off", () => {
     const table = runWithSelectionTable
     const sql = `select a from ${table}; select 33`
@@ -2339,16 +2355,11 @@ describe("editor settings", () => {
       .and("contain", "33")
   })
 
-  it("does not run a notebook cell when complete selection has no query", () => {
-    // Given complete selection mode and a cell containing SQL plus a comment
-    openEditorSettings()
-    cy.getByDataHook("editor-settings-run-with-selection").click()
-    cy.getByDataHook("run-with-selection-complete").click()
-    cy.getByDataHook("editor-settings-save").click()
-
+  it("runs the whole notebook cell from Run cell and Run All regardless of selection", () => {
+    // Given a cell with two statements and a comment-only selection
     cy.createNotebook()
     cy.focusNotebookCell()
-    cy.focused().type("select 1;\n-- note", { delay: 0 })
+    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
     cy.withFocusedEditor((editor) =>
       editor.setSelection({
         startLineNumber: 2,
@@ -2358,18 +2369,137 @@ describe("editor settings", () => {
       }),
     )
 
-    // When the comment-only selection is run
-    let execRequests = 0
+    const execQueries = []
     cy.intercept({ url: "/exec*" }, (request) => {
-      execRequests += 1
+      execQueries.push(new URL(request.url).searchParams.get("query"))
       request.continue()
     })
+
+    // When Run cell is clicked, the selection does not narrow its scope
+    cy.get("[data-notebook-cell] button[aria-label='Run cell']")
+      .should("contain", "Run")
+      .and("have.attr", "aria-disabled", "false")
+      .click()
+
+    // Then every statement runs
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      2,
+    )
+    cy.wrap(null).should(() => {
+      expect([...execQueries].sort()).to.deep.eq(["select 1", "select 2"])
+    })
+
+    // And Cmd+Shift+Enter runs the whole cell even from the result area
+    cy.get("[role='tablist'] [role='tab']").eq(1).click().should("have.focus")
+    cy.then(() => {
+      execQueries.length = 0
+    })
+    cy.window().then((win) => {
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          metaKey: Cypress.platform === "darwin",
+          ctrlKey: Cypress.platform !== "darwin",
+          bubbles: true,
+        }),
+      )
+    })
+    cy.wrap(null).should(() => {
+      expect([...execQueries].sort()).to.deep.eq(["select 1", "select 2"])
+    })
+  })
+
+  it("never widens notebook Cmd+Enter beyond its focused query", () => {
+    // Given a fresh cell whose cursor is in the gap between two statements
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 2, column: 4 }),
+    )
+
+    const execQueries = []
+    cy.intercept({ url: "/exec*" }, (request) => {
+      execQueries.push(new URL(request.url).searchParams.get("query"))
+      request.continue()
+    })
+
+    // When Cmd+Enter is pressed in Monaco with no query at the cursor
     cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
 
-    // Then it is a handled no-op rather than falling through to the whole cell
+    // Then it is a no-op, never an implicit Run All
     cy.wait(500)
-    cy.then(() => expect(execRequests).to.eq(0))
+    cy.then(() => expect(execQueries).to.deep.eq([]))
     cy.get("[data-hook='result-grid-tanstack']:visible").should("not.exist")
+
+    // When only the second statement is run
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 3, column: 4 }),
+    )
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+
+    // Then both statement tabs fit alongside a fully visible result row
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+    cy.get("[role='tablist'] [data-hook='result-tab-not-run']").should(
+      "have.length",
+      1,
+    )
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      1,
+    )
+    cy.getGridRow(0).should("be.visible").and("contain", "2")
+    cy.then(() => {
+      execQueries.length = 0
+    })
+
+    // Given an explicit Run All has created a result tab for each statement
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run-all").run())
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      2,
+    )
+    cy.then(() => {
+      execQueries.length = 0
+    })
+
+    // When the second result tab has focus and Cmd+Enter is pressed
+    cy.get("[role='tablist'] [role='tab']")
+      .eq(1)
+      .click()
+      .should("have.focus")
+      .and("have.attr", "title", "select 2")
+    cy.window().then((win) => {
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", {
+          key: "Enter",
+          metaKey: Cypress.platform === "darwin",
+          ctrlKey: Cypress.platform !== "darwin",
+          bubbles: true,
+        }),
+      )
+    })
+
+    // Then only that tab's statement runs
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+
+    // And the same active tab never becomes a fallback for Monaco
+    cy.focusNotebookCell()
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 2, column: 4 }),
+    )
+    cy.then(() => {
+      execQueries.length = 0
+    })
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+    cy.wait(500)
+    cy.then(() => expect(execQueries).to.deep.eq([]))
   })
 
   it("isolates a shared fragment that only matches part of a query", () => {

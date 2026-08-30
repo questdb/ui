@@ -621,7 +621,10 @@ export const NotebookProvider: React.FC<{
           !cell.bottomResized
         ) {
           store.updateCell(cellId, {
-            bottomHeight: computeResultBottomHeight(cell.result),
+            bottomHeight: computeResultBottomHeight(
+              cell.result,
+              getQueriesFromText(cell.value),
+            ),
           })
         }
 

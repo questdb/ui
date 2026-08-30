@@ -179,6 +179,12 @@ export const getQueriesToRun = (
     return []
   }
 
+  // The lookups invert when the selection sits entirely in the gap between
+  // two statements (a comment line, blank lines) — no statement is touched.
+  if (firstQueryOffsets.startOffset > lastQueryOffsets.endOffset) {
+    return []
+  }
+
   const queries = getQueriesInRange(
     editor,
     model.getPositionAt(firstQueryOffsets.startOffset),
@@ -1003,6 +1009,41 @@ export const normalizeQueryText = (query: string) => {
 
 export const joinQueryTexts = (queries: string[]): string =>
   queries.join("\n;\n")
+
+export type SelectionRunResolution =
+  | { kind: "no-selection" }
+  | { kind: "no-query" }
+  | { kind: "run"; sql: string }
+
+export const resolveSelectionRun = (
+  editor: IStandaloneCodeEditor,
+  selectionMode: RunWithSelectionMode,
+): SelectionRunResolution => {
+  if (selectionMode === "off") return { kind: "no-selection" }
+  const selection = editor.getSelection()
+  const model = editor.getModel()
+  if (!selection || !model || selection.isEmpty()) {
+    return { kind: "no-selection" }
+  }
+
+  if (selectionMode === "complete") {
+    const queries = getQueriesToRun(
+      editor,
+      getStatementOffsets(editor),
+      "complete",
+    )
+    if (queries.length === 0) return { kind: "no-query" }
+    return {
+      kind: "run",
+      sql: joinQueryTexts(
+        queries.map((request) => normalizeQueryText(request.query)),
+      ),
+    }
+  }
+
+  const sql = normalizeQueryText(model.getValueInRange(selection))
+  return stripSQLComments(sql) ? { kind: "run", sql } : { kind: "no-query" }
+}
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
   model.findMatches(needle, true, false, true, null, true) ?? null
