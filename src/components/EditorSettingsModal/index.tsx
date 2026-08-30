@@ -112,6 +112,7 @@ type SettingRowProps = {
   label: string
   description: string
   controlId: string
+  omitHtmlFor?: boolean
   children: ReactNode
 }
 
@@ -121,6 +122,7 @@ const SettingRow = ({
   label,
   description,
   controlId,
+  omitHtmlFor,
   children,
 }: SettingRowProps) => (
   <ItemRow>
@@ -129,7 +131,7 @@ const SettingRow = ({
         color="contentPrimary"
         lineHeight="1"
         type="label"
-        htmlFor={controlId}
+        htmlFor={omitHtmlFor !== true ? controlId : undefined}
       >
         {label}
       </Text>
@@ -184,6 +186,7 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
           label="Run with selection"
           description="Controls how run actions apply your text selection."
           controlId={RUN_WITH_SELECTION_ID}
+          omitHtmlFor
         >
           <ModeSelectField>
             <SelectMenuControl
