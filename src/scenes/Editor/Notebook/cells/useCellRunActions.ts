@@ -34,6 +34,7 @@ type Options = {
 }
 
 type SingleRunSource = "editor" | "result"
+type SelectionRunStart = "no-selection" | "no-query" | "started"
 
 type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
 
@@ -116,18 +117,19 @@ export const useCellRunActions = ({
     validateWithGlobals,
   ])
 
-  const tryRunSelection = useCallback(async (): Promise<boolean> => {
+  const tryRunSelection = useCallback((): SelectionRunStart => {
     const ed = editorRef.current
-    if (!ed) return false
+    if (!ed) return "no-selection"
     const resolution = resolveSelectionRun(ed, runWithSelectionMode)
-    if (resolution.kind === "no-selection") return false
+    if (resolution.kind === "no-selection") return "no-selection"
     clearHighlight()
-    if (resolution.kind === "no-query") return true
+    if (resolution.kind === "no-query") return "no-query"
 
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
-    const { ok } = await runCell(cell.id, resolution.sql)
-    if (runWithSelectionMode === "partial") applyHighlight(ok)
-    return true
+    void runCell(cell.id, resolution.sql).then(({ ok }) => {
+      if (runWithSelectionMode === "partial") applyHighlight(ok)
+    })
+    return "started"
   }, [
     runWithSelectionMode,
     cell.id,
@@ -169,32 +171,36 @@ export const useCellRunActions = ({
   ])
 
   const handleRunSingle = useCallback(
-    async (source: SingleRunSource) => {
+    (source: SingleRunSource): boolean => {
       let sql: string | undefined
       if (source === "editor") {
         const ed = editorRef.current
-        if (!ed) return
-        // Capture the cursor's statement before any await — revealing a compact
-        // cell can unmount Monaco during this same gesture.
+        if (!ed) return false
         const cursorQuery = getQueryFromCursor(ed)?.query
-        if (await tryRunSelection()) return
+        const selectionRun = tryRunSelection()
+        if (selectionRun === "started") return true
+        if (selectionRun === "no-query") {
+          toast.error("Nothing to run")
+          return false
+        }
         sql = cursorQuery
       } else {
-        // Result focus deliberately targets the active statement tab, including
-        // a "Not run" tab. It is not a fallback for an unresolved editor cursor.
         sql = resolveActiveStatementSql(cell.value, cell.result)
       }
 
       if (!sql?.trim()) {
-        return
+        toast.error("Nothing to run")
+        return false
       }
       clearHighlight()
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      const { ok } = await runCell(cell.id, normalizeQueryText(sql))
-      const freshResult =
-        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+      void runCell(cell.id, normalizeQueryText(sql)).then(({ ok }) => {
+        const freshResult =
+          getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+        emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+      })
+      return true
     },
     [
       cell.id,
@@ -229,12 +235,13 @@ export const useCellRunActions = ({
         setCellMode(cell.id, "run")
       }
       firstRunRef.current = cell.result == null
-      // Start the run before revealing: under React 17 a reveal fired from a
-      // native key event re-renders synchronously and unmounts the editor, so
-      // the run must read the cursor first.
-      if (plan.kind === "run-all") void handleRunAll()
-      else if (request.kind === "single") void handleRunSingle(request.source)
-      if (plan.reveal) setCellViewMaximized(cell.id, true)
+      if (plan.kind === "run-all") {
+        void handleRunAll()
+        if (plan.reveal) setCellViewMaximized(cell.id, true)
+      } else if (request.kind === "single") {
+        const started = handleRunSingle(request.source)
+        if (started && plan.reveal) setCellViewMaximized(cell.id, true)
+      }
     },
     [
       cell.id,

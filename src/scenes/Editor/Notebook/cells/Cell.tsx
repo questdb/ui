@@ -382,8 +382,6 @@ const CellInner: React.FC<Props> = ({
         runAll()
         return
       }
-      // Outside Monaco, a single-query shortcut has a target only while focus
-      // is in the result area. Other cell chrome never widens Cmd+Enter.
       if (resultRef.current?.contains(document.activeElement)) {
         e.preventDefault()
         runSingleFromResult()

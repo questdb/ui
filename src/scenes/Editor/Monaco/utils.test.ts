@@ -27,6 +27,7 @@ const makeSingleLineEditor = (
   selection: SingleLineSelection | null,
 ) => {
   let currentSelection = selection
+  let currentCursorColumn = cursorColumn
 
   const toSelection = (sel: SingleLineSelection) => ({
     startLineNumber: 1,
@@ -50,7 +51,7 @@ const makeSingleLineEditor = (
   return {
     getModel: () => model,
     getValue: () => text,
-    getPosition: () => ({ lineNumber: 1, column: cursorColumn }),
+    getPosition: () => ({ lineNumber: 1, column: currentCursorColumn }),
     getSelection: () =>
       currentSelection ? toSelection(currentSelection) : null,
     setSelection: (range: { startColumn: number; endColumn: number }) => {
@@ -58,6 +59,7 @@ const makeSingleLineEditor = (
         startColumn: range.startColumn,
         endColumn: range.endColumn,
       }
+      currentCursorColumn = range.endColumn
     },
   } as unknown as editor.IStandaloneCodeEditor
 }
@@ -577,9 +579,7 @@ describe("run with selection modes", () => {
       // off falls back to the query at the cursor as always
       expect(complete).toEqual([])
       expect(partial).toEqual([])
-      expect(off.map((request) => request.query)).toEqual([
-        "DROP TABLE trades",
-      ])
+      expect(off.map((request) => request.query)).toEqual(["DROP TABLE trades"])
     })
   })
 
@@ -608,6 +608,18 @@ describe("run with selection modes", () => {
 
       // Then the request holds the full statement with no selection
       expect(request?.query).toBe("SELECT 11")
+      expect(request?.selection).toBeUndefined()
+    })
+
+    it("keeps a selection ending in a comment attached to the preceding statement", () => {
+      const editor = makeSingleLineEditor("select 1; /* note */ select 2;", 3, {
+        startColumn: 1,
+        endColumn: 21,
+      })
+
+      const request = getQueryRequestFromEditor(editor, "complete")
+
+      expect(request?.query).toBe("select 1")
       expect(request?.selection).toBeUndefined()
     })
 
@@ -742,12 +754,16 @@ describe("statement boundaries", () => {
     const editor = makeSingleLineEditor(text, startColumn, null)
 
     expect(
-      isFullQueryMatch(editor, {
-        startLineNumber: 1,
-        startColumn,
-        endLineNumber: 1,
-        endColumn: text.length + 1,
-      }),
+      isFullQueryMatch(
+        editor,
+        {
+          startLineNumber: 1,
+          startColumn,
+          endLineNumber: 1,
+          endColumn: text.length + 1,
+        },
+        getStatementOffsets(editor),
+      ),
     ).toBe(true)
   })
 
@@ -756,12 +772,16 @@ describe("statement boundaries", () => {
     const editor = makeMultiLineEditor(text)
 
     expect(
-      isFullQueryMatch(editor, {
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 2,
-        endColumn: 15,
-      }),
+      isFullQueryMatch(
+        editor,
+        {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 2,
+          endColumn: 15,
+        },
+        getStatementOffsets(editor),
+      ),
     ).toBe(true)
   })
 
@@ -770,12 +790,16 @@ describe("statement boundaries", () => {
     const editor = makeMultiLineEditor(text)
 
     expect(
-      isFullQueryMatch(editor, {
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 3,
-        endColumn: 10,
-      }),
+      isFullQueryMatch(
+        editor,
+        {
+          startLineNumber: 1,
+          startColumn: 1,
+          endLineNumber: 3,
+          endColumn: 10,
+        },
+        getStatementOffsets(editor),
+      ),
     ).toBe(true)
   })
 
@@ -785,12 +809,16 @@ describe("statement boundaries", () => {
     const editor = makeSingleLineEditor(text, startColumn, null)
 
     expect(
-      isFullQueryMatch(editor, {
-        startLineNumber: 1,
-        startColumn,
-        endLineNumber: 1,
-        endColumn: text.length + 1,
-      }),
+      isFullQueryMatch(
+        editor,
+        {
+          startLineNumber: 1,
+          startColumn,
+          endLineNumber: 1,
+          endColumn: text.length + 1,
+        },
+        getStatementOffsets(editor),
+      ),
     ).toBe(false)
   })
 

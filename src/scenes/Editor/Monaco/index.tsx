@@ -77,6 +77,7 @@ import {
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
+  getStatementOffsets,
   readShareLinkParams,
   clearShareLinkParams,
   buildShareLinkUrl,
@@ -1273,8 +1274,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         const trimmedQuery = query.trim()
         // Find if the query is already in the editor
         const matches = findMatches(model, trimmedQuery)
+        const statementOffsets = getStatementOffsets(editor)
         const fullQueryMatch = matches?.find((match) =>
-          isFullQueryMatch(editor, match.range),
+          isFullQueryMatch(editor, match.range, statementOffsets),
         )
         if (fullQueryMatch) {
           editor.setSelection(fullQueryMatch.range)

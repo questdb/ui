@@ -264,6 +264,62 @@ Cypress.Commands.add("typeQueryDirectly", (query) => {
   })
 })
 
+Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {
+  cy.window().then((win) => {
+    const readActiveBufferValue = () =>
+      new Cypress.Promise((resolve, reject) => {
+        const openRequest = win.indexedDB.open("web-console")
+        openRequest.onerror = () => reject(openRequest.error)
+        openRequest.onsuccess = () => {
+          const database = openRequest.result
+          const transaction = database.transaction(
+            ["editor_settings", "buffers"],
+            "readonly",
+          )
+          const activeBufferRequest = transaction
+            .objectStore("editor_settings")
+            .index("key")
+            .get("activeBufferId")
+
+          activeBufferRequest.onerror = () => {
+            database.close()
+            reject(activeBufferRequest.error)
+          }
+          activeBufferRequest.onsuccess = () => {
+            const bufferRequest = transaction
+              .objectStore("buffers")
+              .get(activeBufferRequest.result.value)
+            bufferRequest.onerror = () => {
+              database.close()
+              reject(bufferRequest.error)
+            }
+            bufferRequest.onsuccess = () => {
+              const value = bufferRequest.result?.value
+              database.close()
+              resolve(value)
+            }
+          }
+        }
+      })
+
+    const deadline = Date.now() + 10000
+    const poll = () =>
+      readActiveBufferValue().then((value) => {
+        if (value === expectedValue) return
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Active buffer did not persist ${JSON.stringify(expectedValue)}`,
+          )
+        }
+        return new Cypress.Promise((resolve) =>
+          win.setTimeout(resolve, 50),
+        ).then(poll)
+      })
+
+    return poll()
+  })
+})
+
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec")
   cy.typeQuery(`${ctrlOrCmd}{enter}`)

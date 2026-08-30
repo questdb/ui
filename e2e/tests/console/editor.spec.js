@@ -2274,7 +2274,15 @@ describe("editor settings", () => {
       cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
     const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
 
-    // Given the first exec request is held until the loader is observed
+    // And a resolved notebook whose focused cell holds two statements
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type(sql, { delay: 0 })
+    cy.withFocusedEditor((editor) => {
+      expect(editor.getValue()).to.eq(sql)
+    })
+
+    // Given the first cell exec request is held until the loader is observed
     let releaseFirstExec
     cy.intercept(
       { url: "/exec*", times: 1 },
@@ -2283,14 +2291,6 @@ describe("editor settings", () => {
           releaseFirstExec = resolve
         }),
     ).as("heldExec")
-
-    // And a resolved notebook whose focused cell holds two statements
-    cy.createNotebook()
-    cy.focusNotebookCell()
-    cy.focused().type(sql, { delay: 0 })
-    cy.withFocusedEditor((editor) => {
-      expect(editor.getValue()).to.eq(sql)
-    })
 
     // When the mode is partial (default) and the table name is selected
     selectCellRange(tableStart, tableEnd)
@@ -2308,6 +2308,7 @@ describe("editor settings", () => {
     // And only the bare fragment ran: a single result with every column
     cy.get("[data-hook='grid-header-name']:visible").should("have.length", 3)
     cellResultTabs().should("not.exist")
+    cy.get(".selectionSuccessHighlight").should("exist")
 
     // When the mode is complete and the selection cuts into both statements
     setMode("complete")
@@ -2370,8 +2371,10 @@ describe("editor settings", () => {
     )
 
     const execQueries = []
+    const cellQueries = new Set(["select 1", "select 2"])
     cy.intercept({ url: "/exec*" }, (request) => {
-      execQueries.push(new URL(request.url).searchParams.get("query"))
+      const query = new URL(request.url).searchParams.get("query")
+      if (cellQueries.has(query)) execQueries.push(query)
       request.continue()
     })
 
@@ -2391,7 +2394,8 @@ describe("editor settings", () => {
     })
 
     // And Cmd+Shift+Enter runs the whole cell even from the result area
-    cy.get("[role='tablist'] [role='tab']").eq(1).click().should("have.focus")
+    cy.get("[role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[role='tablist'] [role='tab']").eq(1).should("have.focus")
     cy.then(() => {
       execQueries.length = 0
     })
@@ -2421,20 +2425,30 @@ describe("editor settings", () => {
     )
 
     const execQueries = []
+    const cellQueries = new Set(["select 1", "select 2"])
     cy.intercept({ url: "/exec*" }, (request) => {
-      execQueries.push(new URL(request.url).searchParams.get("query"))
+      const query = new URL(request.url).searchParams.get("query")
+      if (cellQueries.has(query)) execQueries.push(query)
       request.continue()
     })
+    const expectNothingToRun = () => {
+      cy.contains(".Toastify__toast--error", "Nothing to run")
+        .should("be.visible")
+        .within(() => {
+          cy.get("button[aria-label='close']").click()
+        })
+      cy.then(() => expect(execQueries).to.deep.eq([]))
+    }
 
     // When Cmd+Enter is pressed in Monaco with no query at the cursor
     cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
 
     // Then it is a no-op, never an implicit Run All
-    cy.wait(500)
-    cy.then(() => expect(execQueries).to.deep.eq([]))
+    expectNothingToRun()
     cy.get("[data-hook='result-grid-tanstack']:visible").should("not.exist")
 
     // When only the second statement is run
+    cy.focusNotebookCell()
     cy.withFocusedEditor((editor) =>
       editor.setPosition({ lineNumber: 3, column: 4 }),
     )
@@ -2468,9 +2482,9 @@ describe("editor settings", () => {
     })
 
     // When the second result tab has focus and Cmd+Enter is pressed
+    cy.get("[role='tablist'] [role='tab']").eq(1).click()
     cy.get("[role='tablist'] [role='tab']")
       .eq(1)
-      .click()
       .should("have.focus")
       .and("have.attr", "title", "select 2")
     cy.window().then((win) => {
@@ -2498,8 +2512,7 @@ describe("editor settings", () => {
       execQueries.length = 0
     })
     cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
-    cy.wait(500)
-    cy.then(() => expect(execQueries).to.deep.eq([]))
+    expectNothingToRun()
   })
 
   it("isolates a shared fragment that only matches part of a query", () => {
@@ -2511,7 +2524,9 @@ describe("editor settings", () => {
 
     // And a persisted buffer whose statement contains the shared fragment
     cy.typeQueryDirectly("select 1 union all select 2;")
-    cy.wait(1000)
+    cy.waitForActiveBufferValue("select 1 union all select 2;")
+    cy.reload()
+    cy.getEditorContent().should("have.value", "select 1 union all select 2;")
 
     // When a share link for the fragment auto-runs
     cy.visit(

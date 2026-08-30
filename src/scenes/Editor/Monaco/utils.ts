@@ -764,10 +764,10 @@ export const getQueryRequestFromEditor = (
     : undefined
 
   if (selectionMode !== "off" && strippedNormalizedSelectedText) {
-    request = getQueryFromSelection(editor)
-    if (selectionMode === "complete" && request) {
-      request = toCompleteQueryRequest(request)
-    }
+    request =
+      selectionMode === "complete"
+        ? getQueriesToRun(editor, getStatementOffsets(editor), "complete")[0]
+        : getQueryFromSelection(editor)
   } else {
     request = getQueryFromCursor(editor)
   }
@@ -1051,6 +1051,7 @@ export const findMatches = (model: editor.ITextModel, needle: string) =>
 export const isFullQueryMatch = (
   editor: IStandaloneCodeEditor,
   range: IRange,
+  statementOffsets: { startOffset: number; endOffset: number }[],
 ): boolean => {
   const model = editor.getModel()
   if (!model) return false
@@ -1063,21 +1064,10 @@ export const isFullQueryMatch = (
     lineNumber: range.endLineNumber,
     column: range.endColumn,
   })
-  const queryRanges = getAllQueries(editor)
-    .map((query) => ({
-      startOffset: model.getOffsetAt({
-        lineNumber: query.row + 1,
-        column: query.column,
-      }),
-      endOffset: model.getOffsetAt({
-        lineNumber: query.endRow + 1,
-        column: query.endColumn,
-      }),
-    }))
-    .filter(
-      ({ startOffset, endOffset }) =>
-        startOffset < matchEndOffset && endOffset > matchStartOffset,
-    )
+  const queryRanges = statementOffsets.filter(
+    ({ startOffset, endOffset }) =>
+      startOffset < matchEndOffset && endOffset > matchStartOffset,
+  )
 
   if (queryRanges.length === 0) return false
 

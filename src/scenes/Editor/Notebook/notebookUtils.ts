@@ -1404,17 +1404,13 @@ const dqlRowCount = (r: SingleQueryResult): number =>
 //      A single executed result still tight-fits its own row count.
 export const computeResultBottomHeight = (
   result: CellResult | null | undefined,
-  statements?: string[],
+  statements: string[],
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
   const frame =
-    (statements
-      ? deriveStatementFrame(statements, result)
-      : deriveStatementFrame(
-          result.results.map((r) => r.query),
-          result,
-        )) ?? derivePositionalFrame(result)
-  const slots = frame?.slots ?? []
+    deriveStatementFrame(statements, result) ?? derivePositionalFrame(result)
+  if (!frame) return NOTIFICATION_PX
+  const slots = frame.slots
   const hasMultipleTabs = slots.length > 1
   const hasMultipleResults = result.results.length > 1
   const tabBar = hasMultipleTabs ? TAB_BAR_PX : 0
@@ -1437,7 +1433,7 @@ export const computeResultBottomHeight = (
 
   // Single executed result: tight-fit up to 10 rows. The tab bar is still
   // included when the editor contributes additional "Not run" slots.
-  const only = frame?.slots[frame.activeSlotIndex]?.result ?? result.results[0]
+  const only = frame.slots[frame.activeSlotIndex]?.result ?? result.results[0]
   if (!only || !isDqlWithColumns(only)) {
     return tabBar + NOTIFICATION_PX
   }

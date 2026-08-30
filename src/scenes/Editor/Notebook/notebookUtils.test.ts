@@ -1358,11 +1358,17 @@ describe("computeResultBottomHeight", () => {
   //   ROW_HEIGHT            = 30
   //   MAX_RESERVED_ROWS     = 10
 
+  const heightForResult = (result: CellResult | null | undefined) =>
+    computeResultBottomHeight(
+      result,
+      result?.results.map(({ query }) => query) ?? [],
+    )
+
   it("null/undefined/empty result → notification-only", () => {
-    expect(computeResultBottomHeight(null)).toBe(44)
-    expect(computeResultBottomHeight(undefined)).toBe(44)
+    expect(heightForResult(null)).toBe(44)
+    expect(heightForResult(undefined)).toBe(44)
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [],
         activeResultIndex: 0,
         timestamp: 0,
@@ -1372,7 +1378,7 @@ describe("computeResultBottomHeight", () => {
 
   it("single error → notification-only", () => {
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [{ type: "error", query: "X", error: "boom" }],
         activeResultIndex: 0,
         timestamp: 0,
@@ -1383,7 +1389,7 @@ describe("computeResultBottomHeight", () => {
   it("single DDL/DML/notice → notification-only", () => {
     for (const type of ["ddl", "dml"] as const) {
       expect(
-        computeResultBottomHeight({
+        heightForResult({
           results: [{ type, query: "X" }],
           activeResultIndex: 0,
           timestamp: 0,
@@ -1395,7 +1401,7 @@ describe("computeResultBottomHeight", () => {
   it("single DQL with columns but 0 rows → notification + actions bar + header (no rows)", () => {
     // The column headers show even with no rows: 44 + 36 + 44 + 0*30 = 124.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1413,7 +1419,7 @@ describe("computeResultBottomHeight", () => {
 
   it("single DQL with no columns → notification-only", () => {
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1444,13 +1450,13 @@ describe("computeResultBottomHeight", () => {
       timestamp: 0,
     })
     // 1 row: 44 + 36 + 44 + 1*30 = 154
-    expect(computeResultBottomHeight(make(1))).toBe(154)
+    expect(heightForResult(make(1))).toBe(154)
     // 5 rows: 44 + 36 + 44 + 5*30 = 274
-    expect(computeResultBottomHeight(make(5))).toBe(274)
+    expect(heightForResult(make(5))).toBe(274)
     // 10 rows: 44 + 36 + 44 + 10*30 = 424
-    expect(computeResultBottomHeight(make(10))).toBe(424)
+    expect(heightForResult(make(10))).toBe(424)
     // 50 rows: cap at 10 → still 424
-    expect(computeResultBottomHeight(make(50))).toBe(424)
+    expect(heightForResult(make(50))).toBe(424)
   })
 
   it("one executed DQL in a multi-statement cell adds tabs but tight-fits its rows", () => {
@@ -1492,7 +1498,7 @@ describe("computeResultBottomHeight", () => {
   it("multi-statement, first DQL with rows → tab + notification + header + 10 rows", () => {
     // 40 + 44 + 36 + 44 + 10*30 = 464
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1513,7 +1519,7 @@ describe("computeResultBottomHeight", () => {
     // The first tab is an error, but the active second tab renders a grid.
     // Reserve the same stable multi-tab height: 40 + 44 + 36 + 44 + 10*30.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           { type: "error", query: "Q1", error: "boom" },
           {
@@ -1534,7 +1540,7 @@ describe("computeResultBottomHeight", () => {
     // The first query shows its column headers, so we reserve the grid block
     // like any DQL-first script: 40 + 44 + 36 + 44 + 10*30 = 464.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -2114,7 +2120,7 @@ describe("releaseCellResultPatch", () => {
     expect(patch).toEqual({
       result: undefined,
       lastRunStatus: "success",
-      bottomHeight: computeResultBottomHeight(threeRowResult),
+      bottomHeight: computeResultBottomHeight(threeRowResult, ["select 1"]),
     })
   })
 
