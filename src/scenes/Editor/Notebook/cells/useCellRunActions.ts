@@ -9,6 +9,7 @@ import {
   getQueryFromCursor,
   normalizeQueryText,
   resolveSelectionRun,
+  type SelectionRunResolution,
 } from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
 import {
@@ -34,7 +35,6 @@ type Options = {
 }
 
 type SingleRunSource = "editor" | "result"
-type SelectionRunStart = "no-selection" | "no-query" | "started"
 
 type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
 
@@ -117,7 +117,7 @@ export const useCellRunActions = ({
     validateWithGlobals,
   ])
 
-  const tryRunSelection = useCallback((): SelectionRunStart => {
+  const tryRunSelection = useCallback((): SelectionRunResolution["kind"] => {
     const ed = editorRef.current
     if (!ed) return "no-selection"
     const resolution = resolveSelectionRun(ed, runWithSelectionMode)
@@ -129,7 +129,7 @@ export const useCellRunActions = ({
     void runCell(cell.id, resolution.sql).then(({ ok }) => {
       if (runWithSelectionMode === "partial") applyHighlight(ok)
     })
-    return "started"
+    return "run"
   }, [
     runWithSelectionMode,
     cell.id,
@@ -178,7 +178,7 @@ export const useCellRunActions = ({
         if (!ed) return false
         const cursorQuery = getQueryFromCursor(ed)?.query
         const selectionRun = tryRunSelection()
-        if (selectionRun === "started") return true
+        if (selectionRun === "run") return true
         if (selectionRun === "no-query") {
           toast.error("Nothing to run")
           return false
@@ -230,18 +230,23 @@ export const useCellRunActions = ({
         })
         return
       }
-      if (plan.exitDraw) {
+      const exitDrawMode = () => {
+        if (!plan.exitDraw) return
         signalUserEdit(bufferIdForEvents)
         setCellMode(cell.id, "run")
       }
       firstRunRef.current = cell.result == null
-      if (plan.kind === "run-all") {
+      if (request.kind === "all") {
+        exitDrawMode()
         void handleRunAll()
         if (plan.reveal) setCellViewMaximized(cell.id, true)
-      } else if (request.kind === "single") {
-        const started = handleRunSingle(request.source)
-        if (started && plan.reveal) setCellViewMaximized(cell.id, true)
+        return
       }
+      // A single run that finds nothing to run leaves the cell untouched —
+      // a draw cell keeps its chart instead of dropping to the grid.
+      if (!handleRunSingle(request.source)) return
+      exitDrawMode()
+      if (plan.reveal) setCellViewMaximized(cell.id, true)
     },
     [
       cell.id,

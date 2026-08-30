@@ -1371,10 +1371,7 @@ export const releaseCellResultPatch = (
   lastRunError: carriedRunError(cell),
   ...(cell.mode !== "draw" && cell.bottomHeight == null && cell.result != null
     ? {
-        bottomHeight: computeResultBottomHeight(
-          cell.result,
-          getQueriesFromText(cell.value),
-        ),
+        bottomHeight: computeResultBottomHeight(cell.result, cell.value),
       }
     : {}),
 })
@@ -1386,9 +1383,9 @@ const dqlRowCount = (r: SingleQueryResult): number =>
   r.type === "dql" ? r.dataset.length : 0
 
 // Computes the bottom slot height for the same statement frame rendered by
-// InlineResultTable. `statements` is the editor's current statement list; a
-// partial run can have one result while still rendering multiple statement
-// tabs (the unexecuted statements appear as "Not run").
+// InlineResultTable. `value` is the cell's current SQL; a partial run can have
+// one result while still rendering multiple statement tabs (the unexecuted
+// statements appear as "Not run").
 //
 // Rules:
 //   1. Single-statement, no grid (error / DDL / DML / notice): just the
@@ -1404,9 +1401,10 @@ const dqlRowCount = (r: SingleQueryResult): number =>
 //      A single executed result still tight-fits its own row count.
 export const computeResultBottomHeight = (
   result: CellResult | null | undefined,
-  statements: string[],
+  value: string,
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
+  const statements = getQueriesFromText(value)
   const frame =
     deriveStatementFrame(statements, result) ?? derivePositionalFrame(result)
   if (!frame) return NOTIFICATION_PX
@@ -1454,7 +1452,7 @@ export const computeResultBottomHeight = (
 export const defaultBottomHeightFor = (cell: NotebookCell): number =>
   cell.mode === "draw"
     ? DEFAULT_CHART_BOTTOM_HEIGHT
-    : computeResultBottomHeight(cell.result, getQueriesFromText(cell.value))
+    : computeResultBottomHeight(cell.result, cell.value)
 
 // True iff this cell occupies vertical space for a bottom slot — i.e. its
 // total height includes bottomHeight. This includes the chart-expanded case
@@ -1477,10 +1475,7 @@ export const modeChangeBottomHeightPatch = (
       mode === "draw"
         ? DEFAULT_CHART_BOTTOM_HEIGHT
         : cell?.result
-          ? computeResultBottomHeight(
-              cell.result,
-              getQueriesFromText(cell.value),
-            )
+          ? computeResultBottomHeight(cell.result, cell.value)
           : undefined,
   }
 }
@@ -1514,10 +1509,7 @@ export const patchCellRunResult = (
       cell.mode !== "draw" &&
       cell.type !== "markdown"
     ) {
-      next.bottomHeight = computeResultBottomHeight(
-        result,
-        getQueriesFromText(cell.value),
-      )
+      next.bottomHeight = computeResultBottomHeight(result, cell.value)
     }
     return next
   })

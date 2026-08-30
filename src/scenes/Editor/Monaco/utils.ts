@@ -88,11 +88,6 @@ export type Request = Readonly<{
   }
 }>
 
-const toCompleteQueryRequest = (request: Request): Request => {
-  const { selection: _selection, ...completeQueryRequest } = request
-  return completeQueryRequest
-}
-
 type SqlTextItem = {
   row: number
   col: number
@@ -151,7 +146,15 @@ export const getQueriesToRun = (
 
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
-  if (selectionMode === "off" || !selection || !selectedText) {
+  const normalizedSelectedText = selectedText
+    ? normalizeQueryText(selectedText)
+    : ""
+  if (
+    selectionMode === "off" ||
+    !selection ||
+    !selectedText ||
+    !normalizedSelectedText
+  ) {
     const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
@@ -160,8 +163,6 @@ export const getQueriesToRun = (
   }
   let selectionStartOffset = model.getOffsetAt(selection.getStartPosition())
   let selectionEndOffset = model.getOffsetAt(selection.getEndPosition())
-
-  const normalizedSelectedText = normalizeQueryText(selectedText)
 
   if (stripSQLComments(normalizedSelectedText).length > 0) {
     selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
@@ -206,7 +207,7 @@ export const getQueriesToRun = (
       return undefined
     }
     return selectionMode === "complete"
-      ? toCompleteQueryRequest(query)
+      ? query
       : {
           ...query,
           selection: {
@@ -1026,6 +1027,9 @@ export const resolveSelectionRun = (
     return { kind: "no-selection" }
   }
 
+  const selectedText = normalizeQueryText(model.getValueInRange(selection))
+  if (!selectedText) return { kind: "no-selection" }
+
   if (selectionMode === "complete") {
     const queries = getQueriesToRun(
       editor,
@@ -1041,8 +1045,9 @@ export const resolveSelectionRun = (
     }
   }
 
-  const sql = normalizeQueryText(model.getValueInRange(selection))
-  return stripSQLComments(sql) ? { kind: "run", sql } : { kind: "no-query" }
+  return stripSQLComments(selectedText)
+    ? { kind: "run", sql: selectedText }
+    : { kind: "no-query" }
 }
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>

@@ -537,6 +537,24 @@ describe("run with selection modes", () => {
       expect(result.every((request) => !request.selection)).toBe(true)
     })
 
+    it("falls back to the cursor query when the selection is only whitespace", () => {
+      // Given a selection covering nothing but a space inside the statement
+      const editor = makeSingleLineEditor(TEXT, 3, {
+        startColumn: 7,
+        endColumn: 8,
+      })
+
+      // When resolving the queries to run in each honouring mode
+      // Then the selection carries no statement content, so the run stays
+      // enabled on the cursor query instead of resolving to nothing
+      expect(getQueriesToRun(editor, QUERY_OFFSETS, "partial")).toEqual([
+        getQueryFromCursor(editor),
+      ])
+      expect(getQueriesToRun(editor, QUERY_OFFSETS, "complete")).toEqual([
+        getQueryFromCursor(editor),
+      ])
+    })
+
     it("keeps off and complete distinct for a cross-statement selection", () => {
       // Given a valid selection that starts at the cursor and crosses into the
       // second statement
@@ -694,6 +712,42 @@ describe("resolveSelectionRun", () => {
     // Then there is nothing to run and the run is blocked
     expect(resolveSelectionRun(editor, "partial")).toEqual({
       kind: "no-query",
+    })
+  })
+
+  it("reports no selection when only whitespace is selected", () => {
+    // Given a selection covering the indentation of a statement, with the
+    // cursor still inside that statement
+    const text = "SELECT\n   1\nFROM long_sequence(1)"
+    const editor = makeMultiLineEditor(text, {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 4,
+    })
+
+    // When resolving the selection run in both honouring modes
+    // Then the selection is treated as absent, so the caller falls back to the
+    // cursor statement rather than refusing the run
+    expect(resolveSelectionRun(editor, "partial")).toEqual({
+      kind: "no-selection",
+    })
+    expect(resolveSelectionRun(editor, "complete")).toEqual({
+      kind: "no-selection",
+    })
+  })
+
+  it("reports no selection when only a statement separator is selected", () => {
+    // Given a selection covering just the trailing semicolon
+    const editor = makeSingleLineEditor(TEXT, 3, {
+      startColumn: 10,
+      endColumn: 11,
+    })
+
+    // When resolving the selection run
+    // Then it carries no statement content, so it is not a selection run
+    expect(resolveSelectionRun(editor, "partial")).toEqual({
+      kind: "no-selection",
     })
   })
 

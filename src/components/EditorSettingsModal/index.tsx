@@ -131,7 +131,7 @@ const SettingRow = ({
         color="contentPrimary"
         lineHeight="1"
         type="label"
-        htmlFor={omitHtmlFor !== true ? controlId : undefined}
+        htmlFor={!omitHtmlFor ? controlId : undefined}
       >
         {label}
       </Text>

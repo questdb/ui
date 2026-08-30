@@ -1361,7 +1361,7 @@ describe("computeResultBottomHeight", () => {
   const heightForResult = (result: CellResult | null | undefined) =>
     computeResultBottomHeight(
       result,
-      result?.results.map(({ query }) => query) ?? [],
+      (result?.results ?? []).map(({ query }) => query).join(";\n"),
     )
 
   it("null/undefined/empty result → notification-only", () => {
@@ -1477,9 +1477,31 @@ describe("computeResultBottomHeight", () => {
     }
 
     // 40 tab + 44 notification + 36 actions + 44 header + 1*30 row = 194.
-    expect(computeResultBottomHeight(result, ["select 1", "select 2"])).toBe(
-      194,
-    )
+    expect(computeResultBottomHeight(result, "select 1;\nselect 2")).toBe(194)
+  })
+
+  it("keeps the grid block reserved while the active tab is an unexecuted statement", () => {
+    // Given a two-statement cell where only the second statement ran, and the
+    // user has selected the "Not run" tab, so the active slot holds no result
+    const result = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "select 2",
+          columns: [{ name: "2", type: "INT" }],
+          dataset: [[2]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      activeStatementKey: statementKeysFor(["select 1"])[0],
+      timestamp: 0,
+    }
+
+    // When sizing the bottom slot for that frame
+    // Then it still reserves the executed result's grid rather than collapsing
+    // to tab bar + notification (84), which would clip the visible grid.
+    expect(computeResultBottomHeight(result, "select 1;\nselect 2")).toBe(194)
   })
 
   it("one executed non-grid result in a multi-statement cell still includes its tabs", () => {
@@ -1490,7 +1512,7 @@ describe("computeResultBottomHeight", () => {
           activeResultIndex: 0,
           timestamp: 0,
         },
-        ["create table x (n int)", "select * from x"],
+        "create table x (n int);\nselect * from x",
       ),
     ).toBe(84)
   })
@@ -2120,7 +2142,7 @@ describe("releaseCellResultPatch", () => {
     expect(patch).toEqual({
       result: undefined,
       lastRunStatus: "success",
-      bottomHeight: computeResultBottomHeight(threeRowResult, ["select 1"]),
+      bottomHeight: computeResultBottomHeight(threeRowResult, "select 1"),
     })
   })
 

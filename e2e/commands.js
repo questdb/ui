@@ -270,45 +270,63 @@ Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {
       new Cypress.Promise((resolve, reject) => {
         const openRequest = win.indexedDB.open("web-console")
         openRequest.onerror = () => reject(openRequest.error)
+        openRequest.onblocked = () =>
+          reject(new Error("web-console IndexedDB open is blocked"))
         openRequest.onsuccess = () => {
           const database = openRequest.result
-          const transaction = database.transaction(
-            ["editor_settings", "buffers"],
-            "readonly",
-          )
-          const activeBufferRequest = transaction
-            .objectStore("editor_settings")
-            .index("key")
-            .get("activeBufferId")
-
-          activeBufferRequest.onerror = () => {
+          const fail = (error) => {
             database.close()
-            reject(activeBufferRequest.error)
+            reject(error)
           }
-          activeBufferRequest.onsuccess = () => {
-            const bufferRequest = transaction
-              .objectStore("buffers")
-              .get(activeBufferRequest.result.value)
-            bufferRequest.onerror = () => {
-              database.close()
-              reject(bufferRequest.error)
+          try {
+            const transaction = database.transaction(
+              ["editor_settings", "buffers"],
+              "readonly",
+            )
+            transaction.onerror = () => fail(transaction.error)
+            const activeBufferRequest = transaction
+              .objectStore("editor_settings")
+              .index("key")
+              .get("activeBufferId")
+
+            activeBufferRequest.onerror = () => fail(activeBufferRequest.error)
+            activeBufferRequest.onsuccess = () => {
+              try {
+                const activeBufferId = activeBufferRequest.result?.value
+                if (activeBufferId === undefined) {
+                  fail(new Error("no activeBufferId row in editor_settings"))
+                  return
+                }
+                const bufferRequest = transaction
+                  .objectStore("buffers")
+                  .get(activeBufferId)
+                bufferRequest.onerror = () => fail(bufferRequest.error)
+                bufferRequest.onsuccess = () => {
+                  const value = bufferRequest.result?.value
+                  database.close()
+                  resolve(value)
+                }
+              } catch (error) {
+                fail(error)
+              }
             }
-            bufferRequest.onsuccess = () => {
-              const value = bufferRequest.result?.value
-              database.close()
-              resolve(value)
-            }
+          } catch (error) {
+            fail(error)
           }
         }
       })
 
-    const deadline = Date.now() + 10000
+    // Poll well inside Cypress's own command timeout so this command's
+    // message wins over a generic cy.then() timeout.
+    const deadline = Date.now() + 8000
     const poll = () =>
       readActiveBufferValue().then((value) => {
         if (value === expectedValue) return
         if (Date.now() >= deadline) {
           throw new Error(
-            `Active buffer did not persist ${JSON.stringify(expectedValue)}`,
+            `Active buffer did not persist ${JSON.stringify(
+              expectedValue,
+            )} — last read ${JSON.stringify(value)}`,
           )
         }
         return new Cypress.Promise((resolve) =>

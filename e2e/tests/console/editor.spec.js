@@ -2230,6 +2230,39 @@ describe("editor settings", () => {
     cy.getGridRow(0).should("contain", "2")
   })
 
+  it("runs the glyph's own query in complete mode while a selection spans both statements", () => {
+    // Given the mode is set to complete
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-complete").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    const execQueries = []
+    const statements = new Set(["select 1", "select 2"])
+    cy.intercept({ url: "/exec*" }, (request) => {
+      const query = new URL(request.url).searchParams.get("query")
+      if (statements.has(query)) execQueries.push(query)
+      request.continue()
+    })
+
+    // And two statements with a selection whose caret ends inside the second
+    cy.typeQueryDirectly("select 1;\nselect 2;")
+    cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 2, column: 9 })
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run 2 selected queries",
+    )
+
+    // When the second statement's run glyph is clicked
+    cy.getRunIconInLine(2).click({ force: true })
+
+    // Then that statement runs, never the first one the selection reaches back into
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+    cy.getGridRow(0).should("contain", "2")
+  })
+
   it("disables run while the selection covers only a comment between statements", () => {
     // Given a commented-out statement between two live statements
     cy.typeQueryDirectly("select 1;\n-- old: delete from t\nselect 2;")
