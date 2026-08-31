@@ -73,6 +73,16 @@ export type TreeNodeKind =
   | "folder"
   | "detail"
 
+const TABLE_NODE_KINDS: TreeNodeKind[] = [
+  "table",
+  "matview",
+  "view",
+  "liveview",
+]
+
+const isTableNodeKind = (kind: TreeNodeKind): kind is QuestDB.TableKind =>
+  TABLE_NODE_KINDS.includes(kind)
+
 type Props = Readonly<{
   id: string
   index: number
@@ -411,7 +421,7 @@ const Row = ({
   const isExpandable =
     ["folder", "table", "matview", "view", "liveview"].includes(kind) ||
     (kind === "column" && type === "SYMBOL")
-  const isTableKind = ["table", "matview", "view", "liveview"].includes(kind)
+  const isTableKind = isTableNodeKind(kind)
   const isRootFolder = [
     MATVIEWS_GROUP_KEY,
     TABLES_GROUP_KEY,
@@ -614,7 +624,7 @@ const Row = ({
                 designatedTimestamp={designatedTimestamp}
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
-                kind={kind as QuestDB.TableKind}
+                kind={kind}
               />
             )}
             {kind === "detail" && <InfoCircle size="14px" />}

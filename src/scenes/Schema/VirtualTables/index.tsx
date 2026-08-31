@@ -47,7 +47,6 @@ import {
   SymbolColumnDetails,
   TableKind,
 } from "../../../utils/questdb/types"
-import { createTableDetailsTarget } from "../../../store/Console/types"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../../store"
 import {
@@ -609,10 +608,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           dispatch(
             actions.console.pushSidebarHistory({
               type: "tableDetails",
-              payload: createTableDetailsTarget(
-                item.name,
-                item.kind as TableKind,
-              ),
+              payload: { tableName: item.name, kind: item.kind as TableKind },
             }),
           )
           setTimeout(() => setFocusedIndex(index))

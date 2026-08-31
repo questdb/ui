@@ -47,7 +47,6 @@ import {
 } from "./shared-styles"
 
 const BIGINT_ZERO = BigInt(0)
-const BIGINT_ONE = BigInt(1)
 
 export interface MonitoringTabProps {
   tableData: Table
@@ -770,9 +769,7 @@ export const MonitoringTab = ({
                         (tableData.wal_txn ?? BIGINT_ZERO) -
                         (tableData.table_txn ?? BIGINT_ZERO)
                       const lag = rawLag > BIGINT_ZERO ? rawLag : BIGINT_ZERO
-                      return `${lag.toLocaleString()} txn${
-                        lag === BIGINT_ONE ? "" : "s"
-                      }`
+                      return formatTxnCount(lag)
                     })()}
                     issue={healthStatus?.fieldIssues.get("transactionLag")}
                     showTrend

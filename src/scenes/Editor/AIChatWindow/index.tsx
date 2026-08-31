@@ -48,7 +48,6 @@ import {
   createSchemaExplainFlowConfig,
 } from "../../../utils/ai/executeAIFlow"
 import { getTableKind, getTableKindLabel } from "../../../utils/questdb/types"
-import { createTableDetailsTarget } from "../../../store/Console/types"
 import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { useDispatch, useSelector } from "react-redux"
@@ -614,10 +613,10 @@ const AIChatWindow: React.FC = () => {
         dispatch(
           actions.console.pushSidebarHistory({
             type: "tableDetails",
-            payload: createTableDetailsTarget(
-              table.table_name,
-              getTableKind(table),
-            ),
+            payload: {
+              tableName: table.table_name,
+              kind: getTableKind(table),
+            },
           }),
         )
         return true

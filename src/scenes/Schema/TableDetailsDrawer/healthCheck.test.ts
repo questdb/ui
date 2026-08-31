@@ -332,17 +332,21 @@ describe("calculateHealthStatus for live views", () => {
     expect(status.issues).toEqual([])
   })
 
-  it("should display live view lag without treating it as a trend", () => {
+  it("should not raise an issue or a trend for a large live view lag", () => {
+    // Given a live view far behind its base table
     const liveView = makeLiveView({ lag_seqtxn: BigInt(10_000) })
 
+    // When its health is calculated
     const status = calculateHealthStatus(
       makeTable(),
       { kind: "liveview", liveView },
       emptyTrend,
     )
 
-    expect(status.fieldIssues.has("liveViewLag")).toBe(false)
-    expect(status.trendIndicators.has("liveViewLag")).toBe(false)
+    // Then lag contributes nothing: it is a flush-cadence sawtooth, not a signal
+    expect([...status.fieldIssues.keys()]).toEqual([])
+    expect([...status.trendIndicators.keys()]).toEqual([])
+    expect(status.issues).toEqual([])
   })
 
   it("should report a critical issue when the live view is invalid", () => {

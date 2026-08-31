@@ -35,6 +35,8 @@ import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export type QueryId = number
 
+const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
+
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
   private _nextQueryId: QueryId = 1
@@ -498,9 +500,8 @@ export class Client {
   }
 
   async getTableDetails(table: string): Promise<QueryResult<Table>> {
-    const escapedTable = table.replace(/'/g, "''")
     return await this.queryCatalog<Table>(
-      `tables() where table_name = '${escapedTable}';`,
+      `tables() where table_name = '${escapeSqlLiteral(table)}';`,
     )
   }
 
@@ -511,18 +512,19 @@ export class Client {
   async getMaterializedViewDetails(
     viewName: string,
   ): Promise<QueryResult<MaterializedView>> {
-    const escapedViewName = viewName.replace(/'/g, "''")
     return await this.queryCatalog<MaterializedView>(
-      `materialized_views() WHERE view_name = '${escapedViewName}';`,
+      `materialized_views() WHERE view_name = '${escapeSqlLiteral(viewName)}';`,
     )
   }
 
   async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
+    return this.queryDDL(
+      `SHOW CREATE MATERIALIZED VIEW '${escapeSqlLiteral(table)}';`,
+    )
   }
 
   async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE VIEW '${viewName}';`)
+    return this.queryDDL(`SHOW CREATE VIEW '${escapeSqlLiteral(viewName)}';`)
   }
 
   async showViews(): Promise<QueryResult<View>> {
@@ -532,7 +534,9 @@ export class Client {
   async showLiveViewDDL(
     viewName: string,
   ): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE LIVE VIEW '${viewName}';`)
+    return this.queryDDL(
+      `SHOW CREATE LIVE VIEW '${escapeSqlLiteral(viewName)}';`,
+    )
   }
 
   async showLiveViews(): Promise<QueryResult<LiveView>> {
@@ -540,7 +544,7 @@ export class Client {
   }
 
   async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE TABLE '${table}';`)
+    return this.queryDDL(`SHOW CREATE TABLE '${escapeSqlLiteral(table)}';`)
   }
 
   async showDDL(
@@ -548,14 +552,18 @@ export class Client {
     kind: TableKind,
   ): Promise<QueryResult<{ ddl: string }>> {
     switch (kind) {
+      case "table":
+        return this.showTableDDL(name)
       case "matview":
         return this.showMatViewDDL(name)
       case "view":
         return this.showViewDDL(name)
       case "liveview":
         return this.showLiveViewDDL(name)
-      default:
-        return this.showTableDDL(name)
+      default: {
+        const unsupported: never = kind
+        throw new Error(`Unsupported table kind: ${String(unsupported)}`)
+      }
     }
   }
 

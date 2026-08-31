@@ -70,9 +70,7 @@ import {
   RefreshRate,
 } from "../../scenes/Editor/Metrics/utils"
 import type { Duration } from "../../scenes/Editor/Metrics/types"
-import { useSchema } from "./SchemaContext"
-import { SchemaProvider } from "./SchemaContext"
-import { TreeNodeKind } from "./Row"
+import { SchemaProvider, useSchema, type SelectedTable } from "./SchemaContext"
 import { toast } from "../../components/Toast"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
@@ -244,15 +242,11 @@ const Schema = ({
   const copySchemasToClipboard = async () => {
     void trackEvent(ConsoleEvent.SCHEMA_COPY_MULTIPLE)
     if (!tables) return
-    const tablesWithError: { name: string; type: TreeNodeKind }[] = []
+    const tablesWithError: SelectedTable[] = []
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          // selectedTables only contains table kinds from allSelectableTables
-          const response = await quest.showDDL(
-            table.name,
-            table.type as QuestDB.TableKind,
-          )
+          const response = await quest.showDDL(table.name, table.type)
 
           if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
             return response.data[0].ddl
@@ -343,25 +337,25 @@ const Schema = ({
     }
   }, [autoRefreshTables])
 
-  const allSelectableTables = useMemo(() => {
+  const allSelectableTables = useMemo<SelectedTable[]>(() => {
     if (!tables) return []
 
     // Default to 'T' (table) for backward compatibility with older servers
     const regularTables = tables
       .filter((t) => (t.table_type ?? "T") === "T")
-      .map((t) => ({ name: t.table_name, type: "table" as TreeNodeKind }))
+      .map((t) => ({ name: t.table_name, type: "table" as const }))
 
     const matViews = tables
       .filter((t) => t.table_type === "M")
-      .map((t) => ({ name: t.table_name, type: "matview" as TreeNodeKind }))
+      .map((t) => ({ name: t.table_name, type: "matview" as const }))
 
     const liveViewsList = tables
       .filter((t) => t.table_type === "L")
-      .map((t) => ({ name: t.table_name, type: "liveview" as TreeNodeKind }))
+      .map((t) => ({ name: t.table_name, type: "liveview" as const }))
 
     const viewsList = tables
       .filter((t) => t.table_type === "V")
-      .map((t) => ({ name: t.table_name, type: "view" as TreeNodeKind }))
+      .map((t) => ({ name: t.table_name, type: "view" as const }))
 
     return [...regularTables, ...matViews, ...liveViewsList, ...viewsList]
   }, [tables])

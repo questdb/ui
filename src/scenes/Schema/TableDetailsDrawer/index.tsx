@@ -36,15 +36,12 @@ import {
   type Column,
   type MaterializedView,
   type View,
-  type LiveView,
 } from "../../../utils/questdb/types"
-import { createTableDetailsTarget } from "../../../store/Console/types"
 import {
   calculateHealthStatus,
   detectIngestionActive,
   isLiveViewLoadFailure,
   LIVE_VIEW_ISSUE_GUIDANCE,
-  LIVE_VIEW_POLL_MS,
   MAX_TREND_SAMPLES,
   type TrendData,
   type HealthIssue,
@@ -52,6 +49,7 @@ import {
 import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
+import { useLiveViewMetadata } from "./useLiveViewMetadata"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
@@ -128,9 +126,6 @@ const CopyButtonSlot = styled.span`
 
 type TabType = "monitoring" | "details"
 
-const LIVE_VIEW_QUERY_TIMEOUT_MS = 10_000
-const LIVE_VIEW_METADATA_FAILURE_THRESHOLD = 3
-const LIVE_VIEW_METADATA_RECOVERY_THRESHOLD = 2
 const TABLE_POLL_MIN_MS = 200
 const TABLE_POLL_MAX_MS = 5_000
 const DETAILS_TABLE_POLL_MS = 1_000
@@ -175,19 +170,12 @@ export const TableDetailsDrawer = () => {
   const target = useSelector(selectors.console.getTableDetailsTarget)
   const targetRef = useRef(target)
   const activeSidebarRef = useRef(activeSidebar)
-  const activeLiveViewQueryIdRef = useRef<QuestDB.QueryId | null>(null)
 
   const tableName = target?.tableName ?? ""
-  const isMatView = target?.isMatView ?? false
-  const isView = target?.isView ?? false
-  const isLiveView = target?.isLiveView ?? false
-  const kind: TableKind = isView
-    ? "view"
-    : isMatView
-      ? "matview"
-      : isLiveView
-        ? "liveview"
-        : "table"
+  const kind: TableKind = target?.kind ?? "table"
+  const isMatView = kind === "matview"
+  const isView = kind === "view"
+  const isLiveView = kind === "liveview"
   const hasTarget = target !== null
   const isOpen = activeSidebar?.type === "tableDetails"
 
@@ -201,9 +189,7 @@ export const TableDetailsDrawer = () => {
       return (
         activeSidebarRef.current?.type === "tableDetails" &&
         currentTarget?.tableName === candidateTableName &&
-        currentTarget.isMatView === (candidateKind === "matview") &&
-        currentTarget.isView === (candidateKind === "view") &&
-        currentTarget.isLiveView === (candidateKind === "liveview")
+        currentTarget.kind === candidateKind
       )
     },
     [],
@@ -222,6 +208,19 @@ export const TableDetailsDrawer = () => {
     },
     [dispatch, isCurrentTarget],
   )
+
+  const {
+    liveViewData,
+    metadataError: liveViewMetadataError,
+    fetchLiveViewData,
+    reset: resetLiveViewMetadata,
+  } = useLiveViewMetadata({
+    tableName,
+    isLiveView,
+    isDrawerOpen: isOpen && hasTarget,
+    isCurrentTarget,
+    clearIfCurrentTarget,
+  })
 
   const tables = useSelector(selectors.query.getTables)
 
@@ -243,10 +242,7 @@ export const TableDetailsDrawer = () => {
       dispatch(
         actions.console.pushSidebarHistory({
           type: "tableDetails",
-          payload: createTableDetailsTarget(
-            option.label,
-            option.kind ?? "table",
-          ),
+          payload: { tableName: option.label, kind: option.kind ?? "table" },
         }),
       )
     },
@@ -259,10 +255,6 @@ export const TableDetailsDrawer = () => {
   const [tableData, setTableData] = useState<Table | null>(null)
   const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
   const [viewData, setViewData] = useState<View | null>(null)
-  const [liveViewData, setLiveViewData] = useState<LiveView | null>(null)
-  const [liveViewMetadataError, setLiveViewMetadataError] = useState(false)
-  const liveViewMetadataFailureCountRef = useRef(0)
-  const liveViewMetadataSuccessCountRef = useRef(0)
   const [columns, setColumns] = useState<Column[]>([])
   const [ddl, setDdl] = useState<string>("")
   const [loading, setLoading] = useState(true)
@@ -289,34 +281,6 @@ export const TableDetailsDrawer = () => {
       ? (liveViewData?.base_table_name ?? undefined)
       : undefined
 
-  const recordLiveViewMetadataSuccess = useCallback(() => {
-    liveViewMetadataFailureCountRef.current = 0
-    liveViewMetadataSuccessCountRef.current += 1
-    if (
-      liveViewMetadataSuccessCountRef.current >=
-      LIVE_VIEW_METADATA_RECOVERY_THRESHOLD
-    ) {
-      setLiveViewMetadataError(false)
-    }
-  }, [])
-
-  const recordLiveViewMetadataFailure = useCallback(() => {
-    liveViewMetadataSuccessCountRef.current = 0
-    liveViewMetadataFailureCountRef.current += 1
-    if (
-      liveViewMetadataFailureCountRef.current >=
-      LIVE_VIEW_METADATA_FAILURE_THRESHOLD
-    ) {
-      setLiveViewMetadataError(true)
-    }
-  }, [])
-
-  const resetLiveViewMetadataError = useCallback(() => {
-    liveViewMetadataFailureCountRef.current = 0
-    liveViewMetadataSuccessCountRef.current = 0
-    setLiveViewMetadataError(false)
-  }, [])
-
   const kindData: TableKindData = useMemo(
     () =>
       kind === "view"
@@ -335,10 +299,10 @@ export const TableDetailsDrawer = () => {
     dispatch(
       actions.console.pushSidebarHistory({
         type: "tableDetails",
-        payload: createTableDetailsTarget(
-          baseTableName,
-          baseTable ? getTableKind(baseTable) : "table",
-        ),
+        payload: {
+          tableName: baseTableName,
+          kind: baseTable ? getTableKind(baseTable) : "table",
+        },
       }),
     )
   }, [dispatch, baseTableName, baseTableExists, tables])
@@ -449,81 +413,6 @@ export const TableDetailsDrawer = () => {
     }
   }, [quest, tableName, isView, clearIfCurrentTarget])
 
-  const fetchLiveViewData = useCallback(async () => {
-    if (!isLiveView) return
-    if (activeLiveViewQueryIdRef.current !== null) return
-
-    let queryId: QuestDB.QueryId | null = null
-    let timeoutId: number | null = null
-    let timedOut = false
-    try {
-      const escapedName = tableName.replace(/'/g, "''")
-      const query = quest.queryRaw(
-        `live_views() WHERE view_name = '${escapedName}'`,
-        { cancellable: true },
-      )
-      const currentQueryId = query.queryId
-      queryId = currentQueryId
-      activeLiveViewQueryIdRef.current = currentQueryId
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = window.setTimeout(() => {
-          timedOut = true
-          if (activeLiveViewQueryIdRef.current === currentQueryId) {
-            quest.abort(currentQueryId)
-          }
-          reject(new Error("Live view metadata request timed out"))
-        }, LIVE_VIEW_QUERY_TIMEOUT_MS)
-      })
-
-      const rawResponse = await Promise.race([query.promise, timeoutPromise])
-      if (activeLiveViewQueryIdRef.current !== queryId) return
-      if (!isCurrentTarget(tableName, "liveview")) return
-
-      const response = QuestDB.Client.transformQueryRawResult<LiveView>(
-        rawResponse,
-        { convertLongsToBigInt: true },
-      )
-      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
-        setLiveViewData(response.data[0])
-        recordLiveViewMetadataSuccess()
-      } else if (
-        response.type === QuestDB.Type.DQL &&
-        response.data.length === 0
-      ) {
-        clearIfCurrentTarget(tableName, "liveview")
-      } else {
-        recordLiveViewMetadataFailure()
-      }
-    } catch (error) {
-      const wasCancelled =
-        typeof error === "object" &&
-        error !== null &&
-        "error" in error &&
-        error.error === "Cancelled by user"
-      if (wasCancelled && !timedOut) {
-        return
-      }
-      if (!isCurrentTarget(tableName, "liveview")) return
-      recordLiveViewMetadataFailure()
-      console.error("Failed to fetch live view data:", error)
-    } finally {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
-      }
-      if (activeLiveViewQueryIdRef.current === queryId) {
-        activeLiveViewQueryIdRef.current = null
-      }
-    }
-  }, [
-    quest,
-    tableName,
-    isLiveView,
-    isCurrentTarget,
-    clearIfCurrentTarget,
-    recordLiveViewMetadataSuccess,
-    recordLiveViewMetadataFailure,
-  ])
-
   const fetchColumns = useCallback(async () => {
     try {
       const response = await quest.showColumns(tableName)
@@ -603,8 +492,7 @@ export const TableDetailsDrawer = () => {
       setTableData(null)
       setMatViewData(null)
       setViewData(null)
-      setLiveViewData(null)
-      resetLiveViewMetadataError()
+      resetLiveViewMetadata()
       setColumns([])
       setDdl("")
       setColumnsExpanded(isView)
@@ -621,8 +509,7 @@ export const TableDetailsDrawer = () => {
       setTableData(null)
       setMatViewData(null)
       setViewData(null)
-      setLiveViewData(null)
-      resetLiveViewMetadataError()
+      resetLiveViewMetadata()
       setColumns([])
       setDdl("")
       setColumnsExpanded(false)
@@ -635,7 +522,7 @@ export const TableDetailsDrawer = () => {
       })
       setBaseTableStatus(null)
     }
-  }, [isOpen, hasTarget, tableName, fetchAllData, resetLiveViewMetadataError])
+  }, [isOpen, hasTarget, tableName, fetchAllData, resetLiveViewMetadata])
 
   useEffect(() => {
     if (baseTableName) {
@@ -714,23 +601,6 @@ export const TableDetailsDrawer = () => {
 
     return () => clearInterval(interval)
   }, [isOpen, hasTarget, isView, fetchViewData])
-
-  useEffect(() => {
-    if (!isOpen || !hasTarget || !isLiveView) return
-
-    const interval = setInterval(() => {
-      void fetchLiveViewData()
-    }, LIVE_VIEW_POLL_MS)
-
-    return () => {
-      clearInterval(interval)
-      const queryId = activeLiveViewQueryIdRef.current
-      if (queryId !== null) {
-        quest.abort(queryId)
-        activeLiveViewQueryIdRef.current = null
-      }
-    }
-  }, [isOpen, hasTarget, isLiveView, fetchLiveViewData, quest])
 
   useEffect(() => {
     if (!isOpen || !hasTarget) return
