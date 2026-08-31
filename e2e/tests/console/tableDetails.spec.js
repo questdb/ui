@@ -14,6 +14,12 @@ const TEST_TABLE_NO_WAL = "btc_trades_no_wal"
 const TEST_MATVIEW = "btc_trades_mv"
 const TEST_MATVIEW_ON_MV = "btc_trades_mv_on_mv"
 const TEST_VIEW = "btc_trades_view"
+const TEST_LIVE_VIEW = "btc_trades_lv"
+const TEST_LIVE_VIEW_2 = "btc_trades_lv_2"
+
+const TEST_LIVE_VIEW_2_DDL =
+  `CREATE LIVE VIEW IF NOT EXISTS ${TEST_LIVE_VIEW_2} FLUSH EVERY 1s IN MEMORY 5s START FROM BEGINNING AS ` +
+  "SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM btc_trades;"
 
 function interceptTablesQuery(modifications) {
   cy.intercept(
@@ -74,6 +80,46 @@ function interceptMatViewsQuery(modifications) {
   ).as("matviewsQuery")
 }
 
+function interceptLiveViewsQuery(modifications) {
+  cy.intercept(
+    {
+      method: "GET",
+      pathname: "/exec",
+      query: { query: /live_views\(\)/ },
+    },
+    (req) => {
+      req.continue((res) => {
+        if (res.body?.dataset?.length > 0) {
+          for (const [fieldName, value] of Object.entries(modifications)) {
+            const fieldIndex = res.body.columns.findIndex(
+              (c) => c.name === fieldName,
+            )
+            if (fieldIndex !== -1) {
+              for (let i = 0; i < res.body.dataset.length; i++) {
+                res.body.dataset[i][fieldIndex] = value
+              }
+            }
+          }
+        }
+        return res
+      })
+    },
+  ).as("liveViewsQuery")
+}
+
+function mutateLiveViewResponse(res, modifications) {
+  if (!res.body?.dataset?.length) return
+
+  for (const [fieldName, value] of Object.entries(modifications)) {
+    const fieldIndex = res.body.columns.findIndex(
+      (column) => column.name === fieldName,
+    )
+    if (fieldIndex !== -1) {
+      res.body.dataset[0][fieldIndex] = value
+    }
+  }
+}
+
 function interceptAIRequest(responseText = "Test AI response", sql = null) {
   const responseData = createFinalResponseData("openai", responseText, sql)
 
@@ -86,19 +132,6 @@ function interceptAIRequest(responseText = "Test AI response", sql = null) {
       createResponse("openai", responseData, { streaming: true, delay: 100 }),
     )
   }).as("openaiRequest")
-}
-
-// Radix arms a tooltip only on a trigger pointermove, and realHover emits a
-// single move event. That one armed intent can be silently lost to the
-// provider's pointer-in-transit gate or to boundary events fired when the DOM
-// re-renders under the stationary pointer (e.g. right after a tab switch while
-// its data fetches land). Nothing re-arms it without another pointermove, so
-// nudge the pointer after hovering: the first move lets Radix clear stale
-// transit state, the second re-arms the tooltip.
-function hoverForTooltip(hook) {
-  cy.getByDataHook(hook).realHover()
-  cy.getByDataHook(hook).realMouseMove(2, 2, { position: "center" })
-  cy.getByDataHook(hook).realMouseMove(0, 0, { position: "center" })
 }
 
 describe("TableDetailsDrawer", () => {
@@ -615,7 +648,7 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-type-badge").should(
         "contain",
-        "Materialized View",
+        "Materialized view",
       )
       cy.getByDataHook("table-details-view-status").should("be.visible")
       cy.getByDataHook("table-details-base-table-status").should("be.visible")
@@ -638,10 +671,36 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-type-badge").should(
         "contain",
-        "Materialized View",
+        "Materialized view",
       )
       cy.getByDataHook("table-details-name").should("have.value", TEST_MATVIEW)
       cy.getByDataHook("sidebar-back-button").should("be.disabled")
+    })
+
+    it("should fall back to table-backed details when matview metadata is missing", () => {
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /materialized_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            res.body.dataset = []
+            res.body.count = 0
+            return res
+          })
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+      cy.getByDataHook("table-details-tab-details").click()
+
+      cy.getByDataHook("table-details-details-section")
+        .should("be.visible")
+        .should("contain", "Deduplication")
+        .should("contain", "Partitioning")
+        .should("not.contain", "Refresh Type")
     })
 
     after(() => {
@@ -670,7 +729,7 @@ describe("TableDetailsDrawer", () => {
 
       cy.getByDataHook("table-details-type-badge").should(
         "contain",
-        "Materialized View",
+        "Materialized view",
       )
 
       cy.getByDataHook("table-details-tab-details").click()
@@ -686,7 +745,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-name").should("have.value", TEST_MATVIEW)
       cy.getByDataHook("table-details-type-badge").should(
         "contain",
-        "Materialized View",
+        "Materialized view",
       )
     })
 
@@ -730,6 +789,573 @@ describe("TableDetailsDrawer", () => {
       cy.loadConsoleWithAuth()
       cy.dropMaterializedView(TEST_MATVIEW)
       cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("live view specific", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createLiveView(TEST_LIVE_VIEW)
+      cy.execQuery(TEST_LIVE_VIEW_2_DDL)
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      cy.collapseTables()
+      cy.expandLiveViews()
+    })
+
+    it("should show live view type badge, view status and live view monitoring sections", () => {
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Live view",
+      )
+      cy.getByDataHook("table-details-view-status")
+        .should("be.visible")
+        .should("contain", "Active")
+      cy.getByDataHook("table-details-base-table-status").should("be.visible")
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("be.visible")
+        .should("contain", "Unflushed Transactions")
+        .should("contain", "Since Last Flush")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("be.visible")
+        .should("contain", "Rows in Memory")
+        .should("contain", "Memory Footprint")
+      cy.getByDataHook("table-details-live-view-freshness").should(
+        "contain",
+        "Writer Stall",
+      )
+      cy.getByDataHook("table-details-live-view-memory").should(
+        "not.contain",
+        "Dropped Below Start From",
+      )
+    })
+
+    it("should show a retrying error instead of table details when live view metadata fails", () => {
+      let failMetadata = true
+
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /live_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          if (failMetadata) {
+            req.reply({
+              statusCode: 400,
+              body: {
+                error: "live view metadata unavailable",
+                position: 0,
+                query: String(req.query.query ?? ""),
+              },
+            })
+          } else {
+            req.continue()
+          }
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "critical",
+      )
+      cy.getByDataHook("table-details-live-view-metadata-error")
+        .should("be.visible")
+        .should("contain", "retry automatically")
+      cy.getByDataHook("table-details-view-status").should("not.exist")
+
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.getByDataHook("table-details-details-section").should("not.exist")
+
+      cy.then(() => {
+        failMetadata = false
+      })
+      cy.getByDataHook("table-details-tab-monitoring").click()
+      cy.getByDataHook("table-details-view-status").should("contain", "Active")
+      cy.getByDataHook("table-details-live-view-metadata-error").should(
+        "not.exist",
+      )
+    })
+
+    it("should complete metadata polling when responses exceed the poll period", () => {
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /live_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            res.setDelay(1500)
+            return res
+          })
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      cy.getByDataHook("table-details-view-status")
+        .should("be.visible")
+        .should("contain", "Active")
+      cy.getByDataHook("table-details-live-view-memory").should("be.visible")
+    })
+
+    it("should display unsafe LONG counters without rounding", () => {
+      interceptLiveViewsQuery({
+        lag_seqtxn: "9007199254740993",
+        in_mem_rows: "9007199254740993",
+      })
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      cy.getByDataHook("table-details-live-view-freshness").should(
+        "contain",
+        "9,007,199,254,740,993 txns",
+      )
+      cy.getByDataHook("table-details-live-view-memory").should(
+        "contain",
+        "9,007,199,254,740,993",
+      )
+    })
+
+    it("should show the seeding status, writer stall and dropped rows from live view metrics", () => {
+      // Given
+      interceptLiveViewsQuery({
+        view_status: "seeding",
+        writer_stall_micros: "6500000",
+        below_lower_bound_count: "5",
+        o3_rejected_count: "3",
+      })
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then: the server holds last_processed_seqtxn equal to
+      // seed_target_seqtxn for the whole seed, so there is no progress to show
+      cy.getByDataHook("table-details-view-status").should("contain", "Seeding")
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("contain", "Writer Stall")
+        .should("contain", "6.5 s")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("contain", "Dropped Below Start From")
+        .should("contain", "5 in-order · 3 out-of-order")
+    })
+
+    it("should show Never and Unknown for lag values the server does not know yet", () => {
+      // Given: lag_micros is NULL until the first flush and lag_seqtxn is
+      // NULL while the base table token is unresolved
+      interceptLiveViewsQuery({
+        lag_micros: null,
+        lag_seqtxn: null,
+      })
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("contain", "Unknown")
+        .should("contain", "Never")
+    })
+
+    it("should show the live view definition cards in the details tab", () => {
+      // Given
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // When
+      cy.getByDataHook("table-details-tab-details").click()
+
+      // Then
+      cy.getByDataHook("table-details-ddl-section").should("be.visible")
+      cy.getByDataHook("table-details-flush-every-card")
+        .should("contain", "Flush Every")
+        .should("contain", "1 Second")
+      cy.getByDataHook("table-details-in-memory-card")
+        .should("contain", "In Memory")
+        .should("contain", "5 Seconds")
+      cy.getByDataHook("table-details-start-from-card")
+        .should("contain", "Start From")
+        .should("contain", "Beginning")
+      cy.getByDataHook("table-details-details-section").should(
+        "contain",
+        "Partitioning",
+      )
+      cy.getByDataHook("table-details-details-section")
+        .should("not.contain", "TTL")
+        .should("not.contain", "Deduplication")
+        .should("not.contain", "Refresh Type")
+      cy.getByDataHook("table-details-storage-policy-section").should(
+        "not.exist",
+      )
+    })
+
+    it("should navigate to the base table and back preserving kinds", () => {
+      // Given
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.getByDataHook("table-details-base-table-section").should("be.visible")
+
+      // When
+      cy.getByDataHook("table-details-base-table-link")
+        .should("contain", TEST_TABLE)
+        .click()
+
+      // Then
+      cy.getByDataHook("table-details-type-badge").should("contain", "Table")
+      cy.getByDataHook("table-details-name").should("have.value", TEST_TABLE)
+
+      // When
+      cy.getByDataHook("sidebar-back-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-type-badge").should(
+        "contain",
+        "Live view",
+      )
+      cy.getByDataHook("table-details-name").should(
+        "have.value",
+        TEST_LIVE_VIEW,
+      )
+    })
+
+    it("should ignore an in-flight response after selecting another live view", () => {
+      let delayOldTarget = false
+      let oldTargetRequestStarted = false
+
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /live_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          const query = String(req.query.query ?? "")
+          if (
+            delayOldTarget &&
+            !oldTargetRequestStarted &&
+            query.includes(TEST_LIVE_VIEW)
+          ) {
+            oldTargetRequestStarted = true
+            req.alias = "staleLiveViewResponse"
+            req.continue((res) => {
+              mutateLiveViewResponse(res, {
+                view_status: "invalid",
+                invalidation_reason: "belongs to old target",
+                in_mem_rows: "111",
+              })
+              res.setDelay(1800)
+              return res
+            })
+          } else if (query.includes(TEST_LIVE_VIEW_2)) {
+            req.continue((res) => {
+              mutateLiveViewResponse(res, {
+                view_status: "seeding",
+                in_mem_rows: "222",
+              })
+              return res
+            })
+          } else {
+            req.continue()
+          }
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.getByDataHook("table-details-view-status").should("contain", "Active")
+
+      cy.then(() => {
+        delayOldTarget = true
+      })
+      cy.wrap(null).should(() => {
+        expect(oldTargetRequestStarted).to.equal(true)
+      })
+
+      cy.getByDataHook("table-details-name").click()
+      cy.getByDataHook("table-details-name").clear().type(TEST_LIVE_VIEW_2)
+      cy.getByDataHook("table-details-name").type("{enter}")
+
+      cy.getByDataHook("table-details-name").should(
+        "have.value",
+        TEST_LIVE_VIEW_2,
+      )
+      cy.getByDataHook("table-details-view-status").should("contain", "Seeding")
+      cy.getByDataHook("table-details-live-view-memory").should(
+        "contain",
+        "222",
+      )
+
+      cy.wait("@staleLiveViewResponse")
+      cy.getByDataHook("table-details-name").should(
+        "have.value",
+        TEST_LIVE_VIEW_2,
+      )
+      cy.getByDataHook("table-details-view-status").should("contain", "Seeding")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("contain", "222")
+        .should("not.contain", "111")
+    })
+
+    it("should not close a newly opened sidebar for a stale empty response", () => {
+      let injectEmpty = false
+      let emptyRequestStarted = false
+
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /live_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          if (injectEmpty && !emptyRequestStarted) {
+            emptyRequestStarted = true
+            req.alias = "staleEmptyLiveViewResponse"
+            req.continue((res) => {
+              res.body.dataset = []
+              res.body.count = 0
+              res.setDelay(1800)
+              return res
+            })
+          } else {
+            req.continue()
+          }
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.getByDataHook("table-details-view-status").should("contain", "Active")
+
+      cy.then(() => {
+        injectEmpty = true
+      })
+      cy.wrap(null).should(() => {
+        expect(emptyRequestStarted).to.equal(true)
+      })
+
+      cy.getByDataHook("news-panel-button")
+        .click()
+        .should("have.attr", "data-selected", "true")
+
+      cy.wait("@staleEmptyLiveViewResponse")
+      cy.getByDataHook("news-panel-button").should(
+        "have.attr",
+        "data-selected",
+        "true",
+      )
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW_2)
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+      cy.dropTableIfExists(TEST_TABLE)
+    })
+  })
+
+  describe("live view invalid state (R5)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createLiveView(TEST_LIVE_VIEW)
+      cy.refreshSchema()
+      cy.getByDataHook("schema-folder-title")
+        .contains("Live views")
+        .should("exist")
+    })
+
+    it("should show critical health status and permanence guidance for an invalid live view", () => {
+      // Given
+      interceptLiveViewsQuery({
+        view_status: "invalid",
+        invalidation_reason: "rename column operation [column=price]",
+      })
+      cy.expandLiveViews()
+      cy.getByDataHook("schema-liveview-title").should(
+        "contain",
+        TEST_LIVE_VIEW,
+      )
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+      cy.getByDataHook("table-details-error-banner")
+        .should("be.visible")
+        .should("contain", "Live view is invalid")
+        .should("contain", "Invalidation is permanent")
+      cy.getByDataHook("table-details-view-status").should("contain", "Invalid")
+      cy.getByDataHook("table-details-resume-wal-button").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+      cy.dropTableIfExists(TEST_TABLE)
+    })
+  })
+
+  describe("live view load-failure states (R6/R7)", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createLiveView(TEST_LIVE_VIEW)
+      cy.refreshSchema()
+      cy.getByDataHook("schema-folder-title")
+        .contains("Live views")
+        .should("exist")
+    })
+
+    it("should show critical health status and hide metric sections for an unreadable live view", () => {
+      // Given: load-failure stubs report NULL for every diagnostic column
+      interceptLiveViewsQuery({
+        view_status: "state_unreadable",
+        base_table_name: null,
+        view_sql: null,
+        flush_every_interval_unit: null,
+        in_memory_interval_unit: null,
+        lag_seqtxn: null,
+        lag_micros: null,
+        in_mem_rows: null,
+        in_mem_bytes: null,
+      })
+      cy.expandLiveViews()
+      cy.getByDataHook("schema-liveview-title").should(
+        "contain",
+        TEST_LIVE_VIEW,
+      )
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+      cy.getByDataHook("table-details-error-banner")
+        .should("be.visible")
+        .should("contain", "Live view state files are unreadable")
+        .should("contain", "drop and recreate the view")
+      cy.getByDataHook("table-details-view-status").should(
+        "contain",
+        "State unreadable",
+      )
+      cy.getByDataHook("table-details-base-table-status")
+        .should("contain", "Unknown")
+        .and("not.contain", "Valid")
+        .and("not.contain", "Suspended")
+        .and("not.contain", "Dropped")
+      cy.getByDataHook("table-details-live-view-freshness").should("not.exist")
+      cy.getByDataHook("table-details-live-view-memory").should("not.exist")
+
+      // When: the definition is unreadable, so the details tab has no cards
+      cy.getByDataHook("table-details-tab-details").click()
+
+      // Then
+      cy.getByDataHook("table-details-details-section").should("not.exist")
+    })
+
+    it("should show the version unsupported status and hide metric sections", () => {
+      // Given: load-failure stubs report NULL for every diagnostic column
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+      interceptLiveViewsQuery({
+        view_status: "version_unsupported",
+        lag_seqtxn: null,
+        lag_micros: null,
+        in_mem_rows: null,
+        in_mem_bytes: null,
+      })
+      cy.expandLiveViews()
+      cy.getByDataHook("schema-liveview-title").should(
+        "contain",
+        TEST_LIVE_VIEW,
+      )
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // Then
+      cy.getByDataHook("table-details-health-status")
+        .should("be.visible")
+        .should("have.attr", "data-severity", "critical")
+      cy.getByDataHook("table-details-view-status").should(
+        "contain",
+        "Version unsupported",
+      )
+      cy.getByDataHook("table-details-live-view-freshness").should("not.exist")
+      cy.getByDataHook("table-details-live-view-memory").should("not.exist")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+      cy.dropTableIfExists(TEST_TABLE)
+    })
+  })
+
+  describe("live view dropped while the drawer is open", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.createLiveView(TEST_LIVE_VIEW)
+      cy.refreshSchema()
+      cy.getByDataHook("schema-folder-title")
+        .contains("Live views")
+        .should("exist")
+    })
+
+    it("should show the empty state after the live view is dropped", () => {
+      // Given
+      cy.expandLiveViews()
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+
+      // When
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+
+      // Then
+      cy.getByDataHook("table-details-name").should("not.exist")
+      cy.getByDataHook("table-details-toggle-button").should(
+        "have.attr",
+        "data-selected",
+        "true",
+      )
+      cy.getByDataHook("table-details-empty-state").should("be.visible")
+
+      // When the drawer is closed and reopened
+      cy.getByDataHook("table-details-toggle-button").click()
+      cy.getByDataHook("table-details-toggle-button").should(
+        "have.attr",
+        "data-selected",
+        "false",
+      )
+      cy.getByDataHook("table-details-toggle-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-toggle-button").should(
+        "have.attr",
+        "data-selected",
+        "true",
+      )
+      cy.getByDataHook("table-details-empty-state").should("be.visible")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+      cy.dropTableIfExists(TEST_TABLE)
     })
   })
 
@@ -839,7 +1465,7 @@ describe("TableDetailsDrawer", () => {
       cy.openDetailsDrawer(TEST_TABLE)
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
-      hoverForTooltip("table-details-error-ask-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-error-ask-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -849,7 +1475,7 @@ describe("TableDetailsDrawer", () => {
       cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
-      hoverForTooltip("table-details-warning-ask-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-warning-ask-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -860,7 +1486,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("tooltip").should("not.exist")
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
-      hoverForTooltip("table-details-explain-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-explain-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -891,7 +1517,7 @@ describe("TableDetailsDrawer", () => {
       cy.openDetailsDrawer(TEST_TABLE)
 
       cy.getByDataHook("table-details-error-ask-ai").should("be.disabled")
-      hoverForTooltip("table-details-error-ask-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-error-ask-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -901,7 +1527,7 @@ describe("TableDetailsDrawer", () => {
       cy.wait(200)
 
       cy.getByDataHook("table-details-warning-ask-ai").should("be.disabled")
-      hoverForTooltip("table-details-warning-ask-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-warning-ask-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",
@@ -913,7 +1539,7 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-tab-details").click()
       cy.getByDataHook("table-details-explain-ai").should("be.disabled")
       cy.getByDataHook("table-details-copy-ddl").should("be.visible").click()
-      hoverForTooltip("table-details-explain-ai")
+      cy.hoverForTooltip(() => cy.getByDataHook("table-details-explain-ai"))
       cy.wait(200)
       cy.getByDataHook("tooltip").should(
         "contain",

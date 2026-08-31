@@ -18,6 +18,7 @@ import {
 } from "../../../components"
 import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
 import { color, getTableKind } from "../../../utils"
+import { createTableDetailsTarget } from "../../../store/Console/types"
 import type {
   ConversationMessage,
   UserMessageDisplayType,
@@ -532,11 +533,10 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
         dispatch(
           actions.console.pushSidebarHistory({
             type: "tableDetails",
-            payload: {
-              tableName: table.table_name,
-              isMatView: table.table_type === "M",
-              isView: table.table_type === "V",
-            },
+            payload: createTableDetailsTarget(
+              table.table_name,
+              getTableKind(table),
+            ),
           }),
         )
       }

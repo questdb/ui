@@ -10,13 +10,14 @@ import {
 } from "@phosphor-icons/react"
 import { Box, Text, CopyButton, TextButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
-import type {
-  Table,
-  MaterializedView,
-  View,
-  Column,
-} from "../../../utils/questdb/types"
-import { formatTTL, extractStoragePolicyClauses } from "./utils"
+import type { Table, Column } from "../../../utils/questdb/types"
+import type { TableKindData } from "./types"
+import {
+  formatTTL,
+  formatInterval,
+  formatUtcTimestamp,
+  extractStoragePolicyClauses,
+} from "./utils"
 import { ColumnIcon } from "../Row"
 import {
   Section,
@@ -35,14 +36,13 @@ import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 export interface DetailsTabProps {
   tableData: Table
-  matViewData: MaterializedView | null
-  viewData: View | null
+  kindData: TableKindData
   columns: Column[]
   ddl: string
-  isMatView: boolean
-  isView: boolean
+  isLiveViewLoadFailure: boolean
   isEnterprise: boolean
   truncatedDDL: { text: string; grayedOutLines: [number, number] | null }
+  baseTableName: string | undefined
   baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
   columnsExpanded: boolean
   onColumnsExpandedChange: (expanded: boolean) => void
@@ -140,14 +140,13 @@ const ButtonsContainer = styled(Box).attrs({
 
 export const DetailsTab = ({
   tableData,
-  matViewData,
-  viewData,
+  kindData,
   columns,
   ddl,
-  isMatView,
-  isView,
+  isLiveViewLoadFailure,
   isEnterprise,
   truncatedDDL,
+  baseTableName,
   baseTableStatus,
   columnsExpanded,
   onColumnsExpandedChange,
@@ -157,6 +156,9 @@ export const DetailsTab = ({
 }: DetailsTabProps) => {
   const { addBuffer } = useEditor()
   const theme = useTheme()
+  const view = kindData.kind === "view" ? kindData.view : null
+  const matView = kindData.kind === "matview" ? kindData.matView : null
+  const liveView = kindData.kind === "liveview" ? kindData.liveView : null
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
   const storagePolicyClauses = useMemo(
@@ -165,11 +167,18 @@ export const DetailsTab = ({
   )
   const hasStoragePolicy = storagePolicyClauses.length > 0
   const hasTtl = (tableData.ttlValue ?? 0) !== 0
-  const showStoragePolicySection = isEnterprise || hasStoragePolicy
+  const showStoragePolicySection =
+    (kindData.kind === "table" || kindData.kind === "matview") &&
+    (isEnterprise || hasStoragePolicy)
+  const showDetailsSection =
+    !isLiveViewLoadFailure &&
+    (kindData.kind === "table" ||
+      kindData.kind === "matview" ||
+      (kindData.kind === "liveview" && liveView !== null))
 
   return (
     <>
-      {isMatView && matViewData && (
+      {baseTableName && (
         <HorizontalSection data-hook="table-details-base-table-section">
           <Text color="contentSecondary" size="sm" lineHeight="1.7">
             Base Table
@@ -182,7 +191,7 @@ export const DetailsTab = ({
             <Text
               color={baseTableExists ? "contentPrimary" : "contentSecondary"}
             >
-              {matViewData.base_table_name}
+              {baseTableName}
             </Text>
             {baseTableExists && (
               <ArrowSquareInIcon
@@ -195,11 +204,11 @@ export const DetailsTab = ({
         </HorizontalSection>
       )}
 
-      {isView && viewData?.view_status === "invalid" && (
+      {view?.view_status === "invalid" && (
         <Section>
           <ErrorBanner
             title="View is invalid"
-            description={viewData.invalidation_reason || undefined}
+            description={view.invalidation_reason || undefined}
             onAskAI={onAskAIForViewIssue}
             docsUrl={ISSUE_DOCS_URLS["R4"]}
           />
@@ -306,15 +315,66 @@ export const DetailsTab = ({
         </Section>
       )}
 
-      {/* Details Section - layout differs by type, hidden for views */}
-      {!isView && (
+      {/* Details Section - layout differs by type, hidden for views. Hidden
+          for load-failure live views too: their definition is unreadable, so
+          every card value would be a fabricated NULL-as-zero. Live views with
+          no payload are also hidden; matviews fall back to table-backed cards. */}
+      {showDetailsSection && (
         <Section data-hook="table-details-details-section">
           <SectionTitleContainer>
             <InfoIcon size="16px" weight="bold" />
             <SectionTitle>Details</SectionTitle>
           </SectionTitleContainer>
 
-          {isMatView && matViewData ? (
+          {kindData.kind === "liveview" && liveView ? (
+            /* Live view: 4 cards (2×2). TTL, dedup and refresh type do not apply. */
+            <MetricsGrid $columns={2}>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-flush-every-card"
+              >
+                <MetricLabel>Flush Every</MetricLabel>
+                <MetricValue>
+                  {formatInterval(
+                    liveView.flush_every_interval,
+                    liveView.flush_every_interval_unit,
+                  )}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-in-memory-card"
+              >
+                <MetricLabel>In Memory</MetricLabel>
+                <MetricValue>
+                  {formatInterval(
+                    liveView.in_memory_interval,
+                    liveView.in_memory_interval_unit,
+                  )}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-start-from-card"
+              >
+                <MetricLabel>Start From</MetricLabel>
+                <MetricValue>
+                  {liveView.view_lower_bound_timestamp
+                    ? formatUtcTimestamp(liveView.view_lower_bound_timestamp)
+                    : "Beginning"}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.surfaceInset}>
+                <MetricLabel>Partitioning</MetricLabel>
+                <MetricValue>
+                  {tableData.partitionBy === "NONE"
+                    ? "None"
+                    : tableData.partitionBy.charAt(0).toUpperCase() +
+                      tableData.partitionBy.slice(1).toLowerCase()}
+                </MetricValue>
+              </MetricCard>
+            </MetricsGrid>
+          ) : kindData.kind === "matview" && matView ? (
             /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 2 : 3}>
               {hasTtl && (
@@ -343,13 +403,13 @@ export const DetailsTab = ({
               <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Refresh Type</MetricLabel>
                 <MetricValue>
-                  {matViewData.refresh_type.charAt(0).toUpperCase() +
-                    matViewData.refresh_type.slice(1).toLowerCase()}
+                  {matView.refresh_type.charAt(0).toUpperCase() +
+                    matView.refresh_type.slice(1).toLowerCase()}
                 </MetricValue>
               </MetricCard>
             </MetricsGrid>
-          ) : (
-            /* Table: 3 cards (1 row) when TTL is configured, 2 cards (1 row) when not. */
+          ) : kindData.kind === "table" || kindData.kind === "matview" ? (
+            /* Table and matview fallback: 3 cards when TTL is configured, 2 when not. */
             <MetricsGrid $columns={hasTtl ? 3 : 2}>
               {hasTtl && (
                 <MetricCard $background={theme.color.surfaceInset}>
@@ -375,11 +435,11 @@ export const DetailsTab = ({
                 </MetricValue>
               </MetricCard>
             </MetricsGrid>
-          )}
+          ) : null}
         </Section>
       )}
 
-      {!isView && showStoragePolicySection && (
+      {showStoragePolicySection && (
         <Section data-hook="table-details-storage-policy-section">
           <SectionTitleContainer>
             <DatabaseIcon size="16px" weight="bold" />

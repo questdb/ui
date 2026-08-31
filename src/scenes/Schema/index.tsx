@@ -143,6 +143,7 @@ const Schema = ({
   const [materializedViews, setMaterializedViews] =
     useState<QuestDB.MaterializedView[]>()
   const [views, setViews] = useState<QuestDB.View[]>()
+  const [liveViews, setLiveViews] = useState<QuestDB.LiveView[]>()
   const dispatch = useDispatch()
   const [filterSuspendedOnly, setFilterSuspendedOnly] = useState(false)
   const { autoRefreshTables, updateSettings } = useLocalStorage()
@@ -170,6 +171,9 @@ const Schema = ({
         if (data.some((t) => t.table_type === "V")) {
           void fetchViews()
         }
+        if (data.some((t) => t.table_type === "L")) {
+          void fetchLiveViews()
+        }
         dispatchState({ view: View.ready })
       } else {
         dispatchState({ view: View.error })
@@ -183,9 +187,7 @@ const Schema = ({
 
   const fetchMaterializedViews = async () => {
     try {
-      const matViewsResponse = await quest.query<QuestDB.MaterializedView>(
-        "materialized_views()",
-      )
+      const matViewsResponse = await quest.showMaterializedViews()
       if (matViewsResponse && matViewsResponse.type === QuestDB.Type.DQL) {
         setMaterializedViews(matViewsResponse.data)
       }
@@ -199,6 +201,17 @@ const Schema = ({
       const viewsResponse = await quest.showViews()
       if (viewsResponse && viewsResponse.type === QuestDB.Type.DQL) {
         setViews(viewsResponse.data)
+      }
+    } catch (error) {
+      // Fail silently
+    }
+  }
+
+  const fetchLiveViews = async () => {
+    try {
+      const liveViewsResponse = await quest.showLiveViews()
+      if (liveViewsResponse && liveViewsResponse.type === QuestDB.Type.DQL) {
+        setLiveViews(liveViewsResponse.data)
       }
     } catch (error) {
       // Fail silently
@@ -235,13 +248,11 @@ const Schema = ({
     const ddls = await Promise.all(
       selectedTables.map(async (table) => {
         try {
-          // selectedTables only contains "table" | "matview" | "view" types from allSelectableTables
-          const response =
-            table.type === "matview"
-              ? await quest.showMatViewDDL(table.name)
-              : table.type === "view"
-                ? await quest.showViewDDL(table.name)
-                : await quest.showTableDDL(table.name)
+          // selectedTables only contains table kinds from allSelectableTables
+          const response = await quest.showDDL(
+            table.name,
+            table.type as QuestDB.TableKind,
+          )
 
           if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
             return response.data[0].ddl
@@ -344,11 +355,15 @@ const Schema = ({
       .filter((t) => t.table_type === "M")
       .map((t) => ({ name: t.table_name, type: "matview" as TreeNodeKind }))
 
+    const liveViewsList = tables
+      .filter((t) => t.table_type === "L")
+      .map((t) => ({ name: t.table_name, type: "liveview" as TreeNodeKind }))
+
     const viewsList = tables
       .filter((t) => t.table_type === "V")
       .map((t) => ({ name: t.table_name, type: "view" as TreeNodeKind }))
 
-    return [...regularTables, ...matViews, ...viewsList]
+    return [...regularTables, ...matViews, ...liveViewsList, ...viewsList]
   }, [tables])
 
   const suspendedTablesCount = useMemo(
@@ -518,6 +533,7 @@ const Schema = ({
           tables={tables ?? []}
           materializedViews={materializedViews}
           views={views}
+          liveViews={liveViews}
           filterSuspendedOnly={filterSuspendedOnly}
           state={state}
           loadingError={loadingError}

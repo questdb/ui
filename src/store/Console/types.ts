@@ -22,11 +22,24 @@
  *
  ******************************************************************************/
 
+import type { TableKind } from "../../utils/questdb/types"
+
 export type TableDetailsTarget = {
   tableName: string
   isMatView: boolean
   isView: boolean
+  isLiveView: boolean
 } | null
+
+export const createTableDetailsTarget = (
+  tableName: string,
+  kind: TableKind,
+): TableDetailsTarget => ({
+  tableName,
+  isMatView: kind === "matview",
+  isView: kind === "view",
+  isLiveView: kind === "liveview",
+})
 
 export type SidebarType = "news" | "aiChat" | "tableDetails"
 

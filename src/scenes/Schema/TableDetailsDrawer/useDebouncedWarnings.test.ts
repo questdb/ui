@@ -2,6 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { applyDebounceFilter, updateFirstSeen } from "./useDebouncedWarnings"
 import type { HealthStatus, HealthIssue, TrendIndicator } from "./healthCheck"
 
+const DEBOUNCED_ISSUE_FIELDS: Record<string, string> = {
+  Y1: "transactionLag",
+  Y2: "pendingRows",
+}
+
 const makeHealthStatus = (
   issueIds: string[],
   options?: { trendDirection?: "increasing" | "decreasing" },
@@ -9,14 +14,13 @@ const makeHealthStatus = (
   const issues: HealthIssue[] = issueIds.map((id) => ({
     id,
     severity: "warning" as const,
-    field: id === "Y1" ? "transactionLag" : id === "Y2" ? "pendingRows" : id,
+    field: DEBOUNCED_ISSUE_FIELDS[id] ?? id,
     message: `Issue ${id}`,
   }))
 
   const trendIndicators = new Map<string, TrendIndicator>()
   for (const id of issueIds) {
-    const trendKey =
-      id === "Y1" ? "transactionLag" : id === "Y2" ? "pendingRows" : null
+    const trendKey = DEBOUNCED_ISSUE_FIELDS[id] ?? null
     if (trendKey) {
       trendIndicators.set(trendKey, {
         field: trendKey,

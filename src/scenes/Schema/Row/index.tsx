@@ -56,6 +56,7 @@ import { Checkbox } from "../checkbox"
 import { Tooltip } from "../../../components/Tooltip"
 import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
 import {
+  LIVEVIEWS_GROUP_KEY,
   MATVIEWS_GROUP_KEY,
   TABLES_GROUP_KEY,
   VIEWS_GROUP_KEY,
@@ -68,6 +69,7 @@ export type TreeNodeKind =
   | "table"
   | "matview"
   | "view"
+  | "liveview"
   | "folder"
   | "detail"
 
@@ -407,16 +409,17 @@ const Row = ({
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const isExpandable =
-    ["folder", "table", "matview", "view"].includes(kind) ||
+    ["folder", "table", "matview", "view", "liveview"].includes(kind) ||
     (kind === "column" && type === "SYMBOL")
-  const isTableKind = ["table", "matview", "view"].includes(kind)
+  const isTableKind = ["table", "matview", "view", "liveview"].includes(kind)
   const isRootFolder = [
     MATVIEWS_GROUP_KEY,
     TABLES_GROUP_KEY,
     VIEWS_GROUP_KEY,
+    LIVEVIEWS_GROUP_KEY,
   ].includes(id ?? "")
   const matchesSearch =
-    ["column", "table", "matview", "view"].includes(kind) &&
+    ["column", "table", "matview", "view", "liveview"].includes(kind) &&
     query &&
     name.toLowerCase().includes(query.toLowerCase())
 
@@ -611,15 +614,18 @@ const Row = ({
                 designatedTimestamp={designatedTimestamp}
                 partitionBy={partitionBy}
                 walEnabled={walEnabled}
-                kind={kind as "table" | "matview" | "view"}
+                kind={kind as QuestDB.TableKind}
               />
             )}
             {kind === "detail" && <InfoCircle size="14px" />}
-            {["column", "table", "matview", "view"].includes(kind) ? (
+            {["column", "table", "matview", "view", "liveview"].includes(
+              kind,
+            ) ? (
               <Highlighter
                 highlightClassName="highlight"
                 searchWords={[query ?? ""]}
                 textToHighlight={name}
+                autoEscape
               />
             ) : (
               name

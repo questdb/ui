@@ -130,26 +130,29 @@ const createStorageDetailsNodes = (
 export const createTableNode = (
   table: QuestDB.Table,
   parentId: string,
-  isMatView: boolean = false,
-  isView: boolean = false,
+  kind: QuestDB.TableKind,
   materializedViews: QuestDB.MaterializedView[] | undefined,
   views: QuestDB.View[] | undefined,
+  liveViews: QuestDB.LiveView[] | undefined,
   tableColumns: InformationSchemaColumn[],
 ): TreeNode => {
   const tableId = `${parentId}:${table.table_name}`
-  const matViewData = isMatView
-    ? materializedViews?.find((mv) => mv.view_name === table.table_name)
-    : undefined
-  const viewData = isView
-    ? views?.find((v) => v.view_name === table.table_name)
-    : undefined
+  const matViewData =
+    kind === "matview"
+      ? materializedViews?.find((mv) => mv.view_name === table.table_name)
+      : undefined
+  const viewData =
+    kind === "view"
+      ? views?.find((v) => v.view_name === table.table_name)
+      : undefined
+  const liveViewData =
+    kind === "liveview"
+      ? liveViews?.find((lv) => lv.view_name === table.table_name)
+      : undefined
 
   const columnsId = `${tableId}:columns`
   const baseTablesId = `${tableId}:baseTables`
   const storageDetailsId = `${tableId}:storageDetails`
-
-  // Determine the kind
-  const kind = isMatView ? "matview" : isView ? "view" : "table"
 
   const tableNode: TreeNode = {
     id: tableId,
@@ -158,6 +161,7 @@ export const createTableNode = (
     table,
     matViewData,
     viewData,
+    liveViewData,
     parent: parentId,
     isExpanded: getSectionExpanded(tableId),
     partitionBy: table.partitionBy,
@@ -173,8 +177,8 @@ export const createTableNode = (
         isExpanded: getSectionExpanded(columnsId),
         children: createColumnNodes(table, columnsId, tableColumns),
       },
-      // Only show storage details for tables and materialized views (not for regular views)
-      ...(!isView
+      // Only show storage details for stored kinds (not for regular views)
+      ...(kind !== "view"
         ? [
             {
               id: storageDetailsId,
@@ -189,7 +193,9 @@ export const createTableNode = (
     ],
   }
 
-  if (isMatView && matViewData) {
+  const baseTableName =
+    matViewData?.base_table_name ?? liveViewData?.base_table_name
+  if (baseTableName) {
     tableNode.children.push({
       id: baseTablesId,
       kind: "folder",
@@ -198,9 +204,9 @@ export const createTableNode = (
       isExpanded: getSectionExpanded(baseTablesId),
       children: [
         {
-          id: `${baseTablesId}:${matViewData.base_table_name}`,
+          id: `${baseTablesId}:${baseTableName}`,
           kind: "detail",
-          name: matViewData.base_table_name,
+          name: baseTableName,
           parent: baseTablesId,
           children: [],
         },

@@ -36,10 +36,18 @@ import {
   TABLES_GROUP_KEY,
   MATVIEWS_GROUP_KEY,
   VIEWS_GROUP_KEY,
+  LIVEVIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { useSchema } from "../SchemaContext"
+import { getLiveViewFailure } from "../TableDetailsDrawer/healthCheck"
 import { QuestContext } from "../../../providers"
-import { PartitionBy, SymbolColumnDetails } from "../../../utils/questdb/types"
+import {
+  getTableKindLabel,
+  PartitionBy,
+  SymbolColumnDetails,
+  TableKind,
+} from "../../../utils/questdb/types"
+import { createTableDetailsTarget } from "../../../store/Console/types"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../../store"
 import {
@@ -63,6 +71,7 @@ type VirtualTablesProps = {
   tables: QuestDB.Table[]
   materializedViews?: QuestDB.MaterializedView[]
   views?: QuestDB.View[]
+  liveViews?: QuestDB.LiveView[]
   filterSuspendedOnly: boolean
   state: State
   loadingError: ErrorResult | null
@@ -96,6 +105,7 @@ export type FlattenedTreeItem = {
   column?: TreeColumn
   matViewData?: QuestDB.MaterializedView
   viewData?: QuestDB.View
+  liveViewData?: QuestDB.LiveView
   walTableData?: QuestDB.WalTable
   parent?: string
   isExpanded?: boolean
@@ -155,19 +165,6 @@ const Loader = styled(Loader3)`
   ${spinAnimation};
 `
 
-export const getTableKindLabel = (kind: "table" | "matview" | "view") => {
-  switch (kind) {
-    case "table":
-      return "Table"
-    case "matview":
-      return "Materialized view"
-    case "view":
-      return "View"
-    default:
-      return ""
-  }
-}
-
 const Loading = () => {
   const [loaderShown, setLoaderShown] = useState(false)
   // Show the loader only for delayed fetching process
@@ -183,6 +180,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   tables,
   materializedViews,
   views,
+  liveViews,
   filterSuspendedOnly,
   state,
   loadingError,
@@ -223,46 +221,57 @@ const VirtualTables: FC<VirtualTablesProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null)
   useRetainLastFocus({ virtuosoRef, focusedIndex, setFocusedIndex, wrapperRef })
 
-  const [regularTables, matViewTables, viewTables] = useMemo(() => {
-    return tables
-      .reduce(
-        (acc, table: QuestDB.Table) => {
-          const normalizedTableName = table.table_name.toLowerCase()
-          const normalizedQuery = query.toLowerCase()
-          const tableNameMatches = normalizedTableName.includes(normalizedQuery)
-          const columnMatches =
-            !!query &&
-            !!allColumns[table.table_name]?.some((col) =>
-              col.column_name.toLowerCase().includes(normalizedQuery),
-            )
-          const shownIfFilteredSuspendedOnly = filterSuspendedOnly
-            ? table.walEnabled && table.table_suspended
-            : true
-          const shownIfFilteredWithQuery = tableNameMatches || columnMatches
+  const [regularTables, matViewTables, viewTables, liveViewTables] =
+    useMemo(() => {
+      return tables
+        .reduce(
+          (acc, table: QuestDB.Table) => {
+            const normalizedTableName = table.table_name.toLowerCase()
+            const normalizedQuery = query.toLowerCase()
+            const tableNameMatches =
+              normalizedTableName.includes(normalizedQuery)
+            const columnMatches =
+              !!query &&
+              !!allColumns[table.table_name]?.some((col) =>
+                col.column_name.toLowerCase().includes(normalizedQuery),
+              )
+            const shownIfFilteredSuspendedOnly = filterSuspendedOnly
+              ? table.walEnabled && table.table_suspended
+              : true
+            const shownIfFilteredWithQuery = tableNameMatches || columnMatches
 
-          if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
-            // Use table_type to categorize: 'T' = table, 'M' = matview, 'V' = view
-            // Default to 'T' (table) for backward compatibility with older servers
-            const tableType =
-              (table.table_type as "T" | "M" | "V" | undefined) ?? "T"
-            const categoryIndex =
-              tableType === "M" ? 1 : tableType === "V" ? 2 : 0
-            acc[categoryIndex].push({
-              ...table,
-              hasColumnMatches: columnMatches,
-            })
+            if (shownIfFilteredSuspendedOnly && shownIfFilteredWithQuery) {
+              // Use table_type to categorize: 'T' = table, 'M' = matview, 'V' = view, 'L' = live view
+              // Default to 'T' (table) for backward compatibility with older servers
+              const tableType = table.table_type ?? "T"
+              const categoryIndex =
+                tableType === "M"
+                  ? 1
+                  : tableType === "V"
+                    ? 2
+                    : tableType === "L"
+                      ? 3
+                      : 0
+              acc[categoryIndex].push({
+                ...table,
+                hasColumnMatches: columnMatches,
+              })
+              return acc
+            }
             return acc
-          }
-          return acc
-        },
-        [[], [], []] as (QuestDB.Table & { hasColumnMatches: boolean })[][],
-      )
-      .map((tables) =>
-        tables.sort((a, b) =>
-          a.table_name.toLowerCase().localeCompare(b.table_name.toLowerCase()),
-        ),
-      )
-  }, [tables, query, filterSuspendedOnly, allColumns])
+          },
+          [[], [], [], []] as (QuestDB.Table & {
+            hasColumnMatches: boolean
+          })[][],
+        )
+        .map((tables) =>
+          tables.sort((a, b) =>
+            a.table_name
+              .toLowerCase()
+              .localeCompare(b.table_name.toLowerCase()),
+          ),
+        )
+    }, [tables, query, filterSuspendedOnly, allColumns])
 
   const flattenedItems = useMemo(() => {
     return Object.values(schemaTree).reduce((acc, node) => {
@@ -273,35 +282,23 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   const getTableSchema = async (
     tableName: string,
-    kind: "table" | "matview" | "view",
+    kind: TableKind,
   ): Promise<string | null> => {
     try {
-      const response =
-        kind === "matview"
-          ? await quest.showMatViewDDL(tableName)
-          : kind === "view"
-            ? await quest.showViewDDL(tableName)
-            : await quest.showTableDDL(tableName)
+      const response = await quest.showDDL(tableName, kind)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
         return response.data[0].ddl
       }
     } catch (_error) {
-      const kindLabel =
-        kind === "matview"
-          ? "materialized view"
-          : kind === "view"
-            ? "view"
-            : "table"
-      toast.error(`Cannot fetch schema for ${kindLabel} '${tableName}'`)
+      toast.error(
+        `Cannot fetch schema for ${getTableKindLabel(kind).toLowerCase()} '${tableName}'`,
+      )
     }
     return null
   }
 
-  const handleCopyQuery = async (
-    tableName: string,
-    kind: "table" | "matview" | "view",
-  ) => {
+  const handleCopyQuery = async (tableName: string, kind: TableKind) => {
     void trackEvent(ConsoleEvent.SCHEMA_CONTEXT_COPY_DDL, { kind })
     const schema = await getTableSchema(tableName, kind)
     if (schema) {
@@ -543,20 +540,22 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       if (
         item.id === TABLES_GROUP_KEY ||
         item.id === MATVIEWS_GROUP_KEY ||
-        item.id === VIEWS_GROUP_KEY
+        item.id === VIEWS_GROUP_KEY ||
+        item.id === LIVEVIEWS_GROUP_KEY
       ) {
-        const isTable = item.id === TABLES_GROUP_KEY
-        const isMatView = item.id === MATVIEWS_GROUP_KEY
-        const isEmpty = isTable
-          ? regularTables.length === 0
-          : isMatView
-            ? matViewTables.length === 0
-            : viewTables.length === 0
-        const hookLabel = isTable
-          ? "tables"
-          : isMatView
-            ? "materialized-views"
-            : "views"
+        const groupTables = {
+          [TABLES_GROUP_KEY]: regularTables,
+          [MATVIEWS_GROUP_KEY]: matViewTables,
+          [VIEWS_GROUP_KEY]: viewTables,
+          [LIVEVIEWS_GROUP_KEY]: liveViewTables,
+        }[item.id]
+        const isEmpty = groupTables.length === 0
+        const hookLabel = {
+          [TABLES_GROUP_KEY]: "tables",
+          [MATVIEWS_GROUP_KEY]: "materialized-views",
+          [VIEWS_GROUP_KEY]: "views",
+          [LIVEVIEWS_GROUP_KEY]: "live-views",
+        }[item.id]
         return (
           <SectionHeader
             $disabled={isEmpty}
@@ -589,9 +588,13 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       if (
         item.kind === "table" ||
         item.kind === "matview" ||
-        item.kind === "view"
+        item.kind === "view" ||
+        item.kind === "liveview"
       ) {
         const canSuspend = item.kind !== "view" // Views cannot be suspended
+        const liveViewFailure = item.liveViewData
+          ? getLiveViewFailure(item.liveViewData)
+          : null
         const handleOpenDetailsDrawer = () => {
           if (
             activeSidebar?.type === "tableDetails" &&
@@ -606,11 +609,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
           dispatch(
             actions.console.pushSidebarHistory({
               type: "tableDetails",
-              payload: {
-                tableName: item.name,
-                isMatView: item.kind === "matview",
-                isView: item.kind === "view",
-              },
+              payload: createTableDetailsTarget(
+                item.name,
+                item.kind as TableKind,
+              ),
             }),
           )
           setTimeout(() => setFocusedIndex(index))
@@ -645,14 +647,15 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                     errors={[
                       ...(item.matViewData?.view_status === "invalid"
                         ? [
-                            `Materialized view is invalid${item.matViewData?.invalidation_reason && `: ${item.matViewData?.invalidation_reason}`}`,
+                            `Materialized view is invalid${item.matViewData.invalidation_reason ? `: ${item.matViewData.invalidation_reason}` : ""}`,
                           ]
                         : []),
                       ...(item.viewData?.view_status === "invalid"
                         ? [
-                            `View is invalid${item.viewData?.invalidation_reason && `: ${item.viewData?.invalidation_reason}`}`,
+                            `View is invalid${item.viewData.invalidation_reason ? `: ${item.viewData.invalidation_reason}` : ""}`,
                           ]
                         : []),
+                      ...(liveViewFailure ? [liveViewFailure.message] : []),
                       ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
@@ -679,10 +682,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                 <MenuItem
                   data-hook="table-context-menu-copy-schema"
                   onClick={async () =>
-                    await handleCopyQuery(
-                      item.name,
-                      item.kind as "table" | "matview" | "view",
-                    )
+                    await handleCopyQuery(item.name, item.kind as TableKind)
                   }
                   icon={<FileCopy size={16} />}
                 >
@@ -751,7 +751,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       await handleExplainSchema(
                         item.table.id,
                         item.name,
-                        item.kind as "table" | "matview" | "view",
+                        item.kind as TableKind,
                         {
                           partitionBy: item.partitionBy,
                           walEnabled: item.walEnabled,
@@ -816,6 +816,7 @@ const VirtualTables: FC<VirtualTablesProps> = ({
       regularTables,
       matViewTables,
       viewTables,
+      liveViewTables,
       toggleNodeExpansion,
       openedContextMenu,
       openedSuspensionDialog,
@@ -826,98 +827,66 @@ const VirtualTables: FC<VirtualTablesProps> = ({
 
   useEffect(() => {
     if (state.view === View.ready) {
+      const createGroupNode = (
+        groupKey: string,
+        groupName: string,
+        groupTables: (QuestDB.Table & { hasColumnMatches: boolean })[],
+        kind: TableKind,
+      ): TreeNode => ({
+        id: groupKey,
+        kind: "folder",
+        name: `${groupName} (${groupTables.length})`,
+        isExpanded:
+          groupTables.length === 0 ? false : getSectionExpanded(groupKey),
+        children: groupTables.map((table) => {
+          const node = createTableNode(
+            table,
+            groupKey,
+            kind,
+            materializedViews,
+            views,
+            liveViews,
+            allColumns[table.table_name] ?? [],
+          )
+          if (table.hasColumnMatches) {
+            node.isExpanded = true
+            // Also mark the columns folder as expanded (but not persisted)
+            const columnsFolder = node.children.find((child) =>
+              child.id.endsWith(":columns"),
+            )
+            if (columnsFolder) {
+              columnsFolder.isExpanded = true
+            }
+          }
+          return node
+        }),
+      })
+
       const newTree: SchemaTree = {
-        [TABLES_GROUP_KEY]: {
-          id: TABLES_GROUP_KEY,
-          kind: "folder",
-          name: `Tables (${regularTables.length})`,
-          isExpanded:
-            regularTables.length === 0
-              ? false
-              : getSectionExpanded(TABLES_GROUP_KEY),
-          children: regularTables.map((table) => {
-            const node = createTableNode(
-              table,
-              TABLES_GROUP_KEY,
-              false,
-              false,
-              materializedViews,
-              views,
-              allColumns[table.table_name] ?? [],
-            )
-            if (table.hasColumnMatches) {
-              node.isExpanded = true
-              // Also mark the columns folder as expanded (but not persisted)
-              const columnsFolder = node.children.find((child) =>
-                child.id.endsWith(":columns"),
-              )
-              if (columnsFolder) {
-                columnsFolder.isExpanded = true
-              }
-            }
-            return node
-          }),
-        },
-        [MATVIEWS_GROUP_KEY]: {
-          id: MATVIEWS_GROUP_KEY,
-          kind: "folder",
-          name: `Materialized views (${matViewTables.length})`,
-          isExpanded:
-            matViewTables.length === 0
-              ? false
-              : getSectionExpanded(MATVIEWS_GROUP_KEY),
-          children: matViewTables.map((table) => {
-            const node = createTableNode(
-              table,
-              MATVIEWS_GROUP_KEY,
-              true,
-              false,
-              materializedViews,
-              views,
-              allColumns[table.table_name] ?? [],
-            )
-            if (table.hasColumnMatches) {
-              node.isExpanded = true
-              const columnsFolder = node.children.find((child) =>
-                child.id.endsWith(":columns"),
-              )
-              if (columnsFolder) {
-                columnsFolder.isExpanded = true
-              }
-            }
-            return node
-          }),
-        },
-        [VIEWS_GROUP_KEY]: {
-          id: VIEWS_GROUP_KEY,
-          kind: "folder",
-          name: `Views (${viewTables.length})`,
-          isExpanded:
-            viewTables.length === 0
-              ? false
-              : getSectionExpanded(VIEWS_GROUP_KEY),
-          children: viewTables.map((table) => {
-            const node = createTableNode(
-              table,
-              VIEWS_GROUP_KEY,
-              false,
-              true,
-              materializedViews,
-              views,
-              allColumns[table.table_name] ?? [],
-            )
-            if (table.hasColumnMatches) {
-              node.isExpanded = true
-              const columnsFolder = node.children.find((child) =>
-                child.id.endsWith(":columns"),
-              )
-              if (columnsFolder) {
-                columnsFolder.isExpanded = true
-              }
-            }
-            return node
-          }),
-        },
+        [TABLES_GROUP_KEY]: createGroupNode(
+          TABLES_GROUP_KEY,
+          "Tables",
+          regularTables,
+          "table",
+        ),
+        [MATVIEWS_GROUP_KEY]: createGroupNode(
+          MATVIEWS_GROUP_KEY,
+          "Materialized views",
+          matViewTables,
+          "matview",
+        ),
+        [LIVEVIEWS_GROUP_KEY]: createGroupNode(
+          LIVEVIEWS_GROUP_KEY,
+          "Live views",
+          liveViewTables,
+          "liveview",
+        ),
+        [VIEWS_GROUP_KEY]: createGroupNode(
+          VIEWS_GROUP_KEY,
+          "Views",
+          viewTables,
+          "view",
+        ),
       }
 
       fetchedSymbolsRef.current.clear()
@@ -928,9 +897,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
     regularTables,
     matViewTables,
     viewTables,
+    liveViewTables,
     materializedViews,
     views,
-
+    liveViews,
     allColumns,
   ])
 

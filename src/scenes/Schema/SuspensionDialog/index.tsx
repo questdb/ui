@@ -10,7 +10,7 @@ import {
   Input,
   CopyButton,
 } from "../../../components"
-import { getTableKindLabel } from "../VirtualTables"
+import { getTableKindLabel } from "../../../utils/questdb/types"
 import { Undo, CheckCircle, Database2, Files } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -88,7 +88,7 @@ const GENERIC_ERROR_TEXT = "Error restarting transaction"
 type Props = {
   tableName: string
   open: boolean
-  kind: "table" | "matview" | "view"
+  kind: QuestDB.TableKind
   onOpenChange: (open: boolean) => void
 }
 
@@ -143,7 +143,13 @@ export const SuspensionDialog = ({
     setIsSubmitting(true)
     setError(undefined)
     const escapedName = tableName.replace(/'/g, "''")
-    const queryStart = `ALTER ${kind === "matview" ? "MATERIALIZED VIEW" : "TABLE"}`
+    const queryStart = `ALTER ${
+      kind === "matview"
+        ? "MATERIALIZED VIEW"
+        : kind === "liveview"
+          ? "LIVE VIEW"
+          : "TABLE"
+    }`
     try {
       const response = await quest.query(
         `${queryStart} '${escapedName}' RESUME WAL${

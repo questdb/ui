@@ -44,7 +44,7 @@ export type Timings = {
 
 export type Explain = { jitCompiled: boolean }
 
-export type DatasetType = Array<boolean | string | number>
+export type DatasetType = Array<Value | null>
 
 export type RawDqlResult = {
   columns: ColumnDefinition[]
@@ -166,14 +166,28 @@ export type ValidateQueryResult =
 
 export type PartitionBy = "HOUR" | "DAY" | "WEEK" | "MONTH" | "YEAR" | "NONE"
 
-export type TableType = "T" | "M" | "V" // Table | MaterializedView | View
+export type TableType = "T" | "M" | "V" | "L" // Table | MaterializedView | View | LiveView
 
-export type TableKind = "table" | "matview" | "view"
+export type TableKind = "table" | "matview" | "view" | "liveview"
 
 export const getTableKind = (table: Table): TableKind => {
   if (table.matView || table.table_type === "M") return "matview"
   if (table.table_type === "V") return "view"
+  if (table.table_type === "L") return "liveview"
   return "table"
+}
+
+export const getTableKindLabel = (kind: TableKind): string => {
+  switch (kind) {
+    case "matview":
+      return "Materialized view"
+    case "view":
+      return "View"
+    case "liveview":
+      return "Live view"
+    default:
+      return "Table"
+  }
 }
 
 export type Table = {
@@ -189,32 +203,32 @@ export type Table = {
   table_type?: TableType // Optional for backward compatibility with older servers
   directoryName: string
   maxUncommittedRows: number
-  o3MaxLag: number
+  o3MaxLag: bigint
   table_suspended: boolean
-  table_row_count: number | null
+  table_row_count: bigint | null
   table_last_write_timestamp: string | null
   table_max_timestamp: string | null
-  table_txn: number | null
+  table_txn: bigint | null
   table_memory_pressure_level: number | null
-  wal_pending_row_count: number | null
-  wal_txn: number | null
-  wal_tx_count: number | null
+  wal_pending_row_count: bigint | null
+  wal_txn: bigint | null
+  wal_tx_count: bigint | null
   wal_max_timestamp: string | null
-  wal_dedup_row_count_since_start: number | null
-  table_write_amp_count: number | null
+  wal_dedup_row_count_since_start: bigint | null
+  table_write_amp_count: bigint | null
   table_write_amp_p50: number | null
   table_write_amp_p90: number | null
   table_write_amp_p99: number | null
   table_write_amp_max: number | null
-  table_merge_rate_count: number | null
-  table_merge_rate_p50: number | null
-  table_merge_rate_p90: number | null
-  table_merge_rate_p99: number | null
-  table_merge_rate_max: number | null
-  wal_tx_size_p50: number | null
-  wal_tx_size_p90: number | null
-  wal_tx_size_p99: number | null
-  wal_tx_size_max: number | null
+  table_merge_rate_count: bigint | null
+  table_merge_rate_p50: bigint | null
+  table_merge_rate_p90: bigint | null
+  table_merge_rate_p99: bigint | null
+  table_merge_rate_max: bigint | null
+  wal_tx_size_p50: bigint | null
+  wal_tx_size_p90: bigint | null
+  wal_tx_size_p99: bigint | null
+  wal_tx_size_max: bigint | null
 }
 
 export type View = {
@@ -271,8 +285,8 @@ export type MaterializedView = {
   invalidation_reason: string | null
   view_status: "valid" | "refreshing" | "invalid"
   refresh_period_hi: string | null
-  refresh_base_table_txn: number
-  base_table_txn: number
+  refresh_base_table_txn: bigint
+  base_table_txn: bigint
   refresh_limit: number
   refresh_limit_unit: string | null
   timer_time_zone: string | null
@@ -283,6 +297,36 @@ export type MaterializedView = {
   period_length_unit: string | null
   period_delay: number
   period_delay_unit: string | null
+}
+
+export type LiveView = {
+  view_name: string
+  base_table_name: string | null
+  view_sql: string | null
+  view_table_dir_name: string
+  view_status:
+    | "creating"
+    | "active"
+    | "seeding"
+    | "invalid"
+    | "dropping"
+    | "version_unsupported"
+    | "state_unreadable"
+  invalidation_reason: string | null
+  flush_every_interval: bigint | null
+  flush_every_interval_unit: string | null
+  in_memory_interval: bigint | null
+  in_memory_interval_unit: string | null
+  view_lower_bound_timestamp: string | null
+  lag_seqtxn: bigint | null
+  lag_micros: bigint | null
+  writer_stall_micros: bigint | null
+  in_mem_rows: bigint | null
+  in_mem_bytes: bigint | null
+  below_lower_bound_count: bigint | null
+  o3_rejected_count: bigint | null
+  last_processed_seqtxn: bigint | null
+  seed_target_seqtxn: bigint | null
 }
 
 export type Column = {

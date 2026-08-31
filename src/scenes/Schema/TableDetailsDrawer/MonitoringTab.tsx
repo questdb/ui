@@ -12,17 +12,24 @@ import {
   ArrowUpRightIcon,
   ArrowDownRightIcon,
   ArrowRightIcon,
+  TimerIcon,
+  MemoryIcon,
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
 import { Badge, Box, CopyButton, Text, Tooltip } from "../../../components"
-import type { Table, MaterializedView } from "../../../utils/questdb/types"
+import { type Table } from "../../../utils/questdb/types"
+import type { TableKindData } from "./types"
 import {
   formatRelativeTimestamp,
   formatMemoryPressure,
   formatRowCount,
+  formatMicrosDuration,
+  formatBytes,
+  formatTxnCount,
 } from "./utils"
 import {
   ISSUE_DOCS_URLS,
+  LIVE_VIEW_ISSUE_GUIDANCE,
   type HealthStatus,
   type HealthSeverity,
   type HealthIssue,
@@ -39,15 +46,19 @@ import {
   CaretIcon,
 } from "./shared-styles"
 
+const BIGINT_ZERO = BigInt(0)
+const BIGINT_ONE = BigInt(1)
+
 export interface MonitoringTabProps {
   tableData: Table
-  matViewData: MaterializedView | null
-  isMatView: boolean
+  kindData: TableKindData
+  isLiveViewLoadFailure: boolean
   healthStatus: HealthStatus | null
   criticalIssues: HealthIssue[]
   performanceWarnings: HealthIssue[]
   isIngestionActive: boolean
   isIngestionDisabled: boolean
+  baseTableName: string | undefined
   baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
   walExpanded: boolean
   onWalExpandedChange: (expanded: boolean) => void
@@ -55,7 +66,7 @@ export interface MonitoringTabProps {
   onAskAI: (issue: HealthIssue) => void
 }
 
-const RowCountIndicatorInner = styled.div<{ $isMatView?: boolean }>`
+const RowCountIndicatorInner = styled.div<{ $attachedToStatus?: boolean }>`
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -65,8 +76,8 @@ const RowCountIndicatorInner = styled.div<{ $isMatView?: boolean }>`
   width: 100%;
   font-size: ${({ theme }) => theme.fontSize.md};
   color: ${({ theme }) => theme.color.contentPrimary};
-  ${({ $isMatView }) =>
-    $isMatView &&
+  ${({ $attachedToStatus }) =>
+    $attachedToStatus &&
     css`
       border-bottom-left-radius: 0 !important;
       border-bottom-right-radius: 0 !important;
@@ -84,15 +95,15 @@ const TimestampUnderline = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-const MetricsGrid = styled.div<{ $isMatView?: boolean }>`
+const MetricsGrid = styled.div<{ $attachedToRowCount?: boolean }>`
   width: 100%;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.2rem;
   border-radius: 0.5rem;
   overflow: hidden;
-  ${({ $isMatView }) =>
-    $isMatView &&
+  ${({ $attachedToRowCount }) =>
+    $attachedToRowCount &&
     css`
       border-top-left-radius: 0 !important;
       border-top-right-radius: 0 !important;
@@ -124,21 +135,29 @@ const MetricValue = styled(Text).attrs({
   white-space: nowrap;
 `
 
-const TwoColumnGrid = styled.div`
+const ConfigGrid = styled.div<{ $columns: number }>`
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
   gap: 1rem;
   padding: 0 1rem;
 `
 
-const ConfigItem = styled(Box).attrs<{ $background?: string }>({
+const ConfigItem = styled(Box).attrs<{
+  $background?: string
+  $fullWidth?: boolean
+}>({
   flexDirection: "column",
   gap: "0.5rem",
   align: "flex-start",
-})<{ $background?: string }>`
+})<{ $background?: string; $fullWidth?: boolean }>`
   background: ${({ $background }) => $background};
   min-width: 0;
   overflow: hidden;
+  ${({ $fullWidth }) =>
+    $fullWidth &&
+    css`
+      grid-column: 1 / -1;
+    `}
 `
 
 const RateText = styled(Text)`
@@ -251,6 +270,37 @@ export const HELPER_TEXT = {
       </Box>
     </>
   ),
+  liveViewLag: (
+    <Text color="contentSecondary">
+      Base-table transactions the view has not yet applied and flushed. This
+      normally rises between flushes and drops when a flush completes.
+    </Text>
+  ),
+  liveViewSinceLastFlush: (
+    <>
+      <Text color="contentSecondary">
+        Time since the last successful flush. This measures flush activity, not
+        data staleness; it keeps growing while the base table is idle.
+      </Text>
+    </>
+  ),
+  liveViewInMemory: (
+    <>
+      <Text color="contentSecondary">
+        Rows in Memory is the live row count of the in-memory tier and drops as
+        rows age out. Memory Footprint is a peak high-water mark that does not
+        shrink after a burst.
+      </Text>
+    </>
+  ),
+  liveViewDroppedRows: (
+    <>
+      <Text color="contentSecondary">
+        Rows the START FROM boundary excluded from the view, split into in-order
+        and out-of-order arrivals. Counters reset on restart.
+      </Text>
+    </>
+  ),
   transactionLag: (
     <>
       <Text color="contentSecondary">
@@ -304,23 +354,33 @@ const getTrendAssets = (
   }
 }
 
-const formatRate = (rate: number, field: string): string => {
-  const absRate = Math.abs(rate)
-  const unit = field === "transactionLag" ? "transactions/s" : "rows/s"
-
+const formatRateMagnitude = (absRate: number): string => {
   if (absRate >= 1_000_000_000_000) {
-    return `${(absRate / 1_000_000_000_000).toFixed(1)}T ${unit}`
+    return `${(absRate / 1_000_000_000_000).toFixed(1)}T`
   }
   if (absRate >= 1_000_000_000) {
-    return `${(absRate / 1_000_000_000).toFixed(1)}B ${unit}`
+    return `${(absRate / 1_000_000_000).toFixed(1)}B`
   }
   if (absRate >= 1_000_000) {
-    return `${(absRate / 1_000_000).toFixed(1)}M ${unit}`
+    return `${(absRate / 1_000_000).toFixed(1)}M`
   }
   if (absRate >= 1_000) {
-    return `${(absRate / 1_000).toFixed(1)}K ${unit}`
+    return `${(absRate / 1_000).toFixed(1)}K`
   }
-  return `${Math.round(absRate)} ${unit}`
+  return `${Math.round(absRate)}`
+}
+
+const formatRate = (rate: number, field: string): string => {
+  const unit = field === "transactionLag" ? "transactions/s" : "rows/s"
+  const magnitude = formatRateMagnitude(Math.abs(rate))
+  const sign = magnitude === "0" ? "" : rate > 0 ? "+" : "-"
+  return `${sign}${magnitude} ${unit}`
+}
+
+const LIVE_VIEW_FAILURE_STATUS_LABELS: Record<string, string> = {
+  invalid: "Invalid",
+  version_unsupported: "Version unsupported",
+  state_unreadable: "State unreadable",
 }
 
 const ConfigItemWithHealth = ({
@@ -330,6 +390,8 @@ const ConfigItemWithHealth = ({
   issue,
   showTrend,
   trend,
+  boxedValue,
+  fullWidth,
   dataHook,
 }: {
   label: string
@@ -338,6 +400,8 @@ const ConfigItemWithHealth = ({
   issue?: HealthIssue
   showTrend?: boolean
   trend?: TrendIndicator
+  boxedValue?: boolean
+  fullWidth?: boolean
   dataHook?: string
 }) => {
   const theme = useTheme()
@@ -346,6 +410,7 @@ const ConfigItemWithHealth = ({
     : undefined
 
   const iconColor = issue ? getSeverityColor(theme, issue.severity) : undefined
+  const isWarningTrend = trend?.direction === "increasing"
 
   const trendValue = (
     <TrendValueBox
@@ -355,20 +420,12 @@ const ConfigItemWithHealth = ({
     >
       <TrendValueText $color={trendAssets?.color}>{value}</TrendValueText>
       {showTrend && trend && (
-        <TrendBadge
-          variant={trend.direction === "increasing" ? "warning" : "success"}
-          size="sm"
-        >
+        <TrendBadge variant={isWarningTrend ? "warning" : "success"} size="sm">
           {trendAssets?.icon}
           <RateText
-            color={
-              trend.direction === "increasing"
-                ? "statusWarning"
-                : "statusSuccess"
-            }
+            color={isWarningTrend ? "statusWarning" : "statusSuccess"}
             size="xs"
           >
-            {trend.rate > 0 ? "+" : "-"}
             {formatRate(trend.rate, trend.field)}
           </RateText>
         </TrendBadge>
@@ -377,7 +434,7 @@ const ConfigItemWithHealth = ({
   )
 
   return (
-    <ConfigItem>
+    <ConfigItem $fullWidth={fullWidth}>
       <Box gap="0.5rem" align="center">
         <Text color="contentSecondary" size="sm">
           {label}
@@ -397,6 +454,12 @@ const ConfigItemWithHealth = ({
         ) : (
           trendValue
         )
+      ) : boxedValue ? (
+        <TrendValueBox data-hook={dataHook}>
+          <TrendValueText $color={theme.color.contentPrimary}>
+            {value}
+          </TrendValueText>
+        </TrendValueBox>
       ) : (
         <Box>
           <Text color="contentPrimary">{value}</Text>
@@ -408,13 +471,14 @@ const ConfigItemWithHealth = ({
 
 export const MonitoringTab = ({
   tableData,
-  matViewData,
-  isMatView,
+  kindData,
+  isLiveViewLoadFailure,
   healthStatus,
   criticalIssues,
   performanceWarnings,
   isIngestionActive,
   isIngestionDisabled,
+  baseTableName,
   baseTableStatus,
   walExpanded,
   onWalExpandedChange,
@@ -422,13 +486,19 @@ export const MonitoringTab = ({
   onAskAI,
 }: MonitoringTabProps) => {
   const theme = useTheme()
+  const matView = kindData.kind === "matview" ? kindData.matView : null
+  const liveView = kindData.kind === "liveview" ? kindData.liveView : null
   const lastWriteTimestamp = (() => {
     if (!tableData.table_last_write_timestamp) return null
     const date = new Date(tableData.table_last_write_timestamp)
     if (isNaN(date.getTime()) || date.getTime() === 0) return null
     return date.toISOString()
   })()
-
+  const hasStatusSection = matView !== null || liveView !== null
+  const hasLiveViewDroppedRows =
+    liveView !== null &&
+    ((liveView.below_lower_bound_count ?? BIGINT_ZERO) > BIGINT_ZERO ||
+      (liveView.o3_rejected_count ?? BIGINT_ZERO) > BIGINT_ZERO)
   return (
     <>
       {/* Critical Error Banners */}
@@ -440,10 +510,10 @@ export const MonitoringTab = ({
                 key={issue.id}
                 title={issue.message}
                 description={
-                  issue.field === "viewStatus" &&
-                  matViewData?.invalidation_reason
-                    ? matViewData.invalidation_reason
-                    : undefined
+                  LIVE_VIEW_ISSUE_GUIDANCE[issue.id] ??
+                  (issue.field === "viewStatus" && matView?.invalidation_reason
+                    ? matView.invalidation_reason
+                    : undefined)
                 }
                 showResumeButton={issue.field === "walStatus"}
                 onResume={
@@ -462,7 +532,7 @@ export const MonitoringTab = ({
       {/* Row Count Indicator */}
       <Section $squishBottom>
         <RowCountIndicatorInner
-          $isMatView={isMatView}
+          $attachedToStatus={hasStatusSection}
           data-hook="table-details-row-count"
         >
           <RowCountBold data-hook="table-details-row-count-value">
@@ -492,42 +562,15 @@ export const MonitoringTab = ({
         </RowCountIndicatorInner>
       </Section>
 
-      {/* Matview Status Section */}
-      {isMatView && matViewData && (
+      {/* View Status Section (matview and live view) */}
+      {hasStatusSection && (
         <Section $squishTop>
-          <MetricsGrid $isMatView={isMatView}>
+          <MetricsGrid $attachedToRowCount>
             <MetricCard data-hook="table-details-view-status">
               <MetricLabel>View Status</MetricLabel>
               <Box gap="0.5rem" align="center">
-                {matViewData.view_status === "valid" ? (
-                  <>
-                    <CheckCircleIcon
-                      size={16}
-                      weight="fill"
-                      color={theme.color.statusSuccess}
-                    />
-                    <Text color="statusSuccess">Valid</Text>
-                  </>
-                ) : matViewData.view_status === "refreshing" ? (
-                  <MetricValue>Refreshing</MetricValue>
-                ) : (
-                  <>
-                    <XSquareIcon
-                      size={16}
-                      weight="fill"
-                      color={theme.color.statusDanger}
-                    />
-                    <Text color="statusDanger">Invalid</Text>
-                  </>
-                )}
-              </Box>
-            </MetricCard>
-
-            <MetricCard data-hook="table-details-base-table-status">
-              <MetricLabel>Base Table Status</MetricLabel>
-              <MetricValue>
-                <Box gap="0.5rem" align="center">
-                  {baseTableStatus === "Valid" && (
+                {matView ? (
+                  matView.view_status === "valid" ? (
                     <>
                       <CheckCircleIcon
                         size={16}
@@ -536,9 +579,67 @@ export const MonitoringTab = ({
                       />
                       <Text color="statusSuccess">Valid</Text>
                     </>
-                  )}
-                  {(baseTableStatus === "Suspended" ||
-                    baseTableStatus === "Dropped") && (
+                  ) : matView.view_status === "refreshing" ? (
+                    <MetricValue>Refreshing</MetricValue>
+                  ) : (
+                    <>
+                      <XSquareIcon
+                        size={16}
+                        weight="fill"
+                        color={theme.color.statusDanger}
+                      />
+                      <Text color="statusDanger">Invalid</Text>
+                    </>
+                  )
+                ) : liveView ? (
+                  liveView.view_status === "active" ? (
+                    <>
+                      <CheckCircleIcon
+                        size={16}
+                        weight="fill"
+                        color={theme.color.statusSuccess}
+                      />
+                      <Text color="statusSuccess">Active</Text>
+                    </>
+                  ) : liveView.view_status === "invalid" ||
+                    liveView.view_status === "version_unsupported" ||
+                    liveView.view_status === "state_unreadable" ? (
+                    <>
+                      <XSquareIcon
+                        size={16}
+                        weight="fill"
+                        color={theme.color.statusDanger}
+                      />
+                      <Text color="statusDanger">
+                        {LIVE_VIEW_FAILURE_STATUS_LABELS[liveView.view_status]}
+                      </Text>
+                    </>
+                  ) : (
+                    <MetricValue>
+                      {liveView.view_status.charAt(0).toUpperCase() +
+                        liveView.view_status.slice(1)}
+                    </MetricValue>
+                  )
+                ) : null}
+              </Box>
+            </MetricCard>
+
+            <MetricCard data-hook="table-details-base-table-status">
+              <MetricLabel>Base Table Status</MetricLabel>
+              <MetricValue>
+                <Box gap="0.5rem" align="center">
+                  {!baseTableName || baseTableStatus === null ? (
+                    <Text color="contentSecondary">Unknown</Text>
+                  ) : baseTableStatus === "Valid" ? (
+                    <>
+                      <CheckCircleIcon
+                        size={16}
+                        weight="fill"
+                        color={theme.color.statusSuccess}
+                      />
+                      <Text color="statusSuccess">Valid</Text>
+                    </>
+                  ) : (
                     <>
                       <XSquareIcon
                         size={16}
@@ -553,6 +654,71 @@ export const MonitoringTab = ({
             </MetricCard>
           </MetricsGrid>
         </Section>
+      )}
+
+      {liveView && !isLiveViewLoadFailure && (
+        <>
+          <Section data-hook="table-details-live-view-freshness">
+            <SectionTitleContainer>
+              <TimerIcon size="16px" />
+              <SectionTitle>Freshness</SectionTitle>
+            </SectionTitleContainer>
+            <ConfigGrid $columns={3}>
+              <ConfigItemWithHealth
+                label="Unflushed Transactions"
+                helperText={HELPER_TEXT.liveViewLag}
+                value={formatTxnCount(liveView.lag_seqtxn)}
+                boxedValue
+              />
+              <ConfigItemWithHealth
+                label="Since Last Flush"
+                helperText={HELPER_TEXT.liveViewSinceLastFlush}
+                value={
+                  liveView.lag_micros == null
+                    ? "Never"
+                    : formatMicrosDuration(liveView.lag_micros)
+                }
+                boxedValue
+              />
+              <ConfigItemWithHealth
+                label="Writer Stall"
+                value={
+                  liveView.writer_stall_micros == null
+                    ? "Unknown"
+                    : formatMicrosDuration(liveView.writer_stall_micros)
+                }
+                issue={healthStatus?.fieldIssues.get("writerStall")}
+                boxedValue
+              />
+            </ConfigGrid>
+          </Section>
+
+          <Section data-hook="table-details-live-view-memory">
+            <SectionTitleContainer>
+              <MemoryIcon size="16px" />
+              <SectionTitle>In-Memory Tier</SectionTitle>
+            </SectionTitleContainer>
+            <ConfigGrid $columns={2}>
+              <ConfigItemWithHealth
+                label="Rows in Memory"
+                helperText={HELPER_TEXT.liveViewInMemory}
+                value={formatRowCount(liveView.in_mem_rows)}
+              />
+              <ConfigItemWithHealth
+                label="Memory Footprint (peak)"
+                value={formatBytes(liveView.in_mem_bytes)}
+              />
+              {hasLiveViewDroppedRows && (
+                <ConfigItemWithHealth
+                  label="Dropped Below Start From"
+                  helperText={HELPER_TEXT.liveViewDroppedRows}
+                  value={`${formatRowCount(liveView.below_lower_bound_count)} in-order · ${formatRowCount(liveView.o3_rejected_count)} out-of-order`}
+                  fullWidth
+                />
+              )}
+            </ConfigGrid>
+          </Section>
+        </>
       )}
 
       <Section>
@@ -578,7 +744,10 @@ export const MonitoringTab = ({
             </SectionTitleClickable>
             {walExpanded && (
               <DisabledOverlay $disabled={isIngestionDisabled}>
-                <TwoColumnGrid data-hook="table-details-ingestion-content">
+                <ConfigGrid
+                  $columns={2}
+                  data-hook="table-details-ingestion-content"
+                >
                   <ConfigItemWithHealth
                     label="Pending Rows"
                     helperText={HELPER_TEXT.pendingRows}
@@ -597,11 +766,13 @@ export const MonitoringTab = ({
                         tableData.table_txn == null
                       )
                         return "N/A"
-                      const lag = Math.max(
-                        0,
-                        (tableData.wal_txn ?? 0) - (tableData.table_txn ?? 0),
-                      )
-                      return `${lag} txn${lag === 1 ? "" : "s"}`
+                      const rawLag =
+                        (tableData.wal_txn ?? BIGINT_ZERO) -
+                        (tableData.table_txn ?? BIGINT_ZERO)
+                      const lag = rawLag > BIGINT_ZERO ? rawLag : BIGINT_ZERO
+                      return `${lag.toLocaleString()} txn${
+                        lag === BIGINT_ONE ? "" : "s"
+                      }`
                     })()}
                     issue={healthStatus?.fieldIssues.get("transactionLag")}
                     showTrend
@@ -662,7 +833,7 @@ export const MonitoringTab = ({
                     }
                     issue={healthStatus?.fieldIssues.get("mergeRate")}
                   />
-                </TwoColumnGrid>
+                </ConfigGrid>
               </DisabledOverlay>
             )}
           </>
