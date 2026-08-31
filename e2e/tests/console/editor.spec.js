@@ -2193,6 +2193,38 @@ describe("editor settings", () => {
     cy.getByDataHook("editor-settings-modal").should("not.exist")
   })
 
+  // Only the legacy "false" is asserted here: "true" migrates to the same
+  // "partial" the default already produces, so seeding it could not fail.
+  it("migrates a legacy disabled setting to Off on boot", () => {
+    // Given a console booting with the boolean a previous version persisted
+    // under the same key the mode enum now uses
+    cy.loadConsoleWithAuth(false, { "editor.runWithSelection": "false" })
+    cy.getEditorContent().should("be.visible")
+
+    // When the settings modal is opened
+    openEditorSettings()
+
+    // Then the legacy value migrated to Off rather than the partial default
+    cy.getByDataHook("editor-settings-run-with-selection").should(
+      "contain",
+      "Off",
+    )
+    cy.getByDataHook("editor-settings-cancel").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+
+    // And the selection is genuinely ignored, not merely labelled Off
+    const query = `select a from ${runWithSelectionTable}`
+    const startColumn = query.indexOf(runWithSelectionTable) + 1
+    cy.typeQueryDirectly(query)
+    cy.selectRange(
+      { lineNumber: 1, column: startColumn },
+      { lineNumber: 1, column: startColumn + runWithSelectionTable.length },
+    )
+    cy.getByDataHook("button-run-query").should("contain", "Run query")
+    cy.clickRunQuery()
+    cy.get("[data-hook='grid-header-name']").should("have.length", 1)
+  })
+
   it("resolves the selection per mode: partial fragment, complete query, ignored when off", () => {
     const table = runWithSelectionTable
     const query = `select a from ${table}`
