@@ -463,7 +463,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       const queryInCursor = getQueryFromCursor(editor)
       if (
         queryInCursor &&
-        (!selection || selection.isEmpty()) &&
+        (runWithSelectionModeRef.current === "off" ||
+          !selection ||
+          selection.isEmpty()) &&
         createQueryKeyFromRequest(editor, queryInCursor) ===
           createQueryKeyFromRequest(editor, query)
       ) {
