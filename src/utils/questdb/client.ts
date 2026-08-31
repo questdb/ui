@@ -35,7 +35,7 @@ import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export type QueryId = number
 
-const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
+export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
@@ -506,7 +506,7 @@ export class Client {
   }
 
   async showMaterializedViews(): Promise<QueryResult<MaterializedView>> {
-    return await this.queryCatalog<MaterializedView>("materialized_views();")
+    return await this.queryCatalog<MaterializedView>("materialized_views()")
   }
 
   async getMaterializedViewDetails(

@@ -40,8 +40,8 @@ import {
 import {
   calculateHealthStatus,
   detectIngestionActive,
+  getLiveViewIssueGuidance,
   isLiveViewLoadFailure,
-  LIVE_VIEW_ISSUE_GUIDANCE,
   MAX_TREND_SAMPLES,
   type TrendData,
   type HealthIssue,
@@ -334,7 +334,7 @@ export const TableDetailsDrawer = () => {
             ? {
                 source: "live_views()" as const,
                 data: kindData.liveView,
-                guidance: LIVE_VIEW_ISSUE_GUIDANCE[issue.id],
+                guidance: getLiveViewIssueGuidance(issue.id),
               }
             : undefined
 
@@ -396,7 +396,7 @@ export const TableDetailsDrawer = () => {
   const fetchViewData = useCallback(async () => {
     if (!isView) return
     try {
-      const escapedName = tableName.replace(/'/g, "''")
+      const escapedName = QuestDB.escapeSqlLiteral(tableName)
       const response = await quest.query<View>(
         `views() WHERE view_name = '${escapedName}'`,
       )
@@ -441,10 +441,7 @@ export const TableDetailsDrawer = () => {
       return
     }
     try {
-      const escapedName = baseTableName.replace(/'/g, "''")
-      const response = await quest.query<Table>(
-        `tables() WHERE table_name = '${escapedName}'`,
-      )
+      const response = await quest.getTableDetails(baseTableName)
       const baseTableExists =
         response.type === QuestDB.Type.DQL && response.data.length > 0
       const suspended = baseTableExists

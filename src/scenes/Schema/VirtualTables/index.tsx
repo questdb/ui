@@ -590,7 +590,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
         item.kind === "view" ||
         item.kind === "liveview"
       ) {
-        const canSuspend = item.kind !== "view" // Views cannot be suspended
+        // A view's WAL can suspend (its ALTER VIEW ... AS definition change is
+        // a WAL transaction), but no ALTER grammar can resume it
+        const suspendableKind = item.kind === "view" ? null : item.kind
+        const canSuspend = suspendableKind !== null
         const liveViewFailure = item.liveViewData
           ? getLiveViewFailure(item.liveViewData)
           : null
@@ -655,10 +658,10 @@ const VirtualTables: FC<VirtualTablesProps> = ({
                       ...(item.table?.table_suspended ? [`Suspended`] : []),
                     ]}
                   />
-                  {canSuspend && item.table?.table_suspended && (
+                  {suspendableKind && item.table?.table_suspended && (
                     <SuspensionDialog
                       tableName={item.name}
-                      kind={item.kind}
+                      kind={suspendableKind}
                       open={openedSuspensionDialog === item.id}
                       onOpenChange={(isOpen) => {
                         setOpenedSuspensionDialog(isOpen ? item.id : null)

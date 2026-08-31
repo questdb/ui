@@ -29,7 +29,7 @@ import {
 } from "./utils"
 import {
   ISSUE_DOCS_URLS,
-  LIVE_VIEW_ISSUE_GUIDANCE,
+  getLiveViewIssueGuidance,
   type HealthStatus,
   type HealthSeverity,
   type HealthIssue,
@@ -509,7 +509,7 @@ export const MonitoringTab = ({
                 key={issue.id}
                 title={issue.message}
                 description={
-                  LIVE_VIEW_ISSUE_GUIDANCE[issue.id] ??
+                  getLiveViewIssueGuidance(issue.id) ??
                   (issue.field === "viewStatus" && matView?.invalidation_reason
                     ? matView.invalidation_reason
                     : undefined)

@@ -88,7 +88,7 @@ const GENERIC_ERROR_TEXT = "Error restarting transaction"
 type Props = {
   tableName: string
   open: boolean
-  kind: QuestDB.TableKind
+  kind: Exclude<QuestDB.TableKind, "view">
   onOpenChange: (open: boolean) => void
 }
 
@@ -109,7 +109,7 @@ export const SuspensionDialog = ({
 
   const fetchWalTableData = useCallback(async () => {
     try {
-      const escapedName = tableName.replace(/'/g, "''")
+      const escapedName = QuestDB.escapeSqlLiteral(tableName)
       const response = await quest.query<QuestDB.WalTable>(
         `wal_tables() WHERE name = '${escapedName}'`,
       )
@@ -142,7 +142,7 @@ export const SuspensionDialog = ({
     void trackEvent(ConsoleEvent.SCHEMA_RESUME_WAL_SUBMIT)
     setIsSubmitting(true)
     setError(undefined)
-    const escapedName = tableName.replace(/'/g, "''")
+    const escapedName = QuestDB.escapeSqlLiteral(tableName)
     const queryStart = `ALTER ${
       kind === "matview"
         ? "MATERIALIZED VIEW"

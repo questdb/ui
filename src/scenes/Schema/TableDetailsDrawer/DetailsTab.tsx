@@ -174,7 +174,7 @@ export const DetailsTab = ({
     !isLiveViewLoadFailure &&
     (kindData.kind === "table" ||
       kindData.kind === "matview" ||
-      (kindData.kind === "liveview" && liveView !== null))
+      liveView !== null)
 
   return (
     <>
@@ -326,7 +326,7 @@ export const DetailsTab = ({
             <SectionTitle>Details</SectionTitle>
           </SectionTitleContainer>
 
-          {kindData.kind === "liveview" && liveView ? (
+          {liveView ? (
             /* Live view: 4 cards (2×2). TTL, dedup and refresh type do not apply. */
             <MetricsGrid $columns={2}>
               <MetricCard
@@ -374,7 +374,7 @@ export const DetailsTab = ({
                 </MetricValue>
               </MetricCard>
             </MetricsGrid>
-          ) : kindData.kind === "matview" && matView ? (
+          ) : matView ? (
             /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 2 : 3}>
               {hasTtl && (

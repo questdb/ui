@@ -72,7 +72,7 @@ export const useLiveViewMetadata = ({
     let timeoutId: number | null = null
     let timedOut = false
     try {
-      const escapedName = tableName.replace(/'/g, "''")
+      const escapedName = QuestDB.escapeSqlLiteral(tableName)
       const query = quest.queryRaw(
         `live_views() WHERE view_name = '${escapedName}'`,
         { cancellable: true },

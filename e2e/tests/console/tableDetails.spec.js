@@ -1047,7 +1047,6 @@ describe("TableDetailsDrawer", () => {
             query.includes(TEST_LIVE_VIEW)
           ) {
             oldTargetRequestStarted = true
-            req.alias = "staleLiveViewResponse"
             req.continue((res) => {
               mutateLiveViewResponse(res, {
                 view_status: "invalid",
@@ -1095,7 +1094,11 @@ describe("TableDetailsDrawer", () => {
         "222",
       )
 
-      cy.wait("@staleLiveViewResponse")
+      // The drawer aborts the in-flight stale request on target switch, so
+      // its delayed response may never arrive and cannot be cy.wait-ed on.
+      // Wait out the delay window instead: by now the stale response has
+      // either landed and been ignored, or its request died with the abort.
+      cy.wait(2000)
       cy.getByDataHook("table-details-name").should(
         "have.value",
         TEST_LIVE_VIEW_2,
@@ -1119,7 +1122,6 @@ describe("TableDetailsDrawer", () => {
         (req) => {
           if (injectEmpty && !emptyRequestStarted) {
             emptyRequestStarted = true
-            req.alias = "staleEmptyLiveViewResponse"
             req.continue((res) => {
               res.body.dataset = []
               res.body.count = 0
@@ -1146,7 +1148,9 @@ describe("TableDetailsDrawer", () => {
         .click()
         .should("have.attr", "data-selected", "true")
 
-      cy.wait("@staleEmptyLiveViewResponse")
+      // Same abort caveat as above: wait out the delay window, then assert
+      // the stale empty response did not close the newly opened sidebar.
+      cy.wait(2000)
       cy.getByDataHook("news-panel-button").should(
         "have.attr",
         "data-selected",
@@ -1307,7 +1311,9 @@ describe("TableDetailsDrawer", () => {
   })
 
   describe("live view dropped while the drawer is open", () => {
-    before(() => {
+    // beforeEach so a retry starts from a re-created live view: the test
+    // drops it mid-flow, and a before() would poison the second attempt.
+    beforeEach(() => {
       cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
       cy.createLiveView(TEST_LIVE_VIEW)
@@ -1325,8 +1331,9 @@ describe("TableDetailsDrawer", () => {
       // When
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
 
-      // Then
-      cy.getByDataHook("table-details-name").should("not.exist")
+      // Then: the drawer clears its target; the table selector stays
+      // rendered and empties so the user can pick another table.
+      cy.getByDataHook("table-details-name").should("have.value", "")
       cy.getByDataHook("table-details-toggle-button").should(
         "have.attr",
         "data-selected",

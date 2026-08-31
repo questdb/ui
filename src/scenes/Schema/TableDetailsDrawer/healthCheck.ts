@@ -22,11 +22,14 @@ export const ISSUE_DOCS_URLS: Record<string, string> = {
   Y7: LIVE_VIEWS_MONITORING_DOCS_URL, // Live view flush writer stalled
 }
 
-export const LIVE_VIEW_ISSUE_GUIDANCE: Record<string, string> = {
+const LIVE_VIEW_ISSUE_GUIDANCE: Record<LiveViewFailure["issueId"], string> = {
   R5: "Invalidation is permanent. Save the definition with SHOW CREATE LIVE VIEW, then drop and recreate the view. RESUME WAL does not recover an invalid live view.",
   R6: "The on-disk format is not readable by this server build, usually after a binary downgrade. Restore the newer binary and restart. If the binary is correct, the file header is damaged: drop and recreate the view. The view does not refresh until this is resolved.",
   R7: "The view state files are corrupt or missing, and automatic recovery failed. A restart does not fix this. Save the definition with SHOW CREATE LIVE VIEW, then drop and recreate the view. Existing rows stay queryable but frozen.",
 }
+
+export const getLiveViewIssueGuidance = (issueId: string): string | undefined =>
+  (LIVE_VIEW_ISSUE_GUIDANCE as Partial<Record<string, string>>)[issueId]
 
 export type HealthSeverity = "critical" | "warning" | "healthy" | "recovering"
 
