@@ -537,20 +537,29 @@ describe("run with selection modes", () => {
       expect(result.every((request) => !request.selection)).toBe(true)
     })
 
-    it("falls back to the cursor query when the selection is only whitespace", () => {
-      // Given a selection covering nothing but a space inside the statement
-      const editor = makeSingleLineEditor(TEXT, 3, {
-        startColumn: 7,
-        endColumn: 8,
-      })
+    it.each([
+      ["whitespace", { startColumn: 7, endColumn: 8 }],
+      ["a statement separator", { startColumn: 10, endColumn: 11 }],
+      ["a separator and whitespace", { startColumn: 10, endColumn: 12 }],
+    ])("runs nothing when the selection is only %s", (_label, selection) => {
+      // Given a selection carrying no statement content, with the cursor
+      // sitting inside the first statement
+      const editor = makeSingleLineEditor(TEXT, 3, selection)
 
       // When resolving the queries to run in each honouring mode
-      // Then the selection carries no statement content, so the run stays
-      // enabled on the cursor query instead of resolving to nothing
+      // Then neither mode falls back to the cursor query — a deliberate
+      // selection of nothing runnable runs nothing
+      expect(getQueriesToRun(editor, QUERY_OFFSETS, "partial")).toEqual([])
+      expect(getQueriesToRun(editor, QUERY_OFFSETS, "complete")).toEqual([])
+    })
+
+    it("still runs the cursor query when there is no selection at all", () => {
+      // Given a collapsed cursor inside the first statement
+      const editor = makeSingleLineEditor(TEXT, 3, null)
+
+      // When resolving the queries to run
+      // Then the cursor query runs, as it does with the mode off
       expect(getQueriesToRun(editor, QUERY_OFFSETS, "partial")).toEqual([
-        getQueryFromCursor(editor),
-      ])
-      expect(getQueriesToRun(editor, QUERY_OFFSETS, "complete")).toEqual([
         getQueryFromCursor(editor),
       ])
     })
@@ -765,7 +774,7 @@ describe("resolveSelectionRun", () => {
     })
   })
 
-  it("reports no selection when only whitespace is selected", () => {
+  it("blocks a whitespace-only selection", () => {
     // Given a selection covering the indentation of a statement, with the
     // cursor still inside that statement
     const text = "SELECT\n   1\nFROM long_sequence(1)"
@@ -777,27 +786,26 @@ describe("resolveSelectionRun", () => {
     })
 
     // When resolving the selection run in both honouring modes
-    // Then the selection is treated as absent, so the caller falls back to the
-    // cursor statement rather than refusing the run
+    // Then neither falls back to the cursor statement — the run is blocked
     expect(resolveSelectionRun(editor, "partial")).toEqual({
-      kind: "no-selection",
+      kind: "no-query",
     })
     expect(resolveSelectionRun(editor, "complete")).toEqual({
-      kind: "no-selection",
+      kind: "no-query",
     })
   })
 
-  it("reports no selection when only a statement separator is selected", () => {
+  it.each([
+    ["a statement separator", { startColumn: 10, endColumn: 11 }],
+    ["a separator and whitespace", { startColumn: 10, endColumn: 12 }],
+  ])("blocks a selection of only %s", (_label, selection) => {
     // Given a selection covering just the trailing semicolon
-    const editor = makeSingleLineEditor(TEXT, 3, {
-      startColumn: 10,
-      endColumn: 11,
-    })
+    const editor = makeSingleLineEditor(TEXT, 3, selection)
 
     // When resolving the selection run
-    // Then it carries no statement content, so it is not a selection run
+    // Then it carries no statement content, so the run is blocked
     expect(resolveSelectionRun(editor, "partial")).toEqual({
-      kind: "no-selection",
+      kind: "no-query",
     })
   })
 

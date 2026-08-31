@@ -2320,6 +2320,23 @@ describe("editor settings", () => {
     cy.getByDataHook("button-run-query").should("not.be.disabled")
   })
 
+  it("disables run while the selection covers only a statement separator", () => {
+    // Given two statements, the second of which drops a table
+    cy.typeQueryDirectly("select 1;\ndrop table if exists t;")
+
+    // When only the first statement's terminating semicolon and the newline
+    // are selected, leaving the caret inside the second statement
+    cy.selectRange({ lineNumber: 1, column: 9 }, { lineNumber: 2, column: 1 })
+
+    // Then the run button disables rather than targeting the statement the
+    // caret happens to sit in
+    cy.getByDataHook("button-run-query").should("be.disabled")
+
+    // And the keyboard shortcut runs nothing either
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("not.exist")
+  })
+
   it("resolves the notebook cell selection per mode: partial, complete, off", () => {
     const table = runWithSelectionTable
     const sql = `select a from ${table}; select 33`

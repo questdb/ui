@@ -604,11 +604,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     const selectionMode = runWithSelectionModeRef.current
     const selectedText = getSelectedText(editor)
-    const resolvesSelection = Boolean(
-      selectionMode !== "off" &&
-        selectedText &&
-        normalizeQueryText(selectedText),
-    )
+    const resolvesSelection = selectionMode !== "off" && Boolean(selectedText)
     const queries = resolvesSelection
       ? getQueriesToRun(editor, getStatementOffsets(editor), selectionMode, {
           queryOffsetsAreFresh: true,

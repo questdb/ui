@@ -109,6 +109,9 @@ export const stripSQLComments = (text: string): string =>
     return match
   })
 
+export const hasRunnableSelectionContent = (text: string): boolean =>
+  /[^\s;]/.test(stripSQLComments(text))
+
 export const getQueriesFromText = (text: string): string[] => {
   if (!text || !stripSQLComments(text)) return []
 
@@ -147,21 +150,17 @@ export const getQueriesToRun = (
 
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
-  const normalizedSelectedText = selectedText
-    ? normalizeQueryText(selectedText)
-    : ""
-  if (
-    selectionMode === "off" ||
-    !selection ||
-    !selectedText ||
-    !normalizedSelectedText
-  ) {
+  if (selectionMode === "off" || !selection || !selectedText) {
     const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
     }
     return []
   }
+  if (!hasRunnableSelectionContent(selectedText)) {
+    return []
+  }
+  const normalizedSelectedText = normalizeQueryText(selectedText)
   let selectionStartOffset = model.getOffsetAt(selection.getStartPosition())
   let selectionEndOffset = model.getOffsetAt(selection.getEndPosition())
 
@@ -784,11 +783,12 @@ export const getQueryRequestFromEditor = (
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
-  const strippedNormalizedSelectedText = selectedText
-    ? stripSQLComments(normalizeQueryText(selectedText))
-    : undefined
 
-  if (selectionMode !== "off" && strippedNormalizedSelectedText) {
+  if (
+    selectionMode !== "off" &&
+    selectedText &&
+    hasRunnableSelectionContent(selectedText)
+  ) {
     request =
       selectionMode === "complete"
         ? getQueriesToRun(editor, getStatementOffsets(editor), "complete", {
@@ -1053,8 +1053,8 @@ export const resolveSelectionRun = (
     return { kind: "no-selection" }
   }
 
-  const selectedText = normalizeQueryText(model.getValueInRange(selection))
-  if (!selectedText) return { kind: "no-selection" }
+  const selectedText = model.getValueInRange(selection)
+  if (!hasRunnableSelectionContent(selectedText)) return { kind: "no-query" }
 
   if (selectionMode === "complete") {
     const queries = getQueriesToRun(
@@ -1072,9 +1072,7 @@ export const resolveSelectionRun = (
     }
   }
 
-  return stripSQLComments(selectedText)
-    ? { kind: "run", sql: selectedText }
-    : { kind: "no-query" }
+  return { kind: "run", sql: normalizeQueryText(selectedText) }
 }
 
 export const findMatches = (model: editor.ITextModel, needle: string) =>
