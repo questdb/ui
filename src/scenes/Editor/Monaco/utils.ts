@@ -140,6 +140,7 @@ export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
   queryOffsets: { startOffset: number; endOffset: number }[],
   selectionMode: RunWithSelectionMode,
+  options?: { queryOffsetsAreFresh?: boolean },
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
@@ -186,11 +187,34 @@ export const getQueriesToRun = (
     return []
   }
 
-  const queries = getQueriesInRange(
-    editor,
-    model.getPositionAt(firstQueryOffsets.startOffset),
-    model.getPositionAt(lastQueryOffsets.endOffset),
-  )
+  const queries = options?.queryOffsetsAreFresh
+    ? queryOffsets
+        .slice(
+          queryOffsets.indexOf(firstQueryOffsets),
+          queryOffsets.lastIndexOf(lastQueryOffsets) + 1,
+        )
+        .map(({ startOffset, endOffset }) => {
+          const startPosition = model.getPositionAt(startOffset)
+          const endPosition = model.getPositionAt(endOffset)
+
+          return {
+            query: model.getValueInRange({
+              startLineNumber: startPosition.lineNumber,
+              startColumn: startPosition.column,
+              endLineNumber: endPosition.lineNumber,
+              endColumn: endPosition.column,
+            }),
+            row: startPosition.lineNumber - 1,
+            column: startPosition.column,
+            endRow: endPosition.lineNumber - 1,
+            endColumn: endPosition.column,
+          }
+        })
+    : getQueriesInRange(
+        editor,
+        model.getPositionAt(firstQueryOffsets.startOffset),
+        model.getPositionAt(lastQueryOffsets.endOffset),
+      )
   const requests = queries.map((query) => {
     const clampedSelection = clampRange(model, selection, {
       startOffset: model.getOffsetAt({
@@ -767,7 +791,9 @@ export const getQueryRequestFromEditor = (
   if (selectionMode !== "off" && strippedNormalizedSelectedText) {
     request =
       selectionMode === "complete"
-        ? getQueriesToRun(editor, getStatementOffsets(editor), "complete")[0]
+        ? getQueriesToRun(editor, getStatementOffsets(editor), "complete", {
+            queryOffsetsAreFresh: true,
+          })[0]
         : getQueryFromSelection(editor)
   } else {
     request = getQueryFromCursor(editor)
@@ -1035,6 +1061,7 @@ export const resolveSelectionRun = (
       editor,
       getStatementOffsets(editor),
       "complete",
+      { queryOffsetsAreFresh: true },
     )
     if (queries.length === 0) return { kind: "no-query" }
     return {

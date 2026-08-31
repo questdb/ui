@@ -599,6 +599,56 @@ describe("run with selection modes", () => {
       expect(partial).toEqual([])
       expect(off.map((request) => request.query)).toEqual(["DROP TABLE trades"])
     })
+
+    it("resolves every selected statement beyond the viewport parsing window", () => {
+      // Given a document and selection extending beyond the viewport cache
+      const statementCount = 1_200
+      const statements = Array.from(
+        { length: statementCount },
+        (_, index) => `SELECT ${index + 1};`,
+      )
+      const editor = makeMultiLineEditor(statements.join("\n"), {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: statementCount,
+        endColumn: statements[statementCount - 1].length + 1,
+      })
+
+      // When resolving from offsets produced by the same full parse
+      const result = getQueriesToRun(
+        editor,
+        getStatementOffsets(editor),
+        "complete",
+        { queryOffsetsAreFresh: true },
+      )
+
+      // Then every selected statement is returned without another parse
+      expect(result).toHaveLength(statementCount)
+      expect(result[0].query).toBe("SELECT 1")
+      expect(result[statementCount - 1].query).toBe("SELECT 1200")
+    })
+
+    it("reparses cached offsets that became stale after an edit", () => {
+      // Given cached offsets followed by a length-changing edit
+      const staleOffsets = getStatementOffsets(
+        makeMultiLineEditor("SELECT 1;SELECT 2;SELECT 3;"),
+      )
+      const text = "SELECT 1;  SELECT 2;SELECT 3;"
+      const editor = makeMultiLineEditor(text, {
+        startLineNumber: 1,
+        startColumn: 1,
+        endLineNumber: 1,
+        endColumn: text.length + 1,
+      })
+
+      // When resolving the preview from those cached offsets
+      const result = getQueriesToRun(editor, staleOffsets, "partial")
+
+      // Then statement boundaries are reparsed instead of sliced mid-token
+      expect(
+        result.map((request) => request.selection?.queryText ?? request.query),
+      ).toEqual(["SELECT 1", "SELECT 2", "SELECT 3"])
+    })
   })
 
   describe("getQueryRequestFromEditor", () => {

@@ -186,7 +186,7 @@ describe("run query with selection", () => {
     // Then
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
 
     // When
@@ -344,6 +344,43 @@ describe("run query with selection", () => {
       .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
   })
 
+  it("should queue selected queries when starting a run while a script is busy", () => {
+    // Given a script is running
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    cy.clickRunScript()
+    cy.getByDataHook("loading-notification").should(
+      "contain",
+      'Running query "select 1"',
+    )
+
+    // When a strict subset is selected and run with the primary shortcut
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
+    })
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+
+    // Then the selected run is queued for confirmation instead of discarded
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run selected queries")
+    cy.getByRole("dialog").should("contain", "2 selected queries")
+
+    // When confirmed, the active script is cancelled and the selection runs
+    cy.getByDataHook("run-all-queries-confirm").click()
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
+  })
+
   it("should run all queries when starting a run-all while a query is busy", () => {
     // Given a single query is running
     cy.intercept("/exec*", (req) => {
@@ -402,7 +439,7 @@ describe("run all queries in tab", () => {
     // Then
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 6 selected queries",
+      "Run selected queries",
     )
 
     // When
@@ -1037,7 +1074,7 @@ describe("&query URL param", () => {
     cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 2, column: 9 })
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
     cy.realPress(["Alt", "L"])
 
@@ -2221,7 +2258,7 @@ describe("editor settings", () => {
     // When both expanded queries run
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
     cy.clickRunQuery()
 
@@ -2250,7 +2287,7 @@ describe("editor settings", () => {
     cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 2, column: 9 })
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
 
     // When the second statement's run glyph is clicked
@@ -2273,6 +2310,10 @@ describe("editor settings", () => {
     // Then the run button disables instead of targeting a neighbouring
     // statement
     cy.getByDataHook("button-run-query").should("be.disabled")
+
+    // And the keyboard shortcut is also a no-op
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("not.exist")
 
     // And moving the cursor back into a statement enables it again
     cy.clickLine(1)
