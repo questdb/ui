@@ -93,6 +93,9 @@ const Wrapper = styled(PaneWrapper)<{
 }>`
   overflow-x: auto;
   height: 100%;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
   ${({ open }) =>
     !open &&
     css`
@@ -106,6 +109,9 @@ const Content = styled(PaneContent)<{
   display: flex;
   flex-direction: column;
   overflow: auto;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
   ${({ _loading }) => _loading && loadingStyles};
 `
 

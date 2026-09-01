@@ -81,7 +81,7 @@ export const GlobalStyle = createGlobalStyle`
   }
 
   button[data-button-variant="ghost"]:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
     outline-offset: 2px;
   }
 
@@ -94,7 +94,7 @@ export const GlobalStyle = createGlobalStyle`
   }
 
   *:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
     outline-offset: 2px;
   }
 
@@ -183,6 +183,6 @@ export const GlobalStyle = createGlobalStyle`
   }
 
   .allotment-module_splitView__L-yRc > .allotment-module_sashContainer__fzwJF > .allotment-module_sash__QA-2t:hover::before {
-    background: ${({ theme }) => theme.color.contentAccent};
+    background: ${({ theme }) => theme.color.borderStrong};
   }
 `

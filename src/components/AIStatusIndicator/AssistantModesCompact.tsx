@@ -121,7 +121,7 @@ const ModeHeaderTop = styled.div<{
       }
 
       &:focus-visible {
-        outline: 1px solid ${color("contentAccent")};
+        outline: 1px solid ${color("borderStrong")};
         outline-offset: 2px;
       }
 

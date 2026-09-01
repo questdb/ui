@@ -15,7 +15,7 @@ const Root = styled(Box).attrs({
   min-height: ${TOP_BAR_HEIGHT};
   gap: 0;
   background: ${({ theme }) => theme.color.surfaceBase};
-  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderDefault};
   box-shadow: 0 6px 18px ${({ theme }) => theme.color.shadowSubtle};
   z-index: 30;
 `

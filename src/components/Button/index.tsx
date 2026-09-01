@@ -185,7 +185,7 @@ export const ButtonBase = styled.button.attrs<{
     filter 120ms ease;
 
   &&:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
     outline-offset: 2px;
   }
 

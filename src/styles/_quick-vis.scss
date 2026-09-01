@@ -247,7 +247,7 @@
       &:focus,
       &:focus-visible {
         background: theme-color(surfaceInput);
-        border-color: theme-color(contentAccent);
+        border-color: theme-color(borderStrong);
         box-shadow: none;
         outline: none;
       }

@@ -138,7 +138,7 @@ const Wrapper = styled.div<{
   `}
 
   &:hover {
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    background: ${({ theme }) => theme.color.interactionHover};
     .table-menu-button {
       opacity: 1;
     }
@@ -148,14 +148,14 @@ const Wrapper = styled.div<{
     $focused &&
     `
     outline: none;
-    background: ${theme.color.interactionAccentActive};
-    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
+    background: ${theme.color.interactionNeutral};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
     .table-menu-button {
       opacity: 1;
     }
 
     &:hover {
-      background: ${theme.color.interactionAccentActive};
+      background: ${theme.color.interactionNeutral};
     }
   `}
 
@@ -676,7 +676,7 @@ const Row = ({
           onClick={onOpenDetailsDrawer}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <InfoIcon size={18} color={theme.color.contentAccent} />
+          <InfoIcon size={18} color={theme.color.contentSecondary} />
         </DetailsDrawerButton>
       )}
     </Wrapper>

@@ -3,8 +3,11 @@ import React from "react"
 
 export type InputVariant = "transparent" | "error"
 
+export type InputTone = "neutral" | "accent"
+
 export type InputStyleProps = {
   variant?: InputVariant
+  $tone?: InputTone
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & InputStyleProps
@@ -42,7 +45,10 @@ export const inputStyles = css<InputStyleProps>`
   &:focus-visible {
     outline: none;
     box-shadow: none;
-    border-color: ${({ theme }) => theme.color.contentAccent};
+    border-color: ${({ theme, $tone }) =>
+      $tone === "accent"
+        ? theme.color.contentAccent
+        : theme.color.borderStrong};
     background: ${({ theme }) => theme.color.surfaceInput};
   }
 
