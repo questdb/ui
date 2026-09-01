@@ -15,10 +15,15 @@ const TEST_MATVIEW_ON_MV = "btc_trades_mv_on_mv"
 const TEST_VIEW = "btc_trades_view"
 const TEST_LIVE_VIEW = "btc_trades_lv"
 const TEST_LIVE_VIEW_2 = "btc_trades_lv_2"
+const TEST_LIVE_VIEW_BASE_2 = "btc_trades_lv_base_2"
 
+const TEST_LIVE_VIEW_BASE_2_DDL =
+  `CREATE TABLE IF NOT EXISTS ${TEST_LIVE_VIEW_BASE_2} ` +
+  "(symbol SYMBOL, price DOUBLE, timestamp TIMESTAMP) " +
+  "TIMESTAMP(timestamp) PARTITION BY DAY WAL;"
 const TEST_LIVE_VIEW_2_DDL =
   `CREATE LIVE VIEW IF NOT EXISTS ${TEST_LIVE_VIEW_2} FLUSH EVERY 1s IN MEMORY 5s START FROM BEGINNING AS ` +
-  "SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM btc_trades;"
+  `SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM ${TEST_LIVE_VIEW_BASE_2};`
 
 function interceptTablesQuery(modifications, targetTable = TEST_TABLE) {
   cy.intercept(
@@ -373,6 +378,7 @@ describe("TableDetailsDrawer", () => {
         timeout: 5000,
       })
         .should("be.visible")
+        .and("have.attr", "role", "alert")
         .and("contain", `Unable to load ${TEST_TABLE}`)
         .and("contain", "retry automatically")
     })
@@ -1027,6 +1033,7 @@ describe("TableDetailsDrawer", () => {
     before(() => {
       cy.loadConsoleWithAuth()
       cy.createTable(TEST_TABLE)
+      cy.execQuery(TEST_LIVE_VIEW_BASE_2_DDL)
       cy.createLiveView(TEST_LIVE_VIEW)
       cy.execQuery(TEST_LIVE_VIEW_2_DDL)
     })
@@ -1422,6 +1429,57 @@ describe("TableDetailsDrawer", () => {
         .should("not.contain", "111")
     })
 
+    it("should ignore an in-flight base table response after selecting another live view", () => {
+      // Given
+      let oldBaseRequestStarted = false
+
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /tables\(\) where table_name/ },
+        },
+        (req) => {
+          const query = String(req.query.query ?? "")
+          if (!oldBaseRequestStarted && query.includes(`'${TEST_TABLE}'`)) {
+            oldBaseRequestStarted = true
+            req.continue((res) => {
+              res.body.dataset = []
+              res.body.count = 0
+              res.setDelay(1800)
+              return res
+            })
+          } else {
+            req.continue()
+          }
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.wrap(null).should(() => {
+        expect(oldBaseRequestStarted).to.equal(true)
+      })
+
+      // When
+      cy.getByDataHook("table-details-name").click()
+      cy.getByDataHook("table-details-name").clear().type(TEST_LIVE_VIEW_2)
+      cy.getByDataHook("table-details-name").type("{enter}")
+
+      // Then
+      cy.getByDataHook("table-details-name").should(
+        "have.value",
+        TEST_LIVE_VIEW_2,
+      )
+      cy.getByDataHook("table-details-base-table-status").should(
+        "contain",
+        "Valid",
+      )
+      cy.wait(2000)
+      cy.getByDataHook("table-details-base-table-status")
+        .should("contain", "Valid")
+        .and("not.contain", "Dropped")
+    })
+
     it("should not close a newly opened sidebar for a stale empty response", () => {
       let injectEmpty = false
       let emptyRequestStarted = false
@@ -1475,6 +1533,7 @@ describe("TableDetailsDrawer", () => {
       cy.loadConsoleWithAuth()
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW_2)
       cy.dropLiveViewIfExists(TEST_LIVE_VIEW)
+      cy.dropTableIfExists(TEST_LIVE_VIEW_BASE_2)
       cy.dropTableIfExists(TEST_TABLE)
     })
   })

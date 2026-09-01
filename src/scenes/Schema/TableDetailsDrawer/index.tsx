@@ -510,30 +510,6 @@ export const TableDetailsDrawer = () => {
     viewData?.invalidation_reason,
   ])
 
-  const checkBaseTableStatus = useCallback(async () => {
-    if (!baseTableName) {
-      setBaseTableStatus(null)
-      return
-    }
-    try {
-      const response = await quest.getTableDetails(baseTableName)
-      const baseTableExists =
-        response.type === QuestDB.Type.DQL && response.data.length > 0
-      const suspended = baseTableExists
-        ? response.data[0]?.table_suspended
-        : false
-      const status = baseTableExists
-        ? suspended
-          ? "Suspended"
-          : "Valid"
-        : "Dropped"
-      setBaseTableStatus(status)
-    } catch (error) {
-      console.error("Failed to check base table existence:", error)
-      setBaseTableStatus(null)
-    }
-  }, [quest, baseTableName])
-
   useEffect(() => {
     targetRef.current = target
     activeSidebarRef.current = activeSidebar
@@ -561,12 +537,43 @@ export const TableDetailsDrawer = () => {
   }, [clearIfCurrentTarget, kind, tableName, tableSource.state])
 
   useEffect(() => {
-    if (baseTableName && !kindSourceUnavailable) {
-      void checkBaseTableStatus()
-    } else {
+    if (!baseTableName || kindSourceUnavailable) {
       setBaseTableStatus(null)
+      return
     }
-  }, [baseTableName, checkBaseTableStatus, kindSourceUnavailable])
+
+    let active = true
+
+    const checkBaseTableStatus = async () => {
+      try {
+        const response = await quest.getTableDetails(baseTableName)
+        if (!active) return
+
+        const baseTableExists =
+          response.type === QuestDB.Type.DQL && response.data.length > 0
+        const suspended = baseTableExists
+          ? response.data[0]?.table_suspended
+          : false
+        const status = baseTableExists
+          ? suspended
+            ? "Suspended"
+            : "Valid"
+          : "Dropped"
+        setBaseTableStatus(status)
+      } catch (error) {
+        if (!active) return
+
+        console.error("Failed to check base table existence:", error)
+        setBaseTableStatus(null)
+      }
+    }
+
+    void checkBaseTableStatus()
+
+    return () => {
+      active = false
+    }
+  }, [baseTableName, kindSourceUnavailable, quest, sourcePrefix])
 
   const usesDetailsPolling = isView || activeTab === "details"
 
@@ -779,7 +786,7 @@ export const TableDetailsDrawer = () => {
             </Text>
           </LoadingContainer>
         ) : hasTarget && tablesUnavailable && tableData === null ? (
-          <EmptyState data-hook="table-details-source-error">
+          <EmptyState role="alert" data-hook="table-details-source-error">
             <ErrorBanner
               title={`Unable to load ${tableName}`}
               description="The console cannot reach the server. It will retry automatically."
