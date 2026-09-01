@@ -61,12 +61,15 @@ describe("TableDetailsDrawer in enterprise", () => {
           body: { error: "Storage policy unavailable", position: 0 },
         },
       ).as("storagePolicyUnavailable")
-      cy.wait("@storagePolicyUnavailable")
-      cy.wait("@storagePolicyUnavailable")
-      cy.wait("@storagePolicyUnavailable")
+      // The policy is polled every STORAGE_POLICY_POLL_MS (5s), so each retry
+      // and the failure threshold behind the banner need more than the 5s
+      // requestTimeout Cypress applies to an aliased wait by default.
+      cy.wait("@storagePolicyUnavailable", { requestTimeout: 15000 })
+      cy.wait("@storagePolicyUnavailable", { requestTimeout: 15000 })
+      cy.wait("@storagePolicyUnavailable", { requestTimeout: 15000 })
 
       // Then
-      cy.getByDataHook("table-details-storage-unavailable", { timeout: 5000 })
+      cy.getByDataHook("table-details-storage-unavailable", { timeout: 12000 })
         .should("be.visible")
         .and("contain", "Unavailable")
     })
@@ -89,12 +92,27 @@ describe("TableDetailsDrawer in enterprise", () => {
 
     it("renders catalog policy values and disabled status", () => {
       // Given
+      cy.intercept({
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /storage_policies/ },
+      }).as("storagePolicies")
       cy.openDetailsDrawer(TEST_TABLE)
 
       // When
       cy.getByDataHook("table-details-tab-details").click()
+      cy.wait("@storagePolicies")
 
-      // Then
+      // Then the catalogue is read as a bare identifier, not a table function
+      cy.get("@storagePolicies")
+        .its("request.url")
+        .then((url) => {
+          const query = decodeURIComponent(url)
+          expect(query).to.contain("storage_policies WHERE table_dir_name")
+          expect(query).not.to.contain("storage_policies(")
+        })
+
+      // Then each duration column renders through its own label
       cy.getByDataHook("table-details-storage-policy-section")
         .should("be.visible")
         .within(() => {
@@ -104,13 +122,16 @@ describe("TableDetailsDrawer in enterprise", () => {
           cy.contains("10 Days").should("be.visible")
           cy.contains("Drop Local").should("be.visible")
           cy.contains("1 Year").should("be.visible")
+          // DROP REMOTE was never set, so the catalogue reports it as a zero
+          // duration and the stage is omitted rather than shown as "0 Hours"
+          cy.contains("Drop Remote").should("not.exist")
         })
 
       // When
       cy.execQuery(`ALTER TABLE ${TEST_TABLE} DISABLE STORAGE POLICY`)
 
-      // Then
-      cy.getByDataHook("table-details-storage-disabled", { timeout: 5000 })
+      // Then the next poll picks the change up, up to 5s away
+      cy.getByDataHook("table-details-storage-disabled", { timeout: 12000 })
         .should("be.visible")
         .and("contain", "Disabled")
     })

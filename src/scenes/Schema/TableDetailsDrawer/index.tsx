@@ -133,6 +133,9 @@ const TABLE_POLL_MIN_MS = 200
 const TABLE_POLL_MAX_MS = 5_000
 const DETAILS_TABLE_POLL_MS = 1_000
 const KIND_POLL_MS = 1_000
+// A storage policy only changes when an operator runs DDL against the table,
+// so it is polled far less often than the columns and DDL beside it.
+const STORAGE_POLICY_POLL_MS = 5_000
 
 type TableSourceData = { type: "found"; data: Table } | { type: "missing" }
 
@@ -352,7 +355,7 @@ export const TableDetailsDrawer = () => {
       activeTab === "details" &&
       tableData !== null,
     query: `storage_policies WHERE table_dir_name = '${escapedStorageDirectoryName}';`,
-    pollIntervalMs: DETAILS_TABLE_POLL_MS,
+    pollIntervalMs: STORAGE_POLICY_POLL_MS,
     transformResponse: transformStoragePolicyResponse,
   })
 
@@ -403,7 +406,15 @@ export const TableDetailsDrawer = () => {
   const columns =
     columnsSource.state.status === "ready" ? columnsSource.state.data : []
   const ddl = ddlSource.state.status === "ready" ? ddlSource.state.data : ""
-  const loading = tableSource.state.status === "loading" && tableData === null
+  // The kind source carries the invalid/unreadable status, so rendering before
+  // it answers would show a healthy view that is not.
+  const kindSourceLoading =
+    (isView && viewSource.state.status === "loading") ||
+    (isMatView && matViewSource.state.status === "loading") ||
+    (isLiveView && liveViewSource.state.status === "loading")
+  const loading =
+    (tableSource.state.status === "loading" && tableData === null) ||
+    kindSourceLoading
   const tablesUnavailable = tableSource.state.status === "unavailable"
   const kindSourceUnavailable =
     (isView && viewSource.state.status === "unavailable") ||

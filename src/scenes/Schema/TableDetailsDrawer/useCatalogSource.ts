@@ -88,7 +88,12 @@ export const useCatalogSource = <T>({
         ),
       )
     } catch (error) {
-      if (currentKeyRef.current !== requestKey) return
+      if (
+        currentKeyRef.current !== requestKey ||
+        activeQueryIdRef.current !== queryId
+      ) {
+        return
+      }
       if (isCancelledRequest(error) && !timedOut) return
 
       setMachine((previous) =>
@@ -114,13 +119,18 @@ export const useCatalogSource = <T>({
     currentKeyRef.current = sourceKey
   }, [sourceKey])
 
+  // Keyed to the source identity alone: a source that is merely disabled keeps
+  // its last answer, so re-enabling it renders that instead of a loading state.
+  useEffect(() => {
+    setMachine(createSourceMachineState(sourceKey))
+  }, [sourceKey])
+
   useEffect(() => {
     const activeQueryId = activeQueryIdRef.current
     if (activeQueryId !== null) {
       quest.abort(activeQueryId)
       activeQueryIdRef.current = null
     }
-    setMachine(createSourceMachineState(sourceKey))
 
     if (!enabled) return
 

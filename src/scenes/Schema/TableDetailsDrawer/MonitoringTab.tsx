@@ -520,7 +520,13 @@ export const MonitoringTab = ({
       {/* Critical Error Banners */}
       {criticalIssues.length > 0 && (
         <Section>
-          <Box flexDirection="column" gap="1rem" align="stretch">
+          <Box
+            flexDirection="column"
+            gap="1rem"
+            align="stretch"
+            role="alert"
+            data-hook="table-details-critical-issues"
+          >
             {criticalIssues.map((issue) => (
               <ErrorBanner
                 key={issue.id}

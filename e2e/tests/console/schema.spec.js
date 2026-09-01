@@ -685,6 +685,45 @@ describe("materialized views", () => {
     )
   })
 
+  it("should omit the reason when the view is invalidated without one", () => {
+    // Given a matview the server reports as invalid with a null reason
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: {
+          query: "materialized_views()",
+        },
+      },
+      (req) => {
+        req.continue((res) => {
+          if (res.body?.dataset?.length > 0) {
+            const viewStatusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status",
+            )
+            const invalidationReasonIndex = res.body.columns.findIndex(
+              (c) => c.name === "invalidation_reason",
+            )
+            res.body.dataset[0][viewStatusIndex] = "invalid"
+            res.body.dataset[0][invalidationReasonIndex] = null
+          }
+          return res
+        })
+      },
+    )
+    cy.refreshSchema()
+    cy.expandMatViews()
+
+    // When
+    cy.hoverForTooltip(() => cy.getByDataHook("schema-row-error-icon"))
+    cy.wait(300)
+
+    // Then the message stops at the status, with no interpolated null
+    cy.getByDataHook("tooltip")
+      .should("contain", "Materialized view is invalid")
+      .and("not.contain", "null")
+  })
+
   after(() => {
     cy.loadConsoleWithAuth()
 
