@@ -84,7 +84,10 @@ const MessageBubble = styled(Box).attrs({ align: "flex-start" })`
   border-radius: 0.8rem;
   width: 100%;
   align-self: flex-end;
-  background: ${color("authBackdrop")};
+  background: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceValue
+      : theme.color.authBackdrop};
   border: 1px solid ${color("borderDefault")};
   flex-shrink: 0;
 `

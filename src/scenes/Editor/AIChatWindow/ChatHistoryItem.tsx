@@ -29,7 +29,7 @@ const Container = styled.div<{ $disabled?: boolean }>`
       $disabled
         ? "transparent"
         : theme.mode === "light"
-          ? theme.color.surfaceBase
+          ? theme.color.interactionHover
           : theme.color.surfaceInput};
 
     .chat-title {

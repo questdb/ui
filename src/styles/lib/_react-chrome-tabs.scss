@@ -81,6 +81,10 @@
     box-shadow: none;
   }
 
+  html[data-theme="light"] .chrome-tabs .new-tab-button-wrapper .new-tab-button:hover {
+    background: theme-color(interactionHover);
+  }
+
   .chrome-tabs
     .new-tab-button-wrapper
     .new-tab-button[aria-pressed="true"]:hover {

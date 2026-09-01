@@ -78,7 +78,7 @@ const Root = styled.div`
   display: flex;
   flex: 1;
   width: 100%;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const Wrapper = styled(PaneWrapper)`
@@ -88,6 +88,9 @@ const Wrapper = styled(PaneWrapper)`
 const Content = styled(PaneContent)`
   flex: 1 1 0;
   color: ${color("contentPrimary")};
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
 `
 
 const Actions = styled.div`
@@ -98,6 +101,7 @@ const Actions = styled.div`
   padding: 0 1rem;
   width: 100%;
   height: 5.2rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   background: ${({ theme }) => theme.color.surfaceRaised};
 `

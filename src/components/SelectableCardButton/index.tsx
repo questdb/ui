@@ -20,19 +20,20 @@ export const SelectableCardButton = styled(
   }
 
   &&:hover:not(:disabled) {
-    border-color: ${({ theme }) => theme.color.borderAccent};
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    border-color: ${({ theme }) => theme.color.borderDefault};
+    background: ${({ theme }) => theme.color.interactionHover};
     color: ${({ theme }) => theme.color.contentPrimary};
   }
 
   ${({ $selected, theme }) =>
     $selected &&
     css`
-      && {
-        border-color: ${theme.color.borderAccent};
-        background: ${theme.color.interactionAccentActive};
+      &&,
+      &&:hover:not(:disabled) {
+        border-color: ${theme.color.borderDefault};
+        background: ${theme.color.interactionNeutral};
         color: ${theme.color.contentPrimary};
-        box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
+        box-shadow: none;
       }
     `}
 `

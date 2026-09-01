@@ -253,7 +253,7 @@ export const lightColors: ColorShape = {
   // Borders
   borderSubtle: "rgba(28, 32, 41, 0.07)",
   borderDefault: "rgba(28, 32, 41, 0.15)",
-  borderStrong: "#828b99",
+  borderStrong: "#b0b7c2",
   borderAccent: "rgba(184, 20, 71, 0.42)",
   borderAccentStrong: "rgba(184, 20, 71, 0.56)",
 
@@ -264,7 +264,7 @@ export const lightColors: ColorShape = {
   interactionAccentHover: "rgba(184, 20, 71, 0.07)",
   interactionAccentActive: "rgba(184, 20, 71, 0.13)",
   interactionGuide: "#56657f",
-  scrollbarThumb: "#62656b",
+  scrollbarThumb: "#d7dbe3",
   controlSurface: "#f6f7f8",
   controlSurfaceHover: "#e7e9ed",
   controlTrack: "#e8eaee",
@@ -281,7 +281,7 @@ export const lightColors: ColorShape = {
   statusDangerBorder: "rgba(189, 40, 56, 0.28)",
   statusSuccess: "#067047",
   statusSuccessStrong: "#05603e",
-  statusSuccessSurface: "rgba(8, 122, 80, 0.1)",
+  statusSuccessSurface: "rgba(8, 122, 80, 0.16)",
   statusSuccessBorder: "rgba(8, 122, 80, 0.28)",
   statusWarning: "#8a570f",
   statusWarningSurface: "rgba(145, 82, 15, 0.14)",

@@ -12,7 +12,10 @@ export const Sidebar = styled(Box).attrs({ flexDirection: "column" })<{
   padding-top: ${({ align }) => (align === "top" ? "1.2rem" : "0")};
   width: ${SIDEBAR_WIDTH};
   height: 100%;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceRaised
+      : theme.color.surfaceBase};
   border-right: 1px solid ${({ theme }) => theme.color.borderDefault};
   gap: 0.8rem;
   flex-shrink: 0;

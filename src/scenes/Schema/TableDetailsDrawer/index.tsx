@@ -141,7 +141,10 @@ const Tab = styled(TabButton)`
   }
 `
 
-const TabBadge = styled(Badge)`
+const TabBadge = styled(Badge).attrs({
+  shape: "pill" as const,
+  size: "sm" as const,
+})`
   height: 1.8rem;
 `
 

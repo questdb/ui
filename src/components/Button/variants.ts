@@ -197,7 +197,10 @@ export const makeButtonVariant = (variant: ButtonVariant) => {
     }
 
     &&:hover:not(:disabled):not([aria-disabled="true"]) {
-      background: ${getColor(theme.hover.background)};
+      background: ${({ theme: t }) =>
+        variant === "ghost" && t.mode === "light"
+          ? t.color.interactionHover
+          : t.color[theme.hover.background]};
       color: ${getColor(theme.hover.color)};
       border-color: ${getColor(theme.hover.border)};
     }

@@ -197,8 +197,8 @@ change shipped together, split them.
 - Neighbors: chat panel `surfaceRaised` `#f4f5f7`. Nested SQL uses `editorCanvas` `#eef0f3`, so the query block recedes slightly inside the white card. Login `authBackdrop` is untouched.
 - Walked: Explain Query card in the AI panel, light mode. Dark glance to confirm the crimson well remains.
 - Why: Darker-on-dark should invert to lighter-on-light. `authBackdrop` cannot do that job in both themes.
-- Out of scope: plain user `MessageBubble` (still `authBackdrop`); login page; palette retune of `authBackdrop`; inner LiteEditor.
-- For Emre: AI action cards are not login chrome. Light fill is `surfaceValue`. Consider whether `MessageBubble` should follow.
+- Out of scope: login page; palette retune of `authBackdrop`; inner LiteEditor. Plain `MessageBubble` follows later the same day.
+- For Emre: AI action cards are not login chrome. Light fill is `surfaceValue`.
 
 ### 2026-09-01 — Cell icon hover is one step darker in light
 - Lift: binding
@@ -274,6 +274,304 @@ change shipped together, split them.
 - Why: These were still opted into brand after default field focus went neutral.
 - Out of scope: SelectMenu check; AI Settings label; sparkle glyphs; composer; login; checkboxes/switches.
 - For Emre: Open dropdown chrome is field focus, not brand. Check remains a selected-item glyph.
+
+### 2026-09-01 — Results action bar owns the pane-top hairline
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `borderSubtle` (values unchanged)
+- Binding: Result `Actions` gains `border-top` `borderSubtle`. Log `Notifications` wrapper drops `border-bottom` so log + action bar do not stack two lines. Action bar `border-bottom` (to the grid) stays.
+- Neighbors: same weight as other panel-to-work edges (schema wrapper, drawer, allotment sash). Rails stay `borderDefault`.
+- Walked: SQL results with schema open (action bar meets sidebar), log expanded and collapsed, grid and chart.
+- Why: Schema lives only in the top pane. The results bar spans full width under it; without a top edge the two `surfaceRaised` panels fused.
+- Out of scope: notebook `ResultActionsBar` (inside a cell, not against the schema).
+- For Emre: The results pane's top hairline belongs on the action bar, not the log, because the log does not span under the sidebar.
+
+### 2026-09-01 — Light scrollbar thumb follows the surface ladder
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `scrollbarThumb`
+- Before → after (light): `#62656b` → `#c5cad3`
+- Neighbors: sits between `borderDefault` (ink `.15`) and `borderStrong` `#828b99`. Dark thumb stays white `.13`.
+- Walked: search list, result grid, AI chat, news drawer.
+- Why: The old thumb was charcoal on the lifted light surfaces, so every overflow read as a dark rail.
+- Out of scope: dark thumb (already white `.13`). Monaco slider rebound in a later entry.
+- For Emre: Light scrollbars are chrome, not content. Do not reuse `contentDisabled`.
+
+### 2026-09-01 — Light rails, results pane, and webkit scrollbars
+- Lift: binding
+- Status: applied locally
+- Modes: light (rails/footer); both (results, news, webkit)
+- Tokens: `surfaceRaised`, `scrollbarThumb`, `borderSubtle` (values unchanged except the thumb palette above)
+- Binding:
+  - Icon rails (`Sidebar`) and footer: light `surfaceBase` → `surfaceRaised`. Dark rails stay `surfaceBase`.
+  - Result pane `Root` + `PaneContent`: `surfaceBase` → `surfaceRaised` (same as log, action bar, schema, AI).
+  - News list fill: `surfaceBase` → `surfaceRaised`; row rules `surfaceRaised` → `borderSubtle` so they do not vanish.
+  - Global `::-webkit-scrollbar` now paints `scrollbarThumb` (Firefox already used `scrollbar-color`).
+- Neighbors: light chrome frame is one fill (`surfaceRaised` `#f4f5f7`) against work (`surfaceValue` / grid). Stagger is the `borderDefault` rail hairline, not a darker grey.
+- Walked: left nav vs results, right nav vs AI, search overflow, grid overflow, footer.
+- Why: Rails and the results well were still on `surfaceBase` after content panels moved up, so the grey frame looked unthemed. Chrome/Safari never read `scrollbar-color`.
+- Out of scope: TopBar (still `surfaceBase`); editor `PaneWrapper`; checkboxes; `surfaceBase` palette.
+- For Emre: Light icon rails share the panel fill. Dark still recedes (`surfaceBase`). Webkit thumbs are a global chrome rule.
+
+### 2026-09-01 — Run-query menu divider stays a hairline on hover
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `borderSubtle`, `interactionHover`, `surfaceOverlay` (values unchanged)
+- Binding: `ButtonBar` dropdown was a one-off (`surfaceInset` + secondary `Button` items). Secondary hover paints `borderStrong`, which recolored the `borderSubtle` item rule in light (`#828b99` on a pale menu). Menu now uses `floatingSurfaceStyles`. Item hover is `interactionHover` and the divider stays `borderSubtle`.
+- Neighbors: same recipe as `DropdownMenu` / `SelectMenu`.
+- Walked: Run query chevron in light and dark, hover each item.
+- Why: The line was not a separate divider component — it was the button hover border winning.
+- Out of scope: splitting the items off `Button`; checkboxes.
+- For Emre: Menu items that are `Button`s cannot keep the default secondary hover border.
+
+### 2026-09-01 — Monaco scrollbar uses the shared thumb
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `scrollbarThumb` (values unchanged)
+- Binding: Monaco overlay slider `interactionNeutral` → `scrollbarThumb`.
+- Neighbors: dark `interactionNeutral` `#32343e` happened to match the quiet white thumb; light `#e8eaee` sat on `editorCanvas` `#eef0f3` and disappeared / mismatched webkit `#c5cad3`.
+- Walked: SQL editor overflow, both modes.
+- Why: Dark already looked themed. Light was the leftover.
+- Out of scope: Monaco theme JSON (`dracula.ts` menu separators still `interactionNeutral`).
+- For Emre: Editor chrome scrollbars are `scrollbarThumb`, not a list-selection fill.
+
+### 2026-09-01 — Light user chat bubbles lift off the panel
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: `surfaceValue`, `borderDefault` (values unchanged)
+- Binding: plain `MessageBubble` fill `authBackdrop` → `surfaceValue` in light. Dark stays `authBackdrop`. Border was already `borderDefault`.
+- Neighbors: chat panel `surfaceRaised` `#f4f5f7`. Bubble `#ffffff` + `borderDefault` (ink `.15`). Same as `UserRequestBox`.
+- Walked: typed user message in the AI panel, light mode. Dark unchanged.
+- Why: `authBackdrop` light `#c7cbd2` recedes on the raised panel. Lighter-on-light needs `surfaceValue`.
+- Out of scope: assistant reply (not a bubble); composer; login `authBackdrop`.
+- For Emre: User chat chrome in light is `surfaceValue` + `borderDefault`, not the login well.
+
+### 2026-09-01 — Light ghost hover recedes, not lifts
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: `interactionHover` (values unchanged)
+- Binding: ghost `Button` hover used `surfaceRaised`. On tab-rail / chat-header chrome that is already `surfaceRaised` (or close), hover lifted toward white. Light hover is now `interactionHover` (ink wash, same as Add metrics / Select). Dark still `surfaceRaised`.
+- Neighbors: `SegmentedControlButton` hover is already `interactionHover`. Cell maximize/more still override light hover to `surfaceBase` on raised cells.
+- Walked: Add New, Tab History, Tab Settings (SQL tab rail + AI header).
+- Why: Ghost on grey chrome must darken. `surfaceRaised` is an elevation step, not a hover wash.
+- Out of scope: dark ghost; pressed History chip (`surfaceRaised` + `borderDefault`).
+- For Emre: Light ghost hover is the inverting overlay, not a surface lift.
+
+### 2026-09-01 — Schema toolbar: 2px gap between action chips
+- Lift: binding (layout)
+- Status: applied locally
+- Modes: both
+- Binding: Schema header `Box` around Add metrics / Select / Auto refresh `gap="0"` → `gap="0.2rem"` (2px at the 10px rem root).
+- Walked: tables panel with auto-refresh on, hover Select.
+- Why: Hover fills were flush, so Select fused with the active refresh chip.
+- Out of scope: other `gap="0"` toolbars.
+- For Emre: Spacing only; tokens unchanged.
+
+### 2026-09-01 — Light `borderStrong` quieter for activated controls
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `borderStrong`
+- Before → after (light): `#828b99` → `#b0b7c2`. Dark unchanged `#3d414d`.
+- Neighbors: rest stroke is `borderDefault` (ink `.15` ≈ `#dddfe2` on white). Activated hover/open/focus still steps up, but not to charcoal. `gridFocus` stays `#828b99` — denser grid ring, not the chrome stroke.
+- Walked: AI model SelectMenu open, Download as Parquet hover, cell Auto Refresh SelectMenu, Filter/Search fields on focus, ThemeModeSelector open.
+- Why: Activated chrome stroke was jumping the scale. Same role (`borderStrong`) — the light value was too heavy.
+- Out of scope: dark; brand accent fields (`$tone="accent"`); `gridFocus`.
+- For Emre: Light `borderStrong` is now the quiet activated control stroke. Keyboard outlines, sash hover, checkbox rest, and segmented-control track also inherit. Flag if those jobs need to stay at the old `#828b99` (would then be a new role, not this one).
+
+### 2026-09-01 — Chat history hover matches dropdown items
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: `interactionHover` (values unchanged)
+- Binding: `ChatHistoryItem` hover `surfaceBase` → `interactionHover` in light. Dark stays `surfaceInput`.
+- Neighbors: dropdown / schema-tree / search-row hover is `interactionHover`, not a surface. `surfaceBase` `#eef0f3` on a `surfaceRaised` `#f4f5f7` panel was a solid step and read as a different family.
+- Walked: AI chat history list, light mode.
+- Why: Same job as a menu item hover. Not a surface, and not one step lighter — the ink wash.
+- Out of scope: dark (still a solid recede on the raised panel); selected/"Current" treatment (text only).
+- For Emre: List-row hover is `interactionHover` in light. Do not invent a lighter surface for this.
+
+### 2026-09-01 — Light scrollbar thumb one notch quieter
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `scrollbarThumb`
+- Before → after (light): `#c5cad3` → `#d2d6de`. Dark unchanged (`white` `.13`).
+- Neighbors: still darker than `surfaceRaised` `#f4f5f7` / `surfaceCanvas` `#e8eaee`, quieter than `borderStrong` `#b0b7c2`. Webkit, Firefox `scrollbar-color`, and Monaco overlay all read this token.
+- Walked: schema tree, editor, AI panel overflows.
+- Why: After the surface lift the thumb still sat a bit heavy. One step toward the chrome, not a new role.
+- Out of scope: dark; track (stays transparent).
+- For Emre: Same `scrollbarThumb` role. Light value only.
+
+### 2026-09-01 — Chrome-tabs plus hover is the ghost leftover
+- Lift: binding
+- Status: applied locally
+- Modes: light
+- Tokens: `interactionHover` (values unchanged)
+- Binding: `.new-tab-button:hover` in `_react-chrome-tabs.scss` used `surfaceRaised`, more specific than the ghost `Button` rule. Light hover → `interactionHover`. Dark still `surfaceRaised`.
+- Neighbors: same wash as tab-rail History / Settings ghosts and Add metrics.
+- Walked: SQL tab bar plus in light.
+- Why: The plus is not an `IconButton`; chrome-tabs owns its hover in SCSS.
+- Out of scope: tab close / edit chip hovers (still `surfaceRaised`); pressed History chip.
+- For Emre: Chrome-tabs plus is ghost chrome. Do not let SCSS reintroduce a surface lift.
+
+### 2026-09-01 — Light scrollbar thumb into stone, not a cooler neighbor
+- Lift: palette
+- Status: tweaked (too warm; see following entry)
+- Modes: light
+- Tokens: `scrollbarThumb`
+- Before → after (light): `#d2d6de` → `#ddd8d1`. Dark unchanged.
+- Neighbors: no warm chrome role to borrow. Surfaces, controls, and `borderStrong` are all cool blue-gray.
+- Why: The previous notch was not visible. Hue shift was noticeable, but too warm.
+
+### 2026-09-01 — Light scrollbar thumb cooler, still a real step
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `scrollbarThumb`
+- Before → after (light): `#ddd8d1` → `#d7dbe3`. Dark unchanged.
+- Neighbors: same cool family as `surfaceCanvas` `#e8eaee` and `borderStrong` `#b0b7c2`. Lighter than the original `#c5cad3`, cooler than the stone miss.
+- Walked: schema, editor, AI overflows.
+- Why: Stone was too warm. Stay on the cool ladder; take a larger lightness step than `#d2d6de` so it still reads quieter.
+- Out of scope: dark.
+- For Emre: Light thumb is cool chrome, not stone. `#c5cad3` → `#d7dbe3`.
+
+### 2026-09-01 — Provider choice cards go neutral
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `interactionHover`, `interactionNeutral`, `borderDefault` (values unchanged)
+- Binding: `SelectableCardButton` hover `borderAccent` / `interactionAccentHover` → `borderDefault` / `interactionHover`. Selected `borderAccent` / `interactionAccentActive` / inset accent ring → `interactionNeutral` + `borderDefault` (same as list selected).
+- Neighbors: AI setup provider cards and Add Metric type cards share this component.
+- Walked: Add a model provider (OpenAI / Anthropic / Custom), both modes.
+- Why: Choice cards are chrome selection, not a brand action.
+- Out of scope: `TabButton` underlines (still branded); composer `$tone="accent"`.
+- For Emre: Large-target selected cards match list selected, not accent.
+
+### 2026-09-01 — Multi-step pill gets a visible hairline
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `borderDefault` (values unchanged)
+- Binding: `StepIndicatorContainer` had only `shadowSubtle`. Add `borderDefault` so the capsule reads on the modal.
+- Neighbors: modal itself is `borderDefault`. Inner step name chip stays `interactionNeutral`.
+- Walked: Add a model provider step pill, light and dark.
+- Why: Shadow alone disappeared, especially in dark. `borderSubtle` would still vanish; `borderDefault` is the visible-subtle step.
+- Out of scope: pill fill.
+- For Emre: Step chrome uses the same stroke as the modal edge.
+
+### 2026-09-01 — Status badges are chips; count badges stay pills
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `statusSuccessSurface`, `statusDangerSurface`, `statusWarningSurface`, `statusInfoSurface`, `interactionNeutral` (values unchanged here)
+- Binding: `Badge` default `shape="chip"` — 4px radius, 5px padding, 400/11px, no border, status surface fills. `shape="pill"` keeps the old stadium + 10%/32% wash. `TabBadge` (Monitoring warning/error counts) is pinned to `pill`.
+- Neighbors: AI Validated chip, import file-status, Type/Trend badges, “New”, version/EE badges inherit chip. Monitoring tab count must not.
+- Walked: Assistant Settings Validated chip; table details Monitoring tab.
+- Why: Figma status chips are rounded rects on a status well, not stadium pills. Count badges on tabs are a different job.
+- Out of scope: sidebar Enabled/Inactive (`StatusChip`, not `Badge`).
+- For Emre: Two shapes on one primitive. Pill is the compact count. Chip is the status label.
+
+### 2026-09-01 — Light success wells denser so chips read
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `statusSuccessSurface`
+- Before → after (light): `rgba(8, 122, 80, 0.1)` → `rgba(8, 122, 80, 0.16)`. Dark unchanged.
+- Neighbors: `statusSuccess` `#067047` / `statusSuccessBorder` `.28`. Sits on `surfaceOverlay` `#fafbfc` and selected `interactionNeutralHover` `#e2e5ea`.
+- Walked: Assistant Settings Enabled chip and Validated chip, light mode.
+- Why: `.10` washed out on the new light ladder. Typical light success chips need a denser well.
+- Out of scope: dark success surface; danger/warning/info surfaces.
+- For Emre: Light success fill is the chip/banner well. `.16` is still a wash, not a solid green-100.
+
+### 2026-09-01 — Light Enabled chip uses the success well
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark unchanged)
+- Tokens: `statusSuccessSurface`, `statusSuccessBorder`, `surfaceValue`, `borderDefault` (values as above)
+- Binding: sidebar `StatusChip` Enabled was `interactionNeutral` in both modes — same as the selected provider row (`interactionNeutralHover`) in light, so the chip vanished. Light Enabled → `statusSuccessSurface` + `statusSuccessBorder`. Light Inactive → `surfaceValue` + `borderDefault`. Dark stays `interactionNeutral`, no border (Figma).
+- Neighbors: selected provider `interactionNeutralHover` `#e2e5ea`. Modal `surfaceOverlay` `#fafbfc`.
+- Walked: Assistant Settings sidebar, light, selected Enabled row.
+- Why: Light chips need a fill that is not the selected-row gray. Enabled is a success state.
+- Out of scope: dark Enabled (already matches Figma); Monitoring `TabBadge`.
+- For Emre: Light Enabled is a success chip. Dark Enabled is a neutral well with success type.
+
+### 2026-09-01 — AI settings selected provider is one step quieter
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `interactionNeutral` (values unchanged)
+- Binding: `ProviderTab` selected `interactionNeutralHover` → `interactionNeutral`.
+- Neighbors: unselected hover stays `controlSurfaceHover`. Modal is `surfaceOverlay`. Tab underline stays `contentAccent`.
+- Walked: Assistant Settings sidebar, light.
+- Why: Selected row was a notch too heavy on the lifted light ladder. Same interaction role, one step quieter.
+- Out of scope: editor/drawer `TabButton` (still `surfaceRaised`).
+- For Emre: Vertical provider tabs use the list-selected well, not the hover well.
+
+### 2026-09-01 — Models empty well is inset, not the dialog scrim
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `surfaceInset` (values unchanged)
+- Binding: `ModelsPlaceholder` `surfaceScrim` → `surfaceInset`.
+- Neighbors: modal `surfaceOverlay` `#fafbfc`; inputs `surfaceInput` `#fafbfc`. Scrim is 32% ink — a backdrop, not a well.
+- Walked: Assistant Settings before API key validation, light.
+- Why: `surfaceScrim` is occlusion. An empty models region is an embedded well.
+- Out of scope: Overlay / docsearch / grid fades still use scrim.
+- For Emre: Placeholder copy sits on inset, not the dimmer.
+
+### 2026-09-01 — Models empty well one step heavier
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `surfaceRaised` (values unchanged)
+- Binding: `ModelsPlaceholder` `surfaceInset` → `surfaceRaised`.
+- Neighbors: modal `surfaceOverlay` `#fafbfc`. Light inset `#f7f8f9` vanished; raised `#f4f5f7` is the next visible well.
+- Walked: Assistant Settings Enable Models placeholder, light.
+- Why: Inset was a notch too close to the modal. Same empty-well job, one step more present.
+- Out of scope: scrim; other inset wells.
+- For Emre: Empty models copy on raised, not inset.
+
+### 2026-09-01 — Form selects use the input well
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `surfaceInput` (values unchanged)
+- Binding: `SelectMenuControl` trigger was secondary `controlSurface`. Form fields should match `Input` (`surfaceInput`). Toolbar `SelectMenu.Trigger` stays `controlSurface`.
+- Neighbors: Provider Type next to Provider Name / Base URL / API Key inputs.
+- Walked: Add Custom Provider, light.
+- Why: Same row of fields, two fills. Form selects are fields, not toolbar buttons.
+- Out of scope: toolbar dropdowns.
+- For Emre: `SelectMenuControl` is the form select. Trigger fill is `surfaceInput`.
+
+### 2026-09-01 — Footer Connected mark matches Ingesting
+- Lift: binding (geometry)
+- Status: applied locally
+- Modes: both
+- Tokens: `statusSuccess` / `statusDanger` (values unchanged)
+- Binding: footer `ConnectionStatus` mark was a circle with success/danger glow. It is now the same rounded-square SVG as Ingesting / Enabled chips (`0.9rem`, 15% radius, 32% stroke).
+- Neighbors: MCP / Ingesting marks in the same footer row.
+- Walked: footer Connected, light and dark.
+- Why: Status marks in one bar should share geometry. Color still carries the state.
+- Out of scope: MCP pairing popover; Ingesting internals.
+- For Emre: Footer status marks are squares, not dots.
+
+### 2026-09-01 — Provider Type uses the console select
+- Lift: binding (control)
+- Status: applied locally
+- Modes: both
+- Binding: Add Custom Provider `Select` (native `<select>`) → `SelectMenuControl`. Fill follows the form-select entry above (`surfaceInput`).
+- Neighbors: instance type, import settings, chart axes — same primitive.
+- Walked: Add Custom Provider, light, open menu.
+- Why: Native OS menu broke the light console. Form fields should share one select.
+- Out of scope: leftover native `Select` elsewhere.
+- For Emre: Workflow selects are `SelectMenuControl`, not `<select>`.
 
 ---
 

@@ -72,7 +72,10 @@ export const GlobalStyle = createGlobalStyle`
 
   button[data-button-variant="ghost"]:hover:not(:disabled) {
     border-color: transparent;
-    background: ${({ theme }) => theme.color.surfaceRaised};
+    background: ${({ theme }) =>
+      theme.mode === "light"
+        ? theme.color.interactionHover
+        : theme.color.surfaceRaised};
     color: ${({ theme }) => theme.color.contentPrimary};
   }
 
@@ -114,6 +117,20 @@ export const GlobalStyle = createGlobalStyle`
   * {
     scrollbar-width: thin;
     scrollbar-color: ${({ theme }) => theme.color.scrollbarThumb} transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: ${({ theme }) => theme.color.scrollbarThumb};
+    border-radius: 999px;
   }
 
   .monaco-editor,

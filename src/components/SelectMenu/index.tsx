@@ -302,6 +302,20 @@ type SelectMenuControlProps = {
  * indicator as the toolbar dropdowns. Prefer this over native selects when the
  * menu is part of an application workflow rather than a browser form.
  */
+const FieldTrigger = styled(Trigger)`
+  && {
+    background: ${({ theme }) => theme.color.surfaceInput};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.surfaceInput};
+  }
+
+  &&[aria-expanded="true"] {
+    background: ${({ theme }) => theme.color.surfaceInput};
+  }
+`
+
 export const SelectMenuControl = ({
   name,
   id,
@@ -331,7 +345,7 @@ export const SelectMenuControl = ({
 
   return (
     <RadixDropdownMenu.Root modal={modal} onOpenChange={onOpenChange}>
-      <Trigger
+      <FieldTrigger
         id={id}
         className={className}
         dataHook={dataHook}

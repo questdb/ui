@@ -386,7 +386,7 @@ const Schema = ({
               setFilterSuspendedOnly={setFilterSuspendedOnly}
             />
             {tables && (
-              <Box align="center" gap="0">
+              <Box align="center" gap="0.2rem">
                 {selectOpen && (
                   <Tooltip
                     delay={350}
