@@ -195,20 +195,6 @@ const transformStoragePolicyResponse = (
   return result.data[0] ?? null
 }
 
-const getDDLQuery = (tableName: string, kind: TableKind): string => {
-  const escapedName = QuestDB.escapeSqlLiteral(tableName)
-  switch (kind) {
-    case "table":
-      return `SHOW CREATE TABLE '${escapedName}';`
-    case "matview":
-      return `SHOW CREATE MATERIALIZED VIEW '${escapedName}';`
-    case "view":
-      return `SHOW CREATE VIEW '${escapedName}';`
-    case "liveview":
-      return `SHOW CREATE LIVE VIEW '${escapedName}';`
-  }
-}
-
 const TabsContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -341,7 +327,7 @@ export const TableDetailsDrawer = () => {
     sourceKey: `${sourcePrefix}:ddl`,
     sourceName: "DDL",
     enabled: isOpen && hasTarget,
-    query: getDDLQuery(tableName, kind),
+    query: QuestDB.buildDDLQuery(tableName, kind),
     pollIntervalMs:
       isView || activeTab === "details" ? DETAILS_TABLE_POLL_MS : null,
     transformResponse: transformDDLResponse,

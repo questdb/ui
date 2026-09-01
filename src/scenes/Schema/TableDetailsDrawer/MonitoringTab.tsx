@@ -17,7 +17,7 @@ import {
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
 import { Badge, Box, CopyButton, Text, Tooltip } from "../../../components"
-import { type Table } from "../../../utils/questdb/types"
+import { type LiveView, type Table } from "../../../utils/questdb/types"
 import type { TableKindData } from "./types"
 import {
   formatRelativeTimestamp,
@@ -379,11 +379,20 @@ const formatRate = (rate: number, field: string): string => {
   return `${sign}${magnitude} ${unit}`
 }
 
-const LIVE_VIEW_FAILURE_STATUS_LABELS: Record<string, string> = {
+type LiveViewFailureStatus = Extract<
+  LiveView["view_status"],
+  "invalid" | "version_unsupported" | "state_unreadable"
+>
+
+const LIVE_VIEW_FAILURE_STATUS_LABELS: Record<LiveViewFailureStatus, string> = {
   invalid: "Invalid",
   version_unsupported: "Version unsupported",
   state_unreadable: "State unreadable",
 }
+
+const isLiveViewFailureStatus = (
+  status: LiveView["view_status"],
+): status is LiveViewFailureStatus => status in LIVE_VIEW_FAILURE_STATUS_LABELS
 
 const ConfigItemWithHealth = ({
   label,
@@ -610,9 +619,7 @@ export const MonitoringTab = ({
                       />
                       <Text color="statusSuccess">Active</Text>
                     </>
-                  ) : liveView.view_status === "invalid" ||
-                    liveView.view_status === "version_unsupported" ||
-                    liveView.view_status === "state_unreadable" ? (
+                  ) : isLiveViewFailureStatus(liveView.view_status) ? (
                     <>
                       <XSquareIcon
                         size={16}

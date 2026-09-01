@@ -37,6 +37,20 @@ export type QueryId = number
 
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
+export const buildDDLQuery = (name: string, kind: TableKind): string => {
+  const escapedName = escapeSqlLiteral(name)
+  switch (kind) {
+    case "table":
+      return `SHOW CREATE TABLE '${escapedName}';`
+    case "matview":
+      return `SHOW CREATE MATERIALIZED VIEW '${escapedName}';`
+    case "view":
+      return `SHOW CREATE VIEW '${escapedName}';`
+    case "liveview":
+      return `SHOW CREATE LIVE VIEW '${escapedName}';`
+  }
+}
+
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
   private _nextQueryId: QueryId = 1
@@ -509,54 +523,19 @@ export class Client {
     return await this.queryCatalog<MaterializedView>("materialized_views()")
   }
 
-  async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(
-      `SHOW CREATE MATERIALIZED VIEW '${escapeSqlLiteral(table)}';`,
-    )
-  }
-
-  async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE VIEW '${escapeSqlLiteral(viewName)}';`)
-  }
-
   async showViews(): Promise<QueryResult<View>> {
     return await this.query<View>("views();")
-  }
-
-  async showLiveViewDDL(
-    viewName: string,
-  ): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(
-      `SHOW CREATE LIVE VIEW '${escapeSqlLiteral(viewName)}';`,
-    )
   }
 
   async showLiveViews(): Promise<QueryResult<LiveView>> {
     return await this.queryCatalog<LiveView>("live_views();")
   }
 
-  async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE TABLE '${escapeSqlLiteral(table)}';`)
-  }
-
   async showDDL(
     name: string,
     kind: TableKind,
   ): Promise<QueryResult<{ ddl: string }>> {
-    switch (kind) {
-      case "table":
-        return this.showTableDDL(name)
-      case "matview":
-        return this.showMatViewDDL(name)
-      case "view":
-        return this.showViewDDL(name)
-      case "liveview":
-        return this.showLiveViewDDL(name)
-      default: {
-        const unsupported: never = kind
-        throw new Error(`Unsupported table kind: ${String(unsupported)}`)
-      }
-    }
+    return this.queryDDL(buildDDLQuery(name, kind))
   }
 
   private async queryDDL(sql: string): Promise<QueryResult<{ ddl: string }>> {

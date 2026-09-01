@@ -2225,4 +2225,125 @@ describe("TableDetailsDrawer", () => {
       cy.dropTable(TEST_TABLE_2)
     })
   })
+
+  // The real storage_policies catalogue is Enterprise-only, and
+  // test:e2e:enterprise does not run in CI. These stubs pin the contract the
+  // console depends on - the bare identifier, the column set and the "D"
+  // disabled code - so a drift fails here instead of only on a live EE server.
+  describe("storage policy catalogue contract", () => {
+    const STORAGE_POLICY_COLUMNS = [
+      "table_dir_name",
+      "to_parquet",
+      "to_remote",
+      "drop_local",
+      "drop_remote",
+      "status",
+      "last_updated",
+    ]
+
+    const interceptEnterpriseSettings = () => {
+      cy.intercept({ method: "GET", pathname: /\/?settings$/ }, (req) => {
+        req.continue((res) => {
+          if (res.body?.config) {
+            res.body.config["release.type"] = "EE"
+          }
+          return res
+        })
+      }).as("settings")
+    }
+
+    const interceptStoragePolicies = (status) => {
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /storage_policies/ },
+        },
+        {
+          statusCode: 200,
+          body: {
+            columns: STORAGE_POLICY_COLUMNS.map((name) => ({
+              name,
+              type: "STRING",
+            })),
+            count: 1,
+            dataset: [
+              ["dir", "72h", "240h", "12m", "0h", status, "2026-09-01"],
+            ],
+            timings: { compiler: 0, authentication: 0, count: 0, execute: 0 },
+          },
+        },
+      ).as("storagePolicies")
+    }
+
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+    })
+
+    it("should render clauses from the catalogue column set", () => {
+      // Given an Enterprise server returning an active policy
+      interceptEnterpriseSettings()
+      interceptStoragePolicies("A")
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.wait("@storagePolicies")
+
+      // Then the query uses the bare identifier, not a table function
+      cy.get("@storagePolicies")
+        .its("request.url")
+        .then((url) => {
+          const query = decodeURIComponent(url)
+          expect(query).to.contain("storage_policies WHERE table_dir_name")
+          expect(query).not.to.contain("storage_policies(")
+        })
+
+      // Then each duration column renders through its own label
+      cy.getByDataHook("table-details-storage-policy-section")
+        .should("be.visible")
+        .within(() => {
+          cy.contains("To Parquet").should("be.visible")
+          cy.contains("3 Days").should("be.visible")
+          cy.contains("To Remote").should("be.visible")
+          cy.contains("10 Days").should("be.visible")
+          cy.contains("Drop Local").should("be.visible")
+          cy.contains("1 Year").should("be.visible")
+          // drop_remote is "0h" and is omitted rather than shown as "0 Hours"
+          cy.contains("Drop Remote").should("not.exist")
+        })
+      cy.getByDataHook("table-details-storage-disabled").should("not.exist")
+    })
+
+    it("should show the disabled badge only for the D status code", () => {
+      // Given an Enterprise server reporting the policy as disabled
+      interceptEnterpriseSettings()
+      interceptStoragePolicies("D")
+      cy.loadConsoleWithAuth()
+      cy.refreshSchema()
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.wait("@storagePolicies")
+
+      // Then
+      cy.getByDataHook("table-details-storage-disabled")
+        .should("be.visible")
+        .and("contain", "Disabled")
+      // The clauses stay visible so the operator can see what is suspended
+      cy.getByDataHook("table-details-storage-policy-section").within(() => {
+        cy.contains("To Parquet").should("be.visible")
+      })
+    })
+
+    after(() => {
+      // Reload without the settings stub so RELEASE_TYPE returns to OSS
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
 })

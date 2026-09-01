@@ -65,6 +65,6 @@ export const CaretIcon = styled(CaretRightIcon)<{ $expanded?: boolean }>`
 export const UnavailableValue = styled.span.attrs({
   children: "Unavailable",
 })`
-  color: ${({ theme }) => theme.color.contentDisabled};
+  color: ${({ theme }) => theme.color.contentSecondary};
   font-size: ${({ theme }) => theme.fontSize.md};
 `
