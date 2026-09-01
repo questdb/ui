@@ -30,12 +30,15 @@ import { toast } from "../../../../components/Toast"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
+  computeCellHeights,
   isDoubleView,
   isExpectingResult,
-  MIN_BOTTOM_HEIGHT_PX,
+  minBottomHeightFor,
   resolveAutoRefresh,
+  resolveCellPaneLayout,
   resolveCellView,
 } from "../notebookUtils"
+import type { CellToolbarTier } from "../notebookUtils"
 import {
   useCellContentMode,
   useCellVirtualizationEngine,
@@ -51,6 +54,7 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
+import { publishLiveCellPresentation } from "../notebookPresentationStore"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
@@ -109,6 +113,8 @@ const HiddenCellStatus = styled.span`
   white-space: nowrap;
 `
 
+const GRID_PANE_EXPANSION_FALLBACK_MS = 250
+
 type Props = {
   cell: NotebookCell
   index: number
@@ -118,6 +124,8 @@ type Props = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
+  toolbarTierOverride?: CellToolbarTier
+  gridContainerWidth?: number
 }
 
 const CellInner: React.FC<Props> = ({
@@ -129,6 +137,8 @@ const CellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
   isRunning,
+  toolbarTierOverride,
+  gridContainerWidth,
 }) => {
   const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
     useNotebookActions()
@@ -147,7 +157,8 @@ const CellInner: React.FC<Props> = ({
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
 
-  const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
+  const observedToolbarTier = useCellToolbarTier(headerRef, isMaximized)
+  const toolbarTier = toolbarTierOverride ?? observedToolbarTier
   const { loading: chartLoading, refreshing: chartRefreshing } =
     useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
@@ -174,14 +185,82 @@ const CellInner: React.FC<Props> = ({
   // in the grid item's height (both go through computeCellHeights).
   const expectingResult = isExpectingResult(cell, resultStatus)
   const doubleView = isDoubleView(cell) || expectingResult
-  // Compact can't split — one full-height pane: the result fills the cell by
-  // default, "View SQL" (isViewMaximized === false) shows the editor instead.
   const isCompactTier = toolbarTier === "compact"
-  const isViewMaximized = isCompactTier
-    ? doubleView && cell.isViewMaximized !== false
-    : doubleView && !!cell.isViewMaximized
-  const showBottomSlot = isViewMaximized || (doubleView && !isCompactTier)
-  const isSplit = doubleView && !isViewMaximized && !isCompactTier
+  const targetPaneLayout = resolveCellPaneLayout(
+    cell,
+    expectingResult,
+    isCompactTier,
+  )
+  const [paneLayout, setPaneLayout] = React.useState(targetPaneLayout)
+  const resolvedPaneHeights = computeCellHeights(cell, { expectingResult })
+
+  React.useLayoutEffect(() => {
+    if (paneLayout === targetPaneLayout) return undefined
+
+    // Switch immediately before a shrink. Before an expansion, keep the old
+    // pane mounted until RGL has made room for the incoming pane. This applies
+    // to compact editor/result swaps as well as compact -> split.
+    const paneHeight = (layout: typeof paneLayout) =>
+      layout === "editor"
+        ? resolvedPaneHeights.topHeight
+        : layout === "result"
+          ? resolvedPaneHeights.bottomHeight
+          : resolvedPaneHeights.topHeight + resolvedPaneHeights.bottomHeight
+    const expandingPresentation =
+      layoutMode === "grid" &&
+      !isMaximized &&
+      paneHeight(targetPaneLayout) > paneHeight(paneLayout)
+    if (!expandingPresentation) {
+      setPaneLayout(targetPaneLayout)
+      return undefined
+    }
+
+    const gridItem =
+      wrapperRef.current?.closest<HTMLElement>(".react-grid-item")
+    if (!gridItem) {
+      setPaneLayout(targetPaneLayout)
+      return undefined
+    }
+
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      setPaneLayout(targetPaneLayout)
+    }
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === gridItem && event.propertyName === "height") finish()
+    }
+    gridItem.addEventListener("transitionend", onTransitionEnd)
+    const fallback = window.setTimeout(finish, GRID_PANE_EXPANSION_FALLBACK_MS)
+    return () => {
+      settled = true
+      window.clearTimeout(fallback)
+      gridItem.removeEventListener("transitionend", onTransitionEnd)
+    }
+  }, [
+    isMaximized,
+    layoutMode,
+    paneLayout,
+    resolvedPaneHeights.bottomHeight,
+    resolvedPaneHeights.topHeight,
+    targetPaneLayout,
+    wrapperRef,
+  ])
+
+  useEffect(
+    () =>
+      publishLiveCellPresentation(bufferIdForEvents, cell.id, {
+        compact: isCompactTier,
+        paneLayout,
+        ...(gridContainerWidth !== undefined ? { gridContainerWidth } : {}),
+      }),
+    [bufferIdForEvents, cell.id, gridContainerWidth, isCompactTier, paneLayout],
+  )
+
+  const isViewMaximized = paneLayout === "result"
+  const showBottomSlot = paneLayout !== "editor"
+  const isSplit = paneLayout === "split"
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
@@ -425,6 +504,7 @@ const CellInner: React.FC<Props> = ({
         isRunning={isRunning}
         headerRef={headerRef}
         toolbarTier={toolbarTier}
+        paneLayout={paneLayout}
         chartZoomed={chartZoomed}
         left={
           <CellNameLabel
@@ -561,8 +641,8 @@ const CellInner: React.FC<Props> = ({
           doubleView={doubleView}
         />
       )}
-      {/* Bottom slot: result grid OR chart, OR chart filling the whole cell
-          when expanded. */}
+      {/* Bottom slot: result grid OR chart. Hiding the editor preserves this
+          pane's own height instead of borrowing the editor allocation. */}
       {showBottomSlot && (
         <BottomSlot
           ref={resultRef}
@@ -571,7 +651,7 @@ const CellInner: React.FC<Props> = ({
             isViewMaximized
               ? isMaximized
                 ? { flex: 1 }
-                : { height: topHeight + bottomHeight }
+                : { height: bottomHeight }
               : isMaximized
                 ? { flex: 1 - spotlightEditorRatio }
                 : { height: bottomHeight }
@@ -615,15 +695,12 @@ const CellInner: React.FC<Props> = ({
         }}
         onDoubleClick={() => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
-          if (isViewMaximized) resetToDefaults()
-          else resetBottomArea()
+          resetBottomArea()
         }}
         minHeight={
-          isViewMaximized
-            ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX
-            : showBottomSlot
-              ? MIN_BOTTOM_HEIGHT_PX
-              : undefined
+          isViewMaximized || showBottomSlot
+            ? minBottomHeightFor(cell)
+            : undefined
         }
       />
     ) : null

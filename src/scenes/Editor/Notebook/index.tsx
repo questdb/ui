@@ -35,19 +35,20 @@ import { NotebookToolbar } from "./NotebookToolbar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
-  cellChromePx,
   cellHeightPatchForRows,
+  gridCellToolbarTier,
   computeCellGridH,
+  computeCellMinGridH,
   generateDefaultLayout as generateDefaultLayoutPure,
-  isDoubleView,
   isExpectingResult,
   mergeCellLayout,
-  MIN_BOTTOM_HEIGHT_PX,
-  minTopHeightFor,
+  resolveCellPaneLayout,
   NOTEBOOK_GRID_COLS,
+  NOTEBOOK_GRID_MARGIN_X,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
 } from "./notebookUtils"
+import type { CellToolbarTier } from "./notebookUtils"
 import {
   emitUserAction,
   on as onUserAction,
@@ -180,7 +181,7 @@ const MIN_CELL_W = 2
 // unwanted hard floor in grid mode.
 const MIN_CELL_H = 5
 
-const GRID_MARGIN_X = 20
+const GRID_MARGIN_X = NOTEBOOK_GRID_MARGIN_X
 const GRID_MARGIN_Y = NOTEBOOK_GRID_MARGIN_Y
 const GRID_MARGIN: [number, number] = [GRID_MARGIN_X, GRID_MARGIN_Y]
 const GRID_CONTAINER_PADDING: [number, number] = [0, 0]
@@ -333,13 +334,23 @@ type CellViewProps = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
+  toolbarTierOverride?: CellToolbarTier
+  gridContainerWidth?: number
 }
 
-const CellView: React.FC<CellViewProps> = ({ autoRefreshDefault, ...props }) =>
+const CellView: React.FC<CellViewProps> = ({
+  autoRefreshDefault,
+  toolbarTierOverride,
+  ...props
+}) =>
   props.cell.type === "markdown" ? (
     <MarkdownCell {...props} />
   ) : (
-    <Cell {...props} autoRefreshDefault={autoRefreshDefault} />
+    <Cell
+      {...props}
+      autoRefreshDefault={autoRefreshDefault}
+      toolbarTierOverride={toolbarTierOverride}
+    />
   )
 
 const ListLayout: React.FC = () => {
@@ -424,7 +435,7 @@ const GridLayout: React.FC = () => {
   // shadow that only matters when react-grid-layout consumes it. The
   // memo recomputes when the layout, the cells or a statusOf boundary
   // (resultStatusVersion) changes
-  const { computedLayout, layoutKey } = useMemo(() => {
+  const { computedLayout, layoutKey, toolbarTierByCellId } = useMemo(() => {
     const mergedLayout = mergeCellLayout(
       settings.layout && settings.layout.length > 0
         ? settings.layout
@@ -433,6 +444,7 @@ const GridLayout: React.FC = () => {
       LAYOUT_OPTS,
     ) as LayoutItem[]
     const cellById = new Map(cells.map((c) => [c.id, c]))
+    const tiers = new Map<string, CellToolbarTier>()
     const computed = mergedLayout.map((item) => {
       const cell = cellById.get(item.i)
       if (!cell) return item
@@ -440,18 +452,29 @@ const GridLayout: React.FC = () => {
         cell,
         resultHydration?.statusOf(cell.id) ?? "unrequested",
       )
-      const minBottomPx =
-        isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
-      const minTotalPx =
-        minTopHeightFor(cell) +
-        minBottomPx +
-        cellChromePx(cell, expectingResult)
-      const minH = Math.ceil(
-        (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
+      const toolbarTier = gridCellToolbarTier(containerWidth, item.w)
+      const paneLayout = resolveCellPaneLayout(
+        cell,
+        expectingResult,
+        toolbarTier === "compact",
+      )
+      tiers.set(cell.id, toolbarTier)
+      const minH = computeCellMinGridH(
+        cell,
+        ROW_HEIGHT,
+        GRID_MARGIN_Y,
+        expectingResult,
+        paneLayout,
       )
       return {
         ...item,
-        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
+        h: computeCellGridH(
+          cell,
+          ROW_HEIGHT,
+          GRID_MARGIN_Y,
+          expectingResult,
+          paneLayout,
+        ),
         minH,
       }
     })
@@ -463,8 +486,15 @@ const GridLayout: React.FC = () => {
             `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
         )
         .join("|"),
+      toolbarTierByCellId: tiers,
     }
-  }, [settings.layout, cells, resultHydration, resultStatusVersion])
+  }, [
+    settings.layout,
+    cells,
+    resultHydration,
+    resultStatusVersion,
+    containerWidth,
+  ])
 
   const currentLayout = useMemo(() => computedLayout, [layoutKey])
   const gridLayouts = useMemo(
@@ -527,22 +557,33 @@ const GridLayout: React.FC = () => {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
       }
       updateSettings({ layout: mapLayoutXYW(newLayout) })
-      const cellById = new Map(cells.map((c) => [c.id, c]))
-      for (const item of newLayout) {
-        const cell = cellById.get(item.i)
-        if (!cell) continue
-        // rgl reports every cell; the helper no-ops those whose h is unchanged.
-        const patch = cellHeightPatchForRows(
-          cell,
-          item.h,
-          ROW_HEIGHT,
-          GRID_MARGIN_Y,
-          isExpectingResult(
+      // A width-only resize may cross the compact breakpoint and therefore
+      // change the cell's derived h. Do not mistake the old h carried by RGL
+      // for an intentional pane-height resize; only back-solve when the user
+      // actually moved the vertical edge.
+      if (oldItem && newItem && oldItem.h !== newItem.h) {
+        const cell = cells.find((candidate) => candidate.id === newItem.i)
+        if (cell) {
+          const expectingResult = isExpectingResult(
             cell,
             resultHydration?.statusOf(cell.id) ?? "unrequested",
-          ),
-        )
-        if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+          )
+          const toolbarTier = gridCellToolbarTier(containerWidth, newItem.w)
+          const paneLayout = resolveCellPaneLayout(
+            cell,
+            expectingResult,
+            toolbarTier === "compact",
+          )
+          const patch = cellHeightPatchForRows(
+            cell,
+            newItem.h,
+            ROW_HEIGHT,
+            GRID_MARGIN_Y,
+            expectingResult,
+            paneLayout,
+          )
+          if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+        }
       }
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
@@ -558,6 +599,7 @@ const GridLayout: React.FC = () => {
       cells,
       activeBuffer.id,
       resultHydration,
+      containerWidth,
     ],
   )
 
@@ -657,6 +699,8 @@ const GridLayout: React.FC = () => {
                 isFocused={focusedCellId === cell.id}
                 isMaximized={maximizedCellId === cell.id}
                 isRunning={runningCellIds.has(cell.id)}
+                toolbarTierOverride={toolbarTierByCellId.get(cell.id)}
+                gridContainerWidth={containerWidth}
               />
             </GridCellWrapper>
           ))}

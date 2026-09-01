@@ -12,8 +12,6 @@ import {
   CornersOutIcon,
   CornersInIcon,
   ArrowClockwiseIcon,
-  ArrowsOutLineVerticalIcon,
-  ArrowsInLineVerticalIcon,
   GearIcon,
   TableIcon,
   ChartLineIcon,
@@ -29,7 +27,7 @@ import {
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
-import type { CellToolbarTier } from "../notebookUtils"
+import type { CellPaneLayout, CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
@@ -76,6 +74,7 @@ type Props = {
   isRunning?: boolean
   inline?: boolean
   toolbarTier?: CellToolbarTier
+  paneLayout?: CellPaneLayout
   chartZoomed?: boolean
 }
 
@@ -90,6 +89,7 @@ export const CellToolbar: React.FC<Props> = ({
   isRunning = false,
   inline,
   toolbarTier,
+  paneLayout,
   chartZoomed = false,
 }) => {
   const {
@@ -102,6 +102,7 @@ export const CellToolbar: React.FC<Props> = ({
     setCellRefresh,
     setCellViewMaximized,
     setCellMode,
+    updateCell,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
 
@@ -114,7 +115,11 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const isViewMaximized = !isNoneView && !!cell.isViewMaximized
+  const isViewMaximized =
+    !isNoneView &&
+    (paneLayout !== undefined
+      ? paneLayout === "result"
+      : !!cell.isViewMaximized)
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
   // engine would ignore — same gate the inline selector applies.
@@ -142,22 +147,24 @@ export const CellToolbar: React.FC<Props> = ({
     tier: toolbarTier ?? "compact",
     view,
     isMarkdown,
-    // "View SQL" minimizes the chart/table to the editor without dropping data.
-    sqlShown: cell.isViewMaximized === false,
+    // Compact cells cannot split, so showing the editor temporarily hides the
+    // result without dropping its data.
+    sqlShown: paneLayout === "editor",
     chartZoomed,
     isGridMode,
     cellIndex,
     totalCells,
   })
 
-  // Minimize the chart/table to the editor, keeping the data on the cell.
+  // Show the editor, keeping the result data on the cell.
   const handleViewSql = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
       to: "sql",
       method: "menu",
     })
     signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, false)
+    if (toolbarTier === "compact") updateCell(cellId, { compactView: "editor" })
+    else setCellViewMaximized(cellId, false)
   }
   const handleViewTable = () => {
     if (isRunning) return
@@ -173,7 +180,8 @@ export const CellToolbar: React.FC<Props> = ({
     // A chart transfers its data to the grid (no re-query); restore the data
     // pane in case the SQL was being shown.
     if (isChartView) setCellMode(cellId, "run")
-    setCellViewMaximized(cellId, true)
+    if (toolbarTier === "compact") updateCell(cellId, { compactView: "result" })
+    else setCellViewMaximized(cellId, true)
   }
   const handleViewChart = () => {
     if (isRunning) return
@@ -188,15 +196,16 @@ export const CellToolbar: React.FC<Props> = ({
       eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId, maximize: true })
       return
     }
-    setCellViewMaximized(cellId, true)
+    if (toolbarTier === "compact") updateCell(cellId, { compactView: "result" })
+    else setCellViewMaximized(cellId, true)
   }
   const handleToggleMaximizeView = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !cell.isViewMaximized,
+      isViewMaximized: !isViewMaximized,
       view,
     })
     signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, !cell.isViewMaximized)
+    setCellViewMaximized(cellId, !isViewMaximized)
   }
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
@@ -310,7 +319,7 @@ export const CellToolbar: React.FC<Props> = ({
                   onSelect={handleViewSql}
                   icon={<FileSqlIcon size={16} />}
                 >
-                  View SQL
+                  View editor
                 </DropdownMenu.Item>
               )}
               {showViewTable && (
@@ -340,15 +349,9 @@ export const CellToolbar: React.FC<Props> = ({
               {showSplitItem && (
                 <DropdownMenu.Item
                   onSelect={handleToggleMaximizeView}
-                  icon={
-                    isViewMaximized ? (
-                      <ArrowsInLineVerticalIcon size={16} />
-                    ) : (
-                      <ArrowsOutLineVerticalIcon size={16} />
-                    )
-                  }
+                  icon={<FileSqlIcon size={16} />}
                 >
-                  {isViewMaximized ? "Split view" : "Maximized view"}
+                  {isViewMaximized ? "Show editor" : "Hide editor"}
                 </DropdownMenu.Item>
               )}
 

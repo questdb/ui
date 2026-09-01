@@ -1,4 +1,5 @@
 import type {
+  AgentCellView,
   AutoRefresh,
   CellType,
   NotebookCell,
@@ -7,6 +8,7 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { AgentHeightValue } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -120,9 +122,14 @@ export type ApplyNotebookStateCellRequest = {
   type?: CellType | null
   mode?: "run" | "draw" | null
   autoRefresh?: AutoRefresh | null
+  editorHeight?: AgentHeightValue
+  resultHeight?: AgentHeightValue
+  view?: AgentCellView | null
+  // Legacy cached-agent inputs. Not advertised by the current schema.
+  editorVisible?: boolean | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
-  grid?: { x: number; y: number; w: number; h: number } | null
+  grid?: { x: number; y: number; w: number; h?: number } | null
 }
 
 export type ApplyNotebookStateRequest = {

@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { CellToolbar } from "./CellToolbar"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import type { CellToolbarTier } from "../notebookUtils"
+import type { CellPaneLayout, CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { editorCardHeaderStyles } from "../../sharedStyles"
 
@@ -62,6 +62,7 @@ type Props = {
   // cells omit it (no width-driven tiering).
   headerRef?: RefObject<HTMLDivElement>
   toolbarTier?: CellToolbarTier
+  paneLayout?: CellPaneLayout
   chartZoomed?: boolean
 }
 
@@ -78,6 +79,7 @@ export const CellDragHeader: React.FC<Props> = ({
   right,
   headerRef,
   toolbarTier,
+  paneLayout,
   chartZoomed,
 }) => (
   <HeaderBar
@@ -111,6 +113,7 @@ export const CellDragHeader: React.FC<Props> = ({
         isRunning={isRunning}
         inline
         toolbarTier={toolbarTier}
+        paneLayout={paneLayout}
         chartZoomed={chartZoomed}
       />
     </RightSide>

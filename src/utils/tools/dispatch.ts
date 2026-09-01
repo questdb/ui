@@ -8,7 +8,11 @@ import {
 } from "../questdbDocsRetrieval"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
-import type { CellMode, NotebookCell } from "../../store/notebook"
+import type {
+  AgentCellView,
+  CellMode,
+  NotebookCell,
+} from "../../store/notebook"
 import {
   MAX_CELL_NAME_LENGTH,
   exceedsCellNameLimit,
@@ -68,6 +72,7 @@ import {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
@@ -83,6 +88,7 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
+import { readLiveCellPresentation } from "../../scenes/Editor/Notebook/notebookPresentationStore"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -498,7 +504,7 @@ export const dispatchTool = async (
           )
           return {
             ...res,
-            hint: "Duplicated in the background — the tab was not switched. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
+            hint: "Duplicated in the background — the tab was not switched. Run history is preserved; matching saved result snapshots copy best-effort in the background and hydrate when opened. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
           }
         })
       }
@@ -820,9 +826,10 @@ export const dispatchTool = async (
             x: number
             y: number
             w: number
-            h: number
+            h?: number
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
+        const livePresentation = readLiveCellPresentation(buffer_id, cell_id)
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
@@ -832,6 +839,32 @@ export const dispatchTool = async (
                 y,
                 w,
                 h,
+                liveCompact: livePresentation?.compact,
+                gridContainerWidth: livePresentation?.gridContainerWidth,
+              }),
+            signal,
+          ),
+        )
+      }
+      case "set_cell_dimensions": {
+        const { buffer_id, cell_id, editor_height, result_height, view } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            editor_height: number | "auto" | null
+            result_height: number | "auto" | null
+            view: AgentCellView | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          runTransition(
+            buffer_id,
+            (parts) =>
+              setCellDimensionsTransition(parts, buffer_id, cell_id, {
+                editorHeight: editor_height,
+                resultHeight: result_height,
+                view,
+                compact: readLiveCellPresentation(buffer_id, cell_id)?.compact,
               }),
             signal,
           ),

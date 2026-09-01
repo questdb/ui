@@ -10,9 +10,8 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
-  MIN_BOTTOM_HEIGHT_PX,
+  minBottomHeightFor,
   partitionCellHeights,
-  scaleCellHeights,
   topHeightForSql,
 } from "../notebookUtils"
 
@@ -90,7 +89,7 @@ export const useCellResizeOrchestration = ({
     }, [cell.id, readResetTopHeight, updateCell]),
   )
   const bottomResize = useCellResize(
-    MIN_BOTTOM_HEIGHT_PX,
+    minBottomHeightFor(cell),
     useCallback(
       (height: number) =>
         updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
@@ -127,7 +126,7 @@ export const useCellResizeOrchestration = ({
       middleSum(),
       height,
       MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
+      minBottomHeightFor(cell),
     )
     if (isMaximized) {
       setSpotlightLiveRatio(top / (top + bottom))
@@ -143,7 +142,7 @@ export const useCellResizeOrchestration = ({
       middleSum(),
       height,
       MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
+      minBottomHeightFor(cell),
     )
     if (isMaximized) {
       setSpotlightLiveRatio(null)
@@ -206,31 +205,14 @@ export const useCellResizeOrchestration = ({
     updateCell,
   ])
 
-  // When a chart is maximized the BottomSlot fills the whole cell, so its
-  // measured height IS the cell total — scale top/bottom to that new total
-  // (preserving the split so it's intact when the chart is restored).
+  // With the editor hidden, resizing changes only the visible result pane.
+  // The editor allocation stays intact for a later restore.
   const maximizedChartResizeLive = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
+    bottomResize.resizeLive(newTotalHeight)
   }
 
   const maximizedChartResizeEnd = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
+    bottomResize.resizeEnd(newTotalHeight)
   }
 
   useEffect(() => {

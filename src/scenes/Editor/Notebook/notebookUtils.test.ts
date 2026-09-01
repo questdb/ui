@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
+  agentCellPaneDimensions,
   buildAppliedNotebookState,
   attachScriptSummary,
   autoRefreshIntervalMs,
@@ -8,6 +9,8 @@ import {
   AUTO_REFRESH_OPTIONS,
   isAutoRefresh,
   resolveCellView,
+  resolveAgentCellPresentation,
+  resolveCellPaneLayout,
   resolveRunAction,
   buildAppliedCells,
   buildAppliedLayout,
@@ -27,6 +30,7 @@ import {
   computeAgentCellGridH,
   computeCellGridH,
   computeCellHeights,
+  computeCellMinGridH,
   computeResultBottomHeight,
   DEFAULT_CHART_BOTTOM_HEIGHT,
   duplicateCellAt,
@@ -54,7 +58,6 @@ import {
   statementKeysFor,
   removeCell,
   resolveRunCompletion,
-  scaleCellHeights,
   setResultAt,
   singleResultFromExec,
   snapMarkdownTopHeight,
@@ -1203,6 +1206,74 @@ describe("buildAppliedCells", () => {
     // No stored key: the cell inherits the notebook default.
     expect("autoRefresh" in nextCells[0]).toBe(false)
     expect(nextCells[0].isViewMaximized).toBe(true)
+    expect(nextCells[0].wideView).toBe("result")
+  })
+
+  it("applies semantic pane dimensions and view to a new draw cell", () => {
+    const { nextCells } = buildAppliedCells([], {
+      cells: [
+        {
+          value: "SELECT 1",
+          mode: "draw",
+          editorHeight: 120,
+          resultHeight: 280,
+          view: "editor_result",
+          chartConfig: {
+            xColumn: "ts",
+            queries: [{ type: "line", yColumns: ["v"] }],
+          },
+        },
+      ],
+    })
+
+    expect(nextCells[0]).toMatchObject({
+      topHeight: 120,
+      topResized: true,
+      bottomHeight: 280,
+      bottomResized: true,
+      isViewMaximized: false,
+      wideView: "editor_result",
+      compactView: "result",
+    })
+  })
+
+  it("treats null semantic dimensions as preserve for an existing cell", () => {
+    const existing: NotebookCell = {
+      id: "a",
+      position: 0,
+      value: "SELECT 1",
+      mode: "draw",
+      topHeight: 120,
+      topResized: true,
+      bottomHeight: 280,
+      bottomResized: true,
+      isViewMaximized: false,
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "line", yColumns: ["v"] }],
+      },
+    }
+    const { nextCells } = buildAppliedCells([existing], {
+      cells: [
+        {
+          id: "a",
+          preserveValue: true,
+          mode: "draw",
+          editorHeight: null,
+          resultHeight: null,
+          view: null,
+          chartConfig: existing.chartConfig,
+        },
+      ],
+    })
+
+    expect(nextCells[0]).toMatchObject({
+      topHeight: 120,
+      topResized: true,
+      bottomHeight: 280,
+      bottomResized: true,
+      isViewMaximized: false,
+    })
   })
 
   it("apply is a PUT: mode='draw' with no chart_config throws even when the existing cell had one (no merge)", () => {
@@ -1227,7 +1298,7 @@ describe("buildAppliedCells", () => {
     ).toThrow(/no chart_config/)
   })
 
-  it("preserves an existing mode while clearing omitted PUT fields", () => {
+  it("preserves existing mode and editor visibility while clearing omitted PUT fields", () => {
     // Given an existing run cell with optional chart presentation fields
     const prev: NotebookCell[] = [
       {
@@ -1253,7 +1324,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBe("run")
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
-    expect(nextCells[0].isViewMaximized).toBeUndefined()
+    expect(nextCells[0].isViewMaximized).toBe(true)
   })
 
   it("preserves draw mode when apply omits mode and supplies its full chart", () => {
@@ -1581,36 +1652,35 @@ describe("computeCellHeights", () => {
   })
 })
 
-describe("scaleCellHeights", () => {
-  it("scales both heights proportionally to the new content", () => {
-    expect(scaleCellHeights(200, 200, 200, 72, 88)).toEqual({
-      top: 100,
-      bottom: 100,
-    })
+describe("agentCellPaneDimensions", () => {
+  it("reports a stored result pin even when a run result is not loaded", () => {
+    expect(
+      agentCellPaneDimensions({
+        id: "x",
+        position: 0,
+        value: "SELECT 1",
+        bottomHeight: 400,
+        bottomResized: true,
+        lastRunStatus: "success",
+      }),
+    ).toEqual({ editorHeight: "auto", resultHeight: 400 })
   })
-  it("clamps the bottom to its minimum and gives the rest to the top", () => {
-    expect(scaleCellHeights(400, 100, 200, 72, 88)).toEqual({
-      top: 112,
-      bottom: 88,
-    })
-  })
-  it("clamps the top to its minimum and gives the rest to the bottom", () => {
-    expect(scaleCellHeights(100, 400, 200, 72, 88)).toEqual({
-      top: 72,
-      bottom: 128,
-    })
-  })
-  it("never shrinks below the combined minimum, even when asked smaller", () => {
-    expect(scaleCellHeights(400, 200, 50, 72, 88)).toEqual({
-      top: 72,
-      bottom: 88,
-    })
-  })
-  it("falls back to scale 1 when the old content is zero", () => {
-    expect(scaleCellHeights(0, 0, 300, 72, 88)).toEqual({
-      top: 72,
-      bottom: 228,
-    })
+
+  it("reports auto for unpinned panes and normalizes legacy pins", () => {
+    expect(
+      agentCellPaneDimensions({ id: "x", position: 0, value: "SELECT 1" }),
+    ).toEqual({ editorHeight: "auto", resultHeight: "auto" })
+    expect(
+      agentCellPaneDimensions({
+        id: "x",
+        position: 0,
+        value: "SELECT 1",
+        topHeight: 1,
+        topResized: true,
+        bottomHeight: 1,
+        bottomResized: true,
+      }),
+    ).toEqual({ editorHeight: 72, resultHeight: 100 })
   })
 })
 
@@ -1769,9 +1839,9 @@ describe("computeCellGridH", () => {
       ),
     ).toBe(9)
   })
-  it("view-maximized cells drop the divider (bottom slot spans both panes)", () => {
-    // The same heights as the split case, minus the 6px divider: 220px lands
-    // exactly on 8 rows again.
+  it("editor-hidden cells reserve only the result pane", () => {
+    // The editor's 72px allocation is remembered but removed from the visible
+    // footprint: 104px result + 44px chrome snaps to 6 rows.
     expect(
       computeCellGridH(
         {
@@ -1786,7 +1856,168 @@ describe("computeCellGridH", () => {
         10,
         20,
       ),
-    ).toBe(8)
+    ).toBe(6)
+  })
+
+  it("compact cells derive height from exactly the visible pane", () => {
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      topHeight: 200,
+      bottomHeight: 300,
+      result: { results: [], activeResultIndex: 0, timestamp: 0 },
+    }
+
+    // Editor: 200 + 44 chrome = 244px → 9 rows (250px rendered).
+    expect(computeCellGridH(cell, 10, 20, false, "editor")).toBe(9)
+    // Result: 300 + 44 chrome = 344px → 13 rows (370px rendered).
+    expect(computeCellGridH(cell, 10, 20, false, "result")).toBe(13)
+    // Wide split retains both panes and the 6px divider: 550px → 19 rows.
+    expect(computeCellGridH(cell, 10, 20, false, "split")).toBe(19)
+  })
+})
+
+describe("resolveCellPaneLayout", () => {
+  const withResult = (over: Partial<NotebookCell> = {}): NotebookCell => ({
+    id: "x",
+    position: 0,
+    value: "",
+    result: { results: [], activeResultIndex: 0, timestamp: 0 },
+    ...over,
+  })
+
+  it("shows only the editor when no result exists", () => {
+    const cell: NotebookCell = { id: "x", position: 0, value: "" }
+    expect(resolveCellPaneLayout(cell, false, false)).toBe("editor")
+    expect(resolveCellPaneLayout(cell, false, true)).toBe("editor")
+  })
+
+  it("uses persisted visibility for wide cells", () => {
+    expect(resolveCellPaneLayout(withResult(), false, false)).toBe("split")
+    expect(
+      resolveCellPaneLayout(
+        withResult({ isViewMaximized: true }),
+        false,
+        false,
+      ),
+    ).toBe("result")
+    expect(
+      resolveCellPaneLayout(withResult({ wideView: "editor" }), false, false),
+    ).toBe("editor")
+  })
+
+  it("defaults compact cells to result and keeps compact choice independent", () => {
+    expect(resolveCellPaneLayout(withResult(), false, true)).toBe("result")
+    expect(
+      resolveCellPaneLayout(
+        withResult({ isViewMaximized: true, compactView: "editor" }),
+        false,
+        true,
+      ),
+    ).toBe("editor")
+    expect(
+      resolveCellPaneLayout(
+        withResult({ isViewMaximized: false, compactView: "result" }),
+        false,
+        true,
+      ),
+    ).toBe("result")
+  })
+})
+
+describe("resolveAgentCellPresentation", () => {
+  const chart = (over: Partial<NotebookCell> = {}): NotebookCell => ({
+    id: "x",
+    position: 0,
+    value: "SELECT 1",
+    mode: "draw",
+    wideView: "editor_result",
+    compactView: "result",
+    ...over,
+  })
+
+  it("returns the effective live view with its tier", () => {
+    expect(
+      resolveAgentCellPresentation(chart({ wideView: "editor" }), false),
+    ).toEqual({
+      preferred_view: "editor",
+      view: "editor",
+      tier: "wide",
+    })
+    expect(resolveAgentCellPresentation(chart(), true)).toEqual({
+      preferred_view: "editor_result",
+      view: "result",
+      tier: "compact",
+    })
+  })
+
+  it("omits tier and returns the stored preference when inactive", () => {
+    expect(resolveAgentCellPresentation(chart(), undefined)).toEqual({
+      preferred_view: "editor_result",
+    })
+  })
+})
+
+describe("computeCellMinGridH", () => {
+  const result = { results: [], activeResultIndex: 0, timestamp: 0 }
+
+  it("reserves the split editor's current height plus the result minimum", () => {
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      topHeight: 400,
+      bottomHeight: 300,
+      result,
+    }
+
+    // 400px editor + 100px result minimum + 50px split chrome = 550px,
+    // which is exactly 19 rows at rowHeight=10 and marginY=20.
+    expect(computeCellMinGridH(cell, 10, 20)).toBe(19)
+  })
+
+  it("does not reserve the remembered editor height when it is hidden", () => {
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      topHeight: 400,
+      bottomHeight: 300,
+      isViewMaximized: true,
+      result,
+    }
+
+    // 100px result minimum + 44px base chrome requires 6 rows.
+    expect(computeCellMinGridH(cell, 10, 20)).toBe(6)
+  })
+
+  it("uses the chart-specific result minimum", () => {
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      mode: "draw",
+      topHeight: 400,
+      bottomHeight: 350,
+    }
+
+    // 400px editor + 240px chart minimum + 50px split chrome requires 24 rows.
+    expect(computeCellMinGridH(cell, 10, 20)).toBe(24)
+  })
+
+  it("uses only the visible pane minimum in compact layouts", () => {
+    const cell: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "",
+      topHeight: 400,
+      bottomHeight: 300,
+      result,
+    }
+
+    expect(computeCellMinGridH(cell, 10, 20, false, "editor")).toBe(5)
+    expect(computeCellMinGridH(cell, 10, 20, false, "result")).toBe(6)
   })
 })
 
@@ -1964,22 +2195,44 @@ describe("cellHeightPatchForRows", () => {
     expect(patch).toEqual({ bottomHeight: 308, bottomResized: true })
   })
 
-  it("maximized double-view: scales both panes and pins both", () => {
-    // Given a maximized double-view cell — no editor, no divider, so it
-    // carries the base chrome 44
+  it("split double-view: never consumes editor height below the result floor", () => {
+    const c = withResult({ topHeight: 400, bottomHeight: 300 })
+
+    // The split minimum is 400px editor + 100px result + 50px chrome,
+    // or 19 rows. Resizing to that floor changes only the result pane.
+    const patch = cellHeightPatchForRows(c, 19, 10, 20)
+
+    expect(patch).toEqual({ bottomHeight: 100, bottomResized: true })
+    expect(patch).not.toHaveProperty("topHeight")
+    expect(patch).not.toHaveProperty("topResized")
+  })
+
+  it("editor-hidden double-view: resizes only the visible result pane", () => {
+    // Given an editor-hidden double-view cell carrying base chrome only
     const c = withResult({
       topHeight: 72,
       bottomHeight: 100,
       isViewMaximized: true,
     })
     // When a taller height is requested (targetContentPx = 430 - 44 = 386,
-    // scale 386/172 ≈ 2.244)
+    // and no editor allocation in its visible footprint)
     const patch = cellHeightPatchForRows(c, 15, 10, 20)
-    // Then editor and result scale together, both pinned
+    // Then only the result changes; the remembered editor height is untouched
     expect(patch).toEqual({
-      topHeight: 162,
-      bottomHeight: 224,
+      bottomHeight: 386,
+      bottomResized: true,
+    })
+  })
+
+  it("compact editor/result resize only their visible pane", () => {
+    const c = withResult({ topHeight: 200, bottomHeight: 300 })
+
+    expect(cellHeightPatchForRows(c, 10, 10, 20, false, "editor")).toEqual({
+      topHeight: 236,
       topResized: true,
+    })
+    expect(cellHeightPatchForRows(c, 15, 10, 20, false, "result")).toEqual({
+      bottomHeight: 386,
       bottomResized: true,
     })
   })
@@ -2273,10 +2526,11 @@ describe("buildAppliedLayout", () => {
       [],
       { gridCols: 12, rowHeight: 50 },
     )
-    expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 4 })
+    expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 3 })
     // Run-mode cell, no result yet → single-view → only topHeight (72) + chrome (40)
-    // = 112 px → ceil(112 / 50) = 3 rows. Stacks below 'a' which had y+h = 4.
-    expect(layout[1]).toEqual({ i: "b", x: 0, y: 4, w: 12, h: 3 })
+    // = 112 px → ceil(112 / 50) = 3 rows. The supplied legacy h is ignored;
+    // both cells derive h and the second stacks below the first at y=3.
+    expect(layout[1]).toEqual({ i: "b", x: 0, y: 3, w: 12, h: 3 })
   })
 
   it("preserves prevLayout entry when request omits grid", () => {
@@ -2287,7 +2541,7 @@ describe("buildAppliedLayout", () => {
       [{ i: "a", x: 3, y: 4, w: 8, h: 5 }],
       { gridCols: 12, rowHeight: 50 },
     )
-    expect(layout).toEqual([{ i: "a", x: 3, y: 4, w: 8, h: 5 }])
+    expect(layout).toEqual([{ i: "a", x: 3, y: 4, w: 8, h: 3 }])
   })
 
   it("gives draw-mode cells a taller default than run-mode cells (no result yet)", () => {

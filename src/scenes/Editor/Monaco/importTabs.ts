@@ -273,6 +273,14 @@ const sanitizeNotebookCell = (
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
   if (typeof item.isViewMaximized === "boolean")
     cell.isViewMaximized = item.isViewMaximized
+  if (
+    item.wideView === "editor" ||
+    item.wideView === "result" ||
+    item.wideView === "editor_result"
+  )
+    cell.wideView = item.wideView
+  if (item.compactView === "editor" || item.compactView === "result")
+    cell.compactView = item.compactView
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
   if (typeof item.bottomHeight === "number")
     cell.bottomHeight = item.bottomHeight

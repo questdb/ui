@@ -6,6 +6,8 @@ import {
   applyNotebookStateTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  setCellDimensionsTransition,
+  setCellLayoutTransition,
   setCellModeTransition,
   updateCellTransition,
 } from "./notebookTransitions"
@@ -35,6 +37,181 @@ const partsOf = (
   maximizedCellId: null,
   focusedCellId: null,
   ...overrides,
+})
+
+describe("setCellDimensionsTransition", () => {
+  it("shows the editor by expanding the derived footprint and preserving both panes", () => {
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 72,
+      bottomHeight: 350,
+      isViewMaximized: true,
+    })
+    const parts = partsOf([chart], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 12, h: 14 }],
+      },
+    })
+
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor_result",
+      compact: false,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      bottomHeight: 350,
+      isViewMaximized: false,
+      wideView: "editor_result",
+      compactView: "result",
+    })
+    expect(out.parts.settings.layout?.[0].h).toBe(17)
+    expect(out.result).toEqual({
+      preferred_view: "editor_result",
+      view: "editor_result",
+      tier: "wide",
+    })
+  })
+
+  it("supports null preserve, auto reset, and a fixed result height", () => {
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 200,
+      topResized: true,
+      bottomHeight: 350,
+      bottomResized: false,
+      isViewMaximized: true,
+    })
+
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      editorHeight: "auto",
+      resultHeight: 280,
+      view: null,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      topResized: false,
+      bottomHeight: 280,
+      bottomResized: true,
+      isViewMaximized: true,
+    })
+    expect(out.result).toEqual({ preferred_view: "result" })
+  })
+
+  it("stores one editor preference and reports its compact projection", () => {
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      isViewMaximized: true,
+      compactView: "result",
+    })
+
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      view: "editor",
+      compact: true,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      isViewMaximized: false,
+      wideView: "editor",
+      compactView: "editor",
+    })
+    expect(out.result).toEqual({
+      preferred_view: "editor",
+      view: "editor",
+      tier: "compact",
+    })
+  })
+
+  it("reports the deterministic compact fallback without losing the wide preference", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      view: "editor_result",
+      compact: true,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      wideView: "editor_result",
+      compactView: "result",
+    })
+    expect(out.result).toEqual({
+      preferred_view: "editor_result",
+      view: "result",
+      tier: "compact",
+      fallback: "editor_result_unavailable_in_compact",
+    })
+  })
+
+  it("supports a genuine editor-only view in the wide tier", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      view: "editor",
+      compact: false,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      wideView: "editor",
+      compactView: "editor",
+    })
+    expect(out.result).toEqual({
+      preferred_view: "editor",
+      view: "editor",
+      tier: "wide",
+    })
+  })
+
+  it("rejects chart result heights below the visual minimum", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    expect(() =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 100,
+      }),
+    ).toThrow(/at least 240px/)
+  })
+})
+
+describe("setCellLayoutTransition", () => {
+  const chart = cell("a", "SELECT 1", {
+    mode: "draw",
+    wideView: "editor_result",
+    compactView: "result",
+  })
+
+  it("returns the projected live presentation after a width change", () => {
+    const out = setCellLayoutTransition(
+      partsOf([chart], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { x: 0, y: 0, w: 4, liveCompact: false, gridContainerWidth: 1200 },
+    )
+
+    expect(out.result).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      preferred_view: "editor_result",
+      view: "result",
+      tier: "compact",
+    })
+  })
+
+  it("omits effective presentation when no rendered geometry is available", () => {
+    const out = setCellLayoutTransition(
+      partsOf([chart], { settings: { layoutMode: "grid" } }),
+      BUFFER_ID,
+      "a",
+      { x: 0, y: 0, w: 4 },
+    )
+
+    expect(out.result).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      preferred_view: "editor_result",
+    })
+  })
 })
 
 describe("applyNotebookStateTransition", () => {

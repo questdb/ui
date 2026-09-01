@@ -163,6 +163,7 @@ export enum ConsoleEvent {
   MCP_DUPLICATE_CELL = "mcp.duplicate_cell",
   MCP_SET_LAYOUT_MODE = "mcp.set_layout_mode",
   MCP_SET_CELL_LAYOUT = "mcp.set_cell_layout",
+  MCP_SET_CELL_DIMENSIONS = "mcp.set_cell_dimensions",
   MCP_SET_CELL_MODE = "mcp.set_cell_mode",
   MCP_SET_CELL_CHART_CONFIG = "mcp.set_cell_chart_config",
   MCP_SET_CELL_AUTOREFRESH = "mcp.set_cell_autorefresh",

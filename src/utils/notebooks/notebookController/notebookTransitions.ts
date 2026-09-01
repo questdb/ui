@@ -11,18 +11,24 @@ import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
+  agentCellDimensionsPatch,
   buildAppliedNotebookState,
   carriedRunError,
   carriedRunStatus,
   cellHeightPatchForRows,
   cellModeChangePatch,
   clearCellAutoRefresh,
+  computeAgentCellGridH,
   duplicateCellAt,
+  gridCellToolbarTier,
   insertCell,
   isExpectingResult,
   mergeCellChartConfig,
+  minBottomHeightFor,
+  minTopHeightFor,
   nextGridSeedPosition,
   reconcileCellResultForValue,
+  resolveAgentCellPresentation,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
   removeCell,
@@ -30,7 +36,9 @@ import {
   swapCellUp,
   topHeightForSql,
   upsertCellLayout,
+  resolveCellPaneLayout,
   type CellGridPosition,
+  type AgentCellDimensions,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 
 // The single home for every notebook mutation's behavior. Each transition is a
@@ -279,17 +287,48 @@ export const setCellLayoutTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  pos: CellGridPosition,
-): NotebookTransitionResult => {
+  pos: Omit<CellGridPosition, "h"> & {
+    h?: number
+    liveCompact?: boolean
+    gridContainerWidth?: number
+  },
+): NotebookTransitionResult<
+  ReturnType<typeof resolveAgentCellPresentation> & {
+    grid: { x: number; y: number; w: number }
+  }
+> => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
-  // Pin an intentionally-resized h into the cell (see cellHeightPatchForRows).
-  const heightPatch = cellHeightPatchForRows(
-    cell,
-    pos.h,
-    NOTEBOOK_GRID_ROW_HEIGHT,
-    NOTEBOOK_GRID_MARGIN_Y,
-    isExpectingResult(cell, "unrequested"),
+  // Cached clients may still send h. Current clients control pane dimensions
+  // semantically and h is derived from them.
+  const heightPatch =
+    pos.h === undefined
+      ? {}
+      : cellHeightPatchForRows(
+          cell,
+          pos.h,
+          NOTEBOOK_GRID_ROW_HEIGHT,
+          NOTEBOOK_GRID_MARGIN_Y,
+          isExpectingResult(cell, "unrequested"),
+        )
+  const nextCell = { ...cell, ...heightPatch }
+  const compact =
+    parts.settings.layoutMode === "grid"
+      ? pos.gridContainerWidth !== undefined
+        ? gridCellToolbarTier(pos.gridContainerWidth, pos.w) === "compact"
+        : undefined
+      : pos.liveCompact
+  const expectingResult = isExpectingResult(nextCell, "unrequested")
+  const paneLayout = resolveCellPaneLayout(
+    nextCell,
+    expectingResult,
+    compact === true,
   )
+  const layoutPos: CellGridPosition = {
+    x: pos.x,
+    y: pos.y,
+    w: pos.w,
+    h: computeAgentCellGridH(nextCell, paneLayout),
+  }
   return {
     parts: {
       ...parts,
@@ -299,10 +338,105 @@ export const setCellLayoutTransition = (
           : parts.cells,
       settings: {
         ...parts.settings,
-        layout: upsertCellLayout(parts.settings.layout, cellId, pos),
+        layout: upsertCellLayout(parts.settings.layout, cellId, layoutPos),
       },
     },
-    result: undefined,
+    result: {
+      grid: { x: pos.x, y: pos.y, w: pos.w },
+      ...resolveAgentCellPresentation(nextCell, compact, expectingResult),
+    },
+    touchedCellId: cellId,
+  }
+}
+
+export const setCellDimensionsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  dimensions: AgentCellDimensions,
+): NotebookTransitionResult<
+  ReturnType<typeof resolveAgentCellPresentation> & {
+    fallback?:
+      | "editor_result_unavailable_in_compact"
+      | "requested_view_unavailable"
+  }
+> => {
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (
+    cell.type === "markdown" &&
+    (dimensions.resultHeight != null ||
+      dimensions.editorVisible != null ||
+      (dimensions.view != null && dimensions.view !== "editor"))
+  ) {
+    throw new NotebookToolError(
+      "validation",
+      'Markdown cells have no result pane; pass null for result_height and null or "editor" for view.',
+    )
+  }
+  if (
+    typeof dimensions.editorHeight === "number" &&
+    (!Number.isFinite(dimensions.editorHeight) ||
+      dimensions.editorHeight < minTopHeightFor(cell))
+  ) {
+    throw new NotebookToolError(
+      "validation",
+      `editor_height must be at least ${minTopHeightFor(cell)}px.`,
+    )
+  }
+  if (
+    typeof dimensions.resultHeight === "number" &&
+    (!Number.isFinite(dimensions.resultHeight) ||
+      dimensions.resultHeight < minBottomHeightFor(cell))
+  ) {
+    throw new NotebookToolError(
+      "validation",
+      `result_height must be at least ${minBottomHeightFor(cell)}px for this cell.`,
+    )
+  }
+
+  const patch = agentCellDimensionsPatch(cell, dimensions)
+  const nextCell = { ...cell, ...patch }
+  const paneLayout = resolveCellPaneLayout(
+    nextCell,
+    isExpectingResult(nextCell, "unrequested"),
+    dimensions.compact === true,
+  )
+  const layout = parts.settings.layout?.map((item) =>
+    item.i === cellId
+      ? { ...item, h: computeAgentCellGridH(nextCell, paneLayout) }
+      : item,
+  )
+  const presentation = resolveAgentCellPresentation(
+    nextCell,
+    dimensions.compact,
+    isExpectingResult(nextCell, "unrequested"),
+  )
+  const fallback =
+    presentation.view !== undefined &&
+    dimensions.view === "editor_result" &&
+    presentation.view === "result"
+      ? "editor_result_unavailable_in_compact"
+      : presentation.view !== undefined &&
+          dimensions.view != null &&
+          dimensions.view !== presentation.view
+        ? "requested_view_unavailable"
+        : undefined
+  return {
+    parts: {
+      ...parts,
+      cells:
+        Object.keys(patch).length > 0
+          ? patchCellIn(parts.cells, cellId, patch)
+          : parts.cells,
+      settings:
+        layout === parts.settings.layout
+          ? parts.settings
+          : { ...parts.settings, layout },
+    },
+    result: {
+      ...presentation,
+      ...(fallback !== undefined ? { fallback } : {}),
+    },
     touchedCellId: cellId,
   }
 }
@@ -358,7 +492,10 @@ export const setCellViewMaximizedTransition = (
   return {
     parts: {
       ...parts,
-      cells: patchCellIn(parts.cells, cellId, { isViewMaximized: value }),
+      cells: patchCellIn(parts.cells, cellId, {
+        isViewMaximized: value,
+        wideView: value ? "result" : "editor_result",
+      }),
     },
     result: undefined,
     touchedCellId: cellId,

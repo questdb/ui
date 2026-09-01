@@ -47,6 +47,7 @@ export const useCellRunActions = ({
     setCellMode,
     clearCellResult,
     setCellViewMaximized,
+    updateCell,
     getCellsSnapshot,
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
@@ -232,7 +233,10 @@ export const useCellRunActions = ({
       // the run must read the cursor first.
       if (plan.kind === "run-all") void handleRunAll(ignoreSelection)
       else void handleRunSingle()
-      if (plan.reveal) setCellViewMaximized(cell.id, true)
+      if (plan.reveal) {
+        if (isCompactTier) updateCell(cell.id, { compactView: "result" })
+        else setCellViewMaximized(cell.id, true)
+      }
     },
     [
       cell.id,
@@ -242,6 +246,7 @@ export const useCellRunActions = ({
       isCompactTier,
       showBottomSlot,
       setCellViewMaximized,
+      updateCell,
       setCellMode,
       handleRunAll,
       handleRunSingle,
@@ -292,7 +297,9 @@ export const useCellRunActions = ({
     const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
       if (payload?.cellId !== cell.id) return
       void handleDrawClick().then((entered) => {
-        if (entered && payload.maximize) setCellViewMaximized(cell.id, true)
+        if (!entered || !payload.maximize) return
+        if (isCompactTier) updateCell(cell.id, { compactView: "result" })
+        else setCellViewMaximized(cell.id, true)
       })
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
@@ -301,7 +308,14 @@ export const useCellRunActions = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
+  }, [
+    cell.id,
+    refreshRun,
+    handleDrawClick,
+    isCompactTier,
+    setCellViewMaximized,
+    updateCell,
+  ])
 
   const isGridLoading = isRunning && firstRunRef.current
 
