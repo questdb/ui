@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
-  extractStoragePolicyClauses,
+  formatStoragePolicyClauses,
   formatBytes,
   formatInterval,
   formatMicrosDuration,
@@ -11,6 +11,7 @@ import {
   getTrendSamplesForIssue,
 } from "./utils"
 import type { TrendData } from "./healthCheck"
+import type { StoragePolicy } from "../../../utils/questdb/types"
 
 const digitsOf = (formatted: string) => formatted.replace(/\D/g, "")
 
@@ -152,74 +153,56 @@ describe("formatBytes", () => {
   })
 })
 
-describe("extractStoragePolicyClauses", () => {
-  it("returns an empty array when the DDL has no storage policy", () => {
-    const ddl = `CREATE TABLE 'trades' (
-      symbol SYMBOL, price DOUBLE, ts TIMESTAMP
-    ) timestamp(ts) PARTITION BY DAY;`
-    expect(extractStoragePolicyClauses(ddl)).toEqual([])
-  })
+describe("formatStoragePolicyClauses", () => {
+  const policy: StoragePolicy = {
+    table_dir_name: "trades~1",
+    to_parquet: "24h",
+    to_remote: "168h",
+    drop_local: "2160h",
+    drop_remote: "1m",
+    status: "A",
+    last_updated: "2026-09-01T00:00:00.000000Z",
+  }
 
-  it("returns an empty array for unparseable DDL", () => {
-    expect(extractStoragePolicyClauses("not a valid sql statement")).toEqual([])
-  })
-
-  it("returns an empty array for an empty string", () => {
-    expect(extractStoragePolicyClauses("")).toEqual([])
-  })
-
-  it("extracts a single clause with a plural unit", () => {
-    const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
-      timestamp(ts) PARTITION BY DAY
-      STORAGE POLICY(TO PARQUET 3 DAYS);`
-    expect(extractStoragePolicyClauses(ddl)).toEqual([
-      { action: "To Parquet", duration: "3 Days" },
+  it("formats the catalog durations in pipeline order", () => {
+    // Given / When / Then
+    expect(formatStoragePolicyClauses(policy)).toEqual([
+      { action: "To Parquet", duration: "1 Day" },
+      { action: "To Remote", duration: "1 Week" },
+      { action: "Drop Local", duration: "90 Days" },
+      { action: "Drop Remote", duration: "1 Month" },
     ])
   })
 
-  it("normalizes a value of 1 to a singular unit", () => {
-    const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
-      timestamp(ts) PARTITION BY DAY
-      STORAGE POLICY(TO PARQUET 1 DAYS);`
-    expect(extractStoragePolicyClauses(ddl)).toEqual([
+  it("omits stages that the catalog reports as zero", () => {
+    // Given
+    const policyWithoutOptionalStages = {
+      ...policy,
+      to_remote: "0h",
+      drop_local: "0h",
+      drop_remote: "0h",
+    }
+
+    // When / Then
+    expect(formatStoragePolicyClauses(policyWithoutOptionalStages)).toEqual([
       { action: "To Parquet", duration: "1 Day" },
     ])
   })
 
-  it("extracts all clauses in pipeline order", () => {
-    const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
-      timestamp(ts) PARTITION BY DAY
-      STORAGE POLICY(TO PARQUET 1 DAYS, TO REMOTE 10 DAYS, DROP LOCAL 1 MONTHS, DROP REMOTE 2 YEARS);`
-    expect(extractStoragePolicyClauses(ddl)).toEqual([
-      { action: "To Parquet", duration: "1 Day" },
-      { action: "To Remote", duration: "10 Days" },
-      { action: "Drop Local", duration: "1 Month" },
-      { action: "Drop Remote", duration: "2 Years" },
-    ])
+  it("formats complete years that the catalog reports as months", () => {
+    // Given
+    const policyWithYear = { ...policy, drop_remote: "12m" }
+
+    // When / Then
+    expect(formatStoragePolicyClauses(policyWithYear)).toContainEqual({
+      action: "Drop Remote",
+      duration: "1 Year",
+    })
   })
 
-  it("returns an empty array for the retired DROP NATIVE syntax", () => {
-    // Given a DDL from a pre-release server build that still emits the
-    // removed DROP NATIVE stage — the parse failure deliberately degrades
-    // to "no clauses" rather than an error
-    const ddl = `CREATE TABLE 'trades' (price DOUBLE, ts TIMESTAMP)
-      timestamp(ts) PARTITION BY DAY
-      STORAGE POLICY(TO PARQUET 3 DAYS, DROP NATIVE 10 DAYS);`
-    expect(extractStoragePolicyClauses(ddl)).toEqual([])
-  })
-
-  it("extracts TO PARQUET + TO REMOTE with a trailing OWNED BY (reported repro)", () => {
-    // Given the reported DDL whose TO REMOTE clause used to fail the parse
-    const ddl = `CREATE TABLE 'corporate_bonds' (
-      ts TIMESTAMP, isin SYMBOL, price DOUBLE
-    ) timestamp(ts) PARTITION BY DAY
-    STORAGE POLICY(TO PARQUET 3 DAYS, TO REMOTE 30 DAYS)
-    OWNED BY 'admin';`
-    // Then both stages render instead of an empty "Not configured" section
-    expect(extractStoragePolicyClauses(ddl)).toEqual([
-      { action: "To Parquet", duration: "3 Days" },
-      { action: "To Remote", duration: "30 Days" },
-    ])
+  it("returns no clauses when the table has no policy row", () => {
+    // Given / When / Then
+    expect(formatStoragePolicyClauses(null)).toEqual([])
   })
 })
 

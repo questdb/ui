@@ -61,3 +61,10 @@ export const CaretIcon = styled(CaretRightIcon)<{ $expanded?: boolean }>`
   transition: transform 150ms ease;
   transform: rotate(${({ $expanded }) => ($expanded ? "90deg" : "0deg")});
 `
+
+export const UnavailableValue = styled.span.attrs({
+  children: "Unavailable",
+})`
+  color: ${({ theme }) => theme.color.contentDisabled};
+  font-size: ${({ theme }) => theme.fontSize.md};
+`

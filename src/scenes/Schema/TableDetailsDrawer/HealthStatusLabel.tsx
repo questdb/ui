@@ -21,6 +21,8 @@ const LabelContainer = styled.div<{ $severity: HealthSeverity }>`
         return `${theme.color.statusDanger}1F`
       case "warning":
         return `${theme.color.statusWarning}1F`
+      case "unknown":
+        return `${theme.color.contentDisabled}1F`
       case "recovering":
       case "healthy":
       default:
@@ -88,6 +90,8 @@ const StatusSquare = styled(Square)<{ $severity: HealthSeverity }>`
         return theme.color.statusDanger
       case "warning":
         return theme.color.statusWarning
+      case "unknown":
+        return theme.color.contentDisabled
       case "recovering":
       case "healthy":
       default:
@@ -102,7 +106,9 @@ export const HealthStatusLabel = ({ severity }: Props) => {
       ? "Error"
       : severity === "warning"
         ? "Warning"
-        : "Healthy"
+        : severity === "unknown"
+          ? "Unknown"
+          : "Healthy"
 
   return (
     <Tooltip content={statusText}>

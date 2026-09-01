@@ -4,10 +4,13 @@ import type {
   View,
 } from "../../../utils/questdb/types"
 
-// The drawer target's kind together with the data that kind can carry. The
-// payloads stay nullable because they load after the drawer opens.
+export type SourceState<T> =
+  | { status: "loading" }
+  | { status: "ready"; data: T }
+  | { status: "unavailable" }
+
 export type TableKindData =
   | { kind: "table" }
-  | { kind: "view"; view: View | null }
-  | { kind: "matview"; matView: MaterializedView | null }
-  | { kind: "liveview"; liveView: LiveView | null }
+  | { kind: "view"; view: SourceState<View> }
+  | { kind: "matview"; matView: SourceState<MaterializedView> }
+  | { kind: "liveview"; liveView: SourceState<LiveView> }

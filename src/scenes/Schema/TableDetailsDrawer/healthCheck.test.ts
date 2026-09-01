@@ -4,6 +4,7 @@ import {
   calculateTrendRate,
   getTrendDirection,
   detectIngestionActive,
+  isLiveViewLoadFailure,
   type TimestampedSample,
   type TrendData,
 } from "./healthCheck"
@@ -13,6 +14,39 @@ import type {
   Table,
 } from "../../../utils/questdb/types"
 import type { TableKindData } from "./types"
+
+const ready = <T>(data: T) => ({ status: "ready" as const, data })
+const loading = { status: "loading" } as const
+
+describe("isLiveViewLoadFailure", () => {
+  it.each(["version_unsupported", "state_unreadable"] as const)(
+    "should detect the %s load-failure state",
+    (viewStatus) => {
+      // Given
+      const liveView = { view_status: viewStatus } as LiveView
+
+      // When
+      const result = isLiveViewLoadFailure(liveView)
+
+      // Then
+      expect(result).toBe(true)
+    },
+  )
+
+  it.each(["active", "invalid"] as const)(
+    "should keep diagnostics available for the %s state",
+    (viewStatus) => {
+      // Given
+      const liveView = { view_status: viewStatus } as LiveView
+
+      // When
+      const result = isLiveViewLoadFailure(liveView)
+
+      // Then
+      expect(result).toBe(false)
+    },
+  )
+})
 
 const makeSamples = (
   values: number[],
@@ -253,8 +287,11 @@ describe("write amplification health threshold", () => {
   }
   const objectKinds: Array<{ name: string; kindData: TableKindData }> = [
     { name: "table", kindData: { kind: "table" } },
-    { name: "materialized view", kindData: { kind: "matview", matView: null } },
-    { name: "live view", kindData: { kind: "liveview", liveView: null } },
+    {
+      name: "materialized view",
+      kindData: { kind: "matview", matView: loading },
+    },
+    { name: "live view", kindData: { kind: "liveview", liveView: loading } },
   ]
 
   for (const { name, kindData } of objectKinds) {
@@ -323,7 +360,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -339,7 +376,7 @@ describe("calculateHealthStatus for live views", () => {
     // When its health is calculated
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -359,7 +396,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -382,7 +419,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -403,7 +440,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -418,7 +455,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -437,7 +474,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -457,7 +494,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView },
+      { kind: "liveview", liveView: ready(liveView) },
       emptyTrend,
     )
 
@@ -476,12 +513,45 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "liveview", liveView: null },
+      { kind: "liveview", liveView: loading },
       emptyTrend,
     )
 
     // Then
     expect(status.issues).toEqual([])
+  })
+
+  it("should report unknown when live view metadata is unavailable", () => {
+    // Given
+    const table = makeTable()
+
+    // When
+    const status = calculateHealthStatus(
+      table,
+      { kind: "liveview", liveView: { status: "unavailable" } },
+      emptyTrend,
+    )
+
+    // Then
+    expect(status.overallSeverity).toBe("unknown")
+    expect(status.hasUnavailableSource).toBe(true)
+    expect(status.issues).toEqual([])
+  })
+
+  it("should keep a known critical issue above unavailable metadata", () => {
+    // Given
+    const table = { ...makeTable(), table_suspended: true }
+
+    // When
+    const status = calculateHealthStatus(
+      table,
+      { kind: "liveview", liveView: { status: "unavailable" } },
+      emptyTrend,
+    )
+
+    // Then
+    expect(status.overallSeverity).toBe("critical")
+    expect(status.fieldIssues.get("walStatus")?.id).toBe("R1")
   })
 
   it("should omit the reason when the matview is invalid without one", () => {
@@ -495,7 +565,7 @@ describe("calculateHealthStatus for live views", () => {
     // When
     const status = calculateHealthStatus(
       makeTable(),
-      { kind: "matview", matView },
+      { kind: "matview", matView: ready(matView) },
       emptyTrend,
     )
 

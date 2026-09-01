@@ -11,10 +11,28 @@ describe("TableDetailsDrawer in enterprise", () => {
       cy.refreshSchema()
     })
 
-    it("renders the section with the 'Not configured' placeholder", () => {
+    it("shows loading before the 'Not configured' placeholder", () => {
+      // Given
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /storage_policies/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            res.setDelay(1000)
+          })
+        },
+      ).as("storagePolicy")
+
+      // When
       cy.openDetailsDrawer(TEST_TABLE)
       cy.getByDataHook("table-details-tab-details").click()
 
+      // Then
+      cy.getByDataHook("table-details-storage-loading").should("be.visible")
+      cy.wait("@storagePolicy")
       cy.getByDataHook("table-details-storage-policy-section")
         .should("be.visible")
         .within(() => {
@@ -30,6 +48,71 @@ describe("TableDetailsDrawer in enterprise", () => {
         .within(() => {
           cy.contains("TTL").should("not.exist")
         })
+
+      // When
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /storage_policies/ },
+        },
+        {
+          statusCode: 500,
+          body: { error: "Storage policy unavailable", position: 0 },
+        },
+      ).as("storagePolicyUnavailable")
+      cy.wait("@storagePolicyUnavailable")
+      cy.wait("@storagePolicyUnavailable")
+      cy.wait("@storagePolicyUnavailable")
+
+      // Then
+      cy.getByDataHook("table-details-storage-unavailable", { timeout: 5000 })
+        .should("be.visible")
+        .and("contain", "Unavailable")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("with a STORAGE POLICY", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.execQuery(
+        `ALTER TABLE ${TEST_TABLE} SET STORAGE POLICY(TO PARQUET 3 DAYS, TO REMOTE 10 DAYS, DROP LOCAL 1 YEARS)`,
+      )
+      cy.refreshSchema()
+    })
+
+    it("renders catalog policy values and disabled status", () => {
+      // Given
+      cy.openDetailsDrawer(TEST_TABLE)
+
+      // When
+      cy.getByDataHook("table-details-tab-details").click()
+
+      // Then
+      cy.getByDataHook("table-details-storage-policy-section")
+        .should("be.visible")
+        .within(() => {
+          cy.contains("To Parquet").should("be.visible")
+          cy.contains("3 Days").should("be.visible")
+          cy.contains("To Remote").should("be.visible")
+          cy.contains("10 Days").should("be.visible")
+          cy.contains("Drop Local").should("be.visible")
+          cy.contains("1 Year").should("be.visible")
+        })
+
+      // When
+      cy.execQuery(`ALTER TABLE ${TEST_TABLE} DISABLE STORAGE POLICY`)
+
+      // Then
+      cy.getByDataHook("table-details-storage-disabled", { timeout: 5000 })
+        .should("be.visible")
+        .and("contain", "Disabled")
     })
 
     after(() => {

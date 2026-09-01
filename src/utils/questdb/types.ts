@@ -231,6 +231,16 @@ export type Table = {
   wal_tx_size_max: bigint | null
 }
 
+export type StoragePolicy = {
+  table_dir_name: string
+  to_parquet: string
+  to_remote: string
+  drop_local: string
+  drop_remote: string
+  status: string
+  last_updated: string
+}
+
 export type View = {
   view_name: string
   view_sql: string

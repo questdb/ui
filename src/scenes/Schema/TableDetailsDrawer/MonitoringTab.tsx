@@ -30,6 +30,7 @@ import {
 import {
   ISSUE_DOCS_URLS,
   getLiveViewIssueGuidance,
+  isLiveViewLoadFailure,
   type HealthStatus,
   type HealthSeverity,
   type HealthIssue,
@@ -44,6 +45,7 @@ import {
   SectionTitleClickable,
   SectionTitleContainer,
   CaretIcon,
+  UnavailableValue,
 } from "./shared-styles"
 
 const BIGINT_ZERO = BigInt(0)
@@ -51,7 +53,6 @@ const BIGINT_ZERO = BigInt(0)
 export interface MonitoringTabProps {
   tableData: Table
   kindData: TableKindData
-  isLiveViewLoadFailure: boolean
   healthStatus: HealthStatus | null
   criticalIssues: HealthIssue[]
   performanceWarnings: HealthIssue[]
@@ -235,6 +236,8 @@ const getSeverityColor = (
       return theme.color.statusDanger
     case "warning":
       return theme.color.statusWarning
+    case "unknown":
+      return theme.color.contentDisabled
     case "recovering":
       return theme.color.statusSuccess
     default:
@@ -471,7 +474,6 @@ const ConfigItemWithHealth = ({
 export const MonitoringTab = ({
   tableData,
   kindData,
-  isLiveViewLoadFailure,
   healthStatus,
   criticalIssues,
   performanceWarnings,
@@ -485,15 +487,21 @@ export const MonitoringTab = ({
   onAskAI,
 }: MonitoringTabProps) => {
   const theme = useTheme()
-  const matView = kindData.kind === "matview" ? kindData.matView : null
-  const liveView = kindData.kind === "liveview" ? kindData.liveView : null
+  const matViewState = kindData.kind === "matview" ? kindData.matView : null
+  const liveViewState = kindData.kind === "liveview" ? kindData.liveView : null
+  const matView = matViewState?.status === "ready" ? matViewState.data : null
+  const liveView = liveViewState?.status === "ready" ? liveViewState.data : null
+  const matViewUnavailable = matViewState?.status === "unavailable"
+  const liveViewUnavailable = liveViewState?.status === "unavailable"
+  const liveViewDiagnosticsUnavailable =
+    liveViewUnavailable || isLiveViewLoadFailure(liveView)
   const lastWriteTimestamp = (() => {
     if (!tableData.table_last_write_timestamp) return null
     const date = new Date(tableData.table_last_write_timestamp)
     if (isNaN(date.getTime()) || date.getTime() === 0) return null
     return date.toISOString()
   })()
-  const hasStatusSection = matView !== null || liveView !== null
+  const hasStatusSection = matViewState !== null || liveViewState !== null
   const hasLiveViewDroppedRows =
     liveView !== null &&
     ((liveView.below_lower_bound_count ?? BIGINT_ZERO) > BIGINT_ZERO ||
@@ -568,7 +576,9 @@ export const MonitoringTab = ({
             <MetricCard data-hook="table-details-view-status">
               <MetricLabel>View Status</MetricLabel>
               <Box gap="0.5rem" align="center">
-                {matView ? (
+                {matViewUnavailable || liveViewUnavailable ? (
+                  <UnavailableValue />
+                ) : matView ? (
                   matView.view_status === "valid" ? (
                     <>
                       <CheckCircleIcon
@@ -619,7 +629,9 @@ export const MonitoringTab = ({
                         liveView.view_status.slice(1)}
                     </MetricValue>
                   )
-                ) : null}
+                ) : (
+                  <Text color="contentSecondary">Loading…</Text>
+                )}
               </Box>
             </MetricCard>
 
@@ -655,39 +667,55 @@ export const MonitoringTab = ({
         </Section>
       )}
 
-      {liveView && !isLiveViewLoadFailure && (
+      {(liveView || liveViewUnavailable) && (
         <>
           <Section data-hook="table-details-live-view-freshness">
             <SectionTitleContainer>
               <TimerIcon size="16px" />
               <SectionTitle>Freshness</SectionTitle>
             </SectionTitleContainer>
-            <ConfigGrid $columns={3}>
+            <ConfigGrid
+              $columns={2}
+              data-hook="table-details-live-view-freshness-grid"
+            >
               <ConfigItemWithHealth
                 label="Unflushed Transactions"
                 helperText={HELPER_TEXT.liveViewLag}
-                value={formatTxnCount(liveView.lag_seqtxn)}
+                value={
+                  liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : (
+                    formatTxnCount(liveView?.lag_seqtxn ?? null)
+                  )
+                }
                 boxedValue
+                fullWidth
               />
               <ConfigItemWithHealth
                 label="Since Last Flush"
                 helperText={HELPER_TEXT.liveViewSinceLastFlush}
                 value={
-                  liveView.lag_micros == null
-                    ? "Never"
-                    : formatMicrosDuration(liveView.lag_micros)
+                  liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : liveView?.lag_micros == null ? (
+                    "Never"
+                  ) : (
+                    formatMicrosDuration(liveView.lag_micros)
+                  )
                 }
-                boxedValue
               />
               <ConfigItemWithHealth
                 label="Writer Stall"
                 value={
-                  liveView.writer_stall_micros == null
-                    ? "Unknown"
-                    : formatMicrosDuration(liveView.writer_stall_micros)
+                  liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : liveView?.writer_stall_micros == null ? (
+                    "Unknown"
+                  ) : (
+                    formatMicrosDuration(liveView.writer_stall_micros)
+                  )
                 }
                 issue={healthStatus?.fieldIssues.get("writerStall")}
-                boxedValue
               />
             </ConfigGrid>
           </Section>
@@ -701,17 +729,35 @@ export const MonitoringTab = ({
               <ConfigItemWithHealth
                 label="Rows in Memory"
                 helperText={HELPER_TEXT.liveViewInMemory}
-                value={formatRowCount(liveView.in_mem_rows)}
+                value={
+                  liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : (
+                    formatRowCount(liveView?.in_mem_rows ?? null)
+                  )
+                }
               />
               <ConfigItemWithHealth
                 label="Memory Footprint (peak)"
-                value={formatBytes(liveView.in_mem_bytes)}
+                value={
+                  liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : (
+                    formatBytes(liveView?.in_mem_bytes ?? null)
+                  )
+                }
               />
-              {hasLiveViewDroppedRows && (
+              {(hasLiveViewDroppedRows || liveViewDiagnosticsUnavailable) && (
                 <ConfigItemWithHealth
                   label="Dropped Below Start From"
                   helperText={HELPER_TEXT.liveViewDroppedRows}
-                  value={`${formatRowCount(liveView.below_lower_bound_count)} in-order · ${formatRowCount(liveView.o3_rejected_count)} out-of-order`}
+                  value={
+                    liveViewDiagnosticsUnavailable ? (
+                      <UnavailableValue />
+                    ) : (
+                      `${formatRowCount(liveView?.below_lower_bound_count ?? null)} in-order · ${formatRowCount(liveView?.o3_rejected_count ?? null)} out-of-order`
+                    )
+                  }
                   fullWidth
                 />
               )}

@@ -509,14 +509,6 @@ export class Client {
     return await this.queryCatalog<MaterializedView>("materialized_views()")
   }
 
-  async getMaterializedViewDetails(
-    viewName: string,
-  ): Promise<QueryResult<MaterializedView>> {
-    return await this.queryCatalog<MaterializedView>(
-      `materialized_views() WHERE view_name = '${escapeSqlLiteral(viewName)}';`,
-    )
-  }
-
   async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
     return this.queryDDL(
       `SHOW CREATE MATERIALIZED VIEW '${escapeSqlLiteral(table)}';`,

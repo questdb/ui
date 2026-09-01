@@ -1,6 +1,6 @@
 import { formatDistance } from "date-fns"
 import type { TimestampedSample, TrendData } from "./healthCheck"
-import { parseOne, type StoragePolicy } from "@questdb/sql-parser"
+import type { StoragePolicy } from "../../../utils/questdb/types"
 import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 
 const BIGINT_ZERO = BigInt(0)
@@ -117,30 +117,52 @@ export function getTrendSamplesForIssue(
 export type StoragePolicyClause = { action: string; duration: string }
 
 const STORAGE_POLICY_LABELS = [
-  ["toParquet", "To Parquet"],
-  ["toRemote", "To Remote"],
-  ["dropLocal", "Drop Local"],
-  ["dropRemote", "Drop Remote"],
+  ["to_parquet", "To Parquet"],
+  ["to_remote", "To Remote"],
+  ["drop_local", "Drop Local"],
+  ["drop_remote", "Drop Remote"],
 ] as const
 
-export function extractStoragePolicyClauses(
-  ddl: string,
-): StoragePolicyClause[] {
-  let stmt: { storagePolicy?: StoragePolicy } | undefined
-  try {
-    stmt = parseOne(ddl) as { storagePolicy?: StoragePolicy }
-  } catch {
-    return []
+const formatStoragePolicyDuration = (duration: string): string => {
+  const match = duration.match(/^(\d+)([a-z]+)$/)
+  if (!match) return duration
+
+  const value = Number(match[1])
+  const unit = match[2]
+  if (unit === "h" && value % (24 * 7) === 0) {
+    const weeks = value / (24 * 7)
+    return `${weeks} ${formatDurationUnit(weeks, "week")}`
   }
-  const policy = stmt?.storagePolicy
+  if (unit === "h" && value % 24 === 0) {
+    const days = value / 24
+    return `${days} ${formatDurationUnit(days, "day")}`
+  }
+  if (unit === "m" && value % 12 === 0) {
+    const years = value / 12
+    return `${years} ${formatDurationUnit(years, "year")}`
+  }
+
+  const unitName = {
+    h: "hour",
+    d: "day",
+    w: "week",
+    m: "month",
+    y: "year",
+  }[unit]
+  return unitName ? `${value} ${formatDurationUnit(value, unitName)}` : duration
+}
+
+export function formatStoragePolicyClauses(
+  policy: StoragePolicy | null,
+): StoragePolicyClause[] {
   if (!policy) return []
   return STORAGE_POLICY_LABELS.flatMap(([key, label]) => {
-    const v = policy[key]
-    if (!v) return []
+    const duration = policy[key]
+    if (!duration || /^0[a-z]+$/.test(duration)) return []
     return [
       {
         action: label,
-        duration: `${v.value} ${formatDurationUnit(v.value, v.unit)}`,
+        duration: formatStoragePolicyDuration(duration),
       },
     ]
   })

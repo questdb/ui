@@ -31,7 +31,12 @@ const LIVE_VIEW_ISSUE_GUIDANCE: Record<LiveViewFailure["issueId"], string> = {
 export const getLiveViewIssueGuidance = (issueId: string): string | undefined =>
   (LIVE_VIEW_ISSUE_GUIDANCE as Partial<Record<string, string>>)[issueId]
 
-export type HealthSeverity = "critical" | "warning" | "healthy" | "recovering"
+export type HealthSeverity =
+  | "critical"
+  | "warning"
+  | "unknown"
+  | "healthy"
+  | "recovering"
 
 export type TrendDirection = "increasing" | "decreasing" | "stable"
 
@@ -53,6 +58,7 @@ export type TrendIndicator = {
 
 export type HealthStatus = {
   overallSeverity: HealthSeverity
+  hasUnavailableSource: boolean
   issues: HealthIssue[]
   fieldIssues: Map<string, HealthIssue>
   trendIndicators: Map<string, TrendIndicator>
@@ -169,8 +175,6 @@ export const getLiveViewFailure = (
   }
 }
 
-// R6/R7 load-failure stubs report NULL for every diagnostic column; the UI
-// hides the metric sections instead of rendering misleading values.
 export const isLiveViewLoadFailure = (liveView: LiveView | null): boolean =>
   liveView?.view_status === "version_unsupported" ||
   liveView?.view_status === "state_unreadable"
@@ -180,8 +184,19 @@ export function calculateHealthStatus(
   kindData: TableKindData,
   trendData: TrendData,
 ): HealthStatus {
-  const matViewData = kindData.kind === "matview" ? kindData.matView : null
-  const liveViewData = kindData.kind === "liveview" ? kindData.liveView : null
+  const matViewData =
+    kindData.kind === "matview" && kindData.matView.status === "ready"
+      ? kindData.matView.data
+      : null
+  const liveViewData =
+    kindData.kind === "liveview" && kindData.liveView.status === "ready"
+      ? kindData.liveView.data
+      : null
+  const kindSourceUnavailable =
+    (kindData.kind === "view" && kindData.view.status === "unavailable") ||
+    (kindData.kind === "matview" &&
+      kindData.matView.status === "unavailable") ||
+    (kindData.kind === "liveview" && kindData.liveView.status === "unavailable")
   const issues: HealthIssue[] = []
 
   // ============================================================
@@ -363,8 +378,9 @@ export function calculateHealthStatus(
   const severityOrder: Record<HealthSeverity, number> = {
     critical: 0,
     warning: 1,
-    recovering: 2,
-    healthy: 3,
+    unknown: 2,
+    recovering: 3,
+    healthy: 4,
   }
 
   for (const issue of issues) {
@@ -382,9 +398,17 @@ export function calculateHealthStatus(
     overallSeverity = "critical"
   } else if (issues.some((i) => i.severity === "warning")) {
     overallSeverity = "warning"
+  } else if (kindSourceUnavailable) {
+    overallSeverity = "unknown"
   } else if (issues.some((i) => i.severity === "recovering")) {
     overallSeverity = "recovering"
   }
 
-  return { overallSeverity, issues, fieldIssues, trendIndicators }
+  return {
+    overallSeverity,
+    hasUnavailableSource: kindSourceUnavailable,
+    issues,
+    fieldIssues,
+    trendIndicators,
+  }
 }

@@ -21,7 +21,7 @@ const TEST_LIVE_VIEW_2_DDL =
   `CREATE LIVE VIEW IF NOT EXISTS ${TEST_LIVE_VIEW_2} FLUSH EVERY 1s IN MEMORY 5s START FROM BEGINNING AS ` +
   "SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM btc_trades;"
 
-function interceptTablesQuery(modifications) {
+function interceptTablesQuery(modifications, targetTable = TEST_TABLE) {
   cy.intercept(
     {
       method: "GET",
@@ -40,7 +40,7 @@ function interceptTablesQuery(modifications) {
                 (c) => c.name === "table_name",
               )
               for (let i = 0; i < res.body.dataset.length; i++) {
-                if (res.body.dataset[i][tableNameIndex] === TEST_TABLE) {
+                if (res.body.dataset[i][tableNameIndex] === targetTable) {
                   res.body.dataset[i][fieldIndex] = value
                 }
               }
@@ -213,6 +213,206 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-row-count-value")
         .should("be.visible")
         .should("have.text", "0")
+    })
+
+    after(() => {
+      cy.loadConsoleWithAuth()
+      cy.dropTable(TEST_TABLE)
+    })
+  })
+
+  describe("source availability", () => {
+    before(() => {
+      cy.loadConsoleWithAuth()
+      cy.createTable(TEST_TABLE)
+      cy.refreshSchema()
+    })
+
+    beforeEach(() => {
+      cy.loadConsoleWithAuth(false, getOpenAIConfiguredSettings())
+      cy.expandTables()
+    })
+
+    it("should disable DDL actions after repeated failures", () => {
+      // Given
+      let failDDL = false
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /SHOW CREATE TABLE/ },
+        },
+        (req) => {
+          if (failDDL) {
+            req.reply({
+              statusCode: 500,
+              body: { error: "DDL unavailable", position: 0 },
+            })
+          } else {
+            req.continue()
+          }
+        },
+      ).as("ddlAvailability")
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.wait("@ddlAvailability")
+
+      // Then
+      cy.getByDataHook("table-details-copy-ddl").should("not.be.disabled")
+      cy.getByDataHook("table-details-explain-ai").should("not.be.disabled")
+
+      // When
+      cy.then(() => {
+        failDDL = true
+      })
+      cy.wait("@ddlAvailability")
+      cy.wait("@ddlAvailability")
+      cy.wait("@ddlAvailability")
+
+      // Then
+      cy.get('[data-hook="table-details-ddl-unavailable"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", "Unavailable")
+      cy.getByDataHook("table-details-copy-ddl").should("be.disabled")
+      cy.getByDataHook("table-details-explain-ai").should("be.disabled")
+    })
+
+    it("should distinguish unavailable columns from an empty schema", () => {
+      // Given
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /SHOW COLUMNS FROM/ },
+        },
+        {
+          statusCode: 500,
+          body: { error: "Columns unavailable", position: 0 },
+        },
+      ).as("columnsUnavailable")
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+      cy.wait("@columnsUnavailable")
+      cy.wait("@columnsUnavailable")
+      cy.wait("@columnsUnavailable")
+
+      // Then
+      cy.get('[data-hook="table-details-columns-unavailable"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("not.contain", "Columns (0)")
+      cy.getByDataHook("table-details-columns-toggle").should("not.exist")
+    })
+
+    it("should retain last-known-good table data after an admitted failure", () => {
+      // Given
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`tables\\(\\).*${TEST_TABLE}`) },
+        },
+        {
+          statusCode: 500,
+          body: { error: "Tables unavailable", position: 0 },
+        },
+      ).as("tablesUnavailable")
+
+      // When
+      cy.wait("@tablesUnavailable")
+      cy.wait("@tablesUnavailable")
+
+      // Then
+      cy.getByDataHook("table-details-tables-error").should("not.exist")
+      cy.wait("@tablesUnavailable")
+      cy.get('[data-hook="table-details-tables-error"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", "last successful response")
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "unknown",
+      )
+    })
+
+    it("should show a full drawer error when tables metadata never loads", () => {
+      // Given
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`tables\\(\\).*${TEST_TABLE}`) },
+        },
+        {
+          statusCode: 500,
+          body: { error: "Tables unavailable", position: 0 },
+        },
+      ).as("initialTablesUnavailable")
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.wait("@initialTablesUnavailable")
+      cy.wait("@initialTablesUnavailable")
+
+      // Then
+      cy.getByDataHook("table-details-source-error").should("not.exist")
+      cy.wait("@initialTablesUnavailable")
+      cy.get('[data-hook="table-details-source-error"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", `Unable to load ${TEST_TABLE}`)
+        .and("contain", "retry automatically")
+    })
+
+    it("should clear the target immediately after a successful empty tables response", () => {
+      // Given
+      let returnEmpty = false
+      let emptyResponseSent = false
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`tables\\(\\).*${TEST_TABLE}`) },
+        },
+        (req) => {
+          req.continue((res) => {
+            if (returnEmpty && !emptyResponseSent) {
+              res.body.dataset = []
+              res.body.count = 0
+              emptyResponseSent = true
+            }
+            return res
+          })
+        },
+      )
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+
+      // When
+      cy.then(() => {
+        returnEmpty = true
+      })
+      cy.wrap(null).should(() => {
+        expect(emptyResponseSent).to.equal(true)
+      })
+
+      // Then
+      cy.getByDataHook("table-details-name").should("have.value", "")
+      cy.getByDataHook("table-details-empty-state").should("be.visible")
     })
 
     after(() => {
@@ -677,7 +877,9 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("sidebar-back-button").should("be.disabled")
     })
 
-    it("should fall back to table-backed details when matview metadata is missing", () => {
+    it("should keep table-backed details when matview metadata is unavailable", () => {
+      // Given
+      interceptTablesQuery({ table_memory_pressure_level: 1 }, TEST_MATVIEW)
       cy.intercept(
         {
           method: "GET",
@@ -691,16 +893,46 @@ describe("TableDetailsDrawer", () => {
             return res
           })
         },
-      )
+      ).as("missingMatViewMetadata")
 
+      // When
       cy.openDetailsDrawer(TEST_MATVIEW, "matview")
+      cy.wait("@missingMatViewMetadata")
+      cy.wait("@missingMatViewMetadata")
+      cy.wait("@missingMatViewMetadata")
+
+      // Then
+      cy.get('[data-hook="table-details-kind-metadata-error"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", "retry automatically")
+      cy.getByDataHook("table-details-view-status").should(
+        "contain",
+        "Unavailable",
+      )
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "warning",
+      )
+      cy.getByDataHook("table-details-tab-error-badge").should("not.exist")
+      cy.getByDataHook("table-details-tab-warning-badge").should("be.visible")
+
+      // When
       cy.getByDataHook("table-details-tab-details").click()
 
+      // Then
+      cy.getByDataHook("table-details-base-table-section")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+      cy.getByDataHook("table-details-base-table-link").should("be.disabled")
       cy.getByDataHook("table-details-details-section")
         .should("be.visible")
         .should("contain", "Deduplication")
         .should("contain", "Partitioning")
-        .should("not.contain", "Refresh Type")
+        .should("contain", "Refresh Type")
+        .should("contain", "Unavailable")
     })
 
     after(() => {
@@ -824,6 +1056,15 @@ describe("TableDetailsDrawer", () => {
         .should("be.visible")
         .should("contain", "Unflushed Transactions")
         .should("contain", "Since Last Flush")
+      cy.getByDataHook("table-details-live-view-freshness-grid").then(
+        ($grid) => {
+          const gridStyle = getComputedStyle($grid[0])
+          const firstItemStyle = getComputedStyle($grid[0].children[0])
+
+          expect(gridStyle.gridTemplateColumns.split(" ")).to.have.length(2)
+          expect(firstItemStyle.gridColumn).to.equal("1 / -1")
+        },
+      )
       cy.getByDataHook("table-details-live-view-memory")
         .should("be.visible")
         .should("contain", "Rows in Memory")
@@ -838,7 +1079,60 @@ describe("TableDetailsDrawer", () => {
       )
     })
 
-    it("should show a retrying error instead of table details when live view metadata fails", () => {
+    it("should keep live view sections mounted when metadata returns no rows", () => {
+      // Given
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: /live_views\(\) WHERE view_name/ },
+        },
+        (req) => {
+          req.continue((res) => {
+            res.body.dataset = []
+            res.body.count = 0
+            return res
+          })
+        },
+      ).as("emptyLiveViewMetadata")
+
+      // When
+      cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.wait("@emptyLiveViewMetadata")
+      cy.wait("@emptyLiveViewMetadata")
+      cy.wait("@emptyLiveViewMetadata")
+
+      // Then
+      cy.get('[data-hook="table-details-kind-metadata-error"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .and("contain", "retry automatically")
+      cy.getByDataHook("table-details-name").should(
+        "have.value",
+        TEST_LIVE_VIEW,
+      )
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "unknown",
+      )
+      cy.getByDataHook("table-details-view-status").should(
+        "contain",
+        "Unavailable",
+      )
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("contain", "Dropped Below Start From")
+    })
+
+    it("should tolerate transient failures and require two successes to recover", () => {
+      // Given
       let failMetadata = true
 
       cy.intercept(
@@ -850,7 +1144,7 @@ describe("TableDetailsDrawer", () => {
         (req) => {
           if (failMetadata) {
             req.reply({
-              statusCode: 400,
+              statusCode: 500,
               body: {
                 error: "live view metadata unavailable",
                 position: 0,
@@ -861,30 +1155,50 @@ describe("TableDetailsDrawer", () => {
             req.continue()
           }
         },
-      )
+      ).as("liveViewAvailability")
 
+      // When
       cy.openDetailsDrawer(TEST_LIVE_VIEW, "liveview")
+      cy.wait("@liveViewAvailability")
+      cy.wait("@liveViewAvailability")
 
+      // Then
+      cy.getByDataHook("table-details-kind-metadata-error").should("not.exist")
+
+      // When
+      cy.wait("@liveViewAvailability")
+
+      // Then
+      cy.get('[data-hook="table-details-kind-metadata-error"]', {
+        timeout: 5000,
+      })
+        .should("be.visible")
+        .should("contain", "retry automatically")
       cy.getByDataHook("table-details-health-status").should(
         "have.attr",
         "data-severity",
-        "critical",
+        "unknown",
       )
-      cy.getByDataHook("table-details-live-view-metadata-error")
-        .should("be.visible")
-        .should("contain", "retry automatically")
-      cy.getByDataHook("table-details-view-status").should("not.exist")
 
-      cy.getByDataHook("table-details-tab-details").click()
-      cy.getByDataHook("table-details-details-section").should("not.exist")
-
+      // When
       cy.then(() => {
         failMetadata = false
       })
-      cy.getByDataHook("table-details-tab-monitoring").click()
+      cy.wait("@liveViewAvailability")
+
+      // Then
+      cy.getByDataHook("table-details-kind-metadata-error").should("be.visible")
+
+      // When
+      cy.wait("@liveViewAvailability")
+
+      // Then
       cy.getByDataHook("table-details-view-status").should("contain", "Active")
-      cy.getByDataHook("table-details-live-view-metadata-error").should(
-        "not.exist",
+      cy.getByDataHook("table-details-kind-metadata-error").should("not.exist")
+      cy.getByDataHook("table-details-health-status").should(
+        "have.attr",
+        "data-severity",
+        "healthy",
       )
     })
 
@@ -1222,18 +1536,24 @@ describe("TableDetailsDrawer", () => {
         .should("exist")
     })
 
-    it("should show critical health status and hide metric sections for an unreadable live view", () => {
+    it("should show critical health and retain metric sections for an unreadable live view", () => {
       // Given: load-failure stubs report NULL for every diagnostic column
       interceptLiveViewsQuery({
         view_status: "state_unreadable",
         base_table_name: null,
         view_sql: null,
+        flush_every_interval: null,
         flush_every_interval_unit: null,
+        in_memory_interval: null,
         in_memory_interval_unit: null,
+        view_lower_bound_timestamp: null,
         lag_seqtxn: null,
         lag_micros: null,
+        writer_stall_micros: null,
         in_mem_rows: null,
         in_mem_bytes: null,
+        below_lower_bound_count: null,
+        o3_rejected_count: null,
       })
       cy.expandLiveViews()
       cy.getByDataHook("schema-liveview-title").should(
@@ -1261,26 +1581,57 @@ describe("TableDetailsDrawer", () => {
         .and("not.contain", "Valid")
         .and("not.contain", "Suspended")
         .and("not.contain", "Dropped")
-      cy.getByDataHook("table-details-live-view-freshness").should("not.exist")
-      cy.getByDataHook("table-details-live-view-memory").should("not.exist")
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("not.contain", "Never")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("not.contain", "Unknown")
 
-      // When: the definition is unreadable, so the details tab has no cards
+      // When
       cy.getByDataHook("table-details-tab-details").click()
 
       // Then
-      cy.getByDataHook("table-details-details-section").should("not.exist")
+      cy.getByDataHook("table-details-details-section")
+        .should("be.visible")
+        .and("contain", "Flush Every")
+        .and("contain", "In Memory")
+        .and("contain", "Partitioning")
+      cy.getByDataHook("table-details-flush-every-card").should(
+        "contain",
+        "Unavailable",
+      )
+      cy.getByDataHook("table-details-in-memory-card").should(
+        "contain",
+        "Unavailable",
+      )
+      cy.getByDataHook("table-details-start-from-card")
+        .should("contain", "Unavailable")
+        .and("not.contain", "Beginning")
     })
 
-    it("should show the version unsupported status and hide metric sections", () => {
+    it("should show the version unsupported status and retain metric sections", () => {
       // Given: load-failure stubs report NULL for every diagnostic column
       cy.loadConsoleWithAuth()
       cy.refreshSchema()
       interceptLiveViewsQuery({
         view_status: "version_unsupported",
+        base_table_name: null,
+        view_sql: null,
+        flush_every_interval: null,
+        flush_every_interval_unit: null,
+        in_memory_interval: null,
+        in_memory_interval_unit: null,
+        view_lower_bound_timestamp: null,
         lag_seqtxn: null,
         lag_micros: null,
+        writer_stall_micros: null,
         in_mem_rows: null,
         in_mem_bytes: null,
+        below_lower_bound_count: null,
+        o3_rejected_count: null,
       })
       cy.expandLiveViews()
       cy.getByDataHook("schema-liveview-title").should(
@@ -1299,8 +1650,14 @@ describe("TableDetailsDrawer", () => {
         "contain",
         "Version unsupported",
       )
-      cy.getByDataHook("table-details-live-view-freshness").should("not.exist")
-      cy.getByDataHook("table-details-live-view-memory").should("not.exist")
+      cy.getByDataHook("table-details-live-view-freshness")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("not.contain", "Never")
+      cy.getByDataHook("table-details-live-view-memory")
+        .should("be.visible")
+        .and("contain", "Unavailable")
+        .and("not.contain", "Unknown")
     })
 
     after(() => {
@@ -1382,8 +1739,26 @@ describe("TableDetailsDrawer", () => {
     })
 
     it("should open view details from schema, show View badge, no tabs, only DDL and columns sections with columns expanded", () => {
+      // Given
+      let tableMetadataRequests = 0
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: {
+            query: new RegExp(`tables\\(\\).*${TEST_VIEW}`),
+          },
+        },
+        (req) => {
+          tableMetadataRequests += 1
+          req.continue()
+        },
+      ).as("viewTableMetadata")
+
+      // When
       cy.openDetailsDrawer(TEST_VIEW, "view")
 
+      // Then
       cy.getByDataHook("table-details-type-badge").should("contain", "View")
 
       cy.getByDataHook("table-details-tab-monitoring").should("not.exist")
@@ -1398,6 +1773,18 @@ describe("TableDetailsDrawer", () => {
       cy.getByDataHook("table-details-health-status")
         .should("be.visible")
         .should("have.attr", "data-severity", "healthy")
+
+      // When
+      cy.wait("@viewTableMetadata")
+      cy.then(() => {
+        tableMetadataRequests = 0
+      })
+      cy.wait(2200)
+
+      // Then
+      cy.then(() => {
+        expect(tableMetadataRequests).to.be.within(1, 3)
+      })
     })
 
     after(() => {
@@ -1836,65 +2223,6 @@ describe("TableDetailsDrawer", () => {
       cy.loadConsoleWithAuth()
       cy.dropTable(TEST_TABLE)
       cy.dropTable(TEST_TABLE_2)
-    })
-  })
-
-  describe("table with STORAGE POLICY", () => {
-    before(() => {
-      cy.loadConsoleWithAuth()
-      cy.createTable(TEST_TABLE)
-      cy.refreshSchema()
-    })
-
-    beforeEach(() => {
-      cy.intercept(
-        {
-          method: "GET",
-          pathname: "/exec",
-          query: { query: /SHOW\s+CREATE/i },
-        },
-        (req) => {
-          req.continue((res) => {
-            const row = res.body?.dataset?.[0]
-            if (row && typeof row[0] === "string") {
-              row[0] = row[0].replace(
-                /(\bPARTITION\s+BY\s+\w+)/i,
-                "$1 STORAGE POLICY(TO PARQUET 3 DAYS, TO REMOTE 10 DAYS, DROP LOCAL 1 YEARS)",
-              )
-            }
-          })
-        },
-      ).as("showCreate")
-
-      cy.loadConsoleWithAuth()
-      cy.expandTables()
-    })
-
-    it("hides TTL and renders the storage policy section", () => {
-      cy.openDetailsDrawer(TEST_TABLE)
-      cy.getByDataHook("table-details-tab-details").click()
-
-      cy.getByDataHook("table-details-storage-policy-section")
-        .should("be.visible")
-        .within(() => {
-          cy.contains("To Parquet").should("be.visible")
-          cy.contains("3 Days").should("be.visible")
-          cy.contains("To Remote").should("be.visible")
-          cy.contains("10 Days").should("be.visible")
-          cy.contains("Drop Local").should("be.visible")
-          cy.contains("1 Year").should("be.visible")
-        })
-
-      cy.getByDataHook("table-details-details-section")
-        .should("be.visible")
-        .within(() => {
-          cy.contains("TTL").should("not.exist")
-        })
-    })
-
-    after(() => {
-      cy.loadConsoleWithAuth()
-      cy.dropTable(TEST_TABLE)
     })
   })
 })

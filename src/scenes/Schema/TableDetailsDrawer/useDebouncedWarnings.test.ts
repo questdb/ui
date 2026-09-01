@@ -38,6 +38,7 @@ const makeHealthStatus = (
 
   return {
     overallSeverity: issues.length > 0 ? "warning" : "healthy",
+    hasUnavailableSource: false,
     issues,
     fieldIssues,
     trendIndicators,
@@ -82,6 +83,20 @@ describe("useDebouncedWarnings", () => {
 
     expect(result.issues).toHaveLength(0)
     expect(result.trendIndicators.has("transactionLag")).toBe(false)
+  })
+
+  it("should preserve unknown when an unavailable source has an unconfirmed warning", () => {
+    // Given
+    const raw = {
+      ...makeHealthStatus(["Y1"]),
+      hasUnavailableSource: true,
+    }
+
+    // When
+    const result = sim.process(raw, 0)
+
+    // Then
+    expect(result?.overallSeverity).toBe("unknown")
   })
 
   it("should confirm Y1 after 5 seconds of continuous presence", () => {
@@ -217,6 +232,7 @@ describe("useDebouncedWarnings", () => {
     for (const i of issues) fieldIssues.set(i.field, i)
     const raw: HealthStatus = {
       overallSeverity: "warning",
+      hasUnavailableSource: false,
       issues,
       fieldIssues,
       trendIndicators: new Map(),
