@@ -868,17 +868,71 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].lastRunStatus).toBe("success")
   })
 
-  it("reports resultsCleared when a run cell is converted to markdown", () => {
-    // Given a run cell with a live result
+  it("rejects turning an existing sql cell into markdown", () => {
+    // Given a sql cell
+    const prev: NotebookCell[] = [{ id: "a", position: 0, value: "x" }]
+    // When the apply re-sends its id with type markdown
+    // Then the request is refused
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", value: "x", type: "markdown" }],
+      }),
+    ).toThrow(/Cell "a" is sql; cell kind cannot change/)
+  })
+
+  it("rejects turning an existing markdown cell into sql", () => {
+    // Given a markdown cell
     const prev: NotebookCell[] = [
-      { id: "a", position: 0, value: "x", result: dql("x") },
+      { id: "a", position: 0, value: "# title", type: "markdown" },
     ]
-    // When the apply converts it to markdown without touching the text
-    const { resultsCleared } = buildAppliedCells(prev, {
-      cells: [{ id: "a", value: "x", type: "markdown" }],
+    // When the apply re-sends its id with type sql
+    // Then the request is refused
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [{ id: "a", preserveValue: true, type: "sql" }],
+      }),
+    ).toThrow(/Cell "a" is markdown; cell kind cannot change/)
+  })
+
+  it("ignores view and result_height on a markdown cell", () => {
+    // Given an existing markdown cell
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "# title", type: "markdown" },
+    ]
+    // When the apply sends a view and a result_height with the editor height
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [
+        {
+          id: "a",
+          preserveValue: true,
+          editorHeight: 86,
+          resultHeight: 300,
+          view: "result",
+        },
+      ],
     })
-    // Then its snapshot is flagged along with the dropped result
-    expect(resultsCleared).toEqual(["a"])
+    // Then only the editor height lands on the cell
+    expect(nextCells[0]).toMatchObject({ topHeight: 86, topResized: true })
+    expect(nextCells[0].bottomHeight).toBeUndefined()
+    expect(nextCells[0].preferredView).toBeUndefined()
+  })
+
+  it("accepts an echoed kind on an existing cell", () => {
+    // Given a sql cell and a markdown cell
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "x" },
+      { id: "b", position: 1, value: "# title", type: "markdown" },
+    ]
+    // When the apply repeats each cell's current kind
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [
+        { id: "a", preserveValue: true, type: "sql" },
+        { id: "b", preserveValue: true, type: "markdown" },
+      ],
+    })
+    // Then both cells keep their kind
+    expect(nextCells[0].type).toBeUndefined()
+    expect(nextCells[1].type).toBe("markdown")
   })
 
   it("preserves run history as lastRunStatus when a value change drops the result", () => {
@@ -1042,60 +1096,6 @@ describe("buildAppliedCells", () => {
       cells: [{ value: hugeValue, type: "markdown" }],
     })
     expect(nextCells[0].value).toBe(hugeValue)
-  })
-
-  it("rejects preserving an over-limit markdown cell flipped to sql", () => {
-    const hugeValue = Array(100_000).fill("x").join("\n")
-    const prev: NotebookCell[] = [
-      { id: "a", position: 0, value: hugeValue, type: "markdown" },
-    ]
-    expect(() =>
-      buildAppliedCells(prev, {
-        cells: [{ id: "a", preserveValue: true, type: "sql" }],
-      }),
-    ).toThrow(/line limit/)
-  })
-
-  it("validates dimensions against the target type when markdown becomes sql", () => {
-    const prev: NotebookCell[] = [
-      { id: "a", position: 0, value: "SELECT 1", type: "markdown" },
-    ]
-    expect(() =>
-      buildAppliedCells(prev, {
-        cells: [
-          {
-            id: "a",
-            preserveValue: true,
-            type: "sql",
-            editorHeight: 30,
-            view: "result",
-          },
-        ],
-      }),
-    ).toThrow(/editor_height below its minimum/)
-  })
-
-  it("applies a requested view when markdown becomes sql", () => {
-    const prev: NotebookCell[] = [
-      { id: "a", position: 0, value: "SELECT 1", type: "markdown" },
-    ]
-    const { nextCells } = buildAppliedCells(prev, {
-      cells: [
-        {
-          id: "a",
-          preserveValue: true,
-          type: "sql",
-          editorHeight: 72,
-          view: "result",
-        },
-      ],
-    })
-    expect(nextCells[0]).toMatchObject({
-      topHeight: 72,
-      topResized: true,
-      preferredView: "result",
-    })
-    expect(nextCells[0].type).toBeUndefined()
   })
 
   it("rejects grid placement that extends beyond the notebook columns", () => {
@@ -2009,6 +2009,25 @@ describe("resolveAgentCellPresentation", () => {
     ...over,
   })
 
+  it("reports null pane views for a markdown cell in every tier", () => {
+    // Given a markdown cell
+    const markdown = chart({ mode: undefined, type: "markdown" })
+    // When its presentation resolves for an unmounted, wide, or compact cell
+    // Then preferred_view and view are null and tier is never reported
+    expect(resolveAgentCellPresentation(markdown)).toEqual({
+      preferred_view: null,
+      view: null,
+    })
+    expect(resolveAgentCellPresentation(markdown, false)).toEqual({
+      preferred_view: null,
+      view: null,
+    })
+    expect(resolveAgentCellPresentation(markdown, true)).toEqual({
+      preferred_view: null,
+      view: null,
+    })
+  })
+
   it("returns the effective live view with its tier", () => {
     expect(
       resolveAgentCellPresentation(chart({ preferredView: "editor" }), false),
@@ -2589,20 +2608,6 @@ describe("lastRunError carry chain", () => {
     // actually happened, and only a run rewrites it
     expect(nextCells[0].lastRunStatus).toBe("error")
     expect(nextCells[0].lastRunError).toBe("table does not exist")
-  })
-
-  it("buildAppliedCells drops run markers when a cell turns markdown", () => {
-    // Given a stripped errored cell converted to prose
-    const [stripped] = stripCellResults([errored("a")])
-
-    // When apply converts it to markdown
-    const { nextCells } = buildAppliedCells([stripped], {
-      cells: [{ id: "a", value: stripped.value, type: "markdown" }],
-    })
-
-    // Then no run markers remain on the markdown cell
-    expect(nextCells[0].lastRunStatus).toBeUndefined()
-    expect(nextCells[0].lastRunError).toBeUndefined()
   })
 })
 

@@ -87,7 +87,10 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
-import { readLiveCellPresentation } from "../../scenes/Editor/Notebook/notebookPresentationStore"
+import {
+  readGridContainerWidth,
+  readLiveCellPresentation,
+} from "../../scenes/Editor/Notebook/notebookPresentationStore"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -841,7 +844,7 @@ export const dispatchTool = async (
                 w,
                 liveCompact: livePresentation?.compact,
                 liveExpectingResult: livePresentation?.expectingResult,
-                gridContainerWidth: livePresentation?.gridContainerWidth,
+                gridContainerWidth: readGridContainerWidth(buffer_id),
               })
             },
             signal,

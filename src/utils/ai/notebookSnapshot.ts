@@ -18,6 +18,7 @@ import type { UserActionDigest } from "../../providers/AIConversationProvider/ty
 import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
 import {
+  type AgentCellPresentation,
   agentCellPaneDimensions,
   agentViewForPaneLayout,
   resolveAgentCellPresentation,
@@ -58,9 +59,9 @@ export type NotebookContextCell = {
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
   editor_height?: number | "auto"
-  result_height?: number | "auto"
-  preferred_view: AgentCellView
-  view?: AgentCellView
+  result_height?: number | "auto" | null
+  preferred_view: AgentCellView | null
+  view?: AgentCellView | null
   tier?: AgentCellTier
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -165,7 +166,11 @@ const refreshFields = (
   }
 }
 
-const liveAgentCellPresentation = (cell: NotebookCell, bufferId: number) => {
+const liveAgentCellPresentation = (
+  cell: NotebookCell,
+  bufferId: number,
+): AgentCellPresentation => {
+  if (cell.type === "markdown") return resolveAgentCellPresentation(cell)
   const live = readLiveCellPresentation(bufferId, cell.id)
   if (!live) return resolveAgentCellPresentation(cell)
   return {
@@ -200,7 +205,8 @@ const buildCell = (
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
   const dimensions = agentCellPaneDimensions(cell)
   out.editor_height = dimensions.editorHeight
-  if (dimensions.resultHeight !== undefined)
+  if (cell.type === "markdown") out.result_height = null
+  else if (dimensions.resultHeight !== undefined)
     out.result_height = dimensions.resultHeight
   if (presentation.view !== undefined) out.view = presentation.view
   if (presentation.tier !== undefined) out.tier = presentation.tier
@@ -471,9 +477,9 @@ export type NotebookCellDetails = {
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
   editor_height: number | "auto"
-  result_height?: number | "auto"
-  preferred_view: AgentCellView
-  view?: AgentCellView
+  result_height?: number | "auto" | null
+  preferred_view: AgentCellView | null
+  view?: AgentCellView | null
   tier?: AgentCellTier
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -550,7 +556,8 @@ export const serializeCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  if (dimensions.resultHeight !== undefined)
+  if (cell.type === "markdown") out.result_height = null
+  else if (dimensions.resultHeight !== undefined)
     out.result_height = dimensions.resultHeight
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)

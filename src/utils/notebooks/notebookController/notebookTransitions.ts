@@ -13,6 +13,7 @@ import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   agentCellDimensionsPatch,
+  applicableCellDimensions,
   buildAppliedNotebookState,
   carriedRunError,
   carriedRunStatus,
@@ -338,7 +339,7 @@ export const setCellDimensionsTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  dimensions: AgentCellDimensions,
+  requested: AgentCellDimensions,
 ): NotebookTransitionResult<
   ReturnType<typeof resolveAgentCellPresentation> & {
     fallback?:
@@ -347,16 +348,7 @@ export const setCellDimensionsTransition = (
   }
 > => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
-  if (
-    cell.type === "markdown" &&
-    (dimensions.resultHeight != null ||
-      (dimensions.view != null && dimensions.view !== "editor"))
-  ) {
-    throw new NotebookToolError(
-      "validation",
-      'Markdown cells have no result pane; pass null for result_height and null or "editor" for view.',
-    )
-  }
+  const dimensions = applicableCellDimensions(cell, requested)
   if (
     typeof dimensions.editorHeight === "number" &&
     (!Number.isFinite(dimensions.editorHeight) ||

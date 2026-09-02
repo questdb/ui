@@ -30,7 +30,6 @@ import { toast } from "../../../../components/Toast"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
-  computeCellHeights,
   isDoubleView,
   isExpectingResult,
   minBottomHeightFor,
@@ -113,8 +112,6 @@ const HiddenCellStatus = styled.span`
   white-space: nowrap;
 `
 
-const GRID_PANE_EXPANSION_FALLBACK_MS = 250
-
 type Props = {
   cell: NotebookCell
   index: number
@@ -125,7 +122,6 @@ type Props = {
   isMaximized: boolean
   isRunning: boolean
   toolbarTierOverride?: CellToolbarTier
-  gridContainerWidth?: number
 }
 
 const CellInner: React.FC<Props> = ({
@@ -138,7 +134,6 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
   toolbarTierOverride,
-  gridContainerWidth,
 }) => {
   const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
     useNotebookActions()
@@ -186,67 +181,7 @@ const CellInner: React.FC<Props> = ({
   const expectingResult = isExpectingResult(cell, resultStatus)
   const doubleView = isDoubleView(cell) || expectingResult
   const isCompactTier = toolbarTier === "compact"
-  const targetPaneLayout = resolveCellPaneLayout(
-    cell,
-    expectingResult,
-    isCompactTier,
-  )
-  const [paneLayout, setPaneLayout] = React.useState(targetPaneLayout)
-  const resolvedPaneHeights = computeCellHeights(cell, { expectingResult })
-
-  React.useLayoutEffect(() => {
-    if (paneLayout === targetPaneLayout) return undefined
-
-    // Switch immediately before a shrink. Before an expansion, keep the old
-    // pane mounted until RGL has made room for the incoming pane. This applies
-    // to compact editor/result swaps as well as compact -> split.
-    const paneHeight = (layout: typeof paneLayout) =>
-      layout === "editor"
-        ? resolvedPaneHeights.topHeight
-        : layout === "result"
-          ? resolvedPaneHeights.bottomHeight
-          : resolvedPaneHeights.topHeight + resolvedPaneHeights.bottomHeight
-    const expandingPresentation =
-      layoutMode === "grid" &&
-      !isMaximized &&
-      paneHeight(targetPaneLayout) > paneHeight(paneLayout)
-    if (!expandingPresentation) {
-      setPaneLayout(targetPaneLayout)
-      return undefined
-    }
-
-    const gridItem =
-      wrapperRef.current?.closest<HTMLElement>(".react-grid-item")
-    if (!gridItem) {
-      setPaneLayout(targetPaneLayout)
-      return undefined
-    }
-
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      setPaneLayout(targetPaneLayout)
-    }
-    const onTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === gridItem && event.propertyName === "height") finish()
-    }
-    gridItem.addEventListener("transitionend", onTransitionEnd)
-    const fallback = window.setTimeout(finish, GRID_PANE_EXPANSION_FALLBACK_MS)
-    return () => {
-      settled = true
-      window.clearTimeout(fallback)
-      gridItem.removeEventListener("transitionend", onTransitionEnd)
-    }
-  }, [
-    isMaximized,
-    layoutMode,
-    paneLayout,
-    resolvedPaneHeights.bottomHeight,
-    resolvedPaneHeights.topHeight,
-    targetPaneLayout,
-    wrapperRef,
-  ])
+  const paneLayout = resolveCellPaneLayout(cell, expectingResult, isCompactTier)
 
   useEffect(
     () =>
@@ -254,16 +189,8 @@ const CellInner: React.FC<Props> = ({
         compact: isCompactTier,
         paneLayout,
         expectingResult,
-        ...(gridContainerWidth !== undefined ? { gridContainerWidth } : {}),
       }),
-    [
-      bufferIdForEvents,
-      cell.id,
-      expectingResult,
-      gridContainerWidth,
-      isCompactTier,
-      paneLayout,
-    ],
+    [bufferIdForEvents, cell.id, expectingResult, isCompactTier, paneLayout],
   )
 
   const resultOnly = paneLayout === "result"

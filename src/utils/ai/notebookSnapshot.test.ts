@@ -280,6 +280,37 @@ describe("buildSnapshot", () => {
     unpublish()
   })
 
+  it("reports null pane views and result height for a markdown cell", async () => {
+    // Given a live markdown cell
+    const id = await seedNotebook({
+      cells: [sql("a", "# title", { type: "markdown" })],
+    })
+    // When the snapshot builds
+    const snap = await buildSnapshot(id)
+    const cellSnapshot = snap?.status === "ok" ? snap.cells[0] : undefined
+    // Then the pane fields are null and tier is absent
+    expect(cellSnapshot).toMatchObject({
+      type: "markdown",
+      preferred_view: null,
+      view: null,
+      result_height: null,
+    })
+    expect(cellSnapshot?.tier).toBeUndefined()
+    // And get_cell reports the same null pane fields
+    const details = serializeCell(
+      [sql("a", "# title", { type: "markdown" })],
+      "a",
+      id,
+      false,
+    )
+    expect(details).toMatchObject({
+      preferred_view: null,
+      view: null,
+      result_height: null,
+    })
+    expect(details.tier).toBeUndefined()
+  })
+
   it("omits tier and reports the stored preference for an inactive notebook", async () => {
     const id = await seedNotebook({
       cells: [

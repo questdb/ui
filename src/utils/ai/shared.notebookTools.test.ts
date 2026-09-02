@@ -42,6 +42,7 @@ import type { ToolExecutionContext } from "./shared"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
 import {
   __resetNotebookPresentationStoreForTests,
+  publishGridContainerWidth,
   publishLiveCellPresentation,
 } from "../../scenes/Editor/Notebook/notebookPresentationStore"
 
@@ -772,8 +773,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       compact: false,
       paneLayout: "split",
       expectingResult: false,
-      gridContainerWidth: 1200,
     })
+    const unpublishWidth = publishGridContainerWidth(1, 1200)
 
     const res = await dispatchTool(
       "set_cell_layout",
@@ -789,6 +790,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       tier: "compact",
     })
     expect(state.parts.settings.layout?.[0].w).toBe(4)
+    unpublishWidth()
     unpublish()
   })
 

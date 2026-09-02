@@ -137,6 +137,31 @@ describe("setCellDimensionsTransition", () => {
     })
   })
 
+  it("ignores view and result_height on a markdown cell and reports null views", () => {
+    // Given a markdown cell
+    const markdown = cell("a", "# title", { type: "markdown" })
+    // When an agent sends a view and a result_height with the editor height
+    const out = setCellDimensionsTransition(
+      partsOf([markdown]),
+      BUFFER_ID,
+      "a",
+      {
+        editorHeight: 86,
+        resultHeight: 300,
+        view: "result",
+        compact: false,
+      },
+    )
+    // Then only the editor height lands, and the views report null
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 86,
+      topResized: true,
+    })
+    expect(out.parts.cells[0].bottomHeight).toBeUndefined()
+    expect(out.parts.cells[0].preferredView).toBeUndefined()
+    expect(out.result).toEqual({ preferred_view: null, view: null })
+  })
+
   it("supports a genuine editor-only view in the wide tier", () => {
     const chart = cell("a", "SELECT 1", { mode: "draw" })
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {

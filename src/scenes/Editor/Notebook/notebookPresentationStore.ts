@@ -7,9 +7,6 @@ export type LiveCellPresentation = {
   // state alone cannot distinguish a result that is still loading/released
   // from one whose snapshot is known to be missing.
   expectingResult: boolean
-  // Present for grid cells. Tool mutations use the same measured container
-  // width as the renderer to resolve the tier produced by a new grid.w.
-  gridContainerWidth?: number
 }
 
 const presentations = new Map<
@@ -46,6 +43,26 @@ export const readLiveCellPresentation = (
 ): LiveCellPresentation | undefined =>
   presentations.get(bufferId)?.get(cellId)?.value
 
+const gridContainerWidths = new Map<number, number>()
+
+// Tool mutations resolve the tier a new grid.w produces from the same
+// measured container width as the renderer, published once per notebook.
+export const publishGridContainerWidth = (
+  bufferId: number,
+  width: number,
+): (() => void) => {
+  gridContainerWidths.set(bufferId, width)
+  return () => {
+    if (gridContainerWidths.get(bufferId) === width) {
+      gridContainerWidths.delete(bufferId)
+    }
+  }
+}
+
+export const readGridContainerWidth = (bufferId: number): number | undefined =>
+  gridContainerWidths.get(bufferId)
+
 export const __resetNotebookPresentationStoreForTests = (): void => {
   presentations.clear()
+  gridContainerWidths.clear()
 }

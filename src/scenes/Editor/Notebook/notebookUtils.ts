@@ -1111,16 +1111,20 @@ export const buildAppliedCells = (
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
 
-    // Cell kind and mode are sticky: omission preserves the existing cell.
-    // Converting a markdown cell to SQL by omission would silently turn prose
-    // into a runnable query, so only an explicit type can do that.
-    const resolvedType: CellType | undefined =
-      req.type === undefined || req.type === null ? existing?.type : req.type
+    const existingKind: CellType = existing?.type ?? "sql"
+    if (existing && req.type != null && req.type !== existingKind) {
+      throw new ApplyNotebookStateError(
+        `Cell "${existing.id}" is ${existingKind}; cell kind cannot change. Delete it and add a new cell.`,
+        "cells",
+      )
+    }
+    const resolvedType: CellType | undefined = existing
+      ? existing.type
+      : (req.type ?? undefined)
 
     // Markdown cells hold prose, not editor SQL, so they're exempt from the cap.
-    const preservesStoredSql = preserve && existing?.type !== "markdown"
     if (
-      !preservesStoredSql &&
+      !preserve &&
       resolvedType !== "markdown" &&
       exceedsCellLineLimit(value)
     ) {
@@ -1181,26 +1185,20 @@ export const buildAppliedCells = (
     }
 
     const isDraw = resolvedMode === "draw"
-    if (
-      resolvedType === "markdown" &&
-      (req.resultHeight != null || (req.view != null && req.view !== "editor"))
-    ) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} is markdown; result_height must be null and view must be null or "editor". Use editor_height to size its rendered content.`,
-        "cells",
-      )
-    }
     const dimensionCell: NotebookCell = {
-      ...(existing ?? { id, position: index, value }),
+      ...(existing ?? { id, position: index, value, type: resolvedType }),
       value,
       ...(resolvedMode !== undefined ? { mode: resolvedMode } : {}),
     }
-    if (resolvedType === "markdown") dimensionCell.type = "markdown"
-    else delete dimensionCell.type
+    const dimensions = applicableCellDimensions(dimensionCell, {
+      editorHeight: req.editorHeight,
+      resultHeight: req.resultHeight,
+      view: req.view,
+    })
     if (
-      typeof req.editorHeight === "number" &&
-      (!Number.isFinite(req.editorHeight) ||
-        req.editorHeight < minTopHeightFor(dimensionCell))
+      typeof dimensions.editorHeight === "number" &&
+      (!Number.isFinite(dimensions.editorHeight) ||
+        dimensions.editorHeight < minTopHeightFor(dimensionCell))
     ) {
       throw new ApplyNotebookStateError(
         `Cell at index ${index} has an editor_height below its minimum.`,
@@ -1208,24 +1206,23 @@ export const buildAppliedCells = (
       )
     }
     if (
-      typeof req.resultHeight === "number" &&
-      (!Number.isFinite(req.resultHeight) ||
-        req.resultHeight < minBottomHeightFor(dimensionCell))
+      typeof dimensions.resultHeight === "number" &&
+      (!Number.isFinite(dimensions.resultHeight) ||
+        dimensions.resultHeight < minBottomHeightFor(dimensionCell))
     ) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has result_height ${req.resultHeight}px; minimum is ${minBottomHeightFor(dimensionCell)}px.`,
+        `Cell at index ${index} has result_height ${dimensions.resultHeight}px; minimum is ${minBottomHeightFor(dimensionCell)}px.`,
         "cells",
       )
     }
-    const dimensionsPatch = agentCellDimensionsPatch(dimensionCell, {
-      editorHeight: req.editorHeight,
-      resultHeight: req.resultHeight,
-      view: req.view,
-    })
+    const dimensionsPatch = agentCellDimensionsPatch(dimensionCell, dimensions)
     if (req.view == null && !existing && isDraw) {
       dimensionsPatch.preferredView = "result"
     }
-    const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
+    const autoRefresh =
+      req.autoRefresh != null && resolvedType !== "markdown"
+        ? req.autoRefresh
+        : undefined
 
     if (req.grid) {
       const gridError = cellGridBoundsError(req.grid)
@@ -1263,11 +1260,6 @@ export const buildAppliedCells = (
         if (carried !== undefined) next.lastRunStatus = carried
         if (carriedError !== undefined) next.lastRunError = carriedError
         else delete next.lastRunError
-      }
-      const hadRunResult =
-        existing.result != null ||
-        (existing.lastRunStatus != null && existing.lastRunStatus !== "none")
-      if ((resolvedType === "markdown" && hadRunResult) || resultDropped) {
         resultsCleared.push(existing.id)
       }
       if (resolvedMode !== undefined) next.mode = resolvedMode
@@ -1277,19 +1269,7 @@ export const buildAppliedCells = (
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
       Object.assign(next, dimensionsPatch)
-      if (resolvedType === "markdown") {
-        // Markdown cells carry none of the SQL/chart sub-state.
-        next.type = "markdown"
-        next.result = null
-        delete next.mode
-        delete next.chartConfig
-        delete next.autoRefresh
-        delete next.preferredView
-        delete next.bottomHeight
-        delete next.lastRunStatus
-        delete next.lastRunError
-      } else {
-        delete next.type
+      if (resolvedType !== "markdown") {
         next.preferredView ??= "editor_result"
         if (valueChanged && !existing.topResized) {
           const estimated = topHeightForSql(value)
@@ -1418,6 +1398,14 @@ export type AgentCellDimensions = {
   compact?: boolean
   expectingResult?: boolean
 }
+
+export const applicableCellDimensions = (
+  cell: Pick<NotebookCell, "type">,
+  dimensions: AgentCellDimensions,
+): AgentCellDimensions =>
+  cell.type === "markdown"
+    ? { ...dimensions, resultHeight: null, view: null }
+    : dimensions
 
 // Translate the semantic agent wire model into the persisted pane model.
 // `null`/omission preserves, "auto" clears the corresponding resize pin, and
@@ -1579,8 +1567,8 @@ export const storedAgentCellView = (cell: NotebookCell): AgentCellView => {
 }
 
 export type AgentCellPresentation = {
-  preferred_view: AgentCellView
-  view?: AgentCellView
+  preferred_view: AgentCellView | null
+  view?: AgentCellView | null
   tier?: AgentCellTier
 }
 
@@ -1589,6 +1577,7 @@ export const resolveAgentCellPresentation = (
   compact?: boolean,
   expectingResult: boolean = false,
 ): AgentCellPresentation => {
+  if (cell.type === "markdown") return { preferred_view: null, view: null }
   const preferredView = storedAgentCellView(cell)
   if (compact === undefined) return { preferred_view: preferredView }
   const paneLayout = resolveCellPaneLayout(cell, expectingResult, compact)

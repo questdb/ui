@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled, { css } from "styled-components"
 import {
   ResponsiveGridLayout,
@@ -26,6 +33,7 @@ import {
   useNotebookBufferId,
   useNotebookState,
 } from "./NotebookProvider"
+import { publishGridContainerWidth } from "./notebookPresentationStore"
 import { Cell } from "./cells/Cell"
 import { MarkdownCell } from "./cells/MarkdownCell"
 import type { AutoRefresh, NotebookCell } from "../../../store/notebook"
@@ -136,7 +144,7 @@ const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
   ),
 )
 
-const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
+const GridScrollContainer = styled.div<{ $suppressTransitions: boolean }>`
   flex: 1;
   overflow-y: auto;
   padding: 3rem;
@@ -156,13 +164,18 @@ const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
     opacity: 1;
   }
 
-  /* On first mount, react-grid-layout's items would otherwise animate from
-     their initial state to their computed position/size (the "expanding"
-     glitch). Kill the transition until the layout has settled; it's re-enabled
-     for drag/resize. */
+  /* Height is excluded: a pane switch mounts its content in the same commit
+     the item height changes, so the two must land together. */
+  .react-grid-item {
+    transition-property: left, top, width;
+  }
+
+  /* While the container is being resized the geometry tracks every frame;
+     react-grid-layout's stock transitions would chase each one. */
   ${({ $suppressTransitions }) =>
     $suppressTransitions &&
     css`
+      .react-grid-layout,
       .react-grid-item {
         transition: none !important;
       }
@@ -207,6 +220,23 @@ const LAYOUT_OPTS = {
 
 const generateDefaultLayout = (cells: { id: string }[]): CellLayoutItem[] =>
   generateDefaultLayoutPure(cells, LAYOUT_OPTS)
+
+const CONTAINER_RESIZE_SETTLE_MS = 200
+
+const useContainerResizeInFlight = (containerWidth: number): boolean => {
+  const [inFlight, setInFlight] = useState(true)
+
+  useLayoutEffect(() => {
+    setInFlight(true)
+    const timer = window.setTimeout(
+      () => setInFlight(false),
+      CONTAINER_RESIZE_SETTLE_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [containerWidth])
+
+  return inFlight
+}
 
 const ADDED_CELL_SCROLL_SETTLE_MS = 250
 const ADDED_CELL_SCROLL_BOTTOM_GAP_PX = 20
@@ -335,7 +365,6 @@ type CellViewProps = {
   isMaximized: boolean
   isRunning: boolean
   toolbarTierOverride?: CellToolbarTier
-  gridContainerWidth?: number
 }
 
 const CellView: React.FC<CellViewProps> = ({
@@ -401,6 +430,7 @@ const GridLayout: React.FC = () => {
   const resultStatusVersion = useResultStatusVersion()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
+  const bufferId = useNotebookBufferId()
   // measureBeforeMount: don't render the grid until the container width is
   // measured, so cells first paint at their real width instead of animating
   // from the guessed initialWidth (react-grid-layout transitions the change).
@@ -409,26 +439,15 @@ const GridLayout: React.FC = () => {
     containerRef,
     mounted: gridMeasured,
   } = useContainerWidth({ measureBeforeMount: true })
+  const suppressTransitions = useContainerResizeInFlight(containerWidth)
+  useEffect(
+    () => publishGridContainerWidth(bufferId, containerWidth),
+    [bufferId, containerWidth],
+  )
   const autoScroll = useGridDragAutoScroll(
     containerRef as React.RefObject<HTMLElement>,
   )
   useScrollUserAddedCellIntoView()
-
-  // Suppress react-grid-layout's item transition until the grid has rendered
-  // and the width has settled, so cells don't animate into place on mount.
-  // Two frames cover the initial render + the ResizeObserver's first callback.
-  const [gridReady, setGridReady] = useState(false)
-  useEffect(() => {
-    if (!gridMeasured) return
-    let raf2 = 0
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setGridReady(true))
-    })
-    return () => {
-      cancelAnimationFrame(raf1)
-      cancelAnimationFrame(raf2)
-    }
-  }, [gridMeasured])
 
   // Derive each cell's grid h from topHeight + bottomHeight + chrome.
   // The h value in settings.layout is ignored on read — it's a stale
@@ -648,7 +667,7 @@ const GridLayout: React.FC = () => {
     <GridScrollContainer
       ref={containerRef as React.RefObject<HTMLDivElement>}
       id="notebook-scroll-container"
-      $suppressTransitions={!gridReady}
+      $suppressTransitions={suppressTransitions}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement
         const gridItem = target.closest<HTMLElement>("[data-cell-id]")
@@ -700,7 +719,6 @@ const GridLayout: React.FC = () => {
                 isMaximized={maximizedCellId === cell.id}
                 isRunning={runningCellIds.has(cell.id)}
                 toolbarTierOverride={toolbarTierByCellId.get(cell.id)}
-                gridContainerWidth={containerWidth}
               />
             </GridCellWrapper>
           ))}
