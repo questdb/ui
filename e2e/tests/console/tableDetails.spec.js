@@ -1584,7 +1584,7 @@ describe("TableDetailsDrawer", () => {
         .and("not.contain", "Dropped")
     })
 
-    it("should not close a newly opened sidebar for a stale empty response", () => {
+    it("should not close a newly opened sidebar for a stale empty table response", () => {
       let injectEmpty = false
       let emptyRequestStarted = false
 
@@ -1592,7 +1592,11 @@ describe("TableDetailsDrawer", () => {
         {
           method: "GET",
           pathname: "/exec",
-          query: { query: /live_views\(\) WHERE view_name/ },
+          query: {
+            query: new RegExp(
+              `tables\\(\\) where table_name = '${TEST_LIVE_VIEW}';`,
+            ),
+          },
         },
         (req) => {
           if (injectEmpty && !emptyRequestStarted) {

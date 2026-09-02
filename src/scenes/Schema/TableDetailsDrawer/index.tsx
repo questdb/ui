@@ -347,8 +347,13 @@ export const TableDetailsDrawer = () => {
       : tableSource.state.status === "unavailable"
         ? tableSource.lastReadyData
         : null
+  const tableKindMismatch =
+    currentTableResult?.type === "found" &&
+    getTableKind(currentTableResult.data) !== kind
   const tableData =
-    currentTableResult?.type === "found" ? currentTableResult.data : null
+    currentTableResult?.type === "found" && !tableKindMismatch
+      ? currentTableResult.data
+      : null
   const storageDirectoryName = tableData?.directoryName ?? ""
   const escapedStorageDirectoryName =
     QuestDB.escapeSqlLiteral(storageDirectoryName)
@@ -545,11 +550,17 @@ export const TableDetailsDrawer = () => {
   useEffect(() => {
     if (
       tableSource.state.status === "ready" &&
-      tableSource.state.data.type === "missing"
+      (tableSource.state.data.type === "missing" || tableKindMismatch)
     ) {
       clearIfCurrentTarget(tableName, kind)
     }
-  }, [clearIfCurrentTarget, kind, tableName, tableSource.state])
+  }, [
+    clearIfCurrentTarget,
+    kind,
+    tableKindMismatch,
+    tableName,
+    tableSource.state,
+  ])
 
   const usesDetailsPolling = isView || activeTab === "details"
 
