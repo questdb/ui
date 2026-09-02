@@ -237,6 +237,110 @@ describe("TableDetailsDrawer", () => {
       cy.expandTables()
     })
 
+    it("should revalidate metadata before rendering a reopened target", () => {
+      // Given
+      let reopening = false
+      let delayedReopenRequest = false
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`tables\\(\\).*${TEST_TABLE}`) },
+        },
+        (req) => {
+          const shouldDelay = reopening && !delayedReopenRequest
+          if (shouldDelay) {
+            delayedReopenRequest = true
+            req.alias = "delayedReopenMetadata"
+          }
+          req.continue((res) => {
+            const rowCountIndex = res.body?.columns?.findIndex(
+              (column) => column.name === "table_row_count",
+            )
+            if (rowCountIndex >= 0 && res.body.dataset?.[0]) {
+              res.body.dataset[0][rowCountIndex] = reopening ? "2" : "1"
+            }
+            if (shouldDelay) {
+              res.setDelay(2500)
+            }
+          })
+        },
+      )
+
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-row-count-value").should("contain", "1")
+      cy.getByDataHook("sidebar-close-button").click()
+
+      // When
+      cy.then(() => {
+        reopening = true
+      })
+      cy.getByDataHook("table-details-toggle-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-loading").should("be.visible")
+      cy.getByDataHook("table-details-row-count-value").should("not.exist")
+      cy.wait("@delayedReopenMetadata")
+      cy.getByDataHook("table-details-row-count-value").should("contain", "2")
+    })
+
+    it("should retain reopened metadata only as an unavailable fallback", () => {
+      // Given
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+      cy.getByDataHook("sidebar-close-button").click()
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`tables\\(\\).*${TEST_TABLE}`) },
+        },
+        {
+          statusCode: 500,
+          body: { error: "Tables unavailable", position: 0 },
+        },
+      ).as("reopenedTablesUnavailable")
+
+      // When
+      cy.getByDataHook("table-details-toggle-button").click()
+
+      // Then
+      cy.getByDataHook("table-details-loading").should("be.visible")
+      cy.wait("@reopenedTablesUnavailable")
+      cy.wait("@reopenedTablesUnavailable")
+      cy.wait("@reopenedTablesUnavailable")
+      cy.getByDataHook("table-details-tables-error")
+        .should("be.visible")
+        .and("contain", "last successful response")
+      cy.getByDataHook("table-details-row-count-value").should("be.visible")
+    })
+
+    it("should show feedback while DDL is loading", () => {
+      // Given
+      cy.intercept(
+        {
+          method: "GET",
+          pathname: "/exec",
+          query: { query: new RegExp(`SHOW CREATE TABLE.*${TEST_TABLE}`) },
+        },
+        (req) => {
+          req.continue((res) => res.setDelay(2500))
+        },
+      ).as("delayedDDL")
+
+      // When
+      cy.openDetailsDrawer(TEST_TABLE)
+      cy.getByDataHook("table-details-tab-details").click()
+
+      // Then
+      cy.getByDataHook("table-details-ddl-loading")
+        .should("be.visible")
+        .and("contain", "Loading")
+      cy.wait("@delayedDDL")
+      cy.getByDataHook("table-details-ddl-loading").should("not.exist")
+      cy.getByDataHook("table-details-copy-ddl").should("not.be.disabled")
+    })
+
     it("should disable DDL actions after repeated failures", () => {
       // Given
       let failDDL = false

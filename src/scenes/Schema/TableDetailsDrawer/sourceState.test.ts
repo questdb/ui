@@ -252,4 +252,26 @@ describe("source state", () => {
     expect(unavailable.source.status).toBe("unavailable")
     expect(unavailable.lastReadyData).toBe("metadata")
   })
+
+  it("returns to loading for revalidation while retaining fallback data", () => {
+    // Given
+    const ready = nextSourceState(createSourceMachineState("trades"), {
+      type: "success",
+      key: "trades",
+      data: "metadata",
+    })
+
+    // When
+    const revalidating = nextSourceState(ready, {
+      type: "revalidate",
+      key: "trades",
+    })
+
+    // Then
+    expect(revalidating.source).toEqual({ status: "loading" })
+    expect(revalidating.lastReadyData).toBe("metadata")
+    expect(revalidating.consecutiveFailures).toBe(0)
+    expect(revalidating.firstFailureAt).toBeNull()
+    expect(revalidating.consecutiveRecoveries).toBe(0)
+  })
 })

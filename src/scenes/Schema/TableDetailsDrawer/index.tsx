@@ -287,6 +287,7 @@ export const TableDetailsDrawer = () => {
   const sourcePrefix = `${kind}:${tableName}`
   const tableSource = useCatalogSource<TableSourceData>({
     sourceKey: `${sourcePrefix}:tables`,
+    revalidateKey: isOpen,
     sourceName: "table metadata",
     enabled: isOpen && hasTarget,
     query: `tables() where table_name = '${escapedTableName}';`,
@@ -295,6 +296,7 @@ export const TableDetailsDrawer = () => {
   })
   const matViewSource = useCatalogSource<MaterializedView>({
     sourceKey: `${sourcePrefix}:materialized-views`,
+    revalidateKey: isOpen,
     sourceName: "materialized view metadata",
     enabled: isOpen && hasTarget && isMatView,
     query: `materialized_views() WHERE view_name = '${escapedTableName}';`,
@@ -303,6 +305,7 @@ export const TableDetailsDrawer = () => {
   })
   const viewSource = useCatalogSource<View>({
     sourceKey: `${sourcePrefix}:views`,
+    revalidateKey: isOpen,
     sourceName: "view metadata",
     enabled: isOpen && hasTarget && isView,
     query: `views() WHERE view_name = '${escapedTableName}';`,
@@ -311,6 +314,7 @@ export const TableDetailsDrawer = () => {
   })
   const liveViewSource = useCatalogSource<LiveView>({
     sourceKey: `${sourcePrefix}:live-views`,
+    revalidateKey: isOpen,
     sourceName: "live view metadata",
     enabled: isOpen && hasTarget && isLiveView,
     query: `live_views() WHERE view_name = '${escapedTableName}'`,
@@ -319,6 +323,7 @@ export const TableDetailsDrawer = () => {
   })
   const columnsSource = useCatalogSource<Column[]>({
     sourceKey: `${sourcePrefix}:columns`,
+    revalidateKey: isOpen,
     sourceName: "columns",
     enabled: isOpen && hasTarget,
     query: `SHOW COLUMNS FROM '${escapedTableName}';`,
@@ -328,6 +333,7 @@ export const TableDetailsDrawer = () => {
   })
   const ddlSource = useCatalogSource<string>({
     sourceKey: `${sourcePrefix}:ddl`,
+    revalidateKey: isOpen,
     sourceName: "DDL",
     enabled: isOpen && hasTarget,
     query: QuestDB.buildDDLQuery(tableName, kind),
@@ -338,7 +344,9 @@ export const TableDetailsDrawer = () => {
   const currentTableResult =
     tableSource.state.status === "ready"
       ? tableSource.state.data
-      : tableSource.lastReadyData
+      : tableSource.state.status === "unavailable"
+        ? tableSource.lastReadyData
+        : null
   const tableData =
     currentTableResult?.type === "found" ? currentTableResult.data : null
   const storageDirectoryName = tableData?.directoryName ?? ""
@@ -346,6 +354,7 @@ export const TableDetailsDrawer = () => {
     QuestDB.escapeSqlLiteral(storageDirectoryName)
   const storagePolicySource = useCatalogSource<StoragePolicy | null>({
     sourceKey: `${sourcePrefix}:storage-policy:${storageDirectoryName}`,
+    revalidateKey: isOpen,
     sourceName: "storage policy",
     enabled:
       isOpen &&
@@ -371,6 +380,7 @@ export const TableDetailsDrawer = () => {
   // current table by name; the view status reports whether the dependency is valid.
   const baseTableSource = useCatalogSource<TableSourceData>({
     sourceKey: `${sourcePrefix}:base-table:${baseTableName ?? ""}`,
+    revalidateKey: isOpen,
     sourceName: "base table metadata",
     enabled: isOpen && hasTarget && baseTableName !== undefined,
     query: `tables() where table_name = '${escapedBaseTableName}';`,

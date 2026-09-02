@@ -16,6 +16,7 @@ export type SourceMachineState<T> = {
 
 export type SourceOutcome<T> =
   | { type: "success"; key: string; data: T }
+  | { type: "revalidate"; key: string }
   | { type: "failure"; key: string; at: number }
   | { type: "failure-deadline"; key: string; at: number }
   | { type: "timeout"; key: string }
@@ -46,6 +47,13 @@ export const nextSourceState = <T>(
 ): SourceMachineState<T> => {
   if (outcome.key !== state.key || outcome.type === "cancelled") {
     return state
+  }
+
+  if (outcome.type === "revalidate") {
+    return {
+      ...createSourceMachineState<T>(state.key),
+      lastReadyData: state.lastReadyData,
+    }
   }
 
   if (outcome.type === "timeout") {

@@ -13,6 +13,7 @@ import type { SourceState } from "./types"
 
 type Params<T> = {
   sourceKey: string
+  revalidateKey: string | number | boolean
   sourceName: string
   enabled: boolean
   query: string
@@ -34,6 +35,7 @@ const isCancelledRequest = (error: unknown): boolean =>
 
 export const useCatalogSource = <T>({
   sourceKey,
+  revalidateKey,
   sourceName,
   enabled,
   query,
@@ -119,11 +121,14 @@ export const useCatalogSource = <T>({
     currentKeyRef.current = sourceKey
   }, [sourceKey])
 
-  // Keyed to the source identity alone: a source that is merely disabled keeps
-  // its last answer, so re-enabling it renders that instead of a loading state.
   useEffect(() => {
-    setMachine(createSourceMachineState(sourceKey))
-  }, [sourceKey])
+    setMachine((previous) => {
+      if (previous.key !== sourceKey) {
+        return createSourceMachineState(sourceKey)
+      }
+      return nextSourceState(previous, { type: "revalidate", key: sourceKey })
+    })
+  }, [revalidateKey, sourceKey])
 
   useEffect(() => {
     const activeQueryId = activeQueryIdRef.current

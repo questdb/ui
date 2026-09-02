@@ -265,6 +265,10 @@ export const DetailsTab = ({
         </SectionTitleContainer>
         {ddlState.status === "unavailable" ? (
           <UnavailableValue data-hook="table-details-ddl-unavailable" />
+        ) : ddlState.status === "loading" ? (
+          <Text color="contentSecondary" data-hook="table-details-ddl-loading">
+            Loading…
+          </Text>
         ) : ddl ? (
           <LiteEditor
             value={truncatedDDL.text}
