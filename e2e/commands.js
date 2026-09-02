@@ -43,6 +43,12 @@ const viewSchemas = {
     "CREATE VIEW IF NOT EXISTS btc_trades_view AS SELECT * FROM btc_trades;",
 }
 
+const liveViewSchemas = {
+  btc_trades_lv:
+    "CREATE LIVE VIEW IF NOT EXISTS btc_trades_lv FLUSH EVERY 1s IN MEMORY 5s START FROM BEGINNING AS " +
+    "SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM btc_trades;",
+}
+
 Cypress.on("uncaught:exception", (err) => {
   // Monaco editor's word highlighter throws "Canceled" errors during rapid tab switching
   // when restoreViewState cancels pending async operations - this is harmless
@@ -509,6 +515,14 @@ Cypress.Commands.add("dropViewIfExists", (name) => {
   cy.execQuery(`DROP VIEW IF EXISTS ${name};`)
 })
 
+Cypress.Commands.add("createLiveView", (name) => {
+  cy.execQuery(liveViewSchemas[name])
+})
+
+Cypress.Commands.add("dropLiveViewIfExists", (name) => {
+  cy.execQuery(`DROP LIVE VIEW IF EXISTS ${name};`)
+})
+
 Cypress.Commands.add("interceptQuery", (query, alias, response) => {
   cy.intercept(
     {
@@ -662,12 +676,44 @@ Cypress.Commands.add("expandViews", () => {
   })
 })
 
+Cypress.Commands.add("expandLiveViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="expand-live-views"]').length > 0) {
+      cy.get('[data-hook="expand-live-views"]').dblclick({ force: true })
+    }
+  })
+})
+
+Cypress.Commands.add("collapseLiveViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="collapse-live-views"]').length > 0) {
+      cy.get('[data-hook="collapse-live-views"]').dblclick({ force: true })
+    }
+  })
+})
+
 Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
   const titleHook = `schema-${kind}-title`
   cy.getByDataHook(titleHook).contains(name).click()
   cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
   cy.getByDataHook("table-details-name").should("have.value", name)
+})
+
+// Radix arms a tooltip only on a trigger pointermove, and realHover emits a
+// single move event. That one armed intent can be silently lost to the
+// provider's pointer-in-transit gate or to boundary events fired when the DOM
+// re-renders under the stationary pointer (e.g. right after a tab switch while
+// its data fetches land). Nothing re-arms it without another pointermove, so
+// nudge the pointer after hovering: the first move lets Radix clear stale
+// transit state, the second re-arms the tooltip.
+// Takes a factory rather than an element so every action re-queries the
+// trigger: a wrapped node that detaches on re-render keeps a zeroed rect, and
+// realMouseMove would then aim at the viewport corner instead of the trigger.
+Cypress.Commands.add("hoverForTooltip", (getTrigger) => {
+  getTrigger().realHover()
+  getTrigger().realMouseMove(2, 2, { position: "center" })
+  getTrigger().realMouseMove(0, 0, { position: "center" })
 })
 
 Cypress.Commands.add("getEditorTabs", () => {

@@ -127,7 +127,7 @@ export const QuestProvider: React.FC = ({ children }) => {
       .then((result) => {
         if (result.type === QuestDB.Type.DQL && result.count === 1) {
           setBuildVersion(formatVersion(result.dataset[0][0] as string))
-          setCommitHash(formatCommitHash(result.dataset[0][0]))
+          setCommitHash(formatCommitHash(result.dataset[0][0] as string))
         }
       })
   }, [])

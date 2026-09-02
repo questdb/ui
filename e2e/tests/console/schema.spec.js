@@ -16,6 +16,8 @@ const materializedViews = ["btc_trades_mv"]
 
 const views = ["btc_trades_view"]
 
+const liveViews = ["btc_trades_lv"]
+
 describe("questdb schema with working tables", () => {
   before(() => {
     cy.loadConsoleWithAuth()
@@ -585,7 +587,7 @@ describe("materialized views", () => {
     cy.wait(1200)
     cy.getByDataHook("tooltip").should(
       "contain",
-      `Partitioned by "week", ordered on "timestamp" column.`,
+      `Materialized view. Partitioned by "week", ordered on "timestamp" column.`,
     )
   })
 
@@ -683,11 +685,307 @@ describe("materialized views", () => {
     )
   })
 
+  it("should omit the reason when the view is invalidated without one", () => {
+    // Given a matview the server reports as invalid with a null reason
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: {
+          query: "materialized_views()",
+        },
+      },
+      (req) => {
+        req.continue((res) => {
+          if (res.body?.dataset?.length > 0) {
+            const viewStatusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status",
+            )
+            const invalidationReasonIndex = res.body.columns.findIndex(
+              (c) => c.name === "invalidation_reason",
+            )
+            res.body.dataset[0][viewStatusIndex] = "invalid"
+            res.body.dataset[0][invalidationReasonIndex] = null
+          }
+          return res
+        })
+      },
+    )
+    cy.refreshSchema()
+    cy.expandMatViews()
+
+    // When
+    cy.hoverForTooltip(() => cy.getByDataHook("schema-row-error-icon"))
+    cy.wait(300)
+
+    // Then the message stops at the status, with no interpolated null
+    cy.getByDataHook("tooltip")
+      .should("contain", "Materialized view is invalid")
+      .and("not.contain", "null")
+  })
+
   after(() => {
     cy.loadConsoleWithAuth()
 
     materializedViews.forEach((mv) => {
       cy.dropMaterializedView(mv)
+    })
+
+    tables.forEach((table) => {
+      cy.dropTableIfExists(table)
+    })
+  })
+})
+
+describe("live views", () => {
+  before(() => {
+    cy.loadConsoleWithAuth()
+
+    tables.forEach((table) => {
+      cy.createTable(table)
+    })
+    liveViews.forEach((lv) => {
+      cy.createLiveView(lv)
+    })
+    cy.refreshSchema()
+  })
+
+  beforeEach(() => {
+    cy.collapseTables()
+    cy.collapseMatViews()
+  })
+
+  afterEach(() => {
+    cy.collapseLiveViews()
+  })
+
+  it("should show live views in their own folder", () => {
+    // Given
+    cy.getByDataHook("schema-folder-title").should(
+      "contain",
+      `Live views (${liveViews.length})`,
+    )
+
+    // When
+    cy.expandLiveViews()
+
+    // Then
+    cy.getByDataHook("schema-liveview-title").should("contain", "btc_trades_lv")
+  })
+
+  it("should show the table icon description in the tooltip for a live view", () => {
+    // Given
+    cy.expandLiveViews()
+
+    // When
+    cy.hoverForTooltip(() =>
+      cy
+        .getByDataHook("schema-liveview-title")
+        .contains("btc_trades_lv")
+        .closest('[data-hook="schema-row"]')
+        .find('[data-hook="table-icon"]'),
+    )
+    cy.wait(1200)
+
+    // Then: the kind prefix identifies the schema object before the shared
+    // partition/timestamp sentence.
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      `Live view. Partitioned by "day", ordered on "timestamp" column.`,
+    )
+  })
+
+  it("should show the base table and copy schema for a live view", () => {
+    // Given
+    cy.expandLiveViews()
+
+    // When
+    cy.getByDataHook("schema-liveview-title")
+      .contains("btc_trades_lv")
+      .dblclick()
+    cy.getByDataHook("schema-row").contains("Base tables").dblclick()
+
+    // Then
+    cy.getByDataHook("schema-detail-title")
+      .contains("btc_trades")
+      .should("exist")
+
+    // When
+    cy.getByDataHook("schema-liveview-title")
+      .contains("btc_trades_lv")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-copy-schema")
+      .filter(":visible")
+      .click()
+
+    // Then
+    if (Cypress.isBrowser("electron")) {
+      cy.window()
+        .its("navigator.clipboard")
+        .invoke("readText")
+        .should("match", /^CREATE LIVE VIEW.*'btc_trades_lv'/)
+    }
+  })
+
+  it("should not offer creating a materialized view from a live view", () => {
+    // Given
+    cy.expandLiveViews()
+
+    // When
+    cy.getByDataHook("schema-liveview-title")
+      .contains("btc_trades_lv")
+      .rightclick()
+
+    // Then
+    cy.getByDataHook("table-context-menu-view-details")
+      .filter(":visible")
+      .should("exist")
+    cy.getByDataHook("table-context-menu-create-matview").should("not.exist")
+    cy.realPress("Escape")
+  })
+
+  it("should resume WAL for a suspended live view with an ALTER LIVE VIEW statement", () => {
+    // Given: tables() does not flag a suspended live view yet, so simulate the flag
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /tables\(\)/ },
+      },
+      (req) => {
+        req.continue((res) => {
+          if (res.body?.dataset?.length > 0) {
+            const nameIndex = res.body.columns.findIndex(
+              (c) => c.name === "table_name",
+            )
+            const suspendedIndex = res.body.columns.findIndex(
+              (c) => c.name === "table_suspended",
+            )
+            for (const row of res.body.dataset) {
+              if (row[nameIndex] === "btc_trades_lv") {
+                row[suspendedIndex] = true
+              }
+            }
+          }
+          return res
+        })
+      },
+    )
+    cy.refreshSchema()
+    cy.expandLiveViews()
+    cy.getByDataHook("schema-row-error-icon").should("be.visible")
+
+    // When
+    cy.getByDataHook("schema-liveview-title")
+      .contains("btc_trades_lv")
+      .rightclick()
+    cy.getByDataHook("table-context-menu-resume-wal").filter(":visible").click()
+
+    // Then
+    cy.getByDataHook("schema-suspension-dialog").should(
+      "have.attr",
+      "data-table-name",
+      "btc_trades_lv",
+    )
+
+    // When
+    cy.intercept({
+      method: "GET",
+      pathname: "/exec",
+      query: { query: /ALTER LIVE VIEW/ },
+    }).as("resumeLiveViewWal")
+    cy.getByDataHook("schema-suspension-dialog-restart-transaction").click()
+
+    // Then
+    cy.wait("@resumeLiveViewWal").then((interception) => {
+      expect(decodeURIComponent(interception.request.url)).to.contain(
+        "ALTER LIVE VIEW 'btc_trades_lv' RESUME WAL",
+      )
+    })
+    cy.getByDataHook("schema-suspension-dialog-dismiss").click()
+    cy.getByDataHook("schema-suspension-dialog").should("not.exist")
+  })
+
+  it("should show a warning icon and tooltip when the live view is invalidated", () => {
+    // Given
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: {
+          query: /live_views\(\)/,
+        },
+      },
+      (req) => {
+        req.continue((res) => {
+          if (res.body && res.body.dataset && res.body.dataset.length > 0) {
+            const viewStatusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status",
+            )
+            const invalidationReasonIndex = res.body.columns.findIndex(
+              (c) => c.name === "invalidation_reason",
+            )
+            res.body.dataset[0][viewStatusIndex] = "invalid"
+            res.body.dataset[0][invalidationReasonIndex] =
+              "this is an invalidation reason"
+          }
+          return res
+        })
+      },
+    )
+    cy.refreshSchema()
+    cy.expandLiveViews()
+
+    // When
+    cy.hoverForTooltip(() => cy.getByDataHook("schema-row-error-icon"))
+    cy.wait(300)
+
+    // Then
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "Live view is invalid: this is an invalidation reason",
+    )
+  })
+
+  it("should show a warning icon and tooltip when the live view state is unreadable", () => {
+    // Given
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /live_views\(\)/ },
+      },
+      (req) => {
+        req.continue((res) => {
+          if (res.body?.dataset?.length > 0) {
+            const viewStatusIndex = res.body.columns.findIndex(
+              (c) => c.name === "view_status",
+            )
+            res.body.dataset[0][viewStatusIndex] = "state_unreadable"
+          }
+          return res
+        })
+      },
+    )
+    cy.refreshSchema()
+    cy.expandLiveViews()
+
+    // When
+    cy.hoverForTooltip(() => cy.getByDataHook("schema-row-error-icon"))
+    cy.wait(300)
+
+    // Then
+    cy.getByDataHook("tooltip").should(
+      "contain",
+      "Live view state files are unreadable",
+    )
+  })
+
+  after(() => {
+    cy.loadConsoleWithAuth()
+
+    liveViews.forEach((lv) => {
+      cy.dropLiveViewIfExists(lv)
     })
 
     tables.forEach((table) => {

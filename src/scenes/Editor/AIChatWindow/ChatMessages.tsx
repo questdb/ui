@@ -534,8 +534,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
             type: "tableDetails",
             payload: {
               tableName: table.table_name,
-              isMatView: table.table_type === "M",
-              isView: table.table_type === "V",
+              kind: getTableKind(table),
             },
           }),
         )

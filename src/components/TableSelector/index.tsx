@@ -4,7 +4,7 @@ import * as RadixPopover from "@radix-ui/react-popover"
 import Highlighter from "react-highlight-words"
 import { XIcon } from "@phosphor-icons/react"
 import { TableIcon } from "../../scenes/Schema/table-icon"
-import type { PartitionBy } from "../../utils/questdb"
+import type { PartitionBy, TableKind } from "../../utils/questdb"
 import {
   VirtualizedTree,
   type VirtualizedTreeHandle,
@@ -16,7 +16,7 @@ import { floatingSurfaceStyles } from "../overlayStyles"
 export type TableOption = {
   label: string
   value: string
-  kind?: "table" | "matview" | "view"
+  kind?: TableKind
   disabled?: boolean
   walEnabled?: boolean
   partitionBy?: PartitionBy

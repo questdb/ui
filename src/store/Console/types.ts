@@ -22,10 +22,11 @@
  *
  ******************************************************************************/
 
+import type { TableKind } from "../../utils/questdb/types"
+
 export type TableDetailsTarget = {
   tableName: string
-  isMatView: boolean
-  isView: boolean
+  kind: TableKind
 } | null
 
 export type SidebarType = "news" | "aiChat" | "tableDetails"

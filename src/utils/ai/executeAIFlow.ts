@@ -135,8 +135,13 @@ type HealthIssueFlowConfig = BaseFlowConfig & {
     severity: "critical" | "warning"
   }
   tableDetails: string
+  diagnosticDetails?: {
+    source: "materialized_views()" | "live_views()"
+    data: string
+  }
+  issueGuidance?: string
   monitoringDocs: string
-  trendSamples?: Array<{ value: number; timestamp: number }>
+  trendSamples?: Array<{ value: bigint; timestamp: number }>
 }
 
 export type AIFlowConfig =
@@ -309,6 +314,8 @@ function buildFlowSpecificUserMessage(config: AIFlowConfig): AIFlowUserMessage {
           tableName: config.tableName,
           issue: config.issue,
           tableDetails: config.tableDetails,
+          diagnosticDetails: config.diagnosticDetails,
+          issueGuidance: config.issueGuidance,
           monitoringDocs: config.monitoringDocs,
           trendSamples: config.trendSamples,
         }),

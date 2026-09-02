@@ -1,10 +1,4 @@
-import React, {
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-} from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import styled from "styled-components"
 import { selectors, actions } from "../../../store"
@@ -25,34 +19,47 @@ import {
   truncateLongDDL,
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
-import { QuestContext, useSettings } from "../../../providers"
+import { useSettings } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
 import {
   getTableKind,
+  getTableKindLabel,
   type Table,
+  type TableKind,
   type Column,
+  type LiveView,
   type MaterializedView,
+  type StoragePolicy,
   type View,
 } from "../../../utils/questdb/types"
 import {
   calculateHealthStatus,
   detectIngestionActive,
+  getLiveViewIssueGuidance,
+  LIVE_VIEW_POLL_MS,
   MAX_TREND_SAMPLES,
   type TrendData,
   type HealthIssue,
+  type HealthSeverity,
 } from "./healthCheck"
+import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
+import { useCatalogSource } from "./useCatalogSource"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
+import { ErrorBanner } from "./ErrorBanner"
+import type { BaseTableStatus, SourceState, TableKindData } from "./types"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 const TypeBadge = styled(Badge).attrs({ variant: "neutral", size: "sm" })`
   flex-shrink: 0;
 `
+
+const BIGINT_ZERO = BigInt(0)
 
 const LoadingContainer = styled(Box).attrs({
   align: "center",
@@ -92,6 +99,10 @@ const EmptyStateSubheading = styled.p`
   line-height: 1.5;
 `
 
+const MetadataErrorBannerWrapper = styled.div`
+  padding: 1.5rem;
+`
+
 const TitleContainer = styled(Dialog.Title).attrs({})`
   display: flex;
   padding: 0;
@@ -110,6 +121,83 @@ const CopyButtonSlot = styled.span`
 `
 
 type TabType = "monitoring" | "details"
+
+const TABLE_POLL_MIN_MS = 200
+const TABLE_POLL_MAX_MS = 5_000
+const DETAILS_TABLE_POLL_MS = 1_000
+const KIND_POLL_MS = 1_000
+// A storage policy only changes when an operator runs DDL against the table,
+// so it is polled far less often than the columns and DDL beside it.
+const STORAGE_POLICY_POLL_MS = 5_000
+
+type TableSourceData = { type: "found"; data: Table } | { type: "missing" }
+
+const firstCatalogRow = <T extends Record<string, unknown>>(
+  response: QuestDB.QueryRawResult,
+): T | undefined => {
+  const result = QuestDB.Client.transformQueryRawResult<T>(response, {
+    convertLongsToBigInt: true,
+  })
+  return result.type === QuestDB.Type.DQL ? result.data[0] : undefined
+}
+
+const firstRow = <T extends Record<string, unknown>>(
+  response: QuestDB.QueryRawResult,
+): T | undefined => {
+  const result = QuestDB.Client.transformQueryRawResult<T>(response)
+  return result.type === QuestDB.Type.DQL ? result.data[0] : undefined
+}
+
+const transformTableResponse = (
+  response: QuestDB.QueryRawResult,
+): TableSourceData | undefined => {
+  const result = QuestDB.Client.transformQueryRawResult<Table>(response, {
+    convertLongsToBigInt: true,
+  })
+  if (result.type !== QuestDB.Type.DQL) return undefined
+  return result.data[0]
+    ? { type: "found", data: result.data[0] }
+    : { type: "missing" }
+}
+
+const getBaseTableStatus = (
+  state: SourceState<TableSourceData>,
+): BaseTableStatus => {
+  if (state.status !== "ready") return null
+  if (state.data.type === "missing") return "Dropped"
+  return state.data.data.table_suspended ? "Suspended" : "Valid"
+}
+
+const transformMatViewResponse = (response: QuestDB.QueryRawResult) =>
+  firstCatalogRow<MaterializedView>(response)
+
+const transformViewResponse = (response: QuestDB.QueryRawResult) =>
+  firstRow<View>(response)
+
+const transformLiveViewResponse = (response: QuestDB.QueryRawResult) =>
+  firstCatalogRow<LiveView>(response)
+
+const transformColumnsResponse = (
+  response: QuestDB.QueryRawResult,
+): Column[] | undefined => {
+  const result = QuestDB.Client.transformQueryRawResult<Column>(response)
+  return result.type === QuestDB.Type.DQL ? result.data : undefined
+}
+
+const transformDDLResponse = (
+  response: QuestDB.QueryRawResult,
+): string | undefined => {
+  const row = firstRow<{ ddl: string }>(response)
+  return row?.ddl ? row.ddl.replace(/\n{2,}/g, "\n") : undefined
+}
+
+const transformStoragePolicyResponse = (
+  response: QuestDB.QueryRawResult,
+): StoragePolicy | null | undefined => {
+  const result = QuestDB.Client.transformQueryRawResult<StoragePolicy>(response)
+  if (result.type !== QuestDB.Type.DQL) return undefined
+  return result.data[0] ?? null
+}
 
 const TabsContainer = styled.div`
   display: flex;
@@ -149,10 +237,14 @@ export const TableDetailsDrawer = () => {
   const dispatch = useDispatch()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const target = useSelector(selectors.console.getTableDetailsTarget)
+  const targetRef = useRef(target)
+  const activeSidebarRef = useRef(activeSidebar)
 
   const tableName = target?.tableName ?? ""
-  const isMatView = target?.isMatView ?? false
-  const isView = target?.isView ?? false
+  const kind: TableKind = target?.kind ?? "table"
+  const isMatView = kind === "matview"
+  const isView = kind === "view"
+  const isLiveView = kind === "liveview"
   const hasTarget = target !== null
   const isOpen = activeSidebar?.type === "tableDetails"
 
@@ -160,7 +252,149 @@ export const TableDetailsDrawer = () => {
     dispatch(actions.console.closeSidebar())
   }
 
+  const isCurrentTarget = useCallback(
+    (candidateTableName: string, candidateKind: TableKind) => {
+      const currentTarget = targetRef.current
+      return (
+        activeSidebarRef.current?.type === "tableDetails" &&
+        currentTarget?.tableName === candidateTableName &&
+        currentTarget.kind === candidateKind
+      )
+    },
+    [],
+  )
+
+  const clearIfCurrentTarget = useCallback(
+    (missingTableName: string, missingKind: TableKind) => {
+      if (isCurrentTarget(missingTableName, missingKind)) {
+        dispatch(
+          actions.console.replaceSidebarHistory({
+            type: "tableDetails",
+            payload: null,
+          }),
+        )
+      }
+    },
+    [dispatch, isCurrentTarget],
+  )
+
   const tables = useSelector(selectors.query.getTables)
+  const { settings } = useSettings()
+  const isEnterprise = settings["release.type"] === "EE"
+  const [activeTab, setActiveTab] = useState<TabType>("monitoring")
+
+  const escapedTableName = QuestDB.escapeSqlLiteral(tableName)
+  const sourcePrefix = `${kind}:${tableName}`
+  const tableSource = useCatalogSource<TableSourceData>({
+    sourceKey: `${sourcePrefix}:tables`,
+    revalidateKey: isOpen,
+    sourceName: "table metadata",
+    enabled: isOpen && hasTarget,
+    query: `tables() where table_name = '${escapedTableName}';`,
+    pollIntervalMs: null,
+    transformResponse: transformTableResponse,
+  })
+  const matViewSource = useCatalogSource<MaterializedView>({
+    sourceKey: `${sourcePrefix}:materialized-views`,
+    revalidateKey: isOpen,
+    sourceName: "materialized view metadata",
+    enabled: isOpen && hasTarget && isMatView,
+    query: `materialized_views() WHERE view_name = '${escapedTableName}';`,
+    pollIntervalMs: KIND_POLL_MS,
+    transformResponse: transformMatViewResponse,
+  })
+  const viewSource = useCatalogSource<View>({
+    sourceKey: `${sourcePrefix}:views`,
+    revalidateKey: isOpen,
+    sourceName: "view metadata",
+    enabled: isOpen && hasTarget && isView,
+    query: `views() WHERE view_name = '${escapedTableName}';`,
+    pollIntervalMs: KIND_POLL_MS,
+    transformResponse: transformViewResponse,
+  })
+  const liveViewSource = useCatalogSource<LiveView>({
+    sourceKey: `${sourcePrefix}:live-views`,
+    revalidateKey: isOpen,
+    sourceName: "live view metadata",
+    enabled: isOpen && hasTarget && isLiveView,
+    query: `live_views() WHERE view_name = '${escapedTableName}'`,
+    pollIntervalMs: LIVE_VIEW_POLL_MS,
+    transformResponse: transformLiveViewResponse,
+  })
+  const columnsSource = useCatalogSource<Column[]>({
+    sourceKey: `${sourcePrefix}:columns`,
+    revalidateKey: isOpen,
+    sourceName: "columns",
+    enabled: isOpen && hasTarget,
+    query: `SHOW COLUMNS FROM '${escapedTableName}';`,
+    pollIntervalMs:
+      isView || activeTab === "details" ? DETAILS_TABLE_POLL_MS : null,
+    transformResponse: transformColumnsResponse,
+  })
+  const ddlSource = useCatalogSource<string>({
+    sourceKey: `${sourcePrefix}:ddl`,
+    revalidateKey: isOpen,
+    sourceName: "DDL",
+    enabled: isOpen && hasTarget,
+    query: QuestDB.buildDDLQuery(tableName, kind),
+    pollIntervalMs:
+      isView || activeTab === "details" ? DETAILS_TABLE_POLL_MS : null,
+    transformResponse: transformDDLResponse,
+  })
+  const currentTableResult =
+    tableSource.state.status === "ready"
+      ? tableSource.state.data
+      : tableSource.state.status === "unavailable"
+        ? tableSource.lastReadyData
+        : null
+  const tableKindMismatch =
+    currentTableResult?.type === "found" &&
+    getTableKind(currentTableResult.data) !== kind
+  const tableData =
+    currentTableResult?.type === "found" && !tableKindMismatch
+      ? currentTableResult.data
+      : null
+  const storageDirectoryName = tableData?.directoryName ?? ""
+  const escapedStorageDirectoryName =
+    QuestDB.escapeSqlLiteral(storageDirectoryName)
+  const storagePolicySource = useCatalogSource<StoragePolicy | null>({
+    sourceKey: `${sourcePrefix}:storage-policy:${storageDirectoryName}`,
+    revalidateKey: isOpen,
+    sourceName: "storage policy",
+    enabled:
+      isOpen &&
+      hasTarget &&
+      isEnterprise &&
+      kind === "table" &&
+      activeTab === "details" &&
+      tableData !== null,
+    query: `storage_policies WHERE table_dir_name = '${escapedStorageDirectoryName}';`,
+    pollIntervalMs: STORAGE_POLICY_POLL_MS,
+    transformResponse: transformStoragePolicyResponse,
+  })
+  const matViewData =
+    matViewSource.state.status === "ready" ? matViewSource.state.data : null
+  const viewData =
+    viewSource.state.status === "ready" ? viewSource.state.data : null
+  const liveViewData =
+    liveViewSource.state.status === "ready" ? liveViewSource.state.data : null
+  const baseTableName =
+    matViewData?.base_table_name ?? liveViewData?.base_table_name ?? undefined
+  const escapedBaseTableName = QuestDB.escapeSqlLiteral(baseTableName ?? "")
+  // View catalogs expose only the base table name, not its ID. Resolve the
+  // current table by name; the view status reports whether the dependency is valid.
+  const baseTableSource = useCatalogSource<TableSourceData>({
+    sourceKey: `${sourcePrefix}:base-table:${baseTableName ?? ""}`,
+    revalidateKey: isOpen,
+    sourceName: "base table metadata",
+    enabled: isOpen && hasTarget && baseTableName !== undefined,
+    query: `tables() where table_name = '${escapedBaseTableName}';`,
+    pollIntervalMs: KIND_POLL_MS,
+    transformResponse: transformTableResponse,
+  })
+  const baseTableStatus = getBaseTableStatus(baseTableSource.state)
+  const baseTableExists =
+    baseTableStatus === "Valid" || baseTableStatus === "Suspended"
 
   const tableOptions: TableOption[] = useMemo(
     () =>
@@ -180,92 +414,105 @@ export const TableDetailsDrawer = () => {
       dispatch(
         actions.console.pushSidebarHistory({
           type: "tableDetails",
-          payload: {
-            tableName: option.label,
-            isMatView: option.kind === "matview",
-            isView: option.kind === "view",
-          },
+          payload: { tableName: option.label, kind: option.kind ?? "table" },
         }),
       )
     },
     [],
   )
 
-  const { quest } = useContext(QuestContext)
-  const { settings } = useSettings()
-  const isEnterprise = settings["release.type"] === "EE"
-  const [tableData, setTableData] = useState<Table | null>(null)
-  const [matViewData, setMatViewData] = useState<MaterializedView | null>(null)
-  const [viewData, setViewData] = useState<View | null>(null)
-  const [columns, setColumns] = useState<Column[]>([])
-  const [ddl, setDdl] = useState<string>("")
-  const [loading, setLoading] = useState(true)
   const [columnsExpanded, setColumnsExpanded] = useState(false)
   const [walExpanded, setWalExpanded] = useState(true)
   const [hasAutoExpanded, setHasAutoExpanded] = useState(false)
   const [suspensionDialogOpen, setSuspensionDialogOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabType>("monitoring")
   const [trendData, setTrendData] = useState<TrendData>({
     walPendingRowCount: [],
     transactionLag: [],
     ingestionMetric: [],
   })
-  const [baseTableStatus, setBaseTableStatus] = useState<
-    "Dropped" | "Suspended" | "Valid" | null
-  >(null)
-  const baseTableExists =
-    baseTableStatus === "Valid" || baseTableStatus === "Suspended"
+  const columns =
+    columnsSource.state.status === "ready" ? columnsSource.state.data : []
+  const ddl = ddlSource.state.status === "ready" ? ddlSource.state.data : ""
+  // The kind source carries the invalid/unreadable status, so rendering before
+  // it answers would show a healthy view that is not.
+  const kindSourceLoading =
+    (isView && viewSource.state.status === "loading") ||
+    (isMatView && matViewSource.state.status === "loading") ||
+    (isLiveView && liveViewSource.state.status === "loading")
+  const loading =
+    (tableSource.state.status === "loading" && tableData === null) ||
+    kindSourceLoading
+  const tablesUnavailable = tableSource.state.status === "unavailable"
+  const kindSourceUnavailable =
+    (isView && viewSource.state.status === "unavailable") ||
+    (isMatView && matViewSource.state.status === "unavailable") ||
+    (isLiveView && liveViewSource.state.status === "unavailable")
+  const kindData: TableKindData = useMemo(
+    () =>
+      kind === "view"
+        ? { kind, view: viewSource.state }
+        : kind === "matview"
+          ? { kind, matView: matViewSource.state }
+          : kind === "liveview"
+            ? { kind, liveView: liveViewSource.state }
+            : { kind: "table" },
+    [kind, viewSource.state, matViewSource.state, liveViewSource.state],
+  )
 
   const handleNavigateToBaseTable = useCallback(() => {
-    if (!matViewData?.base_table_name || !baseTableExists) return
-    const baseTable = tables.find(
-      (t) => t.table_name === matViewData.base_table_name,
-    )
-    const kind = baseTable ? getTableKind(baseTable) : "table"
+    if (!baseTableName || !baseTableExists) return
+    const baseTable = tables.find((t) => t.table_name === baseTableName)
     dispatch(
       actions.console.pushSidebarHistory({
         type: "tableDetails",
         payload: {
-          tableName: matViewData.base_table_name,
-          isMatView: kind === "matview",
-          isView: kind === "view",
+          tableName: baseTableName,
+          kind: baseTable ? getTableKind(baseTable) : "table",
         },
       }),
     )
-  }, [dispatch, matViewData?.base_table_name, baseTableExists, tables])
+  }, [dispatch, baseTableName, baseTableExists, tables])
 
   const { handleExplainSchema, handleAskAIForHealthIssue } = useAIQuickActions()
 
   const handleExplainWithAI = useCallback(() => {
     void trackEvent(ConsoleEvent.TABLE_DETAILS_SCHEMA_EXPLAIN)
     if (tableData?.id == null) return
-    void handleExplainSchema(
-      tableData.id,
-      tableName,
-      isView ? "view" : isMatView ? "matview" : "table",
-      {
-        partitionBy: tableData.partitionBy,
-        walEnabled: tableData.walEnabled,
-        designatedTimestamp: tableData.designatedTimestamp,
-      },
-    )
-  }, [handleExplainSchema, tableData, tableName, isMatView, isView])
+    void handleExplainSchema(tableData.id, tableName, kind, {
+      partitionBy: tableData.partitionBy,
+      walEnabled: tableData.walEnabled,
+      designatedTimestamp: tableData.designatedTimestamp,
+    })
+  }, [handleExplainSchema, tableData, tableName, kind])
 
   const handleAskAIForIssue = useCallback(
     (issue: HealthIssue) => {
       void trackEvent(ConsoleEvent.TABLE_DETAILS_ASK_AI)
       if (tableData?.id == null) return
 
-      let samples = undefined
-      if (issue.field === "transactionLag") {
-        samples = trendData.transactionLag
-      } else if (issue.field === "pendingRows") {
-        samples = trendData.walPendingRowCount
-      }
+      const diagnosticContext =
+        kindData.kind === "matview" && kindData.matView.status === "ready"
+          ? {
+              source: "materialized_views()" as const,
+              data: kindData.matView.data,
+            }
+          : kindData.kind === "liveview" && kindData.liveView.status === "ready"
+            ? {
+                source: "live_views()" as const,
+                data: kindData.liveView.data,
+                guidance: getLiveViewIssueGuidance(issue.id),
+              }
+            : undefined
 
-      void handleAskAIForHealthIssue(tableData.id, tableName, issue, samples)
+      void handleAskAIForHealthIssue(
+        tableData.id,
+        tableName,
+        issue,
+        getTrendSamplesForIssue(issue.field, trendData),
+        diagnosticContext,
+      )
     },
-    [handleAskAIForHealthIssue, tableData, tableName, trendData],
+    [handleAskAIForHealthIssue, tableData, tableName, trendData, kindData],
   )
 
   const handleAskAIForViewIssue = useCallback(() => {
@@ -284,263 +531,100 @@ export const TableDetailsDrawer = () => {
     viewData?.invalidation_reason,
   ])
 
-  const fetchTableData = useCallback(async () => {
-    try {
-      const escapedName = tableName.replace(/'/g, "''")
-      const response = await quest.query<Table>(
-        `tables() WHERE table_name = '${escapedName}'`,
-      )
-      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
-        setTableData(response.data[0])
-      } else if (
-        response.type === QuestDB.Type.DQL &&
-        response.data.length === 0
-      ) {
-        dispatch(
-          actions.console.replaceSidebarHistory({
-            type: "tableDetails",
-            payload: null,
-          }),
-        )
-      }
-    } catch (error) {
-      console.error("Failed to fetch table data:", error)
-    }
-  }, [quest, tableName])
-
-  const fetchMatViewData = useCallback(async () => {
-    if (!isMatView) return
-    try {
-      const escapedName = tableName.replace(/'/g, "''")
-      const response = await quest.query<MaterializedView>(
-        `materialized_views() WHERE view_name = '${escapedName}'`,
-      )
-      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
-        setMatViewData(response.data[0])
-      }
-    } catch (error) {
-      console.error("Failed to fetch materialized view data:", error)
-    }
-  }, [quest, tableName, isMatView])
-
-  const fetchViewData = useCallback(async () => {
-    if (!isView) return
-    try {
-      const escapedName = tableName.replace(/'/g, "''")
-      const response = await quest.query<View>(
-        `views() WHERE view_name = '${escapedName}'`,
-      )
-      if (response.type === QuestDB.Type.DQL && response.data.length > 0) {
-        setViewData(response.data[0])
-      } else if (
-        response.type === QuestDB.Type.DQL &&
-        response.data.length === 0
-      ) {
-        dispatch(
-          actions.console.replaceSidebarHistory({
-            type: "tableDetails",
-            payload: null,
-          }),
-        )
-      }
-    } catch (error) {
-      console.error("Failed to fetch view data:", error)
-    }
-  }, [quest, tableName, isView, dispatch])
-
-  const fetchColumns = useCallback(async () => {
-    try {
-      const response = await quest.showColumns(tableName)
-      if (response.type === QuestDB.Type.DQL) {
-        setColumns(response.data)
-      }
-    } catch (error) {
-      console.error("Failed to fetch columns:", error)
-    }
-  }, [quest, tableName])
-
-  const fetchDDL = useCallback(async () => {
-    try {
-      const response = isView
-        ? await quest.showViewDDL(tableName)
-        : isMatView
-          ? await quest.showMatViewDDL(tableName)
-          : await quest.showTableDDL(tableName)
-      if (response.type === QuestDB.Type.DQL && response.data[0]?.ddl) {
-        setDdl(response.data[0].ddl)
-      }
-    } catch (error) {
-      console.error("Failed to fetch DDL:", error)
-    }
-  }, [quest, tableName, isMatView, isView])
-
-  const checkBaseTableStatus = useCallback(async () => {
-    if (!isMatView || !matViewData?.base_table_name) {
-      setBaseTableStatus(null)
-      return
-    }
-    try {
-      const escapedName = matViewData.base_table_name.replace(/'/g, "''")
-      const response = await quest.query<Table>(
-        `tables() WHERE table_name = '${escapedName}'`,
-      )
-      const baseTableExists =
-        response.type === QuestDB.Type.DQL && response.data.length > 0
-      const suspended = baseTableExists
-        ? response.data[0]?.table_suspended
-        : false
-      const status = baseTableExists
-        ? suspended
-          ? "Suspended"
-          : "Valid"
-        : "Dropped"
-      setBaseTableStatus(status)
-    } catch (error) {
-      console.error("Failed to check base table existence:", error)
-      setBaseTableStatus(null)
-    }
-  }, [quest, isMatView, matViewData?.base_table_name])
-
-  const fetchAllData = useCallback(async () => {
-    setLoading(true)
-    await Promise.all([
-      fetchTableData(),
-      fetchMatViewData(),
-      fetchViewData(),
-      fetchColumns(),
-      fetchDDL(),
-    ])
-    setLoading(false)
-  }, [fetchTableData, fetchMatViewData, fetchViewData, fetchColumns, fetchDDL])
+  useEffect(() => {
+    targetRef.current = target
+    activeSidebarRef.current = activeSidebar
+  }, [target, activeSidebar])
 
   useEffect(() => {
-    if (isOpen && hasTarget) {
-      setTableData(null)
-      setMatViewData(null)
-      setViewData(null)
-      setColumns([])
-      setDdl("")
-      setColumnsExpanded(isView)
-      setWalExpanded(true)
-      setHasAutoExpanded(false)
-      setTrendData({
-        walPendingRowCount: [],
-        transactionLag: [],
-        ingestionMetric: [],
-      })
-      setBaseTableStatus(null)
-      void fetchAllData()
-    } else if (!isOpen || !hasTarget) {
-      setTableData(null)
-      setMatViewData(null)
-      setViewData(null)
-      setColumns([])
-      setDdl("")
-      setColumnsExpanded(false)
-      setWalExpanded(true)
-      setHasAutoExpanded(false)
-      setTrendData({
-        walPendingRowCount: [],
-        transactionLag: [],
-        ingestionMetric: [],
-      })
-      setBaseTableStatus(null)
-    }
-  }, [isOpen, hasTarget, tableName, fetchAllData])
+    setColumnsExpanded(isOpen && hasTarget ? isView : false)
+    setWalExpanded(true)
+    setHasAutoExpanded(false)
+    setTrendData({
+      walPendingRowCount: [],
+      transactionLag: [],
+      ingestionMetric: [],
+    })
+  }, [isOpen, hasTarget, isView, sourcePrefix])
 
   useEffect(() => {
-    if (matViewData?.base_table_name) {
-      void checkBaseTableStatus()
+    if (
+      tableSource.state.status === "ready" &&
+      (tableSource.state.data.type === "missing" || tableKindMismatch)
+    ) {
+      clearIfCurrentTarget(tableName, kind)
     }
-  }, [matViewData?.base_table_name, checkBaseTableStatus])
+  }, [
+    clearIfCurrentTarget,
+    kind,
+    tableKindMismatch,
+    tableName,
+    tableSource.state,
+  ])
+
+  const usesDetailsPolling = isView || activeTab === "details"
 
   useAdaptivePoll({
-    fetchFn: fetchTableData,
-    enabled: isOpen && hasTarget && !loading && !isView,
-    key: `${tableName}-${activeTab}`,
-    minIntervalMs: activeTab === "monitoring" ? 200 : 1000,
-    maxIntervalMs: activeTab === "monitoring" ? 5000 : 1000,
+    fetchFn: tableSource.fetchNow,
+    enabled: isOpen && hasTarget,
+    key: `${sourcePrefix}-${activeTab}`,
+    minIntervalMs: usesDetailsPolling
+      ? DETAILS_TABLE_POLL_MS
+      : TABLE_POLL_MIN_MS,
+    maxIntervalMs: usesDetailsPolling
+      ? DETAILS_TABLE_POLL_MS
+      : TABLE_POLL_MAX_MS,
     multiplier: 1.5,
   })
 
   useEffect(() => {
-    if (tableData && !loading) {
+    if (
+      tableSource.state.status === "ready" &&
+      tableSource.state.data.type === "found"
+    ) {
+      const currentTableData = tableSource.state.data.data
       const now = Date.now()
       setTrendData((prev) => {
-        // For ingestion detection: use wal_txn for WAL tables, table_row_count for non-WAL
-        const ingestionValue = tableData.walEnabled
-          ? (tableData.wal_txn ?? 0)
-          : (tableData.table_row_count ?? 0)
+        const ingestionValue = currentTableData.walEnabled
+          ? (currentTableData.wal_txn ?? BIGINT_ZERO)
+          : (currentTableData.table_row_count ?? BIGINT_ZERO)
+        const transactionLag =
+          (currentTableData.wal_txn ?? BIGINT_ZERO) -
+          (currentTableData.table_txn ?? BIGINT_ZERO)
 
         return {
-          walPendingRowCount: tableData.walEnabled
+          walPendingRowCount: currentTableData.walEnabled
             ? [
                 ...prev.walPendingRowCount.slice(-(MAX_TREND_SAMPLES - 1)),
                 {
-                  value: Number(tableData.wal_pending_row_count) || 0,
+                  value: currentTableData.wal_pending_row_count ?? BIGINT_ZERO,
                   timestamp: now,
                 },
               ]
             : prev.walPendingRowCount,
-          transactionLag: tableData.walEnabled
+          transactionLag: currentTableData.walEnabled
             ? [
                 ...prev.transactionLag.slice(-(MAX_TREND_SAMPLES - 1)),
                 {
-                  value: Math.max(
-                    0,
-                    (Number(tableData.wal_txn) || 0) -
-                      (Number(tableData.table_txn) || 0),
-                  ),
+                  value:
+                    transactionLag > BIGINT_ZERO ? transactionLag : BIGINT_ZERO,
                   timestamp: now,
                 },
               ]
             : prev.transactionLag,
           ingestionMetric: [
             ...prev.ingestionMetric.slice(-(MAX_TREND_SAMPLES - 1)),
-            { value: Number(ingestionValue) || 0, timestamp: now },
+            { value: ingestionValue, timestamp: now },
           ],
         }
       })
     }
-  }, [tableData, loading])
-
-  useEffect(() => {
-    if (!isOpen || !hasTarget || !isMatView) return
-
-    const interval = setInterval(() => {
-      void fetchMatViewData()
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [isOpen, hasTarget, isMatView, fetchMatViewData])
-
-  useEffect(() => {
-    if (!isOpen || !hasTarget || !isView) return
-
-    const interval = setInterval(() => {
-      void fetchViewData()
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [isOpen, hasTarget, isView, fetchViewData])
-
-  useEffect(() => {
-    if (!isOpen || !hasTarget) return
-    // Not needed for monitoring
-    if (!isView && activeTab !== "details") return
-
-    const interval = setInterval(() => {
-      void fetchColumns()
-      void fetchDDL()
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [isOpen, hasTarget, isView, activeTab, fetchColumns, fetchDDL])
+  }, [tableSource.state])
 
   const rawHealthStatus = useMemo(() => {
     if (!tableData) return null
-    return calculateHealthStatus(tableData, matViewData, trendData, isMatView)
-  }, [tableData, matViewData, trendData, isMatView])
+    return calculateHealthStatus(tableData, kindData, trendData)
+  }, [tableData, kindData, trendData])
 
   const healthStatus = useDebouncedWarnings(rawHealthStatus)
 
@@ -570,13 +654,10 @@ export const TableDetailsDrawer = () => {
   }, [healthStatus])
 
   const monitoringIssuesCounts = useMemo(() => {
-    if (!healthStatus) return { warnings: 0, errors: 0 }
-    const errors = healthStatus.issues.filter(
-      (i) => i.severity === "critical",
-    ).length
-    const warnings = healthStatus.issues.filter(
-      (i) => i.severity === "warning",
-    ).length
+    const errors =
+      healthStatus?.issues.filter((i) => i.severity === "critical").length ?? 0
+    const warnings =
+      healthStatus?.issues.filter((i) => i.severity === "warning").length ?? 0
     return { warnings, errors }
   }, [healthStatus])
 
@@ -591,11 +672,12 @@ export const TableDetailsDrawer = () => {
   }, [healthStatus])
 
   const isIngestionDisabled = useMemo(() => {
-    // Disable ingestion section when WAL is suspended or matview is invalid
     const walSuspended = tableData?.walEnabled && tableData?.table_suspended
     const matViewInvalid = isMatView && matViewData?.view_status === "invalid"
-    return walSuspended || matViewInvalid
-  }, [tableData, isMatView, matViewData])
+    const liveViewInvalid =
+      isLiveView && liveViewData?.view_status === "invalid"
+    return walSuspended || matViewInvalid || liveViewInvalid
+  }, [tableData, isMatView, matViewData, isLiveView, liveViewData])
 
   useEffect(() => {
     if (hasIngestionWarning && !hasAutoExpanded && !walExpanded) {
@@ -604,20 +686,41 @@ export const TableDetailsDrawer = () => {
     }
   }, [hasIngestionWarning, hasAutoExpanded, walExpanded])
 
+  const healthSeverity = useMemo<HealthSeverity>(() => {
+    const calculatedSeverity = isView
+      ? viewData?.view_status === "invalid"
+        ? "critical"
+        : kindSourceUnavailable
+          ? "unknown"
+          : "healthy"
+      : (healthStatus?.overallSeverity ?? "healthy")
+
+    if (
+      tablesUnavailable &&
+      calculatedSeverity !== "critical" &&
+      calculatedSeverity !== "warning"
+    ) {
+      return "unknown"
+    }
+    return calculatedSeverity
+  }, [
+    healthStatus?.overallSeverity,
+    isView,
+    kindSourceUnavailable,
+    tablesUnavailable,
+    viewData?.view_status,
+  ])
+
+  const kindSourceTitle = isLiveView
+    ? "Unable to load live view metadata"
+    : isMatView
+      ? "Unable to load materialized view metadata"
+      : "Unable to load view metadata"
+
   const drawerTitle = useMemo(
     () => (
       <TitleContainer>
-        {hasTarget && (
-          <HealthStatusLabel
-            severity={
-              isView
-                ? viewData?.view_status === "invalid"
-                  ? "critical"
-                  : "healthy"
-                : (healthStatus?.overallSeverity ?? "healthy")
-            }
-          />
-        )}
+        {hasTarget && <HealthStatusLabel severity={healthSeverity} />}
 
         <TableSelector
           titleDataHook="table-details-name"
@@ -639,14 +742,7 @@ export const TableDetailsDrawer = () => {
         )}
       </TitleContainer>
     ),
-    [
-      hasTarget,
-      isView,
-      viewData?.view_status,
-      healthStatus?.overallSeverity,
-      tableOptions,
-      tableName,
-    ],
+    [hasTarget, healthSeverity, tableOptions, tableName],
   )
 
   return (
@@ -661,7 +757,7 @@ export const TableDetailsDrawer = () => {
       afterTitle={
         hasTarget ? (
           <TypeBadge data-hook="table-details-type-badge">
-            {isView ? "View" : isMatView ? "Materialized View" : "Table"}
+            {getTableKindLabel(kind)}
           </TypeBadge>
         ) : undefined
       }
@@ -676,8 +772,37 @@ export const TableDetailsDrawer = () => {
               Loading table details...
             </Text>
           </LoadingContainer>
+        ) : hasTarget && tablesUnavailable && tableData === null ? (
+          <EmptyState role="alert" data-hook="table-details-source-error">
+            <ErrorBanner
+              title={`Unable to load ${tableName}`}
+              description="The console cannot reach the server. It will retry automatically."
+            />
+          </EmptyState>
         ) : tableData ? (
           <>
+            {tablesUnavailable && (
+              <MetadataErrorBannerWrapper
+                role="alert"
+                data-hook="table-details-tables-error"
+              >
+                <ErrorBanner
+                  title="Unable to refresh table metadata"
+                  description="The displayed table data is from the last successful response. The console will retry automatically."
+                />
+              </MetadataErrorBannerWrapper>
+            )}
+            {kindSourceUnavailable && (
+              <MetadataErrorBannerWrapper
+                role="alert"
+                data-hook="table-details-kind-metadata-error"
+              >
+                <ErrorBanner
+                  title={kindSourceTitle}
+                  description="Some metadata is unavailable. The console will retry automatically."
+                />
+              </MetadataErrorBannerWrapper>
+            )}
             {!isView && (
               <TabsContainer>
                 <TabsNav role="tablist" aria-label="Table details sections">
@@ -738,13 +863,13 @@ export const TableDetailsDrawer = () => {
             {!isView && activeTab === "monitoring" && (
               <MonitoringTab
                 tableData={tableData}
-                matViewData={matViewData}
-                isMatView={isMatView}
+                kindData={kindData}
                 healthStatus={healthStatus}
                 criticalIssues={criticalIssues}
                 performanceWarnings={performanceWarnings}
                 isIngestionActive={isIngestionActive}
                 isIngestionDisabled={!!isIngestionDisabled}
+                baseTableName={baseTableName}
                 baseTableStatus={baseTableStatus}
                 walExpanded={walExpanded}
                 onWalExpandedChange={setWalExpanded}
@@ -756,14 +881,13 @@ export const TableDetailsDrawer = () => {
             {(isView || activeTab === "details") && (
               <DetailsTab
                 tableData={tableData}
-                matViewData={matViewData}
-                viewData={viewData}
-                columns={columns}
-                ddl={ddl}
-                isMatView={isMatView}
-                isView={isView}
+                kindData={kindData}
+                columnsState={columnsSource.state}
+                ddlState={ddlSource.state}
+                storagePolicyState={storagePolicySource.state}
                 isEnterprise={isEnterprise}
                 truncatedDDL={truncatedDDL}
+                baseTableName={baseTableName}
                 baseTableStatus={baseTableStatus}
                 columnsExpanded={columnsExpanded}
                 onColumnsExpandedChange={setColumnsExpanded}
@@ -776,7 +900,7 @@ export const TableDetailsDrawer = () => {
             {!isView && (
               <SuspensionDialog
                 tableName={tableName}
-                kind={isMatView ? "matview" : "table"}
+                kind={kind}
                 open={suspensionDialogOpen}
                 onOpenChange={setSuspensionDialogOpen}
               />
