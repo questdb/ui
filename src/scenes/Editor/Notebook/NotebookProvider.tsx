@@ -12,6 +12,7 @@ import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
+  AgentCellView,
   CellResult,
   NotebookCell,
   NotebookVariable,
@@ -35,7 +36,7 @@ import {
   registerController,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
+  setCellPreferredViewTransition,
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
@@ -128,7 +129,7 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
-  setCellViewMaximized: (cellId: string, value: boolean) => void
+  setCellPreferredView: (cellId: string, view: AgentCellView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
   getCellsSnapshot: () => NotebookCell[]
@@ -158,7 +159,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
-  setCellViewMaximized: () => undefined,
+  setCellPreferredView: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
   getCellsSnapshot: () => [],
@@ -767,11 +768,11 @@ export const NotebookProvider: React.FC<{
     [applyTransition, bufferId],
   )
 
-  const setCellViewMaximized = useCallback(
-    (cellId: string, value: boolean) =>
+  const setCellPreferredView = useCallback(
+    (cellId: string, view: AgentCellView) =>
       silently(() =>
         applyTransition((parts) =>
-          setCellViewMaximizedTransition(parts, bufferId, cellId, value),
+          setCellPreferredViewTransition(parts, bufferId, cellId, view),
         ),
       ),
     [applyTransition, bufferId],
@@ -828,7 +829,7 @@ export const NotebookProvider: React.FC<{
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
-    setCellViewMaximized,
+    setCellPreferredView,
     setFocusedCell,
     setMaximizedCellId,
     getCellsSnapshot: () => store.cellsRef.current.slice(),

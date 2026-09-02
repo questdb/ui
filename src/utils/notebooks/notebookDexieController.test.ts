@@ -357,11 +357,10 @@ describe("createDexieNotebookController — settings & layout", () => {
     expect(view.settings?.layoutMode).toBe("grid")
   })
 
-  it("setCellMode draw seeds the chart bottom height and exits view-maximize", async () => {
-    // Given a view-maximized run cell; when it flips to draw, then the chart
-    // defaults land and the maximize exits
+  it("setCellMode draw seeds the chart bottom height and preserves preference", async () => {
+    // A mode change does not silently rewrite the user's pane preference.
     await seedNotebook({
-      cells: [cell("a", "SELECT 1", { isViewMaximized: true })],
+      cells: [cell("a", "SELECT 1", { preferredView: "result" })],
     })
     const controller = makeController()
     await controller.setCellMode("a", "draw")
@@ -369,7 +368,7 @@ describe("createDexieNotebookController — settings & layout", () => {
     expect(view.cells[0]).toMatchObject({
       mode: "draw",
       bottomHeight: 350,
-      isViewMaximized: false,
+      preferredView: "result",
     })
   })
 
@@ -1255,14 +1254,14 @@ describe("createDexieNotebookController — field preservation", () => {
 
   it("a headless run commit keeps the run cell's rich state and never touches siblings or settings", async () => {
     // Given a background notebook whose run cell "a" carries auto-refresh, a
-    // chart config, and view-maximize, a sibling "b" with its own chart, and
+    // chart config, and pane preference, a sibling "b" with its own chart, and
     // notebook-level variables + grid layout
     await seedNotebook({
       cells: [
         cell("a", "SELECT 1", {
           autoRefresh: "5s",
           chartConfig: chartFor("ts"),
-          isViewMaximized: true,
+          preferredView: "result",
         }),
         cell("b", "SELECT 2", { position: 1, chartConfig: chartFor("sym") }),
       ],
@@ -1290,7 +1289,7 @@ describe("createDexieNotebookController — field preservation", () => {
     expect(a).toMatchObject({
       autoRefresh: "5s",
       chartConfig: chartFor("ts"),
-      isViewMaximized: true,
+      preferredView: "result",
       lastRunStatus: "success",
     })
     // And the untouched sibling and notebook settings survive intact

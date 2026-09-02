@@ -3,6 +3,10 @@ import type { CellPaneLayout } from "./notebookUtils"
 export type LiveCellPresentation = {
   compact: boolean
   paneLayout: CellPaneLayout
+  // Mirrors the renderer's hydration-aware result reservation. Persisted cell
+  // state alone cannot distinguish a result that is still loading/released
+  // from one whose snapshot is known to be missing.
+  expectingResult: boolean
   // Present for grid cells. Tool mutations use the same measured container
   // width as the renderer to resolve the tier produced by a new grid.w.
   gridContainerWidth?: number

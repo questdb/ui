@@ -6,6 +6,7 @@ import {
   formatDigest,
   formatNotebookContextPrefix,
   formatSnapshot,
+  serializeCell,
   summarizeCells,
   type NotebookContextSnapshot,
 } from "./notebookSnapshot"
@@ -225,7 +226,7 @@ describe("buildSnapshot", () => {
       expect(gridSnap.cells[0]).toMatchObject({
         editor_height: "auto",
         result_height: "auto",
-        preferred_view: "editor",
+        preferred_view: "editor_result",
       })
     } else {
       throw new Error("expected ok snapshots")
@@ -235,15 +236,14 @@ describe("buildSnapshot", () => {
   it("reports the effective view and tier of a live responsive cell", async () => {
     const chart = sql("a", "SELECT 1", {
       mode: "draw",
-      isViewMaximized: false,
-      wideView: "editor_result",
-      compactView: "editor",
+      preferredView: "editor_result",
     })
     const id = await seedNotebook({ cells: [chart] })
     registerController(makeController(id, [chart], {}))
     const unpublish = publishLiveCellPresentation(id, "a", {
       compact: true,
       paneLayout: "editor",
+      expectingResult: false,
     })
 
     const snap = await buildSnapshot(id)
@@ -255,13 +255,37 @@ describe("buildSnapshot", () => {
     unpublish()
   })
 
+  it("uses the published pane while a result is awaiting hydration", async () => {
+    const pending = sql("a", "SELECT 1", {
+      lastRunStatus: "success",
+      preferredView: "editor_result",
+    })
+    const id = await seedNotebook({ cells: [pending] })
+    registerController(makeController(id, [pending], {}))
+    const unpublish = publishLiveCellPresentation(id, "a", {
+      compact: true,
+      paneLayout: "result",
+      expectingResult: true,
+    })
+
+    const snap = await buildSnapshot(id)
+    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
+      view: "result",
+      tier: "compact",
+    })
+    expect(serializeCell([pending], "a", id, false)).toMatchObject({
+      view: "result",
+      tier: "compact",
+    })
+    unpublish()
+  })
+
   it("omits tier and reports the stored preference for an inactive notebook", async () => {
     const id = await seedNotebook({
       cells: [
         sql("a", "SELECT 1", {
           mode: "draw",
-          wideView: "editor_result",
-          compactView: "result",
+          preferredView: "editor_result",
         }),
       ],
     })
@@ -354,7 +378,7 @@ describe("buildSnapshot", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
-      isViewMaximized: false,
+      preferredView: "editor_result",
       name: "Trades",
       chartConfig: {
         xColumn: "ts",

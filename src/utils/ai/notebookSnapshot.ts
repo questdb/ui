@@ -19,7 +19,9 @@ import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
 import {
   agentCellPaneDimensions,
+  agentViewForPaneLayout,
   resolveAgentCellPresentation,
+  storedAgentCellView,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { readLiveCellPresentation } from "../../scenes/Editor/Notebook/notebookPresentationStore"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
@@ -163,6 +165,16 @@ const refreshFields = (
   }
 }
 
+const liveAgentCellPresentation = (cell: NotebookCell, bufferId: number) => {
+  const live = readLiveCellPresentation(bufferId, cell.id)
+  if (!live) return resolveAgentCellPresentation(cell)
+  return {
+    preferred_view: storedAgentCellView(cell),
+    view: agentViewForPaneLayout(live.paneLayout),
+    tier: live.compact ? ("compact" as const) : ("wide" as const),
+  }
+}
+
 const buildCell = (
   cell: NotebookCell,
   bufferId: number,
@@ -170,10 +182,7 @@ const buildCell = (
   layoutMode: "list" | "grid",
   refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
 ): NotebookContextCell => {
-  const presentation = resolveAgentCellPresentation(
-    cell,
-    readLiveCellPresentation(bufferId, cell.id)?.compact,
-  )
+  const presentation = liveAgentCellPresentation(cell, bufferId)
   const out: NotebookContextCell = {
     id: cell.id,
     preview: preview(cell.value),
@@ -520,10 +529,7 @@ export const serializeCell = (
   const value = truncated ? cell.value.slice(0, CELL_VALUE_MAX) : cell.value
   const run = runStatusOf(cell)
   const dimensions = agentCellPaneDimensions(cell)
-  const presentation = resolveAgentCellPresentation(
-    cell,
-    readLiveCellPresentation(bufferId, cell.id)?.compact,
-  )
+  const presentation = liveAgentCellPresentation(cell, bufferId)
   const out: NotebookCellDetails = {
     id: cell.id,
     value,

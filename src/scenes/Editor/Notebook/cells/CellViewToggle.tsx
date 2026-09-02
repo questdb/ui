@@ -18,7 +18,7 @@ import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
-import type { CellView } from "../notebookUtils"
+import type { CellPaneLayout, CellView } from "../notebookUtils"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 
@@ -72,7 +72,7 @@ const EditorVisibilityToggle = styled(PrimaryToggleButton)`
 type Props = {
   cellId: string
   view: CellView
-  isViewMaximized: boolean
+  paneLayout: CellPaneLayout
   isGridLoading: boolean
   isChartLoading: boolean
   isRunning: boolean
@@ -83,16 +83,18 @@ type Props = {
 export const CellViewToggle: React.FC<Props> = ({
   cellId,
   view,
-  isViewMaximized,
+  paneLayout,
   isGridLoading,
   isChartLoading,
   isRunning,
   chartZoomed,
   showLabels,
 }) => {
-  const { setCellViewMaximized, setCellMode, clearCellResult } =
+  const { setCellPreferredView, setCellMode, clearCellResult } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
+  const resultOnly = paneLayout === "result"
+  const resultHidden = paneLayout === "editor"
 
   // Clicking the active segment toggles it off, wiping the result back to the
   // empty "none" state. Switching between grid and chart re-renders the same
@@ -122,15 +124,16 @@ export const CellViewToggle: React.FC<Props> = ({
       return
     }
     setCellMode(cellId, "run")
+    if (resultHidden) setCellPreferredView(cellId, "editor_result")
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !isViewMaximized,
+      isViewMaximized: !resultOnly,
       view,
     })
     signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, !isViewMaximized)
+    setCellPreferredView(cellId, resultOnly ? "editor_result" : "result")
   }
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -183,11 +186,11 @@ export const CellViewToggle: React.FC<Props> = ({
         </Tooltip>
       </NotebookViewToggle>
       <Divider />
-      <Tooltip content={isViewMaximized ? "Show editor" : "Hide editor"}>
+      <Tooltip content={resultOnly ? "Show editor" : "Hide editor"}>
         <EditorVisibilityToggle
-          aria-label={isViewMaximized ? "Show editor" : "Hide editor"}
+          aria-label={resultOnly ? "Show editor" : "Hide editor"}
           onClick={handleEditorVisibility}
-          selected={!isViewMaximized}
+          selected={!resultOnly}
         >
           <FileSqlIcon size={18} />
         </EditorVisibilityToggle>

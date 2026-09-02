@@ -45,7 +45,7 @@ describe("setCellDimensionsTransition", () => {
       mode: "draw",
       topHeight: 72,
       bottomHeight: 350,
-      isViewMaximized: true,
+      preferredView: "result",
     })
     const parts = partsOf([chart], {
       settings: {
@@ -62,9 +62,7 @@ describe("setCellDimensionsTransition", () => {
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 72,
       bottomHeight: 350,
-      isViewMaximized: false,
-      wideView: "editor_result",
-      compactView: "result",
+      preferredView: "editor_result",
     })
     expect(out.parts.settings.layout?.[0].h).toBe(17)
     expect(out.result).toEqual({
@@ -81,7 +79,7 @@ describe("setCellDimensionsTransition", () => {
       topResized: true,
       bottomHeight: 350,
       bottomResized: false,
-      isViewMaximized: true,
+      preferredView: "result",
     })
 
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
@@ -95,7 +93,7 @@ describe("setCellDimensionsTransition", () => {
       topResized: false,
       bottomHeight: 280,
       bottomResized: true,
-      isViewMaximized: true,
+      preferredView: "result",
     })
     expect(out.result).toEqual({ preferred_view: "result" })
   })
@@ -103,8 +101,7 @@ describe("setCellDimensionsTransition", () => {
   it("stores one editor preference and reports its compact projection", () => {
     const chart = cell("a", "SELECT 1", {
       mode: "draw",
-      isViewMaximized: true,
-      compactView: "result",
+      preferredView: "result",
     })
 
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
@@ -113,9 +110,7 @@ describe("setCellDimensionsTransition", () => {
     })
 
     expect(out.parts.cells[0]).toMatchObject({
-      isViewMaximized: false,
-      wideView: "editor",
-      compactView: "editor",
+      preferredView: "editor",
     })
     expect(out.result).toEqual({
       preferred_view: "editor",
@@ -132,8 +127,7 @@ describe("setCellDimensionsTransition", () => {
     })
 
     expect(out.parts.cells[0]).toMatchObject({
-      wideView: "editor_result",
-      compactView: "result",
+      preferredView: "editor_result",
     })
     expect(out.result).toEqual({
       preferred_view: "editor_result",
@@ -151,8 +145,7 @@ describe("setCellDimensionsTransition", () => {
     })
 
     expect(out.parts.cells[0]).toMatchObject({
-      wideView: "editor",
-      compactView: "editor",
+      preferredView: "editor",
     })
     expect(out.result).toEqual({
       preferred_view: "editor",
@@ -169,13 +162,58 @@ describe("setCellDimensionsTransition", () => {
       }),
     ).toThrow(/at least 240px/)
   })
+
+  it("uses the mounted missing-result state for presentation and height", () => {
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      preferredView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 19 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { compact: false, expectingResult: false },
+    )
+
+    expect(out.result).toEqual({
+      preferred_view: "editor_result",
+      view: "editor",
+      tier: "wide",
+    })
+    expect(out.parts.settings.layout?.[0].h).toBe(5)
+  })
+
+  it("persists a result preference while a missing result falls back to editor", () => {
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      preferredView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending]),
+      BUFFER_ID,
+      "a",
+      { view: "result", compact: false, expectingResult: false },
+    )
+
+    expect(out.parts.cells[0].preferredView).toBe("result")
+    expect(out.result).toEqual({
+      preferred_view: "result",
+      view: "editor",
+      tier: "wide",
+      fallback: "requested_view_unavailable",
+    })
+  })
 })
 
 describe("setCellLayoutTransition", () => {
   const chart = cell("a", "SELECT 1", {
     mode: "draw",
-    wideView: "editor_result",
-    compactView: "result",
+    preferredView: "editor_result",
   })
 
   it("returns the projected live presentation after a width change", () => {
@@ -211,6 +249,17 @@ describe("setCellLayoutTransition", () => {
       grid: { x: 0, y: 0, w: 4 },
       preferred_view: "editor_result",
     })
+  })
+
+  it("rejects placement that extends beyond the grid", () => {
+    expect(() =>
+      setCellLayoutTransition(
+        partsOf([chart], { settings: { layoutMode: "grid" } }),
+        BUFFER_ID,
+        "a",
+        { x: 11, y: 0, w: 2 },
+      ),
+    ).toThrow(NotebookToolError)
   })
 })
 

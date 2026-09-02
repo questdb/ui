@@ -253,12 +253,20 @@ const CellInner: React.FC<Props> = ({
       publishLiveCellPresentation(bufferIdForEvents, cell.id, {
         compact: isCompactTier,
         paneLayout,
+        expectingResult,
         ...(gridContainerWidth !== undefined ? { gridContainerWidth } : {}),
       }),
-    [bufferIdForEvents, cell.id, gridContainerWidth, isCompactTier, paneLayout],
+    [
+      bufferIdForEvents,
+      cell.id,
+      expectingResult,
+      gridContainerWidth,
+      isCompactTier,
+      paneLayout,
+    ],
   )
 
-  const isViewMaximized = paneLayout === "result"
+  const resultOnly = paneLayout === "result"
   const showBottomSlot = paneLayout !== "editor"
   const isSplit = paneLayout === "split"
   const runActive = !isDrawMode && doubleView
@@ -313,7 +321,7 @@ const CellInner: React.FC<Props> = ({
 
   const { editorRef, monacoRef, handleEditorMount } = useMonacoCellEditor({
     cellId: cell.id,
-    editorMounted: !isViewMaximized && contentMode === "full",
+    editorMounted: !resultOnly && contentMode === "full",
     editorViewState: cell.editorViewState,
     quest,
     onFocus: useCallback(
@@ -548,7 +556,7 @@ const CellInner: React.FC<Props> = ({
               view={view}
               cellAutoRefresh={cell.autoRefresh}
               autoRefreshDefault={autoRefreshDefault}
-              isViewMaximized={isViewMaximized}
+              paneLayout={paneLayout}
               isRunning={isRunning}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
@@ -560,7 +568,7 @@ const CellInner: React.FC<Props> = ({
             <CellViewToggle
               cellId={cell.id}
               view={view}
-              isViewMaximized={isViewMaximized}
+              paneLayout={paneLayout}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
               isRunning={isRunning}
@@ -570,7 +578,7 @@ const CellInner: React.FC<Props> = ({
           )
         }
       />
-      {!isViewMaximized && (
+      {!resultOnly && (
         <EditorContainer
           ref={editorContainerRef}
           $spotlight={isMaximized}
@@ -648,7 +656,7 @@ const CellInner: React.FC<Props> = ({
           ref={resultRef}
           $spotlight={isMaximized}
           style={
-            isViewMaximized
+            resultOnly
               ? isMaximized
                 ? { flex: 1 }
                 : { height: bottomHeight }
@@ -678,10 +686,10 @@ const CellInner: React.FC<Props> = ({
       <ResizeHandle
         overlay
         targetRef={
-          isViewMaximized || showBottomSlot ? resultRef : editorContainerRef
+          resultOnly || showBottomSlot ? resultRef : editorContainerRef
         }
         onResize={
-          isViewMaximized
+          resultOnly
             ? maximizedChartResizeLive
             : showBottomSlot
               ? bottomResize.resizeLive
@@ -689,7 +697,7 @@ const CellInner: React.FC<Props> = ({
         }
         onResizeEnd={(height) => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "s" })
-          if (isViewMaximized) maximizedChartResizeEnd(height)
+          if (resultOnly) maximizedChartResizeEnd(height)
           else if (showBottomSlot) bottomResize.resizeEnd(height)
           else topResize.resizeEnd(height)
         }}
@@ -698,9 +706,7 @@ const CellInner: React.FC<Props> = ({
           resetBottomArea()
         }}
         minHeight={
-          isViewMaximized || showBottomSlot
-            ? minBottomHeightFor(cell)
-            : undefined
+          resultOnly || showBottomSlot ? minBottomHeightFor(cell) : undefined
         }
       />
     ) : null

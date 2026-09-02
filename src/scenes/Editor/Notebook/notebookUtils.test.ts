@@ -386,7 +386,15 @@ describe("buildPersistPayload", () => {
       layoutMode: "list",
     })
     expect(payload).toEqual({
-      cells: [{ ...cells[0], result: undefined, lastRunStatus: "cancelled" }],
+      cells: [
+        {
+          ...cells[0],
+          result: undefined,
+          lastRunStatus: "cancelled",
+          lastRunError: undefined,
+          preferredView: "editor_result",
+        },
+      ],
       focusedCellId: "a",
       maximizedCellId: undefined,
       settings: { layoutMode: "list" },
@@ -1048,6 +1056,56 @@ describe("buildAppliedCells", () => {
     ).toThrow(/line limit/)
   })
 
+  it("validates dimensions against the target type when markdown becomes sql", () => {
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "SELECT 1", type: "markdown" },
+    ]
+    expect(() =>
+      buildAppliedCells(prev, {
+        cells: [
+          {
+            id: "a",
+            preserveValue: true,
+            type: "sql",
+            editorHeight: 30,
+            view: "result",
+          },
+        ],
+      }),
+    ).toThrow(/editor_height below its minimum/)
+  })
+
+  it("applies a requested view when markdown becomes sql", () => {
+    const prev: NotebookCell[] = [
+      { id: "a", position: 0, value: "SELECT 1", type: "markdown" },
+    ]
+    const { nextCells } = buildAppliedCells(prev, {
+      cells: [
+        {
+          id: "a",
+          preserveValue: true,
+          type: "sql",
+          editorHeight: 72,
+          view: "result",
+        },
+      ],
+    })
+    expect(nextCells[0]).toMatchObject({
+      topHeight: 72,
+      topResized: true,
+      preferredView: "result",
+    })
+    expect(nextCells[0].type).toBeUndefined()
+  })
+
+  it("rejects grid placement that extends beyond the notebook columns", () => {
+    expect(() =>
+      buildAppliedCells([], {
+        cells: [{ value: "SELECT 1", grid: { x: 11, y: 0, w: 2 } }],
+      }),
+    ).toThrow(/x \+ w must be at most 12/)
+  })
+
   it("deletes cells whose ids are missing from the request", () => {
     const prev: NotebookCell[] = [
       { id: "a", position: 0, value: "" },
@@ -1190,7 +1248,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].chartConfig?.queries).toHaveLength(2)
   })
 
-  it("defaults isViewMaximized to true and stores no autoRefresh key on new draw cells", () => {
+  it("defaults a new draw cell to result and stores no autoRefresh key", () => {
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1205,8 +1263,7 @@ describe("buildAppliedCells", () => {
     })
     // No stored key: the cell inherits the notebook default.
     expect("autoRefresh" in nextCells[0]).toBe(false)
-    expect(nextCells[0].isViewMaximized).toBe(true)
-    expect(nextCells[0].wideView).toBe("result")
+    expect(nextCells[0].preferredView).toBe("result")
   })
 
   it("applies semantic pane dimensions and view to a new draw cell", () => {
@@ -1231,9 +1288,7 @@ describe("buildAppliedCells", () => {
       topResized: true,
       bottomHeight: 280,
       bottomResized: true,
-      isViewMaximized: false,
-      wideView: "editor_result",
-      compactView: "result",
+      preferredView: "editor_result",
     })
   })
 
@@ -1247,7 +1302,7 @@ describe("buildAppliedCells", () => {
       topResized: true,
       bottomHeight: 280,
       bottomResized: true,
-      isViewMaximized: false,
+      preferredView: "editor_result",
       chartConfig: {
         xColumn: "ts",
         queries: [{ type: "line", yColumns: ["v"] }],
@@ -1272,7 +1327,7 @@ describe("buildAppliedCells", () => {
       topResized: true,
       bottomHeight: 280,
       bottomResized: true,
-      isViewMaximized: false,
+      preferredView: "editor_result",
     })
   })
 
@@ -1307,7 +1362,7 @@ describe("buildAppliedCells", () => {
         value: "SELECT 1",
         mode: "run",
         autoRefresh: "5s",
-        isViewMaximized: true,
+        preferredView: "result",
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -1324,7 +1379,7 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].mode).toBe("run")
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
-    expect(nextCells[0].isViewMaximized).toBe(true)
+    expect(nextCells[0].preferredView).toBe("result")
   })
 
   it("preserves draw mode when apply omits mode and supplies its full chart", () => {
@@ -1414,7 +1469,7 @@ describe("isDoubleView", () => {
         position: 0,
         value: "",
         mode: "draw",
-        isViewMaximized: true,
+        preferredView: "result",
       }),
     ).toBe(true)
   })
@@ -1544,12 +1599,13 @@ describe("computeResultBottomHeight", () => {
     ).toBe(464)
   })
 
-  it("multi-statement, first is error → tab + notification only (no grid to show)", () => {
-    // 40 + 44 = 84
+  it("multi-statement, later DQL → tab + full 10-row grid block", () => {
+    // Any grid-bearing tab must fit without resizing or tab-switch jitter:
+    // 40 + 44 + 36 + 44 + 10*30 = 464.
     expect(
       computeResultBottomHeight({
         results: [
-          { type: "error", query: "Q1", error: "boom" },
+          { type: "ddl", query: "Q1" },
           {
             type: "dql",
             query: "Q2",
@@ -1557,6 +1613,19 @@ describe("computeResultBottomHeight", () => {
             dataset: [[1]],
             count: 1,
           },
+        ],
+        activeResultIndex: 1,
+        timestamp: 0,
+      }),
+    ).toBe(464)
+  })
+
+  it("multi-statement with no DQL grid → tab + notification only", () => {
+    expect(
+      computeResultBottomHeight({
+        results: [
+          { type: "ddl", query: "Q1" },
+          { type: "dml", query: "Q2" },
         ],
         activeResultIndex: 1,
         timestamp: 0,
@@ -1850,7 +1919,7 @@ describe("computeCellGridH", () => {
           value: "",
           topHeight: 72,
           bottomHeight: 104,
-          isViewMaximized: true,
+          preferredView: "result",
           result: { results: [], activeResultIndex: 0, timestamp: 0 },
         },
         10,
@@ -1893,32 +1962,36 @@ describe("resolveCellPaneLayout", () => {
     expect(resolveCellPaneLayout(cell, false, true)).toBe("editor")
   })
 
-  it("uses persisted visibility for wide cells", () => {
+  it("uses the authoritative preference for wide cells", () => {
     expect(resolveCellPaneLayout(withResult(), false, false)).toBe("split")
     expect(
       resolveCellPaneLayout(
-        withResult({ isViewMaximized: true }),
+        withResult({ preferredView: "result" }),
         false,
         false,
       ),
     ).toBe("result")
     expect(
-      resolveCellPaneLayout(withResult({ wideView: "editor" }), false, false),
+      resolveCellPaneLayout(
+        withResult({ preferredView: "editor" }),
+        false,
+        false,
+      ),
     ).toBe("editor")
   })
 
-  it("defaults compact cells to result and keeps compact choice independent", () => {
+  it("projects the authoritative preference for compact cells", () => {
     expect(resolveCellPaneLayout(withResult(), false, true)).toBe("result")
     expect(
       resolveCellPaneLayout(
-        withResult({ isViewMaximized: true, compactView: "editor" }),
+        withResult({ preferredView: "editor" }),
         false,
         true,
       ),
     ).toBe("editor")
     expect(
       resolveCellPaneLayout(
-        withResult({ isViewMaximized: false, compactView: "result" }),
+        withResult({ preferredView: "result" }),
         false,
         true,
       ),
@@ -1932,14 +2005,13 @@ describe("resolveAgentCellPresentation", () => {
     position: 0,
     value: "SELECT 1",
     mode: "draw",
-    wideView: "editor_result",
-    compactView: "result",
+    preferredView: "editor_result",
     ...over,
   })
 
   it("returns the effective live view with its tier", () => {
     expect(
-      resolveAgentCellPresentation(chart({ wideView: "editor" }), false),
+      resolveAgentCellPresentation(chart({ preferredView: "editor" }), false),
     ).toEqual({
       preferred_view: "editor",
       view: "editor",
@@ -1955,6 +2027,31 @@ describe("resolveAgentCellPresentation", () => {
   it("omits tier and returns the stored preference when inactive", () => {
     expect(resolveAgentCellPresentation(chart(), undefined)).toEqual({
       preferred_view: "editor_result",
+    })
+  })
+
+  it("keeps preference stable while result availability and width change", () => {
+    const pending: NotebookCell = {
+      id: "x",
+      position: 0,
+      value: "SELECT 1",
+      lastRunStatus: "success",
+      preferredView: "editor_result",
+    }
+    expect(resolveAgentCellPresentation(pending, false, true)).toEqual({
+      preferred_view: "editor_result",
+      view: "editor_result",
+      tier: "wide",
+    })
+    expect(resolveAgentCellPresentation(pending, true, true)).toEqual({
+      preferred_view: "editor_result",
+      view: "result",
+      tier: "compact",
+    })
+    expect(resolveAgentCellPresentation(pending, false, false)).toEqual({
+      preferred_view: "editor_result",
+      view: "editor",
+      tier: "wide",
     })
   })
 })
@@ -1984,7 +2081,7 @@ describe("computeCellMinGridH", () => {
       value: "",
       topHeight: 400,
       bottomHeight: 300,
-      isViewMaximized: true,
+      preferredView: "result",
       result,
     }
 
@@ -2212,7 +2309,7 @@ describe("cellHeightPatchForRows", () => {
     const c = withResult({
       topHeight: 72,
       bottomHeight: 100,
-      isViewMaximized: true,
+      preferredView: "result",
     })
     // When a taller height is requested (targetContentPx = 430 - 44 = 386,
     // and no editor allocation in its visible footprint)
@@ -2518,7 +2615,7 @@ describe("buildAppliedLayout", () => {
     const layout = buildAppliedLayout(
       {
         cells: [
-          { id: "a", value: "", grid: { x: 0, y: 0, w: 6, h: 4 } },
+          { id: "a", value: "", grid: { x: 0, y: 0, w: 6 } },
           { id: "b", value: "" },
         ],
       },
@@ -2528,8 +2625,8 @@ describe("buildAppliedLayout", () => {
     )
     expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 3 })
     // Run-mode cell, no result yet → single-view → only topHeight (72) + chrome (40)
-    // = 112 px → ceil(112 / 50) = 3 rows. The supplied legacy h is ignored;
-    // both cells derive h and the second stacks below the first at y=3.
+    // = 112 px → ceil(112 / 50) = 3 rows. Both cells derive h and the second
+    // stacks below the first at y=3.
     expect(layout[1]).toEqual({ i: "b", x: 0, y: 3, w: 12, h: 3 })
   })
 
@@ -2598,7 +2695,7 @@ describe("cloneNotebookViewState", () => {
         value: "SELECT 2",
         mode: "draw",
         autoRefresh: true,
-        isViewMaximized: true,
+        preferredView: "result",
         chartConfig: {
           xColumn: "ts",
           queries: [{ type: "line", yColumns: ["v"] }],
@@ -2672,7 +2769,7 @@ describe("cloneNotebookViewState", () => {
     expect(out.cells[0].topHeight).toBe(120)
     expect(out.cells[1].mode).toBe("draw")
     expect(out.cells[1].autoRefresh).toBe(true)
-    expect(out.cells[1].isViewMaximized).toBe(true)
+    expect(out.cells[1].preferredView).toBe("result")
     expect(out.cells[1].chartConfig).toEqual({
       xColumn: "ts",
       queries: [{ type: "line", yColumns: ["v"] }],
@@ -3063,6 +3160,45 @@ describe("resolveRunAction", () => {
       kind: "run-single",
       reveal: true,
       exitDraw: false,
+    })
+  })
+
+  it("reveals a wide run cell whose result is hidden by an editor preference", () => {
+    // Given a wide run cell whose stored preference hides the result
+    const cell = {
+      mode: "run" as const,
+      result,
+      preferredView: "editor" as const,
+    }
+    const opts = { isCompactTier: false, showBottomSlot: false }
+    // When the user runs
+    // Then it reveals the grid first, then runs
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "run-all",
+      reveal: true,
+      exitDraw: false,
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "run-single",
+      reveal: true,
+      exitDraw: false,
+    })
+  })
+
+  it("keeps drawing a wide draw cell that has no result yet", () => {
+    // Given a wide draw cell whose chart has not landed (bottom slot hidden)
+    const cell = {
+      mode: "draw" as const,
+      preferredView: "editor_result" as const,
+    }
+    const opts = { isCompactTier: false, showBottomSlot: false }
+    // When the user presses Run All / Run
+    // Then Run All draws the chart and Run is a no-op — never a reveal
+    expect(resolveRunAction(cell, { ...opts, intent: "all" })).toEqual({
+      kind: "chart",
+    })
+    expect(resolveRunAction(cell, { ...opts, intent: "single" })).toEqual({
+      kind: "noop",
     })
   })
 
@@ -3570,83 +3706,6 @@ describe("buildAppliedNotebookState", () => {
     expect(next.settings.layoutMode).toBe("grid")
     expect(next.settings.layout).toHaveLength(1)
     expect(next.settings.layout?.[0].i).toBe("a")
-  })
-
-  it("grid.h differing from the derived height pins it into the cell", () => {
-    // Given a single-view run cell (derived height is 5 rows at 10/20)
-    const current = state([cell("a", "SELECT 1")])
-    // When apply requests a taller grid.h (box 20*10+19*20 = 580,
-    // targetContentPx = 580 - 44 = 536)
-    const next = buildAppliedNotebookState(current, {
-      layoutMode: "grid",
-      cells: [
-        { id: "a", preserveValue: true, grid: { x: 0, y: 0, w: 6, h: 20 } },
-      ],
-    })
-    // Then the height is back-solved into the editor and pinned (topResized)
-    expect(next.cells[0].topHeight).toBe(536)
-    expect(next.cells[0].topResized).toBe(true)
-  })
-
-  it("grid.h equal to the derived height does not pin (auto-height intact)", () => {
-    // Given a single-view run cell whose derived height is 5 rows
-    const current = state([cell("a", "SELECT 1")])
-    // When apply merely echoes that height (the required grid.h round-trip)
-    const next = buildAppliedNotebookState(current, {
-      layoutMode: "grid",
-      cells: [
-        { id: "a", preserveValue: true, grid: { x: 0, y: 0, w: 6, h: 5 } },
-      ],
-    })
-    // Then nothing is pinned — the cell keeps auto-height
-    expect(next.cells[0].topResized).toBeUndefined()
-    expect(next.cells[0].bottomResized).toBeUndefined()
-  })
-
-  it("value edit that echoes the pre-apply grid.h does not pin the editor", () => {
-    // Given a run cell showing a table result (double-view)
-    const withTable = cell("a", "SELECT 1", {
-      results: [],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    const current = state([withTable])
-    // Its grid height is derived from editor + result together
-    const h = computeCellGridH(withTable, 10, 20)
-    // When the agent fixes the SQL (clearing the result) and echoes that same h
-    const next = buildAppliedNotebookState(current, {
-      layoutMode: "grid",
-      cells: [{ id: "a", value: "SELECT 2", grid: { x: 0, y: 0, w: 6, h } }],
-    })
-    // Then the result clears but no phantom resize is pinned — after the re-run
-    // the cell returns to the same split, not a ballooned editor. The height
-    // is restamped from the new SQL (auto-height, not a resize).
-    expect(next.cells[0].result).toBeNull()
-    expect(next.cells[0].topHeight).toBe(topHeightForSql("SELECT 2"))
-    expect(next.cells[0].topResized).toBeUndefined()
-    expect(next.cells[0].bottomResized).toBeUndefined()
-  })
-
-  it("value edit with a taller grid.h resizes the result pane, like a bottom-edge drag", () => {
-    // Given a run cell showing a table result (double-view)
-    const withTable = cell("a", "SELECT 1", {
-      results: [],
-      activeResultIndex: 0,
-      timestamp: 0,
-    })
-    const current = state([withTable])
-    const h = computeCellGridH(withTable, 10, 20)
-    // When the agent fixes the SQL and grows the cell taller (a real resize)
-    const next = buildAppliedNotebookState(current, {
-      layoutMode: "grid",
-      cells: [
-        { id: "a", value: "SELECT 2", grid: { x: 0, y: 0, w: 6, h: h + 5 } },
-      ],
-    })
-    // Then it pins the result pane (bottomResized), never the editor — matching
-    // what the user's grid bottom-edge drag on a table cell writes
-    expect(next.cells[0].bottomResized).toBe(true)
-    expect(next.cells[0].topResized).toBeUndefined()
   })
 
   it("keeps settings referentially identical when nothing settings-related changed", () => {

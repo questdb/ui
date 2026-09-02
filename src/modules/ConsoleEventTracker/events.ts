@@ -169,7 +169,6 @@ export enum ConsoleEvent {
   MCP_SET_CELL_AUTOREFRESH = "mcp.set_cell_autorefresh",
   MCP_SET_NOTEBOOK_AUTOREFRESH = "mcp.set_notebook_autorefresh",
   MCP_SET_CELL_NAME = "mcp.set_cell_name",
-  MCP_SET_CELL_VIEW_MAXIMIZED = "mcp.set_cell_view_maximized",
   MCP_SET_CELL_MAXIMIZED = "mcp.set_cell_maximized",
   MCP_APPLY_NOTEBOOK_STATE = "mcp.apply_notebook_state",
   MCP_GET_TABLES = "mcp.get_tables",

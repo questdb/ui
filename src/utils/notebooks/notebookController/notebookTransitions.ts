@@ -1,5 +1,6 @@
 import {
   MAX_NOTEBOOK_CELLS,
+  type AgentCellView,
   type AutoRefresh,
   type CellMode,
   type CellType,
@@ -15,7 +16,7 @@ import {
   buildAppliedNotebookState,
   carriedRunError,
   carriedRunStatus,
-  cellHeightPatchForRows,
+  cellGridBoundsError,
   cellModeChangePatch,
   clearCellAutoRefresh,
   computeAgentCellGridH,
@@ -29,8 +30,6 @@ import {
   nextGridSeedPosition,
   reconcileCellResultForValue,
   resolveAgentCellPresentation,
-  NOTEBOOK_GRID_MARGIN_Y,
-  NOTEBOOK_GRID_ROW_HEIGHT,
   removeCell,
   swapCellDown,
   swapCellUp,
@@ -288,8 +287,8 @@ export const setCellLayoutTransition = (
   bufferId: number,
   cellId: string,
   pos: Omit<CellGridPosition, "h"> & {
-    h?: number
     liveCompact?: boolean
+    liveExpectingResult?: boolean
     gridContainerWidth?: number
   },
 ): NotebookTransitionResult<
@@ -298,28 +297,18 @@ export const setCellLayoutTransition = (
   }
 > => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
-  // Cached clients may still send h. Current clients control pane dimensions
-  // semantically and h is derived from them.
-  const heightPatch =
-    pos.h === undefined
-      ? {}
-      : cellHeightPatchForRows(
-          cell,
-          pos.h,
-          NOTEBOOK_GRID_ROW_HEIGHT,
-          NOTEBOOK_GRID_MARGIN_Y,
-          isExpectingResult(cell, "unrequested"),
-        )
-  const nextCell = { ...cell, ...heightPatch }
+  const gridError = cellGridBoundsError(pos)
+  if (gridError) throw new NotebookToolError("validation", gridError)
   const compact =
     parts.settings.layoutMode === "grid"
       ? pos.gridContainerWidth !== undefined
         ? gridCellToolbarTier(pos.gridContainerWidth, pos.w) === "compact"
         : undefined
       : pos.liveCompact
-  const expectingResult = isExpectingResult(nextCell, "unrequested")
+  const expectingResult =
+    pos.liveExpectingResult ?? isExpectingResult(cell, "unrequested")
   const paneLayout = resolveCellPaneLayout(
-    nextCell,
+    cell,
     expectingResult,
     compact === true,
   )
@@ -327,15 +316,11 @@ export const setCellLayoutTransition = (
     x: pos.x,
     y: pos.y,
     w: pos.w,
-    h: computeAgentCellGridH(nextCell, paneLayout),
+    h: computeAgentCellGridH(cell, paneLayout),
   }
   return {
     parts: {
       ...parts,
-      cells:
-        Object.keys(heightPatch).length > 0
-          ? patchCellIn(parts.cells, cellId, heightPatch)
-          : parts.cells,
       settings: {
         ...parts.settings,
         layout: upsertCellLayout(parts.settings.layout, cellId, layoutPos),
@@ -343,7 +328,7 @@ export const setCellLayoutTransition = (
     },
     result: {
       grid: { x: pos.x, y: pos.y, w: pos.w },
-      ...resolveAgentCellPresentation(nextCell, compact, expectingResult),
+      ...resolveAgentCellPresentation(cell, compact, expectingResult),
     },
     touchedCellId: cellId,
   }
@@ -365,7 +350,6 @@ export const setCellDimensionsTransition = (
   if (
     cell.type === "markdown" &&
     (dimensions.resultHeight != null ||
-      dimensions.editorVisible != null ||
       (dimensions.view != null && dimensions.view !== "editor"))
   ) {
     throw new NotebookToolError(
@@ -396,9 +380,11 @@ export const setCellDimensionsTransition = (
 
   const patch = agentCellDimensionsPatch(cell, dimensions)
   const nextCell = { ...cell, ...patch }
+  const expectingResult =
+    dimensions.expectingResult ?? isExpectingResult(nextCell, "unrequested")
   const paneLayout = resolveCellPaneLayout(
     nextCell,
-    isExpectingResult(nextCell, "unrequested"),
+    expectingResult,
     dimensions.compact === true,
   )
   const layout = parts.settings.layout?.map((item) =>
@@ -409,7 +395,7 @@ export const setCellDimensionsTransition = (
   const presentation = resolveAgentCellPresentation(
     nextCell,
     dimensions.compact,
-    isExpectingResult(nextCell, "unrequested"),
+    expectingResult,
   )
   const fallback =
     presentation.view !== undefined &&
@@ -482,19 +468,24 @@ export const setCellChartConfigTransition = (
   }
 }
 
-export const setCellViewMaximizedTransition = (
+export const setCellPreferredViewTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  value: boolean,
+  preferredView: AgentCellView,
 ): NotebookTransitionResult => {
-  requireCellIn(parts.cells, cellId, bufferId)
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown") {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells have no pane-view preference.",
+    )
+  }
   return {
     parts: {
       ...parts,
       cells: patchCellIn(parts.cells, cellId, {
-        isViewMaximized: value,
-        wideView: value ? "result" : "editor_result",
+        preferredView,
       }),
     },
     result: undefined,

@@ -693,7 +693,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         topHeight: 200,
         topResized: true,
         bottomHeight: 350,
-        isViewMaximized: true,
+        preferredView: "result",
       }),
     ])
 
@@ -717,7 +717,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       topResized: false,
       bottomHeight: 280,
       bottomResized: true,
-      isViewMaximized: true,
+      preferredView: "result",
     })
   })
 
@@ -726,6 +726,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const unpublish = publishLiveCellPresentation(1, "c", {
       compact: true,
       paneLayout: "result",
+      expectingResult: false,
     })
 
     const res = await dispatchTool(
@@ -747,7 +748,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       tier: "compact",
       fallback: "editor_result_unavailable_in_compact",
     })
-    expect(cellById(state, "c")?.wideView).toBe("editor_result")
+    expect(cellById(state, "c")?.preferredView).toBe("editor_result")
     unpublish()
   })
 
@@ -757,8 +758,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       [
         cell("c", "SELECT 1", {
           mode: "draw",
-          wideView: "editor_result",
-          compactView: "result",
+          preferredView: "editor_result",
         }),
       ],
       {
@@ -771,6 +771,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const unpublish = publishLiveCellPresentation(1, "c", {
       compact: false,
       paneLayout: "split",
+      expectingResult: false,
       gridContainerWidth: 1200,
     })
 
@@ -1185,7 +1186,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
                 },
               ],
             },
-            grid: { x: 0, y: 0, w: 6, h: 6 },
+            grid: { x: 0, y: 0, w: 6 },
           },
         ],
       },
@@ -1200,8 +1201,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       value: "SELECT 1",
       mode: "draw",
       autoRefresh: "5s",
-      isViewMaximized: true,
-      compactView: "result",
+      preferredView: "result",
       chartConfig: {
         xColumn: "ts",
         queries: [

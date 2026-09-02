@@ -100,9 +100,8 @@ export const CellToolbar: React.FC<Props> = ({
     setFocusedCell,
     setMaximizedCellId,
     setCellRefresh,
-    setCellViewMaximized,
+    setCellPreferredView,
     setCellMode,
-    updateCell,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
 
@@ -115,11 +114,8 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const isViewMaximized =
-    !isNoneView &&
-    (paneLayout !== undefined
-      ? paneLayout === "result"
-      : !!cell.isViewMaximized)
+  const resultOnly =
+    !isNoneView && paneLayout !== undefined && paneLayout === "result"
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
   // engine would ignore — same gate the inline selector applies.
@@ -163,8 +159,7 @@ export const CellToolbar: React.FC<Props> = ({
       method: "menu",
     })
     signalUserEdit(bufferId)
-    if (toolbarTier === "compact") updateCell(cellId, { compactView: "editor" })
-    else setCellViewMaximized(cellId, false)
+    setCellPreferredView(cellId, "editor")
   }
   const handleViewTable = () => {
     if (isRunning) return
@@ -180,8 +175,7 @@ export const CellToolbar: React.FC<Props> = ({
     // A chart transfers its data to the grid (no re-query); restore the data
     // pane in case the SQL was being shown.
     if (isChartView) setCellMode(cellId, "run")
-    if (toolbarTier === "compact") updateCell(cellId, { compactView: "result" })
-    else setCellViewMaximized(cellId, true)
+    setCellPreferredView(cellId, "result")
   }
   const handleViewChart = () => {
     if (isRunning) return
@@ -196,16 +190,15 @@ export const CellToolbar: React.FC<Props> = ({
       eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId, maximize: true })
       return
     }
-    if (toolbarTier === "compact") updateCell(cellId, { compactView: "result" })
-    else setCellViewMaximized(cellId, true)
+    setCellPreferredView(cellId, "result")
   }
   const handleToggleMaximizeView = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !isViewMaximized,
+      isViewMaximized: !resultOnly,
       view,
     })
     signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, !isViewMaximized)
+    setCellPreferredView(cellId, resultOnly ? "editor_result" : "result")
   }
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
@@ -351,7 +344,7 @@ export const CellToolbar: React.FC<Props> = ({
                   onSelect={handleToggleMaximizeView}
                   icon={<FileSqlIcon size={16} />}
                 >
-                  {isViewMaximized ? "Show editor" : "Hide editor"}
+                  {resultOnly ? "Show editor" : "Hide editor"}
                 </DropdownMenu.Item>
               )}
 

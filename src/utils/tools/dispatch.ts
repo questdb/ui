@@ -76,7 +76,6 @@ import {
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
   setLayoutModeTransition,
   setNotebookAutoRefreshTransition,
   updateCellTransition,
@@ -819,29 +818,32 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_layout": {
-        const { buffer_id, cell_id, x, y, w, h } =
+        const { buffer_id, cell_id, x, y, w } =
           (input as {
             buffer_id: number
             cell_id: string
             x: number
             y: number
             w: number
-            h?: number
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
-        const livePresentation = readLiveCellPresentation(buffer_id, cell_id)
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
-            (parts) =>
-              setCellLayoutTransition(parts, buffer_id, cell_id, {
+            (parts) => {
+              const livePresentation = readLiveCellPresentation(
+                buffer_id,
+                cell_id,
+              )
+              return setCellLayoutTransition(parts, buffer_id, cell_id, {
                 x,
                 y,
                 w,
-                h,
                 liveCompact: livePresentation?.compact,
+                liveExpectingResult: livePresentation?.expectingResult,
                 gridContainerWidth: livePresentation?.gridContainerWidth,
-              }),
+              })
+            },
             signal,
           ),
         )
@@ -859,13 +861,19 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
-            (parts) =>
-              setCellDimensionsTransition(parts, buffer_id, cell_id, {
+            (parts) => {
+              const livePresentation = readLiveCellPresentation(
+                buffer_id,
+                cell_id,
+              )
+              return setCellDimensionsTransition(parts, buffer_id, cell_id, {
                 editorHeight: editor_height,
                 resultHeight: result_height,
                 view,
-                compact: readLiveCellPresentation(buffer_id, cell_id)?.compact,
-              }),
+                compact: livePresentation?.compact,
+                expectingResult: livePresentation?.expectingResult,
+              })
+            },
             signal,
           ),
         )
@@ -1068,23 +1076,6 @@ export const dispatchTool = async (
                 value,
                 reset_cell_overrides === true,
               ),
-            signal,
-          ),
-        )
-      }
-      case "set_cell_view_maximized": {
-        const { buffer_id, cell_id, value } =
-          (input as {
-            buffer_id: number
-            cell_id: string
-            value: boolean
-          }) || {}
-        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
-        return routeNotebookTool(() =>
-          runTransition(
-            buffer_id,
-            (parts) =>
-              setCellViewMaximizedTransition(parts, buffer_id, cell_id, value),
             signal,
           ),
         )

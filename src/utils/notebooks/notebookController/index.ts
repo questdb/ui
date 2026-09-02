@@ -126,7 +126,7 @@ export {
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
+  setCellPreferredViewTransition,
   setLayoutModeTransition,
   setNotebookAutoRefreshTransition,
   updateCellTransition,

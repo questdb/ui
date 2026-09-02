@@ -125,11 +125,8 @@ export type ApplyNotebookStateCellRequest = {
   editorHeight?: AgentHeightValue
   resultHeight?: AgentHeightValue
   view?: AgentCellView | null
-  // Legacy cached-agent inputs. Not advertised by the current schema.
-  editorVisible?: boolean | null
-  isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
-  grid?: { x: number; y: number; w: number; h?: number } | null
+  grid?: { x: number; y: number; w: number } | null
 }
 
 export type ApplyNotebookStateRequest = {

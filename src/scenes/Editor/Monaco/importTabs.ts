@@ -271,16 +271,19 @@ const sanitizeNotebookCell = (
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
-  if (typeof item.isViewMaximized === "boolean")
-    cell.isViewMaximized = item.isViewMaximized
-  if (
-    item.wideView === "editor" ||
-    item.wideView === "result" ||
-    item.wideView === "editor_result"
-  )
-    cell.wideView = item.wideView
-  if (item.compactView === "editor" || item.compactView === "result")
-    cell.compactView = item.compactView
+  if (item.type !== "markdown") {
+    if (
+      item.preferredView === "editor" ||
+      item.preferredView === "result" ||
+      item.preferredView === "editor_result"
+    ) {
+      cell.preferredView = item.preferredView
+    } else if (item.isViewMaximized === true) {
+      cell.preferredView = "result"
+    } else {
+      cell.preferredView = "editor_result"
+    }
+  }
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
   if (typeof item.bottomHeight === "number")
     cell.bottomHeight = item.bottomHeight

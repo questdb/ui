@@ -775,6 +775,36 @@ describe("sanitizeBuffer", () => {
   })
 
   describe("notebookViewState sanitization", () => {
+    it("imports one preferred view and maps main's legacy boolean", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            { id: "preferred", value: "SELECT 1", preferredView: "editor" },
+            { id: "legacy-on", value: "SELECT 2", isViewMaximized: true },
+            { id: "legacy-off", value: "SELECT 3", isViewMaximized: false },
+            {
+              id: "markdown",
+              value: "# Title",
+              type: "markdown",
+              preferredView: "result",
+            },
+          ],
+        },
+      }
+
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      expect(cells?.map((cell) => cell.preferredView)).toEqual([
+        "editor",
+        "result",
+        "editor_result",
+        undefined,
+      ])
+      expect(cells?.every((cell) => !("isViewMaximized" in cell))).toBe(true)
+    })
+
     it("whitelists cell fields, reindexes positions, drops session state", () => {
       const input = {
         label: "Notebook",

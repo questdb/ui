@@ -224,15 +224,12 @@ export const dispatchApplyNotebookState = async (
         editor_height?: number | "auto" | null
         result_height?: number | "auto" | null
         view?: AgentCellView | null
-        // Legacy cached-agent inputs.
-        editor_visible?: boolean | null
-        is_view_maximized?: boolean | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           right_axis?: ToolRightAxis | null
         } | null
-        grid?: { x: number; y: number; w: number; h?: number } | null
+        grid?: { x: number; y: number; w: number } | null
       }>
     }) || {}
   setStatus(AIOperationStatus.BuildingNotebook)
@@ -402,13 +399,6 @@ export const dispatchApplyNotebookState = async (
       if (c.editor_height !== undefined) cell.editorHeight = c.editor_height
       if (c.result_height !== undefined) cell.resultHeight = c.result_height
       if (c.view !== undefined) cell.view = c.view
-      if (c.editor_visible !== undefined) cell.editorVisible = c.editor_visible
-      if (
-        c.editor_visible == null &&
-        c.is_view_maximized !== undefined &&
-        c.is_view_maximized !== null
-      )
-        cell.isViewMaximized = c.is_view_maximized
       if (c.chart_config) {
         const cfg = c.chart_config
         const chartConfig: ChartConfig = {

@@ -37,7 +37,6 @@ export type AutoRefresh = boolean | AutoRefreshInterval
 // migration. Markdown cells hold their source in `value` and are never executed.
 export type CellType = "sql" | "markdown"
 
-export type CellCompactView = "editor" | "result"
 export type AgentCellView = "editor" | "result" | "editor_result"
 export type AgentCellTier = "compact" | "wide"
 
@@ -57,12 +56,9 @@ export type NotebookCell = {
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
-  // Wide and compact layouts keep internal presentation preferences. The
-  // agent sets one `view` preference and reads the currently resolved view;
-  // these storage fields are never exposed directly.
-  isViewMaximized?: boolean
-  wideView?: AgentCellView
-  compactView?: CellCompactView
+  // Authoritative, viewport-independent pane intent. The rendered view is
+  // derived from this preference, result availability, and current width.
+  preferredView?: AgentCellView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }
@@ -156,6 +152,7 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
   id: crypto.randomUUID(),
   position,
   value,
+  preferredView: "editor_result",
 })
 
 export const createDefaultNotebookViewState = (): NotebookViewState => ({
