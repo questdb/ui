@@ -1,11 +1,4 @@
-import React, {
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  useRef,
-} from "react"
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import styled from "styled-components"
 import { selectors, actions } from "../../../store"
@@ -26,7 +19,7 @@ import {
   truncateLongDDL,
 } from "../../../components/LiteEditor/utils"
 import { CircleNotchSpinner } from "../../Editor/Monaco/icons"
-import { QuestContext, useSettings } from "../../../providers"
+import { useSettings } from "../../../providers"
 import * as QuestDB from "../../../utils/questdb"
 import {
   getTableKind,
@@ -58,7 +51,7 @@ import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
-import type { TableKindData } from "./types"
+import type { BaseTableStatus, SourceState, TableKindData } from "./types"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -165,6 +158,14 @@ const transformTableResponse = (
   return result.data[0]
     ? { type: "found", data: result.data[0] }
     : { type: "missing" }
+}
+
+const getBaseTableStatus = (
+  state: SourceState<TableSourceData>,
+): BaseTableStatus => {
+  if (state.status !== "ready") return null
+  if (state.data.type === "missing") return "Dropped"
+  return state.data.data.table_suspended ? "Suspended" : "Valid"
 }
 
 const transformMatViewResponse = (response: QuestDB.QueryRawResult) =>
@@ -278,7 +279,6 @@ export const TableDetailsDrawer = () => {
   )
 
   const tables = useSelector(selectors.query.getTables)
-  const { quest } = useContext(QuestContext)
   const { settings } = useSettings()
   const isEnterprise = settings["release.type"] === "EE"
   const [activeTab, setActiveTab] = useState<TabType>("monitoring")
@@ -358,6 +358,28 @@ export const TableDetailsDrawer = () => {
     pollIntervalMs: STORAGE_POLICY_POLL_MS,
     transformResponse: transformStoragePolicyResponse,
   })
+  const matViewData =
+    matViewSource.state.status === "ready" ? matViewSource.state.data : null
+  const viewData =
+    viewSource.state.status === "ready" ? viewSource.state.data : null
+  const liveViewData =
+    liveViewSource.state.status === "ready" ? liveViewSource.state.data : null
+  const baseTableName =
+    matViewData?.base_table_name ?? liveViewData?.base_table_name ?? undefined
+  const escapedBaseTableName = QuestDB.escapeSqlLiteral(baseTableName ?? "")
+  // View catalogs expose only the base table name, not its ID. Resolve the
+  // current table by name; the view status reports whether the dependency is valid.
+  const baseTableSource = useCatalogSource<TableSourceData>({
+    sourceKey: `${sourcePrefix}:base-table:${baseTableName ?? ""}`,
+    sourceName: "base table metadata",
+    enabled: isOpen && hasTarget && baseTableName !== undefined,
+    query: `tables() where table_name = '${escapedBaseTableName}';`,
+    pollIntervalMs: KIND_POLL_MS,
+    transformResponse: transformTableResponse,
+  })
+  const baseTableStatus = getBaseTableStatus(baseTableSource.state)
+  const baseTableExists =
+    baseTableStatus === "Valid" || baseTableStatus === "Suspended"
 
   const tableOptions: TableOption[] = useMemo(
     () =>
@@ -393,16 +415,6 @@ export const TableDetailsDrawer = () => {
     transactionLag: [],
     ingestionMetric: [],
   })
-  const [baseTableStatus, setBaseTableStatus] = useState<
-    "Dropped" | "Suspended" | "Valid" | null
-  >(null)
-
-  const matViewData =
-    matViewSource.state.status === "ready" ? matViewSource.state.data : null
-  const viewData =
-    viewSource.state.status === "ready" ? viewSource.state.data : null
-  const liveViewData =
-    liveViewSource.state.status === "ready" ? liveViewSource.state.data : null
   const columns =
     columnsSource.state.status === "ready" ? columnsSource.state.data : []
   const ddl = ddlSource.state.status === "ready" ? ddlSource.state.data : ""
@@ -420,12 +432,6 @@ export const TableDetailsDrawer = () => {
     (isView && viewSource.state.status === "unavailable") ||
     (isMatView && matViewSource.state.status === "unavailable") ||
     (isLiveView && liveViewSource.state.status === "unavailable")
-  const baseTableExists =
-    baseTableStatus === "Valid" || baseTableStatus === "Suspended"
-
-  const baseTableName =
-    matViewData?.base_table_name ?? liveViewData?.base_table_name ?? undefined
-
   const kindData: TableKindData = useMemo(
     () =>
       kind === "view"
@@ -524,7 +530,6 @@ export const TableDetailsDrawer = () => {
       transactionLag: [],
       ingestionMetric: [],
     })
-    setBaseTableStatus(null)
   }, [isOpen, hasTarget, isView, sourcePrefix])
 
   useEffect(() => {
@@ -535,45 +540,6 @@ export const TableDetailsDrawer = () => {
       clearIfCurrentTarget(tableName, kind)
     }
   }, [clearIfCurrentTarget, kind, tableName, tableSource.state])
-
-  useEffect(() => {
-    if (!baseTableName || kindSourceUnavailable) {
-      setBaseTableStatus(null)
-      return
-    }
-
-    let active = true
-
-    const checkBaseTableStatus = async () => {
-      try {
-        const response = await quest.getTableDetails(baseTableName)
-        if (!active) return
-
-        const baseTableExists =
-          response.type === QuestDB.Type.DQL && response.data.length > 0
-        const suspended = baseTableExists
-          ? response.data[0]?.table_suspended
-          : false
-        const status = baseTableExists
-          ? suspended
-            ? "Suspended"
-            : "Valid"
-          : "Dropped"
-        setBaseTableStatus(status)
-      } catch (error) {
-        if (!active) return
-
-        console.error("Failed to check base table existence:", error)
-        setBaseTableStatus(null)
-      }
-    }
-
-    void checkBaseTableStatus()
-
-    return () => {
-      active = false
-    }
-  }, [baseTableName, kindSourceUnavailable, quest, sourcePrefix])
 
   const usesDetailsPolling = isView || activeTab === "details"
 

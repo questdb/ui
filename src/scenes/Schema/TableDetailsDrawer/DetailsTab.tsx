@@ -11,7 +11,7 @@ import {
 import { Box, Text, CopyButton, TextButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import type { Table, Column, StoragePolicy } from "../../../utils/questdb/types"
-import type { SourceState, TableKindData } from "./types"
+import type { BaseTableStatus, SourceState, TableKindData } from "./types"
 import {
   formatTTL,
   formatInterval,
@@ -44,7 +44,7 @@ export interface DetailsTabProps {
   isEnterprise: boolean
   truncatedDDL: { text: string; grayedOutLines: [number, number] | null }
   baseTableName: string | undefined
-  baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
+  baseTableStatus: BaseTableStatus
   columnsExpanded: boolean
   onColumnsExpandedChange: (expanded: boolean) => void
   onNavigateToBaseTable: () => void

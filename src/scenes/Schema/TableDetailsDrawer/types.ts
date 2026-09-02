@@ -14,3 +14,5 @@ export type TableKindData =
   | { kind: "view"; view: SourceState<View> }
   | { kind: "matview"; matView: SourceState<MaterializedView> }
   | { kind: "liveview"; liveView: SourceState<LiveView> }
+
+export type BaseTableStatus = "Valid" | "Suspended" | "Dropped" | null

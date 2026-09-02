@@ -18,7 +18,7 @@ import {
 import { SquareWithShadow } from "./HealthStatusLabel"
 import { Badge, Box, CopyButton, Text, Tooltip } from "../../../components"
 import { type LiveView, type Table } from "../../../utils/questdb/types"
-import type { TableKindData } from "./types"
+import type { BaseTableStatus, TableKindData } from "./types"
 import {
   formatRelativeTimestamp,
   formatMemoryPressure,
@@ -59,7 +59,7 @@ export interface MonitoringTabProps {
   isIngestionActive: boolean
   isIngestionDisabled: boolean
   baseTableName: string | undefined
-  baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
+  baseTableStatus: BaseTableStatus
   walExpanded: boolean
   onWalExpandedChange: (expanded: boolean) => void
   onOpenSuspensionDialog: () => void
