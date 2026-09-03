@@ -245,7 +245,7 @@ const CellInner: React.FC<Props> = ({
       (state) => updateCell(cell.id, { editorViewState: state }),
       [cell.id, updateCell],
     ),
-    onRunAtCursor: () => runSingle(),
+    onRunAtCursor: () => runSingleFromEditor(),
     onRunAll: () => runAll(),
     onContentHeightChange: handleContentHeightChange,
     validate: validateWithGlobals,
@@ -281,16 +281,21 @@ const CellInner: React.FC<Props> = ({
       editorRef.current?.getContentHeight() ?? null
   }, [editorRef])
 
-  const { runAll, runSingle, handleDrawClick, isGridLoading } =
-    useCellRunActions({
-      cell,
-      isRunning,
-      isCompactTier,
-      showBottomSlot,
-      editorRef,
-      applyHighlight,
-      clearHighlight,
-    })
+  const {
+    runAll,
+    runSingleFromEditor,
+    runSingleFromResult,
+    handleDrawClick,
+    isGridLoading,
+  } = useCellRunActions({
+    cell,
+    isRunning,
+    isCompactTier,
+    showBottomSlot,
+    editorRef,
+    applyHighlight,
+    clearHighlight,
+  })
 
   const isExternalSyncRef = useRef(false)
 
@@ -372,13 +377,19 @@ const CellInner: React.FC<Props> = ({
       // Focus inside Monaco: its own action handles the key (same resolver), so
       // bail to avoid running twice.
       if (editorContainerRef.current?.contains(document.activeElement)) return
-      e.preventDefault()
-      if (e.shiftKey) runAll()
-      else runSingle()
+      if (e.shiftKey) {
+        e.preventDefault()
+        runAll()
+        return
+      }
+      if (resultRef.current?.contains(document.activeElement)) {
+        e.preventDefault()
+        runSingleFromResult()
+      }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [isFocused, isMaximized, runAll, runSingle])
+  }, [isFocused, isMaximized, runAll, runSingleFromResult])
 
   const cellEl = (
     <CellWrapper

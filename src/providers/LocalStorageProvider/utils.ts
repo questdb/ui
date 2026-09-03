@@ -24,9 +24,19 @@
 
 import { MAX_COLUMN_WIDTH_BOUNDS } from "../../components/ResultGrid/dimensions"
 import type { MaxColumnWidth } from "../../components/ResultGrid/types"
+import type { RunWithSelectionMode } from "./types"
 
 export const parseBoolean = (value: string, defaultValue: boolean): boolean =>
   value ? value === "true" : defaultValue
+
+export const parseRunWithSelectionMode = (
+  value: string,
+): RunWithSelectionMode => {
+  if (value === "partial" || value === "complete" || value === "off")
+    return value
+  if (value === "false") return "off"
+  return "partial"
+}
 
 export const parseInteger = (value: string, defaultValue: number): number =>
   isNaN(parseInt(value)) ? defaultValue : parseInt(value)
