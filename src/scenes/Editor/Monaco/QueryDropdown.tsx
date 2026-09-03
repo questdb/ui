@@ -6,6 +6,10 @@ import { DropdownMenu } from "../../../components/DropdownMenu"
 import { PlayFilled } from "../../../components/icons/play-filled"
 import { AISparkle } from "../../../components/AISparkle"
 import type { Request } from "./utils"
+import {
+  extractFullQueryText,
+  extractQueryTextToRun,
+} from "./queryDropdownUtils"
 
 const HiddenTrigger = styled.div<{ style?: { top: string; left: string } }>`
   position: fixed;
@@ -46,14 +50,6 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
   const theme = useTheme()
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen)
-  }
-
-  const extractQueryTextToRun = (query: Request) => {
-    if (!query) return "query"
-    const queryText = query.selection ? query.selection.queryText : query.query
-    return queryText.length > 30
-      ? `"${queryText.substring(0, 30)}..."`
-      : `"${queryText}"`
   }
 
   const isExplainDisabled = (query: Request) => {
@@ -124,7 +120,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                           data-hook={`dropdown-item-copy-query-link-${index}`}
                           icon={<LinkSimpleIcon size={16} />}
                         >
-                          Copy link to {extractQueryTextToRun(query)}
+                          Copy link to {extractFullQueryText(query)}
                         </DropdownMenu.Item>,
                       )
                     }
@@ -159,7 +155,7 @@ export const QueryDropdown: React.FC<QueryDropdownProps> = ({
                     data-hook="dropdown-item-copy-query-link"
                     icon={<LinkSimpleIcon size={16} />}
                   >
-                    Copy link to {extractQueryTextToRun(queriesRef.current[0])}
+                    Copy link to {extractFullQueryText(queriesRef.current[0])}
                   </DropdownMenu.Item>,
                 ]}
         </DropdownMenu.Content>

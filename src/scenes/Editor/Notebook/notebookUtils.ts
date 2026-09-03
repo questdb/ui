@@ -1370,7 +1370,9 @@ export const releaseCellResultPatch = (
   lastRunStatus: carriedRunStatus(cell),
   lastRunError: carriedRunError(cell),
   ...(cell.mode !== "draw" && cell.bottomHeight == null && cell.result != null
-    ? { bottomHeight: computeResultBottomHeight(cell.result) }
+    ? {
+        bottomHeight: computeResultBottomHeight(cell.result, cell.value),
+      }
     : {}),
 })
 
@@ -1380,7 +1382,10 @@ const isDqlWithColumns = (r: SingleQueryResult): boolean =>
 const dqlRowCount = (r: SingleQueryResult): number =>
   r.type === "dql" ? r.dataset.length : 0
 
-// Computes the bottom slot height for a result based on its content.
+// Computes the bottom slot height for the same statement frame rendered by
+// InlineResultTable. `value` is the cell's current SQL; a partial run can have
+// one result while still rendering multiple statement tabs (the unexecuted
+// statements appear as "Not run").
 //
 // Rules:
 //   1. Single-statement, no grid (error / DDL / DML / notice): just the
@@ -1389,26 +1394,30 @@ const dqlRowCount = (r: SingleQueryResult): number =>
 //      header + min(N, 10) rows. A 0-row DQL still shows its column headers, so
 //      it reserves the header with no row space. Shrinks for small results,
 //      caps at 10 for large ones.
-//   3. Multi-statement (script) run:
-//      - tab bar always visible.
-//      - If the first result is non-DQL (error / DDL / DML / notice), height
-//        is just tab bar + notification (no grid to show).
-//      - Otherwise reserve a full 10 rows worth of space regardless of how
-//        many rows the active tab actually has (avoids jitter when switching
-//        between tabs that have different row counts).
+//   3. Multiple rendered statement slots add the tab bar, including when all
+//      but one slot are "Not run".
+//   4. Multiple executed results reserve a full 10 rows whenever any result
+//      has a DQL grid (avoids clipping and jitter when switching result tabs).
+//      A single executed result still tight-fits its own row count.
 export const computeResultBottomHeight = (
   result: CellResult | null | undefined,
+  value: string,
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
-  const isMulti = result.results.length > 1
-  const tabBar = isMulti ? TAB_BAR_PX : 0
+  const statements = getQueriesFromText(value)
+  const frame =
+    deriveStatementFrame(statements, result) ?? derivePositionalFrame(result)
+  if (!frame) return NOTIFICATION_PX
+  const slots = frame.slots
+  const hasMultipleTabs = slots.length > 1
+  const hasMultipleResults = result.results.length > 1
+  const tabBar = hasMultipleTabs ? TAB_BAR_PX : 0
 
-  if (isMulti) {
-    const first = result.results[0]
-    if (!first || !isDqlWithColumns(first)) {
-      // First query failed / wasn't DQL — there is no grid to show, no point
-      // reserving 10 rows of space. The tab bar still shows so the user can
-      // click through other tabs.
+  if (hasMultipleResults) {
+    const hasGrid = slots.some(
+      (slot) => slot.result && isDqlWithColumns(slot.result),
+    )
+    if (!hasGrid) {
       return tabBar + NOTIFICATION_PX
     }
     return (
@@ -1420,14 +1429,19 @@ export const computeResultBottomHeight = (
     )
   }
 
-  // Single-statement: tight-fit up to 10 rows.
-  const only = result.results[0]
+  // Single executed result: tight-fit up to 10 rows. The tab bar is still
+  // included when the editor contributes additional "Not run" slots.
+  const only = frame.slots[frame.activeSlotIndex]?.result ?? result.results[0]
   if (!only || !isDqlWithColumns(only)) {
-    return NOTIFICATION_PX
+    return tabBar + NOTIFICATION_PX
   }
   const rows = Math.min(MAX_RESERVED_ROWS, dqlRowCount(only))
   return (
-    NOTIFICATION_PX + RESULT_ACTIONS_BAR_PX + HEADER_HEIGHT + rows * ROW_HEIGHT
+    tabBar +
+    NOTIFICATION_PX +
+    RESULT_ACTIONS_BAR_PX +
+    HEADER_HEIGHT +
+    rows * ROW_HEIGHT
   )
 }
 
@@ -1438,7 +1452,7 @@ export const computeResultBottomHeight = (
 export const defaultBottomHeightFor = (cell: NotebookCell): number =>
   cell.mode === "draw"
     ? DEFAULT_CHART_BOTTOM_HEIGHT
-    : computeResultBottomHeight(cell.result)
+    : computeResultBottomHeight(cell.result, cell.value)
 
 // True iff this cell occupies vertical space for a bottom slot — i.e. its
 // total height includes bottomHeight. This includes the chart-expanded case
@@ -1461,7 +1475,7 @@ export const modeChangeBottomHeightPatch = (
       mode === "draw"
         ? DEFAULT_CHART_BOTTOM_HEIGHT
         : cell?.result
-          ? computeResultBottomHeight(cell.result)
+          ? computeResultBottomHeight(cell.result, cell.value)
           : undefined,
   }
 }
@@ -1495,7 +1509,7 @@ export const patchCellRunResult = (
       cell.mode !== "draw" &&
       cell.type !== "markdown"
     ) {
-      next.bottomHeight = computeResultBottomHeight(result)
+      next.bottomHeight = computeResultBottomHeight(result, cell.value)
     }
     return next
   })

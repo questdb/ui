@@ -33,6 +33,8 @@ export type AiAssistantSettings = {
 
 export type SettingsType = string | boolean | number | AiAssistantSettings
 
+export type RunWithSelectionMode = "partial" | "complete" | "off"
+
 export enum LeftPanelType {
   DATASOURCES = "datasources",
   SEARCH = "search",
@@ -59,7 +61,7 @@ export type LocalConfig = {
   autoRefreshTables: boolean
   useNewGrid: boolean
   useQuickVis: boolean
-  runWithSelection: boolean
+  runWithSelectionMode: RunWithSelectionMode
   maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
