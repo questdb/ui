@@ -36,7 +36,7 @@ import {
   registerController,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellPreferredViewTransition,
+  setCellPaneViewTransition,
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
@@ -129,7 +129,7 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
-  setCellPreferredView: (cellId: string, view: AgentCellView) => void
+  setCellPaneView: (cellId: string, view: AgentCellView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
   getCellsSnapshot: () => NotebookCell[]
@@ -159,7 +159,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
-  setCellPreferredView: () => undefined,
+  setCellPaneView: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
   getCellsSnapshot: () => [],
@@ -768,11 +768,11 @@ export const NotebookProvider: React.FC<{
     [applyTransition, bufferId],
   )
 
-  const setCellPreferredView = useCallback(
+  const setCellPaneView = useCallback(
     (cellId: string, view: AgentCellView) =>
       silently(() =>
         applyTransition((parts) =>
-          setCellPreferredViewTransition(parts, bufferId, cellId, view),
+          setCellPaneViewTransition(parts, bufferId, cellId, view),
         ),
       ),
     [applyTransition, bufferId],
@@ -829,7 +829,7 @@ export const NotebookProvider: React.FC<{
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
-    setCellPreferredView,
+    setCellPaneView,
     setFocusedCell,
     setMaximizedCellId,
     getCellsSnapshot: () => store.cellsRef.current.slice(),

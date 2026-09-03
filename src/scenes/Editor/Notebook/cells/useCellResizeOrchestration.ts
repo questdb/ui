@@ -8,6 +8,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
+  clampPaneHeight,
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
   minBottomHeightFor,
@@ -15,10 +16,9 @@ import {
   topHeightForSql,
 } from "../notebookUtils"
 
-// Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
-// content height for an empty editor (one line + padding); the previous
-// `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
-// pasted content (user-confirmed: unbounded).
+// `MIN_EDITOR_HEIGHT` matches Monaco's reported content height for an empty
+// editor (one line + padding). The editor auto-grows with content up to the
+// shared pane ceiling and scrolls inside past it.
 export const MIN_EDITOR_HEIGHT = 72
 
 type Options = {
@@ -33,7 +33,7 @@ type Options = {
 }
 
 // Every way a cell's editor / result split can be resized — the inner split
-// handle, the bottom-edge handle, the maximized-chart handle, the spotlight
+// handle, the bottom-edge handle, the spotlight
 // ratio, and their double-click resets — plus the derived top/bottom heights
 // the layout renders from.
 export const useCellResizeOrchestration = ({
@@ -56,7 +56,7 @@ export const useCellResizeOrchestration = ({
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
     return contentHeight != null
-      ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
+      ? clampPaneHeight(MIN_EDITOR_HEIGHT, contentHeight)
       : topHeightForSql(cell.value)
   }, [cell.value, getEditorContentHeight])
 
@@ -205,16 +205,6 @@ export const useCellResizeOrchestration = ({
     updateCell,
   ])
 
-  // With the editor hidden, resizing changes only the visible result pane.
-  // The editor allocation stays intact for a later restore.
-  const maximizedChartResizeLive = (newTotalHeight: number) => {
-    bottomResize.resizeLive(newTotalHeight)
-  }
-
-  const maximizedChartResizeEnd = (newTotalHeight: number) => {
-    bottomResize.resizeEnd(newTotalHeight)
-  }
-
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
@@ -235,7 +225,5 @@ export const useCellResizeOrchestration = ({
     middleResizeEnd,
     resetToDefaults,
     resetBottomArea,
-    maximizedChartResizeLive,
-    maximizedChartResizeEnd,
   }
 }

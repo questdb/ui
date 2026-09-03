@@ -19,14 +19,11 @@ describe("migratePersistedNotebookView preferred view", () => {
     [true, "result"],
     [false, "editor_result"],
     [undefined, "editor_result"],
-  ] as const)(
-    "maps main's isViewMaximized=%s to %s",
-    (legacy, preferredView) => {
-      const cell = migratePersistedNotebookView(legacyView(legacy)).cells[0]
-      expect(cell.preferredView).toBe(preferredView)
-      expect(cell).not.toHaveProperty("isViewMaximized")
-    },
-  )
+  ] as const)("maps main's isViewMaximized=%s to %s", (legacy, paneView) => {
+    const cell = migratePersistedNotebookView(legacyView(legacy)).cells[0]
+    expect(cell.paneView).toBe(paneView)
+    expect(cell).not.toHaveProperty("isViewMaximized")
+  })
 
   it("removes pane preference state from markdown", () => {
     const view = {
@@ -36,13 +33,13 @@ describe("migratePersistedNotebookView preferred view", () => {
           position: 0,
           value: "# Title",
           type: "markdown",
-          preferredView: "result",
+          paneView: "result",
           isViewMaximized: true,
         },
       ],
     } as unknown as NotebookViewState
     const cell = migratePersistedNotebookView(view).cells[0]
-    expect(cell).not.toHaveProperty("preferredView")
+    expect(cell).not.toHaveProperty("paneView")
     expect(cell).not.toHaveProperty("isViewMaximized")
   })
 })

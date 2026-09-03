@@ -30,6 +30,7 @@ import { toast } from "../../../../components/Toast"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
+  clampPaneHeight,
   isDoubleView,
   isExpectingResult,
   minBottomHeightFor,
@@ -37,7 +38,6 @@ import {
   resolveCellPaneLayout,
   resolveCellView,
 } from "../notebookUtils"
-import type { CellToolbarTier } from "../notebookUtils"
 import {
   useCellContentMode,
   useCellVirtualizationEngine,
@@ -53,7 +53,7 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
-import { publishLiveCellPresentation } from "../notebookPresentationStore"
+import { publishCellHydration } from "../cellHydrationStore"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
@@ -121,7 +121,6 @@ type Props = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
-  toolbarTierOverride?: CellToolbarTier
 }
 
 const CellInner: React.FC<Props> = ({
@@ -133,7 +132,6 @@ const CellInner: React.FC<Props> = ({
   isFocused,
   isMaximized,
   isRunning,
-  toolbarTierOverride,
 }) => {
   const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
     useNotebookActions()
@@ -152,8 +150,7 @@ const CellInner: React.FC<Props> = ({
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
 
-  const observedToolbarTier = useCellToolbarTier(headerRef, isMaximized)
-  const toolbarTier = toolbarTierOverride ?? observedToolbarTier
+  const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, refreshing: chartRefreshing } =
     useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
@@ -180,17 +177,14 @@ const CellInner: React.FC<Props> = ({
   // in the grid item's height (both go through computeCellHeights).
   const expectingResult = isExpectingResult(cell, resultStatus)
   const doubleView = isDoubleView(cell) || expectingResult
-  const isCompactTier = toolbarTier === "compact"
-  const paneLayout = resolveCellPaneLayout(cell, expectingResult, isCompactTier)
+  const paneLayout = resolveCellPaneLayout(cell, expectingResult)
 
   useEffect(
     () =>
-      publishLiveCellPresentation(bufferIdForEvents, cell.id, {
-        compact: isCompactTier,
-        paneLayout,
+      publishCellHydration(bufferIdForEvents, cell.id, {
         expectingResult,
       }),
-    [bufferIdForEvents, cell.id, expectingResult, isCompactTier, paneLayout],
+    [bufferIdForEvents, cell.id, expectingResult],
   )
 
   const resultOnly = paneLayout === "result"
@@ -214,8 +208,6 @@ const CellInner: React.FC<Props> = ({
     middleResizeEnd,
     resetToDefaults,
     resetBottomArea,
-    maximizedChartResizeLive,
-    maximizedChartResizeEnd,
   } = useCellResizeOrchestration({
     cell,
     layoutMode,
@@ -239,7 +231,7 @@ const CellInner: React.FC<Props> = ({
     (px: number) => {
       if (isMaximized) return
       if (cell.topResized) return
-      const next = Math.max(MIN_EDITOR_HEIGHT, px)
+      const next = clampPaneHeight(MIN_EDITOR_HEIGHT, px)
       if (next === cell.topHeight) return
       updateCell(cell.id, { topHeight: next })
     },
@@ -299,7 +291,6 @@ const CellInner: React.FC<Props> = ({
     useCellRunActions({
       cell,
       isRunning,
-      isCompactTier,
       showBottomSlot,
       editorRef,
       applyHighlight,
@@ -583,13 +574,9 @@ const CellInner: React.FC<Props> = ({
           ref={resultRef}
           $spotlight={isMaximized}
           style={
-            resultOnly
-              ? isMaximized
-                ? { flex: 1 }
-                : { height: bottomHeight }
-              : isMaximized
-                ? { flex: 1 - spotlightEditorRatio }
-                : { height: bottomHeight }
+            isMaximized
+              ? { flex: resultOnly ? 1 : 1 - spotlightEditorRatio }
+              : { height: bottomHeight }
           }
         >
           <CellBottomContent
@@ -612,29 +599,20 @@ const CellInner: React.FC<Props> = ({
     !isMaximized && layoutMode !== "grid" ? (
       <ResizeHandle
         overlay
-        targetRef={
-          resultOnly || showBottomSlot ? resultRef : editorContainerRef
-        }
+        targetRef={showBottomSlot ? resultRef : editorContainerRef}
         onResize={
-          resultOnly
-            ? maximizedChartResizeLive
-            : showBottomSlot
-              ? bottomResize.resizeLive
-              : topResize.resizeLive
+          showBottomSlot ? bottomResize.resizeLive : topResize.resizeLive
         }
         onResizeEnd={(height) => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "s" })
-          if (resultOnly) maximizedChartResizeEnd(height)
-          else if (showBottomSlot) bottomResize.resizeEnd(height)
+          if (showBottomSlot) bottomResize.resizeEnd(height)
           else topResize.resizeEnd(height)
         }}
         onDoubleClick={() => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
           resetBottomArea()
         }}
-        minHeight={
-          resultOnly || showBottomSlot ? minBottomHeightFor(cell) : undefined
-        }
+        minHeight={showBottomSlot ? minBottomHeightFor(cell) : undefined}
       />
     ) : null
 

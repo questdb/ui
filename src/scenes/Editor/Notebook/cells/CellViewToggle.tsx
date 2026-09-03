@@ -90,8 +90,7 @@ export const CellViewToggle: React.FC<Props> = ({
   chartZoomed,
   showLabels,
 }) => {
-  const { setCellPreferredView, setCellMode, clearCellResult } =
-    useNotebookActions()
+  const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
   const bufferId = useNotebookBufferId()
   const resultOnly = paneLayout === "result"
   const resultHidden = paneLayout === "editor"
@@ -124,16 +123,16 @@ export const CellViewToggle: React.FC<Props> = ({
       return
     }
     setCellMode(cellId, "run")
-    if (resultHidden) setCellPreferredView(cellId, "editor_result")
+    if (resultHidden) setCellPaneView(cellId, "editor_result")
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !resultOnly,
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
+      editorShown: resultOnly,
       view,
     })
     signalUserEdit(bufferId)
-    setCellPreferredView(cellId, resultOnly ? "editor_result" : "result")
+    setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
   }
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()

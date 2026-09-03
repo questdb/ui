@@ -2,13 +2,17 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
 import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption } from "echarts"
 import { useTheme } from "styled-components"
 import { echarts } from "./echartsSetup"
+import { withZoomSlider } from "./buildEchartsOption"
+import { snapChartWidth } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -93,6 +97,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const zoomWindowRef = useRef(zoomWindow)
+    const [measuredWidth, setMeasuredWidth] = useState(0)
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
     const animateEntryRef = useRef(
@@ -128,7 +133,9 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
 
       const observer = new ResizeObserver((entries) => {
         const box = entries[0]?.contentRect
-        if (box) resizeTo(box.width, box.height)
+        if (!box) return
+        resizeTo(box.width, box.height)
+        if (box.width > 0) setMeasuredWidth(snapChartWidth(box.width))
       })
       observer.observe(wrapper)
 
@@ -186,14 +193,27 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [bufferId],
     )
 
-    const key = useMemo(() => structuralKey(option), [option])
+    // The chart mounts once the wrapper is measured, so the first instance
+    // already carries the right slider decision instead of remounting for it.
+    useLayoutEffect(() => {
+      const width = wrapperRef.current?.getBoundingClientRect().width
+      if (width) setMeasuredWidth(snapChartWidth(width))
+    }, [])
+
+    const optionToDraw = useMemo(
+      () => withZoomSlider(option, measuredWidth),
+      [option, measuredWidth],
+    )
+    const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
 
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
     const renderOption = useMemo(
       () =>
-        suppressEntryAnimation ? { ...option, animationDuration: 0 } : option,
-      [option, suppressEntryAnimation],
+        suppressEntryAnimation
+          ? { ...optionToDraw, animationDuration: 0 }
+          : optionToDraw,
+      [optionToDraw, suppressEntryAnimation],
     )
 
     const events = useMemo(() => {
@@ -220,20 +240,22 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        <ReactECharts
-          key={`${theme.mode}:${key}`}
-          ref={reactEchartsRef}
-          echarts={echarts}
-          option={renderOption}
-          theme={chartTheme}
-          notMerge={false}
-          lazyUpdate
-          autoResize={false}
-          onEvents={events}
-          onChartReady={handleChartReady}
-          style={{ height: "100%", width: "100%" }}
-          opts={{ renderer: "canvas" }}
-        />
+        {measuredWidth > 0 && (
+          <ReactECharts
+            key={`${theme.mode}:${key}`}
+            ref={reactEchartsRef}
+            echarts={echarts}
+            option={renderOption}
+            theme={chartTheme}
+            notMerge={false}
+            lazyUpdate
+            autoResize={false}
+            onEvents={events}
+            onChartReady={handleChartReady}
+            style={{ height: "100%", width: "100%" }}
+            opts={{ renderer: "canvas" }}
+          />
+        )}
       </div>
     )
   },

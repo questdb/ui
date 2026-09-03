@@ -40,11 +40,6 @@ import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
-import {
-  __resetNotebookPresentationStoreForTests,
-  publishGridContainerWidth,
-  publishLiveCellPresentation,
-} from "../../scenes/Editor/Notebook/notebookPresentationStore"
 
 const cell = (
   id: string,
@@ -195,7 +190,6 @@ beforeEach(async () => {
   __resetNotebookControllerForTests()
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
-  __resetNotebookPresentationStoreForTests()
   clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
@@ -694,7 +688,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         topHeight: 200,
         topResized: true,
         bottomHeight: 350,
-        preferredView: "result",
+        paneView: "result",
       }),
     ])
 
@@ -704,7 +698,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         cell_id: "c",
         editor_height: "auto",
-        result_height: 280,
+        result_height: 300,
         view: null,
       },
       makeClient(),
@@ -712,24 +706,18 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
 
     expect(res.is_error).toBeUndefined()
-    expect(JSON.parse(res.content)).toEqual({ preferred_view: "result" })
+    expect(JSON.parse(res.content)).toEqual({ view: "result" })
     expect(cellById(state, "c")).toMatchObject({
       topHeight: 72,
       topResized: false,
-      bottomHeight: 280,
+      bottomHeight: 300,
       bottomResized: true,
-      preferredView: "result",
+      paneView: "result",
     })
   })
 
-  it("set_cell_dimensions returns the effective compact fallback and tier", async () => {
+  it("set_cell_dimensions reports the cell view", async () => {
     const { state } = mountLive(1, [cell("c", "SELECT 1", { mode: "draw" })])
-    const unpublish = publishLiveCellPresentation(1, "c", {
-      compact: true,
-      paneLayout: "result",
-      expectingResult: false,
-    })
-
     const res = await dispatchTool(
       "set_cell_dimensions",
       {
@@ -743,23 +731,17 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
 
-    expect(JSON.parse(res.content)).toEqual({
-      preferred_view: "editor_result",
-      view: "result",
-      tier: "compact",
-      fallback: "editor_result_unavailable_in_compact",
-    })
-    expect(cellById(state, "c")?.preferredView).toBe("editor_result")
-    unpublish()
+    expect(JSON.parse(res.content)).toEqual({ view: "editor_result" })
+    expect(cellById(state, "c")?.paneView).toBe("editor_result")
   })
 
-  it("set_cell_layout returns the presentation produced by the new width", async () => {
+  it("set_cell_layout returns the stored view with the new position", async () => {
     const { state } = mountLive(
       1,
       [
         cell("c", "SELECT 1", {
           mode: "draw",
-          preferredView: "editor_result",
+          paneView: "editor_result",
         }),
       ],
       {
@@ -769,13 +751,6 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         },
       },
     )
-    const unpublish = publishLiveCellPresentation(1, "c", {
-      compact: false,
-      paneLayout: "split",
-      expectingResult: false,
-    })
-    const unpublishWidth = publishGridContainerWidth(1, 1200)
-
     const res = await dispatchTool(
       "set_cell_layout",
       { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
@@ -785,13 +760,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
     expect(JSON.parse(res.content)).toEqual({
       grid: { x: 0, y: 0, w: 4 },
-      preferred_view: "editor_result",
-      view: "result",
-      tier: "compact",
+      view: "editor_result",
     })
     expect(state.parts.settings.layout?.[0].w).toBe(4)
-    unpublishWidth()
-    unpublish()
   })
 
   it("apply_notebook_state never synthesizes auto_refresh for draw cells", async () => {
@@ -1203,7 +1174,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       value: "SELECT 1",
       mode: "draw",
       autoRefresh: "5s",
-      preferredView: "result",
+      paneView: "result",
       chartConfig: {
         xColumn: "ts",
         queries: [

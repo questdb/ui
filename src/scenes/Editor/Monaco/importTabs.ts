@@ -18,9 +18,10 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
-import { isAutoRefresh } from "../Notebook/notebookUtils"
+import { isAutoRefresh, MAX_PANE_HEIGHT_PX } from "../Notebook/notebookUtils"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
+  isAgentCellView,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   MAX_CELL_NAME_LENGTH,
@@ -272,21 +273,21 @@ const sanitizeNotebookCell = (
   if (chartConfig) cell.chartConfig = chartConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
   if (item.type !== "markdown") {
-    if (
-      item.preferredView === "editor" ||
-      item.preferredView === "result" ||
-      item.preferredView === "editor_result"
-    ) {
-      cell.preferredView = item.preferredView
+    if (isAgentCellView(item.paneView)) {
+      cell.paneView = item.paneView
     } else if (item.isViewMaximized === true) {
-      cell.preferredView = "result"
+      cell.paneView = "result"
     } else {
-      cell.preferredView = "editor_result"
+      cell.paneView = "editor_result"
     }
   }
-  if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
-  if (typeof item.bottomHeight === "number")
-    cell.bottomHeight = item.bottomHeight
+  if (typeof item.topHeight === "number" && Number.isFinite(item.topHeight))
+    cell.topHeight = Math.min(MAX_PANE_HEIGHT_PX, item.topHeight)
+  if (
+    typeof item.bottomHeight === "number" &&
+    Number.isFinite(item.bottomHeight)
+  )
+    cell.bottomHeight = Math.min(MAX_PANE_HEIGHT_PX, item.bottomHeight)
   if (typeof item.topResized === "boolean") cell.topResized = item.topResized
   if (typeof item.bottomResized === "boolean")
     cell.bottomResized = item.bottomResized

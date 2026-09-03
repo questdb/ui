@@ -782,21 +782,21 @@ describe("sanitizeBuffer", () => {
         position: 0,
         notebookViewState: {
           cells: [
-            { id: "preferred", value: "SELECT 1", preferredView: "editor" },
+            { id: "preferred", value: "SELECT 1", paneView: "editor" },
             { id: "legacy-on", value: "SELECT 2", isViewMaximized: true },
             { id: "legacy-off", value: "SELECT 3", isViewMaximized: false },
             {
               id: "markdown",
               value: "# Title",
               type: "markdown",
-              preferredView: "result",
+              paneView: "result",
             },
           ],
         },
       }
 
       const cells = sanitizeBuffer(input).notebookViewState?.cells
-      expect(cells?.map((cell) => cell.preferredView)).toEqual([
+      expect(cells?.map((cell) => cell.paneView)).toEqual([
         "editor",
         "result",
         "editor_result",

@@ -360,7 +360,7 @@ describe("createDexieNotebookController — settings & layout", () => {
   it("setCellMode draw seeds the chart bottom height and preserves preference", async () => {
     // A mode change does not silently rewrite the user's pane preference.
     await seedNotebook({
-      cells: [cell("a", "SELECT 1", { preferredView: "result" })],
+      cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
     const controller = makeController()
     await controller.setCellMode("a", "draw")
@@ -368,7 +368,7 @@ describe("createDexieNotebookController — settings & layout", () => {
     expect(view.cells[0]).toMatchObject({
       mode: "draw",
       bottomHeight: 350,
-      preferredView: "result",
+      paneView: "result",
     })
   })
 
@@ -1261,7 +1261,7 @@ describe("createDexieNotebookController — field preservation", () => {
         cell("a", "SELECT 1", {
           autoRefresh: "5s",
           chartConfig: chartFor("ts"),
-          preferredView: "result",
+          paneView: "result",
         }),
         cell("b", "SELECT 2", { position: 1, chartConfig: chartFor("sym") }),
       ],
@@ -1289,7 +1289,7 @@ describe("createDexieNotebookController — field preservation", () => {
     expect(a).toMatchObject({
       autoRefresh: "5s",
       chartConfig: chartFor("ts"),
-      preferredView: "result",
+      paneView: "result",
       lastRunStatus: "success",
     })
     // And the untouched sibling and notebook settings survive intact

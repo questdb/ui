@@ -87,10 +87,7 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
-import {
-  readGridContainerWidth,
-  readLiveCellPresentation,
-} from "../../scenes/Editor/Notebook/notebookPresentationStore"
+import { readCellHydration } from "../../scenes/Editor/Notebook/cellHydrationStore"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -170,7 +167,10 @@ const routeNotebookTool = async <T>(
         is_error: true,
         content: JSON.stringify({
           error_code: e.code,
-          message: e.message,
+          message:
+            e.code === "validation"
+              ? `VALIDATION_ERROR: ${e.message}`
+              : e.message,
           hint: notebookErrorHint(e.code),
         }),
       }
@@ -834,17 +834,12 @@ export const dispatchTool = async (
           runTransition(
             buffer_id,
             (parts) => {
-              const livePresentation = readLiveCellPresentation(
-                buffer_id,
-                cell_id,
-              )
+              const hydration = readCellHydration(buffer_id, cell_id)
               return setCellLayoutTransition(parts, buffer_id, cell_id, {
                 x,
                 y,
                 w,
-                liveCompact: livePresentation?.compact,
-                liveExpectingResult: livePresentation?.expectingResult,
-                gridContainerWidth: readGridContainerWidth(buffer_id),
+                expectingResult: hydration?.expectingResult,
               })
             },
             signal,
@@ -865,16 +860,12 @@ export const dispatchTool = async (
           runTransition(
             buffer_id,
             (parts) => {
-              const livePresentation = readLiveCellPresentation(
-                buffer_id,
-                cell_id,
-              )
+              const hydration = readCellHydration(buffer_id, cell_id)
               return setCellDimensionsTransition(parts, buffer_id, cell_id, {
                 editorHeight: editor_height,
                 resultHeight: result_height,
                 view,
-                compact: livePresentation?.compact,
-                expectingResult: livePresentation?.expectingResult,
+                expectingResult: hydration?.expectingResult,
               })
             },
             signal,

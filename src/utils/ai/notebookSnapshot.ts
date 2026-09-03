@@ -8,7 +8,6 @@ import { NotebookToolError } from "../notebooks/notebookToolError"
 import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
 import type {
   AgentCellView,
-  AgentCellTier,
   AutoRefresh,
   CellLayoutItem,
   NotebookCell,
@@ -18,13 +17,9 @@ import type { UserActionDigest } from "../../providers/AIConversationProvider/ty
 import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
 import {
-  type AgentCellPresentation,
   agentCellPaneDimensions,
-  agentViewForPaneLayout,
-  resolveAgentCellPresentation,
-  storedAgentCellView,
+  agentCellPresentation,
 } from "../../scenes/Editor/Notebook/notebookUtils"
-import { readLiveCellPresentation } from "../../scenes/Editor/Notebook/notebookPresentationStore"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
@@ -58,11 +53,9 @@ export type NotebookContextCell = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
-  editor_height?: number | "auto"
-  result_height?: number | "auto" | null
-  preferred_view: AgentCellView | null
-  view?: AgentCellView | null
-  tier?: AgentCellTier
+  editor_height: number | "auto"
+  result_height: number | "auto" | null
+  view: AgentCellView | null
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
@@ -166,20 +159,6 @@ const refreshFields = (
   }
 }
 
-const liveAgentCellPresentation = (
-  cell: NotebookCell,
-  bufferId: number,
-): AgentCellPresentation => {
-  if (cell.type === "markdown") return resolveAgentCellPresentation(cell)
-  const live = readLiveCellPresentation(bufferId, cell.id)
-  if (!live) return resolveAgentCellPresentation(cell)
-  return {
-    preferred_view: storedAgentCellView(cell),
-    view: agentViewForPaneLayout(live.paneLayout),
-    tier: live.compact ? ("compact" as const) : ("wide" as const),
-  }
-}
-
 const buildCell = (
   cell: NotebookCell,
   bufferId: number,
@@ -187,11 +166,13 @@ const buildCell = (
   layoutMode: "list" | "grid",
   refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
 ): NotebookContextCell => {
-  const presentation = liveAgentCellPresentation(cell, bufferId)
+  const dimensions = agentCellPaneDimensions(cell)
   const out: NotebookContextCell = {
     id: cell.id,
     preview: preview(cell.value),
-    preferred_view: presentation.preferred_view,
+    editor_height: dimensions.editorHeight,
+    result_height: dimensions.resultHeight,
+    view: agentCellPresentation(cell).view,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
   }
@@ -203,13 +184,6 @@ const buildCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  const dimensions = agentCellPaneDimensions(cell)
-  out.editor_height = dimensions.editorHeight
-  if (cell.type === "markdown") out.result_height = null
-  else if (dimensions.resultHeight !== undefined)
-    out.result_height = dimensions.resultHeight
-  if (presentation.view !== undefined) out.view = presentation.view
-  if (presentation.tier !== undefined) out.tier = presentation.tier
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {
     out.chart_config = toChartConfigWire(chartConfig)
@@ -330,13 +304,9 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     if (c.mode) lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
-    if (c.editor_height !== undefined)
-      lines.push(`      editor_height: ${c.editor_height}`)
-    if (c.result_height !== undefined)
-      lines.push(`      result_height: ${c.result_height}`)
-    lines.push(`      preferred_view: ${c.preferred_view}`)
-    if (c.view !== undefined) lines.push(`      view: ${c.view}`)
-    if (c.tier !== undefined) lines.push(`      tier: ${c.tier}`)
+    lines.push(`      editor_height: ${c.editor_height}`)
+    lines.push(`      result_height: ${c.result_height}`)
+    lines.push(`      view: ${c.view}`)
     if (c.chart_config) {
       lines.push(
         `      chart_config: ${sanitizeForPromptContext(
@@ -477,10 +447,8 @@ export type NotebookCellDetails = {
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
   editor_height: number | "auto"
-  result_height?: number | "auto" | null
-  preferred_view: AgentCellView | null
-  view?: AgentCellView | null
-  tier?: AgentCellTier
+  result_height: number | "auto" | null
+  view: AgentCellView | null
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
@@ -535,7 +503,6 @@ export const serializeCell = (
   const value = truncated ? cell.value.slice(0, CELL_VALUE_MAX) : cell.value
   const run = runStatusOf(cell)
   const dimensions = agentCellPaneDimensions(cell)
-  const presentation = liveAgentCellPresentation(cell, bufferId)
   const out: NotebookCellDetails = {
     id: cell.id,
     value,
@@ -543,11 +510,10 @@ export const serializeCell = (
     last_run_status: run.status,
     last_run_error: run.error,
     editor_height: dimensions.editorHeight,
-    preferred_view: presentation.preferred_view,
+    result_height: dimensions.resultHeight,
+    view: agentCellPresentation(cell).view,
     ...refreshFields(refreshState?.get(cell.id)),
   }
-  if (presentation.view !== undefined) out.view = presentation.view
-  if (presentation.tier !== undefined) out.tier = presentation.tier
   if (truncated) {
     out.truncated = true
     out.full_length = cell.value.length
@@ -556,9 +522,6 @@ export const serializeCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  if (cell.type === "markdown") out.result_height = null
-  else if (dimensions.resultHeight !== undefined)
-    out.result_height = dimensions.resultHeight
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)
   return out

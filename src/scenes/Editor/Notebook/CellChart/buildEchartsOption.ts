@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts"
+import { needsZoomSlider } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -31,8 +32,6 @@ type SeriesContext = {
   xMode: XMode
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
-
-const DATAZOOM_THRESHOLD = 200
 
 const LEGEND_BOTTOM = 3
 const SLIDER_HEIGHT = 18
@@ -357,7 +356,7 @@ export const buildEchartsOption = (
   queries: ResolvedQuery[],
 ): EChartsOption => {
   const chartText = { fontSize: CHART_FONT_SIZE }
-  const axisLabel = { fontSize: CHART_FONT_SIZE }
+  const axisLabel = { fontSize: CHART_FONT_SIZE, hideOverlap: true }
   const axisName = { fontSize: CHART_FONT_SIZE }
   const baseLegend = {
     type: "scroll" as const,
@@ -459,22 +458,13 @@ export const buildEchartsOption = (
       ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
       : "")
 
-  const maxRows = queries.reduce((m, q) => Math.max(m, q.dataset.length), 0)
-  const hasZoom = maxRows > DATAZOOM_THRESHOLD
-  const sliderZoom = {
-    type: "slider" as const,
-    height: SLIDER_HEIGHT,
-    bottom: SLIDER_BOTTOM,
-    textStyle: chartText,
-  }
-
   const rightPadding = 36
 
   const grid: EChartsOption["grid"] = {
     left: 24,
     right: rightPadding,
     top: 40,
-    bottom: hasZoom ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+    bottom: GRID_BOTTOM_NO_ZOOM,
     containLabel: true,
   }
 
@@ -548,7 +538,29 @@ export const buildEchartsOption = (
     grid,
     xAxis,
     yAxis,
-    dataZoom: hasZoom ? [{ type: "inside" }, sliderZoom] : undefined,
     series: series as EChartsOption["series"],
+  }
+}
+
+// Zoom exists only for a chart too dense for its measured width: the slider
+// costs plot height, and zooming a sparse chart is meaningless. The renderer
+// applies this from its own size.
+export const withZoomSlider = (
+  option: EChartsOption,
+  containerWidthPx: number,
+): EChartsOption => {
+  if (!needsZoomSlider(option, containerWidthPx)) return option
+  return {
+    ...option,
+    grid: { ...(option.grid as object), bottom: GRID_BOTTOM_WITH_ZOOM },
+    dataZoom: [
+      { type: "inside" },
+      {
+        type: "slider",
+        height: SLIDER_HEIGHT,
+        bottom: SLIDER_BOTTOM,
+        textStyle: { fontSize: CHART_FONT_SIZE },
+      },
+    ],
   }
 }

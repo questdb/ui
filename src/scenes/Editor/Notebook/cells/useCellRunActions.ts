@@ -22,7 +22,6 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 type Options = {
   cell: NotebookCell
   isRunning: boolean
-  isCompactTier: boolean
   showBottomSlot: boolean
   editorRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>
   applyHighlight: (ok: boolean) => void
@@ -36,7 +35,6 @@ type Options = {
 export const useCellRunActions = ({
   cell,
   isRunning,
-  isCompactTier,
   showBottomSlot,
   editorRef,
   applyHighlight,
@@ -46,7 +44,7 @@ export const useCellRunActions = ({
     runCell,
     setCellMode,
     clearCellResult,
-    setCellPreferredView,
+    setCellPaneView,
     getCellsSnapshot,
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
@@ -213,9 +211,9 @@ export const useCellRunActions = ({
         {
           mode: cell.mode,
           result: cell.result,
-          preferredView: cell.preferredView,
+          paneView: cell.paneView,
         },
-        { isCompactTier, showBottomSlot, intent },
+        { intent },
       )
       if (plan.kind === "noop") return
       if (plan.kind === "chart") {
@@ -237,20 +235,18 @@ export const useCellRunActions = ({
       if (plan.kind === "run-all") void handleRunAll(ignoreSelection)
       else void handleRunSingle()
       if (plan.reveal) {
-        // Running from compact editor-only mode reveals the result while
-        // preserving the natural split presentation when the cell widens.
-        setCellPreferredView(cell.id, "editor_result")
+        // Running from an editor-only pane view reveals the result as a
+        // split, so the run is not invisible.
+        setCellPaneView(cell.id, "editor_result")
       }
     },
     [
       cell.id,
       cell.mode,
       cell.result,
-      cell.preferredView,
+      cell.paneView,
       bufferIdForEvents,
-      isCompactTier,
-      showBottomSlot,
-      setCellPreferredView,
+      setCellPaneView,
       setCellMode,
       handleRunAll,
       handleRunSingle,
@@ -298,12 +294,11 @@ export const useCellRunActions = ({
       if (payload?.cellId !== cell.id) return
       refreshRun()
     }
-    const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
+    const drawHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
       void handleDrawClick().then((entered) => {
-        if (!entered) return
-        if (payload.maximize) setCellPreferredView(cell.id, "result")
-        else if (!showBottomSlot) setCellPreferredView(cell.id, "editor_result")
+        if (entered && !showBottomSlot)
+          setCellPaneView(cell.id, "editor_result")
       })
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
@@ -312,13 +307,7 @@ export const useCellRunActions = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [
-    cell.id,
-    refreshRun,
-    handleDrawClick,
-    setCellPreferredView,
-    showBottomSlot,
-  ])
+  }, [cell.id, refreshRun, handleDrawClick, setCellPaneView, showBottomSlot])
 
   const isGridLoading = isRunning && firstRunRef.current
 

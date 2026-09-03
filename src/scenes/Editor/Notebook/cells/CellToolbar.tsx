@@ -100,7 +100,7 @@ export const CellToolbar: React.FC<Props> = ({
     setFocusedCell,
     setMaximizedCellId,
     setCellRefresh,
-    setCellPreferredView,
+    setCellPaneView,
     setCellMode,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
@@ -114,8 +114,8 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const resultOnly =
-    !isNoneView && paneLayout !== undefined && paneLayout === "result"
+  const resultOnly = paneLayout === "result"
+  const sqlShown = paneLayout === "editor"
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
   // engine would ignore — same gate the inline selector applies.
@@ -128,7 +128,7 @@ export const CellToolbar: React.FC<Props> = ({
     showViewSql,
     showViewTable,
     showViewChart,
-    showSplitItem,
+    showEditorToggleItem,
     showResetZoom,
     showAutoRefreshItem,
     showRefreshItem,
@@ -143,9 +143,7 @@ export const CellToolbar: React.FC<Props> = ({
     tier: toolbarTier ?? "compact",
     view,
     isMarkdown,
-    // Compact cells cannot split, so showing the editor temporarily hides the
-    // result without dropping its data.
-    sqlShown: paneLayout === "editor",
+    sqlShown,
     chartZoomed,
     isGridMode,
     cellIndex,
@@ -159,7 +157,7 @@ export const CellToolbar: React.FC<Props> = ({
       method: "menu",
     })
     signalUserEdit(bufferId)
-    setCellPreferredView(cellId, "editor")
+    setCellPaneView(cellId, "editor")
   }
   const handleViewTable = () => {
     if (isRunning) return
@@ -172,10 +170,10 @@ export const CellToolbar: React.FC<Props> = ({
       to: "grid",
       method: "menu",
     })
-    // A chart transfers its data to the grid (no re-query); restore the data
-    // pane in case the SQL was being shown.
+    // A chart transfers its data to the grid (no re-query). A hidden result
+    // comes back as a split, like the inline editor toggle of the wider tiers.
     if (isChartView) setCellMode(cellId, "run")
-    setCellPreferredView(cellId, "result")
+    if (sqlShown) setCellPaneView(cellId, "editor_result")
   }
   const handleViewChart = () => {
     if (isRunning) return
@@ -185,20 +183,20 @@ export const CellToolbar: React.FC<Props> = ({
     })
     signalUserEdit(bufferId)
     if (isNoneView || isGridView) {
-      // Entering draw can be refused (non-DQL SQL); maximize only once the
-      // draw actually takes, so a refused chart never maximizes the grid.
-      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId, maximize: true })
+      // Entering draw can be refused (non-DQL SQL); the draw handler reveals a
+      // hidden result only once the draw actually takes.
+      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
       return
     }
-    setCellPreferredView(cellId, "result")
+    setCellPaneView(cellId, "editor_result")
   }
-  const handleToggleMaximizeView = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !resultOnly,
+  const handleToggleEditor = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
+      editorShown: resultOnly,
       view,
     })
     signalUserEdit(bufferId)
-    setCellPreferredView(cellId, resultOnly ? "editor_result" : "result")
+    setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
   }
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
@@ -339,9 +337,9 @@ export const CellToolbar: React.FC<Props> = ({
                   {isNoneView ? "Draw" : "View chart"}
                 </DropdownMenu.Item>
               )}
-              {showSplitItem && (
+              {showEditorToggleItem && (
                 <DropdownMenu.Item
-                  onSelect={handleToggleMaximizeView}
+                  onSelect={handleToggleEditor}
                   icon={<FileSqlIcon size={16} />}
                 >
                   {resultOnly ? "Show editor" : "Hide editor"}

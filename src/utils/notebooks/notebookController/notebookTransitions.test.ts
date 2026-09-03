@@ -45,7 +45,7 @@ describe("setCellDimensionsTransition", () => {
       mode: "draw",
       topHeight: 72,
       bottomHeight: 350,
-      preferredView: "result",
+      paneView: "result",
     })
     const parts = partsOf([chart], {
       settings: {
@@ -56,20 +56,16 @@ describe("setCellDimensionsTransition", () => {
 
     const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
       view: "editor_result",
-      compact: false,
+      expectingResult: false,
     })
 
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 72,
       bottomHeight: 350,
-      preferredView: "editor_result",
+      paneView: "editor_result",
     })
     expect(out.parts.settings.layout?.[0].h).toBe(17)
-    expect(out.result).toEqual({
-      preferred_view: "editor_result",
-      view: "editor_result",
-      tier: "wide",
-    })
+    expect(out.result).toEqual({ view: "editor_result" })
   })
 
   it("supports null preserve, auto reset, and a fixed result height", () => {
@@ -79,65 +75,26 @@ describe("setCellDimensionsTransition", () => {
       topResized: true,
       bottomHeight: 350,
       bottomResized: false,
-      preferredView: "result",
+      paneView: "result",
     })
 
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
       editorHeight: "auto",
-      resultHeight: 280,
+      resultHeight: 300,
       view: null,
     })
 
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 72,
       topResized: false,
-      bottomHeight: 280,
+      bottomHeight: 300,
       bottomResized: true,
-      preferredView: "result",
+      paneView: "result",
     })
-    expect(out.result).toEqual({ preferred_view: "result" })
+    expect(out.result).toEqual({ view: "result" })
   })
 
-  it("stores one editor preference and reports its compact projection", () => {
-    const chart = cell("a", "SELECT 1", {
-      mode: "draw",
-      preferredView: "result",
-    })
-
-    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
-      view: "editor",
-      compact: true,
-    })
-
-    expect(out.parts.cells[0]).toMatchObject({
-      preferredView: "editor",
-    })
-    expect(out.result).toEqual({
-      preferred_view: "editor",
-      view: "editor",
-      tier: "compact",
-    })
-  })
-
-  it("reports the deterministic compact fallback without losing the wide preference", () => {
-    const chart = cell("a", "SELECT 1", { mode: "draw" })
-    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
-      view: "editor_result",
-      compact: true,
-    })
-
-    expect(out.parts.cells[0]).toMatchObject({
-      preferredView: "editor_result",
-    })
-    expect(out.result).toEqual({
-      preferred_view: "editor_result",
-      view: "result",
-      tier: "compact",
-      fallback: "editor_result_unavailable_in_compact",
-    })
-  })
-
-  it("ignores view and result_height on a markdown cell and reports null views", () => {
+  it("ignores view and result_height on a markdown cell and reports a null view", () => {
     // Given a markdown cell
     const markdown = cell("a", "# title", { type: "markdown" })
     // When an agent sends a view and a result_height with the editor height
@@ -149,34 +106,39 @@ describe("setCellDimensionsTransition", () => {
         editorHeight: 86,
         resultHeight: 300,
         view: "result",
-        compact: false,
+        expectingResult: false,
       },
     )
-    // Then only the editor height lands, and the views report null
+    // Then only the editor height lands, and the view reports null
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 86,
       topResized: true,
     })
     expect(out.parts.cells[0].bottomHeight).toBeUndefined()
-    expect(out.parts.cells[0].preferredView).toBeUndefined()
-    expect(out.result).toEqual({ preferred_view: null, view: null })
+    expect(out.parts.cells[0].paneView).toBeUndefined()
+    expect(out.result).toEqual({ view: null })
   })
 
-  it("supports a genuine editor-only view in the wide tier", () => {
+  it("supports an editor-only view", () => {
     const chart = cell("a", "SELECT 1", { mode: "draw" })
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
       view: "editor",
-      compact: false,
+      expectingResult: false,
     })
 
     expect(out.parts.cells[0]).toMatchObject({
-      preferredView: "editor",
+      paneView: "editor",
     })
-    expect(out.result).toEqual({
-      preferred_view: "editor",
-      view: "editor",
-      tier: "wide",
-    })
+    expect(out.result).toEqual({ view: "editor" })
+  })
+
+  it("rejects heights above the ceiling", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    expect(() =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 2401,
+      }),
+    ).toThrow(/at most 2400px/)
   })
 
   it("rejects chart result heights below the visual minimum", () => {
@@ -185,13 +147,13 @@ describe("setCellDimensionsTransition", () => {
       setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
         resultHeight: 100,
       }),
-    ).toThrow(/at least 240px/)
+    ).toThrow(/at least 296px/)
   })
 
-  it("uses the mounted missing-result state for presentation and height", () => {
+  it("uses the mounted missing-result state for the grid height", () => {
     const pending = cell("a", "SELECT 1", {
       lastRunStatus: "success",
-      preferredView: "editor_result",
+      paneView: "editor_result",
     })
     const out = setCellDimensionsTransition(
       partsOf([pending], {
@@ -202,46 +164,37 @@ describe("setCellDimensionsTransition", () => {
       }),
       BUFFER_ID,
       "a",
-      { compact: false, expectingResult: false },
+      { expectingResult: false },
     )
 
-    expect(out.result).toEqual({
-      preferred_view: "editor_result",
-      view: "editor",
-      tier: "wide",
-    })
+    expect(out.result).toEqual({ view: "editor_result" })
     expect(out.parts.settings.layout?.[0].h).toBe(5)
   })
 
-  it("persists a result preference while a missing result falls back to editor", () => {
+  it("persists a result view while the result is still missing", () => {
     const pending = cell("a", "SELECT 1", {
       lastRunStatus: "success",
-      preferredView: "editor_result",
+      paneView: "editor_result",
     })
     const out = setCellDimensionsTransition(
       partsOf([pending]),
       BUFFER_ID,
       "a",
-      { view: "result", compact: false, expectingResult: false },
+      { view: "result", expectingResult: false },
     )
 
-    expect(out.parts.cells[0].preferredView).toBe("result")
-    expect(out.result).toEqual({
-      preferred_view: "result",
-      view: "editor",
-      tier: "wide",
-      fallback: "requested_view_unavailable",
-    })
+    expect(out.parts.cells[0].paneView).toBe("result")
+    expect(out.result).toEqual({ view: "result" })
   })
 })
 
 describe("setCellLayoutTransition", () => {
   const chart = cell("a", "SELECT 1", {
     mode: "draw",
-    preferredView: "editor_result",
+    paneView: "editor_result",
   })
 
-  it("returns the projected live presentation after a width change", () => {
+  it("returns the stored view after a position change", () => {
     const out = setCellLayoutTransition(
       partsOf([chart], {
         settings: {
@@ -251,28 +204,12 @@ describe("setCellLayoutTransition", () => {
       }),
       BUFFER_ID,
       "a",
-      { x: 0, y: 0, w: 4, liveCompact: false, gridContainerWidth: 1200 },
+      { x: 0, y: 0, w: 4, expectingResult: false },
     )
 
     expect(out.result).toEqual({
       grid: { x: 0, y: 0, w: 4 },
-      preferred_view: "editor_result",
-      view: "result",
-      tier: "compact",
-    })
-  })
-
-  it("omits effective presentation when no rendered geometry is available", () => {
-    const out = setCellLayoutTransition(
-      partsOf([chart], { settings: { layoutMode: "grid" } }),
-      BUFFER_ID,
-      "a",
-      { x: 0, y: 0, w: 4 },
-    )
-
-    expect(out.result).toEqual({
-      grid: { x: 0, y: 0, w: 4 },
-      preferred_view: "editor_result",
+      view: "editor_result",
     })
   })
 

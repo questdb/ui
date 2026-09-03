@@ -38,7 +38,9 @@ export type AutoRefresh = boolean | AutoRefreshInterval
 export type CellType = "sql" | "markdown"
 
 export type AgentCellView = "editor" | "result" | "editor_result"
-export type AgentCellTier = "compact" | "wide"
+
+export const isAgentCellView = (value: unknown): value is AgentCellView =>
+  value === "editor" || value === "result" || value === "editor_result"
 
 export type NotebookCell = {
   id: string
@@ -56,9 +58,9 @@ export type NotebookCell = {
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
-  // Authoritative, viewport-independent pane intent. The rendered view is
-  // derived from this preference, result availability, and current width.
-  preferredView?: AgentCellView
+  // Stored pane view: editor, result, or editor_result. A cell without a
+  // result shows only the editor until one exists; that never rewrites it.
+  paneView?: AgentCellView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }
@@ -152,7 +154,7 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
   id: crypto.randomUUID(),
   position,
   value,
-  preferredView: "editor_result",
+  paneView: "editor_result",
 })
 
 export const createDefaultNotebookViewState = (): NotebookViewState => ({

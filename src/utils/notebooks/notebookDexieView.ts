@@ -13,6 +13,7 @@ import type {
   NotebookSettings,
   NotebookViewState,
 } from "../../store/notebook"
+import { isAgentCellView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 
@@ -26,40 +27,29 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
-const isAgentCellView = (
-  value: unknown,
-): value is NotebookCell["preferredView"] =>
-  value === "editor" || value === "result" || value === "editor_result"
-
-// Main persisted `isViewMaximized`; the wide/compact fields never shipped.
-// Materialize one viewport-independent preference and remove every legacy
-// presentation key from the runtime view.
-const migrateCellPreferredView = (cell: NotebookCell): NotebookCell => {
+// Main persisted `isViewMaximized`. Materialize the stored pane view and drop
+// the legacy key from the runtime view.
+const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
   const raw = cell as NotebookCell & Record<string, unknown>
   if (cell.type === "markdown") {
     const next = { ...raw }
-    delete next.preferredView
+    delete next.paneView
     delete next.isViewMaximized
-    delete next.wideView
-    delete next.compactView
     return next as NotebookCell
   }
-  const preferredView = isAgentCellView(raw.preferredView)
-    ? raw.preferredView
+  const paneView = isAgentCellView(raw.paneView)
+    ? raw.paneView
     : raw.isViewMaximized === true
       ? "result"
       : "editor_result"
-  const next = { ...raw, preferredView } as NotebookCell &
-    Record<string, unknown>
+  const next = { ...raw, paneView } as NotebookCell & Record<string, unknown>
   delete next.isViewMaximized
-  delete next.wideView
-  delete next.compactView
   return next as NotebookCell
 }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) => {
   const migrated = dropLegacyChartConfigs(migrateLegacyCellNames(view))
-  return { ...migrated, cells: migrated.cells.map(migrateCellPreferredView) }
+  return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
 }
 
 export const readNotebookBufferMeta = async (

@@ -370,3 +370,23 @@ describe("buildEchartsOption — timestamps render in UTC, like the result grid"
     expect(opt.useUTC).toBe(true)
   })
 })
+
+describe("buildEchartsOption — axis labels", () => {
+  it("hides overlapping x-axis labels so a narrow chart thins them instead of colliding", () => {
+    // Given a temporal x column with more ticks than a narrow chart can fit
+    const columns = [col("ts", "TIMESTAMP"), col("v", "DOUBLE")]
+    const dataset = Array.from({ length: 15 }, (_, i) => [i * 120_000, i])
+    // When the option builds
+    const opt = buildEchartsOption({ xColumn: "ts" }, [
+      resolved({
+        columns,
+        dataset,
+        xColumn: "ts",
+        type: "bar",
+        yColumns: ["v"],
+      }),
+    ])
+    // Then the x-axis label config asks ECharts to hide overlaps
+    expect(firstAxis(opt.xAxis).axisLabel).toMatchObject({ hideOverlap: true })
+  })
+})

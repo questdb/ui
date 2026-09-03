@@ -33,7 +33,6 @@ import {
   useNotebookBufferId,
   useNotebookState,
 } from "./NotebookProvider"
-import { publishGridContainerWidth } from "./notebookPresentationStore"
 import { Cell } from "./cells/Cell"
 import { MarkdownCell } from "./cells/MarkdownCell"
 import type { AutoRefresh, NotebookCell } from "../../../store/notebook"
@@ -43,20 +42,18 @@ import { NotebookToolbar } from "./NotebookToolbar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
-  cellHeightPatchForRows,
-  gridCellToolbarTier,
+  paneHeightsFromGridRows,
   computeCellGridH,
+  computeCellMaxGridH,
   computeCellMinGridH,
   generateDefaultLayout as generateDefaultLayoutPure,
   isExpectingResult,
   mergeCellLayout,
   resolveCellPaneLayout,
   NOTEBOOK_GRID_COLS,
-  NOTEBOOK_GRID_MARGIN_X,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
 } from "./notebookUtils"
-import type { CellToolbarTier } from "./notebookUtils"
 import {
   emitUserAction,
   on as onUserAction,
@@ -194,7 +191,7 @@ const MIN_CELL_W = 2
 // unwanted hard floor in grid mode.
 const MIN_CELL_H = 5
 
-const GRID_MARGIN_X = NOTEBOOK_GRID_MARGIN_X
+const GRID_MARGIN_X = 20
 const GRID_MARGIN_Y = NOTEBOOK_GRID_MARGIN_Y
 const GRID_MARGIN: [number, number] = [GRID_MARGIN_X, GRID_MARGIN_Y]
 const GRID_CONTAINER_PADDING: [number, number] = [0, 0]
@@ -364,22 +361,13 @@ type CellViewProps = {
   isFocused: boolean
   isMaximized: boolean
   isRunning: boolean
-  toolbarTierOverride?: CellToolbarTier
 }
 
-const CellView: React.FC<CellViewProps> = ({
-  autoRefreshDefault,
-  toolbarTierOverride,
-  ...props
-}) =>
+const CellView: React.FC<CellViewProps> = ({ autoRefreshDefault, ...props }) =>
   props.cell.type === "markdown" ? (
     <MarkdownCell {...props} />
   ) : (
-    <Cell
-      {...props}
-      autoRefreshDefault={autoRefreshDefault}
-      toolbarTierOverride={toolbarTierOverride}
-    />
+    <Cell {...props} autoRefreshDefault={autoRefreshDefault} />
   )
 
 const ListLayout: React.FC = () => {
@@ -430,7 +418,6 @@ const GridLayout: React.FC = () => {
   const resultStatusVersion = useResultStatusVersion()
   const { setFocusedCell, updateSettings, updateCell } = useNotebookActions()
   const { activeBuffer } = useEditor()
-  const bufferId = useNotebookBufferId()
   // measureBeforeMount: don't render the grid until the container width is
   // measured, so cells first paint at their real width instead of animating
   // from the guessed initialWidth (react-grid-layout transitions the change).
@@ -440,10 +427,6 @@ const GridLayout: React.FC = () => {
     mounted: gridMeasured,
   } = useContainerWidth({ measureBeforeMount: true })
   const suppressTransitions = useContainerResizeInFlight(containerWidth)
-  useEffect(
-    () => publishGridContainerWidth(bufferId, containerWidth),
-    [bufferId, containerWidth],
-  )
   const autoScroll = useGridDragAutoScroll(
     containerRef as React.RefObject<HTMLElement>,
   )
@@ -454,7 +437,7 @@ const GridLayout: React.FC = () => {
   // shadow that only matters when react-grid-layout consumes it. The
   // memo recomputes when the layout, the cells or a statusOf boundary
   // (resultStatusVersion) changes
-  const { computedLayout, layoutKey, toolbarTierByCellId } = useMemo(() => {
+  const { computedLayout, layoutKey } = useMemo(() => {
     const mergedLayout = mergeCellLayout(
       settings.layout && settings.layout.length > 0
         ? settings.layout
@@ -463,7 +446,6 @@ const GridLayout: React.FC = () => {
       LAYOUT_OPTS,
     ) as LayoutItem[]
     const cellById = new Map(cells.map((c) => [c.id, c]))
-    const tiers = new Map<string, CellToolbarTier>()
     const computed = mergedLayout.map((item) => {
       const cell = cellById.get(item.i)
       if (!cell) return item
@@ -471,13 +453,7 @@ const GridLayout: React.FC = () => {
         cell,
         resultHydration?.statusOf(cell.id) ?? "unrequested",
       )
-      const toolbarTier = gridCellToolbarTier(containerWidth, item.w)
-      const paneLayout = resolveCellPaneLayout(
-        cell,
-        expectingResult,
-        toolbarTier === "compact",
-      )
-      tiers.set(cell.id, toolbarTier)
+      const paneLayout = resolveCellPaneLayout(cell, expectingResult)
       const minH = computeCellMinGridH(
         cell,
         ROW_HEIGHT,
@@ -495,6 +471,13 @@ const GridLayout: React.FC = () => {
           paneLayout,
         ),
         minH,
+        maxH: computeCellMaxGridH(
+          cell,
+          ROW_HEIGHT,
+          GRID_MARGIN_Y,
+          expectingResult,
+          paneLayout,
+        ),
       }
     })
     return {
@@ -502,18 +485,11 @@ const GridLayout: React.FC = () => {
       layoutKey: computed
         .map(
           (item) =>
-            `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
+            `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}:${item.maxH}`,
         )
         .join("|"),
-      toolbarTierByCellId: tiers,
     }
-  }, [
-    settings.layout,
-    cells,
-    resultHydration,
-    resultStatusVersion,
-    containerWidth,
-  ])
+  }, [settings.layout, cells, resultHydration, resultStatusVersion])
 
   const currentLayout = useMemo(() => computedLayout, [layoutKey])
   const gridLayouts = useMemo(
@@ -576,10 +552,6 @@ const GridLayout: React.FC = () => {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
       }
       updateSettings({ layout: mapLayoutXYW(newLayout) })
-      // A width-only resize may cross the compact breakpoint and therefore
-      // change the cell's derived h. Do not mistake the old h carried by RGL
-      // for an intentional pane-height resize; only back-solve when the user
-      // actually moved the vertical edge.
       if (oldItem && newItem && oldItem.h !== newItem.h) {
         const cell = cells.find((candidate) => candidate.id === newItem.i)
         if (cell) {
@@ -587,19 +559,12 @@ const GridLayout: React.FC = () => {
             cell,
             resultHydration?.statusOf(cell.id) ?? "unrequested",
           )
-          const toolbarTier = gridCellToolbarTier(containerWidth, newItem.w)
-          const paneLayout = resolveCellPaneLayout(
-            cell,
-            expectingResult,
-            toolbarTier === "compact",
-          )
-          const patch = cellHeightPatchForRows(
+          const patch = paneHeightsFromGridRows(
             cell,
             newItem.h,
             ROW_HEIGHT,
             GRID_MARGIN_Y,
             expectingResult,
-            paneLayout,
           )
           if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
         }
@@ -618,7 +583,6 @@ const GridLayout: React.FC = () => {
       cells,
       activeBuffer.id,
       resultHydration,
-      containerWidth,
     ],
   )
 
@@ -718,7 +682,6 @@ const GridLayout: React.FC = () => {
                 isFocused={focusedCellId === cell.id}
                 isMaximized={maximizedCellId === cell.id}
                 isRunning={runningCellIds.has(cell.id)}
-                toolbarTierOverride={toolbarTierByCellId.get(cell.id)}
               />
             </GridCellWrapper>
           ))}

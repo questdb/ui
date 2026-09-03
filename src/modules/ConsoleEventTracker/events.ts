@@ -126,7 +126,7 @@ export enum ConsoleEvent {
   NOTEBOOK_CELL_EXPAND_WIDTH = "notebook.cell_expand_width",
   NOTEBOOK_CELL_SIZE_RESET = "notebook.cell_size_reset",
   NOTEBOOK_CELL_VIEW_CHANGE = "notebook.cell_view_change",
-  NOTEBOOK_CELL_VIEW_MAXIMIZE = "notebook.cell_view_maximize",
+  NOTEBOOK_CELL_EDITOR_TOGGLE = "notebook.cell_editor_toggle",
   NOTEBOOK_CELL_MAXIMIZE = "notebook.cell_maximize",
   NOTEBOOK_DRAW_TOGGLE = "notebook.draw_toggle",
   NOTEBOOK_DRAW_REFUSED = "notebook.draw_refused",

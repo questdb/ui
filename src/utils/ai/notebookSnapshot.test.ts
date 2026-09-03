@@ -25,10 +25,6 @@ import type {
   NotebookViewState,
 } from "../../store/notebook"
 import { createEmptyDigest } from "../../providers/AIConversationProvider/userActionDigest"
-import {
-  __resetNotebookPresentationStoreForTests,
-  publishLiveCellPresentation,
-} from "../../scenes/Editor/Notebook/notebookPresentationStore"
 
 const sql = (
   id: string,
@@ -82,7 +78,6 @@ beforeEach(async () => {
   __resetNotebookControllerForTests()
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
-  __resetNotebookPresentationStoreForTests()
   await db.buffers.clear()
 })
 
@@ -226,61 +221,14 @@ describe("buildSnapshot", () => {
       expect(gridSnap.cells[0]).toMatchObject({
         editor_height: "auto",
         result_height: "auto",
-        preferred_view: "editor_result",
+        view: "editor_result",
       })
     } else {
       throw new Error("expected ok snapshots")
     }
   })
 
-  it("reports the effective view and tier of a live responsive cell", async () => {
-    const chart = sql("a", "SELECT 1", {
-      mode: "draw",
-      preferredView: "editor_result",
-    })
-    const id = await seedNotebook({ cells: [chart] })
-    registerController(makeController(id, [chart], {}))
-    const unpublish = publishLiveCellPresentation(id, "a", {
-      compact: true,
-      paneLayout: "editor",
-      expectingResult: false,
-    })
-
-    const snap = await buildSnapshot(id)
-    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
-      preferred_view: "editor_result",
-      view: "editor",
-      tier: "compact",
-    })
-    unpublish()
-  })
-
-  it("uses the published pane while a result is awaiting hydration", async () => {
-    const pending = sql("a", "SELECT 1", {
-      lastRunStatus: "success",
-      preferredView: "editor_result",
-    })
-    const id = await seedNotebook({ cells: [pending] })
-    registerController(makeController(id, [pending], {}))
-    const unpublish = publishLiveCellPresentation(id, "a", {
-      compact: true,
-      paneLayout: "result",
-      expectingResult: true,
-    })
-
-    const snap = await buildSnapshot(id)
-    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
-      view: "result",
-      tier: "compact",
-    })
-    expect(serializeCell([pending], "a", id, false)).toMatchObject({
-      view: "result",
-      tier: "compact",
-    })
-    unpublish()
-  })
-
-  it("reports null pane views and result height for a markdown cell", async () => {
+  it("reports a null view and result height for a markdown cell", async () => {
     // Given a live markdown cell
     const id = await seedNotebook({
       cells: [sql("a", "# title", { type: "markdown" })],
@@ -288,14 +236,12 @@ describe("buildSnapshot", () => {
     // When the snapshot builds
     const snap = await buildSnapshot(id)
     const cellSnapshot = snap?.status === "ok" ? snap.cells[0] : undefined
-    // Then the pane fields are null and tier is absent
+    // Then the pane fields are null
     expect(cellSnapshot).toMatchObject({
       type: "markdown",
-      preferred_view: null,
       view: null,
       result_height: null,
     })
-    expect(cellSnapshot?.tier).toBeUndefined()
     // And get_cell reports the same null pane fields
     const details = serializeCell(
       [sql("a", "# title", { type: "markdown" })],
@@ -304,33 +250,25 @@ describe("buildSnapshot", () => {
       false,
     )
     expect(details).toMatchObject({
-      preferred_view: null,
       view: null,
       result_height: null,
     })
-    expect(details.tier).toBeUndefined()
   })
 
-  it("omits tier and reports the stored preference for an inactive notebook", async () => {
+  it("reports the stored view for an inactive notebook", async () => {
     const id = await seedNotebook({
       cells: [
         sql("a", "SELECT 1", {
           mode: "draw",
-          preferredView: "editor_result",
+          paneView: "editor_result",
         }),
       ],
     })
 
     const snap = await buildSnapshot(id)
     expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
-      preferred_view: "editor_result",
+      view: "editor_result",
     })
-    expect(
-      snap?.status === "ok" ? snap.cells[0].view : "unexpected",
-    ).toBeUndefined()
-    expect(
-      snap?.status === "ok" ? snap.cells[0].tier : "unexpected",
-    ).toBeUndefined()
   })
 
   it("round-trips a pinned result height while passive result data is unloaded", async () => {
@@ -409,7 +347,7 @@ describe("buildSnapshot", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
-      preferredView: "editor_result",
+      paneView: "editor_result",
       name: "Trades",
       chartConfig: {
         xColumn: "ts",

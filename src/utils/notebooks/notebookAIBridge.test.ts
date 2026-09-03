@@ -469,7 +469,7 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       updateSettings: () => undefined,
       setCellMode: () => undefined,
       setCellChartConfig: () => undefined,
-      setCellPreferredView: () => undefined,
+      setCellPaneView: () => undefined,
       setMaximizedCellId: vi.fn(),
       updateCells: () => undefined,
       applyTransition: <T>(
