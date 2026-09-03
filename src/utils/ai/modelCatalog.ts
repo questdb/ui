@@ -26,6 +26,9 @@ const OPENAI_NON_CHAT_TOKENS = [
   "codex",
   "computer-use",
   "chat-latest",
+  // Research-tier models: minutes of reasoning with no streamed output or
+  // summaries — they read as unresponsive in an interactive chat.
+  "-pro",
   "chatgpt",
   "babbage",
   "davinci",

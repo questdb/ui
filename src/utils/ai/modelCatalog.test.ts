@@ -81,6 +81,7 @@ describe("filterOpenAiChatModels", () => {
       model("gpt-4o-mini-tts", AUG_2025 + 1),
       model("gpt-5-chat-latest", AUG_2025 + 200),
       model("gpt-5.3-codex", AUG_2025 + 250),
+      model("gpt-5.4-pro", AUG_2025 + 250),
       model("sora-2", AUG_2025 + 250),
       model("davinci-002", AUG_2025 + 1),
     ]
