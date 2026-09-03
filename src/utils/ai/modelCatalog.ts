@@ -6,6 +6,10 @@ export type ProviderModel = {
 
 const DATE_SUFFIX = /-(\d{8}|\d{4}-\d{2}-\d{2}|\d{4})$/
 
+// Everything since the gpt-5 launch reasons, and belongs in the default
+// picker view; older generations stay reachable via "Show all models".
+const GPT5_LAUNCH_START = Date.UTC(2025, 7, 1) / 1000
+
 const OPENAI_NON_CHAT_TOKENS = [
   "embedding",
   "tts",
@@ -76,7 +80,12 @@ const isOpenAiNonChatModel = (id: string): boolean =>
 export const filterOpenAiChatModels = (
   models: ProviderModel[],
 ): ProviderModel[] =>
-  sortModelsNewestFirst(models.filter((m) => !isOpenAiNonChatModel(m.id)))
+  sortModelsNewestFirst(
+    models.filter(
+      (m) =>
+        !isOpenAiNonChatModel(m.id) && (m.created ?? 0) >= GPT5_LAUNCH_START,
+    ),
+  )
 
 export const UTILITY_MODEL_TIERS: Record<"anthropic" | "openai", string[]> = {
   anthropic: ["haiku", "sonnet"],
@@ -104,12 +113,8 @@ export const resolveUtilityModel = (
   return null
 }
 
-const REASONING_GATE_START = Date.UTC(2025, 7, 1) / 1000
-
 export const computeReasoningModels = (models: ProviderModel[]): string[] =>
-  models
-    .filter((m) => (m.created ?? 0) >= REASONING_GATE_START)
-    .map((m) => m.id)
+  models.filter((m) => (m.created ?? 0) >= GPT5_LAUNCH_START).map((m) => m.id)
 
 export const isReasoningModel = (
   modelId: string,

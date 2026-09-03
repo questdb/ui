@@ -74,15 +74,15 @@ describe("filterOpenAiChatModels", () => {
   it("drops known non-chat models and dated snapshots", () => {
     // Given a listing with chat models, noise, and dated snapshots
     const listing = [
-      model("gpt-5.4", 300),
-      model("gpt-5.4-2026-03-05", 300),
-      model("text-embedding-3-small", 1),
-      model("whisper-1", 1),
-      model("gpt-4o-mini-tts", 1),
-      model("gpt-5-chat-latest", 200),
-      model("gpt-5.3-codex", 250),
-      model("sora-2", 250),
-      model("davinci-002", 1),
+      model("gpt-5.4", AUG_2025 + 300),
+      model("gpt-5.4-2026-03-05", AUG_2025 + 300),
+      model("text-embedding-3-small", AUG_2025 + 1),
+      model("whisper-1", AUG_2025 + 1),
+      model("gpt-4o-mini-tts", AUG_2025 + 1),
+      model("gpt-5-chat-latest", AUG_2025 + 200),
+      model("gpt-5.3-codex", AUG_2025 + 250),
+      model("sora-2", AUG_2025 + 250),
+      model("davinci-002", AUG_2025 + 1),
     ]
     // When the filter runs
     const kept = filterOpenAiChatModels(listing).map((m) => m.id)
@@ -90,18 +90,33 @@ describe("filterOpenAiChatModels", () => {
     expect(kept).toEqual(["gpt-5.4"])
   })
 
+  it("hides generations older than gpt-5 by default", () => {
+    // Given chat models from before and after the gpt-5 launch
+    const listing = [
+      model("gpt-5", AUG_2025),
+      model("gpt-4.1", JUL_2025),
+      model("gpt-3.5-turbo", JUL_2025 - 1_000_000),
+    ]
+    // When the filter runs
+    const kept = filterOpenAiChatModels(listing).map((m) => m.id)
+    // Then only the current generation stays in the default view
+    expect(kept).toEqual(["gpt-5"])
+  })
+
   it("keeps a brand-new generation without any code change", () => {
-    const kept = filterOpenAiChatModels([model("gpt-6", 500)]).map((m) => m.id)
+    const kept = filterOpenAiChatModels([model("gpt-6", AUG_2025 + 500)]).map(
+      (m) => m.id,
+    )
     expect(kept).toEqual(["gpt-6"])
   })
 
   it("sorts newest first", () => {
     const kept = filterOpenAiChatModels([
-      model("gpt-4.1", 100),
-      model("gpt-5.4", 300),
-      model("gpt-5", 200),
+      model("gpt-5", AUG_2025 + 100),
+      model("gpt-5.4", AUG_2025 + 300),
+      model("gpt-5.2", AUG_2025 + 200),
     ]).map((m) => m.id)
-    expect(kept).toEqual(["gpt-5.4", "gpt-5", "gpt-4.1"])
+    expect(kept).toEqual(["gpt-5.4", "gpt-5.2", "gpt-5"])
   })
 })
 
