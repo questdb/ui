@@ -44,15 +44,15 @@ const ItemWrapper = styled.div<{
   min-height: 3.2rem;
 
   &:hover {
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 
   ${({ $focused, theme }) =>
     $focused &&
     `
     outline: none;
-    background: ${theme.color.interactionAccentActive};
-    border: 1px solid ${theme.color.borderAccent};
+    background: ${theme.color.interactionNeutral};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
   `}
 `
 
@@ -80,7 +80,7 @@ const FileIcon = styled.div`
   svg {
     width: 1.4rem;
     height: 1.4rem;
-    color: ${({ theme }) => theme.color.contentAccent};
+    color: ${({ theme }) => theme.color.contentSecondary};
   }
 `
 

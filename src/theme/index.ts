@@ -157,8 +157,8 @@ export const darkColors: ColorShape = {
   // Result grid
   gridRow: "#17181d",
   gridHeader: "#202126",
-  gridSelection: "#2b1d25",
-  gridFocus: "#b81447",
+  gridSelection: "#252830",
+  gridFocus: "#6b7382",
 
   // Editor
   editorCanvas: "#17181d",
@@ -229,16 +229,16 @@ export const lightColors: ColorShape = {
   onboardingAccent: "#176f87",
 
   // Surfaces
-  surfaceCanvas: "#d9dce2",
-  surfaceStage: "#c9cdd4",
-  surfaceBase: "#e3e5e9",
-  surfaceInset: "#eceef1",
-  surfaceRaised: "#e8eaee",
-  surfaceInput: "#f2f3f5",
-  surfaceOverlay: "#f2f3f5",
-  surfaceValue: "#fbfcfd",
-  surfaceScrim: "rgba(27, 31, 39, 0.38)",
-  surfaceTabRail: "rgba(218, 221, 227, 0.94)",
+  surfaceCanvas: "#e8eaee",
+  surfaceStage: "#e2e5ea",
+  surfaceBase: "#eef0f3",
+  surfaceInset: "#f7f8f9",
+  surfaceRaised: "#f4f5f7",
+  surfaceInput: "#fafbfc",
+  surfaceOverlay: "#fafbfc",
+  surfaceValue: "#ffffff",
+  surfaceScrim: "rgba(27, 31, 39, 0.32)",
+  surfaceTabRail: "rgba(232, 234, 238, 0.94)",
 
   // Content
   contentPrimary: "#1c2029",
@@ -258,8 +258,8 @@ export const lightColors: ColorShape = {
   borderAccentStrong: "rgba(184, 20, 71, 0.56)",
 
   // Interaction and controls
-  interactionNeutral: "#d9dce2",
-  interactionNeutralHover: "#d2d6dd",
+  interactionNeutral: "#e8eaee",
+  interactionNeutralHover: "#e2e5ea",
   interactionHover: "#1c202913",
   interactionAccentHover: "rgba(184, 20, 71, 0.07)",
   interactionAccentActive: "rgba(184, 20, 71, 0.13)",
@@ -267,7 +267,7 @@ export const lightColors: ColorShape = {
   scrollbarThumb: "#62656b",
   controlSurface: "#f6f7f8",
   controlSurfaceHover: "#e7e9ed",
-  controlTrack: "#d9dce2",
+  controlTrack: "#e8eaee",
   controlKnob: "#505968",
 
   // Actions and status
@@ -292,11 +292,11 @@ export const lightColors: ColorShape = {
   statusFeature: "#6553aa",
 
   // Shadows
-  shadowSubtle: "rgba(27, 31, 39, 0.06)",
-  shadowSoft: "rgba(27, 31, 39, 0.11)",
-  shadowMedium: "rgba(27, 31, 39, 0.18)",
-  shadowStrong: "rgba(27, 31, 39, 0.27)",
-  shadowOverlay: "rgba(27, 31, 39, 0.38)",
+  shadowSubtle: "rgba(27, 31, 39, 0.035)",
+  shadowSoft: "rgba(27, 31, 39, 0.055)",
+  shadowMedium: "rgba(27, 31, 39, 0.08)",
+  shadowStrong: "rgba(27, 31, 39, 0.16)",
+  shadowOverlay: "rgba(27, 31, 39, 0.22)",
 
   // Liquid glass
   glassSurface: "rgba(255, 255, 255, 0.58)",
@@ -310,14 +310,14 @@ export const lightColors: ColorShape = {
   aiGradientEnd: "#76184c",
 
   // Result grid
-  gridRow: "#e9ebef",
-  gridHeader: "#dce0e6",
-  gridSelection: "#e0afbf",
-  gridFocus: "#8a0f35",
+  gridRow: "#f4f5f7",
+  gridHeader: "#e7eaee",
+  gridSelection: "#d8dce3",
+  gridFocus: "#828b99",
 
   // Editor
-  editorCanvas: "#d9dce2",
-  editorBorder: "#c9cdd4",
+  editorCanvas: "#eef0f3",
+  editorBorder: "#e2e5ea",
   editorSelection: "#aec8ec",
   editorSelectionAccent: "#7a99c4",
   editorActiveLine: "#1c202909",

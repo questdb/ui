@@ -56,7 +56,7 @@ const SegmentedControlRoot = styled.div`
   && > button[aria-pressed="true"]:focus-visible {
     outline: none;
     outline-offset: 0;
-    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.contentAccent};
+    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.borderStrong};
   }
 `
 
@@ -82,7 +82,10 @@ const GlassSelection = styled.div`
   border-bottom-width: 2px;
   border-bottom-color: ${({ theme }) => theme.color.glassEdge};
   border-radius: 0.4rem;
-  box-shadow: 0 3px 9px ${({ theme }) => theme.color.shadowSoft};
+  box-shadow: ${({ theme }) =>
+    theme.mode === "light"
+      ? `0 1px 1px ${theme.color.shadowSubtle}, 0 1px 3px ${theme.color.shadowSoft}`
+      : `0 3px 9px ${theme.color.shadowSoft}`};
   backdrop-filter: blur(6px) saturate(145%);
   -webkit-backdrop-filter: blur(5px) saturate(150%);
   transition: opacity 100ms ease;

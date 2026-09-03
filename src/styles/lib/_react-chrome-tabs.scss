@@ -56,7 +56,7 @@
     filter 150ms ease;
 
   &:focus-visible {
-    outline: 1px solid theme-color(contentAccent);
+    outline: 1px solid theme-color(borderStrong);
     outline-offset: 2px;
   }
 
@@ -178,6 +178,26 @@
   background: linear-gradient(to left, theme-color(shadowMedium), transparent);
 }
 
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow {
+  width: 6px;
+}
+
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow-left {
+  background: linear-gradient(
+    to right,
+    theme-color(shadowMedium) 0%,
+    theme-color(transparent) 65%
+  );
+}
+
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow-right {
+  background: linear-gradient(
+    to left,
+    theme-color(shadowMedium) 0%,
+    theme-color(transparent) 65%
+  );
+}
+
 .chrome-tabs[data-overflow-left="true"] .chrome-tabs-overflow-shadow-left {
   opacity: 1;
 }
@@ -212,7 +232,7 @@
   display: none;
   position: relative;
   z-index: 1;
-  border: 1px solid theme-color(contentAccent);
+  border: 1px solid theme-color(borderStrong);
   padding: 0.2rem 0.4rem;
   line-height: 20px;
   height: 20px;

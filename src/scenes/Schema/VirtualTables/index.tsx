@@ -139,8 +139,8 @@ const TableRow = styled(Row)<{ $contextMenuOpen: boolean }>`
   ${({ $contextMenuOpen, theme }) =>
     $contextMenuOpen &&
     `
-    background: ${theme.color.interactionAccentActive};
-    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
+    background: ${theme.color.interactionNeutral};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
   `}
 `
 

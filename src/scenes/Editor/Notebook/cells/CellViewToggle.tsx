@@ -39,6 +39,13 @@ const ViewIconButton = styled(IconButton)`
     width: 1.8rem;
     height: 1.8rem;
   }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) =>
+      theme.mode === "light"
+        ? theme.color.interactionNeutralHover
+        : theme.color.surfaceRaised};
+  }
 `
 
 const Divider = styled.div`

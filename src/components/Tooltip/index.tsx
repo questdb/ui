@@ -110,7 +110,7 @@ const ArrowWithBorder = React.forwardRef<SVGSVGElement>((props, ref) => {
       <polyline
         points="0,0 7,7 14,0"
         fill="none"
-        stroke={theme.color.contentDisabled}
+        stroke={theme.color.borderDefault}
         strokeWidth="1"
       />
     </StyledArrowSvg>
@@ -130,7 +130,7 @@ const TooltipContent = styled(RadixTooltip.Content)<{
   max-width: ${({ $maxWidth }) => $maxWidth ?? "460px"};
   padding: 1rem;
   background: ${color("surfaceInset")};
-  border: 1px solid ${color("contentDisabled")};
+  border: 1px solid ${color("borderDefault")};
   border-radius: 6px;
   z-index: ${TOOLTIP_Z_INDEX};
   animation-duration: 200ms;

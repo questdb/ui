@@ -108,7 +108,7 @@ export const DocSearchStyles = css`
   }
 
   .DocSearch.DocSearch-Button:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
     outline-offset: 2px;
   }
 

@@ -54,8 +54,8 @@ const TriggerContainer = styled.div`
 
   &:hover,
   &:focus-within {
-    border-color: ${({ theme }) => theme.color.borderAccent};
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    border-color: ${({ theme }) => theme.color.borderDefault};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 `
 
@@ -110,18 +110,18 @@ const Item = styled.div<{ $active: boolean; $disabled?: boolean }>`
   color: ${({ theme, $disabled }) =>
     $disabled ? theme.color.contentDisabled : theme.color.contentPrimary};
   background: ${({ $active, theme }) =>
-    $active ? theme.color.interactionAccentActive : "transparent"};
+    $active ? theme.color.interactionNeutral : "transparent"};
   border: 1px solid
     ${({ $active, theme }) =>
-      $active ? theme.color.borderAccent : "transparent"};
+      $active ? theme.color.borderDefault : "transparent"};
 
   &:hover {
     background: ${({ $disabled, $active, theme }) =>
       $disabled
         ? "transparent"
         : $active
-          ? theme.color.interactionAccentActive
-          : theme.color.interactionAccentHover};
+          ? theme.color.interactionNeutral
+          : theme.color.interactionHover};
   }
 
   .highlight {

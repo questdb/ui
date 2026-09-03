@@ -41,7 +41,7 @@ const TriggerRoot = styled(Button).attrs({ variant: "secondary" })<{
   text-align: left;
 
   &[aria-expanded="true"] {
-    border-color: ${({ theme }) => theme.color.borderAccent};
+    border-color: ${({ theme }) => theme.color.borderStrong};
   }
 
   &[aria-expanded="true"] ${TriggerCaret} {

@@ -80,7 +80,7 @@ export const HeaderNameRow = styled.div<{ $align: string }>`
 `
 
 export const HeaderName = styled.span`
-  color: ${color("contentObject")};
+  color: ${color("contentPrimary")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -138,7 +138,7 @@ export const ColResizer = styled.div`
   }
 
   &:hover::after {
-    background: ${color("contentAccent")};
+    background: ${color("borderStrong")};
   }
 `
 
@@ -157,7 +157,7 @@ export const ResizeGhost = styled.div`
   top: 0;
   bottom: 0;
   width: 2px;
-  background: ${color("contentAccent")};
+  background: ${color("borderStrong")};
   pointer-events: none;
   /* Above the resizer overlay (z-index 6) so the drag line isn't clipped. */
   z-index: 7;
@@ -180,16 +180,16 @@ export const Row = styled.div<{ $active: boolean }>`
       &:hover {
         background:
           linear-gradient(
-            ${theme.color.interactionAccentHover},
-            ${theme.color.interactionAccentHover}
+            ${theme.color.interactionHover},
+            ${theme.color.interactionHover}
           ),
           ${theme.color.surfaceInset};
 
         [data-frozen="true"] {
           background:
             linear-gradient(
-              ${theme.color.interactionAccentHover},
-              ${theme.color.interactionAccentHover}
+              ${theme.color.interactionHover},
+              ${theme.color.interactionHover}
             ),
             ${theme.color.surfaceInset};
         }
@@ -350,7 +350,7 @@ export const FreezeHandle = styled.div<{
     !$dragging &&
     css`
       &:hover::after {
-        background: ${color("contentAccent")};
+        background: ${color("borderStrong")};
       }
     `}
 `

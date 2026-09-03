@@ -443,13 +443,18 @@ export const Login = ({
             >
               <FormBody>
                 <Form.Item name="username" label="Username">
-                  <Form.Input name="username" placeholder="Enter username" />
+                  <Form.Input
+                    name="username"
+                    placeholder="Enter username"
+                    tone="accent"
+                  />
                 </Form.Item>
                 <Form.Item name="password" label="Password">
                   <Form.Input
                     name="password"
                     type="password"
                     placeholder="Enter password"
+                    tone="accent"
                   />
                 </Form.Item>
                 {errorMessage && (
