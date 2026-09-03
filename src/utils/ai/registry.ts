@@ -10,6 +10,23 @@ type ProviderOptions = {
   baseURL?: string
   contextWindow?: number
   isCustom?: boolean
+  reasoning?: { effort: "high"; models: string[] }
+}
+
+const reasoningOptions = (
+  providerId: ProviderId,
+  settings?: AiAssistantSettings,
+): Pick<ProviderOptions, "reasoning"> => {
+  const providerSettings = settings?.providers?.[providerId]
+  if (
+    providerSettings?.reasoningEffort !== "high" ||
+    !providerSettings.reasoningModels?.length
+  ) {
+    return {}
+  }
+  return {
+    reasoning: { effort: "high", models: providerSettings.reasoningModels },
+  }
 }
 
 export function createProvider(
@@ -20,7 +37,12 @@ export function createProvider(
   // Check built-in providers first
   const builtin = BUILTIN_PROVIDERS[providerId]
   if (builtin) {
-    return createProviderByType(builtin.type, providerId, apiKey)
+    return createProviderByType(
+      builtin.type,
+      providerId,
+      apiKey,
+      reasoningOptions(providerId, settings),
+    )
   }
 
   // Check custom providers

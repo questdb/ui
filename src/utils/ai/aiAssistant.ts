@@ -350,16 +350,6 @@ const tryWithRetries = async <T>(
   }
 }
 
-export const testApiKey = async (
-  apiKey: string,
-  model: string,
-  providerId: ProviderId,
-  settings?: AiAssistantSettings,
-): Promise<{ valid: boolean; error?: string }> => {
-  const provider = createProvider(providerId, apiKey, settings)
-  return provider.testConnection({ apiKey, model })
-}
-
 export const generateChatTitle = async ({
   firstUserMessage,
   settings,

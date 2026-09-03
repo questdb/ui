@@ -1,11 +1,13 @@
-import { describe, it, expect, afterEach, beforeAll } from "vitest"
+import { describe, it, expect } from "vitest"
 import {
   reconcileSettings,
   getSelectedModel,
   getAiPermissions,
-  MODEL_OPTIONS,
+  getAllModelOptions,
+  getNextModel,
+  getUtilityModel,
+  providerForModel,
 } from "./settings"
-import type { ModelOption } from "./settings"
 
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 
@@ -17,76 +19,119 @@ const makeSettings = (
 })
 
 describe("reconcileSettings", () => {
-  it("removes stale model IDs from enabledModels", () => {
+  it("keeps built-in model ids it does not recognize", () => {
+    // Given enabled models that no fixed list knows about
     const settings = makeSettings({
       providers: {
         openai: {
           apiKey: "sk-test",
-          enabledModels: ["gpt-5-mini", "removed-model", "also-removed"],
+          enabledModels: ["gpt-7", "gpt-5-mini"],
           grantSchemaAccess: false,
         },
       },
     })
+    // When settings reconcile
     const result = reconcileSettings(settings)
-    expect(result.providers.openai!.enabledModels).toEqual(["gpt-5-mini"])
-  })
-
-  it("does not add defaultEnabled models when user has valid models", () => {
-    const settings = makeSettings({
-      providers: {
-        anthropic: {
-          apiKey: "sk-test",
-          enabledModels: ["claude-sonnet-4-5"],
-          grantSchemaAccess: false,
-        },
-      },
-    })
-    const result = reconcileSettings(settings)
-    expect(result.providers.anthropic!.enabledModels).toEqual([
-      "claude-sonnet-4-5",
+    // Then availability is the picker's job, not reconcile's
+    expect(result.providers.openai!.enabledModels).toEqual([
+      "gpt-7",
+      "gpt-5-mini",
     ])
   })
 
-  it("leaves enabledModels empty when all previous models were removed", () => {
+  it("collapses legacy reasoning variants into plain ids", () => {
     const settings = makeSettings({
       providers: {
-        anthropic: {
+        openai: {
           apiKey: "sk-test",
-          enabledModels: ["removed-model-1", "removed-model-2"],
+          enabledModels: [
+            "gpt-5.4@reasoning=high",
+            "gpt-5.4@reasoning=medium",
+            "gpt-5-mini",
+          ],
           grantSchemaAccess: false,
         },
       },
     })
     const result = reconcileSettings(settings)
-    expect(result.providers.anthropic!.enabledModels).toEqual([])
+    expect(result.providers.openai!.enabledModels).toEqual([
+      "gpt-5.4",
+      "gpt-5-mini",
+    ])
   })
 
-  it("does not add defaults for unconfigured providers", () => {
+  it("folds a selected high variant into reasoningEffort", () => {
+    // Given a user who ran the high variant
     const settings = makeSettings({
+      selectedModel: "gpt-5.4@reasoning=high",
       providers: {
-        anthropic: {
+        openai: {
           apiKey: "sk-test",
-          enabledModels: ["claude-sonnet-4-5"],
+          enabledModels: ["gpt-5.4@reasoning=high", "gpt-5.4@reasoning=low"],
+          grantSchemaAccess: false,
+        },
+      },
+    })
+    // When settings reconcile
+    const result = reconcileSettings(settings)
+    // Then the provider runs on High and the selection is the plain id
+    expect(result.providers.openai!.reasoningEffort).toBe("high")
+    expect(result.selectedModel).toBe("gpt-5.4")
+  })
+
+  it("migrates medium and low variant users to the provider default", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5.4@reasoning=medium",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5.4@reasoning=medium", "gpt-5.4@reasoning=low"],
           grantSchemaAccess: false,
         },
       },
     })
     const result = reconcileSettings(settings)
-    expect(result.providers.openai).toBeUndefined()
+    expect(result.providers.openai!.reasoningEffort).toBeUndefined()
+    expect(result.selectedModel).toBe("gpt-5.4")
+  })
+
+  it("removes custom models missing from their provider definition", () => {
+    const settings = makeSettings({
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: ["llm-a"],
+        },
+      },
+      providers: {
+        "custom-1": {
+          apiKey: "",
+          enabledModels: ["custom-1:llm-a", "custom-1:llm-removed"],
+          grantSchemaAccess: false,
+        },
+      },
+    })
+    const result = reconcileSettings(settings)
+    expect(result.providers["custom-1"]!.enabledModels).toEqual([
+      "custom-1:llm-a",
+    ])
   })
 
   it("is idempotent", () => {
     const settings = makeSettings({
-      selectedModel: "claude-sonnet-4-5",
+      selectedModel: "gpt-5.4@reasoning=high",
       providers: {
         anthropic: {
           apiKey: "sk-test",
-          enabledModels: ["claude-sonnet-4-5", "stale-model"],
+          enabledModels: ["claude-sonnet-4-5"],
           grantSchemaAccess: true,
         },
         openai: {
           apiKey: "sk-test",
-          enabledModels: ["gpt-5-mini"],
+          enabledModels: ["gpt-5.4@reasoning=high", "gpt-5-mini"],
           grantSchemaAccess: false,
         },
       },
@@ -117,7 +162,7 @@ describe("reconcileSettings", () => {
     )
   })
 
-  it("clears selectedModel if not in any enabledModels", () => {
+  it("repairs selectedModel when it is not enabled anywhere", () => {
     const settings = makeSettings({
       selectedModel: "removed-model",
       providers: {
@@ -158,7 +203,7 @@ describe("reconcileSettings", () => {
       providers: {
         openai: {
           apiKey: "sk-test",
-          enabledModels: ["gpt-5-mini", "stale-model"],
+          enabledModels: ["gpt-5-mini", "gpt-5.4@reasoning=high"],
           grantSchemaAccess: false,
         },
       },
@@ -184,7 +229,7 @@ describe("getSelectedModel", () => {
     expect(getSelectedModel(settings)).toBe("gpt-5-mini")
   })
 
-  it("does not return selectedModel if not in enabledModels", () => {
+  it("falls back to the first enabled model", () => {
     const settings = makeSettings({
       selectedModel: "claude-sonnet-4-5",
       providers: {
@@ -195,7 +240,6 @@ describe("getSelectedModel", () => {
         },
       },
     })
-    expect(getSelectedModel(settings)).not.toBe("claude-sonnet-4-5")
     expect(getSelectedModel(settings)).toBe("gpt-5-mini")
   })
 
@@ -205,180 +249,137 @@ describe("getSelectedModel", () => {
   })
 })
 
-/**
- * Simulates version upgrades by temporarily replacing MODEL_OPTIONS contents.
- * Tests verify that user settings from a previous version are handled correctly
- * when the app is updated with a different model list.
- */
-describe("version compatibility scenarios", () => {
-  // Snapshot once before any mutation — re-snapshotting per call leaks an empty baseline on throw.
-  let originalOptions: ModelOption[]
-  beforeAll(() => {
-    originalOptions = [...MODEL_OPTIONS]
-  })
-
-  function setModelOptions(options: ModelOption[]) {
-    MODEL_OPTIONS.length = 0
-    MODEL_OPTIONS.push(...options)
-  }
-
-  afterEach(() => {
-    MODEL_OPTIONS.length = 0
-    MODEL_OPTIONS.push(...originalOptions)
-  })
-
-  it("upgrade: model removed, selectedModel was that model", () => {
-    // v1: user had model-A and model-B, selected model-A
-    setModelOptions([
-      { label: "A", value: "model-a", provider: "openai" },
-      { label: "B", value: "model-b", provider: "openai" },
-    ])
-
-    const v1Settings = makeSettings({
-      selectedModel: "model-a",
+describe("getAllModelOptions", () => {
+  it("builds options from enabled models with stored labels", () => {
+    // Given a provider with one stored label and one without
+    const settings = makeSettings({
       providers: {
         openai: {
           apiKey: "sk-test",
-          enabledModels: ["model-a", "model-b"],
+          enabledModels: ["gpt-5.4", "gpt-5-mini"],
           grantSchemaAccess: false,
+          modelLabels: { "gpt-5.4": "GPT-5.4 (Custom)" },
         },
       },
     })
-
-    // v2: model-A removed, model-C added
-    setModelOptions([
-      { label: "B", value: "model-b", provider: "openai" },
-      {
-        label: "C",
-        value: "model-c",
-        provider: "openai",
-        defaultEnabled: true,
-      },
+    // When options build
+    const options = getAllModelOptions(settings)
+    // Then the stored label wins and the formatter fills the gap
+    expect(options).toEqual([
+      { label: "GPT-5.4 (Custom)", value: "gpt-5.4", provider: "openai" },
+      { label: "GPT-5 Mini", value: "gpt-5-mini", provider: "openai" },
     ])
-
-    const reconciled = reconcileSettings(v1Settings)
-    expect(reconciled.providers.openai!.enabledModels).toEqual(["model-b"])
-    expect(reconciled.selectedModel).toBe("model-b")
   })
 
-  it("upgrade: all models removed for a provider", () => {
-    setModelOptions([{ label: "A", value: "model-a", provider: "openai" }])
-
-    const v1Settings = makeSettings({
-      selectedModel: "model-a",
-      providers: {
-        openai: {
-          apiKey: "sk-test",
-          enabledModels: ["model-a"],
-          grantSchemaAccess: false,
+  it("includes namespaced custom provider models", () => {
+    const settings = makeSettings({
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: ["llm-a"],
         },
       },
     })
-
-    // v2: provider's models completely replaced
-    setModelOptions([
-      {
-        label: "X",
-        value: "model-x",
-        provider: "openai",
-        defaultEnabled: true,
-      },
-      { label: "Y", value: "model-y", provider: "openai" },
+    expect(getAllModelOptions(settings)).toEqual([
+      { label: "llm-a", value: "custom-1:llm-a", provider: "custom-1" },
     ])
-
-    const reconciled = reconcileSettings(v1Settings)
-    // all old models gone, empty list — user must re-enable in settings
-    expect(reconciled.providers.openai!.enabledModels).toEqual([])
-    expect(reconciled.selectedModel).toBeUndefined()
-    expect(getSelectedModel(reconciled)).toBeNull()
   })
+})
 
-  it("upgrade: new models added, user keeps their selection", () => {
-    setModelOptions([
-      { label: "A", value: "model-a", provider: "anthropic", default: true },
-      { label: "B", value: "model-b", provider: "anthropic" },
-    ])
-
-    const v1Settings = makeSettings({
-      selectedModel: "model-b",
+describe("providerForModel", () => {
+  it("finds the built-in provider that enabled the model", () => {
+    const settings = makeSettings({
       providers: {
         anthropic: {
           apiKey: "sk-test",
-          enabledModels: ["model-a", "model-b"],
-          grantSchemaAccess: true,
-        },
-      },
-    })
-
-    // v2: model-C added
-    setModelOptions([
-      { label: "A", value: "model-a", provider: "anthropic", default: true },
-      { label: "B", value: "model-b", provider: "anthropic" },
-      {
-        label: "C",
-        value: "model-c",
-        provider: "anthropic",
-        defaultEnabled: true,
-      },
-    ])
-
-    const reconciled = reconcileSettings(v1Settings)
-    // existing models preserved, new model NOT auto-added
-    expect(reconciled.providers.anthropic!.enabledModels).toEqual([
-      "model-a",
-      "model-b",
-    ])
-    expect(reconciled.selectedModel).toBe("model-b")
-    expect(getSelectedModel(reconciled)).toBe("model-b")
-  })
-
-  it("upgrade: selected model survives but some enabled models removed", () => {
-    setModelOptions([
-      { label: "A", value: "model-a", provider: "openai" },
-      { label: "B", value: "model-b", provider: "openai" },
-      { label: "C", value: "model-c", provider: "openai" },
-    ])
-
-    const v1Settings = makeSettings({
-      selectedModel: "model-b",
-      providers: {
-        openai: {
-          apiKey: "sk-test",
-          enabledModels: ["model-a", "model-b", "model-c"],
+          enabledModels: ["claude-sonnet-5"],
           grantSchemaAccess: false,
         },
       },
     })
-
-    // v2: model-A and model-C removed
-    setModelOptions([
-      { label: "B", value: "model-b", provider: "openai" },
-      { label: "D", value: "model-d", provider: "openai" },
-    ])
-
-    const reconciled = reconcileSettings(v1Settings)
-    expect(reconciled.providers.openai!.enabledModels).toEqual(["model-b"])
-    expect(reconciled.selectedModel).toBe("model-b")
-    expect(getSelectedModel(reconciled)).toBe("model-b")
+    expect(providerForModel("claude-sonnet-5", settings)).toBe("anthropic")
+    expect(providerForModel("gpt-5-mini", settings)).toBeNull()
   })
 
-  it("downgrade: user has models from a newer version", () => {
-    setModelOptions([{ label: "A", value: "model-a", provider: "openai" }])
+  it("parses namespaced custom values without settings lookup", () => {
+    expect(providerForModel("custom-1:llm-a")).toBe("custom-1")
+  })
+})
 
-    const futureSettings = makeSettings({
-      selectedModel: "model-future",
+describe("getNextModel", () => {
+  it("keeps the current model while it stays enabled", () => {
+    expect(
+      getNextModel("gpt-5-mini", { openai: ["gpt-5.4", "gpt-5-mini"] }),
+    ).toBe("gpt-5-mini")
+  })
+
+  it("takes the first enabled model of any provider when the current one is gone", () => {
+    const settings = makeSettings({
       providers: {
-        openai: {
+        anthropic: {
           apiKey: "sk-test",
-          enabledModels: ["model-a", "model-future"],
+          enabledModels: ["claude-sonnet-5"],
           grantSchemaAccess: false,
         },
       },
     })
+    expect(
+      getNextModel("gpt-5-mini", { anthropic: ["claude-sonnet-5"] }, settings),
+    ).toBe("claude-sonnet-5")
+  })
 
-    const reconciled = reconcileSettings(futureSettings)
-    expect(reconciled.providers.openai!.enabledModels).toEqual(["model-a"])
-    expect(reconciled.selectedModel).toBe("model-a")
+  it("returns null when nothing is enabled", () => {
+    expect(getNextModel("gpt-5-mini", {})).toBeNull()
+  })
+})
+
+describe("getUtilityModel", () => {
+  it("returns the persisted utility model for a built-in provider", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5.4",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5.4"],
+          grantSchemaAccess: false,
+          utilityModel: "gpt-5.6-luna",
+        },
+      },
+    })
+    expect(getUtilityModel("openai", settings)).toBe("gpt-5.6-luna")
+  })
+
+  it("falls back to the selected model when nothing is persisted", () => {
+    const settings = makeSettings({
+      selectedModel: "gpt-5.4",
+      providers: {
+        openai: {
+          apiKey: "sk-test",
+          enabledModels: ["gpt-5.4"],
+          grantSchemaAccess: false,
+        },
+      },
+    })
+    expect(getUtilityModel("openai", settings)).toBe("gpt-5.4")
+  })
+
+  it("uses the selected model for custom providers", () => {
+    const settings = makeSettings({
+      selectedModel: "custom-1:llm-a",
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: ["llm-a"],
+        },
+      },
+    })
+    expect(getUtilityModel("custom-1", settings)).toBe("custom-1:llm-a")
   })
 })
 

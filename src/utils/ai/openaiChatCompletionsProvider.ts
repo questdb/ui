@@ -9,12 +9,14 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { getModelProps } from "./settings"
+import { parseModelValue } from "./settings"
 import type { ProviderId } from "./settings"
+import { isReasoningModel } from "./modelCatalog"
 import {
   type AIProvider,
   type ExecuteFlowParams,
   type FlowResult,
+  type ProviderModel,
   type ToolDefinition,
   type Message,
 } from "./types"
@@ -34,6 +36,7 @@ import {
   classifyOpenAIError,
   countTokensFromNativePayload,
   isOpenAINonRetryableError,
+  isReasoningRejection,
 } from "./openaiShared"
 import {
   createHeaderFilteredFetch,
@@ -289,6 +292,28 @@ async function executeRequest(
   streaming?: StreamingCallback,
   abortSignal?: AbortSignal,
 ): Promise<RequestResult> {
+  try {
+    return await executeRequestOnce(openai, params, streaming, abortSignal)
+  } catch (error) {
+    if (params.reasoning_effort && isReasoningRejection(error)) {
+      const { reasoning_effort: _reasoningEffort, ...withoutReasoning } = params
+      return executeRequestOnce(
+        openai,
+        withoutReasoning,
+        streaming,
+        abortSignal,
+      )
+    }
+    throw error
+  }
+}
+
+async function executeRequestOnce(
+  openai: OpenAI,
+  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  streaming?: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<RequestResult> {
   if (streaming) {
     const accumulated = await createChatCompletionStreaming(
       openai,
@@ -350,23 +375,15 @@ async function executeRequest(
   }
 }
 
-function toChatCompletionsAPIProps(model: string): {
-  model: string
-  reasoning_effort?: OpenAI.ReasoningEffort
-} {
-  const props = getModelProps(model)
-  return {
-    model: props.model,
-    ...(props.reasoningEffort
-      ? { reasoning_effort: props.reasoningEffort as OpenAI.ReasoningEffort }
-      : {}),
-  }
-}
-
 export function createOpenAIChatCompletionsProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
-  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
+  options?: {
+    baseURL?: string
+    contextWindow?: number
+    isCustom?: boolean
+    reasoning?: { effort: "high"; models: string[] }
+  },
 ): AIProvider {
   const isCustom = options?.isCustom ?? false
   const openai = new OpenAI({
@@ -381,6 +398,19 @@ export function createOpenAIChatCompletionsProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
+
+  const toRequestProps = (
+    model: string,
+  ): { model: string; reasoning_effort?: OpenAI.ReasoningEffort } => {
+    const rawModel = parseModelValue(model).rawModel
+    return {
+      model: rawModel,
+      ...(options?.reasoning &&
+      isReasoningModel(rawModel, options.reasoning.models)
+        ? { reasoning_effort: options.reasoning.effort }
+        : {}),
+    }
+  }
 
   return {
     id: providerId,
@@ -421,7 +451,7 @@ export function createOpenAIChatCompletionsProvider(
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const baseParams = {
-        ...toChatCompletionsAPIProps(model),
+        ...toRequestProps(model),
         tools: openaiTools,
       }
 
@@ -563,7 +593,7 @@ export function createOpenAIChatCompletionsProvider(
     async generateTitle({ model, prompt }) {
       try {
         const response = await openai.chat.completions.create({
-          model: toChatCompletionsAPIProps(model).model,
+          model: parseModelValue(model).rawModel,
           messages: [{ role: "user", content: prompt }],
           ...(isCustom ? {} : { max_completion_tokens: 100 }),
         })
@@ -585,17 +615,34 @@ export function createOpenAIChatCompletionsProvider(
       abortSignal?: AbortSignal
     }) {
       let text = ""
-      const stream = await openai.chat.completions.create(
-        {
-          ...toChatCompletionsAPIProps(model),
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
-          stream: true,
-        },
-        ...(abortSignal ? [{ signal: abortSignal }] : ([] as const)),
-      )
+      const summaryParams = {
+        ...toRequestProps(model),
+        messages: [
+          { role: "system" as const, content: systemPrompt },
+          { role: "user" as const, content: userMessage },
+        ],
+        stream: true as const,
+      }
+      const requestOptions = abortSignal
+        ? ([{ signal: abortSignal }] as const)
+        : ([] as const)
+      let stream
+      try {
+        stream = await openai.chat.completions.create(
+          summaryParams,
+          ...requestOptions,
+        )
+      } catch (error) {
+        if (!summaryParams.reasoning_effort || !isReasoningRejection(error)) {
+          throw error
+        }
+        const { reasoning_effort: _reasoningEffort, ...withoutReasoning } =
+          summaryParams
+        stream = await openai.chat.completions.create(
+          withoutReasoning,
+          ...requestOptions,
+        )
+      }
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content
         if (delta) {
@@ -603,43 +650,6 @@ export function createOpenAIChatCompletionsProvider(
         }
       }
       return text
-    },
-
-    async testConnection({ apiKey: testApiKey, model }) {
-      try {
-        const testClient = new OpenAI({
-          apiKey: testApiKey,
-          dangerouslyAllowBrowser: true,
-          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
-          ...(isCustom
-            ? {
-                fetch: createHeaderFilteredFetch(OPENAI_ALLOWED_HEADERS),
-              }
-            : {}),
-        })
-        await testClient.chat.completions.create({
-          model: getModelProps(model).model,
-          messages: [{ role: "user", content: "ping" }],
-        })
-        return { valid: true }
-      } catch (error: unknown) {
-        const status =
-          (error as { status?: number })?.status ||
-          (error as { error?: { status?: number } })?.error?.status
-        if (status === 401) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (status === 429) {
-          return { valid: true }
-        }
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to validate API key",
-        }
-      }
     },
 
     async countTokens({ messages, systemPrompt }) {
@@ -655,12 +665,17 @@ export function createOpenAIChatCompletionsProvider(
       return countTokensFromNativePayload(systemPrompt, nativeMessages)
     },
 
-    async listModels(): Promise<string[]> {
-      const models: string[] = []
+    async listModels(): Promise<ProviderModel[]> {
+      const models: ProviderModel[] = []
       for await (const model of openai.models.list()) {
-        models.push(model.id)
+        const name = (model as { name?: unknown }).name
+        models.push({
+          id: model.id,
+          created: model.created,
+          ...(typeof name === "string" ? { label: name } : {}),
+        })
       }
-      return models.sort((a, b) => a.localeCompare(b))
+      return models.sort((a, b) => a.id.localeCompare(b.id))
     },
 
     classifyError(

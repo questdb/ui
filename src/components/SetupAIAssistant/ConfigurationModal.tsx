@@ -4,33 +4,37 @@ import { Dialog } from "../Dialog"
 import { MultiStepModal, Step } from "../MultiStepModal"
 import { Box } from "../Box"
 import { Input } from "../Input"
-import { Switch } from "../Switch"
 import { Text } from "../Text"
 import { IconButton } from "../IconButton"
 import { SelectableCardButton } from "../SelectableCardButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { testApiKey } from "../../utils/ai/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import type { CustomProviderDefinition } from "../../providers/LocalStorageProvider/types"
 import { toast } from "../Toast"
 import {
-  getAllModelOptions,
+  buildListingMetadata,
+  filterOpenAiChatModels,
+  formatModelLabel,
   getAllProviders,
   makeCustomModelValue,
-  type ModelOption,
+  sortModelsNewestFirst,
   type ProviderId,
+  type ProviderModel,
   getProviderName,
 } from "../../utils/ai"
+import { createProvider } from "../../utils/ai/registry"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 import type { Permissions } from "../../utils/tools/permissions"
 import { useModalNavigation } from "../MultiStepModal"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
-import { BrainIcon } from "./BrainIcon"
 import { PlusIcon, Plugs as PlugsIcon, XIcon } from "@phosphor-icons/react"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
+import { ModelPicker } from "./ModelPicker"
+import { ReasoningSection } from "./ReasoningSection"
+import type { ReasoningEffortLevel } from "./ReasoningSection"
 
 const ModalContent = styled.div`
   display: flex;
@@ -158,10 +162,6 @@ const ErrorText = styled(Text)`
   font-size: 1.3rem;
 `
 
-const ModelList = styled(Box).attrs({ flexDirection: "column", gap: "1.2rem" })`
-  width: 100%;
-`
-
 const FormGroup = styled(Box).attrs({
   flexDirection: "column",
   gap: "1.6rem",
@@ -208,41 +208,6 @@ const EnableModelsTitle = styled(Text)`
   color: ${({ theme }) => theme.color.contentPrimary};
 `
 
-const ModelToggleRow = styled(Box).attrs({
-  justifyContent: "space-between",
-  align: "center",
-  gap: "2.4rem",
-})`
-  width: 100%;
-`
-
-const ModelInfoColumn = styled(Box).attrs({
-  flexDirection: "column",
-  gap: "0.8rem",
-})`
-  flex: 1;
-  align-items: flex-start;
-`
-
-const ModelInfoRow = styled(Box).attrs({
-  gap: "0.8rem",
-  align: "center",
-})`
-  width: 100%;
-`
-
-const ModelDescriptionText = styled(Text)`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  flex: 1;
-`
-
-const ModelNameText = styled(Text)`
-  font-size: 1.4rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
 const WarningText = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
@@ -280,10 +245,14 @@ type StepOneContentProps = {
 
 type StepTwoContentProps = {
   selectedProvider: ProviderId | null
+  listing: ProviderModel[] | null
   enabledModels: string[]
+  manualInput: string
+  reasoningEffortLevel: ReasoningEffortLevel
   permissions: Permissions
-  modelsByProvider: Record<string, ModelOption[]>
-  onModelToggle: (modelValue: string) => void
+  onSelectionChange: (models: string[]) => void
+  onManualInputChange: (value: string) => void
+  onReasoningEffortChange: (next: ReasoningEffortLevel) => void
   onPermissionsChange: (next: Permissions) => void
 }
 
@@ -417,10 +386,14 @@ const StepOneContent = ({
 
 const StepTwoContent = ({
   selectedProvider,
+  listing,
   enabledModels,
+  manualInput,
+  reasoningEffortLevel,
   permissions,
-  modelsByProvider,
-  onModelToggle,
+  onSelectionChange,
+  onManualInputChange,
+  onReasoningEffortChange,
   onPermissionsChange,
 }: StepTwoContentProps) => {
   const theme = useTheme()
@@ -428,9 +401,18 @@ const StepTwoContent = ({
   const handleClose: () => void = navigation.handleClose
   const currentProvider = selectedProvider
 
-  const getModelsForProvider = (provider: ProviderId) => {
-    return modelsByProvider[provider] || []
-  }
+  const isOpenAi = currentProvider === "openai"
+  const pickerModels = listing
+    ? isOpenAi
+      ? filterOpenAiChatModels(listing)
+      : sortModelsNewestFirst(listing)
+    : []
+  const hiddenModels =
+    listing && isOpenAi
+      ? sortModelsNewestFirst(
+          listing.filter((m) => !pickerModels.some((p) => p.id === m.id)),
+        )
+      : undefined
 
   return (
     <ModalContent data-hook="ai-settings-modal-step-two">
@@ -439,9 +421,9 @@ const StepTwoContent = ({
           <HeaderText>
             <ModalTitle>Setup your model preferences</ModalTitle>
             <ModalSubtitle id="step-1-description">
-              Enable and disable each of the models QuestDB currently supports
-              from this provider, and a level of data access. You&apos;ll be
-              able to update these settings any time.
+              Enable the models you want to use from this provider, and a level
+              of data access. You&apos;ll be able to update these settings any
+              time.
             </ModalSubtitle>
           </HeaderText>
           <CloseButton onClick={handleClose} />
@@ -449,11 +431,11 @@ const StepTwoContent = ({
       </HeaderSection>
       <Separator />
       <ContentSection>
-        {currentProvider ? (
+        {currentProvider && listing ? (
           <FormGroup>
             <EnableModelsSection>
               <EnableModelsHeader>
-                <EnableModelsTitle>Enable Models</EnableModelsTitle>
+                <EnableModelsTitle>Models</EnableModelsTitle>
                 <ProviderBadge>
                   {currentProvider === "anthropic" ? (
                     <AnthropicIcon
@@ -475,37 +457,16 @@ const StepTwoContent = ({
                   </ProviderBadgeText>
                 </ProviderBadge>
               </EnableModelsHeader>
-              <ModelList>
-                {getModelsForProvider(currentProvider).map((model) => {
-                  const isEnabled = enabledModels.includes(model.value)
-                  return (
-                    <ModelToggleRow
-                      key={model.value}
-                      data-model={model.label}
-                      data-model-enabled={isEnabled}
-                    >
-                      <ModelInfoColumn>
-                        <ModelNameText>{model.label}</ModelNameText>
-                        {model.isSlow && (
-                          <ModelInfoRow>
-                            <BrainIcon color={theme.color.contentSecondary} />
-                            <ModelDescriptionText>
-                              Due to advanced reasoning &amp; thinking
-                              capabilities, responses using this model can be
-                              slow.
-                            </ModelDescriptionText>
-                          </ModelInfoRow>
-                        )}
-                      </ModelInfoColumn>
-                      <Switch
-                        checked={isEnabled}
-                        onChange={() => onModelToggle(model.value)}
-                        data-checked={isEnabled}
-                      />
-                    </ModelToggleRow>
-                  )
-                })}
-              </ModelList>
+              <ModelPicker
+                listedModels={pickerModels}
+                hiddenModels={hiddenModels}
+                selectedModels={enabledModels}
+                manualInput={manualInput}
+                dataHookPrefix="configure-models"
+                labelFor={(model) => model.label ?? formatModelLabel(model.id)}
+                onSelectionChange={onSelectionChange}
+                onManualInputChange={onManualInputChange}
+              />
             </EnableModelsSection>
           </FormGroup>
         ) : (
@@ -515,6 +476,17 @@ const StepTwoContent = ({
           </SectionDescription>
         )}
       </ContentSection>
+      {isOpenAi && (
+        <>
+          <Separator />
+          <ContentSection>
+            <ReasoningSection
+              value={reasoningEffortLevel}
+              onChange={onReasoningEffortChange}
+            />
+          </ContentSection>
+        </>
+      )}
       <Separator />
       <ContentSection>
         {currentProvider && (
@@ -557,19 +529,14 @@ export const ConfigurationModal = ({
   }, [open])
 
   const [enabledModels, setEnabledModels] = useState<string[]>([])
+  const [manualInput, setManualInput] = useState("")
+  const [providerListing, setProviderListing] = useState<
+    ProviderModel[] | null
+  >(null)
+  const [reasoningEffortLevel, setReasoningEffortLevel] =
+    useState<ReasoningEffortLevel>("default")
   const [permissions, setPermissions] =
     useState<Permissions>(DEFAULT_PERMISSIONS)
-
-  const modelsByProvider = useMemo(() => {
-    const result: Record<string, ModelOption[]> = {}
-    getAllModelOptions(aiAssistantSettings).forEach((model) => {
-      if (!result[model.provider]) {
-        result[model.provider] = []
-      }
-      result[model.provider].push(model)
-    })
-    return result
-  }, [aiAssistantSettings])
 
   const handleProviderSelect = useCallback((provider: ProviderId) => {
     setSelectedProvider(provider)
@@ -582,21 +549,20 @@ export const ConfigurationModal = ({
     setError(null)
   }, [])
 
-  const handleModelToggle = useCallback((modelValue: string) => {
-    setEnabledModels((prev) => {
-      const isEnabled = prev.includes(modelValue)
-      return isEnabled
-        ? prev.filter((m) => m !== modelValue)
-        : [...prev, modelValue]
-    })
-  }, [])
-
   const handlePermissionsChange = useCallback((next: Permissions) => {
     setPermissions(next)
   }, [])
 
+  const effectiveEnabledModels = useCallback(() => {
+    const pending = manualInput.trim()
+    return pending && !enabledModels.includes(pending)
+      ? [...enabledModels, pending]
+      : enabledModels
+  }, [enabledModels, manualInput])
+
   const handleComplete = () => {
-    if (!selectedProvider || enabledModels.length === 0) return
+    const models = effectiveEnabledModels()
+    if (!selectedProvider || models.length === 0) return
 
     void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
       name: selectedProvider,
@@ -605,24 +571,33 @@ export const ConfigurationModal = ({
       write: permissions.write,
     })
 
-    const selectedModel =
-      enabledModels.find(
-        (m) =>
-          getAllModelOptions(aiAssistantSettings).find((mo) => mo.value === m)
-            ?.default,
-      ) ?? enabledModels[0]
+    const metadata = providerListing
+      ? buildListingMetadata(selectedProvider, providerListing, models)
+      : null
 
     const newSettings = {
       ...aiAssistantSettings,
-      selectedModel,
+      selectedModel: models[0],
       providers: {
         ...aiAssistantSettings.providers,
         [selectedProvider]: {
           apiKey,
-          enabledModels,
+          enabledModels: models,
           grantSchemaAccess: permissions.grantSchemaAccess,
           read: permissions.read,
           write: permissions.write,
+          ...(metadata && Object.keys(metadata.modelLabels).length > 0
+            ? { modelLabels: metadata.modelLabels }
+            : {}),
+          ...(metadata?.utilityModel
+            ? { utilityModel: metadata.utilityModel }
+            : {}),
+          ...(metadata?.reasoningModels?.length
+            ? { reasoningModels: metadata.reasoningModels }
+            : {}),
+          ...(reasoningEffortLevel === "high"
+            ? { reasoningEffort: "high" as const }
+            : {}),
         },
       },
     }
@@ -649,53 +624,44 @@ export const ConfigurationModal = ({
       return "Please enter an API key"
     }
 
-    const testModel =
-      getAllModelOptions(aiAssistantSettings).find(
-        (m) => m.isTestModel && m.provider === selectedProvider,
-      )?.value ?? modelsByProvider[selectedProvider][0].value
-
+    const provider = createProvider(
+      selectedProvider,
+      apiKey,
+      aiAssistantSettings,
+    )
     try {
-      const result = await testApiKey(
-        apiKey,
-        testModel,
-        selectedProvider,
-        aiAssistantSettings,
-      )
-      if (!result.valid) {
-        const errorMsg = result.error || "Invalid API key"
-        setError(errorMsg)
-        return errorMsg
-      }
-      const defaultModels = getAllModelOptions(aiAssistantSettings)
-        .filter((m) => m.defaultEnabled && m.provider === selectedProvider)
-        .map((m) => m.value)
-      if (defaultModels.length > 0) {
-        setEnabledModels(defaultModels)
-      }
+      const listing = await provider.listModels()
+      setProviderListing(listing)
       setError(null)
       void trackEvent(ConsoleEvent.AI_CONFIGURATION_VALIDATE)
       return true
     } catch (err) {
+      const classified = provider.classifyError(err, () => {})
       const errorMessage =
-        err instanceof Error ? err.message : "Failed to validate API key"
+        classified.type === "invalid_key"
+          ? "Invalid API key"
+          : classified.message
       setError(errorMessage)
       return errorMessage
     }
-  }, [selectedProvider, apiKey, modelsByProvider])
+  }, [selectedProvider, apiKey, aiAssistantSettings])
 
   const validateStepTwo = useCallback((): string | boolean => {
     if (!selectedProvider) return "Please select a provider"
-    if (enabledModels.length === 0) {
+    if (effectiveEnabledModels().length === 0) {
       return "Please enable at least one model"
     }
     return true
-  }, [enabledModels, selectedProvider])
+  }, [effectiveEnabledModels, selectedProvider])
 
   const handleStepChange = useCallback(
     (newStepIndex: number, direction: "next" | "previous") => {
       // When going back from step 2 to step 1, reset step 2 state but keep API key
       if (newStepIndex === 0 && direction === "previous") {
         setEnabledModels([])
+        setManualInput("")
+        setProviderListing(null)
+        setReasoningEffortLevel("default")
         setPermissions(DEFAULT_PERMISSIONS)
       }
     },
@@ -707,6 +673,9 @@ export const ConfigurationModal = ({
     setApiKey("")
     setError(null)
     setEnabledModels([])
+    setManualInput("")
+    setProviderListing(null)
+    setReasoningEffortLevel("default")
     setPermissions(DEFAULT_PERMISSIONS)
   }, [])
 
@@ -778,10 +747,14 @@ export const ConfigurationModal = ({
         content: (
           <StepTwoContent
             selectedProvider={selectedProvider}
+            listing={providerListing}
             enabledModels={enabledModels}
+            manualInput={manualInput}
+            reasoningEffortLevel={reasoningEffortLevel}
             permissions={permissions}
-            modelsByProvider={modelsByProvider}
-            onModelToggle={handleModelToggle}
+            onSelectionChange={setEnabledModels}
+            onManualInputChange={setManualInput}
+            onReasoningEffortChange={setReasoningEffortLevel}
             onPermissionsChange={handlePermissionsChange}
           />
         ),
@@ -795,10 +768,11 @@ export const ConfigurationModal = ({
       providerName,
       handleProviderSelect,
       handleApiKeyChange,
+      providerListing,
       enabledModels,
+      manualInput,
+      reasoningEffortLevel,
       permissions,
-      modelsByProvider,
-      handleModelToggle,
       handlePermissionsChange,
       validateStepOne,
       validateStepTwo,

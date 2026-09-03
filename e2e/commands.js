@@ -4,8 +4,7 @@ require("@4tw/cypress-drag-drop")
 
 const { ctrlOrCmd, escapeRegExp, seedNotebookOnboarding } = require("./utils")
 
-const contextPath = process.env.QDB_HTTP_CONTEXT_WEB_CONSOLE || ""
-const baseUrl = `http://localhost:9999${contextPath}`
+const baseUrl = Cypress.config("baseUrl")
 
 const tableSchemas = {
   btc_trades:

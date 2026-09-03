@@ -3,6 +3,15 @@ import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 import type { StatusCallback, AiAssistantAPIError } from "./aiAssistant"
 import { StreamingError, RefusalError, MaxTokensError } from "./shared"
 
+export function isReasoningRejection(error: unknown): boolean {
+  if (!(error instanceof OpenAI.APIError) || error.status !== 400) return false
+  const param = (error as { param?: string | null }).param
+  return (
+    (typeof param === "string" && param.includes("reasoning")) ||
+    error.message.toLowerCase().includes("reasoning")
+  )
+}
+
 let tiktokenEncoder: Tiktoken | null = null
 
 export async function countTokensFromNativePayload(

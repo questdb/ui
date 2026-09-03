@@ -7,6 +7,10 @@ export type ProviderSettings = {
   // Optional for back-compat; missing fields default to denied.
   read?: boolean
   write?: boolean
+  modelLabels?: Record<string, string>
+  utilityModel?: string
+  reasoningEffort?: "default" | "high"
+  reasoningModels?: string[]
 }
 
 export type CustomProviderDefinition = {

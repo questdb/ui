@@ -81,29 +81,35 @@ function interceptAIChatRequest(
 }
 
 /**
- * Intercepts AI provider token validation requests.
+ * Intercepts AI provider model listing requests.
+ * Validation now runs through GET /v1/models, so a mocked listing both
+ * validates the key and feeds the model picker.
+ *
+ * The OpenAI listing carries noise (whisper-1) that the picker must filter,
+ * and `created` timestamps that drive newest-first ordering.
  *
  * @param {"anthropic" | "openai"} provider - The AI provider to intercept
- * @param {boolean} success - If true, returns 200 success response; if false, returns 401 error
+ * @param {boolean} success - If true, returns 200 with a listing; if false, returns 401
  */
 function interceptTokenValidation(provider, success) {
-  const endpoint = PROVIDERS[provider].endpoint
-
   if (provider === "openai") {
     if (success) {
-      cy.intercept("POST", endpoint, {
+      cy.intercept("GET", "https://api.openai.com/v1/models*", {
         statusCode: 200,
         delay: 200,
         body: {
-          id: "resp_mock_test",
-          object: "response",
-          created_at: Date.now(),
-          status: "completed",
-          output: [],
+          object: "list",
+          data: [
+            { id: "gpt-5.4", object: "model", created: 1772000000 },
+            { id: "gpt-5-mini", object: "model", created: 1754500000 },
+            { id: "gpt-5", object: "model", created: 1754400000 },
+            { id: "gpt-5-nano", object: "model", created: 1754300000 },
+            { id: "whisper-1", object: "model", created: 1677532384 },
+          ],
         },
       }).as("openaiValidation")
     } else {
-      cy.intercept("POST", endpoint, {
+      cy.intercept("GET", "https://api.openai.com/v1/models*", {
         statusCode: 401,
         delay: 200,
         body: {
@@ -119,24 +125,37 @@ function interceptTokenValidation(provider, success) {
     }
   } else if (provider === "anthropic") {
     if (success) {
-      cy.intercept("POST", endpoint, {
+      cy.intercept("GET", "https://api.anthropic.com/v1/models*", {
         statusCode: 200,
         delay: 200,
         body: {
-          id: "msg_mock_test",
-          type: "message",
-          role: "assistant",
-          content: [],
-          model: "claude-sonnet-4-5",
-          stop_reason: "end_turn",
-          usage: {
-            input_tokens: 10,
-            output_tokens: 5,
-          },
+          data: [
+            {
+              type: "model",
+              id: "claude-opus-4-5",
+              display_name: "Claude Opus 4.5",
+              created_at: "2025-11-01T00:00:00Z",
+            },
+            {
+              type: "model",
+              id: "claude-sonnet-4-5",
+              display_name: "Claude Sonnet 4.5",
+              created_at: "2025-09-29T00:00:00Z",
+            },
+            {
+              type: "model",
+              id: "claude-haiku-4-5",
+              display_name: "Claude Haiku 4.5",
+              created_at: "2025-10-01T00:00:00Z",
+            },
+          ],
+          has_more: false,
+          first_id: "claude-opus-4-5",
+          last_id: "claude-haiku-4-5",
         },
       }).as("anthropicValidation")
     } else {
-      cy.intercept("POST", endpoint, {
+      cy.intercept("GET", "https://api.anthropic.com/v1/models*", {
         statusCode: 401,
         delay: 200,
         body: {
@@ -165,6 +184,14 @@ describe("ai assistant", () => {
         `Unhandled Anthropic request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
       )
     }).as("unhandledAnthropic")
+
+    cy.intercept("GET", "https://api.openai.com/v1/models*", () => {
+      throw new Error("Unhandled OpenAI model listing request detected!")
+    }).as("unhandledOpenAIModels")
+
+    cy.intercept("GET", "https://api.anthropic.com/v1/models*", () => {
+      throw new Error("Unhandled Anthropic model listing request detected!")
+    }).as("unhandledAnthropicModels")
   })
 
   describe("onboarding and settings", () => {
@@ -294,10 +321,15 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-settings-api-key").type("valid-api-key")
       cy.getByDataHook("multi-step-modal-next-button").click()
 
-      // Then
+      // Then - step two shows the filtered listing, nothing preselected
       cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
+      cy.getByDataHook("configure-models-model-row").should("have.length", 4)
 
-      // When
+      // When - enable two models and activate
+      cy.getByDataHook("configure-models-model-row").contains("gpt-5.4").click()
+      cy.getByDataHook("configure-models-model-row")
+        .contains("gpt-5-mini")
+        .click()
       cy.getByDataHook("multi-step-modal-next-button").click()
 
       // Then
@@ -396,7 +428,10 @@ describe("ai assistant", () => {
       // Then
       cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
 
-      // When - drop permissions to None so schema tools are excluded.
+      // When - enable a model, drop permissions to None so schema tools are excluded.
+      cy.getByDataHook("configure-models-model-row")
+        .contains("gpt-5-mini")
+        .click()
       cy.getByDataHook("permissions-trigger").click()
       cy.getByDataHook("permission-level-none").click()
       cy.getByDataHook("multi-step-modal-next-button").click()
@@ -444,8 +479,8 @@ describe("ai assistant", () => {
     })
 
     it("should work with multiple providers", () => {
-      const openaiEnabledModels = []
-      const anthropicEnabledModels = []
+      const openaiEnabledModels = ["GPT-5.4", "GPT-5 Mini"]
+      const anthropicEnabledModels = ["Claude Opus 4.5", "Claude Sonnet 4.5"]
 
       // Given - Set up OpenAI provider first
       interceptTokenValidation("openai", true)
@@ -462,10 +497,11 @@ describe("ai assistant", () => {
       // Then - Should be on step two
       cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
 
-      // When - Store enabled model labels for OpenAI
-      cy.get('[data-model-enabled="true"]').each(($modelRow) => {
-        openaiEnabledModels.push($modelRow.attr("data-model"))
-      })
+      // When - Enable two OpenAI models
+      cy.getByDataHook("configure-models-model-row").contains("gpt-5.4").click()
+      cy.getByDataHook("configure-models-model-row")
+        .contains("gpt-5-mini")
+        .click()
 
       cy.getByDataHook("multi-step-modal-next-button").click()
 
@@ -500,18 +536,23 @@ describe("ai assistant", () => {
       cy.getByDataHook("ai-settings-api-key").type("valid-anthropic-key")
       cy.getByDataHook("ai-settings-test-api").click()
 
-      // Then - Should show validating and then validated
+      // Then - Validation opens Manage Models with the fetched listing
       cy.wait("@anthropicValidation")
+      cy.getByDataHook("manage-models-model-row").should("have.length", 3)
+
+      // When - Enable two Anthropic models and save the picker
+      cy.getByDataHook("manage-models-model-row")
+        .contains("Claude Opus 4.5")
+        .click()
+      cy.getByDataHook("manage-models-model-row")
+        .contains("Claude Sonnet 4.5")
+        .click()
+      cy.getByDataHook("manage-models-save").click()
 
       // Then - Anthropic should no longer show Inactive
       cy.getByDataHook("ai-settings-provider-anthropic")
         .getByDataHook("ai-settings-provider-status")
         .should("not.contain", "Inactive")
-
-      // When - Store enabled model labels for Anthropic
-      cy.get('[data-enabled="true"]').each(($modelRow) => {
-        anthropicEnabledModels.push($modelRow.attr("data-model"))
-      })
 
       // When - Save settings
       cy.getByDataHook("ai-settings-save").click()
@@ -3499,15 +3540,32 @@ describe("custom providers", () => {
     cy.contains("codellama").should("be.visible")
     cy.get("body").type("{esc}") // close dropdown
 
+    cy.intercept("GET", "http://localhost:11434/v1/models*", {
+      statusCode: 200,
+      body: {
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
+          { id: "codellama", object: "model" },
+        ],
+      },
+    }).as("ollamaModels")
+
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
 
+    // Models render as read-only rows; changes go through Manage models
     cy.get("[data-model='llama3']").should("exist")
     cy.get("[data-model='mistral']").should("exist")
     cy.get("[data-model='codellama']").should("exist")
 
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@ollamaModels")
+    cy.getByDataHook("custom-provider-model-row").contains("mistral").click()
+    cy.getByDataHook("manage-models-save").click()
+
+    cy.get("[data-model='mistral']").should("not.exist")
     cy.getByDataHook("ai-settings-save").click()
 
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
@@ -3518,10 +3576,14 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    cy.get("[data-model='mistral']").should("not.exist")
 
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='true']").should("exist")
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@ollamaModels")
+    cy.getByDataHook("custom-provider-model-row").contains("mistral").click()
+    cy.getByDataHook("manage-models-save").click()
+
+    cy.get("[data-model='mistral']").should("exist")
     cy.getByDataHook("ai-settings-save").click()
 
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
@@ -3859,7 +3921,7 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-settings-model-dropdown").click()
     cy.getByDataHook("ai-settings-model-item-label")
-      .contains("GPT-5 mini")
+      .contains("GPT-5 Mini")
       .click()
 
     cy.getByDataHook("chat-window-new").click()
@@ -4158,7 +4220,7 @@ describe("custom providers", () => {
     cy.get("body").type("{esc}") // close dropdown
   })
 
-  it("should auto-enable new models from manage models and preserve unsaved toggle state", () => {
+  it("should add and remove models through manage models in manual mode", () => {
     const providerId = "test-provider"
 
     cy.loadConsoleWithAuth(
@@ -4175,14 +4237,10 @@ describe("custom providers", () => {
       .should("be.visible")
       .click()
 
-    // All 3 models should be enabled
-    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-b'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
-
-    // Disable model-b toggle (unsaved state)
-    cy.get("[data-model='model-b']").find("button[role='switch']").click()
-    cy.get("[data-model='model-b'][data-enabled='false']").should("exist")
+    // All 3 models render as read-only rows
+    cy.get("[data-model='model-a']").should("exist")
+    cy.get("[data-model='model-b']").should("exist")
+    cy.get("[data-model='model-c']").should("exist")
 
     // Intercept model fetch → fail to get manual mode
     cy.intercept("GET", "**/models*", {
@@ -4214,10 +4272,10 @@ describe("custom providers", () => {
     cy.getByDataHook("manage-models-save").click()
 
     // Back in SettingsModal: model-b gone, model-d auto-enabled
-    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-a']").should("exist")
     cy.get("[data-model='model-b']").should("not.exist")
-    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-d'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-c']").should("exist")
+    cy.get("[data-model='model-d']").should("exist")
 
     // Save settings
     cy.getByDataHook("ai-settings-save").click()
@@ -4234,10 +4292,6 @@ describe("custom providers", () => {
 
   it("should handle no-API-key custom provider: models visible, no validated badge, schema toggle enabled, and allow adding an API key", () => {
     const providerId = "ollama"
-    const customEndpoint = getCustomProviderEndpoint(
-      CUSTOM_PROVIDER_DEFAULTS.baseURL,
-      "openai-chat-completions",
-    )
 
     cy.loadConsoleWithAuth(
       false,
@@ -4265,7 +4319,7 @@ describe("custom providers", () => {
       "This provider does not have an API key",
     )
 
-    // Model list visible with both models
+    // Model list visible with both models as read-only rows
     cy.get("[data-model='llama3']").should("exist")
     cy.get("[data-model='mistral']").should("exist")
 
@@ -4275,11 +4329,7 @@ describe("custom providers", () => {
     // Manage models button visible
     cy.getByDataHook("ai-settings-manage-models").should("be.visible")
 
-    // Toggle mistral off
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
-
-    // Built-in provider should NOT have manage models button
+    // Built-in provider should NOT have manage models button before validation
     cy.getByDataHook("ai-settings-provider-openai").click()
     cy.getByDataHook("ai-settings-manage-models").should("not.exist")
 
@@ -4292,21 +4342,16 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-edit-api-key").click()
     cy.getByDataHook("ai-settings-api-key").type("sk-custom-key-123")
 
-    // Intercept validation request to custom endpoint
-    cy.intercept("POST", customEndpoint, {
+    // Validation runs through the provider's model listing
+    cy.intercept("GET", "http://localhost:11434/v1/models*", {
       statusCode: 200,
       delay: 200,
       body: {
-        id: "chatcmpl-mock",
-        object: "chat.completion",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "" },
-            finish_reason: "stop",
-          },
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
         ],
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       },
     }).as("customValidation")
 
@@ -4317,19 +4362,20 @@ describe("custom providers", () => {
     // Validated badge should now appear
     cy.getByDataHook("ai-settings-validated-badge").should("be.visible")
 
-    // Models still visible, mistral toggle preserved
-    cy.get("[data-model='llama3'][data-enabled='true']").should("exist")
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    // Models still visible
+    cy.get("[data-model='llama3']").should("exist")
+    cy.get("[data-model='mistral']").should("exist")
 
     // Part C: Save and verify
 
     cy.getByDataHook("ai-settings-save").click()
     cy.get(".toast-success-container").should("be.visible").click()
 
-    // Dropdown should show only llama3 (mistral was disabled)
+    // Dropdown should show both models
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
-    cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 2)
     cy.contains("llama3").should("be.visible")
+    cy.contains("mistral").should("be.visible")
     cy.get("body").type("{esc}") // close dropdown
   })
 })

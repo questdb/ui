@@ -8,12 +8,13 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { getModelProps } from "./settings"
+import { parseModelValue } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
   type ExecuteFlowParams,
   type FlowResult,
+  type ProviderModel,
   type ToolDefinition,
   type Message,
 } from "./types"
@@ -130,7 +131,7 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
 }
 
 function toAnthropicModel(model: string): string {
-  return getModelProps(model).model
+  return parseModelValue(model).rawModel
 }
 
 async function createAnthropicMessage(
@@ -397,7 +398,6 @@ async function handleToolCalls(
     system: systemPrompt,
     ...(!isLastRound && { tools }),
     messages: updatedHistory,
-    temperature: 0.3,
   }
 
   const followUpMessage = streaming
@@ -507,7 +507,6 @@ export function createAnthropicProvider(
         system: systemPrompt,
         tools: anthropicTools,
         messages: initialMessages,
-        temperature: 0.3,
       }
 
       const message = streaming
@@ -587,7 +586,6 @@ export function createAnthropicProvider(
           model: toAnthropicModel(model),
           messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
-          temperature: 0.3,
         })
 
         const textBlock = message.content.find((block) => block.type === "text")
@@ -611,7 +609,7 @@ export function createAnthropicProvider(
       let text = ""
       const stream = anthropic.messages.stream(
         {
-          ...getModelProps(model),
+          model: toAnthropicModel(model),
           max_tokens: 64_000,
           messages: [{ role: "user", content: userMessage }],
           system: systemPrompt,
@@ -627,54 +625,6 @@ export function createAnthropicProvider(
         }
       }
       return text
-    },
-
-    async testConnection({ apiKey: testApiKey, model }) {
-      try {
-        const testClient = new Anthropic({
-          apiKey: testApiKey,
-          dangerouslyAllowBrowser: true,
-          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
-          ...(isCustom
-            ? {
-                fetch: createHeaderFilteredFetch(ANTHROPIC_ALLOWED_HEADERS),
-              }
-            : {}),
-        })
-
-        await createAnthropicMessage(testClient, {
-          model: toAnthropicModel(model),
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 16,
-        })
-        return { valid: true }
-      } catch (error: unknown) {
-        if (error instanceof MaxTokensError || error instanceof RefusalError) {
-          return { valid: true }
-        }
-        if (error instanceof Anthropic.AuthenticationError) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (error instanceof Anthropic.RateLimitError) {
-          return { valid: true }
-        }
-        const status =
-          (error as { status?: number })?.status ||
-          (error as { error?: { status?: number } })?.error?.status
-        if (status === 401) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (status === 429) {
-          return { valid: true }
-        }
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to validate API key",
-        }
-      }
     },
 
     async countTokens({ messages, systemPrompt, model }) {
@@ -697,12 +647,16 @@ export function createAnthropicProvider(
       return response.input_tokens
     },
 
-    async listModels(): Promise<string[]> {
-      const models: string[] = []
+    async listModels(): Promise<ProviderModel[]> {
+      const models: ProviderModel[] = []
       for await (const model of anthropic.models.list()) {
-        models.push(model.id)
+        models.push({
+          id: model.id,
+          label: model.display_name,
+          created: Math.floor(Date.parse(model.created_at) / 1000),
+        })
       }
-      return models.sort((a, b) => a.localeCompare(b))
+      return models.sort((a, b) => a.id.localeCompare(b.id))
     },
 
     classifyError(

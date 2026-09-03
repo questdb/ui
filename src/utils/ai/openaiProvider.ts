@@ -5,12 +5,14 @@ import type {
   StatusCallback,
   StreamingCallback,
 } from "./aiAssistant"
-import { getModelProps } from "./settings"
+import { parseModelValue } from "./settings"
 import type { ProviderId } from "./settings"
+import { isReasoningModel } from "./modelCatalog"
 import {
   type AIProvider,
   type ExecuteFlowParams,
   type FlowResult,
+  type ProviderModel,
   type ToolDefinition,
   type Message,
 } from "./types"
@@ -28,6 +30,7 @@ import {
   classifyOpenAIError,
   countTokensFromNativePayload,
   isOpenAINonRetryableError,
+  isReasoningRejection,
 } from "./openaiShared"
 import {
   createHeaderFilteredFetch,
@@ -255,28 +258,37 @@ function getOpenAIText(response: OpenAI.Responses.Response): {
   return { type: "text", message: "" }
 }
 
-function toResponsesAPIProps(model: string): {
-  model: string
-  reasoning?: OpenAI.Reasoning
-} {
-  const props = getModelProps(model)
-  return {
-    model: props.model,
-    ...(props.reasoningEffort
-      ? {
-          reasoning: {
-            effort: props.reasoningEffort as OpenAI.ReasoningEffort,
-            summary: "auto",
-          },
-        }
-      : {}),
+async function createResponseWithReasoningFallback(
+  openai: OpenAI,
+  params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+  streaming?: StreamingCallback,
+  abortSignal?: AbortSignal,
+): Promise<OpenAI.Responses.Response> {
+  const run = async (p: OpenAI.Responses.ResponseCreateParamsNonStreaming) =>
+    streaming
+      ? (await createOpenAIResponseStreaming(openai, p, streaming, abortSignal))
+          .response
+      : openai.responses.create(p)
+  try {
+    return await run(params)
+  } catch (error) {
+    if (params.reasoning && isReasoningRejection(error)) {
+      const { reasoning: _reasoning, ...withoutReasoning } = params
+      return run(withoutReasoning)
+    }
+    throw error
   }
 }
 
 export function createOpenAIProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
-  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
+  options?: {
+    baseURL?: string
+    contextWindow?: number
+    isCustom?: boolean
+    reasoning?: { effort: "high"; models: string[] }
+  },
 ): AIProvider {
   const isCustom = options?.isCustom ?? false
   const openai = new OpenAI({
@@ -291,6 +303,24 @@ export function createOpenAIProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
+
+  const toRequestProps = (
+    model: string,
+  ): { model: string; reasoning?: OpenAI.Reasoning } => {
+    const rawModel = parseModelValue(model).rawModel
+    return {
+      model: rawModel,
+      ...(options?.reasoning &&
+      isReasoningModel(rawModel, options.reasoning.models)
+        ? {
+            reasoning: {
+              effort: options.reasoning.effort,
+              summary: "auto" as const,
+            },
+          }
+        : {}),
+    }
+  }
 
   return {
     id: providerId,
@@ -329,7 +359,7 @@ export function createOpenAIProvider(
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const requestParams = {
-        ...toResponsesAPIProps(model),
+        ...toRequestProps(model),
         instructions: config.systemInstructions,
         input,
         tools: openaiTools,
@@ -337,17 +367,12 @@ export function createOpenAIProvider(
         include: ["reasoning.encrypted_content"],
       } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
-      const streamResult = streaming
-        ? await createOpenAIResponseStreaming(
-            openai,
-            requestParams,
-            streaming,
-            abortSignal,
-          )
-        : {
-            response: await openai.responses.create(requestParams),
-          }
-      let lastResponse = streamResult.response
+      let lastResponse = await createResponseWithReasoningFallback(
+        openai,
+        requestParams,
+        streaming,
+        abortSignal,
+      )
       input = [...input, ...lastResponse.output]
 
       totalInputTokens += lastResponse.usage?.input_tokens ?? 0
@@ -437,7 +462,7 @@ export function createOpenAIProvider(
         streaming?.onResponseStart?.()
 
         const loopRequestParams = {
-          ...toResponsesAPIProps(model),
+          ...toRequestProps(model),
           instructions: config.systemInstructions,
           input,
           ...(!isLastRound && { tools: openaiTools }),
@@ -445,17 +470,12 @@ export function createOpenAIProvider(
           include: ["reasoning.encrypted_content"],
         } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
-        const loopResult = streaming
-          ? await createOpenAIResponseStreaming(
-              openai,
-              loopRequestParams,
-              streaming,
-              abortSignal,
-            )
-          : {
-              response: await openai.responses.create(loopRequestParams),
-            }
-        lastResponse = loopResult.response
+        lastResponse = await createResponseWithReasoningFallback(
+          openai,
+          loopRequestParams,
+          streaming,
+          abortSignal,
+        )
         input = [...input, ...lastResponse.output]
 
         totalInputTokens += lastResponse.usage?.input_tokens ?? 0
@@ -502,7 +522,7 @@ export function createOpenAIProvider(
     async generateTitle({ model, prompt }) {
       try {
         const response = await openai.responses.create({
-          model: toResponsesAPIProps(model).model,
+          model: parseModelValue(model).rawModel,
           input: [{ role: "user", content: prompt }],
           max_output_tokens: 100,
         })
@@ -524,58 +544,34 @@ export function createOpenAIProvider(
       abortSignal?: AbortSignal
     }) {
       let text = ""
-      const stream = await openai.responses.create(
-        {
-          ...toResponsesAPIProps(model),
-          instructions: systemPrompt,
-          input: userMessage,
-          stream: true,
-        },
-        ...(abortSignal ? [{ signal: abortSignal }] : ([] as const)),
-      )
+      const summaryParams = {
+        ...toRequestProps(model),
+        instructions: systemPrompt,
+        input: userMessage,
+        stream: true as const,
+      }
+      const requestOptions = abortSignal
+        ? ([{ signal: abortSignal }] as const)
+        : ([] as const)
+      let stream
+      try {
+        stream = await openai.responses.create(summaryParams, ...requestOptions)
+      } catch (error) {
+        if (!summaryParams.reasoning || !isReasoningRejection(error)) {
+          throw error
+        }
+        const { reasoning: _reasoning, ...withoutReasoning } = summaryParams
+        stream = await openai.responses.create(
+          withoutReasoning,
+          ...requestOptions,
+        )
+      }
       for await (const event of stream) {
         if (event.type === "response.output_text.delta" && "delta" in event) {
           text += event.delta
         }
       }
       return text
-    },
-
-    async testConnection({ apiKey: testApiKey, model }) {
-      try {
-        const testClient = new OpenAI({
-          apiKey: testApiKey,
-          dangerouslyAllowBrowser: true,
-          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
-          ...(isCustom
-            ? {
-                fetch: createHeaderFilteredFetch(OPENAI_ALLOWED_HEADERS),
-              }
-            : {}),
-        })
-        await testClient.responses.create({
-          model: getModelProps(model).model,
-          input: [{ role: "user", content: "ping" }],
-        })
-        return { valid: true }
-      } catch (error: unknown) {
-        const status =
-          (error as { status?: number })?.status ||
-          (error as { error?: { status?: number } })?.error?.status
-        if (status === 401) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (status === 429) {
-          return { valid: true }
-        }
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to validate API key",
-        }
-      }
     },
 
     async countTokens({ messages, systemPrompt }) {
@@ -591,12 +587,17 @@ export function createOpenAIProvider(
       return countTokensFromNativePayload(systemPrompt, nativeInput)
     },
 
-    async listModels(): Promise<string[]> {
-      const models: string[] = []
+    async listModels(): Promise<ProviderModel[]> {
+      const models: ProviderModel[] = []
       for await (const model of openai.models.list()) {
-        models.push(model.id)
+        const name = (model as { name?: unknown }).name
+        models.push({
+          id: model.id,
+          created: model.created,
+          ...(typeof name === "string" ? { label: name } : {}),
+        })
       }
-      return models.sort((a, b) => a.localeCompare(b))
+      return models.sort((a, b) => a.id.localeCompare(b.id))
     },
 
     classifyError(
