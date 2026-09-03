@@ -5,9 +5,10 @@ import { Overlay } from "../Overlay"
 import { ForwardRef } from "../ForwardRef"
 import { Text } from "../Text"
 import { Button } from "../Button"
-import { Switch } from "../Switch"
+import { SelectMenuControl } from "../SelectMenu"
 import { Input } from "../Input"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
+import type { RunWithSelectionMode } from "../../providers/LocalStorageProvider/types"
 import {
   isMaxColumnWidthDraftValid,
   parseMaxColumnWidth,
@@ -77,6 +78,36 @@ const WidthInput = styled(Input)`
   text-align: right;
 `
 
+const ModeSelectField = styled.div`
+  width: 16rem;
+`
+
+const RUN_WITH_SELECTION_OPTIONS: {
+  label: string
+  value: RunWithSelectionMode
+  description: string
+  dataHook: string
+}[] = [
+  {
+    label: "Partial queries",
+    value: "partial",
+    description: "Selecting part of a query runs only that part.",
+    dataHook: "run-with-selection-partial",
+  },
+  {
+    label: "Complete queries",
+    value: "complete",
+    description: "Selecting part of a query runs the whole query.",
+    dataHook: "run-with-selection-complete",
+  },
+  {
+    label: "Off",
+    value: "off",
+    description: "The selection is ignored. The query at the cursor runs.",
+    dataHook: "run-with-selection-off",
+  },
+]
+
 type SettingRowProps = {
   label: string
   description: string
@@ -117,9 +148,10 @@ const MAX_COLUMN_WIDTH_ID = "editor-settings-max-column-width"
 const MAX_COLUMN_WIDTH_ERROR_ID = `${MAX_COLUMN_WIDTH_ID}-error`
 
 const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
-  const { runWithSelection, maxColumnWidth, updateSettings } = useLocalStorage()
-  const [runWithSelectionDraft, setRunWithSelectionDraft] =
-    useState(runWithSelection)
+  const { runWithSelectionMode, maxColumnWidth, updateSettings } =
+    useLocalStorage()
+  const [runWithSelectionModeDraft, setRunWithSelectionModeDraft] =
+    useState(runWithSelectionMode)
   const [maxColumnWidthDraft, setMaxColumnWidthDraft] = useState(
     maxColumnWidth === "auto" ? "" : String(maxColumnWidth),
   )
@@ -132,7 +164,7 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
       widthInputRef.current?.focus()
       return
     }
-    updateSettings(StoreKey.RUN_WITH_SELECTION, runWithSelectionDraft)
+    updateSettings(StoreKey.RUN_WITH_SELECTION, runWithSelectionModeDraft)
     updateSettings(
       StoreKey.MAX_COLUMN_WIDTH,
       parseMaxColumnWidth(maxColumnWidthDraft),
@@ -150,16 +182,23 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
       <Body>
         <SettingRow
           label="Run with selection"
-          description="Run actions in the editor respect your text selection."
+          description="Controls how run actions apply your text selection."
           controlId={RUN_WITH_SELECTION_ID}
         >
-          <Switch
-            id={RUN_WITH_SELECTION_ID}
-            checked={runWithSelectionDraft}
-            onChange={setRunWithSelectionDraft}
-            ariaDescribedBy={settingDescriptionId(RUN_WITH_SELECTION_ID)}
-            dataHook={RUN_WITH_SELECTION_ID}
-          />
+          <ModeSelectField>
+            <SelectMenuControl
+              id={RUN_WITH_SELECTION_ID}
+              name="run-with-selection-mode"
+              ariaLabel="Run with selection"
+              ariaDescribedBy={settingDescriptionId(RUN_WITH_SELECTION_ID)}
+              dataHook={RUN_WITH_SELECTION_ID}
+              value={runWithSelectionModeDraft}
+              onValueChange={(value) =>
+                setRunWithSelectionModeDraft(value as RunWithSelectionMode)
+              }
+              options={RUN_WITH_SELECTION_OPTIONS}
+            />
+          </ModeSelectField>
         </SettingRow>
         <SettingRow
           label="Maximum column width (px)"

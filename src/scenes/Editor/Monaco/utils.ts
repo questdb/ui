@@ -26,6 +26,7 @@ import type { Monaco } from "@monaco-editor/react"
 import type { ErrorResult } from "../../../utils"
 import { hashString } from "../../../utils"
 import type { ValidateQueryResult } from "../../../utils/questdb"
+import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -108,6 +109,9 @@ export const stripSQLComments = (text: string): string =>
     return match
   })
 
+export const hasRunnableSelectionContent = (text: string): boolean =>
+  /[^\s;]/.test(stripSQLComments(text))
+
 export const getQueriesFromText = (text: string): string[] => {
   if (!text || !stripSQLComments(text)) return []
 
@@ -138,24 +142,27 @@ export const getSelectedText = (
 export const getQueriesToRun = (
   editor: IStandaloneCodeEditor,
   queryOffsets: { startOffset: number; endOffset: number }[],
-  runWithSelection: boolean,
+  selectionMode: RunWithSelectionMode,
+  options?: { queryOffsetsAreFresh?: boolean },
 ): Request[] => {
   const model = editor.getModel()
   if (!model) return []
 
   const selection = editor.getSelection()
   const selectedText = selection ? model.getValueInRange(selection) : undefined
-  if (!runWithSelection || !selection || !selectedText) {
+  if (selectionMode === "off" || !selection || !selectedText) {
     const queryInCursor = getQueryFromCursor(editor)
     if (queryInCursor) {
       return [queryInCursor]
     }
     return []
   }
+  if (!hasRunnableSelectionContent(selectedText)) {
+    return []
+  }
+  const normalizedSelectedText = normalizeQueryText(selectedText)
   let selectionStartOffset = model.getOffsetAt(selection.getStartPosition())
   let selectionEndOffset = model.getOffsetAt(selection.getEndPosition())
-
-  const normalizedSelectedText = normalizeQueryText(selectedText)
 
   if (stripSQLComments(normalizedSelectedText).length > 0) {
     selectionStartOffset += selectedText.indexOf(normalizedSelectedText)
@@ -173,11 +180,40 @@ export const getQueriesToRun = (
     return []
   }
 
-  const queries = getQueriesInRange(
-    editor,
-    model.getPositionAt(firstQueryOffsets.startOffset),
-    model.getPositionAt(lastQueryOffsets.endOffset),
-  )
+  // The lookups invert when the selection sits entirely in the gap between
+  // two statements (a comment line, blank lines) — no statement is touched.
+  if (firstQueryOffsets.startOffset > lastQueryOffsets.endOffset) {
+    return []
+  }
+
+  const queries = options?.queryOffsetsAreFresh
+    ? queryOffsets
+        .slice(
+          queryOffsets.indexOf(firstQueryOffsets),
+          queryOffsets.lastIndexOf(lastQueryOffsets) + 1,
+        )
+        .map(({ startOffset, endOffset }) => {
+          const startPosition = model.getPositionAt(startOffset)
+          const endPosition = model.getPositionAt(endOffset)
+
+          return {
+            query: model.getValueInRange({
+              startLineNumber: startPosition.lineNumber,
+              startColumn: startPosition.column,
+              endLineNumber: endPosition.lineNumber,
+              endColumn: endPosition.column,
+            }),
+            row: startPosition.lineNumber - 1,
+            column: startPosition.column,
+            endRow: endPosition.lineNumber - 1,
+            endColumn: endPosition.column,
+          }
+        })
+    : getQueriesInRange(
+        editor,
+        model.getPositionAt(firstQueryOffsets.startOffset),
+        model.getPositionAt(lastQueryOffsets.endOffset),
+      )
   const requests = queries.map((query) => {
     const clampedSelection = clampRange(model, selection, {
       startOffset: model.getOffsetAt({
@@ -190,13 +226,13 @@ export const getQueriesToRun = (
       }),
     })
     const clampedSelectionText = model.getValueInRange(clampedSelection)
-    return stripSQLComments(normalizeQueryText(clampedSelectionText))
-      ? {
-          query: query.query,
-          row: query.row,
-          column: query.column,
-          endRow: query.endRow,
-          endColumn: query.endColumn,
+    if (!stripSQLComments(normalizeQueryText(clampedSelectionText))) {
+      return undefined
+    }
+    return selectionMode === "complete"
+      ? query
+      : {
+          ...query,
           selection: {
             startOffset: model.getOffsetAt({
               lineNumber: clampedSelection.startLineNumber,
@@ -209,7 +245,6 @@ export const getQueriesToRun = (
             queryText: clampedSelectionText,
           },
         }
-      : undefined
   })
   return requests.filter(Boolean) as Request[]
 }
@@ -649,6 +684,24 @@ export const getQueriesInRange = (
   return [...stackQueries, ...(nextSqlQuery ? [nextSqlQuery] : [])]
 }
 
+export const getStatementOffsets = (
+  editor: IStandaloneCodeEditor,
+): { startOffset: number; endOffset: number }[] => {
+  const model = editor.getModel()
+  if (!model) return []
+
+  return getAllQueries(editor).map((query) => ({
+    startOffset: model.getOffsetAt({
+      lineNumber: query.row + 1,
+      column: query.column,
+    }),
+    endOffset: model.getOffsetAt({
+      lineNumber: query.endRow + 1,
+      column: query.endColumn,
+    }),
+  }))
+}
+
 export const getQueriesStartingFromLine = (
   editor: IStandaloneCodeEditor,
   lineNumber: number,
@@ -726,16 +779,22 @@ export const getQueryFromSelection = (
 
 export const getQueryRequestFromEditor = (
   editor: IStandaloneCodeEditor,
-  runWithSelection: boolean,
+  selectionMode: RunWithSelectionMode,
 ): Request | undefined => {
   let request: Request | undefined
   const selectedText = getSelectedText(editor)
-  const strippedNormalizedSelectedText = selectedText
-    ? stripSQLComments(normalizeQueryText(selectedText))
-    : undefined
 
-  if (runWithSelection && strippedNormalizedSelectedText) {
-    request = getQueryFromSelection(editor)
+  if (
+    selectionMode !== "off" &&
+    selectedText &&
+    hasRunnableSelectionContent(selectedText)
+  ) {
+    request =
+      selectionMode === "complete"
+        ? getQueriesToRun(editor, getStatementOffsets(editor), "complete", {
+            queryOffsetsAreFresh: true,
+          })[0]
+        : getQueryFromSelection(editor)
   } else {
     request = getQueryFromCursor(editor)
   }
@@ -975,8 +1034,91 @@ export const normalizeQueryText = (query: string) => {
   return result.trim()
 }
 
+export const joinQueryTexts = (queries: string[]): string =>
+  queries.join("\n;\n")
+
+export type SelectionRunResolution =
+  | { kind: "no-selection" }
+  | { kind: "no-query" }
+  | { kind: "run"; sql: string }
+
+export const resolveSelectionRun = (
+  editor: IStandaloneCodeEditor,
+  selectionMode: RunWithSelectionMode,
+): SelectionRunResolution => {
+  if (selectionMode === "off") return { kind: "no-selection" }
+  const selection = editor.getSelection()
+  const model = editor.getModel()
+  if (!selection || !model || selection.isEmpty()) {
+    return { kind: "no-selection" }
+  }
+
+  const selectedText = model.getValueInRange(selection)
+  if (!hasRunnableSelectionContent(selectedText)) return { kind: "no-query" }
+
+  if (selectionMode === "complete") {
+    const queries = getQueriesToRun(
+      editor,
+      getStatementOffsets(editor),
+      "complete",
+      { queryOffsetsAreFresh: true },
+    )
+    if (queries.length === 0) return { kind: "no-query" }
+    return {
+      kind: "run",
+      sql: joinQueryTexts(
+        queries.map((request) => normalizeQueryText(request.query)),
+      ),
+    }
+  }
+
+  return { kind: "run", sql: normalizeQueryText(selectedText) }
+}
+
 export const findMatches = (model: editor.ITextModel, needle: string) =>
   model.findMatches(needle, true, false, true, null, true) ?? null
+
+export const isFullQueryMatch = (
+  editor: IStandaloneCodeEditor,
+  range: IRange,
+  statementOffsets: { startOffset: number; endOffset: number }[],
+): boolean => {
+  const model = editor.getModel()
+  if (!model) return false
+
+  const matchStartOffset = model.getOffsetAt({
+    lineNumber: range.startLineNumber,
+    column: range.startColumn,
+  })
+  const matchEndOffset = model.getOffsetAt({
+    lineNumber: range.endLineNumber,
+    column: range.endColumn,
+  })
+  const queryRanges = statementOffsets.filter(
+    ({ startOffset, endOffset }) =>
+      startOffset < matchEndOffset && endOffset > matchStartOffset,
+  )
+
+  if (queryRanges.length === 0) return false
+
+  const firstQuery = queryRanges[0]
+  const lastQuery = queryRanges[queryRanges.length - 1]
+  if (
+    matchStartOffset !== firstQuery.startOffset ||
+    matchEndOffset < lastQuery.endOffset
+  ) {
+    return false
+  }
+
+  const trailingStart = model.getPositionAt(lastQuery.endOffset)
+  const trailingText = model.getValueInRange({
+    startLineNumber: trailingStart.lineNumber,
+    startColumn: trailingStart.column,
+    endLineNumber: range.endLineNumber,
+    endColumn: range.endColumn,
+  })
+  return getQueriesFromText(trailingText).length === 0
+}
 
 export const getLastPosition = (
   editor: IStandaloneCodeEditor,

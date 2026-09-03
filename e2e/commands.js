@@ -264,6 +264,80 @@ Cypress.Commands.add("typeQueryDirectly", (query) => {
   })
 })
 
+Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {
+  cy.window().then((win) => {
+    const readActiveBufferValue = () =>
+      new Cypress.Promise((resolve, reject) => {
+        const openRequest = win.indexedDB.open("web-console")
+        openRequest.onerror = () => reject(openRequest.error)
+        openRequest.onblocked = () =>
+          reject(new Error("web-console IndexedDB open is blocked"))
+        openRequest.onsuccess = () => {
+          const database = openRequest.result
+          const fail = (error) => {
+            database.close()
+            reject(error)
+          }
+          try {
+            const transaction = database.transaction(
+              ["editor_settings", "buffers"],
+              "readonly",
+            )
+            transaction.onerror = () => fail(transaction.error)
+            const activeBufferRequest = transaction
+              .objectStore("editor_settings")
+              .index("key")
+              .get("activeBufferId")
+
+            activeBufferRequest.onerror = () => fail(activeBufferRequest.error)
+            activeBufferRequest.onsuccess = () => {
+              try {
+                const activeBufferId = activeBufferRequest.result?.value
+                if (activeBufferId === undefined) {
+                  fail(new Error("no activeBufferId row in editor_settings"))
+                  return
+                }
+                const bufferRequest = transaction
+                  .objectStore("buffers")
+                  .get(activeBufferId)
+                bufferRequest.onerror = () => fail(bufferRequest.error)
+                bufferRequest.onsuccess = () => {
+                  const value = bufferRequest.result?.value
+                  database.close()
+                  resolve(value)
+                }
+              } catch (error) {
+                fail(error)
+              }
+            }
+          } catch (error) {
+            fail(error)
+          }
+        }
+      })
+
+    // Poll well inside Cypress's own command timeout so this command's
+    // message wins over a generic cy.then() timeout.
+    const deadline = Date.now() + 8000
+    const poll = () =>
+      readActiveBufferValue().then((value) => {
+        if (value === expectedValue) return
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Active buffer did not persist ${JSON.stringify(
+              expectedValue,
+            )} — last read ${JSON.stringify(value)}`,
+          )
+        }
+        return new Cypress.Promise((resolve) =>
+          win.setTimeout(resolve, 50),
+        ).then(poll)
+      })
+
+    return poll()
+  })
+})
+
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec")
   cy.typeQuery(`${ctrlOrCmd}{enter}`)
@@ -441,6 +515,36 @@ Cypress.Commands.add("selectRange", (startPos, endPos) => {
       endColumn: endPos.column,
     })
   })
+})
+
+Cypress.Commands.add("createNotebook", () => {
+  cy.get(".chrome-tabs .new-tab-button").click()
+  cy.getByDataHook("new-tab-notebook").click()
+  cy.getByDataHook("notebook-toolbar").should("be.visible")
+  cy.getByDataHook("cell-editor-shimmer").should("not.exist")
+  cy.getByDataHook("cell-grid-shimmer").should("not.exist")
+  cy.get("[data-notebook-cell] .monaco-editor textarea").should("exist")
+})
+
+Cypress.Commands.add("focusNotebookCell", () => {
+  cy.get("[data-notebook-cell] .monaco-editor .view-lines").first().click()
+  cy.focused().should("have.class", "inputarea")
+})
+
+Cypress.Commands.add("withFocusedEditor", (fn) => {
+  cy.window().should((win) => {
+    const hasFocusedEditor = win.monaco.editor
+      .getEditors()
+      .some((candidate) => candidate.hasTextFocus())
+    expect(hasFocusedEditor, "a Monaco editor has focus").to.eq(true)
+  })
+  cy.window().then((win) =>
+    fn(
+      win.monaco.editor
+        .getEditors()
+        .find((candidate) => candidate.hasTextFocus()),
+    ),
+  )
 })
 
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"))

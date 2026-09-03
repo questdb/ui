@@ -27,21 +27,21 @@ const truncateQuery = (query: string, maxLen = 30): string => {
 const SlotIcon: React.FC<{ slot: StatementSlotView }> = ({ slot }) => {
   if (slot.refreshing || slot.result?.type === "running") {
     return (
-      <TabSpinner>
+      <TabSpinner data-hook="result-tab-loading">
         <LoadingIconSvg />
       </TabSpinner>
     )
   }
   if (slot.refreshError !== undefined) {
     return (
-      <TabStatusIcon $success={false}>
+      <TabStatusIcon $success={false} data-hook="result-tab-refresh-error">
         <ArrowClockwiseIcon size={18} />
       </TabStatusIcon>
     )
   }
   if (slot.result === null) {
     return (
-      <CancelledIcon>
+      <CancelledIcon data-hook="result-tab-not-run">
         <MinusIcon size={18} />
       </CancelledIcon>
     )
@@ -49,20 +49,23 @@ const SlotIcon: React.FC<{ slot: StatementSlotView }> = ({ slot }) => {
   const { type } = slot.result
   if (type === "queued") {
     return (
-      <CancelledIcon>
+      <CancelledIcon data-hook="result-tab-queued">
         <Queue size={18} />
       </CancelledIcon>
     )
   }
   if (type === "cancelled") {
     return (
-      <CancelledIcon>
+      <CancelledIcon data-hook="result-tab-cancelled">
         <CloseOutline size="18px" />
       </CancelledIcon>
     )
   }
   return (
-    <TabStatusIcon $success={type !== "error"}>
+    <TabStatusIcon
+      $success={type !== "error"}
+      data-hook={type === "error" ? "result-tab-error" : "result-tab-success"}
+    >
       {type === "error" ? (
         <CloseOutline size="18px" />
       ) : (
