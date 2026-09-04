@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React from "react"
 import styled from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Box } from "../Box"
@@ -9,7 +9,6 @@ import { Input } from "../Input"
 import { Text } from "../Text"
 import { TextButton } from "../TextButton"
 import type { ProviderModel } from "../../utils/ai"
-import { sortModelsNewestFirst } from "../../utils/ai"
 
 const PickerSection = styled(Box).attrs({
   flexDirection: "column",
@@ -74,11 +73,6 @@ const ModelIdText = styled(Text)`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-const ShowAllButton = styled(TextButton)`
-  font-size: 1.3rem;
-  align-self: flex-start;
-`
-
 const HelperText = styled(Text)`
   font-size: 1.3rem;
   font-weight: 400;
@@ -129,7 +123,6 @@ const ChipRemoveButton = styled(IconButton)`
 
 export type ModelPickerProps = {
   listedModels: ProviderModel[]
-  hiddenModels?: ProviderModel[]
   selectedModels: string[]
   manualInput: string
   dataHookPrefix: string
@@ -140,7 +133,6 @@ export type ModelPickerProps = {
 
 export const ModelPicker = ({
   listedModels,
-  hiddenModels,
   selectedModels,
   manualInput,
   dataHookPrefix,
@@ -148,15 +140,9 @@ export const ModelPicker = ({
   onSelectionChange,
   onManualInputChange,
 }: ModelPickerProps) => {
-  const [showAll, setShowAll] = useState(false)
-
-  const visibleModels =
-    showAll && hiddenModels?.length
-      ? sortModelsNewestFirst([...listedModels, ...hiddenModels])
-      : listedModels
   const isRowChecked = (rowId: string) => selectedModels.includes(rowId)
   const manualModels = selectedModels.filter(
-    (selected) => !visibleModels.some((m) => m.id === selected),
+    (selected) => !listedModels.some((m) => m.id === selected),
   )
 
   const handleToggleRow = (rowId: string) => {
@@ -176,7 +162,7 @@ export const ModelPicker = ({
 
   const handleDeselectAll = () => {
     onSelectionChange(
-      selectedModels.filter((s) => !visibleModels.some((m) => m.id === s)),
+      selectedModels.filter((s) => !listedModels.some((m) => m.id === s)),
     )
   }
 
@@ -216,7 +202,7 @@ export const ModelPicker = ({
           </SelectAllRow>
         </HeaderRow>
         <ModelListContainer role="group" aria-label="Select models">
-          {visibleModels.map((model) => {
+          {listedModels.map((model) => {
             const label = labelFor ? labelFor(model) : model.id
             return (
               <ModelRow
@@ -233,15 +219,6 @@ export const ModelPicker = ({
             )
           })}
         </ModelListContainer>
-        {!showAll && !!hiddenModels?.length && (
-          <ShowAllButton
-            type="button"
-            data-hook={`${dataHookPrefix}-show-all`}
-            onClick={() => setShowAll(true)}
-          >
-            Show all models
-          </ShowAllButton>
-        )}
       </PickerSection>
       <PickerSection align="flex-start">
         <HelperText>Don&apos;t see your model? Add it manually:</HelperText>

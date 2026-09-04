@@ -315,7 +315,7 @@ describe("getAllModelOptions", () => {
     // Then the stored label wins and the formatter fills the gap
     expect(options).toEqual([
       { label: "GPT-5.4 (Custom)", value: "gpt-5.4", provider: "openai" },
-      { label: "GPT-5 Mini", value: "gpt-5-mini", provider: "openai" },
+      { label: "GPT 5 Mini", value: "gpt-5-mini", provider: "openai" },
     ])
   })
 
@@ -637,7 +637,7 @@ describe("buildListingMetadata", () => {
 
     // Then listed ids get derived labels and unlisted ids keep the raw value
     expect(metadata.modelLabels).toEqual({
-      "gpt-5.4": "GPT-5.4",
+      "gpt-5.4": "GPT 5.4",
       "my-proxy-model": "my-proxy-model",
     })
     // And the utility model comes from the cheap tier of the chat pool

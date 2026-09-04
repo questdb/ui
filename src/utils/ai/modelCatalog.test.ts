@@ -30,25 +30,43 @@ describe("stripDateSuffix", () => {
 
 describe("formatModelLabel", () => {
   it("derives labels from OpenAI ids", () => {
-    expect(formatModelLabel("gpt-5-mini")).toBe("GPT-5 Mini")
-    expect(formatModelLabel("gpt-5.4")).toBe("GPT-5.4")
-    expect(formatModelLabel("gpt-5.6-luna")).toBe("GPT-5.6 Luna")
-    expect(formatModelLabel("gpt-4o")).toBe("GPT-4o")
+    expect(formatModelLabel("gpt-5-mini")).toBe("GPT 5 Mini")
+    expect(formatModelLabel("gpt-5.4")).toBe("GPT 5.4")
+    expect(formatModelLabel("gpt-5.6-luna")).toBe("GPT 5.6 Luna")
+    expect(formatModelLabel("gpt-4o")).toBe("GPT 4o")
     expect(formatModelLabel("o4-mini")).toBe("o4 Mini")
   })
 
-  it("joins consecutive version numbers with dots", () => {
+  it("formats version numbers without provider-specific separators", () => {
+    expect(formatModelLabel("gpt-6")).toBe("GPT 6")
+    expect(formatModelLabel("gpt-6-7")).toBe("GPT 6.7")
+    expect(formatModelLabel("gpt-5.6-7")).toBe("GPT 5.6.7")
+    expect(formatModelLabel("gpt-5.6-something")).toBe("GPT 5.6 Something")
+    expect(formatModelLabel("something-1.2")).toBe("Something 1.2")
     expect(formatModelLabel("claude-sonnet-4-5")).toBe("Claude Sonnet 4.5")
+    expect(formatModelLabel("claude-sonnet-5")).toBe("Claude Sonnet 5")
+    expect(formatModelLabel("claude-sonnet-6-7")).toBe("Claude Sonnet 6.7")
+    expect(formatModelLabel("claude-sonnet-6.7-something")).toBe(
+      "Claude Sonnet 6.7 Something",
+    )
+    expect(formatModelLabel("claude-sonnet-6-7-something")).toBe(
+      "Claude Sonnet 6.7 Something",
+    )
   })
 
-  it("drops the date suffix", () => {
-    expect(formatModelLabel("claude-opus-4-5-20251101")).toBe("Claude Opus 4.5")
-    expect(formatModelLabel("gpt-5.4-nano-2026-03-17")).toBe("GPT-5.4 Nano")
+  it("preserves date suffixes", () => {
+    expect(formatModelLabel("gpt-5.4-20250815")).toBe("GPT 5.4 (20250815)")
+    expect(formatModelLabel("claude-opus-4-5-20251101")).toBe(
+      "Claude Opus 4.5 (20251101)",
+    )
+    expect(formatModelLabel("gpt-5.4-nano-2026-03-17")).toBe(
+      "GPT 5.4 Nano (2026-03-17)",
+    )
   })
 })
 
 describe("filterOpenAiChatModels", () => {
-  it("drops known non-chat models and dated snapshots", () => {
+  it("drops known non-chat models but keeps dated snapshots", () => {
     // Given a listing with chat models, noise, and dated snapshots
     const listing = [
       model("gpt-5.4", AUG_2025 + 300),
@@ -64,8 +82,8 @@ describe("filterOpenAiChatModels", () => {
     ]
     // When the filter runs
     const kept = filterOpenAiChatModels(listing).map((m) => m.id)
-    // Then only the plain chat model remains
-    expect(kept).toEqual(["gpt-5.4"])
+    // Then both the plain chat model and its dated snapshot remain
+    expect(kept).toEqual(["gpt-5.4", "gpt-5.4-2026-03-05"])
   })
 
   it("hides generations older than gpt-5 by default", () => {

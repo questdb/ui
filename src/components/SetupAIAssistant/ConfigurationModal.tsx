@@ -410,12 +410,6 @@ const StepTwoContent = ({
       ? filterOpenAiChatModels(listing)
       : sortModelsNewestFirst(listing)
     : []
-  const hiddenModels =
-    listing && isOpenAi
-      ? sortModelsNewestFirst(
-          listing.filter((m) => !pickerModels.some((p) => p.id === m.id)),
-        )
-      : undefined
 
   return (
     <ModalContent data-hook="ai-settings-modal-step-two">
@@ -462,7 +456,6 @@ const StepTwoContent = ({
               </EnableModelsHeader>
               <ModelPicker
                 listedModels={pickerModels}
-                hiddenModels={hiddenModels}
                 selectedModels={enabledModels}
                 manualInput={manualInput}
                 dataHookPrefix="configure-models"

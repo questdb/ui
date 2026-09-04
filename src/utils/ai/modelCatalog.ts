@@ -6,8 +6,8 @@ export type ProviderModel = {
 
 const DATE_SUFFIX = /-(\d{8}|\d{4}-\d{2}-\d{2}|\d{4})$/
 
-// Everything since the gpt-5 launch reasons, and belongs in the default
-// picker view; older generations stay reachable via "Show all models".
+// Models released since GPT-5 are eligible for the picker; older models remain
+// available through manual entry.
 const GPT5_LAUNCH_START = Date.UTC(2025, 7, 1) / 1000
 
 const OPENAI_NON_CHAT_TOKENS = [
@@ -41,7 +41,9 @@ export const stripDateSuffix = (id: string): string =>
 const isNumericToken = (token: string): boolean => /^[\d.]+$/.test(token)
 
 export const formatModelLabel = (id: string): string => {
-  const tokens = stripDateSuffix(id).split("-")
+  const dateSuffix = id.match(DATE_SUFFIX)
+  const baseId = dateSuffix ? id.slice(0, -dateSuffix[0].length) : id
+  const tokens = baseId.split("-")
   const parts: string[] = []
   for (const token of tokens) {
     if (token.toLowerCase() === "gpt") {
@@ -49,19 +51,22 @@ export const formatModelLabel = (id: string): string => {
       continue
     }
     const previous = parts[parts.length - 1]
-    if (/\d/.test(token)) {
-      if (previous === "GPT") {
-        parts[parts.length - 1] = `GPT-${token}`
-      } else if (previous && isNumericToken(previous)) {
+    if (isNumericToken(token)) {
+      if (previous && isNumericToken(previous)) {
         parts[parts.length - 1] = `${previous}.${token}`
       } else {
         parts.push(token)
       }
       continue
     }
+    if (/\d/.test(token)) {
+      parts.push(token)
+      continue
+    }
     parts.push(token.charAt(0).toUpperCase() + token.slice(1))
   }
-  return parts.join(" ") || id
+  const label = parts.join(" ") || id
+  return dateSuffix ? `${label} (${dateSuffix[1]})` : label
 }
 
 export const sortModelsNewestFirst = (
@@ -72,8 +77,7 @@ export const sortModelsNewestFirst = (
   )
 
 const isOpenAiNonChatModel = (id: string): boolean =>
-  OPENAI_NON_CHAT_TOKENS.some((token) => id.includes(token)) ||
-  DATE_SUFFIX.test(id)
+  OPENAI_NON_CHAT_TOKENS.some((token) => id.toLowerCase().includes(token))
 
 export const filterOpenAiChatModels = (
   models: ProviderModel[],

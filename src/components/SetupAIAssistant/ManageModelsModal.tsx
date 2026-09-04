@@ -127,6 +127,7 @@ type BuiltinModelsContentProps = {
   enabledModels: string[]
   initialListing?: ProviderModel[]
   onLoadingChange: (loading: boolean) => void
+  onFetchFailedChange: (failed: boolean) => void
 }
 
 const BuiltinModelsContent = forwardRef<
@@ -134,13 +135,20 @@ const BuiltinModelsContent = forwardRef<
   BuiltinModelsContentProps
 >(
   (
-    { providerId, apiKey, enabledModels, initialListing, onLoadingChange },
+    {
+      providerId,
+      apiKey,
+      enabledModels,
+      initialListing,
+      onLoadingChange,
+      onFetchFailedChange,
+    },
     ref,
   ) => {
     const [listing, setListing] = useState<ProviderModel[] | null>(
       initialListing ?? null,
     )
-    const [fetchFailed, setFetchFailed] = useState(false)
+    const [fetchError, setFetchError] = useState<string | null>(null)
     const [selectedModels, setSelectedModels] = useState<string[]>(
       initialListing ? enabledModels : [],
     )
@@ -153,12 +161,6 @@ const BuiltinModelsContent = forwardRef<
         ? filterOpenAiChatModels(listing)
         : sortModelsNewestFirst(listing)
       : []
-    const hiddenModels =
-      listing && isOpenAi
-        ? sortModelsNewestFirst(
-            listing.filter((m) => !pickerModels.some((p) => p.id === m.id)),
-          )
-        : undefined
 
     const selectionWithPending = () => {
       const pending = manualInput.trim()
@@ -193,23 +195,31 @@ const BuiltinModelsContent = forwardRef<
 
       const doFetch = async () => {
         if (initialListing) {
+          onFetchFailedChange(false)
           onLoadingChange(false)
           return
         }
+        onFetchFailedChange(false)
         onLoadingChange(true)
+        const provider = createProviderByType(
+          BUILTIN_PROVIDERS[providerId].type,
+          providerId,
+          apiKey,
+        )
         try {
-          const provider = createProviderByType(
-            BUILTIN_PROVIDERS[providerId].type,
-            providerId,
-            apiKey,
-          )
           const models = await provider.listModels()
           if (cancelled) return
           setListing(models)
           setSelectedModels(enabledModels)
-        } catch {
+        } catch (error) {
           if (cancelled) return
-          setFetchFailed(true)
+          const classified = provider.classifyError(error, () => {})
+          setFetchError(
+            classified.type === "rate_limit"
+              ? classified.message
+              : "Could not fetch models from the provider. Check your API key and connection, then try again.",
+          )
+          onFetchFailedChange(true)
         } finally {
           if (!cancelled) {
             setIsLoading(false)
@@ -234,12 +244,11 @@ const BuiltinModelsContent = forwardRef<
       )
     }
 
-    if (fetchFailed) {
+    if (fetchError) {
       return (
         <ContentSection align="flex-start" role="alert">
           <ErrorText data-hook="manage-models-fetch-error">
-            Could not fetch models from the provider. Check your API key and
-            connection, then try again.
+            {fetchError}
           </ErrorText>
         </ContentSection>
       )
@@ -249,7 +258,6 @@ const BuiltinModelsContent = forwardRef<
       <ContentSection align="flex-start">
         <ModelPicker
           listedModels={pickerModels}
-          hiddenModels={hiddenModels}
           selectedModels={selectedModels}
           manualInput={manualInput}
           dataHookPrefix="manage-models"
@@ -287,6 +295,7 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
   const { open, onOpenChange, providerId } = props
   const [error, setError] = useState<string | null>(null)
   const [modelsLoading, setModelsLoading] = useState(true)
+  const [modelsFetchFailed, setModelsFetchFailed] = useState(false)
   const modelSettingsRef = useRef<ModelSettingsRef>(null)
   const builtinModelsRef = useRef<BuiltinModelsRef>(null)
 
@@ -368,6 +377,7 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
                   enabledModels={props.enabledModels}
                   initialListing={props.initialListing}
                   onLoadingChange={setModelsLoading}
+                  onFetchFailedChange={setModelsFetchFailed}
                 />
               )}
             </ScrollableContent>
@@ -390,7 +400,7 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
                 variant="primary"
                 data-hook="manage-models-save"
                 onClick={handleSave}
-                disabled={modelsLoading}
+                disabled={modelsLoading || modelsFetchFailed}
               >
                 Save
               </FooterButton>

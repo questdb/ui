@@ -717,7 +717,8 @@ export function createAnthropicProvider(
       if (error instanceof Anthropic.RateLimitError) {
         return {
           type: "rate_limit",
-          message: "Rate limit exceeded. Please try again later.",
+          message:
+            "The provider's rate or usage limit was reached. Check your provider account limits or try again later.",
           details: error.message,
         }
       }

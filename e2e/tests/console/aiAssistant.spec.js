@@ -3384,7 +3384,7 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-settings-model-dropdown").click()
     cy.getByDataHook("ai-settings-model-item-label")
-      .contains("GPT-5 Mini")
+      .contains("GPT 5 Mini")
       .click()
 
     cy.getByDataHook("chat-window-new").click()

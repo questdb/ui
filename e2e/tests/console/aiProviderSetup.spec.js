@@ -260,7 +260,7 @@ describe("ai provider setup flows", () => {
       expect(settings.providers.openai.reasoningEffort).to.equal("high")
       expect(settings.providers.openai.utilityModel).to.equal("gpt-5-nano")
       expect(settings.providers.openai.modelLabels).to.deep.equal({
-        "gpt-5.4": "GPT-5.4",
+        "gpt-5.4": "GPT 5.4",
         "my-proxy-model": "my-proxy-model",
       })
     })
@@ -353,7 +353,7 @@ describe("ai provider setup flows", () => {
     cy.wait("@openaiListing")
 
     // Then the picker auto-opens from the validation fetch, with no extra request
-    cy.getByDataHook("manage-models-model-row").should("have.length", 4)
+    cy.getByDataHook("manage-models-model-row").should("have.length", 5)
     cy.get("@openaiListing.all").should("have.length", 1)
 
     // When the picker is cancelled with nothing selected
@@ -366,19 +366,19 @@ describe("ai provider setup flows", () => {
     // When validation runs again and Select All is used
     cy.getByDataHook("ai-settings-test-api").click()
     cy.wait("@openaiListing")
-    cy.getByDataHook("manage-models-model-row").should("have.length", 4)
-    cy.getByDataHook("manage-models-show-all").click()
+    cy.getByDataHook("manage-models-model-row").should("have.length", 5)
     cy.getByDataHook("manage-models-select-all").click()
     cy.getByDataHook("manage-models-save").click()
     cy.getByDataHook("manage-models-save").should("not.exist")
 
-    // Then only the curated chat models persist — hidden ids stay out
+    // Then every listed chat model, including dated snapshots, persists
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.providers.openai.enabledModels).to.deep.equal([
         "gpt-5.4",
         "gpt-5-mini",
         "gpt-5",
+        "gpt-5-2025-08-06",
         "gpt-5-nano",
       ])
     })
@@ -390,8 +390,8 @@ describe("ai provider setup flows", () => {
 
     // Then the picks survive and an OpenAI model can be selected
     cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item").should("have.length", 6)
-    cy.getByDataHook("ai-settings-model-item").contains("GPT-5.4").click()
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 7)
+    cy.getByDataHook("ai-settings-model-item").contains("GPT 5.4").click()
 
     // When the picker reopens manually it refetches a fresh listing
     interceptOpenAIListing()
@@ -444,7 +444,7 @@ describe("ai provider setup flows", () => {
     cy.wait("@openaiListing")
 
     // Then the old key's picks are cleared in the picker
-    cy.getByDataHook("manage-models-model-row").should("have.length", 4)
+    cy.getByDataHook("manage-models-model-row").should("have.length", 5)
     cy.getByDataHook("manage-models-model-row")
       .find("input[type=checkbox]:checked")
       .should("have.length", 0)
@@ -494,8 +494,7 @@ describe("ai provider setup flows", () => {
     cy.getByDataHook("manage-models-model-chip").contains("gpt-5.4-2026-03-05")
     cy.getByDataHook("manage-models-model-chip").contains("my-proxy-model")
 
-    // When all models are revealed, alias and dated rows toggle independently
-    cy.getByDataHook("manage-models-show-all").click()
+    // The plain alias and dated snapshot rows toggle independently
     cy.getByDataHook("manage-models-model-row")
       .contains(/^gpt-5$/)
       .closest("label")
@@ -529,11 +528,61 @@ describe("ai provider setup flows", () => {
     // And the dropdown shows derived labels but never invents one for manual ids
     cy.getByDataHook("ai-settings-cancel").click()
     cy.getByDataHook("ai-settings-model-dropdown").click()
-    cy.getByDataHook("ai-settings-model-item").contains("GPT-5.4")
+    cy.getByDataHook("ai-settings-model-item").contains("GPT 5.4")
     cy.getByDataHook("ai-settings-model-item").contains("my-proxy-model")
     cy.getByDataHook("ai-settings-model-item")
       .contains("My-proxy-model")
       .should("not.exist")
+  })
+
+  it("blocks model changes and identifies a rate-limited listing", () => {
+    // Given an existing OpenAI configuration whose model listing is rate limited
+    cy.loadConsoleWithAuth(false, {
+      "ai.assistant.settings": JSON.stringify({
+        selectedModel: "gpt-5.4",
+        providers: {
+          openai: {
+            apiKey: "test-openai-key",
+            enabledModels: ["gpt-5.4"],
+            grantSchemaAccess: false,
+          },
+        },
+      }),
+    })
+    cy.intercept("GET", OPENAI_MODELS_URL, {
+      statusCode: 429,
+      headers: { "retry-after": "0" },
+      body: {
+        error: {
+          message: "Rate limit reached",
+          type: "rate_limit_error",
+          param: null,
+          code: "rate_limit_exceeded",
+        },
+      },
+    }).as("openaiListing")
+
+    // When Manage Models attempts to refresh the provider listing
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-openai").click()
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@openaiListing")
+
+    // Then the failure is identified and no model changes can be made
+    cy.getByDataHook("manage-models-fetch-error").should(
+      "contain",
+      "rate or usage limit was reached",
+    )
+    cy.getByDataHook("manage-models-model-row").should("not.exist")
+    cy.getByDataHook("manage-models-manual-model-input").should("not.exist")
+    cy.getByDataHook("manage-models-save").should("be.disabled")
+
+    // And the saved configuration is untouched
+    cy.window().then((win) => {
+      expect(readAiSettings(win).providers.openai.enabledModels).to.deep.equal([
+        "gpt-5.4",
+      ])
+    })
   })
 
   it("survives interruptions: wizard escape, tab switch mid-validation, stale key edits", () => {
@@ -884,7 +933,7 @@ describe("ai provider setup flows", () => {
     })
 
     it("should work with multiple providers", () => {
-      const openaiEnabledModels = ["GPT-5.4", "GPT-5 Mini"]
+      const openaiEnabledModels = ["GPT 5.4", "GPT 5 Mini"]
       const anthropicEnabledModels = ["Claude Opus 4.5", "Claude Sonnet 4.5"]
 
       // Given - Set up OpenAI provider first

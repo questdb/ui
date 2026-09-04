@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import OpenAI from "openai"
-import { isReasoningRejection } from "./openaiShared"
+import { classifyOpenAIError, isReasoningRejection } from "./openaiShared"
 
 const apiError = (status: number, param: string | null, message: string) =>
   new OpenAI.APIError(
@@ -46,5 +46,26 @@ describe("isReasoningRejection", () => {
       isReasoningRejection(apiError(429, "reasoning.effort", "rate limited")),
     ).toBe(false)
     expect(isReasoningRejection(new Error("reasoning failed"))).toBe(false)
+  })
+})
+
+describe("classifyOpenAIError", () => {
+  it("reports a 429 as a rate or usage limit", () => {
+    const error = new OpenAI.RateLimitError(
+      429,
+      {
+        message: "Rate limit reached",
+        type: "rate_limit_error",
+        code: "rate_limit_exceeded",
+      },
+      "Rate limit reached",
+      new Headers(),
+    )
+
+    expect(classifyOpenAIError(error, () => {})).toMatchObject({
+      type: "rate_limit",
+      message:
+        "The provider's rate or usage limit was reached. Check your provider account limits or try again later.",
+    })
   })
 })
