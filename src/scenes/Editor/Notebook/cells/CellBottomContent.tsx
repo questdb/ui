@@ -148,7 +148,7 @@ export const CellBottomContent: React.FC<Props> = ({
   if (!expectingResult) return null
   if (resultStatus === "failed") {
     return (
-      <LoadFailureState>
+      <LoadFailureState role="alert" aria-live="assertive" aria-atomic="true">
         Result failed to load. Run the cell again to restore it.
       </LoadFailureState>
     )

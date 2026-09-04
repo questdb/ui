@@ -1612,14 +1612,22 @@ export const cellHasRunOutcome = (cell: NotebookCell): boolean =>
 export type AgentCellPresentation = { view: AgentCellView | null }
 
 // `view` reports what the cell presents: "editor" while there is nothing to
-// show, the stored arrangement once a run outcome exists.
+// show, the stored arrangement once a run outcome exists. A live, known-missing
+// run snapshot has historical status but no result pane; draw mode remains a
+// result presentation because the chart itself is the mode.
 export const agentCellPresentation = (
   cell: NotebookCell,
+  resultStatus: CellResultStatus = "unrequested",
 ): AgentCellPresentation => ({
   view:
     cell.type === "markdown"
       ? null
-      : cellHasRunOutcome(cell)
+      : cellHasRunOutcome(cell) &&
+          !(
+            cell.mode !== "draw" &&
+            cell.result == null &&
+            resultStatus === "missing"
+          )
         ? storedCellPaneView(cell)
         : "editor",
 })

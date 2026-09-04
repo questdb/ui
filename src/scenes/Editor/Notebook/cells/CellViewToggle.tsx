@@ -197,6 +197,7 @@ export const CellViewToggle: React.FC<Props> = ({
       <Tooltip content={resultOnly ? "Show editor" : "Hide editor"}>
         <EditorVisibilityToggle
           aria-label="Editor"
+          aria-pressed={!resultOnly}
           onClick={handleEditorVisibility}
           selected={!resultOnly}
         >

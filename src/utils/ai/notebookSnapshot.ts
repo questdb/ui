@@ -20,6 +20,7 @@ import {
   agentCellPaneDimensions,
   agentCellPresentation,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import type { CellResultStatus } from "../../scenes/Editor/Notebook/resultHydration/cellResultHydration"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 
@@ -161,10 +162,10 @@ const refreshFields = (
 
 const buildCell = (
   cell: NotebookCell,
-  bufferId: number,
   gridByCellId: Map<string, CellLayoutItem>,
   layoutMode: "list" | "grid",
   refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatus: CellResultStatus,
 ): NotebookContextCell => {
   const dimensions = agentCellPaneDimensions(cell)
   const out: NotebookContextCell = {
@@ -172,7 +173,7 @@ const buildCell = (
     preview: preview(cell.value),
     editor_height: dimensions.editorHeight,
     result_height: dimensions.resultHeight,
-    view: agentCellPresentation(cell).view,
+    view: agentCellPresentation(cell, resultStatus).view,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
   }
@@ -233,7 +234,13 @@ export const buildSnapshot = async (
     layout_mode: layoutMode,
     maximized_cell_id: maximizedCellId,
     cells: cells.map((c) =>
-      buildCell(c, bufferId, gridByCellId, layoutMode, refreshState),
+      buildCell(
+        c,
+        gridByCellId,
+        layoutMode,
+        refreshState,
+        controller?.readResultStatus?.(c.id) ?? "unrequested",
+      ),
     ),
   }
   // Absence stays observable: with no configured default, nothing polls.
@@ -485,6 +492,7 @@ export const serializeCell = (
   bufferId: number,
   getFullContent: boolean,
   refreshState?: ReadonlyMap<string, CellRefreshView>,
+  resultStatus: CellResultStatus = "unrequested",
 ): NotebookCellDetails => {
   const cell = cells.find((c) => c.id === cellId)
   if (!cell) {
@@ -511,7 +519,7 @@ export const serializeCell = (
     last_run_error: run.error,
     editor_height: dimensions.editorHeight,
     result_height: dimensions.resultHeight,
-    view: agentCellPresentation(cell).view,
+    view: agentCellPresentation(cell, resultStatus).view,
     ...refreshFields(refreshState?.get(cell.id)),
   }
   if (truncated) {

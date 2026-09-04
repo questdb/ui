@@ -561,6 +561,7 @@ export const dispatchTool = async (
                   buffer_id,
                   get_full_content === true,
                   controller?.readRefreshState?.(),
+                  controller?.readResultStatus?.(cell_id) ?? "unrequested",
                 ),
               ),
             signal,

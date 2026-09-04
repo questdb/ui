@@ -36,6 +36,7 @@ import {
 } from "../notebookDexieView"
 import {
   __resetNotebookHeadlessRunsForTests,
+  cancelHeadlessCellRuns,
   runHeadlessCell,
   type DexieControllerDeps,
 } from "../notebookHeadlessRun"
@@ -297,6 +298,13 @@ export const createDexieNotebookController = (
         }
         if (commit === "archived") {
           throw notebookArchivedMidEdit(bufferId)
+        }
+        // Invalidate only after the document commit succeeds. Because this is
+        // still inside the per-buffer queue, a completed headless request
+        // cannot interleave its result commit between this mutation and the
+        // invalidation.
+        if (out.cancelRuns) {
+          cancelHeadlessCellRuns(bufferId, out.cancelRuns.cellIds)
         }
         // Runs only after a durable commit and is never awaited: the write is
         // done, and failing the tool over orphaned snapshot/layout cleanup

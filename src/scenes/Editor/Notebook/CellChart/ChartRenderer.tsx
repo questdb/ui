@@ -11,8 +11,8 @@ import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption } from "echarts"
 import { useTheme } from "styled-components"
 import { echarts } from "./echartsSetup"
-import { withZoomSlider } from "./buildEchartsOption"
-import { snapChartWidth } from "./chartDensity"
+import { withZoomDensity } from "./buildEchartsOption"
+import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -97,7 +97,12 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const zoomWindowRef = useRef(zoomWindow)
-    const [measuredWidth, setMeasuredWidth] = useState(0)
+    const [zoomDensity, setZoomDensity] = useState<ChartZoomDensity | null>(
+      null,
+    )
+    const measuredWidthRef = useRef(0)
+    const optionRef = useRef(option)
+    optionRef.current = option
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
     const animateEntryRef = useRef(
@@ -113,6 +118,17 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     useEffect(() => {
       onZoomChangeRef.current = onZoomChange
     }, [onZoomChange])
+
+    const measureDensity = useCallback((width: number) => {
+      if (width <= 0) return
+      measuredWidthRef.current = width
+      const next = chartZoomDensity(optionRef.current, width)
+      setZoomDensity((previous) =>
+        previous?.slider === next.slider && previous.wheel === next.wheel
+          ? previous
+          : next,
+      )
+    }, [])
 
     // Capture-phase wheel listener must intercept BEFORE ECharts' inner
     // listeners so the page scrolls instead of ECharts preventDefaulting.
@@ -140,7 +156,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         const box = entries[0]?.contentRect
         if (!box) return
         resizeTo(box.width, box.height)
-        if (box.width > 0) setMeasuredWidth(snapChartWidth(box.width))
+        measureDensity(box.width)
       })
       observer.observe(wrapper)
 
@@ -157,7 +173,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         observer.disconnect()
         document.removeEventListener("visibilitychange", handleVisibility)
       }
-    }, [])
+    }, [measureDensity])
 
     useImperativeHandle(
       ref,
@@ -210,12 +226,23 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     // already carries the right slider decision instead of remounting for it.
     useLayoutEffect(() => {
       const width = wrapperRef.current?.getBoundingClientRect().width
-      if (width) setMeasuredWidth(snapChartWidth(width))
-    }, [])
+      if (width) measureDensity(width)
+    }, [measureDensity, option])
+
+    const effectiveDensity = useMemo(
+      () =>
+        zoomDensity === null
+          ? null
+          : chartZoomDensity(option, measuredWidthRef.current),
+      [option, zoomDensity],
+    )
 
     const optionToDraw = useMemo(
-      () => withZoomSlider(option, measuredWidth),
-      [option, measuredWidth],
+      () =>
+        effectiveDensity === null
+          ? option
+          : withZoomDensity(option, effectiveDensity),
+      [effectiveDensity, option],
     )
     const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
 
@@ -253,7 +280,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        {measuredWidth > 0 && (
+        {effectiveDensity !== null && (
           <ReactECharts
             key={`${theme.mode}:${key}`}
             ref={reactEchartsRef}

@@ -54,9 +54,9 @@ import {
 //
 // Side effects are returned as data, never performed here:
 //   - `cleanup.cellIds`    — snapshots/layouts each shell drops after its commit.
-//   - `cancelRuns.cellIds` — cells whose in-flight run the mounted shell aborts
-//                            (the run would keep writing cell.result after the
-//                            chart engine takes ownership).
+//   - `cancelRuns.cellIds` — cells whose in-flight run either shell aborts
+//                            because the transition invalidated its eventual
+//                            result.
 //   - `deleteSnapshots.cellIds` — cells that survive the transition but whose
 //                            persisted result no longer matches their SQL;
 //                            each shell deletes the snapshot so hydration
@@ -318,7 +318,7 @@ export const setCellLayoutTransition = (
     },
     result: {
       grid: { x: pos.x, y: pos.y, w: pos.w },
-      ...agentCellPresentation(cell),
+      ...agentCellPresentation(cell, pos.resultStatus),
     },
     touchedCellId: cellId,
   }
@@ -372,7 +372,8 @@ export const setCellDimensionsTransition = (
     )
   }
 
-  const discarding = dimensions.view === "editor" && cellHasRunOutcome(cell)
+  const wantsEditorOnly = dimensions.view === "editor"
+  const discarding = wantsEditorOnly && cellHasRunOutcome(cell)
   const patch = {
     ...(discarding ? discardCellResultPatch(cell) : {}),
     ...agentCellDimensionsPatch(cell, dimensions),
@@ -407,11 +408,19 @@ export const setCellDimensionsTransition = (
           : { ...parts.settings, layout },
     },
     result: {
-      ...agentCellPresentation(nextCell),
+      ...agentCellPresentation(nextCell, dimensions.resultStatus),
       ...(discarding ? { result_discarded: true as const } : {}),
     },
     touchedCellId: cellId,
-    ...(discarding ? { deleteSnapshots: { cellIds: [cellId] } } : {}),
+    // A headless run has no persisted `running` placeholder, and a live run
+    // may still be behind its validation barrier. Emit the cancellation intent
+    // for every SQL-cell editor-only request; shells treat it idempotently when
+    // no run exists.
+    ...(wantsEditorOnly ? { cancelRuns: { cellIds: [cellId] } } : {}),
+    // Snapshot rows live outside the buffer document, so a marker-less cell
+    // cannot prove that none exist. Deletion is idempotent and view:"editor"
+    // is the explicit discard gesture.
+    ...(wantsEditorOnly ? { deleteSnapshots: { cellIds: [cellId] } } : {}),
   }
 }
 
@@ -502,6 +511,24 @@ export const applyNotebookStateTransition = (
   applied: { added: string[]; updated: string[]; deleted: string[] }
 }> => {
   const next = buildAppliedNotebookState(parts, request, resultStatusOf)
+  const existingSqlCellIds = new Set(
+    parts.cells
+      .filter((cell) => cell.type !== "markdown")
+      .map((cell) => cell.id),
+  )
+  const invalidatedResultIds = new Set(next.resultsCleared)
+  for (const cell of request.cells) {
+    if (
+      cell.view === "editor" &&
+      typeof cell.id === "string" &&
+      existingSqlCellIds.has(cell.id)
+    ) {
+      // Passive runs do not install a persisted `running` result, and snapshot
+      // rows live outside this document. An editor-only request must therefore
+      // invalidate both even when there is no visible outcome to clear.
+      invalidatedResultIds.add(cell.id)
+    }
+  }
   return {
     parts: {
       ...parts,
@@ -518,8 +545,11 @@ export const applyNotebookStateTransition = (
     },
     result: { applied: next.diff },
     cleanup: { cellIds: next.diff.deleted },
-    ...(next.resultsCleared.length > 0
-      ? { deleteSnapshots: { cellIds: next.resultsCleared } }
+    ...(invalidatedResultIds.size > 0
+      ? { cancelRuns: { cellIds: [...invalidatedResultIds] } }
+      : {}),
+    ...(invalidatedResultIds.size > 0
+      ? { deleteSnapshots: { cellIds: [...invalidatedResultIds] } }
       : {}),
   }
 }

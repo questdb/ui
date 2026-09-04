@@ -42,6 +42,7 @@ const makeController = (
   cells: NotebookCell[],
   settings: NotebookSettings = {},
   maximizedCellId: string | null = null,
+  readResultStatus?: NonNullable<NotebookController["readResultStatus"]>,
 ): NotebookController => ({
   bufferId,
   kind: "live",
@@ -58,6 +59,7 @@ const makeController = (
     }),
   runCell: () =>
     Promise.resolve({ success: true, queryCount: 1, results: ["success"] }),
+  ...(readResultStatus ? { readResultStatus } : {}),
 })
 
 const seedNotebook = async (
@@ -113,6 +115,25 @@ describe("buildSnapshot", () => {
     if (snap?.status === "ok") {
       expect(snap.cells.map((c) => c.id)).toEqual(["b"])
     }
+  })
+
+  it("reports editor when the mounted cell's saved result is known missing", async () => {
+    const released = sql("a", "SELECT 1", {
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+    const id = await seedNotebook({ cells: [released] })
+    registerController(
+      makeController(id, [released], {}, null, () => "missing"),
+    )
+
+    const snap = await buildSnapshot(id)
+
+    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
+      view: "editor",
+      last_run_status: "success",
+    })
   })
 
   it("serves the live snapshot when the controller unregisters mid-read", async () => {
@@ -253,6 +274,28 @@ describe("buildSnapshot", () => {
     expect(details).toMatchObject({
       view: null,
       result_height: null,
+    })
+  })
+
+  it("reports editor from get_cell serialization when the result is missing", () => {
+    const released = sql("a", "SELECT 1", {
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+
+    const details = serializeCell(
+      [released],
+      "a",
+      7,
+      false,
+      undefined,
+      "missing",
+    )
+
+    expect(details).toMatchObject({
+      view: "editor",
+      last_run_status: "success",
     })
   })
 

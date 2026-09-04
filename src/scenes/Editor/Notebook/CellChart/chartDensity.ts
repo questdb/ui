@@ -5,7 +5,6 @@ export const MIN_MARK_PX = 6
 // Lines and scatter downsample to the pixel grid, so detail is lost only once
 // points outnumber pixels.
 export const MIN_POINT_PX = 1
-const CHART_WIDTH_STEP_PX = 100
 const Y_AXIS_LABEL_WIDTH_PX = 48
 // ECharts keeps 20% of a band as the category gap and 20% of a bar between
 // grouped columns, so one column is 0.8 / (1.2k - 0.2) of its band. A candle
@@ -51,23 +50,21 @@ const plotWidthOf = (
   )
 }
 
-export const snapChartWidth = (px: number): number =>
-  Math.max(
-    CHART_WIDTH_STEP_PX,
-    Math.round(px / CHART_WIDTH_STEP_PX) * CHART_WIDTH_STEP_PX,
-  )
-
 // Wheel zoom arms while marks are merely tight — this many times the readable
 // floor — since it costs no plot space; the slider waits for the floor itself.
 export const WHEEL_ZOOM_HEADROOM = 3
 
-const zoomNeededAt = (
+export type ChartZoomDensity = {
+  slider: boolean
+  wheel: boolean
+}
+
+export const chartZoomDensity = (
   option: EChartsOption,
   containerWidthPx: number,
-  headroom: number,
-): boolean => {
+): ChartZoomDensity => {
   const plotWidth = plotWidthOf(option, containerWidthPx)
-  if (plotWidth <= 0) return false
+  if (plotWidth <= 0) return { slider: false, wheel: false }
 
   const series = seriesOf(option)
   const bars = series.filter((s) => s.type === "bar")
@@ -78,24 +75,29 @@ const zoomNeededAt = (
   const bandSlots = (list: SeriesSpec[]) =>
     Math.max(categorySlots, maxDataLength(list))
 
-  const tooDense = (slots: number, fillRatio: number, minPx: number) =>
-    slots > 0 && (plotWidth / slots) * fillRatio < minPx * headroom
-
-  return (
-    (bars.length > 0 &&
-      tooDense(bandSlots(bars), barFillRatio(barColumns(bars)), MIN_MARK_PX)) ||
-    (candles.length > 0 &&
-      tooDense(bandSlots(candles), CANDLE_FILL_RATIO, MIN_MARK_PX)) ||
-    tooDense(maxDataLength(points), 1, MIN_POINT_PX)
-  )
+  const density = { slider: false, wheel: false }
+  const include = (slots: number, fillRatio: number, minPx: number) => {
+    if (slots <= 0) return
+    const markPx = (plotWidth / slots) * fillRatio
+    density.slider ||= markPx < minPx
+    density.wheel ||= markPx < minPx * WHEEL_ZOOM_HEADROOM
+  }
+  if (bars.length > 0) {
+    include(bandSlots(bars), barFillRatio(barColumns(bars)), MIN_MARK_PX)
+  }
+  if (candles.length > 0) {
+    include(bandSlots(candles), CANDLE_FILL_RATIO, MIN_MARK_PX)
+  }
+  include(maxDataLength(points), 1, MIN_POINT_PX)
+  return density
 }
 
 export const needsZoomSlider = (
   option: EChartsOption,
   containerWidthPx: number,
-): boolean => zoomNeededAt(option, containerWidthPx, 1)
+): boolean => chartZoomDensity(option, containerWidthPx).slider
 
 export const needsWheelZoom = (
   option: EChartsOption,
   containerWidthPx: number,
-): boolean => zoomNeededAt(option, containerWidthPx, WHEEL_ZOOM_HEADROOM)
+): boolean => chartZoomDensity(option, containerWidthPx).wheel

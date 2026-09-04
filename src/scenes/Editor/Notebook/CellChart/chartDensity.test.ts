@@ -10,7 +10,6 @@ import {
   MIN_POINT_PX,
   needsWheelZoom,
   needsZoomSlider,
-  snapChartWidth,
   WHEEL_ZOOM_HEADROOM,
 } from "./chartDensity"
 
@@ -129,6 +128,11 @@ describe("needsZoomSlider", () => {
   it("never asks for a slider before the container is measured", () => {
     expect(needsZoomSlider(line(5000), 0)).toBe(false)
   })
+
+  it("uses the exact width instead of rounding a narrow chart up", () => {
+    expect(needsZoomSlider(bars(35, 1), 351)).toBe(true)
+    expect(needsZoomSlider(bars(35, 1), 400)).toBe(false)
+  })
 })
 
 describe("needsWheelZoom", () => {
@@ -193,13 +197,5 @@ describe("withZoomSlider", () => {
     const option = withZoomSlider({ series: [{ type: "pie" }] }, CONTAINER_PX)
 
     expect(option.dataZoom).toBeUndefined()
-  })
-})
-
-describe("snapChartWidth", () => {
-  it("rounds to 100px steps and never returns zero for a measured width", () => {
-    expect(snapChartWidth(40)).toBe(100)
-    expect(snapChartWidth(849)).toBe(800)
-    expect(snapChartWidth(850)).toBe(900)
   })
 })

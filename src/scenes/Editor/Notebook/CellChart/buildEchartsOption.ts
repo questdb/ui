@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts"
-import { needsWheelZoom, needsZoomSlider } from "./chartDensity"
+import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -551,20 +551,25 @@ export const buildEchartsOption = (
 export const withZoomSlider = (
   option: EChartsOption,
   containerWidthPx: number,
+): EChartsOption =>
+  withZoomDensity(option, chartZoomDensity(option, containerWidthPx))
+
+export const withZoomDensity = (
+  option: EChartsOption,
+  density: ChartZoomDensity,
 ): EChartsOption => {
   if (option.xAxis == null) return option
-  const slider = needsZoomSlider(option, containerWidthPx)
   return {
     ...option,
     grid: {
       ...(option.grid as object),
-      bottom: slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+      bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
     },
     dataZoom: [
-      { type: "inside", disabled: !needsWheelZoom(option, containerWidthPx) },
+      { type: "inside", disabled: !density.wheel },
       {
         type: "slider",
-        show: slider,
+        show: density.slider,
         height: SLIDER_HEIGHT,
         bottom: SLIDER_BOTTOM,
         textStyle: { fontSize: CHART_FONT_SIZE },

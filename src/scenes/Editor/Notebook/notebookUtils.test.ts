@@ -2118,6 +2118,24 @@ describe("agentCellPresentation", () => {
     ).toEqual({ view: "editor_result" })
   })
 
+  it("reports editor when a run-marked result is known missing", () => {
+    const releasedRun = chart({
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+
+    expect(agentCellPresentation(releasedRun, "unrequested")).toEqual({
+      view: "result",
+    })
+    expect(agentCellPresentation(releasedRun, "missing")).toEqual({
+      view: "editor",
+    })
+    expect(agentCellPresentation(chart(), "missing")).toEqual({
+      view: "editor_result",
+    })
+  })
+
   it("reports a null view for a markdown cell", () => {
     expect(
       agentCellPresentation(chart({ mode: undefined, type: "markdown" })),

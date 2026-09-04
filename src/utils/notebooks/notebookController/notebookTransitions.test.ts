@@ -140,10 +140,11 @@ describe("setCellDimensionsTransition", () => {
       paneView: "result",
     })
     expect(out.result).toEqual({ view: "editor", result_discarded: true })
+    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
     expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
   })
 
-  it("view editor is a no-op on a cell with nothing to show", () => {
+  it("view editor deletes any marker-less snapshot idempotently", () => {
     const parts = partsOf([cell("a", "SELECT 1")])
     const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
       view: "editor",
@@ -152,7 +153,8 @@ describe("setCellDimensionsTransition", () => {
 
     expect(out.parts.cells).toBe(parts.cells)
     expect(out.result).toEqual({ view: "editor" })
-    expect(out.deleteSnapshots).toBeUndefined()
+    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
   })
 
   it("rejects a view outside the wire enum", () => {
@@ -198,7 +200,7 @@ describe("setCellDimensionsTransition", () => {
       { resultStatus: "missing" },
     )
 
-    expect(out.result).toEqual({ view: "editor_result" })
+    expect(out.result).toEqual({ view: "editor" })
     expect(out.parts.settings.layout?.[0].h).toBe(5)
   })
 
@@ -224,7 +226,7 @@ describe("setCellDimensionsTransition", () => {
     expect(out.parts.settings.layout?.[0].h).toBe(19)
   })
 
-  it("persists a result view while the result is still missing", () => {
+  it("persists the pane preference but reports editor while result is missing", () => {
     const pending = cell("a", "SELECT 1", {
       lastRunStatus: "success",
       paneView: "editor_result",
@@ -237,7 +239,7 @@ describe("setCellDimensionsTransition", () => {
     )
 
     expect(out.parts.cells[0].paneView).toBe("result")
-    expect(out.result).toEqual({ view: "result" })
+    expect(out.result).toEqual({ view: "editor" })
   })
 })
 
@@ -337,6 +339,17 @@ describe("applyNotebookStateTransition", () => {
     // Then the frame collapses and the snapshot deletion is requested, so
     // disk agrees with the collapsed cell on every later reload
     expect(out.parts.cells[0].result).toBeNull()
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+  })
+
+  it("cancels a result-less cell run when apply requests editor-only", () => {
+    // Headless execution does not put a running placeholder in persisted state.
+    const out = applyNotebookStateTransition(partsOf([cell("a", "SELECT 1")]), {
+      cells: [{ id: "a", preserveValue: true, view: "editor" }],
+    })
+
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
     expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
   })
 
