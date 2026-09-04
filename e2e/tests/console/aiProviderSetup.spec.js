@@ -397,6 +397,10 @@ describe("ai provider setup flows", () => {
     interceptOpenAIListing()
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-openai").click()
+    cy.getByDataHook("reasoning-trigger").click()
+    cy.getByDataHook("reasoning-level-high").click()
+    cy.getByDataHook("permissions-trigger").click()
+    cy.getByDataHook("permission-level-write").click()
     cy.getByDataHook("ai-settings-manage-models").click()
     cy.wait("@openaiListing")
 
@@ -411,9 +415,28 @@ describe("ai provider setup flows", () => {
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.selectedModel).to.equal("gpt-5-mini")
+      expect(settings.providers.openai.grantSchemaAccess).to.equal(true)
+      expect(settings.providers.openai.read).to.equal(false)
+      expect(settings.providers.openai.write).to.equal(false)
+      expect(settings.providers.openai.reasoningEffort).to.equal(undefined)
+    })
+
+    // Then cancelling the parent discards its permission and reasoning drafts
+    cy.getByDataHook("ai-settings-cancel").click()
+    cy.reload()
+    cy.getEditor().should("be.visible")
+    cy.window().then((win) => {
+      const settings = readAiSettings(win)
+      expect(settings.providers.openai.grantSchemaAccess).to.equal(true)
+      expect(settings.providers.openai.read).to.equal(false)
+      expect(settings.providers.openai.write).to.equal(false)
+      expect(settings.providers.openai.reasoningEffort).to.equal(undefined)
     })
 
     // When the API key changes to a different one and validates
+    interceptOpenAIListing()
+    cy.getByDataHook("ai-assistant-settings-button").click()
+    cy.getByDataHook("ai-settings-provider-openai").click()
     cy.getByDataHook("ai-settings-edit-api-key").click()
     cy.getByDataHook("ai-settings-api-key").should("not.have.attr", "readonly")
     cy.getByDataHook("ai-settings-api-key").clear().type("key-two")

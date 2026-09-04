@@ -984,7 +984,16 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         [providerId]: result.utilityModel,
       }))
 
-      const perms = permissions[providerId]
+      const storedProvider = aiAssistantSettings.providers?.[providerId]
+      // The nested dialog commits its API key and model preferences only.
+      // Permission and reasoning edits remain drafts until Save Settings.
+      const persistedPermissions: Permissions = storedProvider
+        ? {
+            grantSchemaAccess: storedProvider.grantSchemaAccess,
+            read: storedProvider.read === true,
+            write: storedProvider.write === true,
+          }
+        : { grantSchemaAccess: true, read: false, write: false }
       const updatedSettings: AiAssistantSettings = {
         ...aiAssistantSettings,
         providers: {
@@ -992,10 +1001,10 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           [providerId]: buildProviderSettings({
             apiKey: apiKeys[providerId] ?? "",
             enabledModels: result.enabledModels,
-            permissions: perms,
+            permissions: persistedPermissions,
             modelLabels: result.modelLabels,
             utilityModel: result.utilityModel,
-            reasoningEffort: reasoningEffort[providerId],
+            reasoningEffort: storedProvider?.reasoningEffort ?? "default",
           }),
         },
       }
@@ -1018,13 +1027,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
       toast.success("Model preferences updated")
     },
-    [
-      aiAssistantSettings,
-      apiKeys,
-      permissions,
-      reasoningEffort,
-      updateSettings,
-    ],
+    [aiAssistantSettings, apiKeys, updateSettings],
   )
 
   const currentProviderValidated = validatedApiKeys[selectedProvider]

@@ -334,13 +334,12 @@ export const reconcileSettings = (
     const providerSettings = result.providers[providerKey]
     if (!providerSettings?.enabledModels) continue
 
+    const isBuiltinProvider = Object.hasOwn(BUILTIN_PROVIDERS, providerKey)
     const selectedHighVariant =
+      isBuiltinProvider &&
       selectedModel !== undefined &&
       selectedModel.endsWith("@reasoning=high") &&
       providerSettings.enabledModels.includes(selectedModel)
-    const collapsed = [
-      ...new Set(providerSettings.enabledModels.map(collapseLegacyVariant)),
-    ]
     const validCustomIds = settings.customProviders?.[providerKey]
       ? new Set(
           settings.customProviders[providerKey].models.map((m) =>
@@ -350,15 +349,27 @@ export const reconcileSettings = (
       : null
     result.providers[providerKey] = {
       ...providerSettings,
-      enabledModels: BUILTIN_PROVIDERS[providerKey]
-        ? collapsed
-        : collapsed.filter((id) => validCustomIds?.has(id)),
+      enabledModels: isBuiltinProvider
+        ? [
+            ...new Set(
+              providerSettings.enabledModels.map(collapseLegacyVariant),
+            ),
+          ]
+        : providerSettings.enabledModels.filter((id) =>
+            validCustomIds?.has(id),
+          ),
       ...(selectedHighVariant ? { reasoningEffort: "high" as const } : {}),
     }
   }
 
   if (result.selectedModel !== undefined) {
-    result.selectedModel = collapseLegacyVariant(result.selectedModel)
+    const selectedProvider = providerForModel(result.selectedModel, settings)
+    if (
+      selectedProvider !== null &&
+      Object.hasOwn(BUILTIN_PROVIDERS, selectedProvider)
+    ) {
+      result.selectedModel = collapseLegacyVariant(result.selectedModel)
+    }
   }
   result.selectedModel = getSelectedModel(result) ?? undefined
 

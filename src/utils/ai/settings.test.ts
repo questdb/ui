@@ -61,6 +61,22 @@ describe("reconcileSettings", () => {
     ])
   })
 
+  it("also collapses legacy reasoning variants for built-in Anthropic models", () => {
+    const settings = makeSettings({
+      selectedModel: "claude-sonnet@reasoning=high",
+      providers: {
+        anthropic: {
+          apiKey: "sk-test",
+          enabledModels: ["claude-sonnet@reasoning=high"],
+          grantSchemaAccess: false,
+        },
+      },
+    })
+    const result = reconcileSettings(settings)
+    expect(result.providers.anthropic!.enabledModels).toEqual(["claude-sonnet"])
+    expect(result.selectedModel).toBe("claude-sonnet")
+  })
+
   it("folds a selected high variant into reasoningEffort", () => {
     // Given a user who ran the high variant
     const settings = makeSettings({
@@ -119,6 +135,37 @@ describe("reconcileSettings", () => {
     expect(result.providers["custom-1"]!.enabledModels).toEqual([
       "custom-1:llm-a",
     ])
+  })
+
+  it("preserves reasoning-like suffixes in custom provider model ids", () => {
+    const customModels = [
+      "vendor-model@reasoning=high",
+      "vendor-model@reasoning=medium",
+      "vendor-model@reasoning=low",
+    ]
+    const enabledModels = customModels.map((model) => `custom-1:${model}`)
+    const settings = makeSettings({
+      selectedModel: enabledModels[0],
+      customProviders: {
+        "custom-1": {
+          type: "openai-chat-completions",
+          name: "Test",
+          baseURL: "http://localhost:11434/v1",
+          contextWindow: 100_000,
+          models: customModels,
+        },
+      },
+      providers: {
+        "custom-1": {
+          apiKey: "",
+          enabledModels,
+          grantSchemaAccess: false,
+        },
+      },
+    })
+    const result = reconcileSettings(settings)
+    expect(result.providers["custom-1"]!.enabledModels).toEqual(enabledModels)
+    expect(result.selectedModel).toBe(enabledModels[0])
   })
 
   it("is idempotent", () => {
