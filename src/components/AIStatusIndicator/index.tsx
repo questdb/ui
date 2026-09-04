@@ -11,11 +11,9 @@ import { color } from "../../utils"
 import { slideAnimation } from "../Animation"
 import { AISparkle } from "../AISparkle"
 import { brandLinearGradientHorizontal } from "../../theme"
-import { getAllModelOptions } from "../../utils/ai"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
 import { AIStopButton } from "../AIStopButton"
-import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import { AssistantModes, buildOperationSections } from "./AssistantModes"
 import { CircleNotchSpinner } from "../../scenes/Editor/Monaco/icons"
 import { useSelector } from "react-redux"
@@ -220,34 +218,6 @@ const ChevronButton = styled(Button).attrs({ variant: "ghost" })`
   margin-right: 1rem;
 `
 
-const ExtendedThinkingLabel = styled.div`
-  display: flex;
-  gap: 0.8rem;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  flex-shrink: 0;
-`
-
-const BrainIconWrapper = styled.div`
-  width: 1.6rem;
-  height: 1.6rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`
-
-const ExtendedThinkingText = styled.p`
-  flex: 1 0 0;
-  font-weight: 400;
-  font-size: 1.1rem;
-  color: ${color("contentSecondary")};
-  min-height: 0;
-  min-width: 0;
-  margin: 0;
-`
-
 const AssistantModesContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -264,14 +234,8 @@ const AssistantModesContainer = styled.div`
 `
 
 export const AIStatusIndicator: React.FC = () => {
-  const {
-    status,
-    currentOperation,
-    currentModel,
-    abortOperation,
-    clearOperation,
-    aiAssistantSettings,
-  } = useAIStatus()
+  const { status, currentOperation, abortOperation, clearOperation } =
+    useAIStatus()
   const { chatWindowState, openChatWindow } = useAIConversation()
   const [expanded, setExpanded] = useState(false)
   const [isClosed, setIsClosed] = useState(false)
@@ -280,11 +244,6 @@ export const AIStatusIndicator: React.FC = () => {
   const assistantModesRef = useRef<HTMLDivElement | null>(null)
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const statusRef = useRef<AIOperationStatus | null>(null)
-  const hasExtendedThinking = useMemo(() => {
-    return getAllModelOptions(aiAssistantSettings).find(
-      (model) => model.value === currentModel,
-    )?.isSlow
-  }, [currentModel, aiAssistantSettings])
 
   const operationSections = useMemo(
     () => buildOperationSections(currentOperation, status, true),
@@ -415,17 +374,6 @@ export const AIStatusIndicator: React.FC = () => {
           </CloseButton>
         )}
       </Header>
-
-      {hasExtendedThinking && (
-        <ExtendedThinkingLabel>
-          <BrainIconWrapper>
-            <BrainIcon />
-          </BrainIconWrapper>
-          <ExtendedThinkingText>
-            Extended thinking model enabled. Responses may be slow.
-          </ExtendedThinkingText>
-        </ExtendedThinkingLabel>
-      )}
 
       {expanded && (
         <AssistantModesContainer ref={assistantModesRef}>

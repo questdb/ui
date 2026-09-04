@@ -33,7 +33,7 @@ import {
   type StreamingCallback,
 } from "./aiAssistant"
 import { getExplainSchemaPrompt, getHealthIssuePrompt } from "./index"
-import { providerForModel, getTestModel, getAllModelOptions } from "./index"
+import { providerForModel, getUtilityModel, getAllModelOptions } from "./index"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -415,14 +415,14 @@ async function generateChatTitleIfNeeded(
   )
   if (!provider) return
 
-  const testModelValue = getTestModel(provider, config.aiAssistantSettings)
-  if (!testModelValue) return
+  const utilityModel = getUtilityModel(provider, config.aiAssistantSettings)
+  if (!utilityModel) return
 
   try {
     const title = await generateChatTitle({
       firstUserMessage: userMessageContent,
       settings: {
-        model: testModelValue,
+        model: utilityModel,
         provider,
         apiKey: config.settings.apiKey,
         aiAssistantSettings: config.aiAssistantSettings,

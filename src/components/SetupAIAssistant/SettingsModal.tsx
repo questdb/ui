@@ -1,24 +1,21 @@
-import React, { useState, useCallback, useMemo, useRef } from "react"
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react"
 import styled, { useTheme } from "styled-components"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
 import { Input } from "../Input"
-import { Switch } from "../Switch"
 import { Text } from "../Text"
 import { Button } from "../Button"
 import { IconButton } from "../IconButton"
 import { TabButton } from "../TabButton"
 import { TextButton } from "../TextButton"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
-import { testApiKey } from "../../utils/ai/aiAssistant"
 import { StoreKey } from "../../utils/localStorage/types"
 import { toast } from "../Toast"
 import { Edit } from "../icons"
 import { TrashIcon, PlugsIcon, PlusIcon, XIcon } from "@phosphor-icons/react"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
-import { BrainIcon } from "./BrainIcon"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { Overlay } from "../Overlay"
 import {
@@ -26,12 +23,17 @@ import {
   getAllModelOptions,
   getApiKey,
   makeCustomModelValue,
+  stripModelNamespace,
+  formatModelLabel,
+  buildProviderSettings,
   BUILTIN_PROVIDERS,
   type ModelOption,
   type ProviderId,
+  type ProviderModel,
   getNextModel,
   getProviderName,
 } from "../../utils/ai"
+import { createProvider } from "../../utils/ai/registry"
 import type {
   AiAssistantSettings,
   CustomProviderDefinition,
@@ -45,6 +47,9 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
 import { ManageModelsModal } from "./ManageModelsModal"
+import type { BuiltinModelsResult } from "./ManageModelsModal"
+import { ReasoningSection } from "./ReasoningSection"
+import type { ReasoningEffortLevel } from "./ReasoningSection"
 
 const ModalContent = styled.div`
   display: flex;
@@ -328,13 +333,6 @@ const ModelInfoColumn = styled(Box).attrs({
   align-items: flex-start;
 `
 
-const ModelInfoRow = styled(Box).attrs({
-  gap: "0.8rem",
-  align: "center",
-})`
-  width: 100%;
-`
-
 const ModelDescriptionText = styled(Text)`
   font-size: 1.1rem;
   color: ${({ theme }) => theme.color.contentSecondary};
@@ -473,6 +471,32 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       [],
     ),
   )
+  const [modelLabels, setModelLabels] = useState<
+    Record<ProviderId, Record<string, string>>
+  >(() =>
+    initializeProviderState(
+      (provider) =>
+        aiAssistantSettings.providers?.[provider]?.modelLabels ?? {},
+      {},
+    ),
+  )
+  const [utilityModels, setUtilityModels] = useState<
+    Record<ProviderId, string | undefined>
+  >(() =>
+    initializeProviderState(
+      (provider) => aiAssistantSettings.providers?.[provider]?.utilityModel,
+      undefined,
+    ),
+  )
+  const [reasoningEffort, setReasoningEffort] = useState<
+    Record<ProviderId, ReasoningEffortLevel>
+  >(() =>
+    initializeProviderState(
+      (provider) =>
+        aiAssistantSettings.providers?.[provider]?.reasoningEffort ?? "default",
+      "default",
+    ),
+  )
   const [permissions, setPermissions] = useState<
     Record<ProviderId, Permissions>
   >(() =>
@@ -515,7 +539,8 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [customProviderModalOpen, setCustomProviderModalOpen] = useState(false)
-  const [manageModelsModalOpen, setManageModelsModalOpen] = useState(false)
+  const [manageModelsProvider, setManageModelsProvider] =
+    useState<ProviderId | null>(null)
 
   const [localCustomProviders, setLocalCustomProviders] = useState<
     Record<string, CustomProviderDefinition>
@@ -532,15 +557,45 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [aiAssistantSettings, localCustomProviders],
   )
 
-  const handleProviderSelect = useCallback((provider: ProviderId) => {
-    setSelectedProvider(provider)
-    setValidationErrors((prev) => ({ ...prev, [provider]: null }))
+  const handleProviderSelect = useCallback(
+    (provider: ProviderId) => {
+      if (provider !== selectedProvider) {
+        abortValidation(selectedProvider)
+      }
+      setSelectedProvider(provider)
+      setValidationErrors((prev) => ({ ...prev, [provider]: null }))
+    },
+    [selectedProvider],
+  )
+
+  const validationTokenRef = useRef<Record<string, number>>({})
+  const [validationListings, setValidationListings] = useState<
+    Record<ProviderId, ProviderModel[] | undefined>
+  >({})
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
+
+  const abortValidation = (provider: ProviderId) => {
+    validationTokenRef.current[provider] =
+      (validationTokenRef.current[provider] ?? 0) + 1
+    setValidationState((prev) =>
+      prev[provider] === "validating" ? { ...prev, [provider]: "idle" } : prev,
+    )
+    setValidationListings((prev) => ({ ...prev, [provider]: undefined }))
+  }
 
   const handleApiKeyChange = useCallback(
     (provider: ProviderId, value: string) => {
+      validationTokenRef.current[provider] =
+        (validationTokenRef.current[provider] ?? 0) + 1
       setApiKeys((prev) => ({ ...prev, [provider]: value }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
+      setValidationState((prev) => ({ ...prev, [provider]: "idle" }))
 
       if (validatedApiKeys[provider]) {
         setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
@@ -563,68 +618,51 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       setValidationState((prev) => ({ ...prev, [provider]: "validating" }))
       setValidationErrors((prev) => ({ ...prev, [provider]: null }))
 
-      const providerModels = getModelsForProvider(provider, localSettings)
-      if (providerModels.length === 0) {
+      const token = validationTokenRef.current[provider] ?? 0
+      const isStale = () =>
+        !mountedRef.current ||
+        (validationTokenRef.current[provider] ?? 0) !== token
+      const isBuiltin = !!BUILTIN_PROVIDERS[provider]
+      try {
+        const aiProvider = createProvider(provider, apiKey, localSettings)
+        const listing = await aiProvider.listModels()
+        if (isStale()) return
+        if (isBuiltin) {
+          setValidationListings((prev) => ({ ...prev, [provider]: listing }))
+        }
+        setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
+        setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
+        setValidationErrors((prev) => ({ ...prev, [provider]: null }))
+        const storedKey = localSettings.providers?.[provider]?.apiKey
+        if (isBuiltin && apiKey !== storedKey) {
+          setEnabledModels((prev) => ({ ...prev, [provider]: [] }))
+          setModelLabels((prev) => ({ ...prev, [provider]: {} }))
+          setUtilityModels((prev) => ({ ...prev, [provider]: undefined }))
+        }
+        if (isBuiltin) {
+          setManageModelsProvider(provider)
+        }
+      } catch (err) {
+        if (isStale()) return
+        const aiProvider = createProvider(provider, apiKey, localSettings)
+        const classified = aiProvider.classifyError(err, () => {})
+        if (!isBuiltin && classified.type !== "invalid_key") {
+          // Custom endpoints often lack a model listing — the key may still work.
+          setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
+          setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
+          return
+        }
         setValidationState((prev) => ({ ...prev, [provider]: "error" }))
         setValidationErrors((prev) => ({
           ...prev,
-          [provider]: "No models available for this provider",
+          [provider]:
+            classified.type === "invalid_key"
+              ? "Invalid API key"
+              : classified.message,
         }))
-        return
-      }
-
-      const testModel = (
-        providerModels.find((m) => m.isTestModel) ?? providerModels[0]
-      ).value
-      try {
-        const result = await testApiKey(
-          apiKey,
-          testModel,
-          provider,
-          localSettings,
-        )
-        if (!result.valid) {
-          setValidationState((prev) => ({ ...prev, [provider]: "error" }))
-          setValidationErrors((prev) => ({
-            ...prev,
-            [provider]: result.error || "Invalid API key",
-          }))
-        } else {
-          const defaultModels = getAllModelOptions(localSettings)
-            .filter((m) => m.defaultEnabled && m.provider === provider)
-            .map((m) => m.value)
-          if (defaultModels.length > 0) {
-            setEnabledModels((prev) => ({ ...prev, [provider]: defaultModels }))
-          }
-          setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
-          setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
-          setValidationErrors((prev) => ({ ...prev, [provider]: null }))
-        }
-      } catch (err) {
-        setValidationState((prev) => ({ ...prev, [provider]: "error" }))
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to validate API key"
-        setValidationErrors((prev) => ({ ...prev, [provider]: errorMessage }))
       }
     },
     [apiKeys, localSettings],
-  )
-
-  const handleModelToggle = useCallback(
-    (provider: ProviderId, modelValue: string) => {
-      void trackEvent(ConsoleEvent.AI_SETTINGS_MODEL_TOGGLE)
-      setEnabledModels((prev) => {
-        const current = prev[provider]
-        const isEnabled = current.includes(modelValue)
-        return {
-          ...prev,
-          [provider]: isEnabled
-            ? current.filter((m) => m !== modelValue)
-            : [...current, modelValue],
-        }
-      })
-    },
-    [],
   )
 
   // Emit the legacy schema-access-removed event on grantSchemaAccess → false
@@ -650,13 +688,15 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       const isCustom = !BUILTIN_PROVIDERS[provider]
       if (validatedApiKeys[provider] || isCustom) {
         const perms = permissions[provider]
-        updatedProviders[provider] = {
+        const labels = modelLabels[provider]
+        updatedProviders[provider] = buildProviderSettings({
           apiKey: apiKeys[provider] ?? "",
           enabledModels: enabledModels[provider],
-          grantSchemaAccess: perms.grantSchemaAccess,
-          read: perms.read,
-          write: perms.write,
-        }
+          permissions: perms,
+          modelLabels: labels,
+          utilityModel: utilityModels[provider],
+          reasoningEffort: reasoningEffort[provider],
+        })
       } else {
         delete updatedProviders[provider]
       }
@@ -696,6 +736,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       updatedSettings.selectedModel,
       enabledModels,
       updatedSettings,
+      aiAssistantSettings,
     )
     updatedSettings.selectedModel = nextModel || undefined
 
@@ -708,6 +749,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     localCustomProviders,
     apiKeys,
     enabledModels,
+    modelLabels,
+    utilityModels,
+    reasoningEffort,
     permissions,
     validatedApiKeys,
     updateSettings,
@@ -720,6 +764,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   const handleRemoveProvider = useCallback(
     (providerId: ProviderId) => {
+      abortValidation(providerId)
       const isCustom = !BUILTIN_PROVIDERS[providerId]
       void trackEvent(ConsoleEvent.AI_SETTINGS_PROVIDER_REMOVE, {
         isCustom,
@@ -741,6 +786,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       setValidationState((prev) => ({ ...prev, [providerId]: "idle" }))
       setValidationErrors((prev) => ({ ...prev, [providerId]: null }))
       setEnabledModels((prev) => ({ ...prev, [providerId]: [] }))
+      setModelLabels((prev) => ({ ...prev, [providerId]: {} }))
+      setUtilityModels((prev) => ({ ...prev, [providerId]: undefined }))
+      setReasoningEffort((prev) => ({ ...prev, [providerId]: "default" }))
       setIsInputFocused((prev) => ({ ...prev, [providerId]: false }))
 
       // Switch to first remaining active provider
@@ -887,6 +935,101 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     [aiAssistantSettings, enabledModels, localCustomProviders, updateSettings],
   )
 
+  const builtinModelsSavedRef = useRef(false)
+
+  const handleBuiltinModelsOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) return
+      const provider = manageModelsProvider
+      setManageModelsProvider(null)
+      const cancelled = !builtinModelsSavedRef.current
+      builtinModelsSavedRef.current = false
+      if (!provider) return
+      setValidationListings((prev) => ({ ...prev, [provider]: undefined }))
+      if (!cancelled || (enabledModels[provider]?.length ?? 0) > 0) return
+      abortValidation(provider)
+      const stored = aiAssistantSettings.providers?.[provider]
+      if (stored?.enabledModels?.length) {
+        setApiKeys((prev) => ({ ...prev, [provider]: stored.apiKey }))
+        setEnabledModels((prev) => ({
+          ...prev,
+          [provider]: stored.enabledModels,
+        }))
+        setModelLabels((prev) => ({
+          ...prev,
+          [provider]: stored.modelLabels ?? {},
+        }))
+        setUtilityModels((prev) => ({
+          ...prev,
+          [provider]: stored.utilityModel,
+        }))
+        return
+      }
+      setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
+      setValidationState((prev) => ({ ...prev, [provider]: "idle" }))
+    },
+    [aiAssistantSettings, enabledModels, manageModelsProvider],
+  )
+
+  const handleBuiltinModelsSave = useCallback(
+    (providerId: string, result: BuiltinModelsResult) => {
+      builtinModelsSavedRef.current = true
+      setEnabledModels((prev) => ({
+        ...prev,
+        [providerId]: result.enabledModels,
+      }))
+      setModelLabels((prev) => ({ ...prev, [providerId]: result.modelLabels }))
+      setUtilityModels((prev) => ({
+        ...prev,
+        [providerId]: result.utilityModel,
+      }))
+
+      const storedProvider = aiAssistantSettings.providers?.[providerId]
+      // The nested dialog commits its API key and model preferences only.
+      // Permission and reasoning edits remain drafts until Save Settings.
+      const persistedPermissions: Permissions = storedProvider
+        ? {
+            grantSchemaAccess: storedProvider.grantSchemaAccess,
+            read: storedProvider.read === true,
+            write: storedProvider.write === true,
+          }
+        : { grantSchemaAccess: true, read: false, write: false }
+      const updatedSettings: AiAssistantSettings = {
+        ...aiAssistantSettings,
+        providers: {
+          ...aiAssistantSettings.providers,
+          [providerId]: buildProviderSettings({
+            apiKey: apiKeys[providerId] ?? "",
+            enabledModels: result.enabledModels,
+            permissions: persistedPermissions,
+            modelLabels: result.modelLabels,
+            utilityModel: result.utilityModel,
+            reasoningEffort: storedProvider?.reasoningEffort ?? "default",
+          }),
+        },
+      }
+      const persistedEnabledModels = Object.fromEntries(
+        Object.entries(updatedSettings.providers).map(
+          ([provider, providerSettings]) => [
+            provider,
+            providerSettings?.enabledModels ?? [],
+          ],
+        ),
+      )
+      updatedSettings.selectedModel =
+        getNextModel(
+          updatedSettings.selectedModel,
+          persistedEnabledModels,
+          updatedSettings,
+          aiAssistantSettings,
+        ) || undefined
+
+      updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
+      toast.success("Model preferences updated")
+    },
+    [aiAssistantSettings, apiKeys, updateSettings],
+  )
+
   const currentProviderValidated = validatedApiKeys[selectedProvider]
   const currentProviderApiKey = apiKeys[selectedProvider]
   const currentProviderValidationState = validationState[selectedProvider]
@@ -906,6 +1049,12 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
     () => enabledModels[selectedProvider],
     [enabledModels, selectedProvider],
   )
+
+  const labelForModel = (provider: ProviderId, value: string) => {
+    if (!BUILTIN_PROVIDERS[provider])
+      return stripModelNamespace(value, provider)
+    return modelLabels[provider]?.[value] ?? formatModelLabel(value)
+  }
 
   const allProviders = useMemo(
     () => getAllProviders(localSettings),
@@ -929,7 +1078,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   return (
     <>
       <RadixDialog.Root
-        open={open && !customProviderModalOpen && !manageModelsModalOpen}
+        open={open && !customProviderModalOpen && manageModelsProvider === null}
         onOpenChange={onOpenChange}
       >
         <RadixDialog.Portal>
@@ -1152,56 +1301,35 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         align="center"
                         style={{ width: "100%" }}
                       >
-                        <EnableModelsTitle>Enable Models</EnableModelsTitle>
-                        {isCustomProvider &&
-                          (currentProviderValidated ||
-                            modelsForProvider.length > 0) && (
-                            <ManageModelsButton
-                              type="button"
-                              data-hook="ai-settings-manage-models"
-                              onClick={() => setManageModelsModalOpen(true)}
-                            >
-                              Manage models
-                            </ManageModelsButton>
-                          )}
+                        <EnableModelsTitle>Models</EnableModelsTitle>
+                        {(currentProviderValidated ||
+                          (isCustomProvider &&
+                            modelsForProvider.length > 0)) && (
+                          <ManageModelsButton
+                            type="button"
+                            data-hook="ai-settings-manage-models"
+                            onClick={() =>
+                              setManageModelsProvider(selectedProvider)
+                            }
+                          >
+                            Manage models
+                          </ManageModelsButton>
+                        )}
                       </Box>
-                      {currentProviderValidated ||
-                      (isCustomProvider && modelsForProvider.length > 0) ? (
+                      {enabledModelsForProvider.length > 0 ? (
                         <ModelList>
-                          {modelsForProvider.map((model) => {
-                            const isEnabled = enabledModelsForProvider.includes(
-                              model.value,
-                            )
+                          {enabledModelsForProvider.map((value) => {
+                            const label = labelForModel(selectedProvider, value)
                             return (
-                              <ModelToggleRow
-                                key={model.value}
-                                data-model={model.label}
-                                data-enabled={isEnabled}
-                              >
+                              <ModelToggleRow key={value} data-model={label}>
                                 <ModelInfoColumn>
-                                  <ModelNameText>{model.label}</ModelNameText>
-                                  {model.isSlow && (
-                                    <ModelInfoRow>
-                                      <BrainIcon
-                                        color={theme.color.contentSecondary}
-                                      />
-                                      <ModelDescriptionText>
-                                        Due to advanced reasoning &amp; thinking
-                                        capabilities, responses using this model
-                                        can be slow.
-                                      </ModelDescriptionText>
-                                    </ModelInfoRow>
+                                  <ModelNameText>{label}</ModelNameText>
+                                  {!isCustomProvider && label !== value && (
+                                    <ModelDescriptionText>
+                                      {value}
+                                    </ModelDescriptionText>
                                   )}
                                 </ModelInfoColumn>
-                                <Switch
-                                  checked={isEnabled}
-                                  onChange={() =>
-                                    handleModelToggle(
-                                      selectedProvider,
-                                      model.value,
-                                    )
-                                  }
-                                />
                               </ModelToggleRow>
                             )
                           })}
@@ -1209,14 +1337,28 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                       ) : (
                         <ModelsPlaceholder>
                           <ModelsPlaceholderText>
-                            When you&apos;ve entered and validated your API key,
-                            you&apos;ll be able to select and enable available
-                            models.
+                            {currentProviderValidated
+                              ? "No models enabled yet. Use “Manage models” to enable the models you want."
+                              : "When you’ve entered and validated your API key, you’ll be able to enable models via “Manage models”."}
                           </ModelsPlaceholderText>
                         </ModelsPlaceholder>
                       )}
                     </Box>
                   </ContentSection>
+                  {selectedProvider === "openai" && (
+                    <ContentSection>
+                      <ReasoningSection
+                        value={reasoningEffort[selectedProvider] ?? "default"}
+                        onChange={(next) =>
+                          setReasoningEffort((prev) => ({
+                            ...prev,
+                            [selectedProvider]: next,
+                          }))
+                        }
+                        disabled={!currentProviderValidated}
+                      />
+                    </ContentSection>
+                  )}
                   <ContentSection>
                     <PermissionsSection
                       value={
@@ -1282,17 +1424,34 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           )}
         />
       )}
-      {manageModelsModalOpen &&
-        isCustomProvider &&
-        localCustomProviders[selectedProvider] && (
+      {manageModelsProvider &&
+        !BUILTIN_PROVIDERS[manageModelsProvider] &&
+        localCustomProviders[manageModelsProvider] && (
           <ManageModelsModal
-            open={manageModelsModalOpen}
-            onOpenChange={setManageModelsModalOpen}
-            providerId={selectedProvider}
-            definition={localCustomProviders[selectedProvider]}
+            key={manageModelsProvider}
+            variant="custom"
+            open
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setManageModelsProvider(null)
+            }}
+            providerId={manageModelsProvider}
+            definition={localCustomProviders[manageModelsProvider]}
             onSave={handleManageModelsSave}
           />
         )}
+      {manageModelsProvider && BUILTIN_PROVIDERS[manageModelsProvider] && (
+        <ManageModelsModal
+          key={manageModelsProvider}
+          variant="builtin"
+          open
+          onOpenChange={handleBuiltinModelsOpenChange}
+          providerId={manageModelsProvider}
+          apiKey={apiKeys[manageModelsProvider] ?? ""}
+          enabledModels={enabledModels[manageModelsProvider] ?? []}
+          initialListing={validationListings[manageModelsProvider]}
+          onSave={handleBuiltinModelsSave}
+        />
+      )}
     </>
   )
 }

@@ -1163,7 +1163,42 @@ function createMultiTurnFlow(config) {
   }
 }
 
+/**
+ * Intercepts AI chat requests with a default test response.
+ *
+ * @param {"anthropic" | "openai"} provider - The AI provider to intercept
+ * @param {string} [alias] - Optional custom alias for the intercept
+ * @param {number} [delay=200] - Delay in milliseconds
+ * @param {Object} [options] - Options
+ * @param {boolean} [options.streaming=true] - Whether to use streaming response
+ */
+function interceptAIChatRequest(
+  provider,
+  alias,
+  delay = 200,
+  options = { streaming: true },
+) {
+  const aliasName = alias || `${provider}ChatRequest`
+  const endpoint = PROVIDERS[provider].endpoint
+  const { streaming = true } = options
+
+  const responseData = createFinalResponseData(
+    provider,
+    "Test response explanation",
+  )
+
+  cy.intercept("POST", endpoint, (req) => {
+    if (isTitleRequest(provider, req.body)) {
+      req.reply(createChatTitleResponse(provider, "Test Chat"))
+      return
+    }
+    req.alias = aliasName
+    req.reply(createResponse(provider, responseData, { streaming, delay }))
+  })
+}
+
 module.exports = {
+  interceptAIChatRequest,
   PROVIDERS,
   CUSTOM_PROVIDER_DEFAULTS,
   getOpenAIConfiguredSettings,

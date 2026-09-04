@@ -2,6 +2,7 @@
 
 const {
   PROVIDERS,
+  interceptAIChatRequest,
   CUSTOM_PROVIDER_DEFAULTS,
   getOpenAIConfiguredSettings,
   getAnthropicConfiguredSettings,
@@ -46,112 +47,6 @@ function interceptAIRequestWithResponse(
   }).as(aliasName)
 }
 
-/**
- * Intercepts AI chat requests with a default test response.
- *
- * @param {"anthropic" | "openai"} provider - The AI provider to intercept
- * @param {string} [alias] - Optional custom alias for the intercept
- * @param {number} [delay=0] - Delay in milliseconds
- * @param {Object} [options] - Options
- * @param {boolean} [options.streaming=true] - Whether to use streaming response
- */
-function interceptAIChatRequest(
-  provider,
-  alias,
-  delay = 200,
-  options = { streaming: true },
-) {
-  const aliasName = alias || `${provider}ChatRequest`
-  const endpoint = PROVIDERS[provider].endpoint
-  const { streaming = true } = options
-
-  const responseData = createFinalResponseData(
-    provider,
-    "Test response explanation",
-  )
-
-  cy.intercept("POST", endpoint, (req) => {
-    if (isTitleRequest(provider, req.body)) {
-      req.reply(createChatTitleResponse(provider, "Test Chat"))
-      return
-    }
-    req.alias = aliasName
-    req.reply(createResponse(provider, responseData, { streaming, delay }))
-  })
-}
-
-/**
- * Intercepts AI provider token validation requests.
- *
- * @param {"anthropic" | "openai"} provider - The AI provider to intercept
- * @param {boolean} success - If true, returns 200 success response; if false, returns 401 error
- */
-function interceptTokenValidation(provider, success) {
-  const endpoint = PROVIDERS[provider].endpoint
-
-  if (provider === "openai") {
-    if (success) {
-      cy.intercept("POST", endpoint, {
-        statusCode: 200,
-        delay: 200,
-        body: {
-          id: "resp_mock_test",
-          object: "response",
-          created_at: Date.now(),
-          status: "completed",
-          output: [],
-        },
-      }).as("openaiValidation")
-    } else {
-      cy.intercept("POST", endpoint, {
-        statusCode: 401,
-        delay: 200,
-        body: {
-          error: {
-            message:
-              "Incorrect API key provided: ***. You can find your API key at https://platform.openai.com/account/api-keys.",
-            type: "invalid_request_error",
-            param: null,
-            code: "invalid_api_key",
-          },
-        },
-      }).as("openaiValidation")
-    }
-  } else if (provider === "anthropic") {
-    if (success) {
-      cy.intercept("POST", endpoint, {
-        statusCode: 200,
-        delay: 200,
-        body: {
-          id: "msg_mock_test",
-          type: "message",
-          role: "assistant",
-          content: [],
-          model: "claude-sonnet-4-5",
-          stop_reason: "end_turn",
-          usage: {
-            input_tokens: 10,
-            output_tokens: 5,
-          },
-        },
-      }).as("anthropicValidation")
-    } else {
-      cy.intercept("POST", endpoint, {
-        statusCode: 401,
-        delay: 200,
-        body: {
-          type: "error",
-          error: {
-            type: "authentication_error",
-            message: "invalid x-api-key",
-          },
-          request_id: "req_mock_test",
-        },
-      }).as("anthropicValidation")
-    }
-  }
-}
-
 describe("ai assistant", () => {
   beforeEach(() => {
     cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
@@ -165,405 +60,14 @@ describe("ai assistant", () => {
         `Unhandled Anthropic request detected! Request body: ${JSON.stringify(req.body).slice(0, 200)}...`,
       )
     }).as("unhandledAnthropic")
-  })
 
-  describe("onboarding and settings", () => {
-    beforeEach(() => {
-      cy.loadConsoleWithAuth()
-    })
+    cy.intercept("GET", "https://api.openai.com/v1/models*", () => {
+      throw new Error("Unhandled OpenAI model listing request detected!")
+    }).as("unhandledOpenAIModels")
 
-    it("should display ai assistant promo", () => {
-      // When
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-
-      // Then
-      cy.getByDataHook("ai-promo-modal").should("be.visible")
-
-      // When
-      cy.getByDataHook("ai-promo-close").should("be.visible").click()
-
-      // Then
-      cy.getByDataHook("ai-promo-modal").should("not.exist")
-
-      // When
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-modal-step-one").should("be.visible")
-    })
-
-    it("should handle invalid api key", () => {
-      // When
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-modal-step-one").should("be.visible")
-      // API key input is hidden until a provider is selected
-      cy.getByDataHook("ai-settings-api-key").should("not.exist")
-
-      // When - select Anthropic
-      cy.getByDataHook("ai-settings-provider-anthropic").click()
-
-      // Then - API key input appears
-      cy.getByDataHook("ai-settings-api-key")
-        .should("be.visible")
-        .should("have.attr", "placeholder", "Enter Anthropic API key")
-
-      // When - switch to OpenAI
-      cy.getByDataHook("ai-settings-provider-openai").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-api-key")
-        .should("be.visible")
-        .should("have.attr", "placeholder", "Enter OpenAI API key")
-      ;["anthropic", "openai"].forEach((provider) => {
-        // Given
-        interceptTokenValidation(provider, false)
-
-        // When
-        cy.getByDataHook(`ai-settings-provider-${provider}`).click()
-
-        // Then
-        cy.getByDataHook("ai-settings-api-key")
-          .should("be.visible")
-          .should(
-            "have.attr",
-            "placeholder",
-            `Enter ${provider === "anthropic" ? "Anthropic" : "OpenAI"} API key`,
-          )
-          .should("be.empty")
-
-        // When
-        cy.getByDataHook("ai-settings-api-key").type("invalid-api-key")
-        cy.getByDataHook("multi-step-modal-next-button").click()
-
-        // Then
-        cy.getByDataHook("multi-step-modal-next-button")
-          .should("be.disabled")
-          .should("contain", "Validating...")
-
-        // When
-        cy.wait(`@${provider}Validation`)
-
-        // Then
-        cy.getByDataHook("ai-settings-api-key-error").should("be.visible")
-      })
-    })
-
-    it("should handle valid api key", () => {
-      // Given
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-      ;["anthropic", "openai"].forEach((provider) => {
-        // Given
-        interceptTokenValidation(provider, true)
-
-        // When
-        cy.getByDataHook(`ai-settings-provider-${provider}`).click()
-
-        // When
-        cy.getByDataHook("ai-settings-api-key").type("valid-api-key")
-        cy.getByDataHook("multi-step-modal-next-button").click()
-
-        // Then
-        cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
-        cy.getByDataHook("multi-step-modal-cancel-button").click()
-      })
-    })
-
-    it("should show ai buttons after setup is completed", () => {
-      // Given
-      interceptTokenValidation("openai", true)
-
-      // When
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-      cy.getByDataHook("ai-settings-provider-openai").click()
-      cy.getByDataHook("ai-settings-api-key").type("valid-api-key")
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
-
-      // When
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then
-      cy.getByDataHook("ai-assistant-settings-button").should(
-        "contain",
-        "AI Settings",
-      )
-      cy.getByDataHook("ai-chat-button").should("be.visible")
-      cy.getByDataHook("ai-settings-model-dropdown").should("be.visible")
-
-      // When / Then — selecting a model closes the dropdown (handleModelSelect
-      // calls setDropdownActive(false)), so re-open it for each model and
-      // re-query the item just before clicking; otherwise the list detaches the
-      // node as it settles/closes and cy.click() hits a stale element.
-      ;[0, 1].forEach((index) => {
-        cy.getByDataHook("ai-settings-model-dropdown").click()
-        cy.getByDataHook("ai-settings-model-item").should("be.visible")
-
-        cy.getByDataHook("ai-settings-model-item")
-          .eq(index)
-          .find("[data-hook='ai-settings-model-item-label']")
-          .invoke("text")
-          .then((text) => {
-            const label = text.trim()
-            cy.getByDataHook("ai-settings-model-item").eq(index).click()
-            cy.getByDataHook("ai-settings-model-dropdown").should(
-              "contain",
-              label,
-            )
-          })
-      })
-
-      // When
-      cy.typeQuery("SELECT 1;")
-
-      // Then
-      cy.getAIIconInLine(1).should("be.visible")
-
-      // When
-      cy.getByDataHook("ai-assistant-settings-button").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-validated-badge")
-        .should("be.visible")
-        .should("contain", "Validated")
-      cy.getByDataHook("ai-settings-provider-openai")
-        .getByDataHook("ai-settings-provider-status")
-        .should("be.visible")
-        .should("contain", "Enabled")
-
-      cy.getByDataHook("ai-settings-provider-anthropic")
-        .getByDataHook("ai-settings-provider-status")
-        .should("be.visible")
-        .should("contain", "Inactive")
-
-      // When
-      cy.getByDataHook("ai-settings-remove-provider").scrollIntoView()
-      cy.getByDataHook("ai-settings-remove-provider")
-        .should("be.visible")
-        .click()
-
-      // Then
-      cy.getByDataHook("ai-settings-validated-badge").should("not.exist")
-      cy.getByDataHook("ai-settings-provider-openai")
-        .getByDataHook("ai-settings-provider-status")
-        .should("be.visible")
-        .should("contain", "Inactive")
-
-      // When
-      cy.getByDataHook("ai-settings-save").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-model-dropdown").should("not.exist")
-      cy.getByDataHook("ai-chat-button").should("not.exist")
-      cy.getByDataHook("ai-assistant-settings-button").should(
-        "contain",
-        "Configure",
-      )
-    })
-
-    it("should not provide schema tools when schema access is disabled", () => {
-      const schemaTools = ["get_tables", "get_table_schema"]
-
-      // Given
-      interceptTokenValidation("openai", true)
-
-      // When
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-      cy.getByDataHook("ai-settings-provider-openai").click()
-      cy.getByDataHook("ai-settings-api-key").type("valid-api-key")
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then
-      cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
-
-      // When - drop permissions to None so schema tools are excluded.
-      cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-none").click()
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then - AI chat should be available
-      cy.get(".toast-success-container").should("be.visible").click()
-      cy.getByDataHook("ai-chat-button").should("be.visible")
-
-      // When - Open chat and send a message
-      interceptAIChatRequest("openai", "chatWithoutSchema")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Hello, test message")
-      cy.getByDataHook("chat-send-button").click()
-
-      // Then - Verify request does NOT contain schema tools
-      cy.wait("@chatWithoutSchema").then((interception) => {
-        const tools = interception.request.body.tools || []
-        const toolNames = tools.map((t) => t.name || t.function?.name)
-        schemaTools.forEach((schemaTool) => {
-          expect(toolNames).to.not.include(schemaTool)
-        })
-      })
-
-      // When - Open settings modal and re-enable schema access
-      cy.getByDataHook("ai-assistant-settings-button").click()
-      cy.getByDataHook("permissions-trigger").click()
-      cy.getByDataHook("permission-level-schema").click()
-      cy.getByDataHook("ai-settings-save").click()
-      cy.get(".toast-success-container").should("be.visible").click()
-
-      // When - Send another message
-      interceptAIChatRequest("openai", "chatWithSchema")
-      cy.getByDataHook("chat-input-textarea").type("Another test message")
-      cy.getByDataHook("chat-send-button").click()
-
-      // Then - Verify request DOES contain schema tools
-      cy.wait("@chatWithSchema").then((interception) => {
-        const tools = interception.request.body.tools || []
-        const toolNames = tools.map((t) => t.name || t.function?.name)
-        schemaTools.forEach((schemaTool) => {
-          expect(toolNames).to.include(schemaTool)
-        })
-      })
-    })
-
-    it("should work with multiple providers", () => {
-      const openaiEnabledModels = []
-      const anthropicEnabledModels = []
-
-      // Given - Set up OpenAI provider first
-      interceptTokenValidation("openai", true)
-
-      // When - Complete setup with OpenAI
-      cy.getByDataHook("ai-assistant-settings-button")
-        .should("be.visible")
-        .click()
-      cy.getByDataHook("ai-promo-continue").should("be.visible").click()
-      cy.getByDataHook("ai-settings-provider-openai").click()
-      cy.getByDataHook("ai-settings-api-key").type("valid-openai-key")
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then - Should be on step two
-      cy.getByDataHook("ai-settings-modal-step-two").should("be.visible")
-
-      // When - Store enabled model labels for OpenAI
-      cy.get('[data-model-enabled="true"]').each(($modelRow) => {
-        openaiEnabledModels.push($modelRow.attr("data-model"))
-      })
-
-      cy.getByDataHook("multi-step-modal-next-button").click()
-
-      // Then - Verify model dropdown shows exactly the enabled OpenAI models
-      cy.get(".toast-success-container").should("be.visible").click()
-      cy.getByDataHook("ai-settings-model-dropdown").click()
-      cy.then(() => {
-        cy.getByDataHook("ai-settings-model-item").should(
-          "have.length",
-          openaiEnabledModels.length,
-        )
-        openaiEnabledModels.forEach((modelLabel) => {
-          cy.getByDataHook("ai-settings-model-item").contains(modelLabel)
-        })
-      })
-      cy.get("body").type("{esc}") // close dropdown
-
-      // When - Open settings and configure Anthropic provider
-      interceptTokenValidation("anthropic", true)
-      cy.getByDataHook("ai-assistant-settings-button").click()
-
-      // Then - OpenAI should show Enabled, Anthropic should show Inactive
-      cy.getByDataHook("ai-settings-provider-openai")
-        .getByDataHook("ai-settings-provider-status")
-        .should("contain", "Enabled")
-      cy.getByDataHook("ai-settings-provider-anthropic")
-        .getByDataHook("ai-settings-provider-status")
-        .should("contain", "Inactive")
-
-      // When - Configure Anthropic
-      cy.getByDataHook("ai-settings-provider-anthropic").click()
-      cy.getByDataHook("ai-settings-api-key").type("valid-anthropic-key")
-      cy.getByDataHook("ai-settings-test-api").click()
-
-      // Then - Should show validating and then validated
-      cy.wait("@anthropicValidation")
-
-      // Then - Anthropic should no longer show Inactive
-      cy.getByDataHook("ai-settings-provider-anthropic")
-        .getByDataHook("ai-settings-provider-status")
-        .should("not.contain", "Inactive")
-
-      // When - Store enabled model labels for Anthropic
-      cy.get('[data-enabled="true"]').each(($modelRow) => {
-        anthropicEnabledModels.push($modelRow.attr("data-model"))
-      })
-
-      // When - Save settings
-      cy.getByDataHook("ai-settings-save").click()
-      cy.get(".toast-success-container").should("be.visible").click()
-
-      // Then - Model dropdown should contain models from both providers
-      cy.getByDataHook("ai-settings-model-dropdown").click()
-      cy.then(() => {
-        const allEnabledModels = [
-          ...openaiEnabledModels,
-          ...anthropicEnabledModels,
-        ]
-        cy.getByDataHook("ai-settings-model-item").should(
-          "have.length",
-          allEnabledModels.length,
-        )
-        allEnabledModels.forEach((modelLabel) => {
-          cy.getByDataHook("ai-settings-model-item").contains(modelLabel)
-        })
-      })
-
-      // When - Select first OpenAI model and open chat
-      cy.then(() => {
-        cy.getByDataHook("ai-settings-model-item")
-          .contains(openaiEnabledModels[0])
-          .click()
-      })
-      interceptAIChatRequest("openai", "openaiChat")
-      cy.getByDataHook("ai-chat-button").click()
-      cy.getByDataHook("ai-chat-window").should("be.visible")
-      cy.getByDataHook("chat-input-textarea").type("Test message for OpenAI")
-      cy.getByDataHook("chat-send-button").click()
-
-      // Then - Should intercept OpenAI request
-      cy.wait("@openaiChat")
-
-      // When - Select first Anthropic model from dropdown
-      cy.getByDataHook("ai-settings-model-dropdown").click()
-      cy.then(() => {
-        cy.getByDataHook("ai-settings-model-item")
-          .contains(anthropicEnabledModels[0])
-          .click()
-      })
-
-      // When - Send another message
-      interceptAIChatRequest("anthropic", "anthropicChat")
-      cy.getByDataHook("chat-input-textarea").type("Test message for Anthropic")
-      cy.getByDataHook("chat-send-button").click()
-
-      // Then - Should intercept Anthropic request
-      cy.wait("@anthropicChat")
-    })
+    cy.intercept("GET", "https://api.anthropic.com/v1/models*", () => {
+      throw new Error("Unhandled Anthropic model listing request detected!")
+    }).as("unhandledAnthropicModels")
   })
 
   describe("ai chat window ergonomics", () => {
@@ -3499,15 +3003,32 @@ describe("custom providers", () => {
     cy.contains("codellama").should("be.visible")
     cy.get("body").type("{esc}") // close dropdown
 
+    cy.intercept("GET", "http://localhost:11434/v1/models*", {
+      statusCode: 200,
+      body: {
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
+          { id: "codellama", object: "model" },
+        ],
+      },
+    }).as("ollamaModels")
+
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").should("be.visible").click()
 
+    // Models render as read-only rows; changes go through Manage models
     cy.get("[data-model='llama3']").should("exist")
     cy.get("[data-model='mistral']").should("exist")
     cy.get("[data-model='codellama']").should("exist")
 
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@ollamaModels")
+    cy.getByDataHook("custom-provider-model-row").contains("mistral").click()
+    cy.getByDataHook("manage-models-save").click()
+
+    cy.get("[data-model='mistral']").should("not.exist")
     cy.getByDataHook("ai-settings-save").click()
 
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
@@ -3518,10 +3039,14 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-assistant-settings-button").click()
     cy.getByDataHook("ai-settings-provider-ollama").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    cy.get("[data-model='mistral']").should("not.exist")
 
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='true']").should("exist")
+    cy.getByDataHook("ai-settings-manage-models").click()
+    cy.wait("@ollamaModels")
+    cy.getByDataHook("custom-provider-model-row").contains("mistral").click()
+    cy.getByDataHook("manage-models-save").click()
+
+    cy.get("[data-model='mistral']").should("exist")
     cy.getByDataHook("ai-settings-save").click()
 
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
@@ -3859,7 +3384,7 @@ describe("custom providers", () => {
 
     cy.getByDataHook("ai-settings-model-dropdown").click()
     cy.getByDataHook("ai-settings-model-item-label")
-      .contains("GPT-5 mini")
+      .contains("GPT 5 Mini")
       .click()
 
     cy.getByDataHook("chat-window-new").click()
@@ -4158,7 +3683,7 @@ describe("custom providers", () => {
     cy.get("body").type("{esc}") // close dropdown
   })
 
-  it("should auto-enable new models from manage models and preserve unsaved toggle state", () => {
+  it("should add and remove models through manage models in manual mode", () => {
     const providerId = "test-provider"
 
     cy.loadConsoleWithAuth(
@@ -4175,14 +3700,10 @@ describe("custom providers", () => {
       .should("be.visible")
       .click()
 
-    // All 3 models should be enabled
-    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-b'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
-
-    // Disable model-b toggle (unsaved state)
-    cy.get("[data-model='model-b']").find("button[role='switch']").click()
-    cy.get("[data-model='model-b'][data-enabled='false']").should("exist")
+    // All 3 models render as read-only rows
+    cy.get("[data-model='model-a']").should("exist")
+    cy.get("[data-model='model-b']").should("exist")
+    cy.get("[data-model='model-c']").should("exist")
 
     // Intercept model fetch → fail to get manual mode
     cy.intercept("GET", "**/models*", {
@@ -4214,10 +3735,10 @@ describe("custom providers", () => {
     cy.getByDataHook("manage-models-save").click()
 
     // Back in SettingsModal: model-b gone, model-d auto-enabled
-    cy.get("[data-model='model-a'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-a']").should("exist")
     cy.get("[data-model='model-b']").should("not.exist")
-    cy.get("[data-model='model-c'][data-enabled='true']").should("exist")
-    cy.get("[data-model='model-d'][data-enabled='true']").should("exist")
+    cy.get("[data-model='model-c']").should("exist")
+    cy.get("[data-model='model-d']").should("exist")
 
     // Save settings
     cy.getByDataHook("ai-settings-save").click()
@@ -4234,10 +3755,6 @@ describe("custom providers", () => {
 
   it("should handle no-API-key custom provider: models visible, no validated badge, schema toggle enabled, and allow adding an API key", () => {
     const providerId = "ollama"
-    const customEndpoint = getCustomProviderEndpoint(
-      CUSTOM_PROVIDER_DEFAULTS.baseURL,
-      "openai-chat-completions",
-    )
 
     cy.loadConsoleWithAuth(
       false,
@@ -4265,7 +3782,7 @@ describe("custom providers", () => {
       "This provider does not have an API key",
     )
 
-    // Model list visible with both models
+    // Model list visible with both models as read-only rows
     cy.get("[data-model='llama3']").should("exist")
     cy.get("[data-model='mistral']").should("exist")
 
@@ -4275,11 +3792,7 @@ describe("custom providers", () => {
     // Manage models button visible
     cy.getByDataHook("ai-settings-manage-models").should("be.visible")
 
-    // Toggle mistral off
-    cy.get("[data-model='mistral']").find("button[role='switch']").click()
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
-
-    // Built-in provider should NOT have manage models button
+    // Built-in provider should NOT have manage models button before validation
     cy.getByDataHook("ai-settings-provider-openai").click()
     cy.getByDataHook("ai-settings-manage-models").should("not.exist")
 
@@ -4292,21 +3805,16 @@ describe("custom providers", () => {
     cy.getByDataHook("ai-settings-edit-api-key").click()
     cy.getByDataHook("ai-settings-api-key").type("sk-custom-key-123")
 
-    // Intercept validation request to custom endpoint
-    cy.intercept("POST", customEndpoint, {
+    // Validation runs through the provider's model listing
+    cy.intercept("GET", "http://localhost:11434/v1/models*", {
       statusCode: 200,
       delay: 200,
       body: {
-        id: "chatcmpl-mock",
-        object: "chat.completion",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "" },
-            finish_reason: "stop",
-          },
+        object: "list",
+        data: [
+          { id: "llama3", object: "model" },
+          { id: "mistral", object: "model" },
         ],
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       },
     }).as("customValidation")
 
@@ -4317,19 +3825,20 @@ describe("custom providers", () => {
     // Validated badge should now appear
     cy.getByDataHook("ai-settings-validated-badge").should("be.visible")
 
-    // Models still visible, mistral toggle preserved
-    cy.get("[data-model='llama3'][data-enabled='true']").should("exist")
-    cy.get("[data-model='mistral'][data-enabled='false']").should("exist")
+    // Models still visible
+    cy.get("[data-model='llama3']").should("exist")
+    cy.get("[data-model='mistral']").should("exist")
 
     // Part C: Save and verify
 
     cy.getByDataHook("ai-settings-save").click()
     cy.get(".toast-success-container").should("be.visible").click()
 
-    // Dropdown should show only llama3 (mistral was disabled)
+    // Dropdown should show both models
     cy.getByDataHook("ai-settings-model-dropdown").should("be.visible").click()
-    cy.getByDataHook("ai-settings-model-item").should("have.length", 1)
+    cy.getByDataHook("ai-settings-model-item").should("have.length", 2)
     cy.contains("llama3").should("be.visible")
+    cy.contains("mistral").should("be.visible")
     cy.get("body").type("{esc}") // close dropdown
   })
 })

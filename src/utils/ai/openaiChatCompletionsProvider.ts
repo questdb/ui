@@ -9,12 +9,13 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { getModelProps } from "./settings"
+import { stripModelNamespace } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
   type ExecuteFlowParams,
   type FlowResult,
+  type ProviderModel,
   type ToolDefinition,
   type Message,
 } from "./types"
@@ -350,23 +351,14 @@ async function executeRequest(
   }
 }
 
-function toChatCompletionsAPIProps(model: string): {
-  model: string
-  reasoning_effort?: OpenAI.ReasoningEffort
-} {
-  const props = getModelProps(model)
-  return {
-    model: props.model,
-    ...(props.reasoningEffort
-      ? { reasoning_effort: props.reasoningEffort as OpenAI.ReasoningEffort }
-      : {}),
-  }
-}
-
 export function createOpenAIChatCompletionsProvider(
   apiKey: string,
   providerId: ProviderId = "openai",
-  options?: { baseURL?: string; contextWindow?: number; isCustom?: boolean },
+  options?: {
+    baseURL?: string
+    contextWindow?: number
+    isCustom?: boolean
+  },
 ): AIProvider {
   const isCustom = options?.isCustom ?? false
   const openai = new OpenAI({
@@ -421,7 +413,7 @@ export function createOpenAIChatCompletionsProvider(
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const baseParams = {
-        ...toChatCompletionsAPIProps(model),
+        model: stripModelNamespace(model, providerId),
         tools: openaiTools,
       }
 
@@ -563,7 +555,7 @@ export function createOpenAIChatCompletionsProvider(
     async generateTitle({ model, prompt }) {
       try {
         const response = await openai.chat.completions.create({
-          model: toChatCompletionsAPIProps(model).model,
+          model: stripModelNamespace(model, providerId),
           messages: [{ role: "user", content: prompt }],
           ...(isCustom ? {} : { max_completion_tokens: 100 }),
         })
@@ -585,16 +577,20 @@ export function createOpenAIChatCompletionsProvider(
       abortSignal?: AbortSignal
     }) {
       let text = ""
+      const summaryParams = {
+        model: stripModelNamespace(model, providerId),
+        messages: [
+          { role: "system" as const, content: systemPrompt },
+          { role: "user" as const, content: userMessage },
+        ],
+        stream: true as const,
+      }
+      const requestOptions = abortSignal
+        ? ([{ signal: abortSignal }] as const)
+        : ([] as const)
       const stream = await openai.chat.completions.create(
-        {
-          ...toChatCompletionsAPIProps(model),
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
-          stream: true,
-        },
-        ...(abortSignal ? [{ signal: abortSignal }] : ([] as const)),
+        summaryParams,
+        ...requestOptions,
       )
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content
@@ -603,43 +599,6 @@ export function createOpenAIChatCompletionsProvider(
         }
       }
       return text
-    },
-
-    async testConnection({ apiKey: testApiKey, model }) {
-      try {
-        const testClient = new OpenAI({
-          apiKey: testApiKey,
-          dangerouslyAllowBrowser: true,
-          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
-          ...(isCustom
-            ? {
-                fetch: createHeaderFilteredFetch(OPENAI_ALLOWED_HEADERS),
-              }
-            : {}),
-        })
-        await testClient.chat.completions.create({
-          model: getModelProps(model).model,
-          messages: [{ role: "user", content: "ping" }],
-        })
-        return { valid: true }
-      } catch (error: unknown) {
-        const status =
-          (error as { status?: number })?.status ||
-          (error as { error?: { status?: number } })?.error?.status
-        if (status === 401) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (status === 429) {
-          return { valid: true }
-        }
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to validate API key",
-        }
-      }
     },
 
     async countTokens({ messages, systemPrompt }) {
@@ -655,12 +614,17 @@ export function createOpenAIChatCompletionsProvider(
       return countTokensFromNativePayload(systemPrompt, nativeMessages)
     },
 
-    async listModels(): Promise<string[]> {
-      const models: string[] = []
+    async listModels(): Promise<ProviderModel[]> {
+      const models: ProviderModel[] = []
       for await (const model of openai.models.list()) {
-        models.push(model.id)
+        const name = (model as { name?: unknown }).name
+        models.push({
+          id: model.id,
+          created: model.created,
+          ...(typeof name === "string" ? { label: name } : {}),
+        })
       }
-      return models.sort((a, b) => a.localeCompare(b))
+      return models.sort((a, b) => a.id.localeCompare(b.id))
     },
 
     classifyError(

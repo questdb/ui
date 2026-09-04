@@ -50,6 +50,7 @@ import {
   RunWithSelectionMode,
 } from "./types"
 import { reconcileSettings } from "../../utils/ai/settings"
+import { onReasoningUnsupported } from "../../utils/ai/reasoningFallback"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
   providers: {},
@@ -379,6 +380,23 @@ export const LocalStorageProvider = ({
       refreshSettings(key)
     },
     [refreshSettings],
+  )
+
+  useEffect(
+    () =>
+      onReasoningUnsupported((providerId) => {
+        const settings = getAiAssistantSettings()
+        const providerSettings = settings.providers[providerId]
+        if (providerSettings?.reasoningEffort !== "high") return
+        updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, {
+          ...settings,
+          providers: {
+            ...settings.providers,
+            [providerId]: { ...providerSettings, reasoningEffort: "default" },
+          },
+        })
+      }),
+    [updateSettings],
   )
 
   const value = useMemo(
