@@ -1,15 +1,14 @@
 import type {
   AiAssistantSettings,
   CustomProviderDefinition,
+  ProviderSettings,
 } from "../../providers/LocalStorageProvider/types"
 import type { Permissions } from "../tools/permissions"
 import { getValue } from "../localStorage"
 import { StoreKey } from "../localStorage/types"
 import {
-  computeReasoningModels,
   filterOpenAiChatModels,
   formatModelLabel,
-  matchesListedModel,
   resolveUtilityModel,
   UTILITY_MODEL_TIERS,
 } from "./modelCatalog"
@@ -58,16 +57,26 @@ export const makeCustomModelValue = (
 
 export const parseModelValue = (
   value: string,
+  customProviders?: Record<string, CustomProviderDefinition>,
 ): { customProviderId: string; rawModel: string } | { rawModel: string } => {
   const sepIndex = value.indexOf(CUSTOM_MODEL_SEP)
   if (sepIndex === -1) return { rawModel: value }
   const candidateProvider = value.slice(0, sepIndex)
-  // Only treat as namespaced if the prefix is NOT a built-in provider.
-  if (BUILTIN_PROVIDERS[candidateProvider]) return { rawModel: value }
+  if (!customProviders || !Object.hasOwn(customProviders, candidateProvider)) {
+    return { rawModel: value }
+  }
   return {
     customProviderId: candidateProvider,
     rawModel: value.slice(sepIndex + 1),
   }
+}
+
+export const stripModelNamespace = (
+  value: string,
+  providerId: ProviderId,
+): string => {
+  const prefix = `${providerId}${CUSTOM_MODEL_SEP}`
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value
 }
 
 export const getModelLabel = (
@@ -112,7 +121,7 @@ export const providerForModel = (
   settings?: AiAssistantSettings,
 ): ProviderId | null => {
   // Check for namespaced custom model value (providerId:modelId)
-  const parsed = parseModelValue(model)
+  const parsed = parseModelValue(model, settings?.customProviders)
   if ("customProviderId" in parsed) return parsed.customProviderId
   return (
     Object.keys(BUILTIN_PROVIDERS).find((providerId) =>
@@ -166,14 +175,20 @@ export const getNextModel = (
   currentModel: string | undefined,
   enabledModels: Record<ProviderId, string[]>,
   settings?: AiAssistantSettings,
+  previousSettings?: AiAssistantSettings,
 ): string | null => {
   const providerOf = (model: string) => {
-    const parsed = parseModelValue(model)
+    const parsed = parseModelValue(
+      model,
+      settings?.customProviders ?? previousSettings?.customProviders,
+    )
     if ("customProviderId" in parsed) return parsed.customProviderId
     return (
       Object.keys(enabledModels).find((p) =>
         enabledModels[p]?.includes(model),
-      ) ?? providerForModel(model, settings)
+      ) ??
+      providerForModel(model, settings) ??
+      providerForModel(model, previousSettings)
     )
   }
   const modelProvider = currentModel ? providerOf(currentModel) : null
@@ -218,6 +233,35 @@ export const getUtilityModel = (
   )
 }
 
+export type ProviderSettingsInput = {
+  apiKey: string
+  enabledModels: string[]
+  permissions: Permissions
+  modelLabels?: Record<string, string>
+  utilityModel?: string
+  reasoningEffort?: "default" | "high"
+}
+
+export const buildProviderSettings = ({
+  apiKey,
+  enabledModels,
+  permissions,
+  modelLabels,
+  utilityModel,
+  reasoningEffort,
+}: ProviderSettingsInput): ProviderSettings => ({
+  apiKey,
+  enabledModels,
+  grantSchemaAccess: permissions.grantSchemaAccess,
+  read: permissions.read,
+  write: permissions.write,
+  ...(modelLabels && Object.keys(modelLabels).length > 0
+    ? { modelLabels }
+    : {}),
+  ...(utilityModel ? { utilityModel } : {}),
+  ...(reasoningEffort === "high" ? { reasoningEffort: "high" as const } : {}),
+})
+
 /**
  * Derives the listing-dependent provider settings captured at Save time:
  * labels for enabled models, the utility model, and the reasoning gate.
@@ -225,7 +269,6 @@ export const getUtilityModel = (
 export type ListingMetadata = {
   modelLabels: Record<string, string>
   utilityModel?: string
-  reasoningModels?: string[]
 }
 
 export const buildListingMetadata = (
@@ -241,13 +284,12 @@ export const buildListingMetadata = (
   )
   const modelLabels: Record<string, string> = {}
   for (const id of enabledModels) {
-    const label = listing.find((m) => matchesListedModel(id, m.id))?.label
-    if (label) modelLabels[id] = label
+    const listed = listing.find((m) => m.id === id)
+    modelLabels[id] = listed ? (listed.label ?? formatModelLabel(id)) : id
   }
   return {
     modelLabels,
     ...(utilityModel ? { utilityModel } : {}),
-    ...(isOpenAi ? { reasoningModels: computeReasoningModels(listing) } : {}),
   }
 }
 

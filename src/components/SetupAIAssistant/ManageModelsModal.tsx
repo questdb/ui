@@ -11,6 +11,7 @@ import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
 import { Text } from "../Text"
+import { ValidationNotice } from "../ValidationNotice"
 import { Button } from "../Button"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { Overlay } from "../Overlay"
@@ -21,7 +22,6 @@ import {
   filterOpenAiChatModels,
   formatModelLabel,
   getProviderName,
-  matchesListedModel,
   sortModelsNewestFirst,
 } from "../../utils/ai"
 import { createProviderByType } from "../../utils/ai/registry"
@@ -114,7 +114,6 @@ export type BuiltinModelsResult = {
   enabledModels: string[]
   modelLabels: Record<string, string>
   utilityModel?: string
-  reasoningModels?: string[]
 }
 
 type BuiltinModelsRef = {
@@ -126,140 +125,142 @@ type BuiltinModelsContentProps = {
   providerId: string
   apiKey: string
   enabledModels: string[]
+  initialListing?: ProviderModel[]
   onLoadingChange: (loading: boolean) => void
 }
 
 const BuiltinModelsContent = forwardRef<
   BuiltinModelsRef,
   BuiltinModelsContentProps
->(({ providerId, apiKey, enabledModels, onLoadingChange }, ref) => {
-  const [listing, setListing] = useState<ProviderModel[] | null>(null)
-  const [fetchFailed, setFetchFailed] = useState(false)
-  const [selectedModels, setSelectedModels] = useState<string[]>([])
-  const [unavailableModels, setUnavailableModels] = useState<string[]>([])
-  const [manualInput, setManualInput] = useState("")
-  const [isLoading, setIsLoading] = useState(true)
-
-  const isOpenAi = BUILTIN_PROVIDERS[providerId]?.type === "openai"
-  const pickerModels = listing
-    ? isOpenAi
-      ? filterOpenAiChatModels(listing)
-      : sortModelsNewestFirst(listing)
-    : []
-  const hiddenModels =
-    listing && isOpenAi
-      ? sortModelsNewestFirst(
-          listing.filter((m) => !pickerModels.some((p) => p.id === m.id)),
-        )
-      : undefined
-
-  const selectionWithPending = () => {
-    const pending = manualInput.trim()
-    return pending && !selectedModels.includes(pending)
-      ? [...selectedModels, pending]
-      : [...selectedModels]
-  }
-
-  useImperativeHandle(
+>(
+  (
+    { providerId, apiKey, enabledModels, initialListing, onLoadingChange },
     ref,
-    () => ({
-      getResult: () => {
-        if (!listing) return null
-        const models = selectionWithPending()
-        return {
-          enabledModels: models,
-          ...buildListingMetadata(providerId, listing, models),
-        }
-      },
-      validate: () => {
-        if (!listing) return "Could not fetch models from the provider"
-        if (selectionWithPending().length === 0)
-          return "Enable at least one model"
-        return true
-      },
-    }),
-    [listing, selectedModels, manualInput, providerId],
-  )
+  ) => {
+    const [listing, setListing] = useState<ProviderModel[] | null>(
+      initialListing ?? null,
+    )
+    const [fetchFailed, setFetchFailed] = useState(false)
+    const [selectedModels, setSelectedModels] = useState<string[]>(
+      initialListing ? enabledModels : [],
+    )
+    const [manualInput, setManualInput] = useState("")
+    const [isLoading, setIsLoading] = useState(!initialListing)
 
-  useEffect(() => {
-    let cancelled = false
+    const isOpenAi = BUILTIN_PROVIDERS[providerId]?.type === "openai"
+    const pickerModels = listing
+      ? isOpenAi
+        ? filterOpenAiChatModels(listing)
+        : sortModelsNewestFirst(listing)
+      : []
+    const hiddenModels =
+      listing && isOpenAi
+        ? sortModelsNewestFirst(
+            listing.filter((m) => !pickerModels.some((p) => p.id === m.id)),
+          )
+        : undefined
 
-    const doFetch = async () => {
-      setIsLoading(true)
-      onLoadingChange(true)
-      try {
-        const provider = createProviderByType(
-          BUILTIN_PROVIDERS[providerId].type,
-          providerId,
-          apiKey,
-        )
-        const models = await provider.listModels()
-        if (cancelled) return
-        setListing(models)
-        setSelectedModels(
-          enabledModels.filter((id) =>
-            models.some((m) => matchesListedModel(id, m.id)),
-          ),
-        )
-        setUnavailableModels(
-          enabledModels.filter(
-            (id) => !models.some((m) => matchesListedModel(id, m.id)),
-          ),
-        )
-      } catch {
-        if (cancelled) return
-        setFetchFailed(true)
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false)
+    const selectionWithPending = () => {
+      const pending = manualInput.trim()
+      return pending && !selectedModels.includes(pending)
+        ? [...selectedModels, pending]
+        : [...selectedModels]
+    }
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        getResult: () => {
+          if (!listing) return null
+          const models = selectionWithPending()
+          return {
+            enabledModels: models,
+            ...buildListingMetadata(providerId, listing, models),
+          }
+        },
+        validate: () => {
+          if (!listing) return "Could not fetch models from the provider"
+          if (selectionWithPending().length === 0)
+            return "Enable at least one model"
+          return true
+        },
+      }),
+      [listing, selectedModels, manualInput, providerId],
+    )
+
+    useEffect(() => {
+      let cancelled = false
+
+      const doFetch = async () => {
+        if (initialListing) {
           onLoadingChange(false)
+          return
+        }
+        onLoadingChange(true)
+        try {
+          const provider = createProviderByType(
+            BUILTIN_PROVIDERS[providerId].type,
+            providerId,
+            apiKey,
+          )
+          const models = await provider.listModels()
+          if (cancelled) return
+          setListing(models)
+          setSelectedModels(enabledModels)
+        } catch {
+          if (cancelled) return
+          setFetchFailed(true)
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false)
+            onLoadingChange(false)
+          }
         }
       }
+
+      void doFetch()
+      return () => {
+        cancelled = true
+      }
+    }, [])
+
+    if (isLoading) {
+      return (
+        <ContentSection>
+          <LoadingContainer role="status" aria-busy aria-label="Loading models">
+            <LoadingSpinner size="3rem" />
+          </LoadingContainer>
+        </ContentSection>
+      )
     }
 
-    void doFetch()
-    return () => {
-      cancelled = true
+    if (fetchFailed) {
+      return (
+        <ContentSection align="flex-start" role="alert">
+          <ErrorText data-hook="manage-models-fetch-error">
+            Could not fetch models from the provider. Check your API key and
+            connection, then try again.
+          </ErrorText>
+        </ContentSection>
+      )
     }
-  }, [])
 
-  if (isLoading) {
-    return (
-      <ContentSection>
-        <LoadingContainer>
-          <LoadingSpinner size="3rem" />
-        </LoadingContainer>
-      </ContentSection>
-    )
-  }
-
-  if (fetchFailed) {
     return (
       <ContentSection align="flex-start">
-        <ErrorText data-hook="manage-models-fetch-error">
-          Could not fetch models from the provider. Check your API key and
-          connection, then try again.
-        </ErrorText>
+        <ModelPicker
+          listedModels={pickerModels}
+          hiddenModels={hiddenModels}
+          selectedModels={selectedModels}
+          manualInput={manualInput}
+          dataHookPrefix="manage-models"
+          labelFor={(model) => model.label ?? formatModelLabel(model.id)}
+          onSelectionChange={setSelectedModels}
+          onManualInputChange={setManualInput}
+        />
       </ContentSection>
     )
-  }
-
-  return (
-    <ContentSection align="flex-start">
-      <ModelPicker
-        listedModels={pickerModels}
-        hiddenModels={hiddenModels}
-        selectedModels={selectedModels}
-        unavailableModels={unavailableModels}
-        manualInput={manualInput}
-        dataHookPrefix="manage-models"
-        labelFor={(model) => model.label ?? formatModelLabel(model.id)}
-        onSelectionChange={setSelectedModels}
-        onManualInputChange={setManualInput}
-      />
-    </ContentSection>
-  )
-})
+  },
+)
 
 BuiltinModelsContent.displayName = "BuiltinModelsContent"
 
@@ -277,6 +278,7 @@ type ManageModelsModalProps = {
       variant: "builtin"
       apiKey: string
       enabledModels: string[]
+      initialListing?: ProviderModel[]
       onSave: (providerId: string, result: BuiltinModelsResult) => void
     }
 )
@@ -364,13 +366,19 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
                   providerId={providerId}
                   apiKey={props.apiKey}
                   enabledModels={props.enabledModels}
+                  initialListing={props.initialListing}
                   onLoadingChange={setModelsLoading}
                 />
               )}
             </ScrollableContent>
-            <Separator />
+            {error ? (
+              <ValidationNotice dataHook="manage-models-error">
+                {error}
+              </ValidationNotice>
+            ) : (
+              <Separator />
+            )}
             <FooterSection>
-              {error && <ErrorText>{error}</ErrorText>}
               <FooterButton
                 variant="secondary"
                 data-hook="manage-models-cancel"

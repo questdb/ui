@@ -38,11 +38,6 @@ const OPENAI_NON_CHAT_TOKENS = [
 export const stripDateSuffix = (id: string): string =>
   id.replace(DATE_SUFFIX, "")
 
-export const matchesListedModel = (
-  storedId: string,
-  listedId: string,
-): boolean => storedId === listedId || stripDateSuffix(listedId) === storedId
-
 const isNumericToken = (token: string): boolean => /^[\d.]+$/.test(token)
 
 export const formatModelLabel = (id: string): string => {
@@ -104,7 +99,7 @@ export const resolveUtilityModel = (
     const alias = stripDateSuffix(model.id)
     const existing = byAlias.get(alias)
     if (!existing || (model.created ?? 0) > (existing.created ?? 0)) {
-      byAlias.set(alias, { ...model, id: alias })
+      byAlias.set(alias, model)
     }
   }
   for (const tier of tiers) {
@@ -115,13 +110,3 @@ export const resolveUtilityModel = (
   }
   return null
 }
-
-export const computeReasoningModels = (models: ProviderModel[]): string[] =>
-  models.filter((m) => (m.created ?? 0) >= GPT5_LAUNCH_START).map((m) => m.id)
-
-export const isReasoningModel = (
-  modelId: string,
-  reasoningModels: string[] | undefined,
-): boolean =>
-  reasoningModels?.some((listed) => matchesListedModel(modelId, listed)) ??
-  false

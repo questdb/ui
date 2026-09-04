@@ -8,7 +8,7 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { parseModelValue } from "./settings"
+import { stripModelNamespace } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
@@ -128,10 +128,6 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
       ...(t.inputSchema.required ? { required: t.inputSchema.required } : {}),
     },
   }))
-}
-
-function toAnthropicModel(model: string): string {
-  return parseModelValue(model).rawModel
 }
 
 async function createAnthropicMessage(
@@ -500,7 +496,7 @@ export function createAnthropicProvider(
 
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
-      const resolvedModel = toAnthropicModel(model)
+      const resolvedModel = stripModelNamespace(model, providerId)
 
       const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
         model: resolvedModel,
@@ -583,7 +579,7 @@ export function createAnthropicProvider(
     async generateTitle({ model, prompt }) {
       try {
         const message = await createAnthropicMessage(anthropic, {
-          model: toAnthropicModel(model),
+          model: stripModelNamespace(model, providerId),
           messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
         })
@@ -609,7 +605,7 @@ export function createAnthropicProvider(
       let text = ""
       const stream = anthropic.messages.stream(
         {
-          model: toAnthropicModel(model),
+          model: stripModelNamespace(model, providerId),
           max_tokens: 64_000,
           messages: [{ role: "user", content: userMessage }],
           system: systemPrompt,
@@ -640,7 +636,7 @@ export function createAnthropicProvider(
 
       const nativeMessages = toNativeMessages(messages)
       const response = await anthropic.messages.countTokens({
-        model: toAnthropicModel(model),
+        model: stripModelNamespace(model, providerId),
         system: systemPrompt,
         messages: nativeMessages,
       })

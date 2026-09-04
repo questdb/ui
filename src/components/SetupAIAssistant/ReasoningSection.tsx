@@ -7,20 +7,11 @@ export type ReasoningEffortLevel = "default" | "high"
 type Option = {
   level: ReasoningEffortLevel
   label: string
-  hint: string
 }
 
 const OPTIONS: Option[] = [
-  {
-    level: "default",
-    label: "Default",
-    hint: "Each model uses its own default reasoning level.",
-  },
-  {
-    level: "high",
-    label: "High",
-    hint: "Maximum thinking — slower, better for hard questions.",
-  },
+  { level: "default", label: "Default" },
+  { level: "high", label: "High" },
 ]
 
 const Field = styled.div`
@@ -57,10 +48,10 @@ export const ReasoningSection: React.FC<Props> = ({
         <SelectMenu.Trigger
           disabled={disabled}
           dataHook="reasoning-trigger"
+          aria-label={`Reasoning: ${current.label}`}
           label={current.label}
-          description={current.hint}
+          labelFontSize="1.4rem"
           fullWidth
-          rich
         />
         <SelectMenu.Portal>
           <SelectMenu.Content sideOffset={4} align="start">
@@ -72,7 +63,6 @@ export const ReasoningSection: React.FC<Props> = ({
                 <SelectMenu.Item
                   key={opt.level}
                   value={opt.level}
-                  description={opt.hint}
                   data-hook={`reasoning-level-${opt.level}`}
                 >
                   {opt.label}

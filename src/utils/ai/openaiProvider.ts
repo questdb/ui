@@ -5,9 +5,10 @@ import type {
   StatusCallback,
   StreamingCallback,
 } from "./aiAssistant"
-import { parseModelValue } from "./settings"
+import { stripModelNamespace } from "./settings"
 import type { ProviderId } from "./settings"
-import { isReasoningModel } from "./modelCatalog"
+import { reportReasoningUnsupported } from "./reasoningFallback"
+import { toast } from "../../components/Toast"
 import {
   type AIProvider,
   type ExecuteFlowParams,
@@ -133,7 +134,6 @@ async function createOpenAIResponseStreaming(
         ...params,
         stream: true,
         store: false,
-        include: ["reasoning.encrypted_content"],
       } as OpenAI.Responses.ResponseCreateParamsStreaming,
       { signal: abortSignal },
     )
@@ -258,26 +258,15 @@ function getOpenAIText(response: OpenAI.Responses.Response): {
   return { type: "text", message: "" }
 }
 
-async function createResponseWithReasoningFallback(
-  openai: OpenAI,
+function stripReasoning(
   params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
-  streaming?: StreamingCallback,
-  abortSignal?: AbortSignal,
-): Promise<OpenAI.Responses.Response> {
-  const run = async (p: OpenAI.Responses.ResponseCreateParamsNonStreaming) =>
-    streaming
-      ? (await createOpenAIResponseStreaming(openai, p, streaming, abortSignal))
-          .response
-      : openai.responses.create(p)
-  try {
-    return await run(params)
-  } catch (error) {
-    if (params.reasoning && isReasoningRejection(error)) {
-      const { reasoning: _reasoning, ...withoutReasoning } = params
-      return run(withoutReasoning)
-    }
-    throw error
-  }
+): OpenAI.Responses.ResponseCreateParamsNonStreaming {
+  const {
+    reasoning: _reasoning,
+    include: _include,
+    ...withoutReasoning
+  } = params
+  return withoutReasoning
 }
 
 export function createOpenAIProvider(
@@ -287,7 +276,7 @@ export function createOpenAIProvider(
     baseURL?: string
     contextWindow?: number
     isCustom?: boolean
-    reasoning?: { effort: "high"; models: string[] }
+    reasoning?: { effort: "high" }
   },
 ): AIProvider {
   const isCustom = options?.isCustom ?? false
@@ -304,14 +293,21 @@ export function createOpenAIProvider(
 
   const contextWindow = options?.contextWindow ?? 400_000
 
+  let reasoningUnsupported = false
+
+  const markReasoningUnsupported = () => {
+    if (reasoningUnsupported) return
+    reasoningUnsupported = true
+    toast.info("Reasoning preference changed to Default")
+    reportReasoningUnsupported(providerId)
+  }
+
   const toRequestProps = (
     model: string,
   ): { model: string; reasoning?: OpenAI.Reasoning } => {
-    const rawModel = parseModelValue(model).rawModel
     return {
-      model: rawModel,
-      ...(options?.reasoning &&
-      isReasoningModel(rawModel, options.reasoning.models)
+      model: stripModelNamespace(model, providerId),
+      ...(options?.reasoning && !reasoningUnsupported
         ? {
             reasoning: {
               effort: options.reasoning.effort,
@@ -319,6 +315,36 @@ export function createOpenAIProvider(
             },
           }
         : {}),
+    }
+  }
+
+  const createResponseWithReasoningFallback = async (
+    params: OpenAI.Responses.ResponseCreateParamsNonStreaming,
+    streaming?: StreamingCallback,
+    abortSignal?: AbortSignal,
+  ): Promise<OpenAI.Responses.Response> => {
+    const run = async (p: OpenAI.Responses.ResponseCreateParamsNonStreaming) =>
+      streaming
+        ? (
+            await createOpenAIResponseStreaming(
+              openai,
+              p,
+              streaming,
+              abortSignal,
+            )
+          ).response
+        : openai.responses.create(p)
+    const effectiveParams = reasoningUnsupported
+      ? stripReasoning(params)
+      : params
+    try {
+      return await run(effectiveParams)
+    } catch (error) {
+      if (effectiveParams.reasoning && isReasoningRejection(error)) {
+        markReasoningUnsupported()
+        return run(stripReasoning(params))
+      }
+      throw error
     }
   }
 
@@ -368,7 +394,6 @@ export function createOpenAIProvider(
       } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
       let lastResponse = await createResponseWithReasoningFallback(
-        openai,
         requestParams,
         streaming,
         abortSignal,
@@ -471,7 +496,6 @@ export function createOpenAIProvider(
         } as OpenAI.Responses.ResponseCreateParamsNonStreaming
 
         lastResponse = await createResponseWithReasoningFallback(
-          openai,
           loopRequestParams,
           streaming,
           abortSignal,
@@ -522,7 +546,7 @@ export function createOpenAIProvider(
     async generateTitle({ model, prompt }) {
       try {
         const response = await openai.responses.create({
-          model: parseModelValue(model).rawModel,
+          model: stripModelNamespace(model, providerId),
           input: [{ role: "user", content: prompt }],
           max_output_tokens: 100,
         })
@@ -560,6 +584,7 @@ export function createOpenAIProvider(
         if (!summaryParams.reasoning || !isReasoningRejection(error)) {
           throw error
         }
+        markReasoningUnsupported()
         const { reasoning: _reasoning, ...withoutReasoning } = summaryParams
         stream = await openai.responses.create(
           withoutReasoning,

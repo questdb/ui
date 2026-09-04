@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react"
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import styled, { useTheme } from "styled-components"
 import { Dialog } from "../Dialog"
 import { MultiStepModal, Step } from "../MultiStepModal"
@@ -13,6 +13,7 @@ import type { CustomProviderDefinition } from "../../providers/LocalStorageProvi
 import { toast } from "../Toast"
 import {
   buildListingMetadata,
+  buildProviderSettings,
   filterOpenAiChatModels,
   formatModelLabel,
   getAllProviders,
@@ -367,9 +368,11 @@ const StepOneContent = ({
                 data-hook="ai-settings-api-key"
               />
               {error && (
-                <ErrorText data-hook="ai-settings-api-key-error">
-                  {error}
-                </ErrorText>
+                <Box role="alert">
+                  <ErrorText data-hook="ai-settings-api-key-error">
+                    {error}
+                  </ErrorText>
+                </Box>
               )}
               <SectionDescription>
                 Stored locally in your browser and never sent to QuestDB
@@ -511,6 +514,7 @@ export const ConfigurationModal = ({
   onOpenChange,
 }: ConfigurationModalProps) => {
   const { aiAssistantSettings, updateSettings } = useLocalStorage()
+  const closeCountRef = useRef(0)
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   )
@@ -580,25 +584,14 @@ export const ConfigurationModal = ({
       selectedModel: models[0],
       providers: {
         ...aiAssistantSettings.providers,
-        [selectedProvider]: {
+        [selectedProvider]: buildProviderSettings({
           apiKey,
           enabledModels: models,
-          grantSchemaAccess: permissions.grantSchemaAccess,
-          read: permissions.read,
-          write: permissions.write,
-          ...(metadata && Object.keys(metadata.modelLabels).length > 0
-            ? { modelLabels: metadata.modelLabels }
-            : {}),
-          ...(metadata?.utilityModel
-            ? { utilityModel: metadata.utilityModel }
-            : {}),
-          ...(metadata?.reasoningModels?.length
-            ? { reasoningModels: metadata.reasoningModels }
-            : {}),
-          ...(reasoningEffortLevel === "high"
-            ? { reasoningEffort: "high" as const }
-            : {}),
-        },
+          permissions,
+          modelLabels: metadata?.modelLabels,
+          utilityModel: metadata?.utilityModel,
+          reasoningEffort: reasoningEffortLevel,
+        }),
       },
     }
 
@@ -629,8 +622,10 @@ export const ConfigurationModal = ({
       apiKey,
       aiAssistantSettings,
     )
+    const session = closeCountRef.current
     try {
       const listing = await provider.listModels()
+      if (session !== closeCountRef.current) return false
       setProviderListing(listing)
       setError(null)
       void trackEvent(ConsoleEvent.AI_CONFIGURATION_VALIDATE)
@@ -642,7 +637,7 @@ export const ConfigurationModal = ({
           ? "Invalid API key"
           : classified.message
       setError(errorMessage)
-      return errorMessage
+      return false
     }
   }, [selectedProvider, apiKey, aiAssistantSettings])
 
@@ -669,6 +664,7 @@ export const ConfigurationModal = ({
   )
 
   const handleModalClose = useCallback(() => {
+    closeCountRef.current += 1
     setSelectedProvider(null)
     setApiKey("")
     setError(null)
@@ -795,7 +791,6 @@ export const ConfigurationModal = ({
         onComplete={handleComplete}
         canProceed={canProceed}
         completeButtonText="Activate Assistant"
-        showValidationError={false}
       />
       {customProviderModalOpen && (
         <CustomProviderModal

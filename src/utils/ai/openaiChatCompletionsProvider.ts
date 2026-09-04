@@ -9,9 +9,8 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { parseModelValue } from "./settings"
+import { stripModelNamespace } from "./settings"
 import type { ProviderId } from "./settings"
-import { isReasoningModel } from "./modelCatalog"
 import {
   type AIProvider,
   type ExecuteFlowParams,
@@ -36,7 +35,6 @@ import {
   classifyOpenAIError,
   countTokensFromNativePayload,
   isOpenAINonRetryableError,
-  isReasoningRejection,
 } from "./openaiShared"
 import {
   createHeaderFilteredFetch,
@@ -292,28 +290,6 @@ async function executeRequest(
   streaming?: StreamingCallback,
   abortSignal?: AbortSignal,
 ): Promise<RequestResult> {
-  try {
-    return await executeRequestOnce(openai, params, streaming, abortSignal)
-  } catch (error) {
-    if (params.reasoning_effort && isReasoningRejection(error)) {
-      const { reasoning_effort: _reasoningEffort, ...withoutReasoning } = params
-      return executeRequestOnce(
-        openai,
-        withoutReasoning,
-        streaming,
-        abortSignal,
-      )
-    }
-    throw error
-  }
-}
-
-async function executeRequestOnce(
-  openai: OpenAI,
-  params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
-  streaming?: StreamingCallback,
-  abortSignal?: AbortSignal,
-): Promise<RequestResult> {
   if (streaming) {
     const accumulated = await createChatCompletionStreaming(
       openai,
@@ -382,7 +358,6 @@ export function createOpenAIChatCompletionsProvider(
     baseURL?: string
     contextWindow?: number
     isCustom?: boolean
-    reasoning?: { effort: "high"; models: string[] }
   },
 ): AIProvider {
   const isCustom = options?.isCustom ?? false
@@ -398,19 +373,6 @@ export function createOpenAIChatCompletionsProvider(
   })
 
   const contextWindow = options?.contextWindow ?? 400_000
-
-  const toRequestProps = (
-    model: string,
-  ): { model: string; reasoning_effort?: OpenAI.ReasoningEffort } => {
-    const rawModel = parseModelValue(model).rawModel
-    return {
-      model: rawModel,
-      ...(options?.reasoning &&
-      isReasoningModel(rawModel, options.reasoning.models)
-        ? { reasoning_effort: options.reasoning.effort }
-        : {}),
-    }
-  }
 
   return {
     id: providerId,
@@ -451,7 +413,7 @@ export function createOpenAIChatCompletionsProvider(
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
       const baseParams = {
-        ...toRequestProps(model),
+        model: stripModelNamespace(model, providerId),
         tools: openaiTools,
       }
 
@@ -593,7 +555,7 @@ export function createOpenAIChatCompletionsProvider(
     async generateTitle({ model, prompt }) {
       try {
         const response = await openai.chat.completions.create({
-          model: parseModelValue(model).rawModel,
+          model: stripModelNamespace(model, providerId),
           messages: [{ role: "user", content: prompt }],
           ...(isCustom ? {} : { max_completion_tokens: 100 }),
         })
@@ -616,7 +578,7 @@ export function createOpenAIChatCompletionsProvider(
     }) {
       let text = ""
       const summaryParams = {
-        ...toRequestProps(model),
+        model: stripModelNamespace(model, providerId),
         messages: [
           { role: "system" as const, content: systemPrompt },
           { role: "user" as const, content: userMessage },
@@ -626,23 +588,10 @@ export function createOpenAIChatCompletionsProvider(
       const requestOptions = abortSignal
         ? ([{ signal: abortSignal }] as const)
         : ([] as const)
-      let stream
-      try {
-        stream = await openai.chat.completions.create(
-          summaryParams,
-          ...requestOptions,
-        )
-      } catch (error) {
-        if (!summaryParams.reasoning_effort || !isReasoningRejection(error)) {
-          throw error
-        }
-        const { reasoning_effort: _reasoningEffort, ...withoutReasoning } =
-          summaryParams
-        stream = await openai.chat.completions.create(
-          withoutReasoning,
-          ...requestOptions,
-        )
-      }
+      const stream = await openai.chat.completions.create(
+        summaryParams,
+        ...requestOptions,
+      )
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content
         if (delta) {

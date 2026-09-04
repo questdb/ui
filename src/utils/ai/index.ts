@@ -37,8 +37,9 @@ export {
   getUtilityModel,
   getProviderContextWindow,
   getApiKey,
+  buildProviderSettings,
   makeCustomModelValue,
-  parseModelValue,
+  stripModelNamespace,
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,
@@ -52,10 +53,8 @@ export type {
   CustomProviderDefinition,
 } from "./settings"
 export {
-  computeReasoningModels,
   filterOpenAiChatModels,
   formatModelLabel,
-  matchesListedModel,
   resolveUtilityModel,
   sortModelsNewestFirst,
   UTILITY_MODEL_TIERS,

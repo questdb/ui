@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
-  computeReasoningModels,
   filterOpenAiChatModels,
   formatModelLabel,
-  isReasoningModel,
-  matchesListedModel,
   resolveUtilityModel,
   stripDateSuffix,
   UTILITY_MODEL_TIERS,
@@ -28,26 +25,6 @@ describe("stripDateSuffix", () => {
   it("keeps non-date suffixes", () => {
     expect(stripDateSuffix("gpt-3.5-turbo-16k")).toBe("gpt-3.5-turbo-16k")
     expect(stripDateSuffix("claude-sonnet-4-5")).toBe("claude-sonnet-4-5")
-  })
-})
-
-describe("matchesListedModel", () => {
-  it("matches exact ids", () => {
-    expect(matchesListedModel("gpt-5.4", "gpt-5.4")).toBe(true)
-  })
-
-  it("matches a stored alias against its dated listing id", () => {
-    expect(
-      matchesListedModel("claude-sonnet-4-5", "claude-sonnet-4-5-20250929"),
-    ).toBe(true)
-  })
-
-  it("does not match a stored dated id against a different dated id", () => {
-    expect(matchesListedModel("gpt-4-0613", "gpt-4-1106")).toBe(false)
-  })
-
-  it("does not match unrelated ids", () => {
-    expect(matchesListedModel("gpt-5.4", "gpt-5.4-mini")).toBe(false)
   })
 })
 
@@ -142,7 +119,7 @@ describe("resolveUtilityModel", () => {
     )
   })
 
-  it("collapses dated ids to their alias and keeps the newest", () => {
+  it("dedupes dated variants per alias and returns the listed id verbatim", () => {
     const listing = [
       model("claude-haiku-4-5-20251001", 100),
       model("claude-haiku-4-6", 200),
@@ -153,31 +130,16 @@ describe("resolveUtilityModel", () => {
     )
   })
 
+  it("keeps a dated winner's exact listed id", () => {
+    const listing = [model("claude-haiku-4-5-20251001", 100)]
+    expect(resolveUtilityModel(listing, UTILITY_MODEL_TIERS.anthropic)).toBe(
+      "claude-haiku-4-5-20251001",
+    )
+  })
+
   it("returns null when no tier matches", () => {
     expect(
       resolveUtilityModel([model("gpt-5.4", 100)], UTILITY_MODEL_TIERS.openai),
     ).toBeNull()
-  })
-})
-
-describe("reasoning gate", () => {
-  it("gates models created on or after the gpt-5 launch", () => {
-    const listing = [
-      model("gpt-5", AUG_2025),
-      model("gpt-4.1", JUL_2025),
-      model("gpt-6", AUG_2025 + 1_000_000),
-    ]
-    expect(computeReasoningModels(listing)).toEqual(["gpt-5", "gpt-6"])
-  })
-
-  it("treats models without a timestamp as ungated", () => {
-    expect(computeReasoningModels([{ id: "mystery-model" }])).toEqual([])
-  })
-
-  it("matches enabled aliases against gated dated ids", () => {
-    const gated = ["gpt-5.4-2026-03-05", "gpt-5.4"]
-    expect(isReasoningModel("gpt-5.4", gated)).toBe(true)
-    expect(isReasoningModel("gpt-4.1", gated)).toBe(false)
-    expect(isReasoningModel("gpt-4.1", undefined)).toBe(false)
   })
 })

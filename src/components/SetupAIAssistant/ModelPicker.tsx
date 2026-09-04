@@ -1,6 +1,6 @@
 import React, { useState } from "react"
-import styled, { useTheme } from "styled-components"
-import { WarningIcon, XIcon } from "@phosphor-icons/react"
+import styled from "styled-components"
+import { XIcon } from "@phosphor-icons/react"
 import { Box } from "../Box"
 import { Button } from "../Button"
 import { Checkbox } from "../Checkbox"
@@ -9,7 +9,7 @@ import { Input } from "../Input"
 import { Text } from "../Text"
 import { TextButton } from "../TextButton"
 import type { ProviderModel } from "../../utils/ai"
-import { matchesListedModel, sortModelsNewestFirst } from "../../utils/ai"
+import { sortModelsNewestFirst } from "../../utils/ai"
 
 const PickerSection = styled(Box).attrs({
   flexDirection: "column",
@@ -74,21 +74,6 @@ const ModelIdText = styled(Text)`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
-const UnavailableRow = styled(Box).attrs({
-  gap: "0.8rem",
-  align: "center",
-})`
-  padding: 0.6rem 0.8rem;
-  font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-`
-
-const UnavailableHint = styled(Text)`
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.statusWarning};
-  margin-left: auto;
-`
-
 const ShowAllButton = styled(TextButton)`
   font-size: 1.3rem;
   align-self: flex-start;
@@ -146,7 +131,6 @@ export type ModelPickerProps = {
   listedModels: ProviderModel[]
   hiddenModels?: ProviderModel[]
   selectedModels: string[]
-  unavailableModels?: string[]
   manualInput: string
   dataHookPrefix: string
   labelFor?: (model: ProviderModel) => string
@@ -158,39 +142,33 @@ export const ModelPicker = ({
   listedModels,
   hiddenModels,
   selectedModels,
-  unavailableModels,
   manualInput,
   dataHookPrefix,
   labelFor,
   onSelectionChange,
   onManualInputChange,
 }: ModelPickerProps) => {
-  const theme = useTheme()
   const [showAll, setShowAll] = useState(false)
 
   const visibleModels =
     showAll && hiddenModels?.length
       ? sortModelsNewestFirst([...listedModels, ...hiddenModels])
       : listedModels
-  const isRowChecked = (rowId: string) =>
-    selectedModels.some((selected) => matchesListedModel(selected, rowId))
-  const isListedAnywhere = (selected: string) =>
-    listedModels.some((m) => matchesListedModel(selected, m.id)) ||
-    (hiddenModels?.some((m) => matchesListedModel(selected, m.id)) ?? false)
-  const manualModels = selectedModels.filter((m) => !isListedAnywhere(m))
+  const isRowChecked = (rowId: string) => selectedModels.includes(rowId)
+  const manualModels = selectedModels.filter(
+    (selected) => !visibleModels.some((m) => m.id === selected),
+  )
 
   const handleToggleRow = (rowId: string) => {
     if (isRowChecked(rowId)) {
-      onSelectionChange(
-        selectedModels.filter((s) => !matchesListedModel(s, rowId)),
-      )
+      onSelectionChange(selectedModels.filter((s) => s !== rowId))
     } else {
       onSelectionChange([...selectedModels, rowId])
     }
   }
 
   const handleSelectAll = () => {
-    const unchecked = visibleModels
+    const unchecked = listedModels
       .filter((m) => !isRowChecked(m.id))
       .map((m) => m.id)
     onSelectionChange([...selectedModels, ...unchecked])
@@ -198,9 +176,7 @@ export const ModelPicker = ({
 
   const handleDeselectAll = () => {
     onSelectionChange(
-      selectedModels.filter(
-        (s) => !visibleModels.some((m) => matchesListedModel(s, m.id)),
-      ),
+      selectedModels.filter((s) => !visibleModels.some((m) => m.id === s)),
     )
   }
 
@@ -239,23 +215,7 @@ export const ModelPicker = ({
             </SelectAllLink>
           </SelectAllRow>
         </HeaderRow>
-        <ModelListContainer>
-          {unavailableModels?.map((model) => (
-            <UnavailableRow
-              key={model}
-              data-hook={`${dataHookPrefix}-unavailable-row`}
-            >
-              <WarningIcon
-                size="16px"
-                weight="bold"
-                color={theme.color.statusWarning}
-              />
-              {model}
-              <UnavailableHint>
-                Removed by the provider. Save removes it.
-              </UnavailableHint>
-            </UnavailableRow>
-          ))}
+        <ModelListContainer role="group" aria-label="Select models">
           {visibleModels.map((model) => {
             const label = labelFor ? labelFor(model) : model.id
             return (
@@ -288,6 +248,7 @@ export const ModelPicker = ({
         <AddModelRow>
           <AddModelInput
             type="text"
+            aria-label="Add a model by name"
             data-hook={`${dataHookPrefix}-manual-model-input`}
             value={manualInput}
             onChange={(e) => onManualInputChange(e.target.value)}

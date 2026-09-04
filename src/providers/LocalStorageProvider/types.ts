@@ -10,7 +10,6 @@ export type ProviderSettings = {
   modelLabels?: Record<string, string>
   utilityModel?: string
   reasoningEffort?: "default" | "high"
-  reasoningModels?: string[]
 }
 
 export type CustomProviderDefinition = {

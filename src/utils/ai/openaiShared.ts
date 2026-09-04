@@ -5,11 +5,7 @@ import { StreamingError, RefusalError, MaxTokensError } from "./shared"
 
 export function isReasoningRejection(error: unknown): boolean {
   if (!(error instanceof OpenAI.APIError) || error.status !== 400) return false
-  const param = (error as { param?: string | null }).param
-  return (
-    (typeof param === "string" && param.includes("reasoning")) ||
-    error.message.toLowerCase().includes("reasoning")
-  )
+  return typeof error.param === "string" && error.param.startsWith("reasoning")
 }
 
 let tiktokenEncoder: Tiktoken | null = null

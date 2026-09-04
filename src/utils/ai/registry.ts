@@ -10,23 +10,17 @@ type ProviderOptions = {
   baseURL?: string
   contextWindow?: number
   isCustom?: boolean
-  reasoning?: { effort: "high"; models: string[] }
+  reasoning?: { effort: "high" }
 }
 
 const reasoningOptions = (
   providerId: ProviderId,
   settings?: AiAssistantSettings,
 ): Pick<ProviderOptions, "reasoning"> => {
-  const providerSettings = settings?.providers?.[providerId]
-  if (
-    providerSettings?.reasoningEffort !== "high" ||
-    !providerSettings.reasoningModels?.length
-  ) {
-    return {}
-  }
-  return {
-    reasoning: { effort: "high", models: providerSettings.reasoningModels },
-  }
+  if (BUILTIN_PROVIDERS[providerId]?.type !== "openai") return {}
+  return settings?.providers?.[providerId]?.reasoningEffort === "high"
+    ? { reasoning: { effort: "high" } }
+    : {}
 }
 
 export function createProvider(
