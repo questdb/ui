@@ -1,6 +1,6 @@
 import React from "react"
 import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
-import { CaretRightIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react"
 import styled, { css } from "styled-components"
 import {
   menuContainerStyles,
@@ -76,6 +76,42 @@ const Item = React.forwardRef<
 
 Item.displayName = "DropdownMenuItem"
 
+const StyledCheckboxItem = styled(RadixDropdownMenu.CheckboxItem)`
+  ${menuItemStyles}
+`
+
+const CheckSlot = styled.span`
+  display: inline-flex;
+  width: 1.6rem;
+  margin-left: auto;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.color.contentAccent};
+`
+
+type CheckboxItemProps = React.ComponentPropsWithoutRef<
+  typeof RadixDropdownMenu.CheckboxItem
+> & {
+  icon?: React.ReactNode
+}
+
+const CheckboxItem = React.forwardRef<
+  React.ElementRef<typeof RadixDropdownMenu.CheckboxItem>,
+  CheckboxItemProps
+>(({ icon, children, ...props }, ref) => (
+  <StyledCheckboxItem ref={ref} {...props}>
+    {icon != null && <MenuItemIcon>{icon}</MenuItemIcon>}
+    {children}
+    <CheckSlot>
+      <RadixDropdownMenu.ItemIndicator asChild>
+        <CheckIcon size={16} weight="bold" />
+      </RadixDropdownMenu.ItemIndicator>
+    </CheckSlot>
+  </StyledCheckboxItem>
+))
+
+CheckboxItem.displayName = "DropdownMenuCheckboxItem"
+
 const StyledSubTrigger = styled(RadixDropdownMenu.SubTrigger)`
   ${menuItemStyles}
   justify-content: space-between;
@@ -119,6 +155,8 @@ export const DropdownMenu = {
   `,
 
   Item,
+
+  CheckboxItem,
 
   Sub: RadixDropdownMenu.Sub,
 

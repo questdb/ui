@@ -1,9 +1,11 @@
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
 import type {
+  AgentCellView,
   AutoRefresh,
   AutoRefreshInterval,
   CellLayoutItem,
   CellMode,
+  CellPaneView,
   CellResult,
   CellType,
   NotebookCell,
@@ -15,6 +17,8 @@ import type {
 import {
   AUTO_REFRESH_INTERVALS,
   createCell,
+  isAgentCellView,
+  isCellPaneView,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   exceedsCellLineLimit,
@@ -26,6 +30,7 @@ import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
+export type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
 import {
   HEADER_HEIGHT,
@@ -90,35 +95,15 @@ export const resolveCellView = (
   return "none"
 }
 
-type RunActionPlan =
-  | { kind: "chart" }
-  | { kind: "noop" }
-  | { kind: "run-all" | "run-single"; reveal: boolean; exitDraw: boolean }
+type RunActionPlan = { kind: "chart" | "noop" | "run-all" | "run-single" }
 
 export const resolveRunAction = (
-  cell: Pick<NotebookCell, "mode" | "result">,
-  opts: {
-    isCompactTier: boolean
-    showBottomSlot: boolean
-    intent: "all" | "single"
-  },
-): RunActionPlan => {
-  // Reveal only the compact "View SQL" collapse — in wider tiers the slot is
-  // never force-hidden, so revealing there would wrongly maximize a split view.
-  const reveal = opts.isCompactTier && !opts.showBottomSlot
-  if (cell.mode === "draw" && !reveal) {
-    return opts.intent === "all" ? { kind: "chart" } : { kind: "noop" }
-  }
-  // Run mode, or a draw cell collapsed behind the compact "View SQL" editor:
-  // act as a grid so a shortcut never surfaces the chart from the editor. A
-  // collapsed draw cell drops to run mode first, so the grid — not the chart —
-  // is what appears.
-  return {
-    kind: opts.intent === "all" ? "run-all" : "run-single",
-    reveal,
-    exitDraw: cell.mode === "draw",
-  }
-}
+  cell: Pick<NotebookCell, "mode">,
+  opts: { intent: "all" | "single" },
+): RunActionPlan =>
+  cell.mode === "draw"
+    ? { kind: opts.intent === "all" ? "chart" : "noop" }
+    : { kind: opts.intent === "all" ? "run-all" : "run-single" }
 
 export type CellToolbarTier = "compact" | "standard" | "expanded"
 
@@ -136,10 +121,9 @@ export const cellToolbarTier = (
       : "compact"
 
 export type CellToolbarMenuFlags = {
-  showViewSql: boolean
   showViewTable: boolean
   showViewChart: boolean
-  showSplitItem: boolean
+  showEditorToggleItem: boolean
   showResetZoom: boolean
   showAutoRefreshItem: boolean
   showRefreshItem: boolean
@@ -155,14 +139,14 @@ export type CellToolbarMenuFlags = {
 // Which items the "more actions" menu shows. An item appears only when it is
 // applicable to the current state AND not already a visible toolbar button for
 // this tier/view, so the menu never duplicates an inline control or offers a
-// disabled/greyed action. `sqlShown` is the compact-tier "View SQL" state
-// (isViewMaximized === false). Markdown cells (no run/draw views) keep just the
-// move/duplicate/delete items.
+// disabled/greyed action. The compact tier has no inline view controls, so the
+// menu carries the same three controls the wider tiers show in the header:
+// the table/chart segments and the editor toggle, as checkable items.
+// Markdown cells (no run/draw views) keep just the move/duplicate/delete items.
 export const cellToolbarMenuFlags = (params: {
   tier: CellToolbarTier
   view: CellView
   isMarkdown: boolean
-  sqlShown: boolean
   chartZoomed: boolean
   isGridMode: boolean
   cellIndex: number
@@ -172,7 +156,6 @@ export const cellToolbarMenuFlags = (params: {
     tier,
     view,
     isMarkdown,
-    sqlShown,
     chartZoomed,
     isGridMode,
     cellIndex,
@@ -180,39 +163,29 @@ export const cellToolbarMenuFlags = (params: {
   } = params
   const isCompact = tier === "compact"
   const isChartView = view === "chart"
-  const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const hasToolbarSplit = tier !== "compact" && !isNoneView
   const hasToolbarRefresh = tier === "expanded" && !isNoneView
   // The inline interval control rides on the refresh split-button, which the
   // expanded tier renders for grids as well as charts.
   const hasToolbarInterval = hasToolbarRefresh
-  const chartCollapsed = isCompact && isChartView && sqlShown
 
-  const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
-  const showViewTable =
-    isCompact && !isMarkdown && (isNoneView || sqlShown || isChartView)
-  const showViewChart =
-    isCompact && !isMarkdown && (isNoneView || sqlShown || isGridView)
-  const showSplitItem = !hasToolbarSplit && !isNoneView && !isCompact
-  const showResetZoom =
-    isCompact && isChartView && chartZoomed && !chartCollapsed
-  // Auto-refresh applies to any cell showing a view, not just charts. Unlike
-  // Refresh it survives a collapsed chart: it patches cell state rather than
-  // publishing to the unmounted canvas.
+  const showViewTable = isCompact && !isMarkdown
+  const showViewChart = isCompact && !isMarkdown
+  const showEditorToggleItem = isCompact && !isNoneView && !isMarkdown
+  const showResetZoom = isCompact && isChartView && chartZoomed
+  // Auto-refresh applies to any cell showing a view, not just charts.
   const showAutoRefreshItem = !hasToolbarInterval && !isNoneView
-  const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
-  const showChartSettings = isChartView && !chartCollapsed
+  const showRefreshItem = !hasToolbarRefresh && !isNoneView
+  const showChartSettings = isChartView
   const showMoveUp = !isGridMode && cellIndex > 0
   const showMoveDown = !isGridMode && cellIndex < totalCells - 1
   const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
   const showDelete = totalCells > 1
 
   return {
-    showViewSql,
     showViewTable,
     showViewChart,
-    showSplitItem,
+    showEditorToggleItem,
     showResetZoom,
     showAutoRefreshItem,
     showRefreshItem,
@@ -221,8 +194,7 @@ export const cellToolbarMenuFlags = (params: {
     showMoveDown,
     showDuplicate,
     showDelete,
-    groupAHasItems:
-      showViewSql || showViewTable || showViewChart || showSplitItem,
+    groupAHasItems: showViewTable || showViewChart || showEditorToggleItem,
     groupBHasItems:
       showResetZoom ||
       showAutoRefreshItem ||
@@ -490,12 +462,19 @@ export const runHistoryPatch = (
 }
 
 export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
-  cells.map((cell) => ({
-    ...cell,
-    result: undefined,
-    lastRunStatus: carriedRunStatus(cell),
-    lastRunError: carriedRunError(cell),
-  }))
+  cells.map((cell) => {
+    const persisted: NotebookCell = {
+      ...cell,
+      result: undefined,
+      lastRunStatus: carriedRunStatus(cell),
+      lastRunError: carriedRunError(cell),
+    }
+    if (cell.type === "markdown") delete persisted.paneView
+    else persisted.paneView = cell.paneView ?? "editor_result"
+    const canonical = persisted as NotebookCell & Record<string, unknown>
+    delete canonical.isViewMaximized
+    return persisted
+  })
 
 export const buildPersistPayload = (
   cells: NotebookCell[],
@@ -601,6 +580,7 @@ export const insertCell = (
   if (override?.type) patch.type = override.type
   const created: NotebookCell =
     Object.keys(patch).length > 0 ? { ...base, ...patch } : base
+  if (created.type === "markdown") delete created.paneView
   const newCell: NotebookCell =
     created.type === "markdown" || created.topHeight !== undefined
       ? created
@@ -698,9 +678,11 @@ type ApplyCellRequest = {
   type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: AutoRefresh | null
-  isViewMaximized?: boolean | null
+  editorHeight?: number | "auto" | null
+  resultHeight?: number | "auto" | null
+  view?: AgentCellView | null
   chartConfig?: ChartConfig | null
-  grid?: { x: number; y: number; w: number; h: number } | null
+  grid?: { x: number; y: number; w: number } | null
 }
 
 type ApplyRequest = {
@@ -1066,8 +1048,27 @@ export const buildAppliedCells = (
         "cells",
       )
     }
+    const existingKind: CellType = existing?.type ?? "sql"
+    if (existing && req.type != null && req.type !== existingKind) {
+      throw new ApplyNotebookStateError(
+        `Cell "${existing.id}" is ${existingKind}; cell kind cannot change. Delete it and add a new cell.`,
+        "cells",
+      )
+    }
+    const resolvedType: CellType | undefined = existing
+      ? existing.type
+      : (req.type ?? undefined)
+
+    // A markdown cell can carry a stored mode only through legacy import
+    // leakage; inheriting it would make every apply that preserves the cell
+    // fail on advice the agent already followed. Dropping it heals the cell
+    // on write — only an explicitly requested mode is the agent's error.
     const resolvedMode: CellMode | undefined =
-      req.mode === undefined || req.mode === null ? existing?.mode : req.mode
+      resolvedType === "markdown"
+        ? undefined
+        : req.mode === undefined || req.mode === null
+          ? existing?.mode
+          : req.mode
 
     // PUT semantics: a non-empty string sets the name, null/"" clears it.
     const resolvedName =
@@ -1082,16 +1083,9 @@ export const buildAppliedCells = (
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
 
-    // Cell kind and mode are sticky: omission preserves the existing cell.
-    // Converting a markdown cell to SQL by omission would silently turn prose
-    // into a runnable query, so only an explicit type can do that.
-    const resolvedType: CellType | undefined =
-      req.type === undefined || req.type === null ? existing?.type : req.type
-
     // Markdown cells hold prose, not editor SQL, so they're exempt from the cap.
-    const preservesStoredSql = preserve && existing?.type !== "markdown"
     if (
-      !preservesStoredSql &&
+      !preserve &&
       resolvedType !== "markdown" &&
       exceedsCellLineLimit(value)
     ) {
@@ -1102,7 +1096,7 @@ export const buildAppliedCells = (
     }
 
     if (resolvedType === "markdown") {
-      if (resolvedMode !== undefined) {
+      if (req.mode != null) {
         throw new ApplyNotebookStateError(
           `Cell at index ${index} is a markdown cell and cannot have a mode. Omit mode and chart_config for markdown cells.`,
           "cells",
@@ -1151,14 +1145,86 @@ export const buildAppliedCells = (
       )
     }
 
+    if (req.view != null && !isAgentCellView(req.view)) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has an invalid view; use editor, result, or editor_result.`,
+        "cells",
+      )
+    }
+    if (req.view === "editor" && req.mode === "draw") {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} combines mode "draw" with view "editor"; view editor discards the result and returns the cell to run mode. Omit mode or pick another view.`,
+        "cells",
+      )
+    }
+
     const isDraw = resolvedMode === "draw"
-    const isViewMaximized =
-      req.isViewMaximized != null
-        ? req.isViewMaximized
-        : isDraw
-          ? true
-          : undefined
-    const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
+    const dimensionCell: NotebookCell = {
+      ...(existing ?? { id, position: index, value, type: resolvedType }),
+      value,
+      ...(resolvedMode !== undefined ? { mode: resolvedMode } : {}),
+    }
+    const dimensions = applicableCellDimensions(dimensionCell, {
+      editorHeight: req.editorHeight,
+      resultHeight: req.resultHeight,
+      view: req.view,
+    })
+    if (
+      typeof dimensions.editorHeight === "number" &&
+      (!Number.isFinite(dimensions.editorHeight) ||
+        dimensions.editorHeight < minTopHeightFor(dimensionCell))
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has an editor_height below its minimum.`,
+        "cells",
+      )
+    }
+    if (
+      typeof dimensions.resultHeight === "number" &&
+      (!Number.isFinite(dimensions.resultHeight) ||
+        dimensions.resultHeight < minBottomHeightFor(dimensionCell))
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has result_height ${dimensions.resultHeight}px; minimum is ${minBottomHeightFor(dimensionCell)}px.`,
+        "cells",
+      )
+    }
+    if (
+      typeof dimensions.editorHeight === "number" &&
+      dimensions.editorHeight > MAX_PANE_HEIGHT_PX
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has editor_height ${dimensions.editorHeight}px; maximum is ${MAX_PANE_HEIGHT_PX}px.`,
+        "cells",
+      )
+    }
+    if (
+      typeof dimensions.resultHeight === "number" &&
+      dimensions.resultHeight > MAX_PANE_HEIGHT_PX
+    ) {
+      throw new ApplyNotebookStateError(
+        `Cell at index ${index} has result_height ${dimensions.resultHeight}px; maximum is ${MAX_PANE_HEIGHT_PX}px.`,
+        "cells",
+      )
+    }
+    const dimensionsPatch = agentCellDimensionsPatch(dimensionCell, dimensions)
+    if (req.view == null && !existing && isDraw) {
+      dimensionsPatch.paneView = "result"
+    }
+    const autoRefresh =
+      req.autoRefresh != null && resolvedType !== "markdown"
+        ? req.autoRefresh
+        : undefined
+
+    if (req.grid) {
+      const gridError = cellGridBoundsError(req.grid)
+      if (gridError) {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has invalid grid placement: ${gridError}`,
+          "cells",
+        )
+      }
+    }
 
     if (existing) {
       updated.push(existing.id)
@@ -1186,11 +1252,6 @@ export const buildAppliedCells = (
         if (carried !== undefined) next.lastRunStatus = carried
         if (carriedError !== undefined) next.lastRunError = carriedError
         else delete next.lastRunError
-      }
-      const hadRunResult =
-        existing.result != null ||
-        (existing.lastRunStatus != null && existing.lastRunStatus !== "none")
-      if ((resolvedType === "markdown" && hadRunResult) || resultDropped) {
         resultsCleared.push(existing.id)
       }
       if (resolvedMode !== undefined) next.mode = resolvedMode
@@ -1199,22 +1260,16 @@ export const buildAppliedCells = (
       else delete next.chartConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
-      if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
-      else delete next.isViewMaximized
-      if (resolvedType === "markdown") {
-        // Markdown cells carry none of the SQL/chart sub-state.
-        next.type = "markdown"
-        next.result = null
-        delete next.mode
-        delete next.chartConfig
-        delete next.autoRefresh
-        delete next.isViewMaximized
-        delete next.bottomHeight
-        delete next.lastRunStatus
-        delete next.lastRunError
-      } else {
-        delete next.type
-        if (valueChanged && !existing.topResized) {
+      if (req.view === "editor" && cellHasRunOutcome(next)) {
+        Object.assign(next, discardCellResultPatch(next))
+        if (!resultsCleared.includes(existing.id)) {
+          resultsCleared.push(existing.id)
+        }
+      }
+      Object.assign(next, dimensionsPatch)
+      if (resolvedType !== "markdown") {
+        next.paneView ??= "editor_result"
+        if (valueChanged && !next.topResized) {
           const estimated = topHeightForSql(value)
           if (
             existing.topHeight == null ||
@@ -1238,19 +1293,21 @@ export const buildAppliedCells = (
     if (resolvedName !== undefined) created.name = resolvedName
     if (resolvedType === "markdown") {
       created.type = "markdown"
+      Object.assign(created, dimensionsPatch)
       return created
     }
     created.topHeight = topHeightForSql(value)
+    created.paneView = "editor_result"
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
-    if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.
     if (resolvedMode === "draw") {
       created.bottomHeight = DEFAULT_CHART_BOTTOM_HEIGHT
     }
+    Object.assign(created, dimensionsPatch)
     return created
   })
 
@@ -1276,14 +1333,13 @@ export const buildAppliedCells = (
 // === Cell sizing model ======================================================
 // Cells are in one of two view states:
 //
-//   - Single-view: only the editor (or only the expanded chart) is visible.
-//     Total cell height = topHeight + chrome.
-//   - Double-view: editor on top + result/chart on bottom.
-//     Total cell height = topHeight + bottomHeight + chrome.
+//   - Editor visible, no result: topHeight + chrome.
+//   - Editor visible with result: topHeight + bottomHeight + split chrome.
+//   - Editor hidden: bottomHeight + chrome. topHeight stays persisted but does
+//     not consume space, so restoring the editor expands around both panes.
 //
-// `topHeight` and `bottomHeight` live on NotebookCell; they replace the four
-// `custom*Height` fields from the old model. In grid mode, the grid h (rows)
-// is *derived* from topHeight + bottomHeight on every render.
+// `topHeight` and `bottomHeight` live on NotebookCell. In grid mode, grid h is
+// derived from the currently visible pane heights on every render.
 // ============================================================================
 
 // Exact fixed chrome every cell carries, in pixels:
@@ -1306,7 +1362,7 @@ export const CELL_EDITOR_LINE_HEIGHT = 24
 export const CELL_EDITOR_PADDING = { top: 4, bottom: 4 }
 
 export const topHeightForSql = (value: string): number =>
-  Math.max(
+  clampPaneHeight(
     DEFAULT_TOP_HEIGHT,
     value.split("\n").length * CELL_EDITOR_LINE_HEIGHT +
       CELL_EDITOR_PADDING.top +
@@ -1314,15 +1370,95 @@ export const topHeightForSql = (value: string): number =>
   )
 
 // Markdown cells carry the base chrome only (they never split) and keep their
-// heights on the grid-row lattice (26, 56, 86, …) so the derived cell box is
+// heights on the grid-row lattice (56, 86, 116, …) so the derived cell box is
 // always exact — see snapMarkdownTopHeight.
-export const MARKDOWN_DEFAULT_TOP_HEIGHT = 56
-export const MIN_MARKDOWN_HEIGHT_PX = 26
+// One line of rendered prose is 34px, so 56 is the first lattice point that
+// shows any content. Stored heights below it render as they are until the next
+// resize writes a new value.
+export const MIN_MARKDOWN_HEIGHT_PX = 56
 
 // Default chart height for draw mode (experimental — per user spec).
 export const DEFAULT_CHART_BOTTOM_HEIGHT = 350
 
 export const MIN_BOTTOM_HEIGHT_PX = 100
+// ECharts reserves roughly 96-126 px for axes, labels, and the zoom control.
+// A 100 px chart pane is structurally valid but leaves no useful plot. Keep
+// table results at the historical minimum while giving charts a visual floor.
+export const MIN_CHART_HEIGHT_PX = 296
+// One ceiling for every pane: it only stops nonsense such as multi-million
+// pixel agent writes or an editor auto-grown to a hundred thousand lines.
+export const MAX_PANE_HEIGHT_PX = 2400
+
+export const clampPaneHeight = (minimum: number, px: number): number =>
+  Math.min(MAX_PANE_HEIGHT_PX, Math.max(minimum, px))
+
+export const minBottomHeightFor = (cell: NotebookCell): number =>
+  cell.mode === "draw" ? MIN_CHART_HEIGHT_PX : MIN_BOTTOM_HEIGHT_PX
+
+export type AgentHeightValue = number | "auto" | null
+
+// Reads a cell's live snapshot-load status; the passive (unmounted) route has
+// no live statuses and falls back to "unrequested", matching what the mounted
+// notebook renders for a run-marked cell before its snapshot loads.
+export type CellResultStatusReader = (cellId: string) => CellResultStatus
+
+export type AgentCellDimensions = {
+  editorHeight?: AgentHeightValue
+  resultHeight?: AgentHeightValue
+  view?: AgentCellView | null
+  resultStatus?: CellResultStatus
+}
+
+export const applicableCellDimensions = (
+  cell: Pick<NotebookCell, "type">,
+  dimensions: AgentCellDimensions,
+): AgentCellDimensions =>
+  cell.type === "markdown"
+    ? { ...dimensions, resultHeight: null, view: null }
+    : dimensions
+
+// The agent's view:"editor" is the toggle-off gesture, not a stored value:
+// discard the run outcome and drop back to run mode, keeping the stored pane
+// arrangement for the next run. Mirrors the UI's clearCellResult; callers
+// delete the persisted snapshot through the transition's deleteSnapshots.
+export const discardCellResultPatch = (
+  cell: NotebookCell,
+): Partial<NotebookCell> => ({
+  result: undefined,
+  lastRunStatus: undefined,
+  ...(cell.mode === "draw" ? { mode: "run" as CellMode } : {}),
+  ...(cell.bottomResized ? {} : { bottomHeight: undefined }),
+})
+
+// Translate the semantic agent wire model into the persisted pane model.
+// `null`/omission preserves, "auto" clears the corresponding resize pin, and
+// a number fixes the pane at that pixel height. view:"editor" is an action,
+// not a stored value — the callers apply discardCellResultPatch for it.
+export const agentCellDimensionsPatch = (
+  cell: NotebookCell,
+  dimensions: AgentCellDimensions,
+): Partial<NotebookCell> => {
+  const patch: Partial<NotebookCell> = {}
+  if (dimensions.editorHeight === "auto") {
+    patch.topHeight =
+      cell.type === "markdown" ? undefined : topHeightForSql(cell.value)
+    patch.topResized = false
+  } else if (typeof dimensions.editorHeight === "number") {
+    patch.topHeight = dimensions.editorHeight
+    patch.topResized = true
+  }
+  if (dimensions.resultHeight === "auto") {
+    patch.bottomHeight = undefined
+    patch.bottomResized = false
+  } else if (typeof dimensions.resultHeight === "number") {
+    patch.bottomHeight = dimensions.resultHeight
+    patch.bottomResized = true
+  }
+  if (isCellPaneView(dimensions.view) && cell.type !== "markdown") {
+    patch.paneView = dimensions.view
+  }
+  return patch
+}
 
 // Pixel sizes of the result panel's chrome. Kept in sync with the styled-
 // components in result-table/styles.ts; if those constants change, update
@@ -1454,13 +1590,56 @@ export const defaultBottomHeightFor = (cell: NotebookCell): number =>
     ? DEFAULT_CHART_BOTTOM_HEIGHT
     : computeResultBottomHeight(cell.result, cell.value)
 
-// True iff this cell occupies vertical space for a bottom slot — i.e. its
-// total height includes bottomHeight. This includes the chart-expanded case
-// (chart fills both slots; the cell footprint still spans topHeight +
-// bottomHeight).
+// True iff this cell has a result slot. Visibility determines whether the
+// editor allocation is added alongside that slot.
 export const isDoubleView = (cell: NotebookCell): boolean => {
   if (cell.mode === "draw") return true
   return cell.result != null
+}
+
+export type CellPaneLayout = "editor" | "split" | "result"
+
+export const storedCellPaneView = (cell: NotebookCell): CellPaneView =>
+  isCellPaneView(cell.paneView) ? cell.paneView : "editor_result"
+
+// A run outcome is anything view:"editor" would discard: an in-memory result,
+// a carried run status (result on disk only), or draw mode itself.
+export const cellHasRunOutcome = (cell: NotebookCell): boolean =>
+  cell.mode === "draw" ||
+  cell.result != null ||
+  (cell.lastRunStatus != null && cell.lastRunStatus !== "none")
+
+export type AgentCellPresentation = { view: AgentCellView | null }
+
+// `view` reports what the cell presents: "editor" while there is nothing to
+// show, the stored arrangement once a run outcome exists. A live, known-missing
+// run snapshot has historical status but no result pane; draw mode remains a
+// result presentation because the chart itself is the mode.
+export const agentCellPresentation = (
+  cell: NotebookCell,
+  resultStatus: CellResultStatus = "unrequested",
+): AgentCellPresentation => ({
+  view:
+    cell.type === "markdown"
+      ? null
+      : cellHasRunOutcome(cell) &&
+          !(
+            cell.mode !== "draw" &&
+            cell.result == null &&
+            resultStatus === "missing"
+          )
+        ? storedCellPaneView(cell)
+        : "editor",
+})
+
+// A cell without a result shows the editor until one exists; that never
+// rewrites its stored view.
+export const resolveCellPaneLayout = (
+  cell: NotebookCell,
+  expectingResult: boolean = false,
+): CellPaneLayout => {
+  if (!isDoubleView(cell) && !expectingResult) return "editor"
+  return storedCellPaneView(cell) === "result" ? "result" : "split"
 }
 
 // bottomHeight seeding when a cell flips between run and draw. A user-resized
@@ -1483,10 +1662,7 @@ export const modeChangeBottomHeightPatch = (
 export const cellModeChangePatch = (
   cell: NotebookCell | undefined,
   mode: CellMode,
-): Partial<NotebookCell> => ({
-  ...modeChangeBottomHeightPatch(cell, mode),
-  ...(mode === "draw" ? { isViewMaximized: false } : {}),
-})
+): Partial<NotebookCell> => modeChangeBottomHeightPatch(cell, mode)
 
 export const mergeCellChartConfig = (
   cell: NotebookCell,
@@ -1515,24 +1691,56 @@ export const patchCellRunResult = (
   })
 
 // Exact per-state chrome. Split cells (editor above, result/chart or its
-// reserved shimmer below) add the in-flow divider; a view-maximized cell hides
-// both the editor and the divider — its bottom slot spans topHeight +
-// bottomHeight — so it carries the base chrome only, like markdown.
+// reserved shimmer below) add the in-flow divider; an editor-hidden cell
+// carries base chrome only.
 export const cellChromePx = (
   cell: NotebookCell,
   expectingResult: boolean = false,
+  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
 ): number => {
   if (cell.type === "markdown") return CELL_BASE_CHROME_PX
-  const split =
-    (isDoubleView(cell) || expectingResult) && cell.isViewMaximized !== true
-  return split ? CELL_BASE_CHROME_PX + SPLIT_HANDLE_PX : CELL_BASE_CHROME_PX
+  return paneLayout === "split"
+    ? CELL_BASE_CHROME_PX + SPLIT_HANDLE_PX
+    : CELL_BASE_CHROME_PX
 }
 
 export const minTopHeightFor = (cell: NotebookCell): number =>
   cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
 
 const defaultTopHeightFor = (cell: NotebookCell): number =>
-  cell.type === "markdown" ? MARKDOWN_DEFAULT_TOP_HEIGHT : DEFAULT_TOP_HEIGHT
+  cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
+
+export const agentCellPaneDimensions = (
+  cell: NotebookCell,
+): {
+  editorHeight: number | "auto"
+  resultHeight: number | "auto" | null
+} => {
+  const pinnedHeight = (
+    resized: boolean | undefined,
+    height: number | undefined,
+    minimum: number,
+  ): number | "auto" =>
+    resized && typeof height === "number" && Number.isFinite(height)
+      ? clampPaneHeight(minimum, height)
+      : "auto"
+
+  return {
+    editorHeight: pinnedHeight(
+      cell.topResized,
+      cell.topHeight,
+      minTopHeightFor(cell),
+    ),
+    resultHeight:
+      cell.type === "markdown"
+        ? null
+        : pinnedHeight(
+            cell.bottomResized,
+            cell.bottomHeight,
+            minBottomHeightFor(cell),
+          ),
+  }
+}
 
 // Resolves a cell's editor (top) and bottom-slot heights — shared by the
 // rendered cell (Cell.tsx, with live drag overrides) and computeCellGridH.
@@ -1546,7 +1754,7 @@ export const computeCellHeights = (
 ): { topHeight: number; bottomHeight: number } => {
   const topHeight =
     opts.liveTopHeight ?? cell.topHeight ?? defaultTopHeightFor(cell)
-  const bottomHeight = isDoubleView(cell)
+  const resolvedBottomHeight = isDoubleView(cell)
     ? (opts.liveBottomHeight ??
       cell.bottomHeight ??
       defaultBottomHeightFor(cell))
@@ -1555,6 +1763,14 @@ export const computeCellHeights = (
         cell.bottomHeight ??
         RESERVED_RESULT_BOTTOM_HEIGHT)
       : 0
+  // A visible bottom slot never renders below its pane floor (296 chart /
+  // 100 result): a bare notification sits in a 100px pane rather than a
+  // 44px sliver, so the rendered height, the resize bounds, and the save
+  // path all share one minimum.
+  const bottomHeight =
+    resolvedBottomHeight === 0
+      ? 0
+      : Math.max(minBottomHeightFor(cell), resolvedBottomHeight)
   return { topHeight, bottomHeight }
 }
 
@@ -1564,9 +1780,20 @@ export const NOTEBOOK_GRID_COLS = 12
 export const NOTEBOOK_GRID_ROW_HEIGHT = 10
 export const NOTEBOOK_GRID_MARGIN_Y = 20
 
-// Derives the react-grid-layout `h` (row count) for a cell from its
-// topHeight + bottomHeight + chrome. Recomputed at render time on every
-// state change.
+export const cellGridBoundsError = (pos: {
+  x: number
+  w: number
+}): string | undefined =>
+  pos.x + pos.w > NOTEBOOK_GRID_COLS
+    ? `x + w must be at most ${NOTEBOOK_GRID_COLS}.`
+    : undefined
+
+export type CellGridBounds = { h: number; minH: number; maxH: number }
+
+// Derives react-grid-layout `h` and its resize bounds from the visible pane
+// heights plus chrome — one computation, so the three numbers can never
+// disagree and `minH ≤ h ≤ maxH` holds for every in-bounds cell state.
+// Recomputed at render time on every state change.
 //
 // react-grid-layout inserts `marginY` BETWEEN rows, so the actual
 // rendered px of an h-row cell is `h * rowHeight + (h - 1) * marginY`,
@@ -1576,35 +1803,79 @@ export const NOTEBOOK_GRID_MARGIN_Y = 20
 // marginY=20 (a 500-px content asked for 50 rows that rendered as
 // ~1480 px). Default marginY=0 keeps backwards-compat for tests/callers
 // that ignore margins.
+//
+// In a split cell the south edge owns only the result pane, so the bounds
+// reserve the editor's current allocation rather than merely its minimum.
+// The middle handle is the only control that repartitions the two panes.
+// Legacy heights stored outside the pane floors/ceiling deliberately render
+// as-is; their first drag snaps them into the new bounds.
+export const computeCellGridBounds = (
+  cell: NotebookCell,
+  rowHeight: number,
+  marginY: number = 0,
+  expectingResult: boolean = false,
+  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
+): CellGridBounds => {
+  const { topHeight, bottomHeight } = computeCellHeights(cell, {
+    expectingResult,
+  })
+  const chrome = cellChromePx(cell, expectingResult, paneLayout)
+  const rows = (px: number): number =>
+    Math.max(1, Math.ceil((px + marginY) / (rowHeight + marginY)))
+  const visibleTopHeight = paneLayout === "result" ? 0 : topHeight
+  const visibleBottomHeight = paneLayout === "editor" ? 0 : bottomHeight
+  const minTopPx =
+    paneLayout === "result"
+      ? 0
+      : paneLayout === "editor"
+        ? minTopHeightFor(cell)
+        : Math.max(minTopHeightFor(cell), topHeight)
+  const maxTopPx =
+    paneLayout === "result"
+      ? 0
+      : paneLayout === "split"
+        ? topHeight
+        : MAX_PANE_HEIGHT_PX
+  const minBottomPx = paneLayout === "editor" ? 0 : minBottomHeightFor(cell)
+  const maxBottomPx = paneLayout === "editor" ? 0 : MAX_PANE_HEIGHT_PX
+  return {
+    h: rows(chrome + visibleTopHeight + visibleBottomHeight),
+    minH: rows(chrome + minTopPx + minBottomPx),
+    maxH: rows(chrome + maxTopPx + maxBottomPx),
+  }
+}
+
 export const computeCellGridH = (
   cell: NotebookCell,
   rowHeight: number,
   marginY: number = 0,
   expectingResult: boolean = false,
-): number => {
-  const { topHeight, bottomHeight } = computeCellHeights(cell, {
-    expectingResult,
-  })
-  const totalPx = cellChromePx(cell, expectingResult) + topHeight + bottomHeight
-  return Math.max(1, Math.ceil((totalPx + marginY) / (rowHeight + marginY)))
-}
+  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
+): number =>
+  computeCellGridBounds(cell, rowHeight, marginY, expectingResult, paneLayout).h
 
 export const snapMarkdownTopHeight = (px: number): number => {
   const step = NOTEBOOK_GRID_ROW_HEIGHT + NOTEBOOK_GRID_MARGIN_Y
   const totalPx = Math.max(px, MIN_MARKDOWN_HEIGHT_PX) + CELL_BASE_CHROME_PX
   const rows = Math.ceil((totalPx + NOTEBOOK_GRID_MARGIN_Y) / step)
-  return rows * step - NOTEBOOK_GRID_MARGIN_Y - CELL_BASE_CHROME_PX
+  return Math.min(
+    MAX_PANE_HEIGHT_PX,
+    rows * step - NOTEBOOK_GRID_MARGIN_Y - CELL_BASE_CHROME_PX,
+  )
 }
 
 // Hydration status isn't knowable headlessly; "unrequested" (reserved space)
 // matches what the notebook renders for a run-marked cell before its snapshot
 // loads, so agent-visible heights agree with the screen.
-export const computeAgentCellGridH = (cell: NotebookCell): number =>
+export const computeAgentCellGridH = (
+  cell: NotebookCell,
+  expectingResult: boolean = isExpectingResult(cell, "unrequested"),
+): number =>
   computeCellGridH(
     cell,
     NOTEBOOK_GRID_ROW_HEIGHT,
     NOTEBOOK_GRID_MARGIN_Y,
-    isExpectingResult(cell, "unrequested"),
+    expectingResult,
   )
 
 export const hasAgentVisibleCellHeightChanged = (
@@ -1630,80 +1901,48 @@ export const partitionCellHeights = (
   return { top, bottom }
 }
 
-export const scaleCellHeights = (
-  oldTop: number,
-  oldBottom: number,
-  newContent: number,
-  minTop: number,
-  minBottom: number,
-): { top: number; bottom: number } => {
-  const oldContent = oldTop + oldBottom
-  const clampedContent = Math.max(minTop + minBottom, newContent)
-  const scale = oldContent > 0 ? clampedContent / oldContent : 1
-  let top = Math.round(oldTop * scale)
-  let bottom = clampedContent - top
-  if (top < minTop) {
-    top = minTop
-    bottom = clampedContent - top
-  }
-  if (bottom < minBottom) {
-    bottom = minBottom
-    top = clampedContent - bottom
-  }
-  return { top, bottom }
-}
-
 // Back-solves a grid `h` into the top/bottom height patch that makes
 // computeCellGridH reproduce it, pinned via *Resized like a manual drag. Empty
 // patch when the rows already match the derived height — an echo of the required
 // grid.h is not a resize, so auto-height stays intact.
-export const cellHeightPatchForRows = (
+export const paneHeightsFromGridRows = (
   cell: NotebookCell,
   rows: number,
   rowHeight: number,
   marginY: number,
   expectingResult: boolean = false,
+  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
 ): Partial<NotebookCell> => {
-  if (rows === computeCellGridH(cell, rowHeight, marginY, expectingResult)) {
+  if (
+    rows ===
+    computeCellGridH(cell, rowHeight, marginY, expectingResult, paneLayout)
+  ) {
     return {}
   }
   const targetContentPx =
     rows * rowHeight +
     (rows - 1) * marginY -
-    cellChromePx(cell, expectingResult)
-  if (!isDoubleView(cell) && !expectingResult) {
+    cellChromePx(cell, expectingResult, paneLayout)
+  if (paneLayout === "editor") {
     return {
-      topHeight: Math.max(minTopHeightFor(cell), targetContentPx),
+      topHeight: clampPaneHeight(minTopHeightFor(cell), targetContentPx),
       topResized: true,
     }
   }
-  if (cell.isViewMaximized === true) {
-    // Maximized hides the editor; scale both so the split survives a restore.
-    const { top, bottom } = scaleCellHeights(
-      cell.topHeight ?? DEFAULT_TOP_HEIGHT,
-      cell.bottomHeight ?? defaultBottomHeightFor(cell),
-      targetContentPx,
-      DEFAULT_TOP_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
+  if (paneLayout === "result") {
     return {
-      topHeight: top,
-      bottomHeight: bottom,
-      topResized: true,
+      bottomHeight: clampPaneHeight(minBottomHeightFor(cell), targetContentPx),
       bottomResized: true,
     }
   }
-  const top = cell.topHeight ?? DEFAULT_TOP_HEIGHT
-  const { top: nextTop, bottom: nextBottom } = partitionCellHeights(
-    targetContentPx,
-    top,
-    DEFAULT_TOP_HEIGHT,
-    MIN_BOTTOM_HEIGHT_PX,
+  const { topHeight } = computeCellHeights(cell, { expectingResult })
+  const nextBottom = clampPaneHeight(
+    minBottomHeightFor(cell),
+    targetContentPx - topHeight,
   )
   return {
     bottomHeight: nextBottom,
     bottomResized: true,
-    ...(nextTop !== top ? { topHeight: nextTop, topResized: true } : {}),
   }
 }
 
@@ -1712,26 +1951,45 @@ export const buildAppliedLayout = (
   nextCells: NotebookCell[],
   prevLayout: CellLayoutItem[] | undefined,
   defaults: { gridCols: number; rowHeight: number; marginY?: number },
+  resultStatusOf: CellResultStatusReader = () => "unrequested",
 ): CellLayoutItem[] => {
   const prevById = new Map((prevLayout ?? []).map((l) => [l.i, l]))
   let nextY = 0
   return nextCells.map((cell, i) => {
     const req = request.cells[i]
     if (req?.grid) {
-      const item = { i: cell.id, ...req.grid }
-      nextY = Math.max(nextY, req.grid.y + req.grid.h)
+      const h = computeCellGridH(
+        cell,
+        defaults.rowHeight,
+        defaults.marginY,
+        isExpectingResult(cell, resultStatusOf(cell.id)),
+      )
+      const item = {
+        i: cell.id,
+        x: req.grid.x,
+        y: req.grid.y,
+        w: req.grid.w,
+        h,
+      }
+      nextY = Math.max(nextY, req.grid.y + h)
       return item
     }
     const existing = prevById.get(cell.id)
     if (existing) {
-      nextY = Math.max(nextY, existing.y + existing.h)
-      return existing
+      const h = computeCellGridH(
+        cell,
+        defaults.rowHeight,
+        defaults.marginY,
+        isExpectingResult(cell, resultStatusOf(cell.id)),
+      )
+      nextY = Math.max(nextY, existing.y + h)
+      return existing.h === h ? existing : { ...existing, h }
     }
     const cellH = computeCellGridH(
       cell,
       defaults.rowHeight,
       defaults.marginY,
-      isExpectingResult(cell, "unrequested"),
+      isExpectingResult(cell, resultStatusOf(cell.id)),
     )
     const item: CellLayoutItem = {
       i: cell.id,
@@ -1754,6 +2012,7 @@ export type NotebookDocumentState = {
 export const buildAppliedNotebookState = (
   current: NotebookDocumentState,
   request: ApplyRequest,
+  resultStatusOf: CellResultStatusReader = () => "unrequested",
 ): NotebookDocumentState & { diff: AppliedDiff; resultsCleared: string[] } => {
   const { nextCells, diff, resultsCleared } = buildAppliedCells(
     current.cells,
@@ -1764,42 +2023,22 @@ export const buildAppliedNotebookState = (
       ? current.settings.layoutMode
       : request.layoutMode
 
-  // Pin an intentionally-resized grid.h into the cell; the stored h alone is a
-  // stale shadow the renderer overwrites (see cellHeightPatchForRows).
-  //
-  // Back-solve against the pre-apply cell, not the mutated one: the agent's h
-  // was derived from the cell it read (with its result), so a value edit that
-  // drops the result must not flip the cell to the single-view branch and pin
-  // the editor. Evaluating on the prior cell makes an agent-sent h behave
-  // exactly like the user's bottom-edge drag.
-  const prevById = new Map(current.cells.map((c) => [c.id, c]))
-  const cells =
-    targetLayoutMode === "grid"
-      ? nextCells.map((cell, i) => {
-          const g = request.cells[i]?.grid
-          if (!g) return cell
-          const prior = prevById.get(cell.id) ?? cell
-          const patch = cellHeightPatchForRows(
-            prior,
-            g.h,
-            NOTEBOOK_GRID_ROW_HEIGHT,
-            NOTEBOOK_GRID_MARGIN_Y,
-            isExpectingResult(prior, "unrequested"),
-          )
-          return Object.keys(patch).length > 0 ? { ...cell, ...patch } : cell
-        })
-      : nextCells
-
   let nextSettings = current.settings
   if (targetLayoutMode === "grid") {
     nextSettings = {
       ...nextSettings,
       layoutMode: "grid",
-      layout: buildAppliedLayout(request, cells, current.settings.layout, {
-        gridCols: NOTEBOOK_GRID_COLS,
-        rowHeight: NOTEBOOK_GRID_ROW_HEIGHT,
-        marginY: NOTEBOOK_GRID_MARGIN_Y,
-      }),
+      layout: buildAppliedLayout(
+        request,
+        nextCells,
+        current.settings.layout,
+        {
+          gridCols: NOTEBOOK_GRID_COLS,
+          rowHeight: NOTEBOOK_GRID_ROW_HEIGHT,
+          marginY: NOTEBOOK_GRID_MARGIN_Y,
+        },
+        resultStatusOf,
+      ),
     }
   } else if (request.layoutMode !== undefined && request.layoutMode !== null) {
     nextSettings = { ...nextSettings, layoutMode: request.layoutMode }
@@ -1820,16 +2059,16 @@ export const buildAppliedNotebookState = (
   let nextMaximizedCellId = current.maximizedCellId
   if (request.maximizedCellId !== undefined) {
     const id = request.maximizedCellId
-    nextMaximizedCellId = id && cells.some((c) => c.id === id) ? id : null
+    nextMaximizedCellId = id && nextCells.some((c) => c.id === id) ? id : null
   } else if (
     nextMaximizedCellId &&
-    !cells.some((c) => c.id === nextMaximizedCellId)
+    !nextCells.some((c) => c.id === nextMaximizedCellId)
   ) {
     nextMaximizedCellId = null
   }
 
   return {
-    cells,
+    cells: nextCells,
     settings: nextSettings,
     maximizedCellId: nextMaximizedCellId,
     diff,

@@ -12,10 +12,7 @@ import {
   type SelectionRunResolution,
 } from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
-import {
-  emitUserAction,
-  signalUserEdit,
-} from "../../../../utils/notebooks/notebookAIBridge"
+import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
@@ -27,8 +24,6 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 type Options = {
   cell: NotebookCell
   isRunning: boolean
-  isCompactTier: boolean
-  showBottomSlot: boolean
   editorRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>
   applyHighlight: (ok: boolean) => void
   clearHighlight: () => void
@@ -45,19 +40,12 @@ type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
 export const useCellRunActions = ({
   cell,
   isRunning,
-  isCompactTier,
-  showBottomSlot,
   editorRef,
   applyHighlight,
   clearHighlight,
 }: Options) => {
-  const {
-    runCell,
-    setCellMode,
-    clearCellResult,
-    setCellViewMaximized,
-    getCellsSnapshot,
-  } = useNotebookActions()
+  const { runCell, setCellMode, clearCellResult, getCellsSnapshot } =
+    useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const validateWithGlobals = useValidateWithGlobals()
   const { runWithSelectionMode } = useLocalStorage()
@@ -218,8 +206,8 @@ export const useCellRunActions = ({
   const runResolved = useCallback(
     (request: RunRequest) => {
       const plan = resolveRunAction(
-        { mode: cell.mode, result: cell.result },
-        { isCompactTier, showBottomSlot, intent: request.kind },
+        { mode: cell.mode },
+        { intent: request.kind },
       )
       if (plan.kind === "noop") return
       if (plan.kind === "chart") {
@@ -230,36 +218,14 @@ export const useCellRunActions = ({
         })
         return
       }
-      const exitDrawMode = () => {
-        if (!plan.exitDraw) return
-        signalUserEdit(bufferIdForEvents)
-        setCellMode(cell.id, "run")
-      }
       firstRunRef.current = cell.result == null
       if (request.kind === "all") {
-        exitDrawMode()
         void handleRunAll()
-        if (plan.reveal) setCellViewMaximized(cell.id, true)
         return
       }
-      // A single run that finds nothing to run leaves the cell untouched —
-      // a draw cell keeps its chart instead of dropping to the grid.
-      if (!handleRunSingle(request.source)) return
-      exitDrawMode()
-      if (plan.reveal) setCellViewMaximized(cell.id, true)
+      handleRunSingle(request.source)
     },
-    [
-      cell.id,
-      cell.mode,
-      cell.result,
-      bufferIdForEvents,
-      isCompactTier,
-      showBottomSlot,
-      setCellViewMaximized,
-      setCellMode,
-      handleRunAll,
-      handleRunSingle,
-    ],
+    [cell.id, cell.mode, cell.result, handleRunAll, handleRunSingle],
   )
   const runAll = useCallback(() => runResolved({ kind: "all" }), [runResolved])
   const runSingleFromEditor = useCallback(
@@ -310,11 +276,9 @@ export const useCellRunActions = ({
       if (payload?.cellId !== cell.id) return
       refreshRun()
     }
-    const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
+    const drawHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      void handleDrawClick().then((entered) => {
-        if (entered && payload.maximize) setCellViewMaximized(cell.id, true)
-      })
+      void handleDrawClick()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
@@ -322,7 +286,7 @@ export const useCellRunActions = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
+  }, [cell.id, refreshRun, handleDrawClick])
 
   const isGridLoading = isRunning && firstRunRef.current
 

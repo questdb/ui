@@ -31,6 +31,7 @@ import {
   NOTEBOOK_DELETED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
   patchCellRunResult,
+  RESULT_CLEARED_MID_RUN_NOTE,
   RESULT_NOT_SAVED_RUN_NOTE,
   singleResultFromExec,
   STORAGE_FULL_RUN_NOTE,
@@ -75,6 +76,7 @@ type RunCommitOutcome =
         | "mounted"
         | "notebook_archived"
         | "notebook_gone"
+        | "result_cleared"
         | "cell_gone"
         | "cell_changed"
         | "user_changed"
@@ -84,17 +86,53 @@ type RunCommitOutcome =
 
 type ActiveHeadlessRun = {
   controller: AbortController
+  invalidationReason?: "result_cleared"
 }
 
 type HeadlessRunHandle = {
   signal: AbortSignal
   isCurrent: () => boolean
+  invalidationReason: () => ActiveHeadlessRun["invalidationReason"]
   finish: () => void
 }
 
 // Mirrors the live path's beginCellRun (useCellExecution): a newer headless run
 // of the same cell aborts the older run as well as superseding its result
 const activeHeadlessRuns = new Map<number, Map<string, ActiveHeadlessRun>>()
+const activeHeadlessBarriers = new Map<
+  number,
+  Map<string, Set<AbortController>>
+>()
+
+const beginHeadlessBarrier = (
+  bufferId: number,
+  cellId: string,
+  externalSignal?: AbortSignal,
+): { signal: AbortSignal; finish: () => void } => {
+  const controller = new AbortController()
+  const perBuffer =
+    activeHeadlessBarriers.get(bufferId) ??
+    new Map<string, Set<AbortController>>()
+  const claims = perBuffer.get(cellId) ?? new Set<AbortController>()
+  claims.add(controller)
+  perBuffer.set(cellId, claims)
+  activeHeadlessBarriers.set(bufferId, perBuffer)
+
+  const abortFromExternal = () => controller.abort(externalSignal?.reason)
+  if (externalSignal?.aborted) abortFromExternal()
+  else
+    externalSignal?.addEventListener("abort", abortFromExternal, { once: true })
+
+  return {
+    signal: controller.signal,
+    finish: () => {
+      externalSignal?.removeEventListener("abort", abortFromExternal)
+      claims.delete(controller)
+      if (claims.size === 0) perBuffer.delete(cellId)
+      if (perBuffer.size === 0) activeHeadlessBarriers.delete(bufferId)
+    },
+  }
+}
 
 const beginHeadlessRun = (
   bufferId: number,
@@ -112,6 +150,7 @@ const beginHeadlessRun = (
     signal: activeRun.controller.signal,
     isCurrent: () =>
       activeHeadlessRuns.get(bufferId)?.get(cellId) === activeRun,
+    invalidationReason: () => activeRun.invalidationReason,
     finish: () => {
       const currentPerBuffer = activeHeadlessRuns.get(bufferId)
       if (currentPerBuffer?.get(cellId) !== activeRun) return
@@ -127,6 +166,37 @@ export const forgetHeadlessRuns = (bufferId: number): void => {
     for (const run of perBuffer.values()) run.controller.abort()
   }
   activeHeadlessRuns.delete(bufferId)
+  const barriers = activeHeadlessBarriers.get(bufferId)
+  if (barriers) {
+    for (const claims of barriers.values()) {
+      for (const controller of claims) controller.abort()
+    }
+  }
+  activeHeadlessBarriers.delete(bufferId)
+}
+
+export const cancelHeadlessCellRuns = (
+  bufferId: number,
+  cellIds: readonly string[],
+): void => {
+  const barriers = activeHeadlessBarriers.get(bufferId)
+  if (barriers) {
+    for (const cellId of cellIds) {
+      barriers.get(cellId)?.forEach((controller) => controller.abort())
+      barriers.delete(cellId)
+    }
+    if (barriers.size === 0) activeHeadlessBarriers.delete(bufferId)
+  }
+  const perBuffer = activeHeadlessRuns.get(bufferId)
+  if (!perBuffer) return
+  for (const cellId of cellIds) {
+    const run = perBuffer.get(cellId)
+    if (!run) continue
+    run.invalidationReason = "result_cleared"
+    run.controller.abort()
+    perBuffer.delete(cellId)
+  }
+  if (perBuffer.size === 0) activeHeadlessRuns.delete(bufferId)
 }
 
 const emptySummary = (): RunCellSummary => ({
@@ -357,15 +427,22 @@ export const runHeadlessCell = async (
 
   // The runner's barrier classification is the single decision for permission
   // enforcement, auto-run eligibility, and strategy — dispatch never
-  // classifies separately (live-path parity).
-  const validate = createValidateWithGlobals(quest, () => prep.variables)
-  const barrier = await resolveRunBarrier(
-    queryText,
-    queries.length,
-    gate,
-    (stmt) => statementRequestLimiter(() => validate(stmt, signal), signal),
-  )
-  if (signal?.aborted) return emptySummary()
+  // classifies separately (live-path parity). Register the validation claim so
+  // a concurrent transition can prevent this run from launching.
+  const barrierClaim = beginHeadlessBarrier(bufferId, cellId, signal)
+  let barrier: Awaited<ReturnType<typeof resolveRunBarrier>>
+  try {
+    const validate = createValidateWithGlobals(quest, () => prep.variables)
+    barrier = await resolveRunBarrier(queryText, queries.length, gate, (stmt) =>
+      statementRequestLimiter(
+        () => validate(stmt, barrierClaim.signal),
+        barrierClaim.signal,
+      ),
+    )
+  } finally {
+    barrierClaim.finish()
+  }
+  if (barrierClaim.signal.aborted) return emptySummary()
   if (barrier.action === "denied") {
     return { ...emptySummary(), denied: barrier.reason }
   }
@@ -375,7 +452,6 @@ export const runHeadlessCell = async (
   const classified = barrier.classified
 
   const run = beginHeadlessRun(bufferId, cellId)
-
   try {
     // The queue is NOT held during execution, so runs on other cells of the
     // same notebook proceed in parallel; the commit re-reads and patches only
@@ -424,7 +500,10 @@ export const runHeadlessCell = async (
           return { committed: false, reason: "mounted" }
         }
         if (!run.isCurrent()) {
-          return { committed: false, reason: "superseded" }
+          return {
+            committed: false,
+            reason: run.invalidationReason() ?? "superseded",
+          }
         }
         // The user visited the notebook and edited or ran something while
         // this run was executing — their newer state wins over a stale result.
@@ -481,6 +560,12 @@ export const runHeadlessCell = async (
         return { ...summary, unverified: true, note: USER_CHANGED_MID_RUN_NOTE }
       case "superseded":
         return { ...summary, unverified: true, note: SUPERSEDED_RUN_NOTE }
+      case "result_cleared":
+        return {
+          ...summary,
+          unverified: true,
+          note: RESULT_CLEARED_MID_RUN_NOTE,
+        }
       case "cell_changed":
         return { ...summary, unverified: true, note: CELL_CHANGED_MID_RUN_NOTE }
       case "storage_full":

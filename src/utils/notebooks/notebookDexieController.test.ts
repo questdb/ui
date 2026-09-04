@@ -15,6 +15,7 @@ import {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellMaximizedTransition,
+  setCellDimensionsTransition,
   setCellModeTransition,
   setLayoutModeTransition,
   updateCellTransition,
@@ -308,6 +309,50 @@ describe("createDexieNotebookController — structural edits", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
+  it("view editor deletes a marker-less cell snapshot", async () => {
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1", { mode: "run", paneView: "result" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.mutate((parts) =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "editor",
+      }),
+    )
+
+    await vi.waitFor(async () => {
+      expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+    })
+  })
+
+  it("apply editor-only deletes a marker-less cell snapshot", async () => {
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1", { mode: "run", paneView: "result" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.applyNotebookState({
+      cells: [{ id: "a", preserveValue: true, view: "editor" }],
+    })
+
+    await vi.waitFor(async () => {
+      expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+    })
+  })
+
   it("moveCellUp / moveCellDown swap positions durably", async () => {
     // Given two cells
     await seedNotebook({ cells: [cell("a"), cell("b")] })
@@ -357,11 +402,10 @@ describe("createDexieNotebookController — settings & layout", () => {
     expect(view.settings?.layoutMode).toBe("grid")
   })
 
-  it("setCellMode draw seeds the chart bottom height and exits view-maximize", async () => {
-    // Given a view-maximized run cell; when it flips to draw, then the chart
-    // defaults land and the maximize exits
+  it("setCellMode draw seeds the chart bottom height and preserves preference", async () => {
+    // A mode change does not silently rewrite the user's pane preference.
     await seedNotebook({
-      cells: [cell("a", "SELECT 1", { isViewMaximized: true })],
+      cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
     const controller = makeController()
     await controller.setCellMode("a", "draw")
@@ -369,7 +413,7 @@ describe("createDexieNotebookController — settings & layout", () => {
     expect(view.cells[0]).toMatchObject({
       mode: "draw",
       bottomHeight: 350,
-      isViewMaximized: false,
+      paneView: "result",
     })
   })
 
@@ -853,6 +897,85 @@ describe("createDexieNotebookController — runCell", () => {
     expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
   })
 
+  it("view editor invalidates a headless run before it can restore a result", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("run not in flight")
+    })
+
+    await controller.mutate((parts) =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "editor",
+      }),
+    )
+    respondNext(dqlResult)
+    const summary = await run
+
+    expect(summary.unverified).toBe(true)
+    expect(summary.note).toMatch(/result was cleared/)
+    expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("view editor prevents a headless run from launching after validation", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    let resolveValidation!: (value: unknown) => void
+    const validation = new Promise((resolve) => {
+      resolveValidation = resolve
+    })
+    let validationStarted = false
+    const { quest, pending: inFlight } = makeQuest({
+      validate: () => {
+        validationStarted = true
+        return validation
+      },
+    })
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (!validationStarted) throw new Error("validation not in flight")
+    })
+
+    await controller.mutate((parts) =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "editor",
+      }),
+    )
+    resolveValidation(dqlValidation)
+    const summary = await run
+
+    expect(summary).toEqual({ success: false, queryCount: 0, results: [] })
+    expect(inFlight).toHaveLength(0)
+    expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("apply editor-only invalidates a headless run before it can restore a result", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("run not in flight")
+    })
+
+    await controller.applyNotebookState({
+      cells: [{ id: "a", preserveValue: true, view: "editor" }],
+    })
+    respondNext(dqlResult)
+    const summary = await run
+
+    expect(summary.unverified).toBe(true)
+    expect(summary.note).toMatch(/result was cleared/)
+    expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
   it("a superseded script never starts its remaining statements", async () => {
     // Given a slow write script whose first statement is already in flight
     await seedNotebook({
@@ -1255,14 +1378,14 @@ describe("createDexieNotebookController — field preservation", () => {
 
   it("a headless run commit keeps the run cell's rich state and never touches siblings or settings", async () => {
     // Given a background notebook whose run cell "a" carries auto-refresh, a
-    // chart config, and view-maximize, a sibling "b" with its own chart, and
+    // chart config, and pane preference, a sibling "b" with its own chart, and
     // notebook-level variables + grid layout
     await seedNotebook({
       cells: [
         cell("a", "SELECT 1", {
           autoRefresh: "5s",
           chartConfig: chartFor("ts"),
-          isViewMaximized: true,
+          paneView: "result",
         }),
         cell("b", "SELECT 2", { position: 1, chartConfig: chartFor("sym") }),
       ],
@@ -1290,7 +1413,7 @@ describe("createDexieNotebookController — field preservation", () => {
     expect(a).toMatchObject({
       autoRefresh: "5s",
       chartConfig: chartFor("ts"),
-      isViewMaximized: true,
+      paneView: "result",
       lastRunStatus: "success",
     })
     // And the untouched sibling and notebook settings survive intact

@@ -37,6 +37,19 @@ export type AutoRefresh = boolean | AutoRefreshInterval
 // migration. Markdown cells hold their source in `value` and are never executed.
 export type CellType = "sql" | "markdown"
 
+export type AgentCellView = "editor" | "result" | "editor_result"
+
+export const isAgentCellView = (value: unknown): value is AgentCellView =>
+  value === "editor" || value === "result" || value === "editor_result"
+
+// The storable pane arrangements. "editor" exists only on the agent wire: as a
+// write it discards the result (the toggle-off gesture), as a read it is the
+// derived presentation of a cell with nothing to show.
+export type CellPaneView = "result" | "editor_result"
+
+export const isCellPaneView = (value: unknown): value is CellPaneView =>
+  value === "result" || value === "editor_result"
+
 export type NotebookCell = {
   id: string
   position: number
@@ -53,7 +66,9 @@ export type NotebookCell = {
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
-  isViewMaximized?: boolean
+  // Stored pane arrangement for a cell with a result. A cell without one
+  // shows only the editor; that never rewrites it.
+  paneView?: CellPaneView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }
@@ -147,6 +162,7 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
   id: crypto.randomUUID(),
   position,
   value,
+  paneView: "editor_result",
 })
 
 export const createDefaultNotebookViewState = (): NotebookViewState => ({

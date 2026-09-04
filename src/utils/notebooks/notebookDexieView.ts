@@ -13,6 +13,7 @@ import type {
   NotebookSettings,
   NotebookViewState,
 } from "../../store/notebook"
+import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 
@@ -26,8 +27,31 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
-export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  dropLegacyChartConfigs(migrateLegacyCellNames(view))
+// Main persisted `isViewMaximized`. Materialize the stored pane view and drop
+// the legacy key from the runtime view. A stored "editor" predates the
+// discard-on-editor model and normalizes to the split default.
+const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
+  const raw = cell as NotebookCell & Record<string, unknown>
+  if (cell.type === "markdown") {
+    const next = { ...raw }
+    delete next.paneView
+    delete next.isViewMaximized
+    return next as NotebookCell
+  }
+  const paneView = isCellPaneView(raw.paneView)
+    ? raw.paneView
+    : raw.isViewMaximized === true
+      ? "result"
+      : "editor_result"
+  const next = { ...raw, paneView } as NotebookCell & Record<string, unknown>
+  delete next.isViewMaximized
+  return next as NotebookCell
+}
+
+export const migratePersistedNotebookView = (view: NotebookViewState) => {
+  const migrated = dropLegacyChartConfigs(migrateLegacyCellNames(view))
+  return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
+}
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

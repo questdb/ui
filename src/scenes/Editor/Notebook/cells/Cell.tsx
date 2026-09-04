@@ -30,10 +30,12 @@ import { toast } from "../../../../components/Toast"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
+  clampPaneHeight,
   isDoubleView,
   isExpectingResult,
-  MIN_BOTTOM_HEIGHT_PX,
+  minBottomHeightFor,
   resolveAutoRefresh,
+  resolveCellPaneLayout,
   resolveCellView,
 } from "../notebookUtils"
 import {
@@ -174,14 +176,11 @@ const CellInner: React.FC<Props> = ({
   // in the grid item's height (both go through computeCellHeights).
   const expectingResult = isExpectingResult(cell, resultStatus)
   const doubleView = isDoubleView(cell) || expectingResult
-  // Compact can't split — one full-height pane: the result fills the cell by
-  // default, "View SQL" (isViewMaximized === false) shows the editor instead.
-  const isCompactTier = toolbarTier === "compact"
-  const isViewMaximized = isCompactTier
-    ? doubleView && cell.isViewMaximized !== false
-    : doubleView && !!cell.isViewMaximized
-  const showBottomSlot = isViewMaximized || (doubleView && !isCompactTier)
-  const isSplit = doubleView && !isViewMaximized && !isCompactTier
+  const paneLayout = resolveCellPaneLayout(cell, expectingResult)
+
+  const resultOnly = paneLayout === "result"
+  const showBottomSlot = paneLayout !== "editor"
+  const isSplit = paneLayout === "split"
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
@@ -200,8 +199,6 @@ const CellInner: React.FC<Props> = ({
     middleResizeEnd,
     resetToDefaults,
     resetBottomArea,
-    maximizedChartResizeLive,
-    maximizedChartResizeEnd,
   } = useCellResizeOrchestration({
     cell,
     layoutMode,
@@ -225,7 +222,7 @@ const CellInner: React.FC<Props> = ({
     (px: number) => {
       if (isMaximized) return
       if (cell.topResized) return
-      const next = Math.max(MIN_EDITOR_HEIGHT, px)
+      const next = clampPaneHeight(MIN_EDITOR_HEIGHT, px)
       if (next === cell.topHeight) return
       updateCell(cell.id, { topHeight: next })
     },
@@ -234,7 +231,7 @@ const CellInner: React.FC<Props> = ({
 
   const { editorRef, monacoRef, handleEditorMount } = useMonacoCellEditor({
     cellId: cell.id,
-    editorMounted: !isViewMaximized && contentMode === "full",
+    editorMounted: !resultOnly && contentMode === "full",
     editorViewState: cell.editorViewState,
     quest,
     onFocus: useCallback(
@@ -290,8 +287,6 @@ const CellInner: React.FC<Props> = ({
   } = useCellRunActions({
     cell,
     isRunning,
-    isCompactTier,
-    showBottomSlot,
     editorRef,
     applyHighlight,
     clearHighlight,
@@ -436,6 +431,7 @@ const CellInner: React.FC<Props> = ({
         isRunning={isRunning}
         headerRef={headerRef}
         toolbarTier={toolbarTier}
+        paneLayout={paneLayout}
         chartZoomed={chartZoomed}
         left={
           <CellNameLabel
@@ -479,7 +475,7 @@ const CellInner: React.FC<Props> = ({
               view={view}
               cellAutoRefresh={cell.autoRefresh}
               autoRefreshDefault={autoRefreshDefault}
-              isViewMaximized={isViewMaximized}
+              paneLayout={paneLayout}
               isRunning={isRunning}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
@@ -491,7 +487,7 @@ const CellInner: React.FC<Props> = ({
             <CellViewToggle
               cellId={cell.id}
               view={view}
-              isViewMaximized={isViewMaximized}
+              paneLayout={paneLayout}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
               isRunning={isRunning}
@@ -501,12 +497,14 @@ const CellInner: React.FC<Props> = ({
           )
         }
       />
-      {!isViewMaximized && (
+      {!resultOnly && (
         <EditorContainer
           ref={editorContainerRef}
           $spotlight={isMaximized}
           style={
-            isMaximized ? { flex: spotlightEditorRatio } : { height: topHeight }
+            isMaximized
+              ? { flex: showBottomSlot ? spotlightEditorRatio : 1 }
+              : { height: topHeight }
           }
         >
           {contentMode === "full" ? (
@@ -572,20 +570,16 @@ const CellInner: React.FC<Props> = ({
           doubleView={doubleView}
         />
       )}
-      {/* Bottom slot: result grid OR chart, OR chart filling the whole cell
-          when expanded. */}
+      {/* Bottom slot: result grid OR chart. Hiding the editor preserves this
+          pane's own height instead of borrowing the editor allocation. */}
       {showBottomSlot && (
         <BottomSlot
           ref={resultRef}
           $spotlight={isMaximized}
           style={
-            isViewMaximized
-              ? isMaximized
-                ? { flex: 1 }
-                : { height: topHeight + bottomHeight }
-              : isMaximized
-                ? { flex: 1 - spotlightEditorRatio }
-                : { height: bottomHeight }
+            isMaximized
+              ? { flex: resultOnly ? 1 : 1 - spotlightEditorRatio }
+              : { height: bottomHeight }
           }
         >
           <CellBottomContent
@@ -608,34 +602,20 @@ const CellInner: React.FC<Props> = ({
     !isMaximized && layoutMode !== "grid" ? (
       <ResizeHandle
         overlay
-        targetRef={
-          isViewMaximized || showBottomSlot ? resultRef : editorContainerRef
-        }
+        targetRef={showBottomSlot ? resultRef : editorContainerRef}
         onResize={
-          isViewMaximized
-            ? maximizedChartResizeLive
-            : showBottomSlot
-              ? bottomResize.resizeLive
-              : topResize.resizeLive
+          showBottomSlot ? bottomResize.resizeLive : topResize.resizeLive
         }
         onResizeEnd={(height) => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "s" })
-          if (isViewMaximized) maximizedChartResizeEnd(height)
-          else if (showBottomSlot) bottomResize.resizeEnd(height)
+          if (showBottomSlot) bottomResize.resizeEnd(height)
           else topResize.resizeEnd(height)
         }}
         onDoubleClick={() => {
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
-          if (isViewMaximized) resetToDefaults()
-          else resetBottomArea()
+          resetBottomArea()
         }}
-        minHeight={
-          isViewMaximized
-            ? MIN_EDITOR_HEIGHT + MIN_BOTTOM_HEIGHT_PX
-            : showBottomSlot
-              ? MIN_BOTTOM_HEIGHT_PX
-              : undefined
-        }
+        minHeight={showBottomSlot ? minBottomHeightFor(cell) : undefined}
       />
     ) : null
 

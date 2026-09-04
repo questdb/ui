@@ -1,4 +1,5 @@
 import type {
+  AgentCellView,
   AutoRefresh,
   CellType,
   NotebookCell,
@@ -7,6 +8,10 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type {
+  AgentHeightValue,
+  CellResultStatus,
+} from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -31,6 +36,7 @@ import {
 } from "../notebookDexieView"
 import {
   __resetNotebookHeadlessRunsForTests,
+  cancelHeadlessCellRuns,
   runHeadlessCell,
   type DexieControllerDeps,
 } from "../notebookHeadlessRun"
@@ -79,6 +85,10 @@ export type NotebookController = {
   mutate: NotebookMutate
   readView: () => Promise<NotebookViewState>
   readRefreshState?: () => ReadonlyMap<string, CellRefreshView>
+  // Live-only, like readRefreshState: the snapshot-load status of one cell,
+  // read off the provider's hydration engine (mount-independent). The passive
+  // route omits it; callers fall back to "unrequested".
+  readResultStatus?: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
     signal?: AbortSignal,
@@ -93,6 +103,7 @@ export type NotebookController = {
 // a deleted cell via its cleanup list); the reads are synchronous ref snapshots.
 export type NotebookControllerActions = {
   readRefreshState: () => ReadonlyMap<string, CellRefreshView>
+  readResultStatus: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
     sql?: string,
@@ -120,9 +131,11 @@ export type ApplyNotebookStateCellRequest = {
   type?: CellType | null
   mode?: "run" | "draw" | null
   autoRefresh?: AutoRefresh | null
-  isViewMaximized?: boolean | null
+  editorHeight?: AgentHeightValue
+  resultHeight?: AgentHeightValue
+  view?: AgentCellView | null
   chartConfig?: ChartConfig | null
-  grid?: { x: number; y: number; w: number; h: number } | null
+  grid?: { x: number; y: number; w: number } | null
 }
 
 export type ApplyNotebookStateRequest = {
@@ -160,6 +173,8 @@ export const createNotebookController = (
           liveActionsRef.current.getMaximizedCellId() ?? undefined,
       }),
     readRefreshState: () => liveActionsRef.current.readRefreshState(),
+    readResultStatus: (cellId) =>
+      liveActionsRef.current.readResultStatus(cellId),
     // runCell is not a transition, so it does not inherit requireCellIn — guard
     // it here, matching the passive route's requireCellIn in runHeadlessCell.
     runCell: async (cellId, signal, sql, gate) => {
@@ -283,6 +298,13 @@ export const createDexieNotebookController = (
         }
         if (commit === "archived") {
           throw notebookArchivedMidEdit(bufferId)
+        }
+        // Invalidate only after the document commit succeeds. Because this is
+        // still inside the per-buffer queue, a completed headless request
+        // cannot interleave its result commit between this mutation and the
+        // invalidation.
+        if (out.cancelRuns) {
+          cancelHeadlessCellRuns(bufferId, out.cancelRuns.cellIds)
         }
         // Runs only after a durable commit and is never awaited: the write is
         // done, and failing the tool over orphaned snapshot/layout cleanup

@@ -6,6 +6,8 @@ import {
   applyNotebookStateTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  setCellDimensionsTransition,
+  setCellLayoutTransition,
   setCellModeTransition,
   updateCellTransition,
 } from "./notebookTransitions"
@@ -35,6 +37,247 @@ const partsOf = (
   maximizedCellId: null,
   focusedCellId: null,
   ...overrides,
+})
+
+describe("setCellDimensionsTransition", () => {
+  it("shows the editor by expanding the derived footprint and preserving both panes", () => {
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 72,
+      bottomHeight: 350,
+      paneView: "result",
+    })
+    const parts = partsOf([chart], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 12, h: 14 }],
+      },
+    })
+
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor_result",
+      resultStatus: "missing",
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      bottomHeight: 350,
+      paneView: "editor_result",
+    })
+    expect(out.parts.settings.layout?.[0].h).toBe(17)
+    expect(out.result).toEqual({ view: "editor_result" })
+  })
+
+  it("supports null preserve, auto reset, and a fixed result height", () => {
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 200,
+      topResized: true,
+      bottomHeight: 350,
+      bottomResized: false,
+      paneView: "result",
+    })
+
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      editorHeight: "auto",
+      resultHeight: 300,
+      view: null,
+    })
+
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      topResized: false,
+      bottomHeight: 300,
+      bottomResized: true,
+      paneView: "result",
+    })
+    expect(out.result).toEqual({ view: "result" })
+  })
+
+  it("ignores view and result_height on a markdown cell and reports a null view", () => {
+    // Given a markdown cell
+    const markdown = cell("a", "# title", { type: "markdown" })
+    // When an agent sends a view and a result_height with the editor height
+    const out = setCellDimensionsTransition(
+      partsOf([markdown]),
+      BUFFER_ID,
+      "a",
+      {
+        editorHeight: 86,
+        resultHeight: 300,
+        view: "result",
+        resultStatus: "missing",
+      },
+    )
+    // Then only the editor height lands, and the view reports null
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 86,
+      topResized: true,
+    })
+    expect(out.parts.cells[0].bottomHeight).toBeUndefined()
+    expect(out.parts.cells[0].paneView).toBeUndefined()
+    expect(out.result).toEqual({ view: null })
+  })
+
+  it("view editor discards the run outcome and exits draw", () => {
+    // Given a draw cell with a stored result-only arrangement
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      paneView: "result",
+      lastRunStatus: "success",
+    })
+    // When an agent sends view "editor" — the toggle-off gesture
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      view: "editor",
+      resultStatus: "missing",
+    })
+    // Then the run outcome is wiped, the mode drops to run, the stored
+    // arrangement survives for the next run, and the snapshot is deleted
+    expect(out.parts.cells[0]).toMatchObject({
+      mode: "run",
+      result: undefined,
+      lastRunStatus: undefined,
+      paneView: "result",
+    })
+    expect(out.result).toEqual({ view: "editor", result_discarded: true })
+    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
+  })
+
+  it("view editor deletes any marker-less snapshot idempotently", () => {
+    const parts = partsOf([cell("a", "SELECT 1")])
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor",
+      resultStatus: "missing",
+    })
+
+    expect(out.parts.cells).toBe(parts.cells)
+    expect(out.result).toEqual({ view: "editor" })
+    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
+  })
+
+  it("rejects a view outside the wire enum", () => {
+    expect(() =>
+      setCellDimensionsTransition(partsOf([cell("a")]), BUFFER_ID, "a", {
+        view: "<forged>" as never,
+      }),
+    ).toThrow(/view must be editor, result, or editor_result/)
+  })
+
+  it("rejects heights above the ceiling", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    expect(() =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 2401,
+      }),
+    ).toThrow(/at most 2400px/)
+  })
+
+  it("rejects chart result heights below the visual minimum", () => {
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+    expect(() =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 100,
+      }),
+    ).toThrow(/at least 296px/)
+  })
+
+  it("uses the mounted missing-result state for the grid height", () => {
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 19 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { resultStatus: "missing" },
+    )
+
+    expect(out.result).toEqual({ view: "editor" })
+    expect(out.parts.settings.layout?.[0].h).toBe(5)
+  })
+
+  it("reserves the result area while the snapshot is still loading", () => {
+    // Given the same pending cell, but with a live status that says the
+    // snapshot has not been proven missing yet
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 5 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { resultStatus: "unrequested" },
+    )
+    // Then the grid box keeps the reserved-result footprint
+    expect(out.parts.settings.layout?.[0].h).toBe(19)
+  })
+
+  it("persists the pane preference but reports editor while result is missing", () => {
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending]),
+      BUFFER_ID,
+      "a",
+      { view: "result", resultStatus: "missing" },
+    )
+
+    expect(out.parts.cells[0].paneView).toBe("result")
+    expect(out.result).toEqual({ view: "editor" })
+  })
+})
+
+describe("setCellLayoutTransition", () => {
+  const chart = cell("a", "SELECT 1", {
+    mode: "draw",
+    paneView: "editor_result",
+  })
+
+  it("returns the stored view after a position change", () => {
+    const out = setCellLayoutTransition(
+      partsOf([chart], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { x: 0, y: 0, w: 4, resultStatus: "missing" },
+    )
+
+    expect(out.result).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      view: "editor_result",
+    })
+  })
+
+  it("rejects placement that extends beyond the grid", () => {
+    expect(() =>
+      setCellLayoutTransition(
+        partsOf([chart], { settings: { layoutMode: "grid" } }),
+        BUFFER_ID,
+        "a",
+        { x: 11, y: 0, w: 2 },
+      ),
+    ).toThrow(NotebookToolError)
+  })
 })
 
 describe("applyNotebookStateTransition", () => {
@@ -96,6 +339,17 @@ describe("applyNotebookStateTransition", () => {
     // Then the frame collapses and the snapshot deletion is requested, so
     // disk agrees with the collapsed cell on every later reload
     expect(out.parts.cells[0].result).toBeNull()
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+  })
+
+  it("cancels a result-less cell run when apply requests editor-only", () => {
+    // Headless execution does not put a running placeholder in persisted state.
+    const out = applyNotebookStateTransition(partsOf([cell("a", "SELECT 1")]), {
+      cells: [{ id: "a", preserveValue: true, view: "editor" }],
+    })
+
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
     expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
   })
 
@@ -179,10 +433,12 @@ describe("applyNotebookStateTransition", () => {
     expect(out.parts.focusedCellId).toBe("a")
   })
 
-  it("does no freshness checking: it takes only (parts, request), no read-seq", () => {
+  it("does no freshness checking: it takes (parts, request, resultStatusOf), no read-seq", () => {
     // Freshness is gated once at the dispatch layer, never inside a transition;
-    // a seq parameter here would let staleness leak into the pure layer.
-    expect(applyNotebookStateTransition).toHaveLength(2)
+    // a seq parameter here would let staleness leak into the pure layer. The
+    // third parameter is a per-cell status READER supplied by the controller,
+    // not a freshness token.
+    expect(applyNotebookStateTransition).toHaveLength(3)
   })
 
   it("does no freshness checking: re-applying its own output never staleness-throws", () => {

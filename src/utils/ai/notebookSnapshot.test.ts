@@ -6,6 +6,7 @@ import {
   formatDigest,
   formatNotebookContextPrefix,
   formatSnapshot,
+  serializeCell,
   summarizeCells,
   type NotebookContextSnapshot,
 } from "./notebookSnapshot"
@@ -41,6 +42,7 @@ const makeController = (
   cells: NotebookCell[],
   settings: NotebookSettings = {},
   maximizedCellId: string | null = null,
+  readResultStatus?: NonNullable<NotebookController["readResultStatus"]>,
 ): NotebookController => ({
   bufferId,
   kind: "live",
@@ -57,6 +59,7 @@ const makeController = (
     }),
   runCell: () =>
     Promise.resolve({ success: true, queryCount: 1, results: ["success"] }),
+  ...(readResultStatus ? { readResultStatus } : {}),
 })
 
 const seedNotebook = async (
@@ -114,6 +117,25 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("reports editor when the mounted cell's saved result is known missing", async () => {
+    const released = sql("a", "SELECT 1", {
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+    const id = await seedNotebook({ cells: [released] })
+    registerController(
+      makeController(id, [released], {}, null, () => "missing"),
+    )
+
+    const snap = await buildSnapshot(id)
+
+    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
+      view: "editor",
+      last_run_status: "success",
+    })
+  })
+
   it("serves the live snapshot when the controller unregisters mid-read", async () => {
     // Given a mounted notebook whose Dexie copy lags the live cells
     const id = await seedNotebook({ cells: [sql("a", "persisted")] })
@@ -151,6 +173,17 @@ describe("buildSnapshot", () => {
       expect(snap.cells[1].preview).toBe("line1\\nline2")
     } else {
       throw new Error("expected ok snapshot")
+    }
+  })
+
+  it("preserves SQL comparison operators in structured snapshot previews", async () => {
+    const value =
+      "SELECT * FROM fx_trades WHERE price < 1 AND quantity > 2 AND symbol <> 'A&B'"
+    const id = await seedNotebook({ cells: [sql("a", value)] })
+    const snap = await buildSnapshot(id)
+    expect(snap?.status).toBe("ok")
+    if (snap?.status === "ok") {
+      expect(snap.cells[0].preview).toBe(value)
     }
   })
 
@@ -203,12 +236,100 @@ describe("buildSnapshot", () => {
     const gridSnap = await buildSnapshot(gridId)
     if (listSnap?.status === "ok" && gridSnap?.status === "ok") {
       expect(listSnap.cells[0].grid).toBeUndefined()
-      // h is derived from the cell's content, not the stored layout h (4) —
-      // a fresh run cell resolves to 5 rows regardless of the persisted shadow.
-      expect(gridSnap.cells[0].grid).toEqual({ x: 0, y: 0, w: 6, h: 5 })
+      // Agent layout exposes placement/width only; height is controlled through
+      // semantic pane dimensions and derived internally.
+      expect(gridSnap.cells[0].grid).toEqual({ x: 0, y: 0, w: 6 })
+      // A never-run cell presents only its editor, so the view reads "editor".
+      expect(gridSnap.cells[0]).toMatchObject({
+        editor_height: "auto",
+        result_height: "auto",
+        view: "editor",
+      })
     } else {
       throw new Error("expected ok snapshots")
     }
+  })
+
+  it("reports a null view and result height for a markdown cell", async () => {
+    // Given a live markdown cell
+    const id = await seedNotebook({
+      cells: [sql("a", "# title", { type: "markdown" })],
+    })
+    // When the snapshot builds
+    const snap = await buildSnapshot(id)
+    const cellSnapshot = snap?.status === "ok" ? snap.cells[0] : undefined
+    // Then the pane fields are null
+    expect(cellSnapshot).toMatchObject({
+      type: "markdown",
+      view: null,
+      result_height: null,
+    })
+    // And get_cell reports the same null pane fields
+    const details = serializeCell(
+      [sql("a", "# title", { type: "markdown" })],
+      "a",
+      id,
+      false,
+    )
+    expect(details).toMatchObject({
+      view: null,
+      result_height: null,
+    })
+  })
+
+  it("reports editor from get_cell serialization when the result is missing", () => {
+    const released = sql("a", "SELECT 1", {
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+
+    const details = serializeCell(
+      [released],
+      "a",
+      7,
+      false,
+      undefined,
+      "missing",
+    )
+
+    expect(details).toMatchObject({
+      view: "editor",
+      last_run_status: "success",
+    })
+  })
+
+  it("reports the stored view for an inactive notebook", async () => {
+    const id = await seedNotebook({
+      cells: [
+        sql("a", "SELECT 1", {
+          mode: "draw",
+          paneView: "editor_result",
+        }),
+      ],
+    })
+
+    const snap = await buildSnapshot(id)
+    expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
+      view: "editor_result",
+    })
+  })
+
+  it("round-trips a pinned result height while passive result data is unloaded", async () => {
+    const id = await seedNotebook({
+      cells: [
+        sql("a", "SELECT 1", {
+          bottomHeight: 400,
+          bottomResized: true,
+          lastRunStatus: "success",
+        }),
+      ],
+    })
+
+    const snap = await buildSnapshot(id)
+    expect(
+      snap?.status === "ok" ? snap.cells[0].result_height : undefined,
+    ).toBe(400)
   })
 
   it("includes settings.variables when non-empty and omits when missing", async () => {
@@ -270,7 +391,7 @@ describe("buildSnapshot", () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
-      isViewMaximized: false,
+      paneView: "editor_result",
       name: "Trades",
       chartConfig: {
         xColumn: "ts",
@@ -317,6 +438,17 @@ describe("summarizeCells", () => {
 })
 
 describe("formatSnapshot", () => {
+  it("guards comparison operators only in the pseudo-XML prompt context", async () => {
+    const value = "SELECT 1 WHERE price < 2 AND quantity > 0"
+    const id = await seedNotebook({ cells: [sql("a", value)] })
+    const snap = (await buildSnapshot(id))!
+
+    expect(snap.status === "ok" && snap.cells[0].preview).toBe(value)
+    const out = formatSnapshot(snap)
+    expect(out).toContain("price ‹ 2 AND quantity › 0")
+    expect(out).not.toContain("price < 2")
+  })
+
   it("emits a warning-variant block for archived status", () => {
     const snap: NotebookContextSnapshot = {
       status: "archived",
@@ -349,7 +481,10 @@ describe("formatSnapshot", () => {
     expect(out).toContain(`buffer_id: ${id}`)
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("- id: a")
-    expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 5 }")
+    expect(out).toContain("editor_height: auto")
+    expect(out).toContain("result_height: auto")
+    expect(out).toContain("view: editor")
+    expect(out).toContain("grid: { x: 0, y: 0, w: 12 }")
   })
 
   it("renders chart_config as one-line wire JSON the model can copy back", async () => {

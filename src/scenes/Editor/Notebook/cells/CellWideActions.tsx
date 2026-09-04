@@ -2,6 +2,7 @@ import React from "react"
 import { CellViewToggle } from "./CellViewToggle"
 import { CellRefreshButton } from "./CellRefreshButton"
 import type { AutoRefresh } from "../../../../store/notebook"
+import type { CellPaneLayout } from "../notebookUtils"
 
 type Props = {
   cellId: string
@@ -10,7 +11,7 @@ type Props = {
   view: "grid" | "chart"
   cellAutoRefresh: AutoRefresh | undefined
   autoRefreshDefault: AutoRefresh | undefined
-  isViewMaximized: boolean
+  paneLayout: CellPaneLayout
   isRunning: boolean
   isGridLoading: boolean
   isChartLoading: boolean
@@ -23,7 +24,7 @@ export const CellWideActions: React.FC<Props> = ({
   view,
   cellAutoRefresh,
   autoRefreshDefault,
-  isViewMaximized,
+  paneLayout,
   isRunning,
   isGridLoading,
   isChartLoading,
@@ -49,7 +50,7 @@ export const CellWideActions: React.FC<Props> = ({
     <CellViewToggle
       cellId={cellId}
       view={view}
-      isViewMaximized={isViewMaximized}
+      paneLayout={paneLayout}
       isGridLoading={isGridLoading}
       isChartLoading={isChartLoading}
       isRunning={isRunning}

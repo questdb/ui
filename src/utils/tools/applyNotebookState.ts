@@ -9,7 +9,12 @@ import {
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
 } from "../notebooks/notebookController"
-import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
+import type {
+  AgentCellView,
+  CellMode,
+  CellType,
+  NotebookVariable,
+} from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   denyReasonUnresolvedSql,
@@ -216,13 +221,15 @@ export const dispatchApplyNotebookState = async (
         type?: "sql" | "markdown" | null
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
-        is_view_maximized?: boolean | null
+        editor_height?: number | "auto" | null
+        result_height?: number | "auto" | null
+        view?: AgentCellView | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
           right_axis?: ToolRightAxis | null
         } | null
-        grid?: { x: number; y: number; w: number; h: number } | null
+        grid?: { x: number; y: number; w: number } | null
       }>
     }) || {}
   setStatus(AIOperationStatus.BuildingNotebook)
@@ -389,8 +396,9 @@ export const dispatchApplyNotebookState = async (
       if (c.type === "sql" || c.type === "markdown") cell.type = c.type
       if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
       if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
-      if (c.is_view_maximized !== undefined && c.is_view_maximized !== null)
-        cell.isViewMaximized = c.is_view_maximized
+      if (c.editor_height !== undefined) cell.editorHeight = c.editor_height
+      if (c.result_height !== undefined) cell.resultHeight = c.result_height
+      if (c.view !== undefined) cell.view = c.view
       if (c.chart_config) {
         const cfg = c.chart_config
         const chartConfig: ChartConfig = {
@@ -428,7 +436,13 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutate((parts) => applyNotebookStateTransition(parts, request)),
+        ctrl.mutate((parts) =>
+          applyNotebookStateTransition(
+            parts,
+            request,
+            (cellId) => ctrl.readResultStatus?.(cellId) ?? "unrequested",
+          ),
+        ),
       signal,
     )
     const out = committed

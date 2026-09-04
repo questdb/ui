@@ -184,7 +184,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": true,
-    "description": "Duplicate a notebook tab. Copies every cell (SQL, mode, chart config) and the layout into a NEW notebook labelled \"<label> (copy)\" placed right after the original; cell ids are regenerated and last-run results are cleared. The copy is ALWAYS made in the background — you never switch the user's active tab. The user sees a notification and opens it themselves; only call activate_notebook if they explicitly ask to be taken there.",
+    "description": "Duplicate a notebook tab. Copies every cell (SQL, mode, chart config), layout, and run history into a NEW notebook labelled \"<label> (copy)\" placed right after the original; cell ids are regenerated. Matching saved result snapshots are copied best-effort in the background and hydrate when the copy is opened. `last_run_status` is preserved as history and does not guarantee that a saved result snapshot exists. The copy is ALWAYS made in the background — you never switch the user's active tab. The user sees a notification and opens it themselves; only call activate_notebook if they explicitly ask to be taken there.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -241,7 +241,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Get full details of a cell (value, kind via `type`, UI flags, chart config, last-run status + trimmed error). Three fields are LIVE-ONLY — present only while the notebook is open in the console, so absence never means \"not refreshing\" or \"not blocked\": `refreshing: true` while a refresh is in flight (the visible rows are still the previous round's), `last_refresh_error` when the last round left a failure, and `auto_refresh_blocked: \"contains_write\"` on cells auto-refresh will not run. `last_run_status` is unrelated to these: it stays the outcome of the last completed RUN, and a refresh never changes it. `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
+    "description": "Get full details of a cell (value, kind via `type`, editor_height/result_height, view, chart config, last-run status + trimmed error). Height values are fixed CSS pixels or \"auto\". `view` reports what a SQL/draw cell presents: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -266,7 +266,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Full structural snapshot of a notebook (layout, cells with previews, kind via `type`, last-run statuses). Three fields are LIVE-ONLY — present only while the notebook is open in the console, so absence never means \"not refreshing\" or \"not blocked\": `refreshing: true` while a refresh is in flight (the visible rows are still the previous round's), `last_refresh_error` when the last round left a failure, and `auto_refresh_blocked: \"contains_write\"` on cells auto-refresh will not run. `last_run_status` is unrelated to these: it stays the outcome of the last completed RUN, and a refresh never changes it. `auto_refresh_default` is omitted when the notebook has no configured default. `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
+    "description": "Full structural snapshot of a notebook (layout, cells with previews, semantic pane dimensions, kind via `type`, last-run statuses). Cell `grid` contains x/y/w only; height is derived from editor_height, result_height, and view. `view` reports what a SQL/draw cell presents: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `auto_refresh_default` is omitted when the notebook has no configured default. `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -470,7 +470,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Position a single cell in grid mode. x/y/w/h are integers in the react-grid-layout grid. The 12-column limit applies to WIDTH only (w ≤ 12); h is NOT in column units — the rendered cell box is h*10 + (h-1)*20 px (10px rows with 20px gaps BETWEEN rows; do NOT estimate with h*30), and a fixed 44px cell header inside it leaves (h*30 - 64)px of content. Chart cells pad the plot a further ~40px top and ~56px bottom (~86px when the zoom slider shows) inside that content area. EXAMPLES: markdown h:3 -> 3*10 + 2*20 = 70px box, 70 - 44 = 26px of text (the minimum strip); markdown h:5 -> 130px box, 86px of text (a comfortable title); chart h:10 -> 280px box, 236px content, ~140px of plot after padding (~110px with the zoom slider).",
+    "description": "Position a single cell in grid mode. x/y/w are integers in the react-grid-layout grid; width is limited to 12 columns. Cell height is derived from its semantic pane dimensions. The response includes the applied grid position and the cell's `view`; markdown reports `view` as null. Use set_cell_dimensions to resize a cell or change its `view`.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -482,19 +482,71 @@
           "type": "string"
         },
         "x": {
-          "type": "number"
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 11
         },
         "y": {
-          "type": "number"
+          "type": "integer",
+          "minimum": 0
         },
         "w": {
-          "type": "number"
-        },
-        "h": {
-          "type": "number"
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
         }
       },
-      "required": ["buffer_id", "cell_id", "x", "y", "w", "h"]
+      "required": ["buffer_id", "cell_id", "x", "y", "w"]
+    }
+  },
+  {
+    "name": "set_cell_dimensions",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and returns the cell to run mode — the same gesture as toggling off the table or chart in the UI; the response then carries result_discarded: true. The stored result/editor_result arrangement is kept for the next run. A cell with nothing to show reports view \"editor\". The response reports the cell's `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "editor_height": {
+          "anyOf": [
+            { "type": "number", "minimum": 56, "maximum": 2400 },
+            { "type": "string", "enum": ["auto"] },
+            { "type": "null" }
+          ],
+          "description": "Editor pane height in CSS pixels; for markdown, rendered content height. Null preserves, \"auto\" restores content-driven sizing. SQL editors are at least 72px, markdown at least 56px, and every pane at most 2400px. Use 86px for a polished markdown title."
+        },
+        "result_height": {
+          "anyOf": [
+            { "type": "number", "minimum": 100, "maximum": 2400 },
+            { "type": "string", "enum": ["auto"] },
+            { "type": "null" }
+          ],
+          "description": "Result/chart pane height in CSS pixels. Null preserves, \"auto\" restores result-driven sizing. Maximum 2400px."
+        },
+        "view": {
+          "anyOf": [
+            { "type": "string", "enum": ["editor", "result", "editor_result"] },
+            { "type": "null" }
+          ],
+          "description": "The cell's pane view. Null preserves. result and editor_result store the arrangement. editor DISCARDS the cell's result and snapshot and returns it to run mode (the toggle-off gesture); on a cell with nothing to show it is a no-op."
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "editor_height",
+        "result_height",
+        "view"
+      ]
     }
   },
   {
@@ -734,30 +786,6 @@
     }
   },
   {
-    "name": "set_cell_view_maximized",
-    "category": "free",
-    "surfaces": ["ai", "mcp"],
-    "mutatesNotebook": true,
-    "createsNotebook": false,
-    "description": "Toggle whether the cell's result view (chart OR table) fills the cell, hiding the editor. Applies to any cell that has a result — not just charts. For narrow cells, there is no split-view.  When this is false, the cell only shows the editor for narrow cells. For wide cells, it shows the editor and the result view if result exists.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "buffer_id": {
-          "type": "number"
-        },
-        "cell_id": {
-          "type": "string"
-        },
-        "value": {
-          "type": "boolean"
-        }
-      },
-      "required": ["buffer_id", "cell_id", "value"]
-    }
-  },
-  {
     "name": "apply_notebook_state",
     "category": "free",
     "surfaces": ["ai", "mcp"],
@@ -836,7 +864,7 @@
               "type": {
                 "type": ["string", "null"],
                 "enum": ["sql", "markdown", null],
-                "description": "Cell kind. \"markdown\" makes this a rendered prose cell — `value` is markdown source, and `mode`/`chart_config` MUST be null (rejected otherwise). It is never executed or auto-run. Cell kind is STICKY: null/omitted preserves an existing cell's kind (it does NOT reset markdown cells to SQL); new cells default to \"sql\"."
+                "description": "Cell kind. \"markdown\" makes this a rendered prose cell — `value` is markdown source, and `mode`/`chart_config` MUST be null (rejected otherwise). It is never executed or auto-run. Cell kind is FIXED for the life of a cell: null/omitted preserves an existing cell's kind, and sending the other kind for an existing id is rejected — delete the cell and add a new one instead. New cells default to \"sql\"."
               },
               "mode": {
                 "type": ["string", "null"],
@@ -853,11 +881,33 @@
                     "enum": ["1s", "5s", "10s", "30s", "1m"]
                   }
                 ],
-                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default."
+                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default. Ignored for markdown; keep it null."
               },
-              "is_view_maximized": {
-                "type": ["boolean", "null"],
-                "description": "Whether the cell's result view (chart OR table) fills the cell, hiding the editor. Null defaults to true when mode='draw'."
+              "editor_height": {
+                "anyOf": [
+                  { "type": "number", "minimum": 56, "maximum": 2400 },
+                  { "type": "string", "enum": ["auto"] },
+                  { "type": "null" }
+                ],
+                "description": "Editor pane height in CSS pixels; for markdown, rendered content height. Null preserves an existing setting (default auto for a new cell); \"auto\" restores content-driven sizing. SQL editors are at least 72px, markdown at least 56px, and every pane at most 2400px. Use 86px for a polished markdown title."
+              },
+              "result_height": {
+                "anyOf": [
+                  { "type": "number", "minimum": 100, "maximum": 2400 },
+                  { "type": "string", "enum": ["auto"] },
+                  { "type": "null" }
+                ],
+                "description": "Result/chart pane height in CSS pixels. Null preserves an existing setting (default auto for a new cell); \"auto\" restores result-driven sizing. Charts require at least 296px; tables 100px; maximum 2400px. Ignored for markdown; keep it null."
+              },
+              "view": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["editor", "result", "editor_result"]
+                  },
+                  { "type": "null" }
+                ],
+                "description": "The cell's pane view. Null preserves an existing setting. result and editor_result store the arrangement. editor DISCARDS an existing cell's result and snapshot and returns it to run mode (the toggle-off gesture; the cell is then listed in results_cleared); it cannot combine with mode \"draw\". New draw cells default to result; other new SQL cells default to editor_result but report editor until a result exists. Ignored for markdown; keep it null."
               },
               "chart_config": {
                 "type": ["object", "null"],
@@ -960,22 +1010,24 @@
               "grid": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Grid position when layout_mode='grid'. The 12 columns apply to width only (w ≤ 12). Rendered cell box is h*10 + (h-1)*20 px (do NOT estimate with h*30); a fixed 44px header leaves (h*30 - 64)px of content; chart plots pad a further ~40px top and ~56-86px bottom. EXAMPLES: markdown h:3 -> 70px box / 26px text (the minimum); markdown h:5 -> 130px / 86px text (a title); chart h:10 -> 280px / ~140px of plot.",
+                "description": "Grid position when layout_mode='grid'. The 12 columns apply to width only (w ≤ 12); height is derived from editor_height, result_height, and view.",
                 "properties": {
                   "x": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 11
                   },
                   "y": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 0
                   },
                   "w": {
-                    "type": "integer"
-                  },
-                  "h": {
-                    "type": "integer"
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
                   }
                 },
-                "required": ["x", "y", "w", "h"]
+                "required": ["x", "y", "w"]
               }
             },
             "required": [
@@ -986,7 +1038,9 @@
               "type",
               "mode",
               "auto_refresh",
-              "is_view_maximized",
+              "editor_height",
+              "result_height",
+              "view",
               "chart_config",
               "grid"
             ]
@@ -1056,7 +1110,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown reports `view` and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -1073,7 +1127,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of each notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the digest of user edits to the notebook since your last fetch (or session start). Use this to detect that the user changed something the agent might want to react to. Coalesced — multiple typing events on the same cell collapse to a single 'edited' entry.",
     "inputSchema": {
       "type": "object",
       "properties": {},

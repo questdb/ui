@@ -205,6 +205,25 @@ beforeEach(async () => {
 })
 
 describe("dispatchTool — notebook tools (happy path)", () => {
+  it("get_notebook_state preserves comparison operators in previews", async () => {
+    const value =
+      "SELECT * FROM fx_trades WHERE price < 1 AND quantity > 2 AND symbol <> 'A&B'"
+    live = mountLive(1, [cell("c", value)])
+
+    const res = await dispatchTool(
+      "get_notebook_state",
+      { buffer_id: 1 },
+      makeClient(),
+      noopStatus,
+    )
+
+    expect(res.is_error).toBeUndefined()
+    const parsed = JSON.parse(res.content) as {
+      cells: Array<{ preview: string }>
+    }
+    expect(parsed.cells[0].preview).toBe(value)
+  })
+
   it("create_notebook forwards label and returns the new buffer id", async () => {
     const client = makeClient()
     const res = await dispatchTool(
@@ -662,6 +681,90 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
   })
 
+  it("set_cell_dimensions maps strict null/auto values to semantic pane state", async () => {
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        mode: "draw",
+        topHeight: 200,
+        topResized: true,
+        bottomHeight: 350,
+        paneView: "result",
+      }),
+    ])
+
+    const res = await dispatchTool(
+      "set_cell_dimensions",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        editor_height: "auto",
+        result_height: 300,
+        view: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    expect(res.is_error).toBeUndefined()
+    expect(JSON.parse(res.content)).toEqual({ view: "result" })
+    expect(cellById(state, "c")).toMatchObject({
+      topHeight: 72,
+      topResized: false,
+      bottomHeight: 300,
+      bottomResized: true,
+      paneView: "result",
+    })
+  })
+
+  it("set_cell_dimensions reports the cell view", async () => {
+    const { state } = mountLive(1, [cell("c", "SELECT 1", { mode: "draw" })])
+    const res = await dispatchTool(
+      "set_cell_dimensions",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        editor_height: null,
+        result_height: null,
+        view: "editor_result",
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    expect(JSON.parse(res.content)).toEqual({ view: "editor_result" })
+    expect(cellById(state, "c")?.paneView).toBe("editor_result")
+  })
+
+  it("set_cell_layout returns the stored view with the new position", async () => {
+    const { state } = mountLive(
+      1,
+      [
+        cell("c", "SELECT 1", {
+          mode: "draw",
+          paneView: "editor_result",
+        }),
+      ],
+      {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "c", x: 0, y: 0, w: 6, h: 10 }],
+        },
+      },
+    )
+    const res = await dispatchTool(
+      "set_cell_layout",
+      { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
+      makeClient(),
+      noopStatus,
+    )
+
+    expect(JSON.parse(res.content)).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      view: "editor_result",
+    })
+    expect(state.parts.settings.layout?.[0].w).toBe(4)
+  })
+
   it("apply_notebook_state never synthesizes auto_refresh for draw cells", async () => {
     // Given a notebook with no auto-refresh default
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
@@ -1044,7 +1147,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "SELECT 1",
             mode: "draw",
             auto_refresh: "5s",
-            is_view_maximized: true,
+            view: "result",
             chart_config: {
               x_column: "ts",
               right_axis: null,
@@ -1056,7 +1159,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
                 },
               ],
             },
-            grid: { x: 0, y: 0, w: 6, h: 6 },
+            grid: { x: 0, y: 0, w: 6 },
           },
         ],
       },
@@ -1071,7 +1174,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       value: "SELECT 1",
       mode: "draw",
       autoRefresh: "5s",
-      isViewMaximized: true,
+      paneView: "result",
       chartConfig: {
         xColumn: "ts",
         queries: [
@@ -1730,7 +1833,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "SELECT * FROM trades",
             mode: "draw",
             auto_refresh: null,
-            is_view_maximized: null,
+            view: null,
             chart_config: {
               x_column: "ts",
               name: null,
@@ -1768,7 +1871,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "a",
             mode: null,
             auto_refresh: null,
-            is_view_maximized: null,
+            view: null,
             chart_config: null,
             grid: null,
           },
@@ -1886,7 +1989,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             value: "DROP TABLE victim",
             mode: "draw",
             auto_refresh: null,
-            is_view_maximized: null,
+            view: null,
             chart_config: { type: "line", x_column: "ts", y_columns: ["x"] },
             grid: null,
           },

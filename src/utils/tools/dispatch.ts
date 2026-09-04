@@ -8,7 +8,11 @@ import {
 } from "../questdbDocsRetrieval"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
-import type { CellMode, NotebookCell } from "../../store/notebook"
+import type {
+  AgentCellView,
+  CellMode,
+  NotebookCell,
+} from "../../store/notebook"
 import {
   MAX_CELL_NAME_LENGTH,
   exceedsCellNameLimit,
@@ -68,10 +72,10 @@ import {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
   setLayoutModeTransition,
   setNotebookAutoRefreshTransition,
   updateCellTransition,
@@ -83,6 +87,7 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/notebookUtils"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -96,7 +101,10 @@ class NotebookStateChangedError extends Error {}
 
 const runTransition = <T>(
   bufferId: number,
-  transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+  transition: (
+    parts: ViewParts,
+    resultStatusOf: CellResultStatusReader,
+  ) => NotebookTransitionResult<T>,
   signal?: AbortSignal,
   expectedActionSeq?: number,
 ): Promise<T> =>
@@ -109,7 +117,15 @@ const runTransition = <T>(
       ) {
         throw new NotebookStateChangedError()
       }
-      return ctrl.mutate(transition)
+      // The passive (Dexie) controller has no live hydration statuses;
+      // "unrequested" matches what the mounted notebook renders for a
+      // run-marked cell before its snapshot loads.
+      return ctrl.mutate((parts) =>
+        transition(
+          parts,
+          (cellId) => ctrl.readResultStatus?.(cellId) ?? "unrequested",
+        ),
+      )
     },
     signal,
   )
@@ -162,7 +178,10 @@ const routeNotebookTool = async <T>(
         is_error: true,
         content: JSON.stringify({
           error_code: e.code,
-          message: e.message,
+          message:
+            e.code === "validation"
+              ? `VALIDATION_ERROR: ${e.message}`
+              : e.message,
           hint: notebookErrorHint(e.code),
         }),
       }
@@ -498,7 +517,7 @@ export const dispatchTool = async (
           )
           return {
             ...res,
-            hint: "Duplicated in the background — the tab was not switched. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
+            hint: "Duplicated in the background — the tab was not switched. Run history is preserved; matching saved result snapshots copy best-effort in the background and hydrate when opened. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
           }
         })
       }
@@ -542,6 +561,7 @@ export const dispatchTool = async (
                   buffer_id,
                   get_full_content === true,
                   controller?.readRefreshState?.(),
+                  controller?.readResultStatus?.(cell_id) ?? "unrequested",
                 ),
               ),
             signal,
@@ -813,25 +833,48 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_layout": {
-        const { buffer_id, cell_id, x, y, w, h } =
+        const { buffer_id, cell_id, x, y, w } =
           (input as {
             buffer_id: number
             cell_id: string
             x: number
             y: number
             w: number
-            h: number
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
-            (parts) =>
+            (parts, resultStatusOf) =>
               setCellLayoutTransition(parts, buffer_id, cell_id, {
                 x,
                 y,
                 w,
-                h,
+                resultStatus: resultStatusOf(cell_id),
+              }),
+            signal,
+          ),
+        )
+      }
+      case "set_cell_dimensions": {
+        const { buffer_id, cell_id, editor_height, result_height, view } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            editor_height: number | "auto" | null
+            result_height: number | "auto" | null
+            view: AgentCellView | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          runTransition(
+            buffer_id,
+            (parts, resultStatusOf) =>
+              setCellDimensionsTransition(parts, buffer_id, cell_id, {
+                editorHeight: editor_height,
+                resultHeight: result_height,
+                view,
+                resultStatus: resultStatusOf(cell_id),
               }),
             signal,
           ),
@@ -1035,23 +1078,6 @@ export const dispatchTool = async (
                 value,
                 reset_cell_overrides === true,
               ),
-            signal,
-          ),
-        )
-      }
-      case "set_cell_view_maximized": {
-        const { buffer_id, cell_id, value } =
-          (input as {
-            buffer_id: number
-            cell_id: string
-            value: boolean
-          }) || {}
-        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
-        return routeNotebookTool(() =>
-          runTransition(
-            buffer_id,
-            (parts) =>
-              setCellViewMaximizedTransition(parts, buffer_id, cell_id, value),
             signal,
           ),
         )

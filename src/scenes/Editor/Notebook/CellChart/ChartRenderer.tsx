@@ -2,13 +2,17 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
 import ReactECharts from "echarts-for-react/lib/core"
 import type { EChartsOption } from "echarts"
 import { useTheme } from "styled-components"
 import { echarts } from "./echartsSetup"
+import { withZoomDensity } from "./buildEchartsOption"
+import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
 import { createQuestdbTheme } from "./questdbTheme"
 import { useNotebookBufferId } from "../NotebookProvider"
 import {
@@ -93,16 +97,38 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     const reactEchartsRef = useRef<ReactECharts | null>(null)
     const wrapperRef = useRef<HTMLDivElement | null>(null)
     const zoomWindowRef = useRef(zoomWindow)
+    const [zoomDensity, setZoomDensity] = useState<ChartZoomDensity | null>(
+      null,
+    )
+    const measuredWidthRef = useRef(0)
+    const optionRef = useRef(option)
+    optionRef.current = option
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
     const animateEntryRef = useRef(
       animateEntry && shouldAnimateChartEntry(bufferId),
     )
     const firstInstanceDoneRef = useRef(false)
+    const onZoomChangeRef = useRef(onZoomChange)
 
     useEffect(() => {
       zoomWindowRef.current = zoomWindow
     }, [zoomWindow])
+
+    useEffect(() => {
+      onZoomChangeRef.current = onZoomChange
+    }, [onZoomChange])
+
+    const measureDensity = useCallback((width: number) => {
+      if (width <= 0) return
+      measuredWidthRef.current = width
+      const next = chartZoomDensity(optionRef.current, width)
+      setZoomDensity((previous) =>
+        previous?.slider === next.slider && previous.wheel === next.wheel
+          ? previous
+          : next,
+      )
+    }, [])
 
     // Capture-phase wheel listener must intercept BEFORE ECharts' inner
     // listeners so the page scrolls instead of ECharts preventDefaulting.
@@ -128,7 +154,9 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
 
       const observer = new ResizeObserver((entries) => {
         const box = entries[0]?.contentRect
-        if (box) resizeTo(box.width, box.height)
+        if (!box) return
+        resizeTo(box.width, box.height)
+        measureDensity(box.width)
       })
       observer.observe(wrapper)
 
@@ -145,7 +173,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         observer.disconnect()
         document.removeEventListener("visibilitychange", handleVisibility)
       }
-    }, [])
+    }, [measureDensity])
 
     useImperativeHandle(
       ref,
@@ -169,11 +197,19 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         firstInstanceDoneRef.current = true
         const zoom = zoomWindowRef.current
         if (zoom.start > 0 || zoom.end < 100) {
-          instance.dispatchAction({
-            type: "dataZoom",
-            start: zoom.start,
-            end: zoom.end,
-          })
+          const mounted = instance.getOption() as { dataZoom?: unknown[] }
+          if (Array.isArray(mounted.dataZoom) && mounted.dataZoom.length > 0) {
+            instance.dispatchAction({
+              type: "dataZoom",
+              start: zoom.start,
+              end: zoom.end,
+            })
+          } else {
+            // The remounted option dropped its dataZoom, so the saved window
+            // cannot be restored: report the zoom as gone, or the owner's
+            // Reset button keeps pointing at a zoom that no longer exists.
+            onZoomChangeRef.current?.(0, 100)
+          }
         }
         if (animateEntryRef.current) {
           const onFinished = () => {
@@ -186,14 +222,38 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       [bufferId],
     )
 
-    const key = useMemo(() => structuralKey(option), [option])
+    // The chart mounts once the wrapper is measured, so the first instance
+    // already carries the right slider decision instead of remounting for it.
+    useLayoutEffect(() => {
+      const width = wrapperRef.current?.getBoundingClientRect().width
+      if (width) measureDensity(width)
+    }, [measureDensity, option])
+
+    const effectiveDensity = useMemo(
+      () =>
+        zoomDensity === null
+          ? null
+          : chartZoomDensity(option, measuredWidthRef.current),
+      [option, zoomDensity],
+    )
+
+    const optionToDraw = useMemo(
+      () =>
+        effectiveDensity === null
+          ? option
+          : withZoomDensity(option, effectiveDensity),
+      [effectiveDensity, option],
+    )
+    const key = useMemo(() => structuralKey(optionToDraw), [optionToDraw])
 
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
     const renderOption = useMemo(
       () =>
-        suppressEntryAnimation ? { ...option, animationDuration: 0 } : option,
-      [option, suppressEntryAnimation],
+        suppressEntryAnimation
+          ? { ...optionToDraw, animationDuration: 0 }
+          : optionToDraw,
+      [optionToDraw, suppressEntryAnimation],
     )
 
     const events = useMemo(() => {
@@ -220,20 +280,22 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           height: typeof height === "number" ? `${height}px` : height,
         }}
       >
-        <ReactECharts
-          key={`${theme.mode}:${key}`}
-          ref={reactEchartsRef}
-          echarts={echarts}
-          option={renderOption}
-          theme={chartTheme}
-          notMerge={false}
-          lazyUpdate
-          autoResize={false}
-          onEvents={events}
-          onChartReady={handleChartReady}
-          style={{ height: "100%", width: "100%" }}
-          opts={{ renderer: "canvas" }}
-        />
+        {effectiveDensity !== null && (
+          <ReactECharts
+            key={`${theme.mode}:${key}`}
+            ref={reactEchartsRef}
+            echarts={echarts}
+            option={renderOption}
+            theme={chartTheme}
+            notMerge={false}
+            lazyUpdate
+            autoResize={false}
+            onEvents={events}
+            onChartReady={handleChartReady}
+            style={{ height: "100%", width: "100%" }}
+            opts={{ renderer: "canvas" }}
+          />
+        )}
       </div>
     )
   },

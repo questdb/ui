@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react"
+import { clampPaneHeight } from "../notebookUtils"
 
 export type ResizeController = {
   /** Live drag value that should override any persisted height. Null when idle. */
@@ -19,14 +20,14 @@ export const useCellResize = (
   const [liveHeight, setLiveHeight] = useState<number | null>(null)
 
   const resizeLive = useCallback(
-    (height: number) => setLiveHeight(Math.max(minHeight, height)),
+    (height: number) => setLiveHeight(clampPaneHeight(minHeight, height)),
     [minHeight],
   )
 
   const resizeEnd = useCallback(
     (height: number) => {
       setLiveHeight(null)
-      commit(Math.max(minHeight, height))
+      commit(clampPaneHeight(minHeight, height))
     },
     [minHeight, commit],
   )

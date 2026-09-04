@@ -3,6 +3,8 @@ import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
 import styled from "styled-components"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { Button } from "../../../components/Button"
+import { IconButton } from "../../../components/IconButton"
+import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
@@ -57,6 +59,13 @@ const ChartArea = styled.div`
   position: relative;
   flex: 1;
   min-height: 0;
+`
+
+const ChartActions = styled.div`
+  position: absolute;
+  z-index: 1;
+  top: 0.8rem;
+  right: 0.8rem;
 `
 
 const TruncationNotice = styled.div`
@@ -188,6 +197,12 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
     setZoomEnd(end)
   }, [])
 
+  const handleResetZoom = useCallback(() => {
+    chartRendererRef.current?.resetZoom()
+  }, [])
+
+  const isZoomed = zoomStart > 0 || zoomEnd < 100
+
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {
     emptyMessage = "This result has no rows to plot."
@@ -272,6 +287,20 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
           </TruncationNotice>
         )}
         <ChartArea>
+          {isZoomed && (
+            <ChartActions>
+              <IconButton
+                label="Reset zoom"
+                tooltip="Reset zoom"
+                variant="secondary"
+                size="sm"
+                dataHook="result-chart-reset-zoom"
+                onClick={handleResetZoom}
+              >
+                <Reset size={16} />
+              </IconButton>
+            </ChartActions>
+          )}
           <ChartRenderer
             ref={chartRendererRef}
             option={option}
