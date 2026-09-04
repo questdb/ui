@@ -42,6 +42,14 @@ export type AgentCellView = "editor" | "result" | "editor_result"
 export const isAgentCellView = (value: unknown): value is AgentCellView =>
   value === "editor" || value === "result" || value === "editor_result"
 
+// The storable pane arrangements. "editor" exists only on the agent wire: as a
+// write it discards the result (the toggle-off gesture), as a read it is the
+// derived presentation of a cell with nothing to show.
+export type CellPaneView = "result" | "editor_result"
+
+export const isCellPaneView = (value: unknown): value is CellPaneView =>
+  value === "result" || value === "editor_result"
+
 export type NotebookCell = {
   id: string
   position: number
@@ -58,9 +66,9 @@ export type NotebookCell = {
   mode?: CellMode
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
-  // Stored pane view: editor, result, or editor_result. A cell without a
-  // result shows only the editor until one exists; that never rewrites it.
-  paneView?: AgentCellView
+  // Stored pane arrangement for a cell with a result. A cell without one
+  // shows only the editor; that never rewrites it.
+  paneView?: CellPaneView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }

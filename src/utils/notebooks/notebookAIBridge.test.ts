@@ -489,9 +489,24 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       getMaximizedCellId: () => currentMaximizedId,
       flushChartSnapshots: () => Promise.resolve(),
       readRefreshState: () => new Map(),
+      readResultStatus: () => "unrequested" as const,
     }
     return { live, applied }
   }
+
+  it("reads a cell's snapshot-load status through the live actions", () => {
+    // Given a live controller whose provider reports per-cell statuses
+    const { live } = makeLiveActions([cellA])
+    const controller = createNotebookController(1, {
+      current: {
+        ...live,
+        readResultStatus: (id) => (id === "a" ? "loaded" : "unrequested"),
+      },
+    })
+    // Then the controller delegates mount-independently
+    expect(controller.readResultStatus?.("a")).toBe("loaded")
+    expect(controller.readResultStatus?.("zzz")).toBe("unrequested")
+  })
 
   it("clears a provided maximized id that does not survive the apply", async () => {
     const { live, applied } = makeLiveActions([cellA, cellB])
@@ -553,6 +568,7 @@ describe("createNotebookController — live runCell supersession", () => {
     getMaximizedCellId: () => null,
     flushChartSnapshots: () => Promise.resolve(),
     readRefreshState: () => new Map(),
+    readResultStatus: () => "unrequested" as const,
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({

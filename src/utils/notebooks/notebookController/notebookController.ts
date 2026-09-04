@@ -8,7 +8,10 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
-import type { AgentHeightValue } from "../../../scenes/Editor/Notebook/notebookUtils"
+import type {
+  AgentHeightValue,
+  CellResultStatus,
+} from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -81,6 +84,10 @@ export type NotebookController = {
   mutate: NotebookMutate
   readView: () => Promise<NotebookViewState>
   readRefreshState?: () => ReadonlyMap<string, CellRefreshView>
+  // Live-only, like readRefreshState: the snapshot-load status of one cell,
+  // read off the provider's hydration engine (mount-independent). The passive
+  // route omits it; callers fall back to "unrequested".
+  readResultStatus?: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
     signal?: AbortSignal,
@@ -95,6 +102,7 @@ export type NotebookController = {
 // a deleted cell via its cleanup list); the reads are synchronous ref snapshots.
 export type NotebookControllerActions = {
   readRefreshState: () => ReadonlyMap<string, CellRefreshView>
+  readResultStatus: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
     sql?: string,
@@ -164,6 +172,8 @@ export const createNotebookController = (
           liveActionsRef.current.getMaximizedCellId() ?? undefined,
       }),
     readRefreshState: () => liveActionsRef.current.readRefreshState(),
+    readResultStatus: (cellId) =>
+      liveActionsRef.current.readResultStatus(cellId),
     // runCell is not a transition, so it does not inherit requireCellIn — guard
     // it here, matching the passive route's requireCellIn in runHeadlessCell.
     runCell: async (cellId, signal, sql, gate) => {

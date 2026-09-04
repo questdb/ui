@@ -51,8 +51,11 @@ const Divider = styled.div`
   background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
-// Match the schema toolbar's auto-refresh toggle dimensions and interaction,
-// but keep editor visibility neutral rather than giving it an accent state.
+// Match the schema toolbar's auto-refresh toggle dimensions and interaction.
+// The pressed state wears the same glass lens as the active segments and
+// tabs (SegmentedControl's GlassSelection), so one cue marks every active
+// control in the header. The transparent border reserves the lens's box so
+// toggling never shifts layout.
 const EditorVisibilityToggle = styled(PrimaryToggleButton)`
   &&:not(:disabled) {
     width: auto;
@@ -60,12 +63,20 @@ const EditorVisibilityToggle = styled(PrimaryToggleButton)`
     height: 3rem;
     min-height: 3rem;
     color: ${({ theme }) => theme.color.contentSecondary};
+    border: 1px solid ${({ theme }) => theme.color.transparent};
+    border-bottom-width: 2px;
+    border-radius: 0.4rem;
   }
 
   &&[data-selected="true"],
   &&[data-selected="true"]:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.interactionNeutral};
+    background: ${({ theme }) => theme.color.glassSurface};
     color: ${({ theme }) => theme.color.contentPrimary};
+    border-color: ${({ theme }) => theme.color.glassBorder};
+    border-bottom-color: ${({ theme }) => theme.color.glassEdge};
+    box-shadow: 0 3px 9px ${({ theme }) => theme.color.shadowSoft};
+    backdrop-filter: blur(6px) saturate(145%);
+    -webkit-backdrop-filter: blur(5px) saturate(150%);
   }
 `
 
@@ -93,7 +104,6 @@ export const CellViewToggle: React.FC<Props> = ({
   const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
   const bufferId = useNotebookBufferId()
   const resultOnly = paneLayout === "result"
-  const resultHidden = paneLayout === "editor"
 
   // Clicking the active segment toggles it off, wiping the result back to the
   // empty "none" state. Switching between grid and chart re-renders the same
@@ -123,7 +133,6 @@ export const CellViewToggle: React.FC<Props> = ({
       return
     }
     setCellMode(cellId, "run")
-    if (resultHidden) setCellPaneView(cellId, "editor_result")
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -187,7 +196,7 @@ export const CellViewToggle: React.FC<Props> = ({
       <Divider />
       <Tooltip content={resultOnly ? "Show editor" : "Hide editor"}>
         <EditorVisibilityToggle
-          aria-label={resultOnly ? "Show editor" : "Hide editor"}
+          aria-label="Editor"
           onClick={handleEditorVisibility}
           selected={!resultOnly}
         >

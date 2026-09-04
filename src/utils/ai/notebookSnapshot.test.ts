@@ -218,10 +218,11 @@ describe("buildSnapshot", () => {
       // Agent layout exposes placement/width only; height is controlled through
       // semantic pane dimensions and derived internally.
       expect(gridSnap.cells[0].grid).toEqual({ x: 0, y: 0, w: 6 })
+      // A never-run cell presents only its editor, so the view reads "editor".
       expect(gridSnap.cells[0]).toMatchObject({
         editor_height: "auto",
         result_height: "auto",
-        view: "editor_result",
+        view: "editor",
       })
     } else {
       throw new Error("expected ok snapshots")

@@ -102,6 +102,7 @@ export const CellToolbar: React.FC<Props> = ({
     setCellRefresh,
     setCellPaneView,
     setCellMode,
+    clearCellResult,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
 
@@ -115,7 +116,6 @@ export const CellToolbar: React.FC<Props> = ({
   const isGridView = view === "grid"
   const isNoneView = view === "none"
   const resultOnly = paneLayout === "result"
-  const sqlShown = paneLayout === "editor"
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
   // engine would ignore — same gate the inline selector applies.
@@ -125,7 +125,6 @@ export const CellToolbar: React.FC<Props> = ({
   const moreActionsTooltip = useTriggerTooltip()
 
   const {
-    showViewSql,
     showViewTable,
     showViewChart,
     showEditorToggleItem,
@@ -143,22 +142,15 @@ export const CellToolbar: React.FC<Props> = ({
     tier: toolbarTier ?? "compact",
     view,
     isMarkdown,
-    sqlShown,
     chartZoomed,
     isGridMode,
     cellIndex,
     totalCells,
   })
 
-  // Show the editor, keeping the result data on the cell.
-  const handleViewSql = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "sql",
-      method: "menu",
-    })
-    signalUserEdit(bufferId)
-    setCellPaneView(cellId, "editor")
-  }
+  // Unchecking the active table wipes the result — the same gesture as
+  // toggling off the wide tiers' Table segment. A chart transfers its data to
+  // the grid (no re-query) when switching.
   const handleViewTable = () => {
     if (isRunning) return
     signalUserEdit(bufferId)
@@ -167,28 +159,25 @@ export const CellToolbar: React.FC<Props> = ({
       return
     }
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "grid",
+      to: isGridView ? "none" : "grid",
       method: "menu",
     })
-    // A chart transfers its data to the grid (no re-query). A hidden result
-    // comes back as a split, like the inline editor toggle of the wider tiers.
-    if (isChartView) setCellMode(cellId, "run")
-    if (sqlShown) setCellPaneView(cellId, "editor_result")
+    if (isGridView) {
+      clearCellResult(cellId)
+      return
+    }
+    setCellMode(cellId, "run")
   }
+  // The DRAW event toggles: it enters draw, or exits and wipes when the chart
+  // is already active — matching the wide tiers' Chart segment.
   const handleViewChart = () => {
     if (isRunning) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "chart",
+      to: isChartView ? "none" : "chart",
       method: "menu",
     })
     signalUserEdit(bufferId)
-    if (isNoneView || isGridView) {
-      // Entering draw can be refused (non-DQL SQL); the draw handler reveals a
-      // hidden result only once the draw actually takes.
-      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
-      return
-    }
-    setCellPaneView(cellId, "editor_result")
+    eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
   }
   const handleToggleEditor = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
@@ -305,45 +294,52 @@ export const CellToolbar: React.FC<Props> = ({
           </Tooltip>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" sideOffset={4}>
-              {showViewSql && (
-                <DropdownMenu.Item
-                  onSelect={handleViewSql}
-                  icon={<FileSqlIcon size={16} />}
-                >
-                  View editor
-                </DropdownMenu.Item>
-              )}
-              {showViewTable && (
-                <DropdownMenu.Item
-                  onSelect={handleViewTable}
-                  disabled={isRunning}
-                  icon={
-                    isNoneView ? (
-                      <PlayIcon size={16} />
-                    ) : (
-                      <TableIcon size={16} />
-                    )
-                  }
-                >
-                  {isNoneView ? "Run" : "View table"}
-                </DropdownMenu.Item>
-              )}
-              {showViewChart && (
-                <DropdownMenu.Item
-                  onSelect={handleViewChart}
-                  disabled={isRunning}
-                  icon={<ChartLineIcon size={16} />}
-                >
-                  {isNoneView ? "Draw" : "View chart"}
-                </DropdownMenu.Item>
-              )}
+              {showViewTable &&
+                (isNoneView ? (
+                  <DropdownMenu.Item
+                    onSelect={handleViewTable}
+                    disabled={isRunning}
+                    icon={<PlayIcon size={16} />}
+                  >
+                    Run
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.CheckboxItem
+                    checked={isGridView}
+                    onSelect={handleViewTable}
+                    disabled={isRunning}
+                    icon={<TableIcon size={16} />}
+                  >
+                    View table
+                  </DropdownMenu.CheckboxItem>
+                ))}
+              {showViewChart &&
+                (isNoneView ? (
+                  <DropdownMenu.Item
+                    onSelect={handleViewChart}
+                    disabled={isRunning}
+                    icon={<ChartLineIcon size={16} />}
+                  >
+                    Draw
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.CheckboxItem
+                    checked={isChartView}
+                    onSelect={handleViewChart}
+                    disabled={isRunning}
+                    icon={<ChartLineIcon size={16} />}
+                  >
+                    View chart
+                  </DropdownMenu.CheckboxItem>
+                ))}
               {showEditorToggleItem && (
-                <DropdownMenu.Item
+                <DropdownMenu.CheckboxItem
+                  checked={!resultOnly}
                   onSelect={handleToggleEditor}
                   icon={<FileSqlIcon size={16} />}
                 >
-                  {resultOnly ? "Show editor" : "Hide editor"}
-                </DropdownMenu.Item>
+                  Show editor
+                </DropdownMenu.CheckboxItem>
               )}
 
               {groupAHasItems && <DropdownMenu.Divider />}

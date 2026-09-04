@@ -241,7 +241,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Get full details of a cell (value, kind via `type`, editor_height/result_height, view, chart config, last-run status + trimmed error). Height values are fixed CSS pixels or \"auto\". `view` is the cell's pane view for SQL/draw cells: editor, result, or editor_result. A cell without an available result shows only the editor until one exists; that never rewrites `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
+    "description": "Get full details of a cell (value, kind via `type`, editor_height/result_height, view, chart config, last-run status + trimmed error). Height values are fixed CSS pixels or \"auto\". `view` reports what a SQL/draw cell presents: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `type:\"markdown\"` marks a prose cell whose `value` is markdown source; SQL cells omit `type`. Never includes query result data. By default the value is capped at 4 KB; a capped response carries `truncated: true` and `full_length`. A truncated value is NOT the cell's real content — NEVER write it back (update_cell / apply_notebook_state value); re-read with get_full_content: true first, or keep the cell with preserve_value: true.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -266,7 +266,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Full structural snapshot of a notebook (layout, cells with previews, semantic pane dimensions, kind via `type`, last-run statuses). Cell `grid` contains x/y/w only; height is derived from editor_height, result_height, and view. `view` is the cell's pane view for SQL/draw cells: editor, result, or editor_result. A cell without an available result shows only the editor until one exists; that never rewrites `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `auto_refresh_default` is omitted when the notebook has no configured default. `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
+    "description": "Full structural snapshot of a notebook (layout, cells with previews, semantic pane dimensions, kind via `type`, last-run statuses). Cell `grid` contains x/y/w only; height is derived from editor_height, result_height, and view. `view` reports what a SQL/draw cell presents: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown has no pane-view state: it reports `view` and `result_height` as null. Other LIVE-ONLY fields are `refreshing: true`, `last_refresh_error`, and `auto_refresh_blocked: \"contains_write\"`; absence never means \"not refreshing\" or \"not blocked\". `last_run_status` is unrelated to refresh state: it stays the outcome of the last completed RUN. `auto_refresh_default` is omitted when the notebook has no configured default. `type:\"markdown\"` marks a prose cell; SQL cells omit `type`. No cell data values; no columns/rows/count. Previews are capped at 120 chars — cells cut carry `preview_truncated: true` + `full_length`; a preview is never a cell's real content to write back.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -505,7 +505,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. A cell without an available result shows only the editor until one exists; that never rewrites `view`. The response reports the cell's `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
+    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and returns the cell to run mode — the same gesture as toggling off the table or chart in the UI; the response then carries result_discarded: true. The stored result/editor_result arrangement is kept for the next run. A cell with nothing to show reports view \"editor\". The response reports the cell's `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -537,7 +537,7 @@
             { "type": "string", "enum": ["editor", "result", "editor_result"] },
             { "type": "null" }
           ],
-          "description": "The cell's pane view: editor, result, or editor_result. Null preserves. A cell without an available result shows only the editor until one exists; that never rewrites view."
+          "description": "The cell's pane view. Null preserves. result and editor_result store the arrangement. editor DISCARDS the cell's result and snapshot and returns it to run mode (the toggle-off gesture); on a cell with nothing to show it is a no-op."
         }
       },
       "required": [
@@ -907,7 +907,7 @@
                   },
                   { "type": "null" }
                 ],
-                "description": "The cell's pane view: editor, result, or editor_result. Null preserves an existing setting. New draw cells default to result; other new SQL cells default to editor_result but display editor until a result exists. An unavailable result shows only the editor until one exists; that never rewrites view. Ignored for markdown; keep it null."
+                "description": "The cell's pane view. Null preserves an existing setting. result and editor_result store the arrangement. editor DISCARDS an existing cell's result and snapshot and returns it to run mode (the toggle-off gesture; the cell is then listed in results_cleared); it cannot combine with mode \"draw\". New draw cells default to result; other new SQL cells default to editor_result but report editor until a result exists. Ignored for markdown; keep it null."
               },
               "chart_config": {
                 "type": ["object", "null"],
@@ -1110,7 +1110,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: editor, result, or editor_result; a cell without a result shows only the editor until one exists. Markdown reports `view` and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown reports `view` and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
       "properties": {

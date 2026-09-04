@@ -104,10 +104,15 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       animateEntry && shouldAnimateChartEntry(bufferId),
     )
     const firstInstanceDoneRef = useRef(false)
+    const onZoomChangeRef = useRef(onZoomChange)
 
     useEffect(() => {
       zoomWindowRef.current = zoomWindow
     }, [zoomWindow])
+
+    useEffect(() => {
+      onZoomChangeRef.current = onZoomChange
+    }, [onZoomChange])
 
     // Capture-phase wheel listener must intercept BEFORE ECharts' inner
     // listeners so the page scrolls instead of ECharts preventDefaulting.
@@ -176,11 +181,19 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         firstInstanceDoneRef.current = true
         const zoom = zoomWindowRef.current
         if (zoom.start > 0 || zoom.end < 100) {
-          instance.dispatchAction({
-            type: "dataZoom",
-            start: zoom.start,
-            end: zoom.end,
-          })
+          const mounted = instance.getOption() as { dataZoom?: unknown[] }
+          if (Array.isArray(mounted.dataZoom) && mounted.dataZoom.length > 0) {
+            instance.dispatchAction({
+              type: "dataZoom",
+              start: zoom.start,
+              end: zoom.end,
+            })
+          } else {
+            // The remounted option dropped its dataZoom, so the saved window
+            // cannot be restored: report the zoom as gone, or the owner's
+            // Reset button keeps pointing at a zoom that no longer exists.
+            onZoomChangeRef.current?.(0, 100)
+          }
         }
         if (animateEntryRef.current) {
           const onFinished = () => {

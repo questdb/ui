@@ -43,13 +43,10 @@ import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
   paneHeightsFromGridRows,
-  computeCellGridH,
-  computeCellMaxGridH,
-  computeCellMinGridH,
+  computeCellGridBounds,
   generateDefaultLayout as generateDefaultLayoutPure,
   isExpectingResult,
   mergeCellLayout,
-  resolveCellPaneLayout,
   NOTEBOOK_GRID_COLS,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
@@ -453,30 +450,13 @@ const GridLayout: React.FC = () => {
         cell,
         resultHydration?.statusOf(cell.id) ?? "unrequested",
       )
-      const paneLayout = resolveCellPaneLayout(cell, expectingResult)
-      const minH = computeCellMinGridH(
-        cell,
-        ROW_HEIGHT,
-        GRID_MARGIN_Y,
-        expectingResult,
-        paneLayout,
-      )
       return {
         ...item,
-        h: computeCellGridH(
+        ...computeCellGridBounds(
           cell,
           ROW_HEIGHT,
           GRID_MARGIN_Y,
           expectingResult,
-          paneLayout,
-        ),
-        minH,
-        maxH: computeCellMaxGridH(
-          cell,
-          ROW_HEIGHT,
-          GRID_MARGIN_Y,
-          expectingResult,
-          paneLayout,
         ),
       }
     })

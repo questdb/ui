@@ -57,9 +57,14 @@ export const snapChartWidth = (px: number): number =>
     Math.round(px / CHART_WIDTH_STEP_PX) * CHART_WIDTH_STEP_PX,
   )
 
-export const needsZoomSlider = (
+// Wheel zoom arms while marks are merely tight — this many times the readable
+// floor — since it costs no plot space; the slider waits for the floor itself.
+export const WHEEL_ZOOM_HEADROOM = 3
+
+const zoomNeededAt = (
   option: EChartsOption,
   containerWidthPx: number,
+  headroom: number,
 ): boolean => {
   const plotWidth = plotWidthOf(option, containerWidthPx)
   if (plotWidth <= 0) return false
@@ -74,7 +79,7 @@ export const needsZoomSlider = (
     Math.max(categorySlots, maxDataLength(list))
 
   const tooDense = (slots: number, fillRatio: number, minPx: number) =>
-    slots > 0 && (plotWidth / slots) * fillRatio < minPx
+    slots > 0 && (plotWidth / slots) * fillRatio < minPx * headroom
 
   return (
     (bars.length > 0 &&
@@ -84,3 +89,13 @@ export const needsZoomSlider = (
     tooDense(maxDataLength(points), 1, MIN_POINT_PX)
   )
 }
+
+export const needsZoomSlider = (
+  option: EChartsOption,
+  containerWidthPx: number,
+): boolean => zoomNeededAt(option, containerWidthPx, 1)
+
+export const needsWheelZoom = (
+  option: EChartsOption,
+  containerWidthPx: number,
+): boolean => zoomNeededAt(option, containerWidthPx, WHEEL_ZOOM_HEADROOM)

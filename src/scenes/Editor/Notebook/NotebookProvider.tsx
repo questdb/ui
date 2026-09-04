@@ -12,7 +12,7 @@ import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
-  AgentCellView,
+  CellPaneView,
   CellResult,
   NotebookCell,
   NotebookVariable,
@@ -129,7 +129,7 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
-  setCellPaneView: (cellId: string, view: AgentCellView) => void
+  setCellPaneView: (cellId: string, view: CellPaneView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
   getCellsSnapshot: () => NotebookCell[]
@@ -170,6 +170,7 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
   readRefreshState: () => new Map(),
+  readResultStatus: () => "unrequested",
   flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
     run({
@@ -769,7 +770,7 @@ export const NotebookProvider: React.FC<{
   )
 
   const setCellPaneView = useCallback(
-    (cellId: string, view: AgentCellView) =>
+    (cellId: string, view: CellPaneView) =>
       silently(() =>
         applyTransition((parts) =>
           setCellPaneViewTransition(parts, bufferId, cellId, view),
@@ -836,6 +837,7 @@ export const NotebookProvider: React.FC<{
     getSettings: () => ({ ...settingsRef.current }),
     getMaximizedCellId: () => maximizedCellIdRef.current,
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
+    readResultStatus: (cellId) => resultHydration.statusOf(cellId),
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
     applyTransition,
   }

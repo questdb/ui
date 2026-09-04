@@ -8,8 +8,10 @@ import {
 import {
   MIN_MARK_PX,
   MIN_POINT_PX,
+  needsWheelZoom,
   needsZoomSlider,
   snapChartWidth,
+  WHEEL_ZOOM_HEADROOM,
 } from "./chartDensity"
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
@@ -129,22 +131,68 @@ describe("needsZoomSlider", () => {
   })
 })
 
+describe("needsWheelZoom", () => {
+  it("arms the wheel at the headroom multiple of the readable floor", () => {
+    // Given the most single bars that stay at the wheel threshold (3× the floor)
+    const limit = readableSlots(
+      singleBarFill,
+      MIN_MARK_PX * WHEEL_ZOOM_HEADROOM,
+    )
+    // Then that many need no wheel and one more does
+    expect(needsWheelZoom(bars(limit, 1), CONTAINER_PX)).toBe(false)
+    expect(needsWheelZoom(bars(limit + 1, 1), CONTAINER_PX)).toBe(true)
+  })
+
+  it("offers the wheel without the slider while marks are tight but readable", () => {
+    // Given a line denser than the wheel threshold but sparser than the floor
+    const points = Math.floor(PLOT_PX / 2)
+    // Then the invisible wheel zoom arms while the space-costing slider waits
+    expect(needsWheelZoom(line(points), CONTAINER_PX)).toBe(true)
+    expect(needsZoomSlider(line(points), CONTAINER_PX)).toBe(false)
+  })
+})
+
+type ZoomComponents = [
+  { type: string; disabled: boolean },
+  { type: string; show: boolean },
+]
+
 describe("withZoomSlider", () => {
-  it("leaves a sparse chart without any zoom", () => {
+  it("embeds both zoom components inert on a sparse chart", () => {
     // Given a sparse chart
     const option = withZoomSlider(bars(15, 1), CONTAINER_PX)
-    // Then neither the slider nor the wheel zoom exists and the grid keeps its margin
-    expect(option.dataZoom).toBeUndefined()
+    // Then the components exist but neither is active, so density changes can
+    // never alter the option's structure, and the grid keeps its margin
+    const [inside, slider] = option.dataZoom as ZoomComponents
+    expect(inside).toMatchObject({ type: "inside", disabled: true })
+    expect(slider).toMatchObject({ type: "slider", show: false })
     expect((option.grid as { bottom: number }).bottom).toBe(56)
   })
 
-  it("adds the wheel zoom and the slider together on a dense chart", () => {
+  it("activates the wheel alone on a tight chart", () => {
+    const option = withZoomSlider(line(Math.floor(PLOT_PX / 2)), CONTAINER_PX)
+
+    const [inside, slider] = option.dataZoom as ZoomComponents
+    expect(inside).toMatchObject({ disabled: false })
+    expect(slider).toMatchObject({ show: false })
+    expect((option.grid as { bottom: number }).bottom).toBe(56)
+  })
+
+  it("activates the wheel and the slider together on a dense chart", () => {
     // Given a dense chart
     const option = withZoomSlider(line(PLOT_PX * 2), CONTAINER_PX)
-    // Then both zooms appear and the grid grows at the bottom
-    const zooms = option.dataZoom as { type: string }[]
-    expect(zooms.map((z) => z.type)).toEqual(["inside", "slider"])
+    // Then both zooms are active and the grid grows at the bottom
+    const [inside, slider] = option.dataZoom as ZoomComponents
+    expect(inside).toMatchObject({ type: "inside", disabled: false })
+    expect(slider).toMatchObject({ type: "slider", show: true })
     expect((option.grid as { bottom: number }).bottom).toBe(86)
+  })
+
+  it("leaves an axis-less chart without zoom components", () => {
+    // Given a pie option (no xAxis to zoom)
+    const option = withZoomSlider({ series: [{ type: "pie" }] }, CONTAINER_PX)
+
+    expect(option.dataZoom).toBeUndefined()
   })
 })
 

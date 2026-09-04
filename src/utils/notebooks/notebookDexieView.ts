@@ -13,7 +13,7 @@ import type {
   NotebookSettings,
   NotebookViewState,
 } from "../../store/notebook"
-import { isAgentCellView } from "../../store/notebook"
+import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 
@@ -28,7 +28,8 @@ type NotebookBufferMeta =
   | { kind: "not_a_notebook" }
 
 // Main persisted `isViewMaximized`. Materialize the stored pane view and drop
-// the legacy key from the runtime view.
+// the legacy key from the runtime view. A stored "editor" predates the
+// discard-on-editor model and normalizes to the split default.
 const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
   const raw = cell as NotebookCell & Record<string, unknown>
   if (cell.type === "markdown") {
@@ -37,7 +38,7 @@ const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
     delete next.isViewMaximized
     return next as NotebookCell
   }
-  const paneView = isAgentCellView(raw.paneView)
+  const paneView = isCellPaneView(raw.paneView)
     ? raw.paneView
     : raw.isViewMaximized === true
       ? "result"

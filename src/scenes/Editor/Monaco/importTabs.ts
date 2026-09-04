@@ -18,10 +18,15 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
-import { isAutoRefresh, MAX_PANE_HEIGHT_PX } from "../Notebook/notebookUtils"
+import {
+  clampPaneHeight,
+  isAutoRefresh,
+  minBottomHeightFor,
+  minTopHeightFor,
+} from "../Notebook/notebookUtils"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
-  isAgentCellView,
+  isCellPaneView,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   MAX_CELL_NAME_LENGTH,
@@ -268,12 +273,14 @@ const sanitizeNotebookCell = (
   // Whitelist the kind so a hand-crafted import can't smuggle a bogus type
   // (anything other than "markdown" collapses to the SQL default).
   if (item.type === "markdown") cell.type = "markdown"
-  if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
-  const chartConfig = sanitizeChartConfig(item.chartConfig)
-  if (chartConfig) cell.chartConfig = chartConfig
-  if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+  // Markdown cells carry no run/draw sub-state — gating it here keeps a
+  // hand-crafted import from producing a cell apply_notebook_state rejects.
   if (item.type !== "markdown") {
-    if (isAgentCellView(item.paneView)) {
+    if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
+    const chartConfig = sanitizeChartConfig(item.chartConfig)
+    if (chartConfig) cell.chartConfig = chartConfig
+    if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+    if (isCellPaneView(item.paneView)) {
       cell.paneView = item.paneView
     } else if (item.isViewMaximized === true) {
       cell.paneView = "result"
@@ -281,13 +288,18 @@ const sanitizeNotebookCell = (
       cell.paneView = "editor_result"
     }
   }
+  // Clamp to the same pane floors and ceiling every UI writer enforces, so a
+  // hand-authored file can't pin an invisible editor or an overlapping pane.
   if (typeof item.topHeight === "number" && Number.isFinite(item.topHeight))
-    cell.topHeight = Math.min(MAX_PANE_HEIGHT_PX, item.topHeight)
+    cell.topHeight = clampPaneHeight(minTopHeightFor(cell), item.topHeight)
   if (
     typeof item.bottomHeight === "number" &&
     Number.isFinite(item.bottomHeight)
   )
-    cell.bottomHeight = Math.min(MAX_PANE_HEIGHT_PX, item.bottomHeight)
+    cell.bottomHeight = clampPaneHeight(
+      minBottomHeightFor(cell),
+      item.bottomHeight,
+    )
   if (typeof item.topResized === "boolean") cell.topResized = item.topResized
   if (typeof item.bottomResized === "boolean")
     cell.bottomResized = item.bottomResized

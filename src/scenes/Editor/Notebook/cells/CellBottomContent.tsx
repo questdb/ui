@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo } from "react"
+import styled from "styled-components"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
@@ -12,6 +13,7 @@ import { InlineResultTable } from "../result-table"
 import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
+import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
@@ -19,6 +21,17 @@ import {
   deriveStatementFrame,
   statementKeysFor,
 } from "../notebookUtils"
+
+// Mirrors DrawCanvas's EmptyState: a failed snapshot read keeps the reserved
+// pane and says so, instead of an endless shimmer or a silent collapse.
+const LoadFailureState = styled.div`
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+`
 
 type Props = {
   cell: NotebookCell
@@ -44,6 +57,7 @@ export const CellBottomContent: React.FC<Props> = ({
   const bufferId = useNotebookBufferId()
   const cellRefresh = useCellRefresh()
   const fetchState = useCellFetchState(cell.id)
+  const resultStatus = useCellResultStatus(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
 
   // Tabs follow the editor's statement list; results attach to it by content.
@@ -131,7 +145,13 @@ export const CellBottomContent: React.FC<Props> = ({
       />
     )
   }
-  return expectingResult ? (
-    <GridShimmer statementCount={0} bufferId={bufferId} cellId={cell.id} />
-  ) : null
+  if (!expectingResult) return null
+  if (resultStatus === "failed") {
+    return (
+      <LoadFailureState>
+        Result failed to load. Run the cell again to restore it.
+      </LoadFailureState>
+    )
+  }
+  return <GridShimmer statementCount={0} bufferId={bufferId} cellId={cell.id} />
 }

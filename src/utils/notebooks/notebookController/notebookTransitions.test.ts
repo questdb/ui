@@ -56,7 +56,7 @@ describe("setCellDimensionsTransition", () => {
 
     const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
       view: "editor_result",
-      expectingResult: false,
+      resultStatus: "missing",
     })
 
     expect(out.parts.cells[0]).toMatchObject({
@@ -106,7 +106,7 @@ describe("setCellDimensionsTransition", () => {
         editorHeight: 86,
         resultHeight: 300,
         view: "result",
-        expectingResult: false,
+        resultStatus: "missing",
       },
     )
     // Then only the editor height lands, and the view reports null
@@ -119,17 +119,48 @@ describe("setCellDimensionsTransition", () => {
     expect(out.result).toEqual({ view: null })
   })
 
-  it("supports an editor-only view", () => {
-    const chart = cell("a", "SELECT 1", { mode: "draw" })
+  it("view editor discards the run outcome and exits draw", () => {
+    // Given a draw cell with a stored result-only arrangement
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      paneView: "result",
+      lastRunStatus: "success",
+    })
+    // When an agent sends view "editor" — the toggle-off gesture
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
       view: "editor",
-      expectingResult: false,
+      resultStatus: "missing",
+    })
+    // Then the run outcome is wiped, the mode drops to run, the stored
+    // arrangement survives for the next run, and the snapshot is deleted
+    expect(out.parts.cells[0]).toMatchObject({
+      mode: "run",
+      result: undefined,
+      lastRunStatus: undefined,
+      paneView: "result",
+    })
+    expect(out.result).toEqual({ view: "editor", result_discarded: true })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
+  })
+
+  it("view editor is a no-op on a cell with nothing to show", () => {
+    const parts = partsOf([cell("a", "SELECT 1")])
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor",
+      resultStatus: "missing",
     })
 
-    expect(out.parts.cells[0]).toMatchObject({
-      paneView: "editor",
-    })
+    expect(out.parts.cells).toBe(parts.cells)
     expect(out.result).toEqual({ view: "editor" })
+    expect(out.deleteSnapshots).toBeUndefined()
+  })
+
+  it("rejects a view outside the wire enum", () => {
+    expect(() =>
+      setCellDimensionsTransition(partsOf([cell("a")]), BUFFER_ID, "a", {
+        view: "<forged>" as never,
+      }),
+    ).toThrow(/view must be editor, result, or editor_result/)
   })
 
   it("rejects heights above the ceiling", () => {
@@ -164,11 +195,33 @@ describe("setCellDimensionsTransition", () => {
       }),
       BUFFER_ID,
       "a",
-      { expectingResult: false },
+      { resultStatus: "missing" },
     )
 
     expect(out.result).toEqual({ view: "editor_result" })
     expect(out.parts.settings.layout?.[0].h).toBe(5)
+  })
+
+  it("reserves the result area while the snapshot is still loading", () => {
+    // Given the same pending cell, but with a live status that says the
+    // snapshot has not been proven missing yet
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 5 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { resultStatus: "unrequested" },
+    )
+    // Then the grid box keeps the reserved-result footprint
+    expect(out.parts.settings.layout?.[0].h).toBe(19)
   })
 
   it("persists a result view while the result is still missing", () => {
@@ -180,7 +233,7 @@ describe("setCellDimensionsTransition", () => {
       partsOf([pending]),
       BUFFER_ID,
       "a",
-      { view: "result", expectingResult: false },
+      { view: "result", resultStatus: "missing" },
     )
 
     expect(out.parts.cells[0].paneView).toBe("result")
@@ -204,7 +257,7 @@ describe("setCellLayoutTransition", () => {
       }),
       BUFFER_ID,
       "a",
-      { x: 0, y: 0, w: 4, expectingResult: false },
+      { x: 0, y: 0, w: 4, resultStatus: "missing" },
     )
 
     expect(out.result).toEqual({
@@ -367,10 +420,12 @@ describe("applyNotebookStateTransition", () => {
     expect(out.parts.focusedCellId).toBe("a")
   })
 
-  it("does no freshness checking: it takes only (parts, request), no read-seq", () => {
+  it("does no freshness checking: it takes (parts, request, resultStatusOf), no read-seq", () => {
     // Freshness is gated once at the dispatch layer, never inside a transition;
-    // a seq parameter here would let staleness leak into the pure layer.
-    expect(applyNotebookStateTransition).toHaveLength(2)
+    // a seq parameter here would let staleness leak into the pure layer. The
+    // third parameter is a per-cell status READER supplied by the controller,
+    // not a freshness token.
+    expect(applyNotebookStateTransition).toHaveLength(3)
   })
 
   it("does no freshness checking: re-applying its own output never staleness-throws", () => {

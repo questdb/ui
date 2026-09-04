@@ -436,7 +436,13 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutate((parts) => applyNotebookStateTransition(parts, request)),
+        ctrl.mutate((parts) =>
+          applyNotebookStateTransition(
+            parts,
+            request,
+            (cellId) => ctrl.readResultStatus?.(cellId) ?? "unrequested",
+          ),
+        ),
       signal,
     )
     const out = committed

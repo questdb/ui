@@ -53,7 +53,6 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
-import { publishCellHydration } from "../cellHydrationStore"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
@@ -179,14 +178,6 @@ const CellInner: React.FC<Props> = ({
   const doubleView = isDoubleView(cell) || expectingResult
   const paneLayout = resolveCellPaneLayout(cell, expectingResult)
 
-  useEffect(
-    () =>
-      publishCellHydration(bufferIdForEvents, cell.id, {
-        expectingResult,
-      }),
-    [bufferIdForEvents, cell.id, expectingResult],
-  )
-
   const resultOnly = paneLayout === "result"
   const showBottomSlot = paneLayout !== "editor"
   const isSplit = paneLayout === "split"
@@ -296,7 +287,6 @@ const CellInner: React.FC<Props> = ({
   } = useCellRunActions({
     cell,
     isRunning,
-    showBottomSlot,
     editorRef,
     applyHighlight,
     clearHighlight,
@@ -512,7 +502,9 @@ const CellInner: React.FC<Props> = ({
           ref={editorContainerRef}
           $spotlight={isMaximized}
           style={
-            isMaximized ? { flex: spotlightEditorRatio } : { height: topHeight }
+            isMaximized
+              ? { flex: showBottomSlot ? spotlightEditorRatio : 1 }
+              : { height: topHeight }
           }
         >
           {contentMode === "full" ? (

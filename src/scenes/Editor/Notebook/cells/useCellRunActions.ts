@@ -12,10 +12,7 @@ import {
   type SelectionRunResolution,
 } from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
-import {
-  emitUserAction,
-  signalUserEdit,
-} from "../../../../utils/notebooks/notebookAIBridge"
+import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
@@ -27,7 +24,6 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 type Options = {
   cell: NotebookCell
   isRunning: boolean
-  showBottomSlot: boolean
   editorRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>
   applyHighlight: (ok: boolean) => void
   clearHighlight: () => void
@@ -44,18 +40,12 @@ type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
 export const useCellRunActions = ({
   cell,
   isRunning,
-  showBottomSlot,
   editorRef,
   applyHighlight,
   clearHighlight,
 }: Options) => {
-  const {
-    runCell,
-    setCellMode,
-    clearCellResult,
-    setCellPaneView,
-    getCellsSnapshot,
-  } = useNotebookActions()
+  const { runCell, setCellMode, clearCellResult, getCellsSnapshot } =
+    useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const validateWithGlobals = useValidateWithGlobals()
   const { runWithSelectionMode } = useLocalStorage()
@@ -216,11 +206,7 @@ export const useCellRunActions = ({
   const runResolved = useCallback(
     (request: RunRequest) => {
       const plan = resolveRunAction(
-        {
-          mode: cell.mode,
-          result: cell.result,
-          paneView: cell.paneView,
-        },
+        { mode: cell.mode },
         { intent: request.kind },
       )
       if (plan.kind === "noop") return
@@ -232,39 +218,14 @@ export const useCellRunActions = ({
         })
         return
       }
-      const exitDrawMode = () => {
-        if (!plan.exitDraw) return
-        signalUserEdit(bufferIdForEvents)
-        setCellMode(cell.id, "run")
-      }
       firstRunRef.current = cell.result == null
       if (request.kind === "all") {
-        exitDrawMode()
         void handleRunAll()
-        if (plan.reveal) setCellPaneView(cell.id, "editor_result")
         return
       }
-      // A single run that finds nothing to run leaves the cell untouched —
-      // a draw cell keeps its chart instead of dropping to the grid.
-      if (!handleRunSingle(request.source)) return
-      exitDrawMode()
-      if (plan.reveal) {
-        // Running from an editor-only pane view reveals the result as a
-        // split, so the run is not invisible.
-        setCellPaneView(cell.id, "editor_result")
-      }
+      handleRunSingle(request.source)
     },
-    [
-      cell.id,
-      cell.mode,
-      cell.result,
-      cell.paneView,
-      bufferIdForEvents,
-      setCellPaneView,
-      setCellMode,
-      handleRunAll,
-      handleRunSingle,
-    ],
+    [cell.id, cell.mode, cell.result, handleRunAll, handleRunSingle],
   )
   const runAll = useCallback(() => runResolved({ kind: "all" }), [runResolved])
   const runSingleFromEditor = useCallback(
@@ -317,10 +278,7 @@ export const useCellRunActions = ({
     }
     const drawHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      void handleDrawClick().then((entered) => {
-        if (entered && !showBottomSlot)
-          setCellPaneView(cell.id, "editor_result")
-      })
+      void handleDrawClick()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
@@ -328,7 +286,7 @@ export const useCellRunActions = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, refreshRun, handleDrawClick, setCellPaneView, showBottomSlot])
+  }, [cell.id, refreshRun, handleDrawClick])
 
   const isGridLoading = isRunning && firstRunRef.current
 

@@ -87,7 +87,7 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
-import { readCellHydration } from "../../scenes/Editor/Notebook/cellHydrationStore"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/notebookUtils"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -101,7 +101,10 @@ class NotebookStateChangedError extends Error {}
 
 const runTransition = <T>(
   bufferId: number,
-  transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+  transition: (
+    parts: ViewParts,
+    resultStatusOf: CellResultStatusReader,
+  ) => NotebookTransitionResult<T>,
   signal?: AbortSignal,
   expectedActionSeq?: number,
 ): Promise<T> =>
@@ -114,7 +117,15 @@ const runTransition = <T>(
       ) {
         throw new NotebookStateChangedError()
       }
-      return ctrl.mutate(transition)
+      // The passive (Dexie) controller has no live hydration statuses;
+      // "unrequested" matches what the mounted notebook renders for a
+      // run-marked cell before its snapshot loads.
+      return ctrl.mutate((parts) =>
+        transition(
+          parts,
+          (cellId) => ctrl.readResultStatus?.(cellId) ?? "unrequested",
+        ),
+      )
     },
     signal,
   )
@@ -833,15 +844,13 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
-            (parts) => {
-              const hydration = readCellHydration(buffer_id, cell_id)
-              return setCellLayoutTransition(parts, buffer_id, cell_id, {
+            (parts, resultStatusOf) =>
+              setCellLayoutTransition(parts, buffer_id, cell_id, {
                 x,
                 y,
                 w,
-                expectingResult: hydration?.expectingResult,
-              })
-            },
+                resultStatus: resultStatusOf(cell_id),
+              }),
             signal,
           ),
         )
@@ -859,15 +868,13 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           runTransition(
             buffer_id,
-            (parts) => {
-              const hydration = readCellHydration(buffer_id, cell_id)
-              return setCellDimensionsTransition(parts, buffer_id, cell_id, {
+            (parts, resultStatusOf) =>
+              setCellDimensionsTransition(parts, buffer_id, cell_id, {
                 editorHeight: editor_height,
                 resultHeight: result_height,
                 view,
-                expectingResult: hydration?.expectingResult,
-              })
-            },
+                resultStatus: resultStatusOf(cell_id),
+              }),
             signal,
           ),
         )

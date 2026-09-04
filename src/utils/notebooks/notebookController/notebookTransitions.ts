@@ -1,8 +1,9 @@
 import {
+  isAgentCellView,
   MAX_NOTEBOOK_CELLS,
-  type AgentCellView,
   type AutoRefresh,
   type CellMode,
+  type CellPaneView,
   type CellType,
   type NotebookCell,
 } from "../../../store/notebook"
@@ -18,11 +19,14 @@ import {
   carriedRunError,
   carriedRunStatus,
   cellGridBoundsError,
+  cellHasRunOutcome,
   cellModeChangePatch,
+  discardCellResultPatch,
   clearCellAutoRefresh,
   computeAgentCellGridH,
   duplicateCellAt,
   insertCell,
+  isExpectingResult,
   mergeCellChartConfig,
   MAX_PANE_HEIGHT_PX,
   minBottomHeightFor,
@@ -38,6 +42,8 @@ import {
   upsertCellLayout,
   type CellGridPosition,
   type AgentCellDimensions,
+  type CellResultStatus,
+  type CellResultStatusReader,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 
 // The single home for every notebook mutation's behavior. Each transition is a
@@ -286,7 +292,7 @@ export const setCellLayoutTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  pos: Omit<CellGridPosition, "h"> & { expectingResult?: boolean },
+  pos: Omit<CellGridPosition, "h"> & { resultStatus?: CellResultStatus },
 ): NotebookTransitionResult<
   AgentCellPresentation & { grid: { x: number; y: number; w: number } }
 > => {
@@ -297,7 +303,10 @@ export const setCellLayoutTransition = (
     x: pos.x,
     y: pos.y,
     w: pos.w,
-    h: computeAgentCellGridH(cell, pos.expectingResult),
+    h: computeAgentCellGridH(
+      cell,
+      isExpectingResult(cell, pos.resultStatus ?? "unrequested"),
+    ),
   }
   return {
     parts: {
@@ -320,8 +329,16 @@ export const setCellDimensionsTransition = (
   bufferId: number,
   cellId: string,
   requested: AgentCellDimensions,
-): NotebookTransitionResult<AgentCellPresentation> => {
+): NotebookTransitionResult<
+  AgentCellPresentation & { result_discarded?: true }
+> => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (requested.view != null && !isAgentCellView(requested.view)) {
+    throw new NotebookToolError(
+      "validation",
+      "view must be editor, result, or editor_result.",
+    )
+  }
   const dimensions = applicableCellDimensions(cell, requested)
   if (
     typeof dimensions.editorHeight === "number" &&
@@ -355,13 +372,25 @@ export const setCellDimensionsTransition = (
     )
   }
 
-  const patch = agentCellDimensionsPatch(cell, dimensions)
+  const discarding = dimensions.view === "editor" && cellHasRunOutcome(cell)
+  const patch = {
+    ...(discarding ? discardCellResultPatch(cell) : {}),
+    ...agentCellDimensionsPatch(cell, dimensions),
+  }
   const nextCell = { ...cell, ...patch }
   const layout = parts.settings.layout?.map((item) =>
     item.i === cellId
       ? {
           ...item,
-          h: computeAgentCellGridH(nextCell, dimensions.expectingResult),
+          h: computeAgentCellGridH(
+            nextCell,
+            discarding
+              ? false
+              : isExpectingResult(
+                  cell,
+                  dimensions.resultStatus ?? "unrequested",
+                ),
+          ),
         }
       : item,
   )
@@ -377,8 +406,12 @@ export const setCellDimensionsTransition = (
           ? parts.settings
           : { ...parts.settings, layout },
     },
-    result: agentCellPresentation(nextCell),
+    result: {
+      ...agentCellPresentation(nextCell),
+      ...(discarding ? { result_discarded: true as const } : {}),
+    },
     touchedCellId: cellId,
+    ...(discarding ? { deleteSnapshots: { cellIds: [cellId] } } : {}),
   }
 }
 
@@ -427,7 +460,7 @@ export const setCellPaneViewTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  paneView: AgentCellView,
+  paneView: CellPaneView,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
   if (cell.type === "markdown") {
@@ -464,10 +497,11 @@ export const setCellMaximizedTransition = (
 export const applyNotebookStateTransition = (
   parts: ViewParts,
   request: ApplyNotebookStateRequest,
+  resultStatusOf?: CellResultStatusReader,
 ): NotebookTransitionResult<{
   applied: { added: string[]; updated: string[]; deleted: string[] }
 }> => {
-  const next = buildAppliedNotebookState(parts, request)
+  const next = buildAppliedNotebookState(parts, request, resultStatusOf)
   return {
     parts: {
       ...parts,

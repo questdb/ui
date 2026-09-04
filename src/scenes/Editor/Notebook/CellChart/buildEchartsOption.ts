@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts"
-import { needsZoomSlider } from "./chartDensity"
+import { needsWheelZoom, needsZoomSlider } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -542,21 +542,29 @@ export const buildEchartsOption = (
   }
 }
 
-// Zoom exists only for a chart too dense for its measured width: the slider
-// costs plot height, and zooming a sparse chart is meaningless. The renderer
-// applies this from its own size.
+// Every cartesian chart embeds both zoom components, and density only toggles
+// their visibility — never the option's structure, which would remount the
+// chart through its structural key. Wheel zoom arms while marks are merely
+// tight (it costs no plot space); the slider costs plot height, so it waits
+// until marks fall under the readable floor. The renderer applies this from
+// its own measured size.
 export const withZoomSlider = (
   option: EChartsOption,
   containerWidthPx: number,
 ): EChartsOption => {
-  if (!needsZoomSlider(option, containerWidthPx)) return option
+  if (option.xAxis == null) return option
+  const slider = needsZoomSlider(option, containerWidthPx)
   return {
     ...option,
-    grid: { ...(option.grid as object), bottom: GRID_BOTTOM_WITH_ZOOM },
+    grid: {
+      ...(option.grid as object),
+      bottom: slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+    },
     dataZoom: [
-      { type: "inside" },
+      { type: "inside", disabled: !needsWheelZoom(option, containerWidthPx) },
       {
         type: "slider",
+        show: slider,
         height: SLIDER_HEIGHT,
         bottom: SLIDER_BOTTOM,
         textStyle: { fontSize: CHART_FONT_SIZE },
