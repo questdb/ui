@@ -10,6 +10,7 @@ import { useAgentChanges } from "./useAgentChanges"
 import { Tone, accentColor, deriveTone } from "./tone"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { statusInfoFocus } from "../../../theme"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -59,10 +60,7 @@ const Wrapper = styled(ButtonBase)<PillStyleProps>`
 
   &:focus-visible {
     outline: 1px solid
-      ${(props) =>
-        props.$tone === "idle"
-          ? props.theme.color.contentAccent
-          : accent(props)};
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 

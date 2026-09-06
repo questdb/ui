@@ -67,12 +67,15 @@ export type ColorShape = {
   actionPrimaryHover: string
   statusDanger: string
   statusDangerStrong: string
+  statusDangerContrast: string
+  statusDangerSubtle: string
   statusDangerMuted: string
   statusDangerSurface: string
   statusDangerSurfaceHover: string
   statusDangerBorder: string
   statusSuccess: string
   statusSuccessStrong: string
+  statusSuccessFill: string
   statusSuccessSurface: string
   statusSuccessBorder: string
   statusWarning: string
@@ -80,6 +83,8 @@ export type ColorShape = {
   statusWarningSurfaceHover: string
   statusAttention: string
   statusInfo: string
+  statusInfoSubtle: string
+  statusInfoControl: string
   statusInfoSurface: string
   statusFeature: string
   statusAssistant: string

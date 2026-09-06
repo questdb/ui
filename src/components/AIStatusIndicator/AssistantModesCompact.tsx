@@ -11,6 +11,7 @@ import {
   type OperationHistory,
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
+import { statusInfoFocus } from "../../theme"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import {
   buildOperationSections,
@@ -121,7 +122,8 @@ const ModeHeaderTop = styled.div<{
       }
 
       &:focus-visible {
-        outline: 1px solid ${color("borderStrong")};
+        outline: 1px solid
+          ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
         outline-offset: 2px;
       }
 

@@ -85,6 +85,10 @@ const BaseTableLinkButton = styled(TextButton)`
   display: flex;
   align-items: center;
   gap: 0.4rem;
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.interactionHover};
+  }
 `
 
 const MetricsGrid = styled.div<{ $columns: number }>`

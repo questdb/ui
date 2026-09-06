@@ -43,7 +43,7 @@ const ViewIconButton = styled(IconButton)`
   &&:hover:not(:disabled):not([aria-disabled="true"]) {
     background: ${({ theme }) =>
       theme.mode === "light"
-        ? theme.color.interactionNeutralHover
+        ? theme.color.interactionHover
         : theme.color.surfaceRaised};
   }
 `

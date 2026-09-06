@@ -198,10 +198,6 @@ const StyledTitle = styled(Title)`
     background-color: ${({ theme }) => theme.color.contentAccentStrong};
     color: ${({ theme }) => theme.color.contentInverse};
   }
-
-  svg {
-    color: ${color("contentAccent")};
-  }
 `
 
 const TableActions = styled.span`
@@ -227,7 +223,7 @@ const Spacer = styled.span`
 `
 
 const SortDownIcon = styled(SortDown)`
-  color: ${color("contentAccent")};
+  color: ${color("contentMuted")};
   margin-right: 0.8rem;
   flex-shrink: 0;
 `
@@ -280,7 +276,7 @@ const TypeIcon = styled.div`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("contentAccent")};
+  color: ${color("contentMuted")};
 `
 
 const TYPE_ICONS = {

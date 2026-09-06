@@ -316,6 +316,28 @@ const ValidateRemoveButton = styled(Button).attrs({ variant: "secondary" })`
   gap: 0.8rem;
 `
 
+const ResetProviderButton = styled(Button).attrs({ variant: "ghost" })`
+  && {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  && svg {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) =>
+      theme.mode === "light"
+        ? "rgba(189, 40, 40, 0.1)"
+        : "rgba(219, 36, 36, 0.3)"};
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) svg {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+`
+
 const ModelsPlaceholder = styled(Box).attrs({
   flexDirection: "column",
   gap: "1rem",
@@ -1281,15 +1303,14 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     />
                   </ContentSection>
                   <ContentSection style={{ alignItems: "flex-start" }}>
-                    <Button
-                      variant="dangerGhost"
+                    <ResetProviderButton
                       prefixIcon={<TrashIcon size={16} />}
                       type="button"
                       data-hook="ai-settings-remove-provider"
                       onClick={() => handleRemoveProvider(selectedProvider)}
                     >
                       {isCustomProvider ? "Remove Provider" : "Reset Provider"}
-                    </Button>
+                    </ResetProviderButton>
                   </ContentSection>
                 </ContentPanel>
               </MainContentArea>

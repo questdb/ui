@@ -90,8 +90,8 @@ export const darkColors: ColorShape = {
   contentSecondary: "#9da1ad",
   contentMuted: "#858995",
   contentDisabled: "#747985",
-  contentAccent: "#c94f74",
-  contentAccentStrong: "#cf1750",
+  contentAccent: "#f0428b",
+  contentAccentStrong: "#ee2b7c",
   contentObject: "#81d3f9",
   contentSearchMatch: "rgb(163, 127, 96)",
 
@@ -99,15 +99,15 @@ export const darkColors: ColorShape = {
   borderSubtle: "rgba(255, 255, 255, 0.04)",
   borderDefault: "rgba(255, 255, 255, 0.13)",
   borderStrong: "#3d414d",
-  borderAccent: "rgba(201, 79, 116, 0.42)",
-  borderAccentStrong: "rgba(201, 79, 116, 0.52)",
+  borderAccent: "rgba(240, 66, 139, 0.42)",
+  borderAccentStrong: "rgba(240, 66, 139, 0.52)",
 
   // Interaction and controls
   interactionNeutral: "#32343e",
   interactionNeutralHover: "#292b35",
   interactionHover: "#ffffff0e",
-  interactionAccentHover: "rgba(201, 79, 116, 0.08)",
-  interactionAccentActive: "rgba(201, 79, 116, 0.15)",
+  interactionAccentHover: "rgba(240, 66, 139, 0.08)",
+  interactionAccentActive: "rgba(240, 66, 139, 0.10)",
   interactionGuide: "#6272a4",
   scrollbarThumb: "rgba(255, 255, 255, 0.13)",
   controlSurface: "#262833",
@@ -116,16 +116,19 @@ export const darkColors: ColorShape = {
   controlKnob: "#f8f8f2",
 
   // Actions and status
-  actionPrimary: "#b81447",
-  actionPrimaryHover: "#cf1750",
-  statusDanger: "#ff6b73",
-  statusDangerStrong: "#fa4d56",
-  statusDangerMuted: "rgba(220, 40, 40, 0.72)",
-  statusDangerSurface: "rgba(220, 40, 40, 0.3)",
-  statusDangerSurfaceHover: "rgba(220, 40, 40, 0.4)",
-  statusDangerBorder: "rgba(255, 107, 115, 0.24)",
+  actionPrimary: "#bd0f58",
+  actionPrimaryHover: "#d41162",
+  statusDanger: "#ff3333",
+  statusDangerStrong: "#db2424",
+  statusDangerContrast: "#ff4d4d",
+  statusDangerSubtle: "#ff8080",
+  statusDangerMuted: "rgba(219, 36, 36, 0.72)",
+  statusDangerSurface: "rgba(219, 36, 36, 0.15)",
+  statusDangerSurfaceHover: "rgba(219, 36, 36, 0.4)",
+  statusDangerBorder: "rgba(219, 36, 36, 0.28)",
   statusSuccess: "#66bb6a",
   statusSuccessStrong: "#188a5d",
+  statusSuccessFill: "#3fa659",
   statusSuccessSurface: "rgba(102, 187, 106, 0.12)",
   statusSuccessBorder: "rgba(102, 187, 106, 0.24)",
   statusWarning: "#ffd54f",
@@ -133,7 +136,9 @@ export const darkColors: ColorShape = {
   statusWarningSurfaceHover: "rgba(255, 213, 79, 0.16)",
   statusAttention: "#e3ce78",
   statusInfo: "#81d3f9",
-  statusInfoSurface: "rgba(129, 211, 249, 0.1)",
+  statusInfoSubtle: "#b2e7ff",
+  statusInfoControl: "#0c80f3",
+  statusInfoSurface: "rgba(178, 231, 255, 0.05)",
   statusFeature: "#a99de8",
 
   // Shadows
@@ -149,10 +154,10 @@ export const darkColors: ColorShape = {
   glassEdge: "rgba(255, 255, 255, 0.22)",
 
   // Brand
-  brandGradientStart: "#e51a59",
-  brandGradientEnd: "#8a0f35",
-  aiGradientStart: "#d14671",
-  aiGradientEnd: "#892c6c",
+  brandGradientStart: "#e21269",
+  brandGradientEnd: "#8e0b42",
+  aiGradientStart: "#ee2b7c",
+  aiGradientEnd: "#8e0b42",
 
   // Result grid
   gridRow: "#17181d",
@@ -238,15 +243,15 @@ export const lightColors: ColorShape = {
   surfaceOverlay: "#fafbfc",
   surfaceValue: "#ffffff",
   surfaceScrim: "rgba(27, 31, 39, 0.32)",
-  surfaceTabRail: "rgba(232, 234, 238, 0.94)",
+  surfaceTabRail: "rgba(244, 245, 247, 0.94)",
 
   // Content
   contentPrimary: "#1c2029",
   contentSecondary: "#505968",
   contentMuted: "#565f6e",
   contentDisabled: "#596271",
-  contentAccent: "#b81447",
-  contentAccentStrong: "#8a0f35",
+  contentAccent: "#bd0f58",
+  contentAccentStrong: "#8e0b42",
   contentObject: "#b81447",
   contentSearchMatch: "rgba(202, 139, 44, 0.32)",
 
@@ -254,15 +259,15 @@ export const lightColors: ColorShape = {
   borderSubtle: "rgba(28, 32, 41, 0.07)",
   borderDefault: "rgba(28, 32, 41, 0.15)",
   borderStrong: "#b0b7c2",
-  borderAccent: "rgba(184, 20, 71, 0.42)",
-  borderAccentStrong: "rgba(184, 20, 71, 0.56)",
+  borderAccent: "rgba(189, 15, 88, 0.42)",
+  borderAccentStrong: "rgba(189, 15, 88, 0.56)",
 
   // Interaction and controls
   interactionNeutral: "#e8eaee",
   interactionNeutralHover: "#e2e5ea",
   interactionHover: "#1c202913",
-  interactionAccentHover: "rgba(184, 20, 71, 0.07)",
-  interactionAccentActive: "rgba(184, 20, 71, 0.13)",
+  interactionAccentHover: "rgba(189, 15, 88, 0.08)",
+  interactionAccentActive: "rgba(189, 15, 88, 0.13)",
   interactionGuide: "#56657f",
   scrollbarThumb: "#d7dbe3",
   controlSurface: "#f6f7f8",
@@ -271,16 +276,19 @@ export const lightColors: ColorShape = {
   controlKnob: "#505968",
 
   // Actions and status
-  actionPrimary: "#8a0f35",
-  actionPrimaryHover: "#b81447",
-  statusDanger: "#bd2838",
-  statusDangerStrong: "#a81f2e",
-  statusDangerMuted: "rgba(189, 40, 56, 0.72)",
-  statusDangerSurface: "rgba(189, 40, 56, 0.12)",
-  statusDangerSurfaceHover: "rgba(189, 40, 56, 0.18)",
-  statusDangerBorder: "rgba(189, 40, 56, 0.28)",
+  actionPrimary: "#8e0b42",
+  actionPrimaryHover: "#bd0f58",
+  statusDanger: "#ce1717",
+  statusDangerStrong: "#ce1717",
+  statusDangerContrast: "#b81414",
+  statusDangerSubtle: "#8a0f0f",
+  statusDangerMuted: "rgba(206, 23, 23, 0.72)",
+  statusDangerSurface: "rgba(189, 40, 40, 0.15)",
+  statusDangerSurfaceHover: "rgba(219, 36, 36, 0.4)",
+  statusDangerBorder: "rgba(189, 40, 40, 0.28)",
   statusSuccess: "#067047",
   statusSuccessStrong: "#05603e",
+  statusSuccessFill: "#1f7a39",
   statusSuccessSurface: "rgba(8, 122, 80, 0.16)",
   statusSuccessBorder: "rgba(8, 122, 80, 0.28)",
   statusWarning: "#8a570f",
@@ -288,7 +296,9 @@ export const lightColors: ColorShape = {
   statusWarningSurfaceHover: "rgba(145, 82, 15, 0.2)",
   statusAttention: "#745c00",
   statusInfo: "#176f87",
-  statusInfoSurface: "rgba(23, 111, 135, 0.1)",
+  statusInfoSubtle: "#159cc1",
+  statusInfoControl: "#0a88db",
+  statusInfoSurface: "rgba(21, 156, 193, 0.10)",
   statusFeature: "#6553aa",
 
   // Shadows
@@ -304,10 +314,10 @@ export const lightColors: ColorShape = {
   glassEdge: "rgba(28, 32, 41, 0.22)",
 
   // Brand
-  brandGradientStart: "#b81447",
-  brandGradientEnd: "#5c0a24",
-  aiGradientStart: "#a92352",
-  aiGradientEnd: "#76184c",
+  brandGradientStart: "#bd0f58",
+  brandGradientEnd: "#8e0b42",
+  aiGradientStart: "#bd0f58",
+  aiGradientEnd: "#8e0b42",
 
   // Result grid
   gridRow: "#f4f5f7",
@@ -376,6 +386,14 @@ const fontSize: FontSizeShape = {
   xl: "1.7rem",
   hg: "3rem",
 }
+
+/**
+ * Keyboard focus ring: `statusInfo` at 75% (Figma 1943:115217 / 1943:117006).
+ * Offset rings use this wash; a 1px stroke that dies on `surfaceValue` should
+ * use solid `statusInfo` instead of a fourth token.
+ */
+export const statusInfoFocus = (statusInfo: string): string =>
+  withAlpha(statusInfo, 0.75)
 
 /**
  * Derive translucent renderer colors from semantic opaque roles. Keeping the

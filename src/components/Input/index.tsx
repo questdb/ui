@@ -13,10 +13,10 @@ export type InputStyleProps = {
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & InputStyleProps
 
 const errorStyle = css`
-  border-color: ${({ theme }) => theme.color.statusDanger};
+  border-color: ${({ theme }) => theme.color.statusDangerStrong};
   background-color: ${({ theme }) => theme.color.statusDangerSurface};
   &:focus {
-    border-color: ${({ theme }) => theme.color.statusDanger};
+    border-color: ${({ theme }) => theme.color.statusDangerStrong};
     background: ${({ theme }) => theme.color.statusDangerSurface};
   }
 `

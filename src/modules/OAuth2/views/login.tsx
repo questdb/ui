@@ -160,6 +160,7 @@ const ErrorContainer = styled.div`
   border-radius: 0.8rem;
   border: 1.5px solid ${({ theme }) => theme.color.statusDangerMuted};
   border-left: 6px solid ${({ theme }) => theme.color.statusDangerMuted};
+  background: ${({ theme }) => theme.color.statusDangerSurface};
 `
 
 const RedirectErrorContainer = styled(ErrorContainer)`

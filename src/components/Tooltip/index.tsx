@@ -106,7 +106,14 @@ const ArrowWithBorder = React.forwardRef<SVGSVGElement>((props, ref) => {
       viewBox="0 0 14 7"
       preserveAspectRatio="none"
     >
-      <polygon points="0,0 14,0 7,7" fill={theme.color.surfaceInset} />
+      <polygon
+        points="0,0 14,0 7,7"
+        fill={
+          theme.mode === "light"
+            ? theme.color.surfaceOverlay
+            : theme.color.surfaceInset
+        }
+      />
       <polyline
         points="0,0 7,7 14,0"
         fill="none"
@@ -129,7 +136,10 @@ const TooltipContent = styled(RadixTooltip.Content)<{
   position: relative;
   max-width: ${({ $maxWidth }) => $maxWidth ?? "460px"};
   padding: 1rem;
-  background: ${color("surfaceInset")};
+  background: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceOverlay
+      : theme.color.surfaceInset};
   border: 1px solid ${color("borderDefault")};
   border-radius: 6px;
   z-index: ${TOOLTIP_Z_INDEX};

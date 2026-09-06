@@ -5,6 +5,7 @@ import { Close, ErrorWarning, ExternalLink } from "../../components/icons"
 import { errorWorkarounds } from "../../utils/errorWorkarounds"
 import { IconButton } from "../../components"
 import { ErrorTag } from "utils"
+import { statusInfoFocus } from "../../theme"
 
 const WarningsRoot = styled.div`
   display: flex;
@@ -65,7 +66,8 @@ const WorkaroundLink = styled.a`
   }
 
   &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
     border-radius: 0.2rem;
   }

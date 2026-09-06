@@ -53,7 +53,10 @@ const CustomTooltipWrapper = styled.div`
   min-width: 26rem;
   max-width: min(36rem, calc(100vw - 2rem));
   overflow: hidden;
-  background: ${({ theme }) => theme.color.surfaceInset};
+  background: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceOverlay
+      : theme.color.surfaceInset};
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.8rem;
   box-shadow:

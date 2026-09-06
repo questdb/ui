@@ -23,11 +23,20 @@ export const TabButton = styled(ButtonBase).attrs<TabButtonProps>(
     font-size: ${({ theme }) => theme.fontSize.sm};
     font-weight: 500;
     line-height: 1.15;
+    filter: none;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
   }
 
   &&:hover:not(:disabled) {
     background: ${({ theme }) => theme.color.surfaceRaised};
     color: ${({ theme }) => theme.color.contentPrimary};
+  }
+
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: none;
   }
 
   ${({ $active, theme }) =>
@@ -40,8 +49,10 @@ export const TabButton = styled(ButtonBase).attrs<TabButtonProps>(
         font-weight: 600;
       }
 
-      &&:hover:not(:disabled) {
+      &&:hover:not(:disabled),
+      &&:active:not(:disabled):not([aria-disabled="true"]) {
         background: ${theme.color.surfaceRaised};
+        filter: none;
       }
     `}
 `

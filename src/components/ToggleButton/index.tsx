@@ -28,7 +28,10 @@ import styled from "styled-components"
 import type { FontSize } from "../../types"
 
 import { ButtonProps } from "../Button"
-import { SegmentedControlButton } from "../SegmentedControl"
+import {
+  SegmentedControlButton,
+  type SegmentedControlActiveTone,
+} from "../SegmentedControl"
 
 type Direction = "top" | "right" | "bottom" | "left"
 
@@ -54,6 +57,7 @@ type Props = Readonly<{
   direction: Direction
   selected: boolean
   readOnly?: boolean
+  activeTone?: SegmentedControlActiveTone
 }> &
   ButtonProps
 
@@ -86,7 +90,7 @@ const PrimaryToggleButtonStyled = styled(SegmentedControlButton)<Props>`
 `
 
 const PrimaryToggleButtonWithRef = (
-  props: RenderRefProps,
+  { activeTone, ...props }: RenderRefProps,
   ref: Ref<HTMLButtonElement>,
 ) => (
   <PrimaryToggleButtonStyled
@@ -95,6 +99,7 @@ const PrimaryToggleButtonWithRef = (
     ref={ref}
     $size="md"
     $active={props.selected}
+    $activeTone={activeTone}
     data-selected={props.selected}
   />
 )

@@ -68,7 +68,7 @@ const getTone = (variant: BadgeVariant, theme: DefaultTheme) => {
     info: theme.color.statusInfo,
     success: theme.color.statusSuccess,
     warning: theme.color.statusWarning,
-    danger: theme.color.statusDanger,
+    danger: theme.color.statusDangerContrast,
   }
   return tones[variant]
 }

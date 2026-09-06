@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useState } from "react"
-import styled from "styled-components"
+import styled, { css } from "styled-components"
 import {
   InfoIcon,
   ArrowRightIcon,
@@ -109,6 +109,12 @@ const FullWidthInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
 `
 
+const StatusDetail = styled.span`
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  word-break: break-word;
+`
+
 const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   display: flex;
   align-items: flex-start;
@@ -116,11 +122,9 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   width: 100%;
   padding: 1.6rem;
   background: ${({ theme, $tone }) =>
-    $tone === "danger"
-      ? `${theme.color.statusDanger}1f`
-      : $tone === "warning"
-        ? theme.color.statusWarningSurface
-        : theme.color.surfaceInset};
+    $tone === "warning"
+      ? theme.color.statusWarningSurface
+      : theme.color.surfaceInset};
   color: ${({ theme, $tone }) =>
     $tone === "info"
       ? theme.color.contentSecondary
@@ -129,17 +133,45 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   & > svg {
     flex-shrink: 0;
     color: ${({ theme, $tone }) =>
-      $tone === "danger"
-        ? theme.color.statusDanger
-        : $tone === "warning"
-          ? theme.color.statusWarning
-          : theme.color.contentAccentStrong};
+      $tone === "warning"
+        ? theme.color.statusWarning
+        : theme.color.contentAccentStrong};
   }
 
   strong {
     color: ${({ theme }) => theme.color.contentPrimary};
     font-weight: 600;
   }
+
+  ${({ $tone, theme }) =>
+    $tone === "danger" &&
+    css`
+      align-items: center;
+      padding: 1.2rem;
+      border-radius: ${theme.borderRadius};
+      background: ${theme.mode === "light"
+        ? "rgba(189, 40, 56, 0.08)"
+        : "transparent"};
+      border: 1px solid
+        ${theme.mode === "light"
+          ? theme.color.statusDanger
+          : theme.color.statusDangerMuted};
+      border-left-width: 0.3rem;
+      color: ${theme.color.statusDanger};
+
+      & > svg {
+        color: ${theme.color.statusDanger};
+      }
+
+      strong {
+        color: ${theme.color.statusDanger};
+      }
+
+      ${StatusDetail} {
+        color: ${theme.color.statusDanger};
+        font-weight: 600;
+      }
+    `}
 `
 
 const AgentChangesRow = styled(StatusRow)`
@@ -177,12 +209,6 @@ const StatusText = styled.div`
   gap: 0.2rem;
   min-width: 0;
   line-height: 1.4;
-`
-
-const StatusDetail = styled.span`
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  word-break: break-word;
 `
 
 const Footer = styled.div`
@@ -440,6 +466,42 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
               }}
               disabled={isConnecting}
             />
+
+            {validationError && (
+              <StatusRow
+                $tone="danger"
+                data-hook="mcp-pair-validation-error"
+                role="alert"
+              >
+                <WarningIcon size={16} weight="duotone" />
+                <StatusText>
+                  <StatusDetail>{validationError}</StatusDetail>
+                </StatusText>
+              </StatusRow>
+            )}
+
+            {showWsError && (
+              <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
+                <WarningIcon size={16} weight="duotone" />
+                <StatusText>
+                  <strong>Could not connect to MCP server</strong>
+                  <StatusDetail>
+                    {lastError ??
+                      `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+                  </StatusDetail>
+                </StatusText>
+              </StatusRow>
+            )}
+
+            {showVersionMismatch && versionMismatch === "major" && (
+              <StatusRow
+                $tone="danger"
+                data-hook="mcp-pair-version-mismatch"
+                role="alert"
+              >
+                <BridgeUpgradeNotice severity={versionMismatch} />
+              </StatusRow>
+            )}
           </Body>
         )}
 
@@ -464,35 +526,9 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           </StatusRow>
         )}
 
-        {!succeeded && validationError && (
+        {showVersionMismatch && versionMismatch === "minor" && (
           <StatusRow
-            $tone="danger"
-            data-hook="mcp-pair-validation-error"
-            role="alert"
-          >
-            <WarningIcon size={16} weight="duotone" />
-            <StatusText>
-              <StatusDetail>{validationError}</StatusDetail>
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showWsError && (
-          <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
-            <WarningIcon size={16} weight="duotone" />
-            <StatusText>
-              <strong>Could not connect to MCP server</strong>
-              <StatusDetail>
-                {lastError ??
-                  `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
-              </StatusDetail>
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showVersionMismatch && versionMismatch && (
-          <StatusRow
-            $tone={versionMismatch === "major" ? "danger" : "warning"}
+            $tone="warning"
             data-hook="mcp-pair-version-mismatch"
             role="alert"
           >

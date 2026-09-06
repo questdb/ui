@@ -573,12 +573,340 @@ change shipped together, split them.
 - Out of scope: leftover native `Select` elsewhere.
 - For Emre: Workflow selects are `SelectMenuControl`, not `<select>`.
 
+### 2026-09-02 — Light MCP notebook promo is a solid card
+- Lift: binding
+- Status: applied locally
+- Modes: light
+- Tokens: `surfaceValue` (values unchanged)
+- Binding: `NotebookMcpPromo` `Container` was unfilled (stage showing through the dashed `contentAccent` stroke). Light fill is now `surfaceValue`. Dark stays transparent.
+- Neighbors: notebook stage `surfaceStage`; cells `surfaceRaised`; command chip inside the promo already `surfaceRaised`.
+- Walked: notebook MCP promo, light, expanded.
+- Why: A dashed outline on the stage read as a hole. The notice is a card, not a well. White sits above the stage and above cells without a new token.
+- Out of scope: dark fill; dashed stroke; `New` badge.
+- For Emre: Light promo fill is `surfaceValue`. Dark is still the dashed stroke only.
+
+### 2026-09-04 — Switch is larger and squared
+- Lift: binding (geometry)
+- Status: applied locally
+- Modes: both
+- Tokens: unchanged (`controlTrack`, `controlKnob`, `contentAccent` / `statusSuccessStrong` on, `contentInverse` thumb)
+- Binding: `Switch` track was a 36×20 pill with a 14px circular thumb. Default (`md`) is now 44×20, 6px radius, 1.5px inset, 24px rounded-square thumb (5px radius) — Figma node `1902:32067`. `sm` scales the same language (36×18 / 20px thumb).
+- Neighbors: AI Settings model list (the Figma frame); Editor Settings; import settings; schema designated timestamp.
+- Walked: Editor Settings switch, light and dark, on and off.
+- Why: The pill read as a tiny iOS switch. Squared + longer travel makes the control a row action, not chrome jewelry.
+- Out of scope: color retune (still branded on / success tone); checkboxes; Figma’s green-on — we keep current `tone`.
+- For Emre: Switch geometry only. Do not copy Figma’s `#19ac43` onto the default accent switch.
+
+### 2026-09-04 — Switch stroke is 0.5px
+- Lift: binding (geometry)
+- Status: applied locally
+- Modes: both
+- Binding: `Switch` track stroke is a 0.5px inset `box-shadow` (not `border: 0.5px` — Chromium rounds that used value to 1px even at 2x). Padding is 2px so the hairline plus 1.5px gap still reads as 2px outside-to-thumb. Thumb height/travel stay `md` 16px / 16px.
+- Neighbors: same as the squared-switch entry.
+- Walked: Editor Settings switch, light, off and on.
+- Why: 1px hairline plus 1.5px padding made a 2.5px gutter. Design is 0.5 + 1.5 = 2px outside-to-thumb.
+- Out of scope: color; focus outline still 1px.
+- For Emre: Switch rest/on stroke is 0.5px. Do not thicken it to match other controls.
+
+### 2026-09-04 — Table and mat-view glyphs are muted
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `contentMuted` (values unchanged)
+- Binding: `TableIcon` (and standalone `MaterializedViewIcon`) `contentAccent` → `contentMuted`. Schema row title no longer forces accent onto nested SVGs.
+- Neighbors: schema tree, details `TableSelector`, metrics table picker, AI schema chips, “Create materialized view” menu glyph. Rail table-details latch stays `contentAccent` when selected.
+- Walked: schema tree + details table select, light.
+- Why: Object-type marks were wearing brand. They are labels, not selected chrome.
+- Out of scope: rail latches; notebook title glyphs. Column type glyphs: see following entry.
+- For Emre: Table / mat-view / view identity icons are `contentMuted`.
+
+### 2026-09-04 — Column metadata glyphs are muted
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: `contentMuted` (values unchanged)
+- Binding: `ColumnIcon` `TypeIcon` and designated-timestamp `SortDownIcon` `contentAccent` → `contentMuted`.
+- Neighbors: schema tree column rows; details Columns list (same `ColumnIcon`).
+- Walked: expanded table columns in schema tree, light.
+- Why: Same job as table/mat-view marks — type labels, not brand.
+- Out of scope: rail latches; copy-pulse highlight still uses `contentAccentStrong`.
+- For Emre: Column type icons (including designated timestamp) are `contentMuted`.
+
+### 2026-09-04 — Base-table badge hover in dark
+- Lift: binding
+- Status: applied locally
+- Modes: dark (light already this token)
+- Tokens: `interactionHover` (values unchanged)
+- Binding: `BaseTableLinkButton` (mat-view Details → Base Table) inherits ghost hover, which is `surfaceRaised` in dark — the same fill as the details drawer, so the wash disappears. Hover is now `interactionHover` in both modes, matching light ghost.
+- Neighbors: drawer is `surfaceRaised`. Global dark ghost still `surfaceRaised` (deferred).
+- Walked: `bbo_1s` Details, light and dark, hover on `market_data`.
+- Why: Light ink wash is visible on raised chrome. Dark elevation hover is not.
+- Out of scope: retuning dark `interactionHover`; other ghost buttons.
+- For Emre: This badge uses the overlay, not a surface step. Flag if dark ghost should follow globally.
+
+### 2026-09-05 — Light tab rail is raised at 94%
+- Lift: palette
+- Status: applied locally
+- Modes: light
+- Tokens: `surfaceTabRail`
+- Before → after (light): `rgba(232, 234, 238, 0.94)` → `rgba(244, 245, 247, 0.94)` (`#F4F5F7` at 94%)
+- Neighbors: same RGB as `surfaceRaised` `#f4f5f7`, still the frosted rail (blur + 94%). Dark `rgba(18, 19, 23, 0.82)` unchanged.
+- Walked: editor tab strip, light.
+- Why: Rail was still the old canvas grey at 94%. Zack wants it to sit with raised chrome.
+- Out of scope: dark rail; individual tab pills (still transparent / `interactionHover`).
+- For Emre: Light `surfaceTabRail` is now raised-at-94%, not canvas-at-94%.
+
+### 2026-09-05 — Switch on-fill is a unique success fill
+- Lift: palette + binding
+- Status: applied locally
+- Modes: both
+- Tokens: `statusSuccessFill` (new). Meaning: opaque positive fill that does not need text contrast. Not `statusSuccess` / `Strong` (ink) and not a component-named `switchGreen`.
+- Before → after: dark `#3fa659`, light `#1f7a39` (Figma `1919:102397` / Assistant Settings `1924:106893`, `1913:79570`)
+- Binding: `Switch` on-state `contentAccent` / `statusSuccessStrong` → `statusSuccessFill`. Thumb is `contentInverse` in both states. Rest track in light is Figma `#c9cdd4` (not retuning `controlTrack` — segmented chips still use it). Stroke stays 0.5px inset: dark white `.15`, light ink `.25`.
+- Geometry: track radius `8px` (`sm` `7px`), thumb radius `6px` (`sm` `5px`). Size still `44×20` / `24` thumb, `2px` pad.
+- Neighbors: Enabled / Validated stay `statusSuccess` `#66bb6a` / `#067047`. The fill is brighter and more saturated on purpose.
+- Walked: Editor Settings + AI Enable Models switches, light and dark.
+- Why: Text greens cannot also be the on-track. Zack wants a reviewable unique green in the same family.
+- Out of scope: checkboxes; hover step; retuning `controlTrack`; other controls.
+- For Emre: `statusSuccessFill` is the opaque on-fill. Flag if the name should be `controlOn` once more controls share it.
+
+### 2026-09-06 — statusInfo family: Subtle, Text, Control
+- Lift: palette
+- Status: applied locally
+- Modes: both
+- Tokens: `statusInfo` (unchanged), `statusInfoSubtle` (new), `statusInfoControl` (new), `statusInfoSurface` (retuned to Subtle wash)
+- Before → after:
+  - `statusInfo` stays `#81d3f9` / `#176f87` — info type + focus ring at 75%
+  - `statusInfoSubtle` dark `#b2e7ff`, light `#159cc1` — latch icon
+  - `statusInfoControl` dark `#0c80f3`, light `#0a88db` — checkbox / persistent on-fill (Option 2, bluer)
+  - `statusInfoSurface` dark Text `@10%` → Subtle `@5%` `rgba(178, 231, 255, 0.05)`; light Text `@10%` → Subtle `@10%` `rgba(21, 156, 193, 0.10)` (Figma latch well)
+- Neighbors: do not retune `statusInfo`. Subtle is the quiet on-glyph, not a banner fill. Control is the opaque fill; porcelain ticks use `contentInverse` (~3.8:1 on Option 2). One wash — Surface is Subtle, not a second Text wash.
+- Walked: Figma `1943:113543` / `115332` (latch), `115217` / `117006` (focus), `117179` / `118238` (checkbox)
+- Why: Brand crimson was doing chrome jobs (latch, focus, checkbox). Info ramp splits quiet / type / fill so those jobs leave brand.
+- Out of scope: `contentAccent` / `actionPrimary`; rail icons; tab underlines; notebook cell focus.
+- For Emre: Three roles, one family. Flag if Surface should stay a Text wash for badges — latch Figma is Subtle at 5/10.
+
+### 2026-09-06 — Bind latches, focus, checkboxes, object glyphs to statusInfo
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: values unchanged here
+- Binding:
+  - Non-rail latched icon buttons (`PrimaryToggleButton` `activeTone="info"`): schema auto-refresh / select, result + notebook freeze. Icon `statusInfoSubtle`, well `statusInfoSurface`. Idle stays `contentSecondary`.
+  - Rail `Navigation` (and other rail `PrimaryToggleButton`s) stay `$activeTone="accent"` — `contentAccent` + `interactionAccentActive`. Navigation pins the branded well so a later default change cannot leak.
+  - Keyboard focus (`*:focus-visible`, Button, Switch, Checkbox, chrome-tabs, leftover `borderStrong` rings) → `statusInfo` at 75% (`statusInfoFocus`). Notebook cell focus (`CellWrapper`) stays branded.
+  - `Checkbox` checked fill `contentAccent` → `statusInfoControl`; tick stays `contentInverse`. Schema multi-select filled circle unchanged.
+  - Notebook title glyph + chrome-tab notebook/metrics favicons: `contentObject` → `statusInfo` (light leaves brand `#b81447`).
+- Neighbors: `TabButton` underline, AI `$tone="accent"`, `SelectMenu` check, switches (`statusSuccessFill`) unchanged.
+- Walked: schema auto-refresh, freeze column, Search “Include closed tabs”, button focus, notebook glyph, rail icons. Light and dark.
+- Why: Zack: only non-rail latches take the new pattern. Rail is the branded exception.
+- Out of scope: `SelectMenu` check; cell focus; tab underlines; field focus borders (`Input` still `borderStrong` / accent).
+- For Emre: `activeTone="info"` is the latch. Do not fold it into `accent`. `contentObject` is now unused in components — collapse when ready.
+
+### 2026-09-06 — Product brand is QDB Pink (same hexes both modes)
+- Lift: palette
+- Status: applied locally
+- Modes: both
+- Tokens: `contentAccent`, `contentAccentStrong`, `actionPrimary`, `actionPrimaryHover`, `interactionAccentHover`, `interactionAccentActive`, `borderAccent`, `borderAccentStrong`, `brandGradientStart`, `brandGradientEnd`, `aiGradientStart`, `aiGradientEnd`
+- Before → after (both modes unless noted):
+  - `contentAccent` `#c94f74` / `#b81447` → `#f0428b` (Pink 300) — rail, tabs, remaining chrome accent
+  - `contentAccentStrong` `#cf1750` / `#8a0f35` → `#ee2b7c` (Pink 400)
+  - `actionPrimary` `#b81447` / `#8a0f35` → `#bd0f58` (Pink 700)
+  - `actionPrimaryHover` `#cf1750` / `#b81447` → `#d41162` (Pink 600)
+  - Accent wells rebase on Pink 300; `interactionAccentActive` is **10%** (rail latch well), was 15%/13%
+- Neighbors: Pink 700 is the opaque action; Pink 300 is on-chrome. Do not collapse them. Cell focus and `SelectMenu` check inherit Accent.
+- Walked: Figma Core `2244:340`; console `1913:61852` / `73608` / `83402` / `93667`
+- Why: Pinker brand so it no longer reads as the error red.
+- Out of scope: `contentObject`; inventing `qdbPink*` tokens.
+- For Emre: Same hexes in light. Flag if light actions need a darker step (old light primary was `#8a0f35`).
+
+### 2026-09-06 — Danger rotates to pure red
+- Lift: palette + binding
+- Status: applied locally
+- Modes: both (hexes shared; light contrast is a known risk)
+- Tokens: `statusDanger` `#ff3333`; `statusDangerStrong` `#db2424` (was `#dc2828`); `statusDangerContrast` `#ff4d4d` (new, type on 15% wash); `statusDangerSubtle` `#ff8080` (new, type on 40% wash); `statusDangerSurface` `#db2424` @ **15%**; `statusDangerSurfaceHover` `#db2424` @ **40%**; `statusDangerMuted` Strong @ 72%; `statusDangerBorder` Strong @ 28%
+- Binding:
+  - `danger` Button is solid Strong + `contentInverse` (Delete conversation confirm, Cancel script). Hover fill is Text `#ff3333`.
+  - `dangerGhost` rest Surface + Contrast; hover SurfaceHover + Subtle (Reset Provider, Figma `1948:123286`).
+  - Chat history row delete `dangerGhost` → `danger`.
+  - Field error border Strong; wash Surface. MCP / login / details banners use Surface, not `statusDanger`+`1f`.
+- Neighbors: brand pink and danger red must not share a hex.
+- Why: Separate “this is QuestDB” from “this is broken / destructive.”
+- Out of scope: light-only darker danger type (Zack said dark first).
+- For Emre: Contrast/Subtle are type-on-wash, not fills. Strong is the opaque source.
+
+### 2026-09-06 — Light brand + danger split from dark
+- Lift: palette
+- Status: applied locally
+- Modes: light only (dark hexes unchanged)
+- Tokens:
+  - `contentAccent` `#bd0f58` — rail icons + tab underlines
+  - `contentAccentStrong` `#8e0b42` — sits with actions
+  - `actionPrimary` `#8e0b42`; `actionPrimaryHover` `#bd0f58`
+  - `interactionAccentActive` `#bd0f58` @ **13%** (rail well); hover rebase @ 8%
+  - `statusDanger` `#ce1717` — type + icons always
+  - `statusDangerStrong` `#ce1717` — solid Delete fill
+  - `statusDangerContrast` `#b81414` — type on `#bd2828` @ 15%
+  - `statusDangerSubtle` `#8a0f0f` — type on `#db2424` @ 40% hover
+  - `statusDangerSurface` `#bd2828` @ 15%; `statusDangerSurfaceHover` `#db2424` @ 40%
+- Neighbors: `danger` / `dangerGhost` variants unchanged — they read these roles. Light solid delete is Text, not the dark Strong `#db2424`.
+- Walked: Figma `1913:61813` / `79570` / `85185` / `93656`; hover `1948:123305`
+- Why: One-for-one with the dark pass, with a darker action and a contrast-safe light red.
+- Out of scope: retuning dark; leaving brand on rail/tabs/cell focus.
+- For Emre: Light Strong equals Text so `danger` buttons stay `#ce1717`. Do not share Strong across modes.
+
+### 2026-09-06 — MCP pair error banner
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: no new roles. Light fill is banner-only `rgba(189, 40, 56, 0.08)` (Figma, not the 15% wash). Dark fill is transparent. Stroke is `statusDanger` (light) / `statusDangerMuted` (dark). Type + icon `statusDanger`.
+- Binding: `PairPopover` danger `StatusRow` is inset in the form — 1px border, 3px left accent, 6px radius, 12px padding. Validation / WS error / major version-mismatch use it. `StatusDetail` inherits Text, not `contentSecondary`.
+- Walked: Figma `1913:86918` (light), `1913:85135` (dark)
+- Why: Validation is a status banner, not a full-bleed wash.
+- Out of scope: consent modal; connecting / minor-mismatch rows.
+- For Emre: Do not fold the 8% banner wash into `statusDangerSurface`.
+
+### 2026-09-06 — Reset Provider is a true ghost, not dangerGhost
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none. `dangerGhost` stays the washed secondary (Surface + Contrast / SurfaceHover + Subtle).
+- Binding: Assistant Settings Reset / Remove Provider uses `ghost` + local danger type. Rest is transparent + `statusDanger`. Hover is `#db2424` @ 30% + Subtle in dark; `#bd2828` @ 10% + Text in light. Icons follow type.
+- Walked: Figma `1924:106893` / `1948:123175` (dark), `1919:102447` / `1948:123305` (light)
+- Why: The filled wash is for secondary destructive chips. Reset is a quiet text action until hover.
+- Out of scope: retuning `dangerGhost`; chat-history solid delete.
+- For Emre: Do not fold this hover into `statusDangerSurfaceHover` (40%). Reset is the 10%/30% ghost, not the secondary wash.
+
+### 2026-09-06 — Notebook drag slot is a primary wash
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none. `interactionNeutral` @ 25% was the old slot — light `#e8eaee` on stage `#e2e5ea` vanished.
+- Binding: `react-grid-placeholder` is `withAlpha(contentPrimary, 0.08)` light / `0.10` dark. Ink on the light stage, porcelain on the dark stage. Opacity lives in the alpha, not a second `opacity`. `interactionHover` is the same idea at 7.5% / 5.5% — too quiet on the stage, and Neutral still matches the light ladder.
+- Neighbors: stage `surfaceStage`. Cells `surfaceRaised`. Drag chrome stays `contentAccent`.
+- Why: The snap rectangle has to read as a hole on the stage, not a control fill. Neutral is the pressed-chip role.
+- Out of scope: the always-on stage dot grid (`interactionHover`); retuning Neutral.
+- For Emre: One-off wash. Do not invent `surfaceDragSlot`.
+
+### 2026-09-06 — Freeze latch shares toolbar control height
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: Result freeze (`PrimaryToggleButton`) uses `&&` + `TOOLBAR_CONTROL_HEIGHT` (Button `md` 3.4rem) and the same `0 1.2rem` padding as sibling ghost Buttons. Notebook freeze uses `&&` + ActionButton's 2.8rem / `0 0.6rem`. Latch color stays `statusInfo`.
+- Neighbors: `PrimaryToggleButton` itself stays 3.5rem for rail / other chrome. Schema toolbar chips stay 3rem.
+- Why: Freeze was a segmented-control latch (3.0–3.5rem, width 4rem) sitting next to default `Button` ghosts. No reason for a different chip.
+- Out of scope: retuning `PrimaryToggleButton` globally; latch color.
+- For Emre: Geometry only. `&&` is required to beat `SegmentedControlButton` `$size="md"` (3rem) and `PrimaryToggleButton` (3.5rem).
+
+### 2026-09-06 — Result grid header names are Semibold
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: Column header names are Open Sans Semibold (`600`). `ResultGrid` `HeaderName`, notebook shimmer, and the legacy `.qg-header-name` grid. Width sampling uses the same weight so names don't clip.
+- Neighbors: header type stays Regular / secondary. Cell values unchanged.
+- Why: Figma `1913:84504` — names are `Open Sans SemiBold`, not Regular.
+- Out of scope: type-row italic; cell type color.
+- For Emre: `HEADER_NAME_FONT_WEIGHT` in `ResultGrid/dimensions.ts`.
+
+### 2026-09-06 — Add Markdown hover is the chrome wash
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: secondary Add Markdown (`AddButton` `$variant="secondary"`) hover `interactionNeutral` → `interactionHover`. Type still `contentPrimary` on hover. Add Cell stays `interactionAccentActive`.
+- Neighbors: sits on `surfaceStage`. Light Neutral `#e8eaee` on stage `#e2e5ea` is a lift. Dark Neutral `#32343e` is a pressed chip, several steps up. Ghost / menu / tree / search hover is already `interactionHover` (ink 7.5% / porcelain 5.5%).
+- Why: One-step invert against the surface — darker in light, lighter in dark. Neutral is the selected-chip role.
+- Out of scope: Add Cell; retuning `interactionHover`; global ghost.
+- For Emre: Same wash as other chrome hovers. Do not use Neutral for hover on the stage.
+
+### 2026-09-06 — Result row count is Open Sans Semibold 15
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: Result toolbar count number is `theme.font` / `fontSize.lg` (15px) / `600` / `2.14rem` (21.4px). Dropped `fontMonospace`. "rows" stays Regular `fontSize.sm` (13px) / `1.56rem` / `contentSecondary`.
+- Neighbors: header names are Semibold 14. Cell values stay mono.
+- Why: Figma `1913:84477` — `350,528` is Open Sans SemiBold 15 / 21.4; `rows` is Regular 13 / 15.6.
+- Out of scope: notebook QueryResult "X rows in Yms"; inventing a type token.
+- For Emre: Chrome count, not a cell. Keep tabular-nums.
+
+### 2026-09-06 — Light tooltips share the dropdown overlay
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: none
+- Binding: `Tooltip` box + arrow fill `surfaceInset` → `surfaceOverlay` in light (`#fafbfc`). Dark stays `surfaceInset` (`#121317`). Stroke stays `borderDefault`.
+- Neighbors: dropdowns / popovers already `surfaceOverlay` via `floatingSurfaceStyles`. Light Inset `#f7f8f9` is the editor/grid well, a gray step below Overlay. Dark Inset sits under Overlay on the ladder, so it already matches.
+- Why: Light tooltip was a well next to a near-white menu. Same floating layer as the dropdown.
+- Out of scope: retuning `surfaceInset`; dark tooltip; adding the menu shadow to tooltips.
+- For Emre: Do not fold Inset into Overlay. Inset stays the recessed well.
+
+### 2026-09-06 — Light instance hover card matches tooltips
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: none
+- Binding: TopBar `CustomTooltipWrapper` fill `surfaceInset` → `surfaceOverlay` in light. Dark stays `surfaceInset`. Stroke stays `borderDefault`.
+- Neighbors: shared `Tooltip` already Overlay in light. Same floating-chrome job as Export / EE tooltips.
+- Why: Inset is the well; Overlay is the floating layer. Demo data has no instance type so this card is easy to miss.
+- Out of scope: Monaco `editorWidget`; chart settings drawer; instance color-picker well.
+- For Emre: Same split as Tooltip. Do not retune Inset.
+
+### 2026-09-06 — Dropdown loom blur 16 → 12 (trial, reverted)
+- Lift: binding (geometry, same tokens)
+- Status: reverted
+- Modes: both — `floatingSurfaceStyles` is shared
+- Tokens: none
+- Binding: tried third layer blur `1.6rem` → `1.2rem`. Reverted to `0 1.2rem 1.6rem -0.4rem` `shadowMedium`.
+- Why: Zack: 12px was a look, not a keep. Light-only quieting is the palette lever (`shadowMedium` 8% vs dark 28%), not shared geometry.
+- Out of scope: retuning shadow opacities; dropping the third layer.
+- For Emre: Stack unchanged. Trial only.
+
+### 2026-09-06 — Dropdown shadow C, loom split by mode
+- Lift: binding (geometry, same tokens)
+- Status: applied locally (trial)
+- Modes: both; third layer splits
+- Tokens: none
+- Binding: `floatingSurfaceStyles` (and Monaco / Quick Vis copies):
+  - Shared heel: `0 1px 2px 0` `shadowSoft`
+  - Shared weight: `0 4px 6px -2px` `shadowMedium`
+  - Light loom: `0 8px 8px -4px` `shadowSubtle` (Figma `1957:130606`)
+  - Dark loom: `0 12px 16px -4px` `shadowMedium` (kept the old third layer; "126" read as 16)
+- Neighbors: SelectMenu / DropdownMenu / Popover / MCP pair / theme + AI model. Modals unchanged.
+- Why: Zack: C in both, loom quieter/tighter in light only. Dark still needs the 16px Medium halo.
+- Out of scope: retuning shadow opacities; instance hover card; `modalSurfaceStyles`.
+- For Emre: Geometry split, not a palette retune. Light loom is Subtle so it does not stack two Mediums.
+
+### 2026-09-06 — Dark ghost danger type is Text, not Subtle
+- Lift: binding
+- Status: applied locally
+- Modes: dark (light kept)
+- Tokens: none. `statusDangerSubtle` stays `#ff8080`.
+- Binding: `dangerGhost` hover type `statusDangerSubtle` → `statusDanger` (`#ff3333`) in dark. Reset Provider hover type follows. Light hover stays Subtle on the 40% wash.
+- Neighbors: rest `dangerGhost` still Contrast `#ff4d4d` + Surface. Solid `danger` unchanged.
+- Why: Figma `1948:123286` — Reset Provider type is `#ff3333`, not the 40%-wash Subtle.
+- Out of scope: retuning Subtle; light ghost danger; wash opacities.
+- For Emre: Subtle remains type-on-40%. Dark ghost hover uses Text.
+
+### 2026-09-06 — In-track maximize hover matches Table/Chart
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: none
+- Binding: `ViewIconButton` (maximize / reset-zoom inside `NotebookViewToggle`) light hover `interactionNeutralHover` → `interactionHover`. Same wash as `SegmentedControlButton`. Dark stays `surfaceRaised`.
+- Neighbors: track `controlTrack` `#e8eaee`. NeutralHover `#e2e5ea` on that track vanished. Outside-cell Maximize / More stay `surfaceBase` on the raised cell.
+- Why: Zack: in-track hover must match Table/Chart, not the ghost icons outside the control.
+- Out of scope: CellIconButton; retuning NeutralHover.
+- For Emre: In-track hover is the ink wash, not a surface step on the chip track.
+
 ---
 
 ## Parking lot — not logged as decisions yet
 
 Use this for hunches until they become an entry.
 
-- Brand core (`contentAccent`, `actionPrimary`, `contentObject` in light) may be overused. 2026-09-01 neutralized fields, lists, search, keyboard focus, dropdown open state, grid hover/selection/resize, and column names. Still branded: rail icons, tree glyphs, `SelectMenu` check, tab underlines, notebook cell focus + title glyphs, AI composer/login `$tone="accent"`, checkboxes/switches. Treat leftovers as **binding**.
+- Brand core is QDB Pink, split by mode: dark 300/700 (`#f0428b` / `#bd0f58`), light 700/800 (`#bd0f58` / `#8e0b42`). Still branded: rail, tabs, cell focus, `SelectMenu` check, AI `$tone="accent"`. Danger is the pure-red family (dark bright ramp; light `#ce1717` + contrast steps). `contentObject` unused. Treat leftovers as **binding**.
 - `interactionNeutral` / `controlTrack` leftover `#d9dce2` — addressed 2026-09-01 (table/chart chips).
 - New surface roles: only if two neighbors with *different jobs* are forced to share a token. Propose the meaning first (`surfaceSomething`), then values in both themes.

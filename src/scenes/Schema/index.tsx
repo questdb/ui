@@ -115,7 +115,9 @@ const Content = styled(PaneContent)<{
   ${({ _loading }) => _loading && loadingStyles};
 `
 
-const ToolbarToggleButton = styled(PrimaryToggleButton)`
+const ToolbarToggleButton = styled(PrimaryToggleButton).attrs({
+  activeTone: "info" as const,
+})`
   &&:not(:disabled) {
     width: auto;
     padding: 0 1rem;

@@ -66,7 +66,7 @@ const NotebookGlyph = styled(NotebookIcon).attrs({
 })`
   display: block;
   flex-shrink: 0;
-  color: ${color("contentObject")};
+  color: ${color("statusInfo")};
 `
 
 const NotebookIdentity = styled(Box).attrs({ align: "center", gap: "1rem" })`

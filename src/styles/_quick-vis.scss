@@ -212,9 +212,16 @@
   border: 1px solid theme-color(borderDefault);
   border-radius: 0.6rem;
   box-shadow:
-    0 0.2rem 0.2rem -0.1rem theme-color(shadowSubtle),
-    0 0.4rem 0.6rem -0.2rem theme-color(shadowSubtle),
-    0 1.2rem 1.6rem -0.4rem theme-color(shadowSubtle);
+    0 0.1rem 0.2rem 0 theme-color(shadowSoft),
+    0 0.4rem 0.6rem -0.2rem theme-color(shadowMedium),
+    0 1.2rem 1.6rem -0.4rem theme-color(shadowMedium);
+
+  html[data-theme="light"] & {
+    box-shadow:
+      0 0.1rem 0.2rem 0 theme-color(shadowSoft),
+      0 0.4rem 0.6rem -0.2rem theme-color(shadowMedium),
+      0 0.8rem 0.8rem -0.4rem theme-color(shadowSubtle);
+  }
   color: theme-color(contentPrimary);
   font-family: theme-font(sans);
   font-size: 1.4rem;

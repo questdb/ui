@@ -56,7 +56,8 @@
     filter 150ms ease;
 
   &:focus-visible {
-    outline: 1px solid theme-color(borderStrong);
+    outline: 1px solid
+      color-mix(in srgb, theme-color(statusInfo) 75%, transparent);
     outline-offset: 2px;
   }
 
@@ -358,13 +359,13 @@ html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow-right {
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-favicon--notebook {
-  background-color: theme-color(contentObject);
+  background-color: theme-color(statusInfo);
   -webkit-mask-image: url("/assets/icon-notebook.svg");
   mask-image: url("/assets/icon-notebook.svg");
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-favicon--metrics {
-  background-color: theme-color(contentObject);
+  background-color: theme-color(statusInfo);
   -webkit-mask-image: url("/assets/icon-chart.svg");
   mask-image: url("/assets/icon-chart.svg");
 }

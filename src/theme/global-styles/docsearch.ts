@@ -3,6 +3,7 @@ import { css, type DefaultTheme } from "styled-components"
 import { makeButtonVariant } from "../../components/Button/variants"
 import { TOOLBAR_CONTROL_HEIGHT } from "../../components/Button/tokens"
 import { shortcutKeycapStyles } from "../../components/Key/styles"
+import { statusInfoFocus } from "../index"
 
 const docSearchVariablePattern =
   /var\(--docsearch-([a-z0-9-]+)(?:,\s*[^)]+)?\)/g
@@ -108,7 +109,8 @@ export const DocSearchStyles = css`
   }
 
   .DocSearch.DocSearch-Button:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 

@@ -1,6 +1,7 @@
 import { createGlobalStyle } from "styled-components"
 
 import { DocSearchStyles } from "./global-styles/docsearch"
+import { statusInfoFocus } from "./index"
 
 export const GlobalStyle = createGlobalStyle`
   ${DocSearchStyles}
@@ -84,7 +85,8 @@ export const GlobalStyle = createGlobalStyle`
   }
 
   button[data-button-variant="ghost"]:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 
@@ -97,7 +99,8 @@ export const GlobalStyle = createGlobalStyle`
   }
 
   *:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 

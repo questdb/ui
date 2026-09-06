@@ -76,7 +76,7 @@ const AddButton = styled(ButtonBase)<{
           `
         : css`
             color: ${color("contentPrimary")};
-            background: ${color("interactionNeutral")};
+            background: ${color("interactionHover")};
           `}
   }
 

@@ -139,9 +139,15 @@ export const ActionButton = styled(Button)`
   gap: 0.3rem;
 `
 
-export const FreezeToggle = styled(PrimaryToggleButton)`
-  flex-shrink: 0;
-  height: 2.8rem;
-  width: 3.2rem;
-  padding: 0;
+export const FreezeToggle = styled(PrimaryToggleButton).attrs({
+  activeTone: "info" as const,
+})`
+  && {
+    flex-shrink: 0;
+    height: 2.8rem;
+    min-height: 2.8rem;
+    width: auto;
+    min-width: 2.8rem;
+    padding: 0 0.6rem;
+  }
 `

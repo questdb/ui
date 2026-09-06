@@ -18,6 +18,11 @@ export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
   color: ${({ selected, theme }) =>
     selected ? theme.color.contentAccent : theme.color.contentSecondary};
 
+  &&[aria-pressed="true"] {
+    background: ${({ theme }) => theme.color.interactionAccentActive};
+    color: ${({ theme }) => theme.color.contentAccent};
+  }
+
   &:hover:not([disabled]) {
     color: ${({ selected, theme }) =>
       selected ? theme.color.contentAccent : theme.color.contentPrimary};
@@ -25,6 +30,11 @@ export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
       selected
         ? theme.color.interactionAccentActive
         : theme.color.interactionHover};
+  }
+
+  &&[aria-pressed="true"]:hover:not([disabled]) {
+    background: ${({ theme }) => theme.color.interactionAccentActive};
+    color: ${({ theme }) => theme.color.contentAccent};
   }
 
   & > span {

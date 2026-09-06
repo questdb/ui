@@ -12,6 +12,7 @@ import {
 import { Preferences, InstanceType } from "../../utils/questdb/types"
 import { menuContainerStyles } from "../menuStyles"
 import { InstanceTypeIcon } from "./InstanceTypeIcon"
+import { statusInfoFocus } from "../../theme"
 
 const Wrapper = styled.div`
   ${menuContainerStyles}
@@ -154,7 +155,8 @@ const ColorSlider = styled.input.attrs({ type: "range", min: 0, max: 255 })`
   }
 
   &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderStrong};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 

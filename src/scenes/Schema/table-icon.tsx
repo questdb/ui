@@ -22,8 +22,10 @@ const Root = styled.div<{ $size: string }>`
   height: ${({ $size }) => $size};
   position: relative;
   flex-shrink: 0;
+  color: ${color("contentMuted")};
+
   svg {
-    color: ${color("contentAccent")};
+    color: inherit;
   }
 `
 
@@ -56,12 +58,17 @@ const NonPartitionedTableIcon = ({
   </svg>
 )
 
+const MutedGlyph = styled.svg`
+  color: ${color("contentMuted")};
+  flex-shrink: 0;
+`
+
 export const MaterializedViewIcon = ({
   size = DEFAULT_SIZE,
 }: {
   size?: string
 }) => (
-  <svg
+  <MutedGlyph
     viewBox="0 0 28 28"
     height={size}
     width={size}
@@ -82,7 +89,7 @@ export const MaterializedViewIcon = ({
       <path fill="none" d="M0 0h24v24H0z" />
       <path d="M4 8h16V5H4v3zm10 11v-9h-4v9h4zm2 0h4v-9h-4v9zm-8 0v-9H4v9h4zM3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
     </g>
-  </svg>
+  </MutedGlyph>
 )
 
 export const ViewIcon = ({

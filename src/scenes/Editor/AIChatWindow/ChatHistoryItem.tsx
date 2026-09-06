@@ -6,6 +6,7 @@ import {
   TrashSimpleIcon,
 } from "@phosphor-icons/react"
 import { color } from "../../../utils"
+import { statusInfoFocus } from "../../../theme"
 import type { ConversationMeta } from "../../../store/db"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -39,7 +40,8 @@ const Container = styled.div<{ $disabled?: boolean }>`
   }
 
   &:focus-visible {
-    outline: 1px solid ${color("borderStrong")};
+    outline: 1px solid
+      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 `
@@ -248,7 +250,7 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
               <ActionButton
                 label="Delete conversation"
                 size="sm"
-                variant="dangerGhost"
+                variant="danger"
                 onClick={handleDeleteClick}
                 title="Delete"
                 data-hook="chat-history-delete"

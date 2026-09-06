@@ -14,7 +14,7 @@ import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
 
 export type SegmentedControlTone = "neutral" | "success" | "info"
 
-export type SegmentedControlActiveTone = "accent" | "neutral"
+export type SegmentedControlActiveTone = "accent" | "info" | "neutral"
 
 export type SegmentedControlSize = "xs" | "sm" | "md"
 
@@ -385,6 +385,16 @@ export const SegmentedControlButton = styled(
         &&:hover:not(:disabled):not([aria-disabled="true"]) {
           background: ${theme.color.interactionNeutral};
           color: ${theme.color.contentPrimary};
+        }
+      `
+    }
+
+    if ($activeTone === "info") {
+      return css`
+        &&,
+        &&:hover:not(:disabled):not([aria-disabled="true"]) {
+          background: ${theme.color.statusInfoSurface};
+          color: ${theme.color.statusInfoSubtle};
         }
       `
     }
