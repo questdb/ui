@@ -118,14 +118,8 @@ const runTransition = <T>(
       ) {
         throw new NotebookStateChangedError()
       }
-      // The passive (Dexie) controller has no live hydration statuses;
-      // "unrequested" matches what the mounted notebook renders for a
-      // run-marked cell before its snapshot loads.
-      return ctrl.mutate((parts) =>
-        transition(
-          parts,
-          (cellId) => ctrl.readResultStatus?.(cellId) ?? "unrequested",
-        ),
+      return ctrl.mutate((parts, resultStatusOf) =>
+        transition(parts, resultStatusOf),
       )
     },
     signal,

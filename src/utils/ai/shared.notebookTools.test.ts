@@ -41,6 +41,7 @@ import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
+import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
 
 const cell = (
   id: string,
@@ -119,7 +120,7 @@ const mountLive = (
     kind: "live",
     mutate: (transition) => {
       try {
-        const out = transition(state.parts)
+        const out = transition(state.parts, () => "unrequested")
         state.parts = out.parts
         return Promise.resolve(out.result)
       } catch (error) {
@@ -1504,7 +1505,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       kind: "live",
       mutate: (transition) => {
         try {
-          const out = transition(state.parts)
+          const out = transition(state.parts, () => "unrequested")
           state.parts = out.parts
           abort.abort()
           return Promise.resolve(out.result)
@@ -2867,6 +2868,57 @@ describe("dispatchTool — get_cell content cap switch", () => {
       savedAt: 1,
     })
     expect(await readView()).toBe("result")
+  })
+
+  it("uses missing snapshot status for passive layout and dimension mutations", async () => {
+    unregisterController(1)
+    const persistedCell = cell("c", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+    await db.buffers.update(1, {
+      notebookViewState: {
+        cells: [persistedCell],
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "c", x: 0, y: 0, w: 6, h: 99 }],
+        },
+      },
+    })
+
+    const layout = await dispatchTool(
+      "set_cell_layout",
+      { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
+      makeClient(),
+      noopStatus,
+    )
+    expect(JSON.parse(layout.content)).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      view: "editor",
+    })
+    expect(
+      (await db.buffers.get(1))?.notebookViewState?.settings?.layout?.[0],
+    ).toEqual({
+      i: "c",
+      x: 0,
+      y: 0,
+      w: 4,
+      h: computeAgentCellGridH(persistedCell, false),
+    })
+
+    const dimensions = await dispatchTool(
+      "set_cell_dimensions",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        editor_height: null,
+        result_height: null,
+        view: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    expect(JSON.parse(dimensions.content)).toEqual({ view: "editor" })
   })
 })
 

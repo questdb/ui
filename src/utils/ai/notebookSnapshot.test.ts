@@ -49,8 +49,10 @@ const makeController = (
   kind: "live",
   mutate: (transition) =>
     Promise.resolve(
-      transition({ cells, settings, maximizedCellId, focusedCellId: null })
-        .result,
+      transition(
+        { cells, settings, maximizedCellId, focusedCellId: null },
+        readResultStatus ?? (() => "unrequested"),
+      ).result,
     ),
   readView: () =>
     Promise.resolve({

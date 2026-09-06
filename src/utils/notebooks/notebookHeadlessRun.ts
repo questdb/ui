@@ -128,8 +128,15 @@ const beginHeadlessBarrier = (
     finish: () => {
       externalSignal?.removeEventListener("abort", abortFromExternal)
       claims.delete(controller)
-      if (claims.size === 0) perBuffer.delete(cellId)
-      if (perBuffer.size === 0) activeHeadlessBarriers.delete(bufferId)
+      if (claims.size === 0 && perBuffer.get(cellId) === claims) {
+        perBuffer.delete(cellId)
+      }
+      if (
+        perBuffer.size === 0 &&
+        activeHeadlessBarriers.get(bufferId) === perBuffer
+      ) {
+        activeHeadlessBarriers.delete(bufferId)
+      }
     },
   }
 }

@@ -10,6 +10,7 @@ import type {
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import type {
   AgentHeightValue,
+  CellResultStatusReader,
   CellResultStatus,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
@@ -22,7 +23,10 @@ import {
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
-import { deleteCellSnapshot } from "../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  loadSnapshotCellIds,
+} from "../../../store/notebookResults"
 import { NotebookToolError } from "../notebookToolError"
 import { enqueueBufferTask } from "../notebookBufferQueue"
 import { emitAgentEdit } from "../agentActivity"
@@ -65,7 +69,10 @@ export type RunCellSummary = {
 // transition's typed throw (unknown_cell, last_cell, …) surfaces as a rejection,
 // identically on both routes.
 export type NotebookMutate = <T>(
-  transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+  transition: (
+    parts: ViewParts,
+    resultStatusOf: CellResultStatusReader,
+  ) => NotebookTransitionResult<T>,
 ) => Promise<T>
 
 // Live-only refresh state, read straight off the refresh engine. Absent for
@@ -86,8 +93,8 @@ export type NotebookController = {
   readView: () => Promise<NotebookViewState>
   readRefreshState?: () => ReadonlyMap<string, CellRefreshView>
   // Live-only, like readRefreshState: the snapshot-load status of one cell,
-  // read off the provider's hydration engine (mount-independent). The passive
-  // route omits it; callers fall back to "unrequested".
+  // read off the provider's hydration engine (mount-independent). Passive
+  // transitions receive their IndexedDB-backed reader through `mutate`.
   readResultStatus?: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
@@ -155,7 +162,11 @@ export const createNotebookController = (
   // Promise so a transition's typed throw reaches the agent as a rejection.
   const mutate: NotebookMutate = (transition) => {
     try {
-      return Promise.resolve(liveActionsRef.current.applyTransition(transition))
+      return Promise.resolve(
+        liveActionsRef.current.applyTransition((parts) =>
+          transition(parts, liveActionsRef.current.readResultStatus),
+        ),
+      )
     } catch (error) {
       return Promise.reject(error)
     }
@@ -290,7 +301,10 @@ export const createDexieNotebookController = (
       bufferId,
       async () => {
         const view = await readNotebookView(bufferId)
-        const out = transition(partsOf(view))
+        const snapshotCellIds = new Set(await loadSnapshotCellIds(bufferId))
+        const resultStatusOf: CellResultStatusReader = (cellId) =>
+          snapshotCellIds.has(cellId) ? "unrequested" : "missing"
+        const out = transition(partsOf(view), resultStatusOf)
         requireActive()
         const commit = await commitView(bufferId, out.parts)
         if (commit === "deleted") {

@@ -955,6 +955,76 @@ describe("createDexieNotebookController — runCell", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
+  it("a stale validation barrier cannot unregister its replacement", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const validations: Array<{ resolve: (value: unknown) => void }> = []
+    const {
+      quest,
+      pending: inFlight,
+      respondNext,
+    } = makeQuest({
+      validate: () =>
+        new Promise((resolve) => {
+          validations.push({ resolve })
+        }),
+    })
+    const controller = makeController({}, quest)
+
+    const firstRun = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (validations.length < 1)
+        throw new Error("first validation not started")
+    })
+    await controller.mutate((parts) =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "editor",
+      }),
+    )
+
+    const secondRun = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (validations.length < 2)
+        throw new Error("second validation not started")
+    })
+    validations[0].resolve(dqlValidation)
+    expect(await firstRun).toEqual({
+      success: false,
+      queryCount: 0,
+      results: [],
+    })
+
+    await controller.mutate((parts) =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "editor",
+      }),
+    )
+    validations[1].resolve(dqlValidation)
+
+    let secondSettled = false
+    void secondRun.finally(() => {
+      secondSettled = true
+    })
+    await vi.waitFor(() => {
+      if (!secondSettled && inFlight.length === 0) {
+        throw new Error("second run still awaiting validation")
+      }
+    })
+    if (inFlight.length > 0) respondNext(dqlResult)
+
+    expect(await secondRun).toEqual({
+      success: false,
+      queryCount: 0,
+      results: [],
+    })
+    expect(inFlight).toHaveLength(0)
+    expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
   it("apply editor-only invalidates a headless run before it can restore a result", async () => {
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     const { quest, pending: inFlight, respondNext } = makeQuest()
