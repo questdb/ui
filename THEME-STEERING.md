@@ -901,6 +901,39 @@ change shipped together, split them.
 - Out of scope: CellIconButton; retuning NeutralHover.
 - For Emre: In-track hover is the ink wash, not a surface step on the chip track.
 
+### 2026-09-06 — Provider tab hover is one step below selected
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: unselected `ProviderTab` hover `controlSurfaceHover` → `interactionNeutralHover`. Selected stays `interactionNeutral` (including on hover).
+- Neighbors: selected Neutral (`#e8eaee` / `#32343e`). NeutralHover is the next step down (`#e2e5ea` / `#292b35`). Dark `controlSurfaceHover` equals Neutral, so hover matched selected.
+- Why: Zack: hover should sit one step below the active well, both modes.
+- Out of scope: selected fill; tab underline; StatusChip.
+- For Emre: Same family as selected. Do not use `controlSurfaceHover` here.
+
+### 2026-09-06 — Light provider-tab hover is one more notch
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: none
+- Binding: unselected `ProviderTab` hover in light → `surfaceBase` (`#eef0f3`). Dark stays NeutralHover. Selected stays Neutral. Specificity `&&&&` so TabButton hover cannot win.
+- Neighbors: Overlay `#fafbfc` < Base `#eef0f3` < Neutral `#e8eaee`. NeutralHover and the 22% ink wash both sit *below* Neutral (darker). Light hover is a smaller recede than selected, matching dark's "between sidebar and selected" step.
+- Why: Zack: 22% had impact but the wrong direction — hover must be lighter than active, not darker.
+- Out of scope: retuning NeutralHover; inventing a surface.
+- For Emre: Light hover is Base, not an ink wash. Do not fold this into NeutralHover (Table/Chart track).
+
+### 2026-09-06 — Result-grid selection uses info, double hover
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none. `gridSelection` stays `#252830` / `#d8dce3` (Monaco still reads it).
+- Binding: ResultGrid selected row stacks white 11% / ink 15% (exactly 2× `interactionHover`) over `gridRow`. Focused cell stacks `statusInfoSurface` over that fill, ring `statusInfo`. Copy-pulse follows the ring. `gridFocus` unused here. Legacy `.qg-c-active` matches via `html[data-theme]`.
+- Neighbors: hover stays 1× `interactionHover` over Inset. Monaco suggest/list hover unchanged. Figma `1943:114709` / `1943:116498`.
+- Why: Zack: selection fill is double hover; cell chrome is the info family. Palette retune of `gridSelection` would have moved Monaco — do not.
+- Out of scope: retuning `statusInfo` / `statusInfoSurface` / `gridSelection`; `editorSelection`; notebook cell focus.
+- For Emre: Grid selection wash is local to ResultGrid, not a token. Cell ring is `statusInfo`, not `gridFocus`.
+
 ---
 
 ## Parking lot — not logged as decisions yet

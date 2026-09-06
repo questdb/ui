@@ -156,11 +156,14 @@ const ProviderTab = styled(TabButton)`
       $active ? theme.color.interactionNeutral : theme.color.transparent};
   }
 
-  &&:hover:not(:disabled) {
-    background: ${({ $active, theme }) =>
-      $active
-        ? theme.color.interactionNeutral
-        : theme.color.controlSurfaceHover};
+  &&&&:hover:not(:disabled) {
+    background: ${({ $active, theme }) => {
+      if ($active) return theme.color.interactionNeutral
+      if (theme.mode === "light") {
+        return theme.color.surfaceBase
+      }
+      return theme.color.interactionNeutralHover
+    }};
   }
 `
 

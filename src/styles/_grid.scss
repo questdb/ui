@@ -75,7 +75,6 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
 $active-row-background: theme-color(interactionNeutral);
 $row-hover-background: theme-color(interactionNeutralHover);
-$table-selection-background: theme-color(gridSelection);
 
 .qg-r-hover {
   background-color: $row-hover-background;
@@ -263,9 +262,25 @@ $drag-handle-margin: 2px;
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 1px theme-color(gridFocus);
-  background: $table-selection-background;
+  box-shadow: inset 0 0 0 1px theme-color(statusInfo);
+  background:
+    linear-gradient(
+      theme-color(statusInfoSurface),
+      theme-color(statusInfoSurface)
+    ),
+    linear-gradient(rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.11)),
+    theme-color(gridRow);
   border-radius: 0.4rem;
+}
+
+html[data-theme="light"] .qg-c-active {
+  background:
+    linear-gradient(
+      theme-color(statusInfoSurface),
+      theme-color(statusInfoSurface)
+    ),
+    linear-gradient(rgba(28, 32, 41, 0.15), rgba(28, 32, 41, 0.15)),
+    theme-color(gridRow);
 }
 
 .qg-c-active-pulse {
@@ -275,7 +290,7 @@ $drag-handle-margin: 2px;
 
 @keyframes pulse {
   0% {
-    box-shadow: theme-color(gridFocus) 0 0 0 1px;
+    box-shadow: theme-color(statusInfo) 0 0 0 1px;
   }
   75% {
     box-shadow: theme-color(transparent) 0 0 0 16px;
