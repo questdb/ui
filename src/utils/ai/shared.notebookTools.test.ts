@@ -12,6 +12,7 @@ import { NotebookToolError } from "../notebooks/notebookToolError"
 import {
   __resetNotebookControllerForTests,
   registerController,
+  unregisterController,
   type NotebookController,
   type RunCellSummary,
 } from "../notebooks/notebookController"
@@ -2833,6 +2834,39 @@ describe("dispatchTool — get_cell content cap switch", () => {
       expect(parsed.truncated).toBe(true)
       expect(parsed.full_length).toBe(5000)
     }
+  })
+
+  it("reports passive result view only while its snapshot key exists", async () => {
+    unregisterController(1)
+    await db.buffers.update(1, {
+      notebookViewState: {
+        cells: [
+          cell("c", "SELECT 1", {
+            lastRunStatus: "success",
+            paneView: "result",
+          }),
+        ],
+      },
+    })
+
+    const readView = async () => {
+      const response = await dispatchTool(
+        "get_cell",
+        { buffer_id: 1, cell_id: "c" },
+        makeClient(),
+        noopStatus,
+      )
+      return (JSON.parse(response.content) as { view: string }).view
+    }
+
+    expect(await readView()).toBe("editor")
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "c",
+      results: [],
+      savedAt: 1,
+    })
+    expect(await readView()).toBe("result")
   })
 })
 

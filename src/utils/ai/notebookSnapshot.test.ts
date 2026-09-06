@@ -19,6 +19,7 @@ import {
 } from "../notebooks/notebookController"
 import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
 import { db } from "../../store/db"
+import { saveCellSnapshot } from "../../store/notebookResults"
 import type {
   NotebookCell,
   NotebookSettings,
@@ -81,6 +82,7 @@ beforeEach(async () => {
   __resetNotebookAIBridgeForTests()
   __resetNotebookBufferQueuesForTests()
   await db.buffers.clear()
+  await db.notebook_results.clear()
 })
 
 describe("buildSnapshot", () => {
@@ -134,6 +136,31 @@ describe("buildSnapshot", () => {
       view: "editor",
       last_run_status: "success",
     })
+  })
+
+  it("uses passive snapshot keys to distinguish restorable and missing results", async () => {
+    const released = sql("a", "SELECT 1", {
+      mode: "run",
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+    const id = await seedNotebook({ cells: [released] })
+
+    const missing = await buildSnapshot(id)
+    expect(missing?.status === "ok" ? missing.cells[0].view : undefined).toBe(
+      "editor",
+    )
+
+    await saveCellSnapshot({
+      bufferId: id,
+      cellId: "a",
+      results: [],
+      savedAt: 1,
+    })
+    const restorable = await buildSnapshot(id)
+    expect(
+      restorable?.status === "ok" ? restorable.cells[0].view : undefined,
+    ).toBe("result")
   })
 
   it("serves the live snapshot when the controller unregisters mid-read", async () => {

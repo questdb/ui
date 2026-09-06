@@ -83,6 +83,7 @@ import {
   type NotebookTransitionResult,
 } from "../notebooks/notebookController"
 import {
+  loadNotebookResultStatusReader,
   readNotebookState,
   serializeCell,
   summarizeCells,
@@ -553,17 +554,20 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           withBoundNotebookReadOnly(
             buffer_id,
-            (view, controller) =>
-              Promise.resolve(
-                serializeCell(
-                  view.cells,
-                  cell_id,
-                  buffer_id,
-                  get_full_content === true,
-                  controller?.readRefreshState?.(),
-                  controller?.readResultStatus?.(cell_id) ?? "unrequested",
-                ),
-              ),
+            async (view, controller) => {
+              const resultStatusOf = await loadNotebookResultStatusReader(
+                buffer_id,
+                controller,
+              )
+              return serializeCell(
+                view.cells,
+                cell_id,
+                buffer_id,
+                get_full_content === true,
+                controller?.readRefreshState?.(),
+                resultStatusOf(cell_id),
+              )
+            },
             signal,
           ),
         )

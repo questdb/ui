@@ -1,5 +1,4 @@
 import {
-  isAgentCellView,
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
   type CellMode,
@@ -14,7 +13,6 @@ import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   agentCellDimensionsPatch,
-  applicableCellDimensions,
   buildAppliedNotebookState,
   carriedRunError,
   carriedRunStatus,
@@ -28,9 +26,6 @@ import {
   insertCell,
   isExpectingResult,
   mergeCellChartConfig,
-  MAX_PANE_HEIGHT_PX,
-  minBottomHeightFor,
-  minTopHeightFor,
   nextGridSeedPosition,
   reconcileCellResultForValue,
   agentCellPresentation,
@@ -40,6 +35,7 @@ import {
   swapCellUp,
   topHeightForSql,
   upsertCellLayout,
+  validateAgentCellDimensions,
   type CellGridPosition,
   type AgentCellDimensions,
   type CellResultStatus,
@@ -333,44 +329,29 @@ export const setCellDimensionsTransition = (
   AgentCellPresentation & { result_discarded?: true }
 > => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
-  if (requested.view != null && !isAgentCellView(requested.view)) {
+  const validation = validateAgentCellDimensions(cell, requested)
+  if (!validation.ok) {
+    const { issue } = validation
+    if (issue.reason === "invalid_view") {
+      throw new NotebookToolError(
+        "validation",
+        "view must be editor, result, or editor_result.",
+      )
+    }
+    if (issue.reason === "below_minimum") {
+      throw new NotebookToolError(
+        "validation",
+        issue.field === "editor_height"
+          ? `editor_height must be at least ${issue.limit}px.`
+          : `result_height must be at least ${issue.limit}px for this cell.`,
+      )
+    }
     throw new NotebookToolError(
       "validation",
-      "view must be editor, result, or editor_result.",
+      `Pane heights must be at most ${issue.limit}px.`,
     )
   }
-  const dimensions = applicableCellDimensions(cell, requested)
-  if (
-    typeof dimensions.editorHeight === "number" &&
-    (!Number.isFinite(dimensions.editorHeight) ||
-      dimensions.editorHeight < minTopHeightFor(cell))
-  ) {
-    throw new NotebookToolError(
-      "validation",
-      `editor_height must be at least ${minTopHeightFor(cell)}px.`,
-    )
-  }
-  if (
-    typeof dimensions.resultHeight === "number" &&
-    (!Number.isFinite(dimensions.resultHeight) ||
-      dimensions.resultHeight < minBottomHeightFor(cell))
-  ) {
-    throw new NotebookToolError(
-      "validation",
-      `result_height must be at least ${minBottomHeightFor(cell)}px for this cell.`,
-    )
-  }
-  if (
-    (typeof dimensions.editorHeight === "number" &&
-      dimensions.editorHeight > MAX_PANE_HEIGHT_PX) ||
-    (typeof dimensions.resultHeight === "number" &&
-      dimensions.resultHeight > MAX_PANE_HEIGHT_PX)
-  ) {
-    throw new NotebookToolError(
-      "validation",
-      `Pane heights must be at most ${MAX_PANE_HEIGHT_PX}px.`,
-    )
-  }
+  const { dimensions } = validation
 
   const wantsEditorOnly = dimensions.view === "editor"
   const discarding = wantsEditorOnly && cellHasRunOutcome(cell)

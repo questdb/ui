@@ -1,6 +1,7 @@
 import {
   getController,
   type CellRefreshView,
+  type NotebookController,
 } from "../notebooks/notebookController"
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
@@ -23,6 +24,7 @@ import {
 import type { CellResultStatus } from "../../scenes/Editor/Notebook/resultHydration/cellResultHydration"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { loadSnapshotCellIds } from "../../store/notebookResults"
 
 type ChartQueryWire = {
   type: string
@@ -88,6 +90,18 @@ export type NotebookContextSnapshot =
 
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
+
+// Passive notebook views persist only the run marker; the result payload lives
+// in notebook_results. Read that table's per-buffer index keys (not snapshot
+// payloads) so an evicted/failed snapshot is reported as editor-only.
+export const loadNotebookResultStatusReader = async (
+  bufferId: number,
+  controller?: Pick<NotebookController, "readResultStatus">,
+): Promise<(cellId: string) => CellResultStatus> => {
+  if (controller?.readResultStatus) return controller.readResultStatus
+  const snapshotCellIds = new Set(await loadSnapshotCellIds(bufferId))
+  return (cellId) => (snapshotCellIds.has(cellId) ? "unrequested" : "missing")
+}
 
 const truncate = (s: string, max: number): string =>
   s.length <= max ? s : `${s.slice(0, max - 3)}...`
@@ -218,6 +232,10 @@ export const buildSnapshot = async (
   }
   const view = controller ? await controller.readView() : meta.view
   const refreshState = controller?.readRefreshState?.()
+  const resultStatusOf = await loadNotebookResultStatusReader(
+    bufferId,
+    controller,
+  )
   const cells: NotebookCell[] = view.cells
   const settings: NotebookSettings = view.settings ?? {}
   const maximizedCellId = view.maximizedCellId ?? null
@@ -239,7 +257,7 @@ export const buildSnapshot = async (
         gridByCellId,
         layoutMode,
         refreshState,
-        controller?.readResultStatus?.(c.id) ?? "unrequested",
+        resultStatusOf(c.id),
       ),
     ),
   }

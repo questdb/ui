@@ -303,8 +303,12 @@ export const createDexieNotebookController = (
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the
         // invalidation.
-        if (out.cancelRuns) {
-          cancelHeadlessCellRuns(bufferId, out.cancelRuns.cellIds)
+        const invalidatedCellIds = new Set([
+          ...(out.cancelRuns?.cellIds ?? []),
+          ...(out.cleanup?.cellIds ?? []),
+        ])
+        if (invalidatedCellIds.size > 0) {
+          cancelHeadlessCellRuns(bufferId, [...invalidatedCellIds])
         }
         // Runs only after a durable commit and is never awaited: the write is
         // done, and failing the tool over orphaned snapshot/layout cleanup

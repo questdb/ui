@@ -17,6 +17,7 @@ type Props = {
   isChartLoading: boolean
   isChartRefreshing: boolean
   chartZoomed: boolean
+  onResetZoomFocus?: () => void
 }
 
 export const CellWideActions: React.FC<Props> = ({
@@ -30,6 +31,7 @@ export const CellWideActions: React.FC<Props> = ({
   isChartLoading,
   isChartRefreshing,
   chartZoomed,
+  onResetZoomFocus,
 }) => (
   <>
     {/* Hide the refresh control until the first result lands — while loading,
@@ -56,6 +58,7 @@ export const CellWideActions: React.FC<Props> = ({
       isRunning={isRunning}
       chartZoomed={chartZoomed}
       showLabels
+      onResetZoomFocus={onResetZoomFocus}
     />
   </>
 )

@@ -148,6 +148,11 @@ const CellInner: React.FC<Props> = ({
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
+  const focusCellToolbar = useCallback(() => {
+    headerRef.current
+      ?.querySelector<HTMLButtonElement>(".cell-toolbar button")
+      ?.focus()
+  }, [])
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, refreshing: chartRefreshing } =
@@ -481,6 +486,7 @@ const CellInner: React.FC<Props> = ({
               isChartLoading={chartLoading}
               isChartRefreshing={chartRefreshing}
               chartZoomed={chartZoomed}
+              onResetZoomFocus={focusCellToolbar}
             />
           ) : (
             // Standard tier with a result: the compact (label-less) view toggle.
@@ -493,6 +499,7 @@ const CellInner: React.FC<Props> = ({
               isRunning={isRunning}
               chartZoomed={chartZoomed}
               showLabels={false}
+              onResetZoomFocus={focusCellToolbar}
             />
           )
         }

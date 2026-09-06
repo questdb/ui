@@ -37,9 +37,9 @@ import {
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import { useCellViewActions } from "./useCellViewActions"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -100,9 +100,6 @@ export const CellToolbar: React.FC<Props> = ({
     setFocusedCell,
     setMaximizedCellId,
     setCellRefresh,
-    setCellPaneView,
-    setCellMode,
-    clearCellResult,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
 
@@ -123,6 +120,18 @@ export const CellToolbar: React.FC<Props> = ({
     useCellFetchState(cellId)?.classifyBlock?.kind === "write"
   const [menuOpen, setMenuOpen] = useState(false)
   const moreActionsTooltip = useTriggerTooltip()
+  const {
+    viewTable: handleViewTable,
+    viewChart: handleViewChart,
+    toggleEditor: handleToggleEditor,
+    resetZoom: handleResetZoom,
+  } = useCellViewActions({
+    cellId,
+    view,
+    paneLayout: paneLayout ?? "split",
+    isRunning,
+    method: "menu",
+  })
 
   const {
     showViewTable,
@@ -148,45 +157,6 @@ export const CellToolbar: React.FC<Props> = ({
     totalCells,
   })
 
-  // Unchecking the active table wipes the result — the same gesture as
-  // toggling off the wide tiers' Table segment. A chart transfers its data to
-  // the grid (no re-query) when switching.
-  const handleViewTable = () => {
-    if (isRunning) return
-    signalUserEdit(bufferId)
-    if (isNoneView) {
-      eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
-      return
-    }
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: isGridView ? "none" : "grid",
-      method: "menu",
-    })
-    if (isGridView) {
-      clearCellResult(cellId)
-      return
-    }
-    setCellMode(cellId, "run")
-  }
-  // The DRAW event toggles: it enters draw, or exits and wipes when the chart
-  // is already active — matching the wide tiers' Chart segment.
-  const handleViewChart = () => {
-    if (isRunning) return
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: isChartView ? "none" : "chart",
-      method: "menu",
-    })
-    signalUserEdit(bufferId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
-  }
-  const handleToggleEditor = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
-      editorShown: resultOnly,
-      view,
-    })
-    signalUserEdit(bufferId)
-    setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
-  }
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
       action: isMaximized ? "restore" : "maximize",
@@ -203,10 +173,6 @@ export const CellToolbar: React.FC<Props> = ({
       return
     }
     eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
-  }
-  const handleResetZoom = () => {
-    clearChartZoom(cellId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
   }
   const handleChartSettings = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {

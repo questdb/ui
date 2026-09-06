@@ -13,14 +13,8 @@ import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
 } from "../NotebookViewToggle"
-import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
-import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
-import { eventBus } from "../../../../modules/EventBus"
-import { EventType } from "../../../../modules/EventBus/types"
-import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
 import type { CellPaneLayout, CellView } from "../notebookUtils"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import { useCellViewActions } from "./useCellViewActions"
 
 const DimSpinner = styled(Spinner)`
   opacity: 0.5;
@@ -89,6 +83,7 @@ type Props = {
   isRunning: boolean
   chartZoomed: boolean
   showLabels: boolean
+  onResetZoomFocus?: () => void
 }
 
 export const CellViewToggle: React.FC<Props> = ({
@@ -100,10 +95,16 @@ export const CellViewToggle: React.FC<Props> = ({
   isRunning,
   chartZoomed,
   showLabels,
+  onResetZoomFocus,
 }) => {
-  const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
-  const bufferId = useNotebookBufferId()
   const resultOnly = paneLayout === "result"
+  const { viewTable, viewChart, toggleEditor, resetZoom } = useCellViewActions({
+    cellId,
+    view,
+    paneLayout,
+    isRunning,
+    method: "toggle",
+  })
 
   // Clicking the active segment toggles it off, wiping the result back to the
   // empty "none" state. Switching between grid and chart re-renders the same
@@ -112,41 +113,20 @@ export const CellViewToggle: React.FC<Props> = ({
   // mode back, where the grid shows the chart's last frame.
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isRunning) return
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: view === "chart" ? "none" : "chart",
-      method: "toggle",
-    })
-    signalUserEdit(bufferId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+    viewChart()
   }
   const handleTable = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isRunning) return
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: view === "grid" ? "none" : "grid",
-      method: "toggle",
-    })
-    signalUserEdit(bufferId)
-    if (view === "grid") {
-      clearCellResult(cellId)
-      return
-    }
-    setCellMode(cellId, "run")
+    viewTable()
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
-      editorShown: resultOnly,
-      view,
-    })
-    signalUserEdit(bufferId)
-    setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
+    toggleEditor()
   }
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()
-    clearChartZoom(cellId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
+    resetZoom()
+    onResetZoomFocus?.()
   }
 
   return (

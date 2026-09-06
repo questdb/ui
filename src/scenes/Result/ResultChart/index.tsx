@@ -28,6 +28,7 @@ type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
 type Props = {
   result: ResultChartData | null
   visible: boolean
+  onResetZoomFocus?: () => void
 }
 
 type SavedConfig = {
@@ -143,7 +144,11 @@ const resultChartTelemetry: ChartSettingsTelemetry = {
   },
 }
 
-export const ResultChart: React.FC<Props> = ({ result, visible }) => {
+export const ResultChart: React.FC<Props> = ({
+  result,
+  visible,
+  onResetZoomFocus,
+}) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
   const [zoomStart, setZoomStart] = useState(0)
@@ -199,7 +204,8 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
 
   const handleResetZoom = useCallback(() => {
     chartRendererRef.current?.resetZoom()
-  }, [])
+    onResetZoomFocus?.()
+  }, [onResetZoomFocus])
 
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 

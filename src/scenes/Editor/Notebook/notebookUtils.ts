@@ -1145,12 +1145,6 @@ export const buildAppliedCells = (
       )
     }
 
-    if (req.view != null && !isAgentCellView(req.view)) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has an invalid view; use editor, result, or editor_result.`,
-        "cells",
-      )
-    }
     if (req.view === "editor" && req.mode === "draw") {
       throw new ApplyNotebookStateError(
         `Cell at index ${index} combines mode "draw" with view "editor"; view editor discards the result and returns the cell to run mode. Omit mode or pick another view.`,
@@ -1164,49 +1158,32 @@ export const buildAppliedCells = (
       value,
       ...(resolvedMode !== undefined ? { mode: resolvedMode } : {}),
     }
-    const dimensions = applicableCellDimensions(dimensionCell, {
+    const validation = validateAgentCellDimensions(dimensionCell, {
       editorHeight: req.editorHeight,
       resultHeight: req.resultHeight,
       view: req.view,
     })
-    if (
-      typeof dimensions.editorHeight === "number" &&
-      (!Number.isFinite(dimensions.editorHeight) ||
-        dimensions.editorHeight < minTopHeightFor(dimensionCell))
-    ) {
+    if (!validation.ok) {
+      const { issue } = validation
+      if (issue.reason === "invalid_view") {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has an invalid view; use editor, result, or editor_result.`,
+          "cells",
+        )
+      }
+      if (issue.reason === "below_minimum") {
+        const message =
+          issue.field === "editor_height"
+            ? `Cell at index ${index} has an editor_height below its minimum.`
+            : `Cell at index ${index} has result_height ${issue.value}px; minimum is ${issue.limit}px.`
+        throw new ApplyNotebookStateError(message, "cells")
+      }
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} has an editor_height below its minimum.`,
+        `Cell at index ${index} has ${issue.field} ${issue.value}px; maximum is ${issue.limit}px.`,
         "cells",
       )
     }
-    if (
-      typeof dimensions.resultHeight === "number" &&
-      (!Number.isFinite(dimensions.resultHeight) ||
-        dimensions.resultHeight < minBottomHeightFor(dimensionCell))
-    ) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has result_height ${dimensions.resultHeight}px; minimum is ${minBottomHeightFor(dimensionCell)}px.`,
-        "cells",
-      )
-    }
-    if (
-      typeof dimensions.editorHeight === "number" &&
-      dimensions.editorHeight > MAX_PANE_HEIGHT_PX
-    ) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has editor_height ${dimensions.editorHeight}px; maximum is ${MAX_PANE_HEIGHT_PX}px.`,
-        "cells",
-      )
-    }
-    if (
-      typeof dimensions.resultHeight === "number" &&
-      dimensions.resultHeight > MAX_PANE_HEIGHT_PX
-    ) {
-      throw new ApplyNotebookStateError(
-        `Cell at index ${index} has result_height ${dimensions.resultHeight}px; maximum is ${MAX_PANE_HEIGHT_PX}px.`,
-        "cells",
-      )
-    }
+    const { dimensions } = validation
     const dimensionsPatch = agentCellDimensionsPatch(dimensionCell, dimensions)
     if (req.view == null && !existing && isDraw) {
       dimensionsPatch.paneView = "result"
@@ -1416,6 +1393,70 @@ export const applicableCellDimensions = (
   cell.type === "markdown"
     ? { ...dimensions, resultHeight: null, view: null }
     : dimensions
+
+export type AgentCellDimensionsValidationIssue =
+  | { reason: "invalid_view" }
+  | {
+      field: "editor_height" | "result_height"
+      reason: "below_minimum" | "above_maximum"
+      value: number
+      limit: number
+    }
+
+export type AgentCellDimensionsValidation =
+  | { ok: true; dimensions: AgentCellDimensions }
+  | { ok: false; issue: AgentCellDimensionsValidationIssue }
+
+// One validator for both set_cell_dimensions and apply_notebook_state. The
+// callers keep their tool-specific error types/messages, while contextual
+// minima and the shared ceiling cannot drift between the two entry points.
+export const validateAgentCellDimensions = (
+  cell: NotebookCell,
+  requested: AgentCellDimensions,
+): AgentCellDimensionsValidation => {
+  if (requested.view != null && !isAgentCellView(requested.view)) {
+    return { ok: false, issue: { reason: "invalid_view" } }
+  }
+  const dimensions = applicableCellDimensions(cell, requested)
+  const values = [
+    {
+      field: "editor_height" as const,
+      value: dimensions.editorHeight,
+      minimum: minTopHeightFor(cell),
+    },
+    {
+      field: "result_height" as const,
+      value: dimensions.resultHeight,
+      minimum: minBottomHeightFor(cell),
+    },
+  ]
+  for (const { field, value, minimum } of values) {
+    if (typeof value !== "number") continue
+    if (!Number.isFinite(value) || value < minimum) {
+      return {
+        ok: false,
+        issue: {
+          field,
+          reason: "below_minimum",
+          value,
+          limit: minimum,
+        },
+      }
+    }
+    if (value > MAX_PANE_HEIGHT_PX) {
+      return {
+        ok: false,
+        issue: {
+          field,
+          reason: "above_maximum",
+          value,
+          limit: MAX_PANE_HEIGHT_PX,
+        },
+      }
+    }
+  }
+  return { ok: true, dimensions }
+}
 
 // The agent's view:"editor" is the toggle-off gesture, not a stored value:
 // discard the run outcome and drop back to run mode, keeping the stored pane

@@ -976,6 +976,39 @@ describe("createDexieNotebookController — runCell", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
+  it("apply deletion prevents a headless run from launching after validation", async () => {
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1"), cell("b", "SELECT 2")],
+    })
+    let resolveValidation!: (value: unknown) => void
+    const validation = new Promise((resolve) => {
+      resolveValidation = resolve
+    })
+    let validationStarted = false
+    const { quest, pending: inFlight } = makeQuest({
+      validate: () => {
+        validationStarted = true
+        return validation
+      },
+    })
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (!validationStarted) throw new Error("validation not in flight")
+    })
+
+    await controller.applyNotebookState({
+      cells: [{ id: "b", preserveValue: true }],
+    })
+    resolveValidation(dqlValidation)
+
+    expect(await run).toEqual({ success: false, queryCount: 0, results: [] })
+    expect(inFlight).toHaveLength(0)
+    expect((await persistedView()).cells.map(({ id }) => id)).toEqual(["b"])
+  })
+
   it("a superseded script never starts its remaining statements", async () => {
     // Given a slow write script whose first statement is already in flight
     await seedNotebook({
@@ -1019,6 +1052,7 @@ describe("createDexieNotebookController — runCell", () => {
     // The cell disappears while the query is in flight (the queue is not held
     // during execution, so the delete lands before the commit).
     await controller.deleteCell("a")
+    expect(quest.abort).toHaveBeenCalledWith("q-1")
     respondNext(dqlResult)
     const summary = await pending
     expect(summary.unverified).toBe(true)
