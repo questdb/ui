@@ -5,7 +5,7 @@ import {
   cancelPendingSearchPublish,
   readNotebookView,
 } from "../notebookDexieView"
-import { forgetHeadlessRuns } from "../notebookHeadlessRun"
+import { cancelHeadlessBufferRuns } from "../notebookHeadlessRun"
 import { forgetBufferSeq } from "../notebookAIBridge"
 import { pinNotebookSnapshots } from "../../../store/notebookResults"
 import type { NotebookController } from "./notebookController"
@@ -109,7 +109,7 @@ export const forgetBuffer = (bufferId: number): void => {
   forgetBufferOwnership(bufferId)
   rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
   cancelPendingSearchPublish(bufferId)
-  forgetHeadlessRuns(bufferId)
+  cancelHeadlessBufferRuns(bufferId, "notebook_deleted")
 }
 
 export const releaseArchivedBuffer = (bufferId: number): void => {
@@ -117,6 +117,7 @@ export const releaseArchivedBuffer = (bufferId: number): void => {
   releaseBufferEpoch(bufferId)
   rejectWaiters(bufferId, new MountClaimReleasedError(bufferId))
   cancelPendingSearchPublish(bufferId)
+  cancelHeadlessBufferRuns(bufferId, "notebook_archived")
 }
 
 export const registerController = (controller: NotebookController): void => {

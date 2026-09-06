@@ -14,7 +14,7 @@ type Params = {
   cellId: string
   view: CellView
   paneLayout: CellPaneLayout
-  isRunning: boolean
+  isCellBusy: boolean
   method: CellViewActionMethod
 }
 
@@ -22,7 +22,7 @@ export const useCellViewActions = ({
   cellId,
   view,
   paneLayout,
-  isRunning,
+  isCellBusy,
   method,
 }: Params) => {
   const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
@@ -30,7 +30,7 @@ export const useCellViewActions = ({
   const resultOnly = paneLayout === "result"
 
   const viewTable = useCallback(() => {
-    if (isRunning) return
+    if (isCellBusy) return
     if (view === "none") {
       signalUserEdit(bufferId)
       eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
@@ -48,17 +48,17 @@ export const useCellViewActions = ({
 
     if (view === "grid") clearCellResult(cellId)
     else setCellMode(cellId, "run")
-  }, [bufferId, cellId, clearCellResult, isRunning, method, setCellMode, view])
+  }, [bufferId, cellId, clearCellResult, isCellBusy, method, setCellMode, view])
 
   const viewChart = useCallback(() => {
-    if (isRunning) return
+    if (isCellBusy) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
       to: view === "chart" ? "none" : "chart",
       method,
     })
     signalUserEdit(bufferId)
     eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
-  }, [bufferId, cellId, isRunning, method, view])
+  }, [bufferId, cellId, isCellBusy, method, view])
 
   const toggleEditor = useCallback(() => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {

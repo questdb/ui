@@ -100,28 +100,44 @@ import {
 // identically on both routes.
 class NotebookStateChangedError extends Error {}
 
+const requireUnchangedSince = (
+  bufferId: number,
+  expectedActionSeq: number | undefined,
+): void => {
+  if (
+    expectedActionSeq !== undefined &&
+    getBufferActionSeq(bufferId) !== expectedActionSeq
+  ) {
+    throw new NotebookStateChangedError()
+  }
+}
+
 const runTransition = <T>(
   bufferId: number,
-  transition: (
-    parts: ViewParts,
-    resultStatusOf: CellResultStatusReader,
-  ) => NotebookTransitionResult<T>,
+  transition: (parts: ViewParts) => NotebookTransitionResult<T>,
   signal?: AbortSignal,
   expectedActionSeq?: number,
 ): Promise<T> =>
   withBoundNotebook(
     bufferId,
     (ctrl) => {
-      if (
-        expectedActionSeq !== undefined &&
-        getBufferActionSeq(bufferId) !== expectedActionSeq
-      ) {
-        throw new NotebookStateChangedError()
-      }
-      return ctrl.mutate((parts, resultStatusOf) =>
-        transition(parts, resultStatusOf),
-      )
+      requireUnchangedSince(bufferId, expectedActionSeq)
+      return ctrl.mutate(transition)
     },
+    signal,
+  )
+
+const runTransitionWithResultStatus = <T>(
+  bufferId: number,
+  transition: (
+    parts: ViewParts,
+    resultStatusOf: CellResultStatusReader,
+  ) => NotebookTransitionResult<T>,
+  signal?: AbortSignal,
+): Promise<T> =>
+  withBoundNotebook(
+    bufferId,
+    (ctrl) => ctrl.mutateWithResultStatus(transition),
     signal,
   )
 
@@ -198,8 +214,8 @@ const dispatchRunQuery = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
   toolContext: ToolExecutionContext | undefined,
 ): Promise<{ content: string; is_error?: boolean }> => {
@@ -213,15 +229,9 @@ const dispatchRunQuery = async (
       is_error: true,
     }
   }
-  if (perms && validateSql) {
-    const decision = await classifyAndCheckSqlForRunQuery(
-      sql,
-      perms,
-      validateSql,
-    )
-    if (!decision.granted) {
-      return { content: decision.reason, is_error: true }
-    }
+  const decision = await classifyAndCheckSqlForRunQuery(sql, perms, validateSql)
+  if (!decision.granted) {
+    return { content: decision.reason, is_error: true }
   }
   let formattedSql = sql
   try {
@@ -274,22 +284,20 @@ export const dispatchTool = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
-  permsOrResolver?: Permissions | (() => Permissions),
-  validateSql?: (sql: string) => Promise<ValidateQueryResult>,
+  permsOrResolver: Permissions | (() => Permissions),
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
   toolContext?: ToolExecutionContext,
 ): Promise<{ content: string; is_error?: boolean }> => {
   const perms =
     typeof permsOrResolver === "function" ? permsOrResolver() : permsOrResolver
 
-  if (perms) {
-    const decision = runPermissionGate(toolName, {
-      permissions: perms,
-      categoryFor,
-    })
-    if (!decision.granted) {
-      return { content: decision.reason, is_error: true }
-    }
+  const gate = runPermissionGate(toolName, {
+    permissions: perms,
+    categoryFor,
+  })
+  if (!gate.granted) {
+    return { content: gate.reason, is_error: true }
   }
   if (toolContext && mutatesNotebook(toolName)) {
     toolContext.notebookMutated = true
@@ -529,10 +537,17 @@ export const dispatchTool = async (
         return routeNotebookTool(async () => ({
           cells: await withBoundNotebookReadOnly(
             buffer_id,
-            (view, controller) =>
-              Promise.resolve(
-                summarizeCells(view.cells, controller?.readRefreshState?.()),
-              ),
+            async (view, controller) => {
+              const resultStatusOf = await loadNotebookResultStatusReader(
+                buffer_id,
+                controller,
+              )
+              return summarizeCells(
+                view.cells,
+                controller?.readRefreshState?.(),
+                resultStatusOf,
+              )
+            },
             signal,
           ),
         }))
@@ -614,13 +629,9 @@ export const dispatchTool = async (
             setStatus(AIOperationStatus.RunningCell, { cellId })
             // The runner's barrier classification decides auto-run
             // eligibility — writes are skipped at launch, never pre-checked.
-            const r = await runCellBound(
-              buffer_id,
-              cellId,
-              signal,
-              perms && validateSql ? sql : undefined,
-              perms && validateSql ? { kind: "autoRun" } : undefined,
-            )
+            const r = await runCellBound(buffer_id, cellId, signal, sql, {
+              kind: "autoRun",
+            })
             if (r.denied !== undefined) {
               return { cellId, ran: false, error: r.denied }
             }
@@ -632,6 +643,7 @@ export const dispatchTool = async (
               ran: r.success,
               queryCount: r.queryCount,
               results: r.results,
+              ...(r.cancelled !== undefined ? { cancelled: r.cancelled } : {}),
               ...(r.unverified ? { unverified: r.unverified } : {}),
               ...(r.note ? { note: r.note } : {}),
             }
@@ -650,15 +662,13 @@ export const dispatchTool = async (
         const updateBaseline =
           toolContext?.notebookFreshness?.getReadSeq(buffer_id) ??
           getBufferActionSeq(buffer_id)
-        if (validateSql) {
-          const current = (await readCells(buffer_id, signal)).find(
-            (c) => c.id === cell_id,
-          )
-          if (current?.mode === "draw") {
-            const decision = await requireAllDQL(value, validateSql)
-            if (!decision.granted) {
-              return { content: decision.reason, is_error: true }
-            }
+        const current = (await readCells(buffer_id, signal)).find(
+          (c) => c.id === cell_id,
+        )
+        if (current?.mode === "draw") {
+          const decision = await requireAllDQL(value, validateSql)
+          if (!decision.granted) {
+            return { content: decision.reason, is_error: true }
           }
         }
         // The read above awaits a round-trip; re-check the baseline so a user
@@ -784,39 +794,36 @@ export const dispatchTool = async (
             }),
           )
         }
-        if (perms && validateSql) {
-          if (value === null) {
-            return {
-              content: denyReasonUnresolvedSql("run_cell"),
-              is_error: true,
-            }
+        if (value === null) {
+          return {
+            content: denyReasonUnresolvedSql("run_cell"),
+            is_error: true,
           }
-          // The runner's barrier classification enforces the permission — one
-          // classification per launch, shared with strategy selection.
-          let deniedReason: string | undefined
-          const routed = await routeNotebookTool(async () => {
-            const summary = await runCellBound(
-              buffer_id,
-              cell_id,
-              signal,
-              value,
-              {
-                kind: "explicit",
-                permissions: perms,
-              },
-            )
-            if (summary.denied !== undefined) {
-              deniedReason = summary.denied
-              return {}
-            }
-            return summary
-          })
-          if (deniedReason !== undefined) {
-            return { content: deniedReason, is_error: true }
-          }
-          return routed
         }
-        return routeNotebookTool(() => runCellBound(buffer_id, cell_id, signal))
+        // The runner's barrier classification enforces the permission — one
+        // classification per launch, shared with strategy selection.
+        let deniedReason: string | undefined
+        const routed = await routeNotebookTool(async () => {
+          const summary = await runCellBound(
+            buffer_id,
+            cell_id,
+            signal,
+            value,
+            {
+              kind: "explicit",
+              permissions: perms,
+            },
+          )
+          if (summary.denied !== undefined) {
+            deniedReason = summary.denied
+            return {}
+          }
+          return summary
+        })
+        if (deniedReason !== undefined) {
+          return { content: deniedReason, is_error: true }
+        }
+        return routed
       }
       case "set_layout_mode": {
         const { buffer_id, mode } =
@@ -841,7 +848,7 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         return routeNotebookTool(() =>
-          runTransition(
+          runTransitionWithResultStatus(
             buffer_id,
             (parts, resultStatusOf) =>
               setCellLayoutTransition(parts, buffer_id, cell_id, {
@@ -865,7 +872,7 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         return routeNotebookTool(() =>
-          runTransition(
+          runTransitionWithResultStatus(
             buffer_id,
             (parts, resultStatusOf) =>
               setCellDimensionsTransition(parts, buffer_id, cell_id, {

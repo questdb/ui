@@ -222,7 +222,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "List the cells in a notebook. Returns id, type, short preview (≤120 chars), position, mode, and last-run status. Three fields are LIVE-ONLY — present only while the notebook is open in the console, so absence never means \"not refreshing\" or \"not blocked\": `refreshing: true` while a refresh is in flight (the visible rows are still the previous round's), `last_refresh_error` when the last round left a failure, and `auto_refresh_blocked: \"contains_write\"` on cells auto-refresh will not run. `last_run_status` is unrelated to these: it stays the outcome of the last completed RUN, and a refresh never changes it. No cell data values.",
+    "description": "List the cells in a notebook. Returns id, type, short preview (≤120 chars), position, mode, and last-run status. Mode is the presented result kind: `run` for a table result, `draw` for a chart, and null for editor-only/markdown cells. Three fields are LIVE-ONLY — present only while the notebook is open in the console, so absence never means \"not refreshing\" or \"not blocked\": `refreshing: true` while a refresh is in flight (the visible rows are still the previous round's), `last_refresh_error` when the last round left a failure, and `auto_refresh_blocked: \"contains_write\"` on cells auto-refresh will not run. `last_run_status` is unrelated to these: it stays the outcome of the last completed RUN, and a refresh never changes it. No cell data values.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -470,7 +470,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Position a single cell in grid mode. x/y/w are integers in the react-grid-layout grid; width is limited to 12 columns. Cell height is derived from its semantic pane dimensions. The response includes the applied grid position and the cell's `view`; markdown reports `view` as null. Use set_cell_dimensions to resize a cell or change its `view`.",
+    "description": "Position a single cell in grid mode. x/y/w are integers in the react-grid-layout grid; width is limited to 12 columns. Cell height is derived from its semantic pane dimensions. The response includes the applied grid position plus the cell's presented `view` and `mode`; editor-only and markdown cells report mode null, and markdown also reports view null. Use set_cell_dimensions to resize a cell or change its `view`.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -505,7 +505,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and returns the cell to run mode — the same gesture as toggling off the table or chart in the UI; the response then carries result_discarded: true. The stored result/editor_result arrangement is kept for the next run. A cell with nothing to show reports view \"editor\". The response reports the cell's `view`. Markdown has no pane-view state: it reports `view` and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
+    "description": "Resize a cell using semantic pane dimensions in CSS pixels and choose its pane view. Every input field is required by strict tool calling: pass null to preserve the current setting. Pass \"auto\" for a height to restore automatic sizing, or a number to pin it. For SQL/draw cells, view accepts editor, result, or editor_result. view \"editor\" is DESTRUCTIVE: it discards the cell's result and snapshot and clears its presented mode — the same gesture as toggling off the table or chart in the UI; the response then carries mode:null and result_discarded:true. The stored result/editor_result arrangement is kept for the next result. A cell with nothing to show reports view \"editor\" and mode null. Markdown has no pane-view state: it reports `view`, `mode`, and `result_height` as null; editor_height sizes its rendered content, while result_height and view are ignored — keep them null. Use 86px for a polished markdown title. Chart result_height must be at least 296px; table results at least 100px. No pane may exceed 2400px.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -537,7 +537,7 @@
             { "type": "string", "enum": ["editor", "result", "editor_result"] },
             { "type": "null" }
           ],
-          "description": "The cell's pane view. Null preserves. result and editor_result store the arrangement. editor DISCARDS the cell's result and snapshot and returns it to run mode (the toggle-off gesture); on a cell with nothing to show it is a no-op."
+          "description": "The cell's pane view. Null preserves. result and editor_result store the arrangement. editor DISCARDS the cell's result and snapshot, clears its presented mode, and hides the result pane (the toggle-off gesture); on a cell with nothing to show it is a no-op."
         }
       },
       "required": [
@@ -869,7 +869,7 @@
               "mode": {
                 "type": ["string", "null"],
                 "enum": ["run", "draw", null],
-                "description": "Cell mode. Null defaults to 'run' for new cells, preserves current for existing."
+                "description": "Requested result mode. Null defaults to 'run' for new cells and preserves the current mode for existing cells, except that view='editor' is authoritative and clears the presented mode. An explicit 'run' or 'draw' cannot be combined with view='editor'."
               },
               "auto_refresh": {
                 "anyOf": [
@@ -907,7 +907,7 @@
                   },
                   { "type": "null" }
                 ],
-                "description": "The cell's pane view. Null preserves an existing setting. result and editor_result store the arrangement. editor DISCARDS an existing cell's result and snapshot and returns it to run mode (the toggle-off gesture; the cell is then listed in results_cleared); it cannot combine with mode \"draw\". New draw cells default to result; other new SQL cells default to editor_result but report editor until a result exists. Ignored for markdown; keep it null."
+                "description": "The cell's pane view. Null preserves an existing setting. result and editor_result store the arrangement. editor is authoritative: it DISCARDS an existing cell's result and snapshot, clears its presented mode, and hides the result pane (the toggle-off gesture; the cell is then listed in results_cleared). Send mode:null with view:'editor'; an explicit mode 'run' or 'draw' is rejected as contradictory. New draw cells default to result; other new SQL cells default to editor_result but report editor with mode null until a result exists. Ignored for markdown; keep it null."
               },
               "chart_config": {
                 "type": ["object", "null"],
@@ -1110,7 +1110,7 @@
     "surfaces": ["mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Markdown reports `view` and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
+    "description": "If notebook tools fail with BRIDGE_NOT_PAIRED, call get_pairing_credentials to begin pairing (the response includes a one-click URL to show the user; authentication runs in the browser, the bridge never sees credentials). Once paired, call get_workspace_state at the start of every notebook turn; the digest of edits since your last fetch is in get_recent_user_actions.\n\nReturn the current workspace + notebook context as text. Use this at the start of every notebook turn so you know which notebook is active, what cells exist, layout mode, chart configs, and last-run statuses. SQL/draw cells report their pane `view`: \"editor\" while there is nothing to show, else the stored result or editor_result arrangement. Their `mode` matches that presentation: null for editor-only, `run` for a table result, and `draw` for a chart. Markdown reports `view`, `mode`, and `result_height` as null. Pass include_user_events=true to also receive the digest of edits the user made since your last fetch.",
     "inputSchema": {
       "type": "object",
       "properties": {

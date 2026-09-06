@@ -15,18 +15,18 @@ import type {
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   type CellRunOutcome,
+  cancelledBeforeLaunchSummary,
+  midRunCancellationNote,
+  type RunCancellation,
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
   RESULT_CLEARED_MID_RUN_NOTE,
   summarizeCellResults,
-  SUPERSEDED_RUN_NOTE,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
-import {
-  deleteCellSnapshot,
-  loadSnapshotCellIds,
-} from "../../../store/notebookResults"
+import { deleteCellSnapshot } from "../../../store/notebookResults"
+import { loadPassiveResultStatusReader } from "../notebookResultStatus"
 import { NotebookToolError } from "../notebookToolError"
 import { enqueueBufferTask } from "../notebookBufferQueue"
 import { emitAgentEdit } from "../agentActivity"
@@ -59,6 +59,8 @@ export type RunCellSummary = {
   results: string[]
   unverified?: boolean
   note?: string
+  // Why a cancelled run stopped; with queryCount 0 nothing was executed.
+  cancelled?: RunCancellation
   // Barrier decisions for gated (agent) runs: a permission denial or an
   // auto-run write skip. Nothing executed when either is set.
   denied?: string
@@ -69,6 +71,13 @@ export type RunCellSummary = {
 // transition's typed throw (unknown_cell, last_cell, …) surfaces as a rejection,
 // identically on both routes.
 export type NotebookMutate = <T>(
+  transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+) => Promise<T>
+
+// For the transitions that size a result pane: they also receive the cell
+// result status, which the passive route reads from the snapshot index. Only
+// this entry pays for that read.
+export type NotebookMutateWithResultStatus = <T>(
   transition: (
     parts: ViewParts,
     resultStatusOf: CellResultStatusReader,
@@ -90,11 +99,13 @@ export type NotebookController = {
   // controller as Dexie across a remount race.
   kind: "live" | "dexie"
   mutate: NotebookMutate
+  mutateWithResultStatus: NotebookMutateWithResultStatus
   readView: () => Promise<NotebookViewState>
   readRefreshState?: () => ReadonlyMap<string, CellRefreshView>
   // Live-only, like readRefreshState: the snapshot-load status of one cell,
   // read off the provider's hydration engine (mount-independent). Passive
-  // transitions receive their IndexedDB-backed reader through `mutate`.
+  // transitions receive their IndexedDB-backed reader through
+  // `mutateWithResultStatus`.
   readResultStatus?: (cellId: string) => CellResultStatus
   runCell: (
     cellId: string,
@@ -160,22 +171,26 @@ export const createNotebookController = (
   // The live surface's transition runner: apply the transition to React state
   // (synchronously, via the provider's applyTransition), then normalize to a
   // Promise so a transition's typed throw reaches the agent as a rejection.
-  const mutate: NotebookMutate = (transition) => {
+  const applyMutation = <T>(
+    run: (parts: ViewParts) => NotebookTransitionResult<T>,
+  ): Promise<T> => {
     try {
-      return Promise.resolve(
-        liveActionsRef.current.applyTransition((parts) =>
-          transition(parts, liveActionsRef.current.readResultStatus),
-        ),
-      )
+      return Promise.resolve(liveActionsRef.current.applyTransition(run))
     } catch (error) {
       return Promise.reject(error)
     }
   }
+  const mutate: NotebookMutate = (transition) => applyMutation(transition)
+  const mutateWithResultStatus: NotebookMutateWithResultStatus = (transition) =>
+    applyMutation((parts) =>
+      transition(parts, liveActionsRef.current.readResultStatus),
+    )
 
   return {
     bufferId,
     kind: "live",
     mutate,
+    mutateWithResultStatus,
     readView: () =>
       Promise.resolve({
         cells: liveActionsRef.current.getCellsSnapshot(),
@@ -219,20 +234,30 @@ export const createNotebookController = (
             : {}),
         }
       }
-      const { superseded, cellChanged, notStarted, resultCleared, result } =
-        outcome
+      const {
+        superseded,
+        cellChanged,
+        notStarted,
+        resultCleared,
+        cancelled,
+        result,
+      } = outcome
 
+      if (cancelled !== undefined && notStarted) {
+        return cancelledBeforeLaunchSummary(cancelled)
+      }
       if (superseded || cellChanged || resultCleared) {
         return {
           ...summarizeCellResults(undefined),
           unverified: true,
+          ...(cancelled !== undefined ? { cancelled } : {}),
           note: notStarted
             ? CELL_CHANGED_BEFORE_RUN_NOTE
             : resultCleared
               ? RESULT_CLEARED_MID_RUN_NOTE
               : cellChanged
                 ? CELL_CHANGED_MID_RUN_NOTE
-                : SUPERSEDED_RUN_NOTE,
+                : midRunCancellationNote(cancelled ?? "superseded"),
         }
       }
 
@@ -294,17 +319,16 @@ export const createDexieNotebookController = (
     }
   }
 
-  const mutate: NotebookMutate = async (transition) => {
+  const runMutation = async <T>(
+    produce: (parts: ViewParts) => Promise<NotebookTransitionResult<T>>,
+  ): Promise<T> => {
     requireActive()
     requireUnclaimed()
     const { result, touchedCellId } = await enqueueBufferTask(
       bufferId,
       async () => {
         const view = await readNotebookView(bufferId)
-        const snapshotCellIds = new Set(await loadSnapshotCellIds(bufferId))
-        const resultStatusOf: CellResultStatusReader = (cellId) =>
-          snapshotCellIds.has(cellId) ? "unrequested" : "missing"
-        const out = transition(partsOf(view), resultStatusOf)
+        const out = await produce(partsOf(view))
         requireActive()
         const commit = await commitView(bufferId, out.parts)
         if (commit === "deleted") {
@@ -317,12 +341,15 @@ export const createDexieNotebookController = (
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the
         // invalidation.
-        const invalidatedCellIds = new Set([
-          ...(out.cancelRuns?.cellIds ?? []),
-          ...(out.cleanup?.cellIds ?? []),
-        ])
-        if (invalidatedCellIds.size > 0) {
-          cancelHeadlessCellRuns(bufferId, [...invalidatedCellIds])
+        if (out.cancelRuns) {
+          cancelHeadlessCellRuns(
+            bufferId,
+            out.cancelRuns.cellIds,
+            out.cancelRuns.reason,
+          )
+        }
+        if (out.cleanup && out.cleanup.cellIds.length > 0) {
+          cancelHeadlessCellRuns(bufferId, out.cleanup.cellIds, "cell_deleted")
         }
         // Runs only after a durable commit and is never awaited: the write is
         // done, and failing the tool over orphaned snapshot/layout cleanup
@@ -345,11 +372,18 @@ export const createDexieNotebookController = (
     emitAgentEdit({ bufferId, cellId: touchedCellId })
     return result
   }
+  const mutate: NotebookMutate = (transition) =>
+    runMutation((parts) => Promise.resolve(transition(parts)))
+  const mutateWithResultStatus: NotebookMutateWithResultStatus = (transition) =>
+    runMutation(async (parts) =>
+      transition(parts, await loadPassiveResultStatusReader(bufferId)),
+    )
 
   return {
     bufferId,
     kind: "dexie",
     mutate,
+    mutateWithResultStatus,
     readView: () =>
       enqueueBufferTask(bufferId, () => readNotebookView(bufferId)),
     runCell: (cellId, signal, sql, gate) =>

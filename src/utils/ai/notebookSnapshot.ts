@@ -24,7 +24,7 @@ import {
 import type { CellResultStatus } from "../../scenes/Editor/Notebook/resultHydration/cellResultHydration"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
-import { loadSnapshotCellIds } from "../../store/notebookResults"
+import { loadPassiveResultStatusReader } from "../notebooks/notebookResultStatus"
 
 type ChartQueryWire = {
   type: string
@@ -54,7 +54,7 @@ export type NotebookContextCell = {
   // Omitted for SQL cells (the default); "markdown" for prose cells (rendered,
   // never executed).
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
   editor_height: number | "auto"
   result_height: number | "auto" | null
@@ -91,17 +91,13 @@ export type NotebookContextSnapshot =
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
 
-// Passive notebook views persist only the run marker; the result payload lives
-// in notebook_results. Read that table's per-buffer index keys (not snapshot
-// payloads) so an evicted/failed snapshot is reported as editor-only.
-export const loadNotebookResultStatusReader = async (
+export const loadNotebookResultStatusReader = (
   bufferId: number,
   controller?: Pick<NotebookController, "readResultStatus">,
-): Promise<(cellId: string) => CellResultStatus> => {
-  if (controller?.readResultStatus) return controller.readResultStatus
-  const snapshotCellIds = new Set(await loadSnapshotCellIds(bufferId))
-  return (cellId) => (snapshotCellIds.has(cellId) ? "unrequested" : "missing")
-}
+): Promise<(cellId: string) => CellResultStatus> =>
+  controller?.readResultStatus
+    ? Promise.resolve(controller.readResultStatus)
+    : loadPassiveResultStatusReader(bufferId)
 
 const truncate = (s: string, max: number): string =>
   s.length <= max ? s : `${s.slice(0, max - 3)}...`
@@ -182,12 +178,13 @@ const buildCell = (
   resultStatus: CellResultStatus,
 ): NotebookContextCell => {
   const dimensions = agentCellPaneDimensions(cell)
+  const presentation = agentCellPresentation(cell, resultStatus)
   const out: NotebookContextCell = {
     id: cell.id,
     preview: preview(cell.value),
     editor_height: dimensions.editorHeight,
     result_height: dimensions.resultHeight,
-    view: agentCellPresentation(cell, resultStatus).view,
+    ...presentation,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
   }
@@ -197,7 +194,6 @@ const buildCell = (
   }
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
-  if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {
@@ -326,7 +322,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
         `      name: ${JSON.stringify(sanitizeForPromptContext(c.name))}`,
       )
     if (c.type) lines.push(`      type: ${c.type}`)
-    if (c.mode) lines.push(`      mode: ${c.mode}`)
+    lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
     lines.push(`      editor_height: ${c.editor_height}`)
@@ -453,7 +449,7 @@ export type NotebookCellSummary = {
   preview: string
   position: number
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   last_run_status?: RunStatus
   // Live-only (mounted notebook); see NotebookContextCell.
   refreshing?: true
@@ -469,7 +465,7 @@ export type NotebookCellDetails = {
   name?: string
   position: number
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
   editor_height: number | "auto"
   result_height: number | "auto" | null
@@ -486,6 +482,7 @@ export type NotebookCellDetails = {
 export const summarizeCells = (
   cells: NotebookCell[],
   refreshState?: ReadonlyMap<string, CellRefreshView>,
+  resultStatusOf?: (cellId: string) => CellResultStatus,
 ): NotebookCellSummary[] =>
   cells.map((cell) => {
     const summary: NotebookCellSummary = {
@@ -495,12 +492,15 @@ export const summarizeCells = (
           ? cell.value
           : `${cell.value.slice(0, 117)}...`,
       position: cell.position,
+      mode: agentCellPresentation(
+        cell,
+        resultStatusOf?.(cell.id) ?? "unrequested",
+      ).mode,
       last_run_status: runStatusOf(cell).status,
       ...refreshFields(refreshState?.get(cell.id)),
     }
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
-    if (cell.mode) summary.mode = cell.mode
     return summary
   })
 
@@ -529,6 +529,7 @@ export const serializeCell = (
   const value = truncated ? cell.value.slice(0, CELL_VALUE_MAX) : cell.value
   const run = runStatusOf(cell)
   const dimensions = agentCellPaneDimensions(cell)
+  const presentation = agentCellPresentation(cell, resultStatus)
   const out: NotebookCellDetails = {
     id: cell.id,
     value,
@@ -537,7 +538,7 @@ export const serializeCell = (
     last_run_error: run.error,
     editor_height: dimensions.editorHeight,
     result_height: dimensions.resultHeight,
-    view: agentCellPresentation(cell, resultStatus).view,
+    ...presentation,
     ...refreshFields(refreshState?.get(cell.id)),
   }
   if (truncated) {
@@ -546,7 +547,6 @@ export const serializeCell = (
   }
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
-  if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)

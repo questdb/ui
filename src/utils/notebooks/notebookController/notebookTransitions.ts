@@ -19,7 +19,7 @@ import {
   cellGridBoundsError,
   cellHasRunOutcome,
   cellModeChangePatch,
-  discardCellResultPatch,
+  discardCellResult,
   clearCellAutoRefresh,
   computeAgentCellGridH,
   duplicateCellAt,
@@ -40,6 +40,7 @@ import {
   type AgentCellDimensions,
   type CellResultStatus,
   type CellResultStatusReader,
+  type RunCancelReason,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 
 // The single home for every notebook mutation's behavior. Each transition is a
@@ -50,9 +51,9 @@ import {
 //
 // Side effects are returned as data, never performed here:
 //   - `cleanup.cellIds`    — snapshots/layouts each shell drops after its commit.
-//   - `cancelRuns.cellIds` — cells whose in-flight run either shell aborts
+//   - `cancelRuns`          — cells whose in-flight run either shell aborts
 //                            because the transition invalidated its eventual
-//                            result.
+//                            result, and the reason the run reports for it.
 //   - `deleteSnapshots.cellIds` — cells that survive the transition but whose
 //                            persisted result no longer matches their SQL;
 //                            each shell deletes the snapshot so hydration
@@ -69,7 +70,7 @@ export type NotebookTransitionResult<T = void> = {
   result: T
   touchedCellId?: string
   cleanup?: { cellIds: string[] }
-  cancelRuns?: { cellIds: string[] }
+  cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }
 }
 
@@ -355,11 +356,15 @@ export const setCellDimensionsTransition = (
 
   const wantsEditorOnly = dimensions.view === "editor"
   const discarding = wantsEditorOnly && cellHasRunOutcome(cell)
-  const patch = {
-    ...(discarding ? discardCellResultPatch(cell) : {}),
-    ...agentCellDimensionsPatch(cell, dimensions),
+  const patch = agentCellDimensionsPatch(cell, dimensions)
+  const nextCell = {
+    ...(wantsEditorOnly ? discardCellResult(cell) : cell),
+    ...patch,
   }
-  const nextCell = { ...cell, ...patch }
+  const replacesCell =
+    discarding ||
+    Object.keys(patch).length > 0 ||
+    (wantsEditorOnly && (cell as { mode?: unknown }).mode !== undefined)
   const layout = parts.settings.layout?.map((item) =>
     item.i === cellId
       ? {
@@ -379,10 +384,9 @@ export const setCellDimensionsTransition = (
   return {
     parts: {
       ...parts,
-      cells:
-        Object.keys(patch).length > 0
-          ? patchCellIn(parts.cells, cellId, patch)
-          : parts.cells,
+      cells: replacesCell
+        ? parts.cells.map((c) => (c.id === cellId ? nextCell : c))
+        : parts.cells,
       settings:
         layout === parts.settings.layout
           ? parts.settings
@@ -397,7 +401,9 @@ export const setCellDimensionsTransition = (
     // may still be behind its validation barrier. Emit the cancellation intent
     // for every SQL-cell editor-only request; shells treat it idempotently when
     // no run exists.
-    ...(wantsEditorOnly ? { cancelRuns: { cellIds: [cellId] } } : {}),
+    ...(wantsEditorOnly
+      ? { cancelRuns: { cellIds: [cellId], reason: "result_cleared" as const } }
+      : {}),
     // Snapshot rows live outside the buffer document, so a marker-less cell
     // cannot prove that none exist. Deletion is idempotent and view:"editor"
     // is the explicit discard gesture.
@@ -413,17 +419,22 @@ export const setCellModeTransition = (
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
   const entersDraw = mode === "draw" && cell.mode !== "draw"
+  const nextCell: NotebookCell = {
+    ...cell,
+    ...cellModeChangePatch(cell, mode),
+  }
+  if (mode === "draw") nextCell.mode = "draw"
+  else delete nextCell.mode
   return {
     parts: {
       ...parts,
-      cells: patchCellIn(parts.cells, cellId, {
-        mode,
-        ...cellModeChangePatch(cell, mode),
-      }),
+      cells: parts.cells.map((c) => (c.id === cellId ? nextCell : c)),
     },
     result: undefined,
     touchedCellId: cellId,
-    ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
+    ...(entersDraw
+      ? { cancelRuns: { cellIds: [cellId], reason: "mode_changed" as const } }
+      : {}),
   }
 }
 
@@ -527,7 +538,12 @@ export const applyNotebookStateTransition = (
     result: { applied: next.diff },
     cleanup: { cellIds: next.diff.deleted },
     ...(invalidatedResultIds.size > 0
-      ? { cancelRuns: { cellIds: [...invalidatedResultIds] } }
+      ? {
+          cancelRuns: {
+            cellIds: [...invalidatedResultIds],
+            reason: "result_cleared" as const,
+          },
+        }
       : {}),
     ...(invalidatedResultIds.size > 0
       ? { deleteSnapshots: { cellIds: [...invalidatedResultIds] } }

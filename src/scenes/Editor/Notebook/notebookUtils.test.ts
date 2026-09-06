@@ -334,6 +334,19 @@ describe("stripCellResults", () => {
     expect(out[1].result).toBeUndefined()
   })
 
+  it("normalizes legacy stored run mode away while preserving draw mode", () => {
+    const legacyRun = {
+      ...cell("run", "SELECT 1"),
+      mode: "run",
+    } as unknown as NotebookCell
+    const draw = { ...cell("draw", "SELECT 2"), mode: "draw" as const }
+
+    const [persistedRun, persistedDraw] = stripCellResults([legacyRun, draw])
+
+    expect("mode" in persistedRun).toBe(false)
+    expect(persistedDraw.mode).toBe("draw")
+  })
+
   // The stripped result is the only run signal an unmounted notebook can report
   // to the agent — record it so a committed write isn't read back as "none".
   it("records lastRunStatus from the result before stripping", () => {
@@ -1331,6 +1344,49 @@ describe("buildAppliedCells", () => {
     })
   })
 
+  it("treats editor view as authoritative over a preserved draw mode", () => {
+    const existing: NotebookCell = {
+      id: "a",
+      position: 0,
+      value: "SELECT 1",
+      mode: "draw",
+      result: { results: [], activeResultIndex: 0, timestamp: 1 },
+      paneView: "result",
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "line", yColumns: ["v"] }],
+      },
+    }
+
+    const { nextCells, resultsCleared } = buildAppliedCells([existing], {
+      cells: [
+        {
+          id: "a",
+          preserveValue: true,
+          mode: null,
+          view: "editor",
+          chartConfig: null,
+        },
+      ],
+    })
+
+    expect("mode" in nextCells[0]).toBe(false)
+    expect(nextCells[0].result).toBeUndefined()
+    expect(nextCells[0].chartConfig).toBeUndefined()
+    expect(resultsCleared).toEqual(["a"])
+  })
+
+  it.each(["run", "draw"] as const)(
+    "rejects explicit mode %s with editor view",
+    (mode) => {
+      expect(() =>
+        buildAppliedCells([], {
+          cells: [{ value: "SELECT 1", mode, view: "editor" }],
+        }),
+      ).toThrow(/explicit mode.*view "editor"/)
+    },
+  )
+
   it("honors an explicit editor_height sent together with a value change", () => {
     // Given a never-manually-resized cell
     const existing: NotebookCell = {
@@ -1421,7 +1477,7 @@ describe("buildAppliedCells", () => {
         id: "a",
         position: 0,
         value: "SELECT 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "5s",
         paneView: "result",
         chartConfig: {
@@ -1436,8 +1492,8 @@ describe("buildAppliedCells", () => {
       cells: [{ id: "a", value: "SELECT 1" }], // bare cell — everything omitted
     })
 
-    // Then mode is sticky while the documented PUT fields are cleared
-    expect(nextCells[0].mode).toBe("run")
+    // Then implicit run stays unstored while the documented PUT fields clear
+    expect(nextCells[0].mode).toBeUndefined()
     expect(nextCells[0].chartConfig).toBeUndefined()
     expect(nextCells[0].autoRefresh).toBeUndefined()
     expect(nextCells[0].paneView).toBe("result")
@@ -2095,51 +2151,60 @@ describe("agentCellPresentation", () => {
   })
 
   it("reports the stored pane view once a run outcome exists", () => {
-    expect(agentCellPresentation(chart())).toEqual({ view: "editor_result" })
+    expect(agentCellPresentation(chart())).toEqual({
+      view: "editor_result",
+      mode: "draw",
+    })
     expect(agentCellPresentation(chart({ paneView: "result" }))).toEqual({
       view: "result",
+      mode: "draw",
     })
     expect(agentCellPresentation(chart({ paneView: undefined }))).toEqual({
       view: "editor_result",
+      mode: "draw",
     })
   })
 
   it("reports editor while the cell has nothing to show", () => {
     expect(agentCellPresentation(chart({ mode: undefined }))).toEqual({
       view: "editor",
+      mode: null,
     })
     expect(
       agentCellPresentation(chart({ mode: undefined, lastRunStatus: "none" })),
-    ).toEqual({ view: "editor" })
+    ).toEqual({ view: "editor", mode: null })
     expect(
       agentCellPresentation(
         chart({ mode: undefined, lastRunStatus: "success" }),
       ),
-    ).toEqual({ view: "editor_result" })
+    ).toEqual({ view: "editor_result", mode: "run" })
   })
 
   it("reports editor when a run-marked result is known missing", () => {
     const releasedRun = chart({
-      mode: "run",
+      mode: undefined,
       lastRunStatus: "success",
       paneView: "result",
     })
 
     expect(agentCellPresentation(releasedRun, "unrequested")).toEqual({
       view: "result",
+      mode: "run",
     })
     expect(agentCellPresentation(releasedRun, "missing")).toEqual({
       view: "editor",
+      mode: null,
     })
     expect(agentCellPresentation(chart(), "missing")).toEqual({
       view: "editor_result",
+      mode: "draw",
     })
   })
 
   it("reports a null view for a markdown cell", () => {
     expect(
       agentCellPresentation(chart({ mode: undefined, type: "markdown" })),
-    ).toEqual({ view: null })
+    ).toEqual({ view: null, mode: null })
   })
 })
 
@@ -2786,7 +2851,7 @@ describe("buildAppliedLayout", () => {
     // draw cells, so they're double-view from creation. Run cells stay
     // single-view (no result) and only count topHeight + chrome.
     const cells: NotebookCell[] = [
-      { id: "run-cell", position: 0, value: "", mode: "run" },
+      { id: "run-cell", position: 0, value: "", mode: undefined },
       {
         id: "draw-cell",
         position: 1,
@@ -3158,7 +3223,7 @@ describe("auto-refresh inheritance helpers", () => {
     const cells: NotebookCell[] = [
       { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
       { ...cell("b", "SELECT 2"), mode: "draw", autoRefresh: true },
-      { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: false },
+      { ...cell("c", "SELECT 3"), mode: undefined, autoRefresh: false },
       cell("d", "SELECT 4"),
     ]
     // Then every stored key counts — the count matches what a reset would clear
@@ -3182,8 +3247,12 @@ describe("auto-refresh inheritance helpers", () => {
     }
     const cells: NotebookCell[] = [
       { ...cell("a", "SELECT 1"), mode: "draw", autoRefresh: "5s" },
-      { ...cell("b", "SELECT 2", gridResult), mode: "run", autoRefresh: false },
-      { ...cell("c", "SELECT 3"), mode: "run", autoRefresh: "1s" },
+      {
+        ...cell("b", "SELECT 2", gridResult),
+        mode: undefined,
+        autoRefresh: false,
+      },
+      { ...cell("c", "SELECT 3"), mode: undefined, autoRefresh: "1s" },
     ]
     // Then only the cells with a visible view count toward the displayed total
     expect(countActiveAutoRefreshOverrides(cells)).toBe(2)
@@ -3195,7 +3264,7 @@ describe("auto-refresh inheritance helpers", () => {
     // Given a run cell carrying a dormant override
     const dormant: NotebookCell = {
       ...cell("a", "SELECT 1"),
-      mode: "run",
+      mode: undefined,
       autoRefresh: "1s",
     }
     // When the override clears and the cell later switches to draw
@@ -3237,11 +3306,11 @@ describe("resolveCellView", () => {
     expect(resolveCellView({ mode: "draw", result })).toBe("chart")
   })
   it("is grid for a run cell that has a result", () => {
-    expect(resolveCellView({ mode: "run", result })).toBe("grid")
+    expect(resolveCellView({ mode: undefined, result })).toBe("grid")
     expect(resolveCellView({ result })).toBe("grid")
   })
   it("is none for a run cell with no result", () => {
-    expect(resolveCellView({ mode: "run" })).toBe("none")
+    expect(resolveCellView({ mode: undefined })).toBe("none")
     expect(resolveCellView({})).toBe("none")
   })
 })
@@ -3249,7 +3318,7 @@ describe("resolveCellView", () => {
 describe("resolveRunAction", () => {
   it("runs a single query, or all, for a run cell", () => {
     // Given a run cell
-    const cell = { mode: "run" as const }
+    const cell = {}
     // When the user presses Run All / Run
     // Then it runs all / one
     expect(resolveRunAction(cell, { intent: "all" })).toEqual({

@@ -71,7 +71,7 @@ type Props = {
   layoutMode: "list" | "grid"
   autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
-  isRunning?: boolean
+  isCellBusy?: boolean
   inline?: boolean
   toolbarTier?: CellToolbarTier
   paneLayout?: CellPaneLayout
@@ -86,7 +86,7 @@ export const CellToolbar: React.FC<Props> = ({
   layoutMode,
   autoRefreshDefault,
   isMaximized,
-  isRunning = false,
+  isCellBusy = false,
   inline,
   toolbarTier,
   paneLayout,
@@ -129,7 +129,7 @@ export const CellToolbar: React.FC<Props> = ({
     cellId,
     view,
     paneLayout: paneLayout ?? "split",
-    isRunning,
+    isCellBusy,
     method: "menu",
   })
 
@@ -264,7 +264,7 @@ export const CellToolbar: React.FC<Props> = ({
                 (isNoneView ? (
                   <DropdownMenu.Item
                     onSelect={handleViewTable}
-                    disabled={isRunning}
+                    disabled={isCellBusy}
                     icon={<PlayIcon size={16} />}
                   >
                     Run
@@ -273,7 +273,7 @@ export const CellToolbar: React.FC<Props> = ({
                   <DropdownMenu.CheckboxItem
                     checked={isGridView}
                     onSelect={handleViewTable}
-                    disabled={isRunning}
+                    disabled={isCellBusy}
                     icon={<TableIcon size={16} />}
                   >
                     View table
@@ -283,7 +283,7 @@ export const CellToolbar: React.FC<Props> = ({
                 (isNoneView ? (
                   <DropdownMenu.Item
                     onSelect={handleViewChart}
-                    disabled={isRunning}
+                    disabled={isCellBusy}
                     icon={<ChartLineIcon size={16} />}
                   >
                     Draw
@@ -292,7 +292,7 @@ export const CellToolbar: React.FC<Props> = ({
                   <DropdownMenu.CheckboxItem
                     checked={isChartView}
                     onSelect={handleViewChart}
-                    disabled={isRunning}
+                    disabled={isCellBusy}
                     icon={<ChartLineIcon size={16} />}
                   >
                     View chart

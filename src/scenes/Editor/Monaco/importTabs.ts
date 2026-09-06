@@ -276,7 +276,7 @@ const sanitizeNotebookCell = (
   // Markdown cells carry no run/draw sub-state — gating it here keeps a
   // hand-crafted import from producing a cell apply_notebook_state rejects.
   if (item.type !== "markdown") {
-    if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
+    if (item.mode === "draw") cell.mode = "draw"
     const chartConfig = sanitizeChartConfig(item.chartConfig)
     if (chartConfig) cell.chartConfig = chartConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh

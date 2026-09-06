@@ -22,7 +22,7 @@ import {
   type ApplyNotebookStateRequest,
 } from "./notebookController"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
-import { forgetHeadlessRuns } from "./notebookHeadlessRun"
+import { cancelHeadlessBufferRuns } from "./notebookHeadlessRun"
 import type { DexieControllerDeps } from "./notebookHeadlessRun"
 import {
   claimLive,
@@ -311,7 +311,7 @@ describe("createDexieNotebookController — structural edits", () => {
 
   it("view editor deletes a marker-less cell snapshot", async () => {
     await seedNotebook({
-      cells: [cell("a", "SELECT 1", { mode: "run", paneView: "result" })],
+      cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
     await saveCellSnapshot({
       bufferId: BUFFER_ID,
@@ -334,7 +334,7 @@ describe("createDexieNotebookController — structural edits", () => {
 
   it("apply editor-only deletes a marker-less cell snapshot", async () => {
     await seedNotebook({
-      cells: [cell("a", "SELECT 1", { mode: "run", paneView: "result" })],
+      cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
     await saveCellSnapshot({
       bufferId: BUFFER_ID,
@@ -949,10 +949,78 @@ describe("createDexieNotebookController — runCell", () => {
     resolveValidation(dqlValidation)
     const summary = await run
 
-    expect(summary).toEqual({ success: false, queryCount: 0, results: [] })
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      results: [],
+      cancelled: "result_cleared",
+    })
+    expect(summary.note).toMatch(/Run NOT started/)
     expect(inFlight).toHaveLength(0)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("set_cell_mode draw during a headless run reports the mode change", async () => {
+    // Given a headless run whose query is in flight
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const { quest, pending: inFlight, respondNext } = makeQuest()
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a")
+    await vi.waitFor(() => {
+      if (inFlight.length === 0) throw new Error("run not in flight")
+    })
+
+    // When an agent switches the cell to draw mode before the run settles
+    await controller.mutate((parts) =>
+      setCellModeTransition(parts, BUFFER_ID, "a", "draw"),
+    )
+    respondNext(dqlResult)
+    const summary = await run
+
+    // Then the run reports the mode change, not a cleared result
+    expect(summary.unverified).toBe(true)
+    expect(summary.cancelled).toBe("mode_changed")
+    expect(summary.note).toMatch(/switched to chart mode/)
+    expect(summary.note).not.toMatch(/result was cleared/)
+  })
+
+  it("archiving the notebook stops a headless run before it launches", async () => {
+    // Given a headless run that is still validating
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    let resolveValidation!: (value: unknown) => void
+    const validation = new Promise((resolve) => {
+      resolveValidation = resolve
+    })
+    let validationStarted = false
+    const { quest, pending: inFlight } = makeQuest({
+      validate: () => {
+        validationStarted = true
+        return validation
+      },
+    })
+    const controller = makeController({}, quest)
+    const run = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (!validationStarted) throw new Error("validation not in flight")
+    })
+
+    // When the notebook is archived while validation is pending
+    releaseArchivedBuffer(BUFFER_ID)
+    resolveValidation(dqlValidation)
+    const summary = await run
+
+    // Then no SQL reaches the server and the run says why it stopped
+    expect(inFlight).toHaveLength(0)
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      results: [],
+      cancelled: "notebook_archived",
+    })
+    expect(summary.note).toMatch(/Run NOT started/)
   })
 
   it("a stale validation barrier cannot unregister its replacement", async () => {
@@ -991,10 +1059,11 @@ describe("createDexieNotebookController — runCell", () => {
         throw new Error("second validation not started")
     })
     validations[0].resolve(dqlValidation)
-    expect(await firstRun).toEqual({
+    expect(await firstRun).toMatchObject({
       success: false,
       queryCount: 0,
       results: [],
+      cancelled: "result_cleared",
     })
 
     await controller.mutate((parts) =>
@@ -1015,10 +1084,11 @@ describe("createDexieNotebookController — runCell", () => {
     })
     if (inFlight.length > 0) respondNext(dqlResult)
 
-    expect(await secondRun).toEqual({
+    expect(await secondRun).toMatchObject({
       success: false,
       queryCount: 0,
       results: [],
+      cancelled: "result_cleared",
     })
     expect(inFlight).toHaveLength(0)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
@@ -1074,7 +1144,14 @@ describe("createDexieNotebookController — runCell", () => {
     })
     resolveValidation(dqlValidation)
 
-    expect(await run).toEqual({ success: false, queryCount: 0, results: [] })
+    const summary = await run
+    expect(summary).toMatchObject({
+      success: false,
+      queryCount: 0,
+      results: [],
+      cancelled: "cell_deleted",
+    })
+    expect(summary.note).toMatch(/Run NOT started/)
     expect(inFlight).toHaveLength(0)
     expect((await persistedView()).cells.map(({ id }) => id)).toEqual(["b"])
   })
@@ -1316,7 +1393,7 @@ describe("createDexieNotebookController — runCell", () => {
     })
     // When the notebook is deleted (deleteBuffer clears run bookkeeping too)
     await db.buffers.delete(BUFFER_ID)
-    forgetHeadlessRuns(BUFFER_ID)
+    cancelHeadlessBufferRuns(BUFFER_ID, "notebook_deleted")
     respondNext(dqlResult)
     const summary = await run
     // Then the note names the real reason
@@ -1583,5 +1660,71 @@ describe("createDexieNotebookController — persisted snapshot cap", () => {
       expect(notebooks.has(101)).toBe(false)
       expect(notebooks.has(102)).toBe(false)
     })
+  })
+})
+
+describe("createDexieNotebookController — result snapshot index", () => {
+  it("a status-free mutation never reads the result snapshot index", async () => {
+    // Given a background notebook and a spy on the index read
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const where = vi.spyOn(db.notebook_results, "where")
+    const controller = makeController()
+
+    // When routine mutations run
+    await controller.updateCell("a", { name: "renamed" })
+    await controller.updateCell("a", { value: "SELECT 2" })
+    await controller.mutate((p) => setLayoutModeTransition(p, "grid"))
+
+    // Then the index was never enumerated
+    expect(where).not.toHaveBeenCalled()
+    where.mockRestore()
+  })
+
+  it("a failing result snapshot index does not block a status-free mutation", async () => {
+    // Given the optional index rejects every read
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const where = vi
+      .spyOn(db.notebook_results, "where")
+      .mockImplementation(() => {
+        throw new Error("index down")
+      })
+    const controller = makeController()
+
+    // When an unrelated edit runs
+    await controller.updateCell("a", { name: "renamed" })
+
+    // Then the edit is durable
+    expect((await persistedView()).cells[0].name).toBe("renamed")
+    where.mockRestore()
+  })
+
+  it("a failing result snapshot index degrades a dimensions mutation instead of failing it", async () => {
+    // Given a run-marked cell and an index that rejects every read
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1", { lastRunStatus: "success" })],
+    })
+    const where = vi
+      .spyOn(db.notebook_results, "where")
+      .mockImplementation(() => {
+        throw new Error("index down")
+      })
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const controller = makeController()
+
+    // When a pane-sizing mutation asks for the cell's result status
+    const out = await controller.mutateWithResultStatus(
+      (parts, resultStatusOf) =>
+        setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+          resultHeight: 200,
+          resultStatus: resultStatusOf("a"),
+        }),
+    )
+
+    // Then it commits with the stored arrangement and logs the degraded read
+    expect(out.view).toBe("editor_result")
+    expect((await persistedView()).cells[0].bottomHeight).toBe(200)
+    expect(warn).toHaveBeenCalledOnce()
+    where.mockRestore()
+    warn.mockRestore()
   })
 })

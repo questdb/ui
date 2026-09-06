@@ -31,7 +31,7 @@ const ToggleButton = styled(NotebookViewToggleSegment)`
 `
 
 type Props = {
-  isRunning: boolean
+  isCellBusy: boolean
   isChartLoading: boolean
   runActive: boolean
   isDrawMode: boolean
@@ -44,7 +44,7 @@ type Props = {
 }
 
 export const CellRunDrawToggles: React.FC<Props> = ({
-  isRunning,
+  isCellBusy,
   isChartLoading,
   runActive,
   isDrawMode,
@@ -54,62 +54,68 @@ export const CellRunDrawToggles: React.FC<Props> = ({
   onRun,
   onHideResult,
   onDraw,
-}) => (
-  <NotebookViewToggle role="group" aria-label="Cell execution mode">
-    <Tooltip
-      content={runActive ? "Hide result" : `Run cell (${ctrlCmd}+Shift+Enter)`}
-    >
-      <ToggleButton
-        type="button"
-        $size="md"
-        $active={runActive}
-        $tone="success"
-        $activeTone="neutral"
-        aria-pressed={runActive}
-        aria-disabled={isRunning || (!runActive && !canRun)}
-        onClick={(e) => {
-          e.stopPropagation()
-          if (isRunning || (!runActive && !canRun)) return
-          if (runActive) {
-            onHideResult()
-            return
-          }
-          onRun()
-        }}
-        aria-label={runActive ? "Hide result" : "Run cell"}
+}) => {
+  const runLocked = isCellBusy || (!runActive && !canRun)
+  const drawLocked = isCellBusy || !canRun
+  return (
+    <NotebookViewToggle role="group" aria-label="Cell execution mode">
+      <Tooltip
+        content={
+          runActive ? "Hide result" : `Run cell (${ctrlCmd}+Shift+Enter)`
+        }
       >
-        <PlayIcon weight="fill" />
-        {showLabels && "Run"}
-      </ToggleButton>
-    </Tooltip>
-    <Tooltip
-      content={
-        isDrawMode
-          ? autoRefreshOn
-            ? "Drawing — auto-refresh on"
-            : "Refresh chart"
-          : "Draw (auto-refresh chart)"
-      }
-    >
-      <ToggleButton
-        type="button"
-        $size="md"
-        $active={isDrawMode}
-        $tone="info"
-        $activeTone="neutral"
-        aria-pressed={isDrawMode}
-        aria-disabled={isRunning || !canRun}
-        aria-busy={isDrawMode && isChartLoading}
-        onClick={(e) => {
-          e.stopPropagation()
-          if (isRunning || !canRun) return
-          onDraw()
-        }}
-        aria-label="Draw"
+        <ToggleButton
+          type="button"
+          $size="md"
+          $active={runActive}
+          $tone="success"
+          $activeTone="neutral"
+          aria-pressed={runActive}
+          aria-disabled={runLocked}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (runLocked) return
+            if (runActive) {
+              onHideResult()
+              return
+            }
+            onRun()
+          }}
+          aria-label={runActive ? "Hide result" : "Run cell"}
+        >
+          <PlayIcon weight="fill" />
+          {showLabels && "Run"}
+        </ToggleButton>
+      </Tooltip>
+      <Tooltip
+        content={
+          isDrawMode
+            ? autoRefreshOn
+              ? "Drawing — auto-refresh on"
+              : "Refresh chart"
+            : "Draw (auto-refresh chart)"
+        }
       >
-        {isDrawMode && isChartLoading ? <Spinner size={18} /> : <ChartIcon />}
-        {showLabels && "Draw"}
-      </ToggleButton>
-    </Tooltip>
-  </NotebookViewToggle>
-)
+        <ToggleButton
+          type="button"
+          $size="md"
+          $active={isDrawMode}
+          $tone="info"
+          $activeTone="neutral"
+          aria-pressed={isDrawMode}
+          aria-disabled={drawLocked}
+          aria-busy={isDrawMode && isChartLoading}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (drawLocked) return
+            onDraw()
+          }}
+          aria-label="Draw"
+        >
+          {isDrawMode && isChartLoading ? <Spinner size={18} /> : <ChartIcon />}
+          {showLabels && "Draw"}
+        </ToggleButton>
+      </Tooltip>
+    </NotebookViewToggle>
+  )
+}

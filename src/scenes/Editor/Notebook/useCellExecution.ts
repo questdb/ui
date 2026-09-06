@@ -12,8 +12,10 @@ import { getQueriesFromText } from "../Monaco/utils"
 import type { ValidateQueryResult } from "../../../utils/questdb/types"
 import {
   hasWriteStatement,
+  requireAllDQL,
   resolveRunBarrier,
   type ClassifiedStatement,
+  type PermissionDecision,
   type RunBarrierOutcome,
   type RunCellGate,
 } from "../../../utils/tools/permissions"
@@ -24,12 +26,19 @@ import {
   hasPendingResult,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
+  runCancellationOf,
+  type RunCancellation,
+  type RunCancelReason,
   runHistoryPatch,
   singleResultFromExec,
   statementKeysFor,
 } from "./notebookUtils"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
+
+export type DrawGateOutcome =
+  | { granted: true }
+  | { granted: false; reason?: string }
 
 const publishSchemaIfMutating = (exec: QueryExecResult): void => {
   if (exec.type === "ddl" || exec.type === "dml") {
@@ -45,6 +54,14 @@ const beginCellRun = (
   runGenerationRef.current.set(cellId, generation)
 
   return () => runGenerationRef.current.get(cellId) === generation
+}
+
+// The reason the cell's controllers were aborted with, when any were.
+const cancellationOf = (
+  controllers: readonly AbortController[],
+): RunCancellation | undefined => {
+  const aborted = controllers.find((c) => c.signal.aborted)
+  return aborted ? runCancellationOf(aborted.signal) : undefined
 }
 
 const supersedeCellRun = (
@@ -170,7 +187,7 @@ export const useCellExecution = ({
       if (queries.length === 0) return { ok: false, superseded: false }
 
       const prior = abortControllersRef.current.get(cellId)
-      prior?.forEach((c) => c.abort())
+      prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
       const startCell = cellsRef.current.find((c) => c.id === cellId)
@@ -258,7 +275,11 @@ export const useCellExecution = ({
             }
           }
           if (!isCurrentRun()) {
-            return { ok: failedCount === 0, superseded: true }
+            return {
+              ok: failedCount === 0,
+              superseded: true,
+              cancelled: cancellationOf(controllers),
+            }
           }
           const landed = singleResultFromExec(result, sql)
           finalResults[i] = landed
@@ -358,6 +379,43 @@ export const useCellExecution = ({
     ],
   )
 
+  // One running window covers the whole phase: the barrier (validation) and
+  // the request. A claim opens it; the window closes once the cell has
+  // neither a pending claim nor an in-flight request. Cancel, delete and an
+  // agent mode change reach a validating phase through the claim's signal.
+  const claimBarrier = useCallback(
+    (cellId: string, externalSignal?: AbortSignal) => {
+      const ac = new AbortController()
+      const onExternalAbort = () => ac.abort(externalSignal?.reason)
+      externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
+      const claims =
+        barrierAbortsRef.current.get(cellId) ?? new Set<AbortController>()
+      claims.add(ac)
+      barrierAbortsRef.current.set(cellId, claims)
+      setRunningCellIds((prev) => new Set(prev).add(cellId))
+      return {
+        signal: ac.signal,
+        release: () => {
+          externalSignal?.removeEventListener("abort", onExternalAbort)
+          claims.delete(ac)
+          if (claims.size === 0) barrierAbortsRef.current.delete(cellId)
+        },
+      }
+    },
+    [],
+  )
+
+  const releaseIdleCell = useCallback((cellId: string) => {
+    if (barrierAbortsRef.current.has(cellId)) return
+    if (abortControllersRef.current.has(cellId)) return
+    setRunningCellIds((prev) => {
+      if (!prev.has(cellId)) return prev
+      const next = new Set(prev)
+      next.delete(cellId)
+      return next
+    })
+  }, [])
+
   // Parallel run for refreshable (non-write) cells: every DQL statement
   // launches at once through the shared limiter; an invalid statement is
   // skipped with its validation error as the slot result; one failure skips
@@ -372,7 +430,7 @@ export const useCellExecution = ({
       valueAtRunStart: string,
     ): Promise<CellRunOutcome> => {
       const prior = abortControllersRef.current.get(cellId)
-      prior?.forEach((c) => c.abort())
+      prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
       const startCell = cellsRef.current.find((c) => c.id === cellId)
@@ -458,7 +516,11 @@ export const useCellExecution = ({
         )
 
         if (!isCurrentRun()) {
-          return { ok: failedCount === 0, superseded: true }
+          return {
+            ok: failedCount === 0,
+            superseded: true,
+            cancelled: cancellationOf(controllers),
+          }
         }
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
         if (!liveCell) {
@@ -570,16 +632,14 @@ export const useCellExecution = ({
       if (queries.length === 0) return notRun
 
       // The run claims the cell before the barrier: the attribution baseline
-      // is the gesture-time value, and a barrier-phase abort handle lets
-      // cancel and delete reach a run that is still validating.
+      // is the gesture-time value, and the claim keeps the running window open
+      // while the run is still validating.
       const valueAtRunStart = cell.value
-      const barrierAc = new AbortController()
-      const onBarrierAbort = () => barrierAc.abort(externalSignal?.reason)
-      externalSignal?.addEventListener("abort", onBarrierAbort, { once: true })
-      const claims =
-        barrierAbortsRef.current.get(cellId) ?? new Set<AbortController>()
-      claims.add(barrierAc)
-      barrierAbortsRef.current.set(cellId, claims)
+      const claim = claimBarrier(cellId, externalSignal)
+      const bail = (outcome: CellRunOutcome): CellRunOutcome => {
+        releaseIdleCell(cellId)
+        return outcome
+      }
 
       let barrier: RunBarrierOutcome
       try {
@@ -589,30 +649,34 @@ export const useCellExecution = ({
           gate,
           (stmt) =>
             statementRequestLimiter(
-              () => validateWithGlobals(stmt, barrierAc.signal),
-              barrierAc.signal,
+              () => validateWithGlobals(stmt, claim.signal),
+              claim.signal,
             ),
         )
       } finally {
-        externalSignal?.removeEventListener("abort", onBarrierAbort)
-        claims.delete(barrierAc)
-        if (claims.size === 0) barrierAbortsRef.current.delete(cellId)
+        claim.release()
       }
 
       // Re-check the claim after the barrier await: a cancel, delete, or
       // mode change that landed during validation would otherwise launch —
       // and commit — the run.
-      if (barrierAc.signal.aborted || externalSignal?.aborted) return notRun
+      if (claim.signal.aborted || externalSignal?.aborted) {
+        return bail({
+          ...notRun,
+          notStarted: true,
+          cancelled: runCancellationOf(claim.signal),
+        })
+      }
       if (barrier.action === "denied") {
-        return { ok: false, superseded: false, denied: barrier.reason }
+        return bail({ ok: false, superseded: false, denied: barrier.reason })
       }
       if (barrier.action === "skipped") {
-        return { ok: false, superseded: false, skipped: barrier.reason }
+        return bail({ ok: false, superseded: false, skipped: barrier.reason })
       }
       const classified = barrier.classified
       const liveAfterBarrier = cellsRef.current.find((c) => c.id === cellId)
       if (!liveAfterBarrier || liveAfterBarrier.type === "markdown") {
-        return notRun
+        return bail(notRun)
       }
 
       if (classified && !hasWriteStatement(classified)) {
@@ -636,7 +700,7 @@ export const useCellExecution = ({
       }
 
       const prior = abortControllersRef.current.get(cellId)
-      prior?.forEach((c) => c.abort())
+      prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
       const isCurrentRun = beginCellRun(runGenerationRef, cellId)
       const priorRaw = cellsRef.current.find((c) => c.id === cellId)?.result
@@ -680,7 +744,11 @@ export const useCellExecution = ({
         }
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) {
-          return { ok: execResult.type !== "error", superseded: true }
+          return {
+            ok: execResult.type !== "error",
+            superseded: true,
+            cancelled: cancellationOf([ac]),
+          }
         }
         publishSchemaIfMutating(execResult)
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
@@ -803,11 +871,12 @@ export const useCellExecution = ({
         return { committed: true, ok: execResult.type !== "error" }
       } finally {
         if (isCurrentRun()) {
-          setRunningCellIds((prev) => {
-            const next = new Set(prev)
-            next.delete(cellId)
-            return next
-          })
+          clearRunningCell(
+            abortControllersRef,
+            autoFocusRef,
+            setRunningCellIds,
+            cellId,
+          )
         }
       }
     },
@@ -820,29 +889,71 @@ export const useCellExecution = ({
     ],
   )
 
+  // The Draw gesture's phase: the same claim and running window as a run,
+  // ending at the mode flip instead of a request. The gate commits only
+  // against the SQL and mode it saw — an edit or an agent mode change during
+  // validation wins over the gesture.
+  const validateForDraw = useCallback(
+    async (
+      cellId: string,
+      externalSignal?: AbortSignal,
+    ): Promise<DrawGateOutcome> => {
+      const cell = cellsRef.current.find((c) => c.id === cellId)
+      if (!cell || cell.type === "markdown") return { granted: false }
+      const valueAtStart = cell.value
+      const modeAtStart = cell.mode
+      const claim = claimBarrier(cellId, externalSignal)
+      let decision: PermissionDecision
+      try {
+        decision = await requireAllDQL(valueAtStart, (stmt) =>
+          statementRequestLimiter(
+            () => validateWithGlobals(stmt, claim.signal),
+            claim.signal,
+          ),
+        )
+      } finally {
+        claim.release()
+        releaseIdleCell(cellId)
+      }
+      if (claim.signal.aborted || externalSignal?.aborted) {
+        return { granted: false }
+      }
+      if (!decision.granted) return { granted: false, reason: decision.reason }
+      const live = cellsRef.current.find((c) => c.id === cellId)
+      if (!live || live.value !== valueAtStart || live.mode !== modeAtStart) {
+        return { granted: false }
+      }
+      return { granted: true }
+    },
+    [cellsRef, claimBarrier, releaseIdleCell, validateWithGlobals],
+  )
+
   // Silently discard an in-flight run: no cancelled markers, no snapshot
   // delete. For ownership hand-offs (run→draw) where the chart engine takes
   // over and the run must simply stop writing.
-  const abortCellRun = useCallback((cellId: string) => {
-    barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort())
-    const controllers = abortControllersRef.current.get(cellId)
-    if (!controllers) return
-    // Supersede the in-flight run so its late resolution can't write back
-    supersedeCellRun(runGenerationRef, cellId)
-    controllers.forEach((ac) => ac.abort())
-    clearRunningCell(
-      abortControllersRef,
-      autoFocusRef,
-      setRunningCellIds,
-      cellId,
-    )
-  }, [])
+  const abortCellRun = useCallback(
+    (cellId: string, reason: RunCancelReason) => {
+      barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort(reason))
+      const controllers = abortControllersRef.current.get(cellId)
+      if (!controllers) return
+      // Supersede the in-flight run so its late resolution can't write back
+      supersedeCellRun(runGenerationRef, cellId)
+      controllers.forEach((ac) => ac.abort(reason))
+      clearRunningCell(
+        abortControllersRef,
+        autoFocusRef,
+        setRunningCellIds,
+        cellId,
+      )
+    },
+    [],
+  )
 
-  const cancelCell = useCallback((cellId: string) => {
-    barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort())
+  const cancelCell = useCallback((cellId: string, reason?: RunCancelReason) => {
+    barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort(reason))
     const controllers = abortControllersRef.current.get(cellId)
     if (!controllers) return
-    controllers.forEach((ac) => ac.abort())
+    controllers.forEach((ac) => ac.abort(reason))
   }, [])
 
   const cancelQuery = useCallback(
@@ -918,6 +1029,7 @@ export const useCellExecution = ({
   return {
     runningCellIds,
     runCell,
+    validateForDraw,
     reRunResultAt,
     abortCellRun,
     cancelCell,

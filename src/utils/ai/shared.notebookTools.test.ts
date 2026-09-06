@@ -1,4 +1,5 @@
 import "../../test/stubBrowserGlobals"
+import type { Permissions } from "../tools/permissions"
 import { beforeEach, describe, it, expect, vi } from "vitest"
 import { dispatchTool } from "../tools/dispatch"
 import type { ModelToolsClient, StatusCallback } from "./aiAssistant"
@@ -120,13 +121,15 @@ const mountLive = (
     kind: "live",
     mutate: (transition) => {
       try {
-        const out = transition(state.parts, () => "unrequested")
+        const out = transition(state.parts)
         state.parts = out.parts
         return Promise.resolve(out.result)
       } catch (error) {
         return Promise.reject(error)
       }
     },
+    mutateWithResultStatus: (transition) =>
+      controller.mutate((parts) => transition(parts, () => "unrequested")),
     readView: () => {
       opts.onRead?.()
       return Promise.resolve({
@@ -184,6 +187,16 @@ const makeClient = (
 
 const noopStatus: StatusCallback = () => undefined
 
+// Every agent surface supplies permissions and a validator; tests that do not
+// exercise gating use the widest grant and a validator that classifies as DQL.
+const ALL_GRANTED: Permissions = {
+  grantSchemaAccess: true,
+  read: true,
+  write: true,
+}
+const dqlValidator = () =>
+  Promise.resolve({ query: "", columns: [], timestamp: 0 })
+
 // A default live controller for buffer 1 with an empty notebook, so reads
 // (readBasics / cellValueOf) in gate-rejection and no-op tests have a bound
 // notebook to consult. Tests needing specific cells or a runCell re-mount.
@@ -217,6 +230,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1 },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     expect(res.is_error).toBeUndefined()
@@ -233,6 +248,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { label: "My notebook" },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(client.createNotebook).toHaveBeenCalledWith("My notebook", undefined)
     expect(res.is_error).toBeUndefined()
@@ -254,6 +271,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "SELECT 1" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const parsed = JSON.parse(res.content) as { cellId: string }
     expect(typeof parsed.cellId).toBe("string")
@@ -288,6 +307,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "source" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const { cellId } = JSON.parse(response.content) as { cellId: string }
 
@@ -342,6 +363,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "source" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     // Then neither a cell nor an orphan snapshot is left behind
@@ -364,12 +387,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "SELECT 1; SELECT bad; SELECT 2", run: true },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
-      undefined,
-      undefined,
+      expect.any(String),
+      { kind: "autoRun" },
     )
     expect(JSON.parse(res.content)).toMatchObject({
       ran: false,
@@ -385,6 +410,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.value).toBe("SELECT 2")
     expect(cellById(state, "c")?.name).toBe("keep")
@@ -404,6 +431,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const parsed = JSON.parse(res.content) as Record<string, unknown>
     expect(parsed).toEqual({
@@ -435,6 +464,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const p1 = JSON.parse(runCellRes.content) as Record<string, unknown>
     expect(p1.unverified).toBe(true)
@@ -445,6 +476,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "INSERT INTO t VALUES(1)", run: true },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const p2 = JSON.parse(addRes.content) as Record<string, unknown>
     expect(p2.unverified).toBe(true)
@@ -458,6 +491,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const p3 = JSON.parse(applyRes.content) as {
       runs: Array<Record<string, unknown>>
@@ -484,6 +519,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig).toMatchObject({
       xColumn: "ts",
@@ -509,6 +546,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     // When the user edits before the transition commits
@@ -528,6 +567,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "5s" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.autoRefresh).toBe("5s")
   })
@@ -539,6 +580,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: true },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.autoRefresh).toBe(true)
   })
@@ -552,6 +595,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: false },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.autoRefresh).toBe(false)
   })
@@ -563,6 +608,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "2s" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
@@ -579,6 +626,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: null },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then no key remains — a spread patch would have kept it
     const updated = cellById(state, "c")
@@ -592,6 +641,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, value: "30s" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")
   })
@@ -603,6 +654,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, value: false },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(state.parts.settings.autoRefreshDefault).toBe(false)
   })
@@ -621,6 +674,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, value: "30s", reset_cell_overrides: true },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the default is stored and no override key survives —
     // every cell now inherits 30s
@@ -642,6 +697,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, value: "30s", reset_cell_overrides: null },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the override stays and still wins over the new default
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")
@@ -655,6 +712,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, value: "2s" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
@@ -705,10 +764,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     expect(res.is_error).toBeUndefined()
-    expect(JSON.parse(res.content)).toEqual({ view: "result" })
+    expect(JSON.parse(res.content)).toEqual({ view: "result", mode: "draw" })
     expect(cellById(state, "c")).toMatchObject({
       topHeight: 72,
       topResized: false,
@@ -731,9 +792,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
-    expect(JSON.parse(res.content)).toEqual({ view: "editor_result" })
+    expect(JSON.parse(res.content)).toEqual({
+      view: "editor_result",
+      mode: "draw",
+    })
     expect(cellById(state, "c")?.paneView).toBe("editor_result")
   })
 
@@ -758,11 +824,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     expect(JSON.parse(res.content)).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor_result",
+      mode: "draw",
     })
     expect(state.parts.settings.layout?.[0].w).toBe(4)
   })
@@ -790,6 +859,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     // Then no cell stores a per-cell value — both inherit
@@ -822,6 +893,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
 
     // Then the default lands and the chart inherits it
@@ -837,6 +910,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", name: "BTC price" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.name).toBe("BTC price")
   })
@@ -848,6 +923,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", name: null },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.name).toBeUndefined()
   })
@@ -859,6 +936,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", name: "a".repeat(101) },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(cellById(state, "c")?.name).toBe("orig")
@@ -878,6 +957,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "INSERT INTO t VALUES(1)" },
       transport,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect((JSON.parse(t.content) as { unverified?: boolean }).unverified).toBe(
       true,
@@ -896,6 +977,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "SELECT * FROM t" },
       serverErr,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(
       (JSON.parse(s.content) as { unverified?: boolean }).unverified,
@@ -915,6 +998,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "INSERT INTO t VALUES(1)" },
       transport,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the failure envelope is marked unverified
     const transportPayload = JSON.parse(t.content) as {
@@ -937,6 +1022,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, sql: "SELECT * FROM t" },
       serverErr,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the failure envelope is NOT marked unverified
     const serverPayload = JSON.parse(s.content) as {
@@ -955,6 +1042,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", queries: [{ type: "bar" }] },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([
       { type: "bar", yColumns: [] },
@@ -978,6 +1067,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig).toMatchObject({
       xColumn: "ts",
@@ -1005,6 +1096,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
@@ -1038,6 +1131,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([
       { type: "line", yColumns: [] },
@@ -1055,6 +1150,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
@@ -1076,6 +1173,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
@@ -1096,6 +1195,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig?.queries).toMatchObject([
       { type: "line", yColumns: ["a"] },
@@ -1110,6 +1211,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", queries: [] },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([])
   })
@@ -1126,6 +1229,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "c")?.chartConfig?.queries).toMatchObject([
       null,
@@ -1167,6 +1272,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBeUndefined()
     // The applied cell carries every field in camelCase; c (omitted) is deleted.
@@ -1204,6 +1311,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(state.parts.settings.autoRefreshDefault).toBe(false)
     // When a later apply passes null
@@ -1216,6 +1325,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the stored default survives
     expect(state.parts.settings.autoRefreshDefault).toBe(false)
@@ -1232,6 +1343,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the tool errors and nothing committed
     expect(res.is_error).toBe(true)
@@ -1255,6 +1368,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then the typo errors instead of silently deleting the override
     expect(res.is_error).toBe(true)
@@ -1282,6 +1397,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(a.state.parts.settings.variables).toEqual(variables)
 
@@ -1300,6 +1417,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(b.state.parts.settings.variables).toEqual([
       { name: "keep", value: "1" },
@@ -1320,6 +1439,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(c.state.parts.settings.variables).toEqual([])
   })
@@ -1337,6 +1458,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
@@ -1364,7 +1487,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         },
         client,
         noopStatus,
-        undefined,
+        ALL_GRANTED,
         validateSql,
       )
       expect(res.is_error).toBe(true)
@@ -1387,7 +1510,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       validateSql,
     )
     expect(res.is_error).toBe(true)
@@ -1423,7 +1546,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       validateSql,
     )
     expect(validateSql).toHaveBeenNthCalledWith(
@@ -1458,7 +1581,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       client,
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       validateSql,
     )
     expect(res.is_error).toBe(true)
@@ -1478,8 +1601,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1505,7 +1628,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       kind: "live",
       mutate: (transition) => {
         try {
-          const out = transition(state.parts, () => "unrequested")
+          const out = transition(state.parts)
           state.parts = out.parts
           abort.abort()
           return Promise.resolve(out.result)
@@ -1513,6 +1636,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           return Promise.reject(error)
         }
       },
+      mutateWithResultStatus: (transition) =>
+        controller.mutate((parts) => transition(parts, () => "unrequested")),
       readView: () =>
         Promise.resolve({
           cells: state.parts.cells,
@@ -1529,8 +1654,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cells: [{ id: "b", value: "SELECT 1" }] },
       makeClient(),
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       abort.signal,
     )
 
@@ -1556,8 +1681,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       { notebookFreshness: createNotebookFreshness([[1, readSeq]]) },
     )
@@ -1575,8 +1700,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 2, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       {
         notebookFreshness: createNotebookFreshness([
@@ -1600,8 +1725,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 2, value: "SELECT 1" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       { notebookFreshness: createNotebookFreshness() },
     )
@@ -1620,8 +1745,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 2, cells: [{ value: "SELECT 1" }] },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       { notebookFreshness: createNotebookFreshness() },
     )
@@ -1643,8 +1768,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1658,8 +1783,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1 },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1668,8 +1793,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1689,8 +1814,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { label: "My notebook" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1700,8 +1825,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1720,8 +1845,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1 },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1730,8 +1855,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -1750,8 +1875,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       {},
     )
@@ -1770,8 +1895,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       { notebookFreshness: createNotebookFreshness() },
     )
@@ -1792,8 +1917,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       { notebookFreshness: createNotebookFreshness([[1, readSeq]]) },
     )
@@ -1813,7 +1938,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       client,
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       validateSql,
     )
     expect(res.is_error).toBe(true)
@@ -1850,6 +1975,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // ohlc is never fabricated from y_columns — the candlestick is rejected
     // outright, and nothing is committed.
@@ -1881,6 +2008,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
@@ -1895,6 +2024,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { buffer_id: 1, cell_id: null },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(state.parts.maximizedCellId).toBe(null)
   })
@@ -2071,17 +2202,21 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
-  it("run_cell with no gate leaves execution to re-read the live cell", async () => {
+  it("run_cell pins the SQL it read and gates the launch explicitly", async () => {
     const { runCell } = mountLive(1, [cell("c", "SELECT 1")])
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBeFalsy()
-    // No gate ran, so no SQL is pinned — the executor re-reads the cell.
-    expect(runCell).toHaveBeenCalledWith("c", undefined, undefined, undefined)
+    expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1", {
+      kind: "explicit",
+      permissions: ALL_GRANTED,
+    })
   })
 
   it("allows add_cell with run=true and SELECT when read and write are both denied", async () => {
@@ -2144,7 +2279,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   // openaiProvider, openaiChatCompletionsProvider, dispatchMCPTool). This pins
   // both halves so a caller that drops the gate args — or a refactor of that
   // condition — fails loudly here instead of silently auto-running a write.
-  it("auto-run write protection depends entirely on the gate args", async () => {
+  it("add_cell run:true always passes the autoRun gate, so a write is skipped", async () => {
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const gate = mountLive(1, [], { runCell: okRun, validate })
     const gated = await dispatchTool(
@@ -2165,21 +2300,6 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ran: false,
       skipped: true,
     })
-
-    const ungate = mountLive(1, [], { runCell: okRun })
-    const ungated = await dispatchTool(
-      "add_cell",
-      { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
-      makeClient(),
-      noopStatus,
-    )
-    expect(ungate.runCell).toHaveBeenCalledWith(
-      expect.any(String),
-      undefined,
-      undefined,
-      undefined,
-    )
-    expect(JSON.parse(ungated.content)).toMatchObject({ ran: true })
   })
 })
 
@@ -2202,13 +2322,15 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
-      undefined,
-      undefined,
+      expect.any(String),
+      { kind: "autoRun" },
     )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ success: boolean; queryCount?: number; results?: string[] }>
@@ -2233,13 +2355,118 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
-      undefined,
-      undefined,
+      expect.any(String),
+      { kind: "autoRun" },
     )
+  })
+
+  it.each(["run", "draw"] as const)(
+    "rejects mode='%s' with authoritative view='editor' before mutating",
+    async (mode) => {
+      const originalResult = {
+        results: [] as SingleQueryResult[],
+        activeResultIndex: 0,
+        timestamp: 1,
+      }
+      const { state, runCell } = mountLive(1, [
+        cell("cell-1", "SELECT 1", {
+          result: originalResult,
+          lastRunStatus: "success",
+          paneView: "result",
+        }),
+      ])
+
+      const res = await dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          layout_mode: null,
+          maximized_cell_id: null,
+          cells: [
+            {
+              id: "cell-1",
+              preserve_value: true,
+              mode,
+              view: "editor",
+            },
+          ],
+        },
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+
+      expect(res.is_error).toBe(true)
+      expect(JSON.parse(res.content)).toMatchObject({
+        error_code: "validation",
+      })
+      expect(res.content).toMatch(/view.*editor.*explicit mode/)
+      expect(cellById(state, "cell-1")).toMatchObject({
+        result: originalResult,
+        lastRunStatus: "success",
+        paneView: "result",
+      })
+      expect(runCell).not.toHaveBeenCalled()
+    },
+  )
+
+  it("lets authoritative view='editor' clear a preserved draw mode without chart config", async () => {
+    const { state, runCell } = mountLive(
+      1,
+      [
+        cell("cell-1", "SELECT 1", {
+          mode: "draw",
+          result: {
+            results: [],
+            activeResultIndex: 0,
+            timestamp: 1,
+          },
+          lastRunStatus: "success",
+          paneView: "result",
+          chartConfig: {
+            xColumn: "ts",
+            queries: [{ type: "line", yColumns: ["value"] }],
+          },
+        }),
+      ],
+      { runCell: okRun },
+    )
+
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [
+          {
+            id: "cell-1",
+            preserve_value: true,
+            mode: null,
+            view: "editor",
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    expect(res.is_error).toBeFalsy()
+    expect(JSON.parse(res.content)).toMatchObject({ runs: [] })
+    expect(cellById(state, "cell-1")?.mode).toBeUndefined()
+    expect(cellById(state, "cell-1")?.result).toBeUndefined()
+    expect(cellById(state, "cell-1")?.lastRunStatus).toBeUndefined()
+    expect(cellById(state, "cell-1")?.chartConfig).toBeUndefined()
+    expect(runCell).not.toHaveBeenCalled()
   })
 
   it("skips cells whose resolved mode is 'draw'", async () => {
@@ -2261,6 +2488,8 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(runCell).not.toHaveBeenCalled()
   })
@@ -2300,7 +2529,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       dqlValidate,
     )
     // Then the chart remains in draw mode and is never re-run as SQL
@@ -2324,7 +2553,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
-      undefined,
+      ALL_GRANTED,
       validateSql,
     )
     // Then the draw invariant denies the whole apply before anything commits
@@ -2343,6 +2572,8 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(runCell).not.toHaveBeenCalled()
   })
@@ -2387,7 +2618,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
-      [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
+      [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
     const res = await dispatchTool(
@@ -2431,7 +2662,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
-      [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
+      [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
     const res = await dispatchTool(
@@ -2468,11 +2699,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("re-runs DQL cells that ran before (only writes are history-gated)", async () => {
-    const { runCell } = mountLive(
-      1,
-      [cell("sel-1", "SELECT 1", { mode: "run" })],
-      { runCell: okRun },
-    )
+    const { runCell } = mountLive(1, [cell("sel-1", "SELECT 1")], {
+      runCell: okRun,
+    })
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -2491,13 +2720,10 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     })
   })
 
-  it("preserves existing mode when mode is omitted on an existing cell (draw stays draw, run stays run)", async () => {
+  it("preserves existing mode when omitted (draw stays draw, run stays implicit)", async () => {
     const { state, runCell } = mountLive(
       1,
-      [
-        cell("run-id", "old", { mode: "run" }),
-        cell("draw-id", "old", { mode: "draw" }),
-      ],
+      [cell("run-id", "old"), cell("draw-id", "old", { mode: "draw" })],
       { runCell: okRun },
     )
     const res = await dispatchTool(
@@ -2528,7 +2754,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(runCell).toHaveBeenCalledWith("run-id", undefined, "SELECT 1", {
       kind: "autoRun",
     })
-    expect(cellById(state, "run-id")?.mode).toBe("run")
+    expect(cellById(state, "run-id")?.mode).toBeUndefined()
     expect(cellById(state, "draw-id")?.mode).toBe("draw")
   })
 
@@ -2557,6 +2783,8 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Flush microtasks so dispatchTool resumes past the apply and fires every
     // runCell concurrently.
@@ -2596,6 +2824,8 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ success: boolean; queryCount?: number; results?: string[] }>
@@ -2622,6 +2852,8 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
@@ -2638,6 +2870,8 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(
@@ -2653,6 +2887,8 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       { buffer_id: 1, cell_id: "abc123" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
@@ -2671,6 +2907,8 @@ describe("dispatchTool — non-NotebookToolError falls through to default handle
       { buffer_id: 1, cell_id: "c" },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/network boom/)
@@ -2700,8 +2938,8 @@ describe("dispatchTool — run_query replay guard (sqlWriteExecuted)", () => {
       { sql },
       client,
       noopStatus,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       undefined,
       toolContext,
     )
@@ -2749,6 +2987,8 @@ describe("dispatchMCPTool — data-leak invariant", () => {
       generation: () => 0,
       reset: () => undefined,
     },
+    permissions: { get: () => ALL_GRANTED, consumeDirty: () => false },
+    validateSql: dqlValidator,
     metaToolContext: {
       getActiveBufferId: () => 1,
       getWorkspace: () => null,
@@ -2805,6 +3045,8 @@ describe("dispatchTool — get_cell content cap switch", () => {
       { buffer_id: 1, cell_id: "c", get_full_content: true },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     const parsed = JSON.parse(res.content) as {
       value: string
@@ -2825,6 +3067,8 @@ describe("dispatchTool — get_cell content cap switch", () => {
         input,
         makeClient(),
         noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
       )
       const parsed = JSON.parse(res.content) as {
         value: string
@@ -2856,6 +3100,8 @@ describe("dispatchTool — get_cell content cap switch", () => {
         { buffer_id: 1, cell_id: "c" },
         makeClient(),
         noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
       )
       return (JSON.parse(response.content) as { view: string }).view
     }
@@ -2891,10 +3137,13 @@ describe("dispatchTool — get_cell content cap switch", () => {
       { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(JSON.parse(layout.content)).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor",
+      mode: null,
     })
     expect(
       (await db.buffers.get(1))?.notebookViewState?.settings?.layout?.[0],
@@ -2917,8 +3166,13 @@ describe("dispatchTool — get_cell content cap switch", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
-    expect(JSON.parse(dimensions.content)).toEqual({ view: "editor" })
+    expect(JSON.parse(dimensions.content)).toEqual({
+      view: "editor",
+      mode: null,
+    })
   })
 })
 
@@ -2935,6 +3189,8 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/exactly one/)
@@ -2952,6 +3208,8 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/has no value/)
@@ -2969,6 +3227,8 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       },
       client,
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/without an existing cell id/)
@@ -2986,6 +3246,8 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       },
       makeClient(),
       noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
     )
     expect(cellById(state, "a")?.value).toBe("keepme")
   })
@@ -2994,7 +3256,7 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
-      [cell("ins-1", "INSERT INTO t VALUES (1)", { mode: "run" })],
+      [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
     const res = await dispatchTool(
@@ -3024,13 +3286,9 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
   })
 
   it("auto-run executes a preserved DQL cell with its live SQL", async () => {
-    const { runCell } = mountLive(
-      1,
-      [cell("sel-1", "SELECT 1", { mode: "run" })],
-      {
-        runCell: okRun,
-      },
-    )
+    const { runCell } = mountLive(1, [cell("sel-1", "SELECT 1")], {
+      runCell: okRun,
+    })
     await dispatchTool(
       "apply_notebook_state",
       {

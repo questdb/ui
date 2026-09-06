@@ -49,6 +49,11 @@ const makeController = (
   kind: "live",
   mutate: (transition) =>
     Promise.resolve(
+      transition({ cells, settings, maximizedCellId, focusedCellId: null })
+        .result,
+    ),
+  mutateWithResultStatus: (transition) =>
+    Promise.resolve(
       transition(
         { cells, settings, maximizedCellId, focusedCellId: null },
         readResultStatus ?? (() => "unrequested"),
@@ -88,6 +93,37 @@ beforeEach(async () => {
 })
 
 describe("buildSnapshot", () => {
+  it("reports a run-marked cell's stored view when the snapshot index is unavailable", async () => {
+    // Given a background notebook whose run-marked cell has no snapshot row,
+    // and an index that rejects every read
+    const id = await db.buffers.add({
+      label: "nb",
+      value: "",
+      position: 0,
+      notebookViewState: {
+        cells: [
+          { id: "a", position: 0, value: "SELECT 1", lastRunStatus: "success" },
+        ],
+      },
+    })
+    const where = vi
+      .spyOn(db.notebook_results, "where")
+      .mockImplementation(() => {
+        throw new Error("index down")
+      })
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+
+    // When the snapshot is built
+    const snap = await buildSnapshot(id)
+
+    // Then the read succeeds and the cell keeps its stored arrangement
+    expect(snap?.status).toBe("ok")
+    expect(snap?.status === "ok" && snap.cells[0].view).toBe("editor_result")
+    expect(warn).toHaveBeenCalledOnce()
+    where.mockRestore()
+    warn.mockRestore()
+  })
+
   it("returns null for a buffer that is not a notebook", async () => {
     const id = await db.buffers.add({
       label: "sql tab",
@@ -123,7 +159,7 @@ describe("buildSnapshot", () => {
 
   it("reports editor when the mounted cell's saved result is known missing", async () => {
     const released = sql("a", "SELECT 1", {
-      mode: "run",
+      mode: undefined,
       lastRunStatus: "success",
       paneView: "result",
     })
@@ -136,13 +172,14 @@ describe("buildSnapshot", () => {
 
     expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
       view: "editor",
+      mode: null,
       last_run_status: "success",
     })
   })
 
   it("uses passive snapshot keys to distinguish restorable and missing results", async () => {
     const released = sql("a", "SELECT 1", {
-      mode: "run",
+      mode: undefined,
       lastRunStatus: "success",
       paneView: "result",
     })
@@ -161,8 +198,10 @@ describe("buildSnapshot", () => {
     })
     const restorable = await buildSnapshot(id)
     expect(
-      restorable?.status === "ok" ? restorable.cells[0].view : undefined,
-    ).toBe("result")
+      restorable?.status === "ok"
+        ? [restorable.cells[0].view, restorable.cells[0].mode]
+        : undefined,
+    ).toEqual(["result", "run"])
   })
 
   it("serves the live snapshot when the controller unregisters mid-read", async () => {
@@ -273,6 +312,7 @@ describe("buildSnapshot", () => {
         editor_height: "auto",
         result_height: "auto",
         view: "editor",
+        mode: null,
       })
     } else {
       throw new Error("expected ok snapshots")
@@ -291,6 +331,7 @@ describe("buildSnapshot", () => {
     expect(cellSnapshot).toMatchObject({
       type: "markdown",
       view: null,
+      mode: null,
       result_height: null,
     })
     // And get_cell reports the same null pane fields
@@ -302,13 +343,14 @@ describe("buildSnapshot", () => {
     )
     expect(details).toMatchObject({
       view: null,
+      mode: null,
       result_height: null,
     })
   })
 
   it("reports editor from get_cell serialization when the result is missing", () => {
     const released = sql("a", "SELECT 1", {
-      mode: "run",
+      mode: undefined,
       lastRunStatus: "success",
       paneView: "editor_result",
     })
@@ -324,6 +366,7 @@ describe("buildSnapshot", () => {
 
     expect(details).toMatchObject({
       view: "editor",
+      mode: null,
       last_run_status: "success",
     })
   })
@@ -341,6 +384,7 @@ describe("buildSnapshot", () => {
     const snap = await buildSnapshot(id)
     expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
       view: "editor_result",
+      mode: "draw",
     })
   })
 
@@ -463,6 +507,22 @@ describe("summarizeCells", () => {
     // Then the name is surfaced for the named cell and omitted otherwise
     expect(named.name).toBe("Recent Trades")
     expect(unnamed.name).toBeUndefined()
+    expect(named.mode).toBeNull()
+    expect(unnamed.mode).toBeNull()
+  })
+
+  it("derives run mode only while a table snapshot still exists", () => {
+    const released = sql("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "result",
+    })
+
+    expect(summarizeCells([released], undefined, () => "missing")[0].mode).toBe(
+      null,
+    )
+    expect(
+      summarizeCells([released], undefined, () => "unrequested")[0].mode,
+    ).toBe("run")
   })
 })
 
@@ -512,6 +572,7 @@ describe("formatSnapshot", () => {
     expect(out).toContain("- id: a")
     expect(out).toContain("editor_height: auto")
     expect(out).toContain("result_height: auto")
+    expect(out).toContain("mode: null")
     expect(out).toContain("view: editor")
     expect(out).toContain("grid: { x: 0, y: 0, w: 12 }")
   })

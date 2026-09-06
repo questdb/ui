@@ -65,7 +65,7 @@ describe("setCellDimensionsTransition", () => {
       paneView: "editor_result",
     })
     expect(out.parts.settings.layout?.[0].h).toBe(17)
-    expect(out.result).toEqual({ view: "editor_result" })
+    expect(out.result).toEqual({ view: "editor_result", mode: "draw" })
   })
 
   it("supports null preserve, auto reset, and a fixed result height", () => {
@@ -91,7 +91,7 @@ describe("setCellDimensionsTransition", () => {
       bottomResized: true,
       paneView: "result",
     })
-    expect(out.result).toEqual({ view: "result" })
+    expect(out.result).toEqual({ view: "result", mode: "draw" })
   })
 
   it("ignores view and result_height on a markdown cell and reports a null view", () => {
@@ -116,7 +116,7 @@ describe("setCellDimensionsTransition", () => {
     })
     expect(out.parts.cells[0].bottomHeight).toBeUndefined()
     expect(out.parts.cells[0].paneView).toBeUndefined()
-    expect(out.result).toEqual({ view: null })
+    expect(out.result).toEqual({ view: null, mode: null })
   })
 
   it("view editor discards the run outcome and exits draw", () => {
@@ -131,16 +131,23 @@ describe("setCellDimensionsTransition", () => {
       view: "editor",
       resultStatus: "missing",
     })
-    // Then the run outcome is wiped, the mode drops to run, the stored
+    // Then the run outcome and persisted draw marker are wiped, the stored
     // arrangement survives for the next run, and the snapshot is deleted
     expect(out.parts.cells[0]).toMatchObject({
-      mode: "run",
       result: undefined,
       lastRunStatus: undefined,
       paneView: "result",
     })
-    expect(out.result).toEqual({ view: "editor", result_discarded: true })
-    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
+    expect(out.parts.cells[0].mode).toBeUndefined()
+    expect(out.result).toEqual({
+      view: "editor",
+      mode: null,
+      result_discarded: true,
+    })
+    expect(out.cancelRuns).toEqual({
+      cellIds: ["a"],
+      reason: "result_cleared",
+    })
     expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
   })
 
@@ -152,8 +159,11 @@ describe("setCellDimensionsTransition", () => {
     })
 
     expect(out.parts.cells).toBe(parts.cells)
-    expect(out.result).toEqual({ view: "editor" })
-    expect(out.cancelRuns).toEqual({ cellIds: ["a"] })
+    expect(out.result).toEqual({ view: "editor", mode: null })
+    expect(out.cancelRuns).toEqual({
+      cellIds: ["a"],
+      reason: "result_cleared",
+    })
     expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
   })
 
@@ -200,7 +210,7 @@ describe("setCellDimensionsTransition", () => {
       { resultStatus: "missing" },
     )
 
-    expect(out.result).toEqual({ view: "editor" })
+    expect(out.result).toEqual({ view: "editor", mode: null })
     expect(out.parts.settings.layout?.[0].h).toBe(5)
   })
 
@@ -239,7 +249,7 @@ describe("setCellDimensionsTransition", () => {
     )
 
     expect(out.parts.cells[0].paneView).toBe("result")
-    expect(out.result).toEqual({ view: "editor" })
+    expect(out.result).toEqual({ view: "editor", mode: null })
   })
 })
 
@@ -265,6 +275,7 @@ describe("setCellLayoutTransition", () => {
     expect(out.result).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor_result",
+      mode: "draw",
     })
   })
 
@@ -485,7 +496,7 @@ describe("deleteCellTransition", () => {
 describe("setCellModeTransition", () => {
   it("asks the shell to cancel the cell's run when it enters draw mode", () => {
     // Given a run-mode cell (a run may be in flight)
-    const parts = partsOf([cell("a", "select 1", { mode: "run" })])
+    const parts = partsOf([cell("a", "select 1")])
     // When the cell switches to draw
     const out = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
     // Then the shell is told to abort its in-flight run — the chart engine
@@ -501,6 +512,7 @@ describe("setCellModeTransition", () => {
     const stillDraw = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
     // Then neither carries a cancel request
     expect(toRun.cancelRuns).toBeUndefined()
+    expect(toRun.parts.cells[0].mode).toBeUndefined()
     expect(stillDraw.cancelRuns).toBeUndefined()
   })
 })

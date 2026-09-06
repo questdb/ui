@@ -16,6 +16,7 @@ type Props = {
   isGridLoading: boolean
   isChartLoading: boolean
   isChartRefreshing: boolean
+  isCellBusy: boolean
   chartZoomed: boolean
   onResetZoomFocus?: () => void
 }
@@ -30,6 +31,7 @@ export const CellWideActions: React.FC<Props> = ({
   isGridLoading,
   isChartLoading,
   isChartRefreshing,
+  isCellBusy,
   chartZoomed,
   onResetZoomFocus,
 }) => (
@@ -55,7 +57,7 @@ export const CellWideActions: React.FC<Props> = ({
       paneLayout={paneLayout}
       isGridLoading={isGridLoading}
       isChartLoading={isChartLoading}
-      isRunning={isRunning}
+      isCellBusy={isCellBusy}
       chartZoomed={chartZoomed}
       showLabels
       onResetZoomFocus={onResetZoomFocus}

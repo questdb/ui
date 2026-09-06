@@ -186,6 +186,7 @@ const CellInner: React.FC<Props> = ({
   const resultOnly = paneLayout === "result"
   const showBottomSlot = paneLayout !== "editor"
   const isSplit = paneLayout === "split"
+  const isCellBusy = isRunning || (isDrawMode && chartLoading)
   const runActive = !isDrawMode && doubleView
   const view = resolveCellView(cell)
   const canRun = !!stripSQLComments(cell.value).trim()
@@ -433,7 +434,7 @@ const CellInner: React.FC<Props> = ({
         layoutMode={layoutMode}
         autoRefreshDefault={autoRefreshDefault}
         isMaximized={isMaximized}
-        isRunning={isRunning}
+        isCellBusy={isCellBusy}
         headerRef={headerRef}
         toolbarTier={toolbarTier}
         paneLayout={paneLayout}
@@ -455,7 +456,7 @@ const CellInner: React.FC<Props> = ({
           toolbarTier === "compact" ? null : view === "none" ? (
             // Neutral: action verbs (Run / Draw) — labelled only when expanded.
             <CellRunDrawToggles
-              isRunning={isRunning}
+              isCellBusy={isCellBusy}
               isChartLoading={chartLoading}
               runActive={runActive}
               isDrawMode={isDrawMode}
@@ -485,6 +486,7 @@ const CellInner: React.FC<Props> = ({
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
               isChartRefreshing={chartRefreshing}
+              isCellBusy={isCellBusy}
               chartZoomed={chartZoomed}
               onResetZoomFocus={focusCellToolbar}
             />
@@ -496,7 +498,7 @@ const CellInner: React.FC<Props> = ({
               paneLayout={paneLayout}
               isGridLoading={isGridLoading}
               isChartLoading={chartLoading}
-              isRunning={isRunning}
+              isCellBusy={isCellBusy}
               chartZoomed={chartZoomed}
               showLabels={false}
               onResetZoomFocus={focusCellToolbar}

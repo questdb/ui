@@ -331,6 +331,95 @@ export const NOTEBOOK_ARCHIVED_MID_RUN_NOTE =
   "result was not recorded. Restore it and call get_notebook_state to see the " +
   "current cell state, and verify before re-running anything with side effects."
 
+// Why an in-flight run was cancelled. Transitions name the cause; the shells
+// carry it on the abort signal so both exits can report it.
+export type RunCancelReason =
+  | "result_cleared"
+  | "mode_changed"
+  | "cell_deleted"
+  | "notebook_archived"
+  | "notebook_deleted"
+  | "superseded"
+
+// A signal aborted without a known reason (the tool call itself was aborted).
+export type RunCancellation = RunCancelReason | "cancelled"
+
+const RUN_CANCEL_REASONS: ReadonlySet<string> = new Set<RunCancelReason>([
+  "result_cleared",
+  "mode_changed",
+  "cell_deleted",
+  "notebook_archived",
+  "notebook_deleted",
+  "superseded",
+])
+
+export const runCancellationOf = (signal: AbortSignal): RunCancellation =>
+  typeof signal.reason === "string" && RUN_CANCEL_REASONS.has(signal.reason)
+    ? (signal.reason as RunCancelReason)
+    : "cancelled"
+
+const describeRunCancellation = (reason: RunCancellation): string => {
+  switch (reason) {
+    case "result_cleared":
+      return "the cell's result view was cleared"
+    case "mode_changed":
+      return "the cell was switched to chart mode"
+    case "cell_deleted":
+      return "the cell was deleted"
+    case "notebook_archived":
+      return "the notebook was archived"
+    case "notebook_deleted":
+      return "the notebook was deleted"
+    case "superseded":
+      return "a newer run of this cell started"
+    case "cancelled":
+      return "the request was cancelled"
+  }
+}
+
+export const cancelledBeforeRunNote = (reason: RunCancellation): string =>
+  `Run NOT started: ${describeRunCancellation(reason)} before validation ` +
+  "finished, so nothing was executed. Call get_notebook_state to see the " +
+  "current cell state; it is safe to re-run."
+
+export const MODE_CHANGED_MID_RUN_NOTE =
+  "Run completed, but the cell was switched to chart mode while it was " +
+  "running, so the result was not recorded; the chart now owns the cell. " +
+  "Call get_notebook_state to see the current cell state, and verify before " +
+  "re-running anything with side effects."
+
+export const CANCELLED_MID_RUN_NOTE =
+  "Run completed, but it was cancelled while it was running, so the result " +
+  "was not recorded. Call get_notebook_state to see the current cell state, " +
+  "and verify before re-running anything with side effects."
+
+export const midRunCancellationNote = (reason: RunCancellation): string => {
+  switch (reason) {
+    case "result_cleared":
+      return RESULT_CLEARED_MID_RUN_NOTE
+    case "mode_changed":
+      return MODE_CHANGED_MID_RUN_NOTE
+    case "cell_deleted":
+      return CELL_DELETED_MID_RUN_NOTE
+    case "notebook_archived":
+      return NOTEBOOK_ARCHIVED_MID_RUN_NOTE
+    case "notebook_deleted":
+      return NOTEBOOK_DELETED_MID_RUN_NOTE
+    case "superseded":
+      return SUPERSEDED_RUN_NOTE
+    case "cancelled":
+      return CANCELLED_MID_RUN_NOTE
+  }
+}
+
+export const cancelledBeforeLaunchSummary = (reason: RunCancellation) => ({
+  success: false,
+  queryCount: 0,
+  results: [] as string[],
+  cancelled: reason,
+  note: cancelledBeforeRunNote(reason),
+})
+
 export const STORAGE_FULL_RUN_NOTE =
   "Run completed, but the result could not be saved because the browser's " +
   "local storage limit is exceeded, so it was NOT recorded. Tell the user to " +
@@ -356,6 +445,9 @@ export type CellRunOutcome = {
   cellChanged?: boolean
   notStarted?: boolean
   resultCleared?: boolean
+  // Why a cancelled run stopped. With notStarted it was stopped before any
+  // SQL launched; otherwise the result was discarded at commit.
+  cancelled?: RunCancellation
   // Barrier decisions for gated (agent) runs: a permission denial or an
   // auto-run write skip. Nothing executed when either is set.
   denied?: string
@@ -472,6 +564,7 @@ export const stripCellResults = (cells: NotebookCell[]): NotebookCell[] =>
     if (cell.type === "markdown") delete persisted.paneView
     else persisted.paneView = cell.paneView ?? "editor_result"
     const canonical = persisted as NotebookCell & Record<string, unknown>
+    if (canonical.mode !== "draw") delete canonical.mode
     delete canonical.isViewMaximized
     return persisted
   })
@@ -1066,9 +1159,11 @@ export const buildAppliedCells = (
     const resolvedMode: CellMode | undefined =
       resolvedType === "markdown"
         ? undefined
-        : req.mode === undefined || req.mode === null
-          ? existing?.mode
-          : req.mode
+        : req.view === "editor"
+          ? undefined
+          : req.mode === undefined || req.mode === null
+            ? existing?.mode
+            : req.mode
 
     // PUT semantics: a non-empty string sets the name, null/"" clears it.
     const resolvedName =
@@ -1145,9 +1240,9 @@ export const buildAppliedCells = (
       )
     }
 
-    if (req.view === "editor" && req.mode === "draw") {
+    if (hasExplicitModeForEditor(req.mode, req.view)) {
       throw new ApplyNotebookStateError(
-        `Cell at index ${index} combines mode "draw" with view "editor"; view editor discards the result and returns the cell to run mode. Omit mode or pick another view.`,
+        `Cell at index ${index} combines an explicit mode with view "editor". Editor view clears the stored result and hides the result pane. Set mode to null to request an editor-only view.`,
         "cells",
       )
     }
@@ -1156,7 +1251,7 @@ export const buildAppliedCells = (
     const dimensionCell: NotebookCell = {
       ...(existing ?? { id, position: index, value, type: resolvedType }),
       value,
-      ...(resolvedMode !== undefined ? { mode: resolvedMode } : {}),
+      ...(resolvedMode === "draw" ? { mode: "draw" as const } : {}),
     }
     const validation = validateAgentCellDimensions(dimensionCell, {
       editorHeight: req.editorHeight,
@@ -1209,7 +1304,7 @@ export const buildAppliedCells = (
       // Results carry over by statement content: unchanged statements keep
       // theirs, zero survivors collapse the frame. A released cell (result on
       // disk only) keeps its snapshot — hydration reconciles it on load.
-      const next: NotebookCell = {
+      let next: NotebookCell = {
         ...existing,
         id: existing.id,
         position: index,
@@ -1231,14 +1326,14 @@ export const buildAppliedCells = (
         else delete next.lastRunError
         resultsCleared.push(existing.id)
       }
-      if (resolvedMode !== undefined) next.mode = resolvedMode
+      if (resolvedMode === "draw") next.mode = "draw"
       else delete next.mode
       if (chartConfig !== undefined) next.chartConfig = chartConfig
       else delete next.chartConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
-      if (req.view === "editor" && cellHasRunOutcome(next)) {
-        Object.assign(next, discardCellResultPatch(next))
+      if (req.view === "editor" && cellHasRunOutcome(existing)) {
+        next = discardCellResult(next)
         if (!resultsCleared.includes(existing.id)) {
           resultsCleared.push(existing.id)
         }
@@ -1275,7 +1370,7 @@ export const buildAppliedCells = (
     }
     created.topHeight = topHeightForSql(value)
     created.paneView = "editor_result"
-    if (resolvedMode !== undefined) created.mode = resolvedMode
+    if (resolvedMode === "draw") created.mode = "draw"
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     // Draw cells are double-view from creation (chart visible immediately),
@@ -1459,22 +1554,23 @@ export const validateAgentCellDimensions = (
 }
 
 // The agent's view:"editor" is the toggle-off gesture, not a stored value:
-// discard the run outcome and drop back to run mode, keeping the stored pane
-// arrangement for the next run. Mirrors the UI's clearCellResult; callers
-// delete the persisted snapshot through the transition's deleteSnapshots.
-export const discardCellResultPatch = (
-  cell: NotebookCell,
-): Partial<NotebookCell> => ({
-  result: undefined,
-  lastRunStatus: undefined,
-  ...(cell.mode === "draw" ? { mode: "run" as CellMode } : {}),
-  ...(cell.bottomResized ? {} : { bottomHeight: undefined }),
-})
+// discard the run outcome, keeping the stored pane arrangement for the next
+// result. Callers also delete the draw marker and persisted snapshot.
+export const discardCellResult = (cell: NotebookCell): NotebookCell => {
+  const next: NotebookCell = {
+    ...cell,
+    result: undefined,
+    lastRunStatus: undefined,
+    ...(cell.bottomResized ? {} : { bottomHeight: undefined }),
+  }
+  delete next.mode
+  return next
+}
 
 // Translate the semantic agent wire model into the persisted pane model.
 // `null`/omission preserves, "auto" clears the corresponding resize pin, and
 // a number fixes the pane at that pixel height. view:"editor" is an action,
-// not a stored value — the callers apply discardCellResultPatch for it.
+// not a stored value — callers apply discardCellResult for it.
 export const agentCellDimensionsPatch = (
   cell: NotebookCell,
   dimensions: AgentCellDimensions,
@@ -1650,7 +1746,10 @@ export const cellHasRunOutcome = (cell: NotebookCell): boolean =>
   cell.result != null ||
   (cell.lastRunStatus != null && cell.lastRunStatus !== "none")
 
-export type AgentCellPresentation = { view: AgentCellView | null }
+export type AgentCellPresentation = {
+  view: AgentCellView | null
+  mode: CellMode | null
+}
 
 // `view` reports what the cell presents: "editor" while there is nothing to
 // show, the stored arrangement once a run outcome exists. A live, known-missing
@@ -1659,8 +1758,8 @@ export type AgentCellPresentation = { view: AgentCellView | null }
 export const agentCellPresentation = (
   cell: NotebookCell,
   resultStatus: CellResultStatus = "unrequested",
-): AgentCellPresentation => ({
-  view:
+): AgentCellPresentation => {
+  const view: AgentCellView | null =
     cell.type === "markdown"
       ? null
       : cellHasRunOutcome(cell) &&
@@ -1670,8 +1769,23 @@ export const agentCellPresentation = (
             resultStatus === "missing"
           )
         ? storedCellPaneView(cell)
-        : "editor",
-})
+        : "editor"
+
+  return {
+    view,
+    mode:
+      view === null || view === "editor"
+        ? null
+        : cell.mode === "draw"
+          ? "draw"
+          : "run",
+  }
+}
+
+export const hasExplicitModeForEditor = (
+  mode: CellMode | null | undefined,
+  view: AgentCellView | null | undefined,
+): boolean => view === "editor" && mode != null
 
 // A cell without a result shows the editor until one exists; that never
 // rewrites its stored view.

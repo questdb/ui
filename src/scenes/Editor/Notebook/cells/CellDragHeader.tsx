@@ -55,7 +55,7 @@ type Props = {
   layoutMode: "list" | "grid"
   autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
-  isRunning?: boolean
+  isCellBusy?: boolean
   left?: React.ReactNode
   right?: React.ReactNode
   // SQL cells pass this so the toolbar can adapt to the header's width; markdown
@@ -74,7 +74,7 @@ export const CellDragHeader: React.FC<Props> = ({
   layoutMode,
   autoRefreshDefault,
   isMaximized,
-  isRunning = false,
+  isCellBusy = false,
   left,
   right,
   headerRef,
@@ -110,7 +110,7 @@ export const CellDragHeader: React.FC<Props> = ({
         layoutMode={layoutMode}
         autoRefreshDefault={autoRefreshDefault}
         isMaximized={isMaximized}
-        isRunning={isRunning}
+        isCellBusy={isCellBusy}
         inline
         toolbarTier={toolbarTier}
         paneLayout={paneLayout}

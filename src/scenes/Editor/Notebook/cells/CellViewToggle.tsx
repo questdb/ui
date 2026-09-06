@@ -80,7 +80,7 @@ type Props = {
   paneLayout: CellPaneLayout
   isGridLoading: boolean
   isChartLoading: boolean
-  isRunning: boolean
+  isCellBusy: boolean
   chartZoomed: boolean
   showLabels: boolean
   onResetZoomFocus?: () => void
@@ -92,7 +92,7 @@ export const CellViewToggle: React.FC<Props> = ({
   paneLayout,
   isGridLoading,
   isChartLoading,
-  isRunning,
+  isCellBusy,
   chartZoomed,
   showLabels,
   onResetZoomFocus,
@@ -102,7 +102,7 @@ export const CellViewToggle: React.FC<Props> = ({
     cellId,
     view,
     paneLayout,
-    isRunning,
+    isCellBusy,
     method: "toggle",
   })
 
@@ -140,7 +140,7 @@ export const CellViewToggle: React.FC<Props> = ({
             $activeTone="neutral"
             aria-pressed={view === "grid"}
             aria-busy={view === "grid" && isGridLoading}
-            disabled={isRunning}
+            disabled={isCellBusy}
             onClick={handleTable}
             aria-label="View table"
           >
@@ -160,7 +160,7 @@ export const CellViewToggle: React.FC<Props> = ({
             $activeTone="neutral"
             aria-pressed={view === "chart"}
             aria-busy={view === "chart" && isChartLoading}
-            disabled={isRunning}
+            disabled={isCellBusy}
             onClick={handleChart}
             aria-label="View chart"
           >

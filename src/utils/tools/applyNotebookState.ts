@@ -1,4 +1,5 @@
 import type { StatusCallback } from "../ai/aiAssistant"
+import type { RunCancellation } from "../../scenes/Editor/Notebook/notebookUtils"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
@@ -22,7 +23,10 @@ import {
   type PermissionDecision,
   type Permissions,
 } from "./permissions"
-import { isAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  hasExplicitModeForEditor,
+  isAutoRefresh,
+} from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
   isValidVariableName,
@@ -57,7 +61,7 @@ const validationError = (message: string): ToolResult => ({
 
 const validateApplyVariables = async (
   variables: NotebookVariable[] | null | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
 ): Promise<ToolResult | null> => {
   if (
     variables !== undefined &&
@@ -103,16 +107,14 @@ const validateApplyVariables = async (
       )
     }
   }
-  if (validateSql) {
-    for (let idx = 0; idx < variables.length; idx += 1) {
-      const result = await validateSql(
-        renderDeclareValidationQuery(variables.slice(0, idx + 1)),
+  for (let idx = 0; idx < variables.length; idx += 1) {
+    const result = await validateSql(
+      renderDeclareValidationQuery(variables.slice(0, idx + 1)),
+    )
+    if ("error" in result) {
+      return validationError(
+        `variables[${idx}] (${variables[idx].name}) failed QuestDB validation: ${result.error}`,
       )
-      if ("error" in result) {
-        return validationError(
-          `variables[${idx}] (${variables[idx].name}) failed QuestDB validation: ${result.error}`,
-        )
-      }
     }
   }
   return null
@@ -130,6 +132,7 @@ type RunEntry = {
   queryCount?: number
   results?: string[]
   error?: string
+  cancelled?: RunCancellation
   unverified?: boolean
   note?: string
   skipped?: boolean
@@ -138,8 +141,8 @@ type RunEntry = {
 const runAppliedCells = async (
   resolved: ResolvedRun[],
   bufferId: number,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
 ): Promise<RunEntry[]> => {
   const settled = await Promise.all(
@@ -151,12 +154,7 @@ const runAppliedCells = async (
         const result = await withBoundNotebook(
           bufferId,
           (ctrl) =>
-            ctrl.runCell(
-              r.cellId,
-              signal,
-              perms && validateSql ? r.value : undefined,
-              perms && validateSql ? { kind: "autoRun" } : undefined,
-            ),
+            ctrl.runCell(r.cellId, signal, r.value, { kind: "autoRun" }),
           signal,
         )
         if (result.denied !== undefined) {
@@ -175,6 +173,9 @@ const runAppliedCells = async (
           success: result.success,
           queryCount: result.queryCount,
           results: result.results,
+          ...(result.cancelled !== undefined
+            ? { cancelled: result.cancelled }
+            : {}),
           ...(result.unverified ? { unverified: result.unverified } : {}),
           ...(result.note ? { note: result.note } : {}),
         }
@@ -194,8 +195,8 @@ const runAppliedCells = async (
 export const dispatchApplyNotebookState = async (
   input: unknown,
   setStatus: StatusCallback,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
   toolContext: ToolExecutionContext | undefined,
 ): Promise<{ content: string; is_error?: boolean }> => {
@@ -275,6 +276,18 @@ export const dispatchApplyNotebookState = async (
     }
   }
   for (const [idx, c] of cells.entries()) {
+    if (hasExplicitModeForEditor(c.mode, c.view)) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message:
+            `VALIDATION_ERROR: cells[${idx}].view "editor" cannot be combined with ` +
+            `an explicit mode. Editor view clears the stored result and hides the result pane. ` +
+            `Set mode to null to request an editor-only view.`,
+        }),
+        is_error: true,
+      }
+    }
     if (
       c.auto_refresh !== undefined &&
       c.auto_refresh !== null &&
@@ -344,40 +357,39 @@ export const dispatchApplyNotebookState = async (
   // Shared by the draw-invariant gate (below) and the post-apply
   // auto-run loop's mode resolution.
   const existingModes = new Map<string, CellMode | undefined>()
-  if (validateSql) {
-    const preApplyBasics = await readBasics()
-    for (const c of cells) {
-      if (typeof c.id !== "string" || c.id.length === 0) continue
-      const existing = preApplyBasics.get(c.id)
-      // Unknown ids fall through so applyNotebookState's all-or-nothing
-      // validation surfaces the precise error.
-      if (existing) existingModes.set(c.id, existing.mode)
-    }
-    const drawCells = cells.filter((c) => {
-      const resolved =
-        c.mode === undefined || c.mode === null
-          ? typeof c.id === "string"
-            ? existingModes.get(c.id)
-            : undefined
-          : c.mode
-      return resolved === "draw"
-    })
-    const decisions = await Promise.all(
-      drawCells.map(async (c): Promise<PermissionDecision> => {
-        const sql = resolveCellSql(c, preApplyBasics)
-        if (sql === null) {
-          return {
-            granted: false,
-            reason: denyReasonUnresolvedSql("apply_notebook_state"),
-          }
+  const preApplyBasics = await readBasics()
+  for (const c of cells) {
+    if (typeof c.id !== "string" || c.id.length === 0) continue
+    const existing = preApplyBasics.get(c.id)
+    // Unknown ids fall through so applyNotebookState's all-or-nothing
+    // validation surfaces the precise error.
+    if (existing) existingModes.set(c.id, existing.mode)
+  }
+  const drawCells = cells.filter((c) => {
+    if (c.view === "editor") return false
+    const resolved =
+      c.mode === undefined || c.mode === null
+        ? typeof c.id === "string"
+          ? existingModes.get(c.id)
+          : undefined
+        : c.mode
+    return resolved === "draw"
+  })
+  const decisions = await Promise.all(
+    drawCells.map(async (c): Promise<PermissionDecision> => {
+      const sql = resolveCellSql(c, preApplyBasics)
+      if (sql === null) {
+        return {
+          granted: false,
+          reason: denyReasonUnresolvedSql("apply_notebook_state"),
         }
-        return requireAllDQL(sql, validateSql)
-      }),
-    )
-    const denied = decisions.find((d) => !d.granted)
-    if (denied && !denied.granted) {
-      return { content: denied.reason, is_error: true }
-    }
+      }
+      return requireAllDQL(sql, validateSql)
+    }),
+  )
+  const denied = decisions.find((d) => !d.granted)
+  if (denied && !denied.granted) {
+    return { content: denied.reason, is_error: true }
   }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
@@ -436,7 +448,7 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutate((parts, resultStatusOf) =>
+        ctrl.mutateWithResultStatus((parts, resultStatusOf) =>
           applyNotebookStateTransition(parts, request, resultStatusOf),
         ),
       signal,
@@ -466,6 +478,7 @@ export const dispatchApplyNotebookState = async (
       // notebook and never auto-run prose as SQL.
       const isMarkdown = postApplyBasics.get(cellId)?.type === "markdown"
       const runnable =
+        c.view !== "editor" &&
         !isMarkdown &&
         resolvedMode === "run" &&
         value !== null &&

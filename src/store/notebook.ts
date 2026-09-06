@@ -63,7 +63,10 @@ export type NotebookCell = {
   topResized?: boolean
   bottomResized?: boolean
   spotlightEditorRatio?: number
-  mode?: CellMode
+  // Draw is persistent cell identity because it is also the marker used to
+  // hydrate and refresh a chart whose result is not currently in memory.
+  // Run is the absence of draw mode and must never be persisted.
+  mode?: "draw"
   chartConfig?: ChartConfig
   autoRefresh?: AutoRefresh
   // Stored pane arrangement for a cell with a result. A cell without one

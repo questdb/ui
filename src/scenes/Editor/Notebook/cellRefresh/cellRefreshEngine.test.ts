@@ -519,7 +519,7 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
       // When the user switches the cell back to run mode
-      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
       await vi.advanceTimersByTimeAsync(15_000)
 
       // Then the blocked frame never persists — saving it would resurrect the
@@ -841,7 +841,7 @@ describe("CellRefreshEngine", () => {
 
     // When the user switches to the grid and back — the cell never leaves the
     // viewport, so the visibility observer reports nothing new
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
     engine.sync([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
@@ -874,7 +874,7 @@ describe("CellRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
     // When the cell is no longer in draw mode
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
 
     // Then no further fetches happen and the entry's state is gone
     await vi.advanceTimersByTimeAsync(10_000)
@@ -1847,7 +1847,7 @@ describe("CellRefreshEngine", () => {
       engine.refreshAll()
 
       // When the cell exits draw mode and returns while still hidden
-      engine.sync([{ ...drawCell("c1", "select 1", false), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", false), mode: undefined }])
       engine.sync([drawCell("c1", "select 1", false)])
       await flushAsync()
 
@@ -2099,7 +2099,7 @@ describe("CellRefreshEngine", () => {
     ): NotebookCell => {
       const result = gridFrame(queries)
       cellResults.set(id, result)
-      return { id, position: 0, value, mode: "run", autoRefresh, result }
+      return { id, position: 0, value, mode: undefined, autoRefresh, result }
     }
 
     const errorValidation = (sql: string, error: string) => ({
@@ -2286,7 +2286,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
       }
 
@@ -2305,7 +2305,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
         lastRunStatus: "success",
       }
@@ -2844,7 +2844,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },
@@ -2900,7 +2900,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },

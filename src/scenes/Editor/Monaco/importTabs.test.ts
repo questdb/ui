@@ -836,6 +836,24 @@ describe("sanitizeBuffer", () => {
       expect(cell && "autoRefresh" in cell).toBe(false)
     })
 
+    it("normalizes legacy SQL run mode to the implicit default", () => {
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            { id: "run", value: "SELECT 1", mode: "run" },
+            { id: "draw", value: "SELECT 2", mode: "draw" },
+          ],
+        },
+      }
+
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      expect(cells?.[0].mode).toBeUndefined()
+      expect(cells?.[1].mode).toBe("draw")
+    })
+
     it("clamps imported pane heights to the floors and ceiling the UI enforces", () => {
       // Given a hand-authored file pinning out-of-range heights
       const input = {

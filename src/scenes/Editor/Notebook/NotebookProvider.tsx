@@ -25,6 +25,7 @@ import type { ChartConfig } from "./CellChart/chartTypes"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
+import type { DrawGateOutcome } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
 import {
   addCellTransition,
@@ -47,10 +48,12 @@ import {
   clearCellAutoRefresh,
   computeResultBottomHeight,
   countAutoRefreshOverrides,
+  discardCellResult,
   generateId,
   releaseCellResultPatch,
   snapshotResultsMatchQueries,
   statementKeysFor,
+  type RunCancelReason,
 } from "./notebookUtils"
 import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
@@ -119,6 +122,7 @@ export type NotebookActions = {
     expectFullValue?: boolean,
     gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
+  validateForDraw: (cellId: string) => Promise<DrawGateOutcome>
   reRunResultAt: (cellId: string, index: number) => Promise<boolean>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
@@ -149,6 +153,7 @@ const NOOP_ACTIONS: NotebookActions = {
   moveCellDown: () => undefined,
   duplicateCell: () => Promise.resolve(""),
   runCell: () => Promise.resolve({ ok: false, superseded: false }),
+  validateForDraw: () => Promise.resolve({ granted: false }),
   reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
@@ -409,16 +414,16 @@ export const NotebookProvider: React.FC<{
   )
 
   const cancelCell = useCallback(
-    (cellId: string) => {
-      execution.cancelCell(cellId)
+    (cellId: string, reason?: RunCancelReason) => {
+      execution.cancelCell(cellId, reason)
       releaseCellExecution(cellId)
     },
     [execution, releaseCellExecution],
   )
 
   const abortCellRun = useCallback(
-    (cellId: string) => {
-      execution.abortCellRun(cellId)
+    (cellId: string, reason: RunCancelReason) => {
+      execution.abortCellRun(cellId, reason)
       releaseCellExecution(cellId)
     },
     [execution, releaseCellExecution],
@@ -450,15 +455,16 @@ export const NotebookProvider: React.FC<{
       // here rather than at each call site.
       if (out.cleanup) {
         for (const cellId of out.cleanup.cellIds) {
-          cancelCell(cellId)
+          cancelCell(cellId, "cell_deleted")
           void deleteCellSnapshot(bufferId, cellId)
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
         }
       }
-      // For run->draw transitions, abort the in-flight run
       if (out.cancelRuns) {
-        for (const cellId of out.cancelRuns.cellIds) abortCellRun(cellId)
+        for (const cellId of out.cancelRuns.cellIds) {
+          abortCellRun(cellId, out.cancelRuns.reason)
+        }
       }
       // noteMissing collapses the cell's reserved result area immediately
       if (out.deleteSnapshots) {
@@ -519,12 +525,11 @@ export const NotebookProvider: React.FC<{
   // doesn't rehydrate on the next load.
   const clearCellResult = useCallback(
     (cellId: string) => {
-      const cell = store.cellsRef.current.find((c) => c.id === cellId)
-      store.updateCell(cellId, {
-        result: undefined,
-        lastRunStatus: undefined,
-        ...(cell?.bottomResized ? {} : { bottomHeight: undefined }),
-      })
+      store.updateCells((cells) =>
+        cells.map((cell) =>
+          cell.id === cellId ? discardCellResult(cell) : cell,
+        ),
+      )
       resultHydration.forget(cellId)
       void deleteCellSnapshot(bufferId, cellId)
     },
@@ -799,6 +804,7 @@ export const NotebookProvider: React.FC<{
     moveCellDown,
     duplicateCell,
     runCell,
+    validateForDraw: execution.validateForDraw,
     reRunResultAt: (cellId, index) => {
       // A per-tab rerun is a manual run: it cancels the refresh round, and
       // any COMMIT clears that statement's refresh error — a committed error

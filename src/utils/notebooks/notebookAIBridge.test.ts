@@ -59,6 +59,15 @@ const makeController = (
   kind: "live",
   mutate: (transition) =>
     Promise.resolve(
+      transition({
+        cells: [],
+        settings: {},
+        maximizedCellId: null,
+        focusedCellId: null,
+      }).result,
+    ),
+  mutateWithResultStatus: (transition) =>
+    Promise.resolve(
       transition(
         {
           cells: [],

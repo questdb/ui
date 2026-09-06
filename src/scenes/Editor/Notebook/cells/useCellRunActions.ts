@@ -4,7 +4,6 @@ import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
-import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import {
   getQueryFromCursor,
   normalizeQueryText,
@@ -14,7 +13,6 @@ import {
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
 import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
-import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
@@ -44,17 +42,20 @@ export const useCellRunActions = ({
   applyHighlight,
   clearHighlight,
 }: Options) => {
-  const { runCell, setCellMode, clearCellResult, getCellsSnapshot } =
-    useNotebookActions()
+  const {
+    runCell,
+    validateForDraw,
+    setCellMode,
+    clearCellResult,
+    getCellsSnapshot,
+  } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
-  const validateWithGlobals = useValidateWithGlobals()
   const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
   // A run from the Run toggle spins the Run segment; a run from the refresh
   // button spins the refresh button instead.
   const firstRunRef = useRef(false)
-  const validatingDrawRef = useRef(false)
 
   // Returns true only when the cell actually entered draw mode, so a caller can
   // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
@@ -72,37 +73,30 @@ export const useCellRunActions = ({
       })
       return false
     }
-    if (validatingDrawRef.current) return false
-    validatingDrawRef.current = true
-    try {
-      const decision = await requireAllDQL(cell.value, (s) =>
-        validateWithGlobals(s),
-      )
-      if (!decision.granted) {
+    const gate = await validateForDraw(cell.id)
+    if (!gate.granted) {
+      if (gate.reason !== undefined) {
         void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED)
-        toast.error(decision.reason)
-        return false
+        toast.error(gate.reason)
       }
-      setCellMode(cell.id, "draw")
-      emitUserAction({
-        kind: "user_changed_cell_mode",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-        mode: "draw",
-      })
-      return true
-    } finally {
-      validatingDrawRef.current = false
+      return false
     }
+    setCellMode(cell.id, "draw")
+    emitUserAction({
+      kind: "user_changed_cell_mode",
+      bufferId: bufferIdForEvents,
+      cellId: cell.id,
+      mode: "draw",
+    })
+    return true
   }, [
     cell.id,
-    cell.value,
     isRunning,
     isDrawMode,
     setCellMode,
     clearCellResult,
+    validateForDraw,
     bufferIdForEvents,
-    validateWithGlobals,
   ])
 
   const tryRunSelection = useCallback((): SelectionRunResolution["kind"] => {
