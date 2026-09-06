@@ -647,6 +647,17 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         if (isStale()) return
         const aiProvider = createProvider(provider, apiKey, localSettings)
         const classified = aiProvider.classifyError(err, () => {})
+        if (!isBuiltin && classified.type !== "invalid_key") {
+          // Custom endpoints may not implement model listing or use standard
+          // HTTP statuses. Preserve the existing manual-configuration path.
+          setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
+          setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
+          setValidationErrors((prev) => ({
+            ...prev,
+            [provider]: classified.message,
+          }))
+          return
+        }
         setValidationState((prev) => ({ ...prev, [provider]: "error" }))
         setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
         setValidationErrors((prev) => ({
