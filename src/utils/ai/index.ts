@@ -38,7 +38,7 @@ export {
   getProviderContextWindow,
   getApiKey,
   buildProviderSettings,
-  makeCustomModelValue,
+  makeModelValue,
   stripModelNamespace,
   isAiAssistantConfigured,
   canUseAiAssistant,
@@ -60,3 +60,4 @@ export {
   UTILITY_MODEL_TIERS,
 } from "./modelCatalog"
 export type { ProviderModel } from "./modelCatalog"
+export { getModelListingErrorMessage } from "./modelListingError"

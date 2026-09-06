@@ -22,11 +22,12 @@ const CUSTOM_PROVIDER_DEFAULTS = {
 function getOpenAIConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
-      selectedModel: "gpt-5-mini",
+      modelValueFormat: 2,
+      selectedModel: "openai:gpt-5-mini",
       providers: {
         openai: {
           apiKey: "test-openai-key",
-          enabledModels: ["gpt-5-mini", "gpt-5"],
+          enabledModels: ["openai:gpt-5-mini", "openai:gpt-5"],
           grantSchemaAccess: schemaAccess,
         },
       },
@@ -48,11 +49,12 @@ function getOpenAIPermissionedSettings({
 }) {
   return {
     "ai.assistant.settings": JSON.stringify({
-      selectedModel: "gpt-5-mini",
+      modelValueFormat: 2,
+      selectedModel: "openai:gpt-5-mini",
       providers: {
         openai: {
           apiKey: "test-openai-key",
-          enabledModels: ["gpt-5-mini", "gpt-5"],
+          enabledModels: ["openai:gpt-5-mini", "openai:gpt-5"],
           grantSchemaAccess,
           read,
           write,
@@ -65,11 +67,15 @@ function getOpenAIPermissionedSettings({
 function getAnthropicConfiguredSettings(schemaAccess = true) {
   return {
     "ai.assistant.settings": JSON.stringify({
-      selectedModel: "claude-sonnet-4-5",
+      modelValueFormat: 2,
+      selectedModel: "anthropic:claude-sonnet-4-5",
       providers: {
         anthropic: {
           apiKey: "test-anthropic-key",
-          enabledModels: ["claude-sonnet-4-5", "claude-opus-4-5"],
+          enabledModels: [
+            "anthropic:claude-sonnet-4-5",
+            "anthropic:claude-opus-4-5",
+          ],
           grantSchemaAccess: schemaAccess,
         },
       },
@@ -101,6 +107,7 @@ function getCustomProviderConfiguredSettings(config = {}, mergeWith = null) {
 
   const settings = {
     ...baseSettings,
+    modelValueFormat: 2,
     selectedModel: enabledModels[0],
     customProviders: {
       ...(baseSettings.customProviders || {}),

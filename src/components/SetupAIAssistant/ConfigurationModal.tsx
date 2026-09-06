@@ -17,7 +17,7 @@ import {
   filterOpenAiChatModels,
   formatModelLabel,
   getAllProviders,
-  makeCustomModelValue,
+  makeModelValue,
   sortModelsNewestFirst,
   type ProviderId,
   type ProviderModel,
@@ -560,6 +560,9 @@ export const ConfigurationModal = ({
   const handleComplete = () => {
     const models = effectiveEnabledModels()
     if (!selectedProvider || models.length === 0) return
+    const modelValues = models.map((model) =>
+      makeModelValue(selectedProvider, model),
+    )
 
     void trackEvent(ConsoleEvent.AI_PROVIDER_CONFIGURE, {
       name: selectedProvider,
@@ -574,12 +577,12 @@ export const ConfigurationModal = ({
 
     const newSettings = {
       ...aiAssistantSettings,
-      selectedModel: models[0],
+      selectedModel: modelValues[0],
       providers: {
         ...aiAssistantSettings.providers,
         [selectedProvider]: buildProviderSettings({
           apiKey,
-          enabledModels: models,
+          enabledModels: modelValues,
           permissions,
           modelLabels: metadata?.modelLabels,
           utilityModel: metadata?.utilityModel,
@@ -671,7 +674,7 @@ export const ConfigurationModal = ({
   const handleCustomProviderSave = useCallback(
     (providerId: string, definition: CustomProviderDefinition) => {
       const newEnabledModels = definition.models.map((m) =>
-        makeCustomModelValue(providerId, m),
+        makeModelValue(providerId, m),
       )
 
       const newSettings = {

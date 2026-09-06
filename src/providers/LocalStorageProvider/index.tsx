@@ -32,6 +32,7 @@ import React, {
   useRef,
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
+import { migrateLocalStorage } from "../../utils/localStorage/migrate"
 import { StoreKey } from "../../utils/localStorage/types"
 import {
   parseInteger,
@@ -41,6 +42,7 @@ import {
 } from "./utils"
 import type { MaxColumnWidth } from "../../components/ResultGrid/types"
 import {
+  AI_MODEL_VALUE_FORMAT,
   AiAssistantSettings,
   LocalConfig,
   SettingsType,
@@ -49,10 +51,10 @@ import {
   NotebookOnboarding,
   RunWithSelectionMode,
 } from "./types"
-import { reconcileSettings } from "../../utils/ai/settings"
 import { onReasoningUnsupported } from "../../utils/ai/reasoningFallback"
 
 export const DEFAULT_AI_ASSISTANT_SETTINGS: AiAssistantSettings = {
+  modelValueFormat: AI_MODEL_VALUE_FORMAT,
   providers: {},
 }
 
@@ -158,24 +160,21 @@ type ContextProps = {
 }
 
 const getAiAssistantSettings = (): AiAssistantSettings => {
-  const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
-  if (stored) {
-    try {
+  try {
+    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+    if (stored) {
       const parsed = JSON.parse(stored) as AiAssistantSettings
-      const reconciled = reconcileSettings({
+      return {
+        modelValueFormat: parsed.modelValueFormat,
         selectedModel: parsed.selectedModel,
         providers: parsed.providers || {},
         ...(parsed.customProviders && {
           customProviders: parsed.customProviders,
         }),
-      })
-      if (JSON.stringify(reconciled) !== stored) {
-        setValue(StoreKey.AI_ASSISTANT_SETTINGS, JSON.stringify(reconciled))
       }
-      return reconciled
-    } catch (e) {
-      return defaultConfig.aiAssistantSettings
     }
+  } catch {
+    return defaultConfig.aiAssistantSettings
   }
   return defaultConfig.aiAssistantSettings
 }
@@ -278,7 +277,10 @@ export const LocalStorageProvider = ({
     useState<LeftPanelState>(getLeftPanelState())
 
   const [aiAssistantSettings, setAiAssistantSettings] =
-    useState<AiAssistantSettings>(getAiAssistantSettings())
+    useState<AiAssistantSettings>(() => {
+      if (!migrateLocalStorage()) return defaultConfig.aiAssistantSettings
+      return getAiAssistantSettings()
+    })
 
   const [aiChatPanelWidth, setAiChatPanelWidth] = useState<number>(
     parseInteger(

@@ -48,25 +48,28 @@ export type ModelOption = {
   provider: ProviderId
 }
 
-const CUSTOM_MODEL_SEP = ":"
+const MODEL_VALUE_SEP = ":"
 
-export const makeCustomModelValue = (
+export const makeModelValue = (
   providerId: ProviderId,
   modelId: string,
-): string => `${providerId}${CUSTOM_MODEL_SEP}${modelId}`
+): string => `${providerId}${MODEL_VALUE_SEP}${modelId}`
 
 export const parseModelValue = (
   value: string,
   customProviders?: Record<string, CustomProviderDefinition>,
-): { customProviderId: string; rawModel: string } | { rawModel: string } => {
-  const sepIndex = value.indexOf(CUSTOM_MODEL_SEP)
+): { providerId: ProviderId; rawModel: string } | { rawModel: string } => {
+  const sepIndex = value.indexOf(MODEL_VALUE_SEP)
   if (sepIndex === -1) return { rawModel: value }
   const candidateProvider = value.slice(0, sepIndex)
-  if (!customProviders || !Object.hasOwn(customProviders, candidateProvider)) {
+  if (
+    !Object.hasOwn(BUILTIN_PROVIDERS, candidateProvider) &&
+    (!customProviders || !Object.hasOwn(customProviders, candidateProvider))
+  ) {
     return { rawModel: value }
   }
   return {
-    customProviderId: candidateProvider,
+    providerId: candidateProvider,
     rawModel: value.slice(sepIndex + 1),
   }
 }
@@ -75,17 +78,21 @@ export const stripModelNamespace = (
   value: string,
   providerId: ProviderId,
 ): string => {
-  const prefix = `${providerId}${CUSTOM_MODEL_SEP}`
+  const prefix = `${providerId}${MODEL_VALUE_SEP}`
   return value.startsWith(prefix) ? value.slice(prefix.length) : value
 }
 
 export const getModelLabel = (
-  modelId: string,
+  modelValue: string,
   providerId: ProviderId,
   settings?: AiAssistantSettings,
-): string =>
-  settings?.providers?.[providerId]?.modelLabels?.[modelId] ??
-  formatModelLabel(modelId)
+): string => {
+  const modelId = stripModelNamespace(modelValue, providerId)
+  return (
+    settings?.providers?.[providerId]?.modelLabels?.[modelId] ??
+    formatModelLabel(modelId)
+  )
+}
 
 export const getAllModelOptions = (
   settings?: AiAssistantSettings,
@@ -94,10 +101,10 @@ export const getAllModelOptions = (
   const options: ModelOption[] = []
   for (const providerId of Object.keys(BUILTIN_PROVIDERS)) {
     const enabledModels = settings.providers?.[providerId]?.enabledModels ?? []
-    for (const modelId of enabledModels) {
+    for (const value of enabledModels) {
       options.push({
-        label: getModelLabel(modelId, providerId, settings),
-        value: modelId,
+        label: getModelLabel(value, providerId, settings),
+        value,
         provider: providerId,
       })
     }
@@ -108,7 +115,7 @@ export const getAllModelOptions = (
     for (const modelId of def.models) {
       options.push({
         label: modelId,
-        value: makeCustomModelValue(providerId, modelId),
+        value: makeModelValue(providerId, modelId),
         provider: providerId,
       })
     }
@@ -120,14 +127,8 @@ export const providerForModel = (
   model: ModelOption["value"],
   settings?: AiAssistantSettings,
 ): ProviderId | null => {
-  // Check for namespaced custom model value (providerId:modelId)
   const parsed = parseModelValue(model, settings?.customProviders)
-  if ("customProviderId" in parsed) return parsed.customProviderId
-  return (
-    Object.keys(BUILTIN_PROVIDERS).find((providerId) =>
-      settings?.providers?.[providerId]?.enabledModels?.includes(model),
-    ) ?? null
-  )
+  return "providerId" in parsed ? parsed.providerId : null
 }
 
 export const getAllProviders = (
@@ -163,7 +164,7 @@ export const getAllEnabledModels = (
     } else if (settings.customProviders?.[provider]) {
       models.push(
         ...settings.customProviders[provider].models.map((m) =>
-          makeCustomModelValue(provider, m),
+          makeModelValue(provider, m),
         ),
       )
     }
@@ -175,25 +176,18 @@ export const getNextModel = (
   currentModel: string | undefined,
   enabledModels: Record<ProviderId, string[]>,
   settings?: AiAssistantSettings,
-  previousSettings?: AiAssistantSettings,
 ): string | null => {
   const providerOf = (model: string) => {
-    const parsed = parseModelValue(
-      model,
-      settings?.customProviders ?? previousSettings?.customProviders,
-    )
-    if ("customProviderId" in parsed) return parsed.customProviderId
-    return (
-      Object.keys(enabledModels).find((p) =>
-        enabledModels[p]?.includes(model),
-      ) ??
-      providerForModel(model, settings) ??
-      providerForModel(model, previousSettings)
-    )
+    const parsed = parseModelValue(model, settings?.customProviders)
+    return "providerId" in parsed ? parsed.providerId : null
   }
   const modelProvider = currentModel ? providerOf(currentModel) : null
-  if (modelProvider && enabledModels[modelProvider]?.length > 0) {
-    if (currentModel && enabledModels[modelProvider].includes(currentModel)) {
+  if (
+    currentModel &&
+    modelProvider &&
+    enabledModels[modelProvider]?.length > 0
+  ) {
+    if (enabledModels[modelProvider].includes(currentModel)) {
       return currentModel
     }
     return enabledModels[modelProvider][0]
@@ -289,7 +283,9 @@ export const buildListingMetadata = (
   }
   return {
     modelLabels,
-    ...(utilityModel ? { utilityModel } : {}),
+    ...(utilityModel
+      ? { utilityModel: makeModelValue(providerId, utilityModel) }
+      : {}),
   }
 }
 
@@ -304,76 +300,6 @@ export const getProviderContextWindow = (
 ): number | null => {
   const custom = settings?.customProviders?.[providerId]
   return custom?.contextWindow ?? null
-}
-
-const LEGACY_REASONING_VARIANT = /@reasoning=(high|medium|low)$/
-
-const collapseLegacyVariant = (modelId: string): string =>
-  modelId.replace(LEGACY_REASONING_VARIANT, "")
-
-/**
- * Reconciles persisted AI assistant settings.
- * Collapses legacy `@reasoning=` model variants into plain ids and folds a
- * selected high variant into the provider-level reasoningEffort.
- * Validates custom provider models against customProviders definitions;
- * built-in models stay until the Manage Models picker removes them.
- *
- * Pure function — does not write to localStorage.
- * Idempotent: applying it multiple times produces the same result.
- */
-export const reconcileSettings = (
-  settings: AiAssistantSettings,
-): AiAssistantSettings => {
-  const result = {
-    ...settings,
-    providers: { ...settings.providers },
-  }
-  const selectedModel = result.selectedModel
-
-  for (const providerKey of Object.keys(result.providers)) {
-    const providerSettings = result.providers[providerKey]
-    if (!providerSettings?.enabledModels) continue
-
-    const isBuiltinProvider = Object.hasOwn(BUILTIN_PROVIDERS, providerKey)
-    const selectedHighVariant =
-      isBuiltinProvider &&
-      selectedModel !== undefined &&
-      selectedModel.endsWith("@reasoning=high") &&
-      providerSettings.enabledModels.includes(selectedModel)
-    const validCustomIds = settings.customProviders?.[providerKey]
-      ? new Set(
-          settings.customProviders[providerKey].models.map((m) =>
-            makeCustomModelValue(providerKey, m),
-          ),
-        )
-      : null
-    result.providers[providerKey] = {
-      ...providerSettings,
-      enabledModels: isBuiltinProvider
-        ? [
-            ...new Set(
-              providerSettings.enabledModels.map(collapseLegacyVariant),
-            ),
-          ]
-        : providerSettings.enabledModels.filter((id) =>
-            validCustomIds?.has(id),
-          ),
-      ...(selectedHighVariant ? { reasoningEffort: "high" as const } : {}),
-    }
-  }
-
-  if (result.selectedModel !== undefined) {
-    const selectedProvider = providerForModel(result.selectedModel, settings)
-    if (
-      selectedProvider !== null &&
-      Object.hasOwn(BUILTIN_PROVIDERS, selectedProvider)
-    ) {
-      result.selectedModel = collapseLegacyVariant(result.selectedModel)
-    }
-  }
-  result.selectedModel = getSelectedModel(result) ?? undefined
-
-  return result
 }
 
 export const getApiKey = (
@@ -422,17 +348,18 @@ export const getAiPermissions = (
 }
 
 export const readLiveAiAssistantSettings = (): AiAssistantSettings | null => {
-  const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
-  if (!stored) return null
   try {
+    const stored = getValue(StoreKey.AI_ASSISTANT_SETTINGS)
+    if (!stored) return null
     const parsed = JSON.parse(stored) as AiAssistantSettings
-    return reconcileSettings({
+    return {
+      modelValueFormat: parsed.modelValueFormat,
       selectedModel: parsed.selectedModel,
       providers: parsed.providers || {},
       ...(parsed.customProviders && {
         customProviders: parsed.customProviders,
       }),
-    })
+    }
   } catch {
     return null
   }

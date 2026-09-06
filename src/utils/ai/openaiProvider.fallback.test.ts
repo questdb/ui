@@ -72,7 +72,7 @@ describe("openai reasoning fallback", () => {
 
     // When generating a summary
     const text = await provider.generateSummary({
-      model: "gpt-4o",
+      model: "openai:gpt-4o",
       systemPrompt: "sys",
       userMessage: "user",
     })
@@ -84,6 +84,8 @@ describe("openai reasoning fallback", () => {
       effort: "high",
       summary: "auto",
     })
+    expect(requestBodies()[0].model).toBe("gpt-4o")
+    expect(requestBodies()[1].model).toBe("gpt-4o")
     expect("reasoning" in requestBodies()[1]).toBe(false)
 
     // And the downgrade was surfaced and reported exactly once

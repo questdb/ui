@@ -24,7 +24,11 @@ export type CustomProviderDefinition = {
   write?: boolean
 }
 
+export const AI_MODEL_VALUE_FORMAT = 2 as const
+
 export type AiAssistantSettings = {
+  /** Version 2 stores globally referenced models as `providerId:modelId`. */
+  modelValueFormat?: typeof AI_MODEL_VALUE_FORMAT
   selectedModel?: string
   providers: Partial<Record<string, ProviderSettings>>
   customProviders?: Record<string, CustomProviderDefinition>

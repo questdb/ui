@@ -252,13 +252,15 @@ describe("ai provider setup flows", () => {
     // Then the persisted settings carry the whole configuration
     cy.window().then((win) => {
       const settings = readAiSettings(win)
-      expect(settings.selectedModel).to.equal("gpt-5.4")
+      expect(settings.selectedModel).to.equal("openai:gpt-5.4")
       expect(settings.providers.openai.enabledModels).to.deep.equal([
-        "gpt-5.4",
-        "my-proxy-model",
+        "openai:gpt-5.4",
+        "openai:my-proxy-model",
       ])
       expect(settings.providers.openai.reasoningEffort).to.equal("high")
-      expect(settings.providers.openai.utilityModel).to.equal("gpt-5-nano")
+      expect(settings.providers.openai.utilityModel).to.equal(
+        "openai:gpt-5-nano",
+      )
       expect(settings.providers.openai.modelLabels).to.deep.equal({
         "gpt-5.4": "GPT 5.4",
         "my-proxy-model": "my-proxy-model",
@@ -268,9 +270,11 @@ describe("ai provider setup flows", () => {
     // When a chat message is sent
     cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
       if (isTitleRequest("openai", req.body)) {
+        expect(req.body.model).to.equal("gpt-5-nano")
         req.reply(createChatTitleResponse("openai", "Test Chat"))
         return
       }
+      expect(req.body.model).to.equal("gpt-5.4")
       req.alias = "reasoningChat"
       req.reply(
         createResponse(
@@ -340,6 +344,51 @@ describe("ai provider setup flows", () => {
     })
   })
 
+  it("keeps the provider identity of identical built-in model ids", () => {
+    cy.loadConsoleWithAuth(false, {
+      "ai.assistant.settings": JSON.stringify({
+        modelValueFormat: 2,
+        selectedModel: "anthropic:shared-model",
+        providers: {
+          anthropic: {
+            apiKey: "test-anthropic-key",
+            enabledModels: ["anthropic:shared-model"],
+            grantSchemaAccess: false,
+          },
+          openai: {
+            apiKey: "test-openai-key",
+            enabledModels: ["openai:shared-model"],
+            grantSchemaAccess: false,
+          },
+        },
+      }),
+    })
+
+    // Both rows keep the raw model name as their visible label.
+    cy.getByDataHook("ai-settings-model-dropdown").click()
+    cy.getByDataHook("ai-settings-model-item")
+      .should("have.length", 2)
+      .find("[data-hook='ai-settings-model-item-label']")
+      .each(($label) => {
+        expect($label.text()).to.equal("Shared Model")
+      })
+
+    // Selecting the OpenAI row persists its provider-qualified identity.
+    cy.getByDataHook("ai-settings-model-item").eq(1).click()
+    cy.window().then((win) => {
+      expect(readAiSettings(win).selectedModel).to.equal("openai:shared-model")
+    })
+
+    // Execution uses that identity to select the OpenAI provider.
+    interceptAIChatRequest("openai", "overlappingOpenAIModel")
+    cy.getByDataHook("ai-chat-button").click()
+    cy.getByDataHook("chat-input-textarea").type("hello")
+    cy.getByDataHook("chat-send-button").click()
+    cy.wait("@overlappingOpenAIModel")
+      .its("request.body.model")
+      .should("equal", "shared-model")
+  })
+
   it("manages the OpenAI provider lifecycle from the settings modal", () => {
     // Given a console already configured with Anthropic
     cy.loadConsoleWithAuth(false, getAnthropicConfiguredSettings())
@@ -375,11 +424,11 @@ describe("ai provider setup flows", () => {
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.providers.openai.enabledModels).to.deep.equal([
-        "gpt-5.4",
-        "gpt-5-mini",
-        "gpt-5",
-        "gpt-5-2025-08-06",
-        "gpt-5-nano",
+        "openai:gpt-5.4",
+        "openai:gpt-5-mini",
+        "openai:gpt-5",
+        "openai:gpt-5-2025-08-06",
+        "openai:gpt-5-nano",
       ])
     })
 
@@ -414,7 +463,7 @@ describe("ai provider setup flows", () => {
     cy.getByDataHook("manage-models-save").should("not.exist")
     cy.window().then((win) => {
       const settings = readAiSettings(win)
-      expect(settings.selectedModel).to.equal("gpt-5-mini")
+      expect(settings.selectedModel).to.equal("openai:gpt-5-mini")
       expect(settings.providers.openai.grantSchemaAccess).to.equal(true)
       expect(settings.providers.openai.read).to.equal(false)
       expect(settings.providers.openai.write).to.equal(false)
@@ -455,10 +504,10 @@ describe("ai provider setup flows", () => {
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.providers.openai.enabledModels).to.deep.equal([
-        "gpt-5-mini",
-        "gpt-5",
-        "gpt-5-2025-08-06",
-        "gpt-5-nano",
+        "openai:gpt-5-mini",
+        "openai:gpt-5",
+        "openai:gpt-5-2025-08-06",
+        "openai:gpt-5-nano",
       ])
     })
   })
@@ -520,9 +569,9 @@ describe("ai provider setup flows", () => {
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.providers.openai.enabledModels).to.deep.equal([
-        "gpt-5.4",
-        "my-proxy-model",
-        "gpt-5",
+        "openai:gpt-5.4",
+        "openai:my-proxy-model",
+        "openai:gpt-5",
       ])
     })
 
@@ -581,7 +630,7 @@ describe("ai provider setup flows", () => {
     // And the saved configuration is untouched
     cy.window().then((win) => {
       expect(readAiSettings(win).providers.openai.enabledModels).to.deep.equal([
-        "gpt-5.4",
+        "openai:gpt-5.4",
       ])
     })
   })
@@ -646,9 +695,11 @@ describe("ai provider setup flows", () => {
     cy.window().then((win) => {
       const settings = readAiSettings(win)
       expect(settings.providers.anthropic.enabledModels).to.deep.equal([
-        "claude-haiku-4-5",
+        "anthropic:claude-haiku-4-5",
       ])
-      expect(settings.providers.openai.enabledModels).to.deep.equal(["gpt-5.4"])
+      expect(settings.providers.openai.enabledModels).to.deep.equal([
+        "openai:gpt-5.4",
+      ])
     })
 
     // When a validation response arrives for a key that was already edited

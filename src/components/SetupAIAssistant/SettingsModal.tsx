@@ -22,7 +22,7 @@ import {
   getAllProviders,
   getAllModelOptions,
   getApiKey,
-  makeCustomModelValue,
+  makeModelValue,
   stripModelNamespace,
   formatModelLabel,
   buildProviderSettings,
@@ -32,6 +32,7 @@ import {
   type ProviderModel,
   getNextModel,
   getProviderName,
+  getModelListingErrorMessage,
 } from "../../utils/ai"
 import { createProvider } from "../../utils/ai/registry"
 import type {
@@ -646,19 +647,11 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
         if (isStale()) return
         const aiProvider = createProvider(provider, apiKey, localSettings)
         const classified = aiProvider.classifyError(err, () => {})
-        if (!isBuiltin && classified.type !== "invalid_key") {
-          // Custom endpoints often lack a model listing — the key may still work.
-          setValidationState((prev) => ({ ...prev, [provider]: "validated" }))
-          setValidatedApiKeys((prev) => ({ ...prev, [provider]: true }))
-          return
-        }
         setValidationState((prev) => ({ ...prev, [provider]: "error" }))
+        setValidatedApiKeys((prev) => ({ ...prev, [provider]: false }))
         setValidationErrors((prev) => ({
           ...prev,
-          [provider]:
-            classified.type === "invalid_key"
-              ? "Invalid API key"
-              : classified.message,
+          [provider]: getModelListingErrorMessage(err, classified),
         }))
       }
     },
@@ -736,7 +729,6 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       updatedSettings.selectedModel,
       enabledModels,
       updatedSettings,
-      aiAssistantSettings,
     )
     updatedSettings.selectedModel = nextModel || undefined
 
@@ -810,7 +802,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const handleCustomProviderSave = useCallback(
     (providerId: string, definition: CustomProviderDefinition) => {
       const newEnabledModels = definition.models.map((m) =>
-        makeCustomModelValue(providerId, m),
+        makeModelValue(providerId, m),
       )
 
       setLocalCustomProviders((prev) => ({
@@ -867,7 +859,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const handleManageModelsSave = useCallback(
     (providerId: string, definition: CustomProviderDefinition) => {
       const newModelValues = definition.models.map((m) =>
-        makeCustomModelValue(providerId, m),
+        makeModelValue(providerId, m),
       )
 
       // Update local custom providers — only override models and contextWindow,
@@ -884,7 +876,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
       // Determine which models are truly new (not in the previous model list)
       const oldModelValues = (
         localCustomProviders[providerId]?.models || []
-      ).map((m) => makeCustomModelValue(providerId, m))
+      ).map((m) => makeModelValue(providerId, m))
       const trulyNew = newModelValues.filter((m) => !oldModelValues.includes(m))
 
       // Local state: respect unsaved checkbox toggles, add truly new as enabled
@@ -974,9 +966,12 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   const handleBuiltinModelsSave = useCallback(
     (providerId: string, result: BuiltinModelsResult) => {
       builtinModelsSavedRef.current = true
+      const modelValues = result.enabledModels.map((model) =>
+        makeModelValue(providerId, model),
+      )
       setEnabledModels((prev) => ({
         ...prev,
-        [providerId]: result.enabledModels,
+        [providerId]: modelValues,
       }))
       setModelLabels((prev) => ({ ...prev, [providerId]: result.modelLabels }))
       setUtilityModels((prev) => ({
@@ -1000,7 +995,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           ...aiAssistantSettings.providers,
           [providerId]: buildProviderSettings({
             apiKey: apiKeys[providerId] ?? "",
-            enabledModels: result.enabledModels,
+            enabledModels: modelValues,
             permissions: persistedPermissions,
             modelLabels: result.modelLabels,
             utilityModel: result.utilityModel,
@@ -1021,7 +1016,6 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           updatedSettings.selectedModel,
           persistedEnabledModels,
           updatedSettings,
-          aiAssistantSettings,
         ) || undefined
 
       updateSettings(StoreKey.AI_ASSISTANT_SETTINGS, updatedSettings)
@@ -1051,9 +1045,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
   )
 
   const labelForModel = (provider: ProviderId, value: string) => {
-    if (!BUILTIN_PROVIDERS[provider])
-      return stripModelNamespace(value, provider)
-    return modelLabels[provider]?.[value] ?? formatModelLabel(value)
+    const modelId = stripModelNamespace(value, provider)
+    if (!BUILTIN_PROVIDERS[provider]) return modelId
+    return modelLabels[provider]?.[modelId] ?? formatModelLabel(modelId)
   }
 
   const allProviders = useMemo(
@@ -1320,13 +1314,17 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                         <ModelList>
                           {enabledModelsForProvider.map((value) => {
                             const label = labelForModel(selectedProvider, value)
+                            const modelId = stripModelNamespace(
+                              value,
+                              selectedProvider,
+                            )
                             return (
                               <ModelToggleRow key={value} data-model={label}>
                                 <ModelInfoColumn>
                                   <ModelNameText>{label}</ModelNameText>
-                                  {!isCustomProvider && label !== value && (
+                                  {!isCustomProvider && label !== modelId && (
                                     <ModelDescriptionText>
-                                      {value}
+                                      {modelId}
                                     </ModelDescriptionText>
                                   )}
                                 </ModelInfoColumn>
@@ -1447,7 +1445,9 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
           onOpenChange={handleBuiltinModelsOpenChange}
           providerId={manageModelsProvider}
           apiKey={apiKeys[manageModelsProvider] ?? ""}
-          enabledModels={enabledModels[manageModelsProvider] ?? []}
+          enabledModels={(enabledModels[manageModelsProvider] ?? []).map(
+            (model) => stripModelNamespace(model, manageModelsProvider),
+          )}
           initialListing={validationListings[manageModelsProvider]}
           onSave={handleBuiltinModelsSave}
         />
