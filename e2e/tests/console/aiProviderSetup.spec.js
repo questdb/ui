@@ -457,6 +457,7 @@ describe("ai provider setup flows", () => {
       expect(settings.providers.openai.enabledModels).to.deep.equal([
         "gpt-5-mini",
         "gpt-5",
+        "gpt-5-2025-08-06",
         "gpt-5-nano",
       ])
     })
