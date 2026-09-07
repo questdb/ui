@@ -91,9 +91,9 @@ type Props = Readonly<{
   value?: string | React.ReactNode
 }>
 
-const copyPulse = (pink: string) => keyframes`
+const copyPulse = (color: string) => keyframes`
   0% {
-    box-shadow: ${pink} 0 0 0 1px;
+    box-shadow: ${color} 0 0 0 1px;
   }
   75% {
     box-shadow: transparent 0 0 0 16px;
@@ -168,7 +168,7 @@ const Wrapper = styled.div<{
   ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${copyPulse(theme.color.contentAccent)} 1000ms 0.1s;
+      animation: ${copyPulse(theme.color.borderDefault)} 1000ms 0.1s;
     `}
 `
 
