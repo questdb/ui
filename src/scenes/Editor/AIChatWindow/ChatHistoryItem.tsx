@@ -249,7 +249,7 @@ export const ChatHistoryItem: React.FC<ChatHistoryItemProps> = ({
               <ActionButton
                 label="Delete conversation"
                 size="sm"
-                variant="danger"
+                variant="dangerGhost"
                 onClick={handleDeleteClick}
                 title="Delete"
                 data-hook="chat-history-delete"
