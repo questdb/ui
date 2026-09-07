@@ -28,6 +28,7 @@ import { ctrlCmd } from "../../../../utils/platform"
 import {
   hasAgentVisibleCellHeightChanged,
   MIN_MARKDOWN_HEIGHT_PX,
+  MAX_PANE_HEIGHT_PX,
   snapMarkdownTopHeight,
 } from "../notebookUtils"
 
@@ -445,6 +446,8 @@ const MarkdownCellInner: React.FC<Props> = ({
             heightResize.resetHeight()
           }}
           minHeight={MIN_MARKDOWN_HEIGHT_PX}
+          maxHeight={MAX_PANE_HEIGHT_PX}
+          ariaLabel="Resize markdown pane"
         />
       </CellShell>
     )

@@ -70,6 +70,8 @@ const mountLive = (
     validate?: (sql: string) => Promise<ValidateQueryResult>
     // Fires on each readView — lets a test simulate a user edit racing a read.
     onRead?: () => void
+    // Fires when duplicate_cell flushes live chart snapshots.
+    onFlush?: () => void
   } = {},
 ) => {
   const state: { parts: ViewParts } = {
@@ -139,6 +141,10 @@ const mountLive = (
       })
     },
     runCell: vi.fn(runCell),
+    flushChartSnapshots: () => {
+      opts.onFlush?.()
+      return Promise.resolve()
+    },
   }
   registerController(controller)
   return { state, runCell: controller.runCell }
@@ -371,6 +377,55 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(response.is_error).toBe(true)
     expect(cellIds(state)).toEqual(["source"])
     expect(await loadSnapshotCellIds(1)).toEqual(["source"])
+  })
+
+  it("duplicate_cell drops a copied snapshot when refresh changes the live source", async () => {
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "source",
+      results: [
+        {
+          type: "dql",
+          query: "SELECT 1",
+          columns: [],
+          dataset: [[1]],
+          count: 1,
+        },
+      ],
+      savedAt: 100,
+    })
+    const { state } = mountLive(
+      1,
+      [cell("source", "SELECT 1", { lastRunStatus: "success" })],
+      {
+        onFlush: () => {
+          state.parts = {
+            ...state.parts,
+            cells: state.parts.cells.map((current) =>
+              current.id === "source"
+                ? { ...current, lastRunStatus: "error", lastRunError: "new" }
+                : current,
+            ),
+          }
+        },
+      },
+    )
+
+    const response = await dispatchTool(
+      "duplicate_cell",
+      { buffer_id: 1, cell_id: "source" },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    const { cellId } = JSON.parse(response.content) as { cellId: string }
+
+    expect(cellById(state, cellId)).toMatchObject({
+      lastRunStatus: "error",
+      lastRunError: "new",
+    })
+    expect(await loadCellSnapshot(1, cellId)).toBeUndefined()
   })
 
   it("add_cell with run:true chains runCell and reports per-query status", async () => {
@@ -801,6 +856,30 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       mode: "draw",
     })
     expect(cellById(state, "c")?.paneView).toBe("editor_result")
+  })
+
+  it("set_cell_dimensions rejects malformed height strings at runtime", async () => {
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const res = await dispatchTool(
+      "set_cell_dimensions",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        editor_height: "bogus",
+        result_height: null,
+        view: null,
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    expect(res.is_error).toBe(true)
+    expect(res.content).toContain(
+      "editor_height must be a number, auto, or null",
+    )
+    expect(cellById(state, "c")?.topHeight).toBeUndefined()
   })
 
   it("set_cell_layout returns the stored view with the new position", async () => {
@@ -3195,6 +3274,29 @@ describe("dispatchTool — get_cell content cap switch", () => {
       view: "editor",
       mode: null,
     })
+  })
+})
+
+describe("dispatchTool — apply_notebook_state dimensions", () => {
+  it("rejects a malformed editor_height string at runtime", async () => {
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "a", value: "SELECT 1", editor_height: "bogus" }],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    expect(res.is_error).toBe(true)
+    expect(res.content).toContain("has an invalid editor_height")
+    expect(cellById(state, "a")?.topHeight).toBeUndefined()
   })
 })
 

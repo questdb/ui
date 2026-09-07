@@ -30,6 +30,7 @@ import { toast } from "../../../../components/Toast"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
+  MAX_PANE_HEIGHT_PX,
   clampPaneHeight,
   isDoubleView,
   isExpectingResult,
@@ -201,6 +202,7 @@ const CellInner: React.FC<Props> = ({
     spotlightEditorRatio,
     topResize,
     bottomResize,
+    middleMaxHeight,
     middleResizeLive,
     middleResizeEnd,
     resetToDefaults,
@@ -576,6 +578,9 @@ const CellInner: React.FC<Props> = ({
             void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
             resetToDefaults()
           }}
+          minHeight={MIN_EDITOR_HEIGHT}
+          maxHeight={middleMaxHeight}
+          ariaLabel="Resize editor pane"
           doubleView={doubleView}
         />
       )}
@@ -624,7 +629,11 @@ const CellInner: React.FC<Props> = ({
           void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
           resetBottomArea()
         }}
-        minHeight={showBottomSlot ? minBottomHeightFor(cell) : undefined}
+        minHeight={
+          showBottomSlot ? minBottomHeightFor(cell) : MIN_EDITOR_HEIGHT
+        }
+        maxHeight={MAX_PANE_HEIGHT_PX}
+        ariaLabel={showBottomSlot ? "Resize result pane" : "Resize editor pane"}
       />
     ) : null
 

@@ -8,6 +8,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
+  MAX_PANE_HEIGHT_PX,
   clampPaneHeight,
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
@@ -107,6 +108,9 @@ export const useCellResizeOrchestration = ({
     liveBottomHeight: bottomResize.liveHeight,
     expectingResult,
   })
+  const middleMaxHeight = isMaximized
+    ? MAX_PANE_HEIGHT_PX
+    : topHeight + bottomHeight - minBottomHeightFor(cell)
 
   const spotlightEditorRatio =
     spotlightLiveRatio ??
@@ -221,6 +225,7 @@ export const useCellResizeOrchestration = ({
     spotlightEditorRatio,
     topResize,
     bottomResize,
+    middleMaxHeight,
     middleResizeLive,
     middleResizeEnd,
     resetToDefaults,

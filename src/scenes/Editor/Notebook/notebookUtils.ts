@@ -1318,6 +1318,12 @@ export const buildAppliedCells = (
           "cells",
         )
       }
+      if (issue.reason === "invalid_type") {
+        throw new ApplyNotebookStateError(
+          `Cell at index ${index} has an invalid ${issue.field}; use a number, auto, or null.`,
+          "cells",
+        )
+      }
       if (issue.reason === "below_minimum") {
         const message =
           issue.field === "editor_height"
@@ -1548,6 +1554,10 @@ export type AgentCellDimensionsValidationIssue =
   | { reason: "invalid_view" }
   | {
       field: "editor_height" | "result_height"
+      reason: "invalid_type"
+    }
+  | {
+      field: "editor_height" | "result_height"
       reason: "below_minimum" | "above_maximum"
       value: number
       limit: number
@@ -1581,7 +1591,10 @@ export const validateAgentCellDimensions = (
     },
   ]
   for (const { field, value, minimum } of values) {
-    if (typeof value !== "number") continue
+    if (value === undefined || value === null || value === "auto") continue
+    if (typeof value !== "number") {
+      return { ok: false, issue: { field, reason: "invalid_type" } }
+    }
     if (!Number.isFinite(value) || value < minimum) {
       return {
         ok: false,

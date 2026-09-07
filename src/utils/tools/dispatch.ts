@@ -99,6 +99,7 @@ import {
 // every mutation takes. The transition validates and throws typed errors
 // identically on both routes.
 class NotebookStateChangedError extends Error {}
+class DuplicateSourceChangedError extends Error {}
 
 const requireUnchangedSince = (
   bufferId: number,
@@ -758,19 +759,34 @@ export const dispatchTool = async (
             }
           }
 
+          const duplicateCurrentCell = (guardCopiedSnapshot: boolean) =>
+            runTransition(
+              buffer_id,
+              (parts) => {
+                if (
+                  guardCopiedSnapshot &&
+                  controller?.kind === "live" &&
+                  parts.cells.find((cell) => cell.id === cell_id) !== sourceCell
+                ) {
+                  throw new DuplicateSourceChangedError()
+                }
+                return duplicateCellTransition(parts, buffer_id, cell_id, newId)
+              },
+              signal,
+              seqBeforeRead,
+            )
+
           try {
             return {
-              cellId: await runTransition(
-                buffer_id,
-                (parts) =>
-                  duplicateCellTransition(parts, buffer_id, cell_id, newId),
-                signal,
-                seqBeforeRead,
-              ),
+              cellId: await duplicateCurrentCell(snapshotsCopied > 0),
             }
           } catch (error) {
             if (snapshotsCopied > 0) {
               await deleteCellSnapshot(buffer_id, newId).catch(() => undefined)
+              snapshotsCopied = 0
+            }
+            if (error instanceof DuplicateSourceChangedError) {
+              return { cellId: await duplicateCurrentCell(false) }
             }
             throw error
           }

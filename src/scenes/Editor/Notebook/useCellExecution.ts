@@ -46,14 +46,11 @@ const publishSchemaIfMutating = (exec: QueryExecResult): void => {
   }
 }
 
-const beginCellRun = (
-  runGenerationRef: MutableRefObject<Map<string, number>>,
-  cellId: string,
-) => {
-  const generation = (runGenerationRef.current.get(cellId) ?? 0) + 1
-  runGenerationRef.current.set(cellId, generation)
+const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
+  const generation = (runGenerations.get(cellId) ?? 0) + 1
+  runGenerations.set(cellId, generation)
 
-  return () => runGenerationRef.current.get(cellId) === generation
+  return () => runGenerations.get(cellId) === generation
 }
 
 // The reason the cell's controllers were aborted with, when any were.
@@ -65,13 +62,30 @@ const cancellationOf = (
 }
 
 const supersedeCellRun = (
-  runGenerationRef: MutableRefObject<Map<string, number>>,
+  runGenerations: Map<string, number>,
   cellId: string,
 ) => {
-  runGenerationRef.current.set(
-    cellId,
-    (runGenerationRef.current.get(cellId) ?? 0) + 1,
-  )
+  runGenerations.set(cellId, (runGenerations.get(cellId) ?? 0) + 1)
+}
+
+export const abortCellRunsOnUnmount = (
+  barrierControllers: Map<string, Set<AbortController>>,
+  requestControllers: Map<string, AbortController[]>,
+  runGenerations: Map<string, number>,
+): void => {
+  const cellIds = new Set([
+    ...barrierControllers.keys(),
+    ...requestControllers.keys(),
+  ])
+  cellIds.forEach((cellId) => supersedeCellRun(runGenerations, cellId))
+  barrierControllers.forEach((claims) => {
+    claims.forEach((controller) => controller.abort())
+  })
+  requestControllers.forEach((controllers) => {
+    controllers.forEach((controller) => controller.abort())
+  })
+  barrierControllers.clear()
+  requestControllers.clear()
 }
 
 const clearRunningCell = (
@@ -189,7 +203,7 @@ export const useCellExecution = ({
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
-      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const isCurrentRun = beginCellRun(runGenerationRef.current, cellId)
       const startCell = cellsRef.current.find((c) => c.id === cellId)
       const priorResult = hasPendingResult(startCell?.result)
         ? undefined
@@ -432,7 +446,7 @@ export const useCellExecution = ({
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
-      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const isCurrentRun = beginCellRun(runGenerationRef.current, cellId)
       const startCell = cellsRef.current.find((c) => c.id === cellId)
       const priorResult = hasPendingResult(startCell?.result)
         ? undefined
@@ -702,7 +716,7 @@ export const useCellExecution = ({
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort("superseded" satisfies RunCancelReason))
 
-      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const isCurrentRun = beginCellRun(runGenerationRef.current, cellId)
       const priorRaw = cellsRef.current.find((c) => c.id === cellId)?.result
       const priorResult = hasPendingResult(priorRaw) ? undefined : priorRaw
 
@@ -834,7 +848,7 @@ export const useCellExecution = ({
       if (!target || !target.query.trim()) return notCommitted
       const sql = target.query
 
-      const isCurrentRun = beginCellRun(runGenerationRef, cellId)
+      const isCurrentRun = beginCellRun(runGenerationRef.current, cellId)
       const controllers = abortControllersRef.current.get(cellId) ?? []
       controllers[index]?.abort()
       const ac = new AbortController()
@@ -937,7 +951,7 @@ export const useCellExecution = ({
       const controllers = abortControllersRef.current.get(cellId)
       if (!controllers) return
       // Supersede the in-flight run so its late resolution can't write back
-      supersedeCellRun(runGenerationRef, cellId)
+      supersedeCellRun(runGenerationRef.current, cellId)
       controllers.forEach((ac) => ac.abort(reason))
       clearRunningCell(
         abortControllersRef,
@@ -1013,16 +1027,18 @@ export const useCellExecution = ({
   )
 
   useEffect(() => {
+    const barrierControllersMap = barrierAbortsRef.current
     const controllersMap = abortControllersRef.current
+    const runGenerations = runGenerationRef.current
     return () => {
-      // Supersede before aborting so the in-flight continuations bail at their
-      // isCurrentRun() checks instead of overwriting the cell's last good
-      // snapshot with an abort-error (or a frozen "running" state) on unmount.
-      controllersMap.forEach((list, cellId) => {
-        supersedeCellRun(runGenerationRef, cellId)
-        list.forEach((c) => c.abort())
-      })
-      controllersMap.clear()
+      // Supersede before aborting so both validation- and request-phase
+      // continuations bail instead of launching after teardown or overwriting
+      // the cell's last good snapshot with an abort result.
+      abortCellRunsOnUnmount(
+        barrierControllersMap,
+        controllersMap,
+        runGenerations,
+      )
     }
   }, [])
 

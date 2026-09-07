@@ -339,6 +339,12 @@ export const setCellDimensionsTransition = (
         "view must be editor, result, or editor_result.",
       )
     }
+    if (issue.reason === "invalid_type") {
+      throw new NotebookToolError(
+        "validation",
+        `${issue.field} must be a number, auto, or null.`,
+      )
+    }
     if (issue.reason === "below_minimum") {
       throw new NotebookToolError(
         "validation",
