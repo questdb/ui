@@ -515,6 +515,21 @@ describe("setCellModeTransition", () => {
     expect(toRun.parts.cells[0].mode).toBeUndefined()
     expect(stillDraw.cancelRuns).toBeUndefined()
   })
+
+  it.each(["draw", "run"] as const)(
+    "rejects mode %s on a markdown cell with a typed error",
+    (mode) => {
+      // Given a markdown cell whose prose happens to parse as SQL
+      const parts = partsOf([cell("m", "SELECT 1", { type: "markdown" })])
+      // When a mode is requested
+      const apply = () => setCellModeTransition(parts, BUFFER_ID, "m", mode)
+      // Then the transition refuses and the cell keeps no mode
+      expect(apply).toThrowError(NotebookToolError)
+      expect(apply).toThrowError(/Markdown cells have no run or draw mode/)
+      expect(parts.cells[0].mode).toBeUndefined()
+      expect(parts.cells[0].bottomHeight).toBeUndefined()
+    },
+  )
 })
 
 describe("transition validation guards", () => {

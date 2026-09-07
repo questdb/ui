@@ -118,7 +118,12 @@ const makeQuest = (opts: { validate?: (sql: string) => unknown } = {}) => {
   return { quest, pending, respondNext }
 }
 
-const dqlResult = { type: "dql", columns: [], dataset: [], count: 1 }
+const dqlResult = {
+  type: "dql" as const,
+  columns: [],
+  dataset: [],
+  count: 1,
+}
 const errorResult = { type: "error", error: "boom" }
 
 // Rebuilds the ergonomic named-method API over the collapsed controller
@@ -273,6 +278,90 @@ describe("createDexieNotebookController — structural edits", () => {
     const view = await persistedView()
     expect(view.cells[0]).toMatchObject({ value: "new", name: "Renamed" })
     expect(view.cells[1].value).toBe("keep")
+  })
+
+  it("updateCell deletes a snapshot when none of its statements match", async () => {
+    await seedNotebook({
+      cells: [cell("a", "select 1; select 2", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [
+        { ...dqlResult, query: "select 1" },
+        { ...dqlResult, query: "select 2" },
+      ],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.updateCell("a", { value: "select 12; select 3" })
+
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("updateCell keeps a snapshot with a normalized statement match", async () => {
+    await seedNotebook({
+      cells: [
+        cell("a", "select * from trades where sym = 'A'", {
+          lastRunStatus: "success",
+        }),
+      ],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [
+        {
+          ...dqlResult,
+          query: "select * from trades where sym = 'A'",
+        },
+      ],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.updateCell("a", {
+      value: "SELECT  *\nFROM trades WHERE sym='A'; select 3",
+    })
+
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeDefined()
+  })
+
+  it("updateCell deletes a matching snapshot that contains only placeholders", async () => {
+    await seedNotebook({
+      cells: [cell("a", "select 1", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [{ type: "running", query: "select 1" }],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.updateCell("a", { value: "SELECT\n  1" })
+
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
+  })
+
+  it("apply deletes a snapshot when none of its statements match", async () => {
+    await seedNotebook({
+      cells: [cell("a", "select 1", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [{ ...dqlResult, query: "select 1" }],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    await controller.applyNotebookState({
+      cells: [{ id: "a", value: "select 2" }],
+    })
+
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
   it("updateCell rejects an unknown cell with a typed error", async () => {
@@ -713,6 +802,39 @@ describe("createDexieNotebookController — runCell", () => {
     expect(pending).toHaveLength(0)
   })
 
+  it("a skipped newer claim does not supersede an in-flight run", async () => {
+    await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
+    const {
+      quest,
+      pending: inFlight,
+      respondNext,
+    } = makeQuest({
+      validate: () => ({ queryType: "INSERT" }),
+    })
+    const controller = makeController({}, quest)
+
+    // An explicit write has passed its barrier and reached the server.
+    const explicit = controller.runCell("a", undefined, undefined, {
+      kind: "explicit",
+      permissions: { grantSchemaAccess: true, read: true, write: true },
+    })
+    await vi.waitFor(() => {
+      if (inFlight.length !== 1) throw new Error("write not in flight")
+    })
+
+    // A newer auto-run claims the same cell, but its barrier skips writes.
+    // Since it never launches, it must not take authority from the write.
+    const autoRun = await controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    expect(autoRun.skipped).toMatch(/AUTO_RUN_SKIPPED/)
+    expect(inFlight).toHaveLength(1)
+
+    respondNext({ type: "dml" })
+    expect(await explicit).toMatchObject({ success: true, queryCount: 1 })
+    expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
+  })
+
   it("explicit gate denies a write without the write permission at the barrier", async () => {
     await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
     const { quest, pending } = makeQuest({
@@ -894,6 +1016,59 @@ describe("createDexieNotebookController — runCell", () => {
     // Then the stale result is discarded and the newer run's stays recorded
     expect(summaryFirst.unverified).toBe(true)
     expect(summaryFirst.note).toMatch(/newer run/)
+    expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
+  })
+
+  it("a newer invocation supersedes an older run still awaiting validation", async () => {
+    await seedNotebook({ cells: [cell("a", "SELECT 1")] })
+    const validations: Array<{ resolve: (value: unknown) => void }> = []
+    const {
+      quest,
+      pending: inFlight,
+      respondNext,
+    } = makeQuest({
+      validate: () =>
+        new Promise((resolve) => {
+          validations.push({ resolve })
+        }),
+    })
+    const controller = makeController({}, quest)
+
+    const first = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (validations.length < 1)
+        throw new Error("first validation not started")
+    })
+
+    const second = controller.runCell("a", undefined, undefined, {
+      kind: "autoRun",
+    })
+    await vi.waitFor(() => {
+      if (validations.length < 2)
+        throw new Error("second validation not started")
+    })
+
+    // The newer invocation validates and launches before the older validation
+    // settles. Resolving the older barrier afterward must not let it launch or
+    // supersede the newer request.
+    validations[1].resolve(dqlValidation)
+    await vi.waitFor(() => {
+      if (inFlight.length !== 1) throw new Error("newer run not launched")
+    })
+    validations[0].resolve(dqlValidation)
+
+    expect(await first).toMatchObject({
+      success: false,
+      queryCount: 0,
+      results: [],
+      cancelled: "superseded",
+    })
+    expect(inFlight).toHaveLength(1)
+
+    respondNext(dqlResult)
+    expect(await second).toMatchObject({ success: true, queryCount: 1 })
     expect((await persistedView()).cells[0].lastRunStatus).toBe("success")
   })
 

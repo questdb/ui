@@ -2044,6 +2044,28 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(res.content).toMatch(/could not resolve SQL/)
   })
 
+  it("set_cell_mode rejects a markdown cell without validating its prose as SQL", async () => {
+    // Given a markdown cell whose source reads like a query
+    const { state } = mountLive(1, [
+      cell("m", "SELECT 1", { type: "markdown" }),
+    ])
+    const validateSql = vi.fn()
+    // When the agent asks for draw mode
+    const res = await dispatchTool(
+      "set_cell_mode",
+      { buffer_id: 1, cell_id: "m", mode: "draw" },
+      makeClient(),
+      noopStatus,
+      { grantSchemaAccess: true, read: true, write: true },
+      validateSql,
+    )
+    // Then the typed validation error comes back and no SQL check ran
+    expect(res.is_error).toBe(true)
+    expect(JSON.parse(res.content)).toMatchObject({ error_code: "validation" })
+    expect(validateSql).not.toHaveBeenCalled()
+    expect(cellById(state, "m")?.mode).toBeUndefined()
+  })
+
   it("denies set_cell_mode draw when cell SQL contains DDL/DML, even with write granted", async () => {
     mountLive(1, [cell("c", "DROP TABLE victim")])
     const res = await dispatchTool(

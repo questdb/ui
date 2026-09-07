@@ -895,16 +895,23 @@ export const dispatchTool = async (
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         const modeBaseline = getBufferActionSeq(buffer_id)
         if (mode === "draw" && validateSql) {
-          const cellSql = await cellValueOf(buffer_id, cell_id, signal)
-          if (cellSql === null) {
-            return {
-              content: denyReasonUnresolvedSql("set_cell_mode"),
-              is_error: true,
+          const modeCell = (await readCells(buffer_id, signal)).find(
+            (c) => c.id === cell_id,
+          )
+          // Markdown holds prose, not SQL: the transition rejects it with the
+          // typed error instead of a misleading DQL verdict on the prose.
+          if (modeCell?.type !== "markdown") {
+            const cellSql = modeCell?.value ?? null
+            if (cellSql === null) {
+              return {
+                content: denyReasonUnresolvedSql("set_cell_mode"),
+                is_error: true,
+              }
             }
-          }
-          const decision = await requireAllDQL(cellSql, validateSql)
-          if (!decision.granted) {
-            return { content: decision.reason, is_error: true }
+            const decision = await requireAllDQL(cellSql, validateSql)
+            if (!decision.granted) {
+              return { content: decision.reason, is_error: true }
+            }
           }
         }
         return routeNotebookTool(

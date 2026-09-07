@@ -418,6 +418,12 @@ export const setCellModeTransition = (
   mode: CellMode,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown") {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells have no run or draw mode.",
+    )
+  }
   const entersDraw = mode === "draw" && cell.mode !== "draw"
   const nextCell: NotebookCell = {
     ...cell,

@@ -29,13 +29,27 @@ type NotebookBufferMeta =
 
 // Main persisted `isViewMaximized`. Materialize the stored pane view and drop
 // the legacy key from the runtime view. A stored "editor" predates the
-// discard-on-editor model and normalizes to the split default.
+// discard-on-editor model and normalizes to the split default. Markdown
+// carries no SQL sub-state: imports predating the type gate could persist
+// draw/result fields on prose, which would reserve a phantom result pane.
+const MARKDOWN_FOREIGN_FIELDS = [
+  "paneView",
+  "isViewMaximized",
+  "mode",
+  "chartConfig",
+  "autoRefresh",
+  "bottomHeight",
+  "bottomResized",
+  "result",
+  "lastRunStatus",
+  "lastRunError",
+] as const
+
 const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
   const raw = cell as NotebookCell & Record<string, unknown>
   if (cell.type === "markdown") {
     const next = { ...raw }
-    delete next.paneView
-    delete next.isViewMaximized
+    for (const field of MARKDOWN_FOREIGN_FIELDS) delete next[field]
     return next as NotebookCell
   }
   const paneView = isCellPaneView(raw.paneView)

@@ -86,36 +86,53 @@ type RunCommitOutcome =
         | RunCancellation
     }
 
-type HeadlessClaim = { controller: AbortController; launched: boolean }
+type HeadlessClaim = {
+  controller: AbortController
+  generation: number
+}
+
+type HeadlessCellClaims = {
+  claims: Set<HeadlessClaim>
+  nextGeneration: number
+  latestLaunchedGeneration: number
+}
 
 type HeadlessRunClaim = {
   signal: AbortSignal
-  launch: () => void
+  launch: () => boolean
   isCurrent: () => boolean
   release: () => void
 }
 
 // One claim covers a headless run's whole phase, validation through commit.
 // Cancellation reaches it through the signal, whose reason names the cause
-// (a transition, an archive, a supersession). Launching supersedes the
-// cell's earlier launched runs and stops honouring the external signal: a
-// statement already in flight records its real outcome.
-const headlessClaims = new Map<number, Map<string, Set<HeadlessClaim>>>()
+// (a transition, an archive, a supersession). Generations are assigned when
+// validation begins, but a claim becomes authoritative only when it launches:
+// a newer invocation that is denied or skipped must not cancel an in-flight
+// statement. Launching stops honouring the external signal so a statement
+// already in flight records its real outcome.
+const headlessClaims = new Map<number, Map<string, HeadlessCellClaims>>()
 
 const claimHeadlessRun = (
   bufferId: number,
   cellId: string,
   externalSignal?: AbortSignal,
 ): HeadlessRunClaim => {
+  const perBuffer =
+    headlessClaims.get(bufferId) ?? new Map<string, HeadlessCellClaims>()
+  const state = perBuffer.get(cellId) ?? {
+    claims: new Set<HeadlessClaim>(),
+    nextGeneration: 0,
+    latestLaunchedGeneration: 0,
+  }
+  const generation = state.nextGeneration + 1
   const claim: HeadlessClaim = {
     controller: new AbortController(),
-    launched: false,
+    generation,
   }
-  const perBuffer =
-    headlessClaims.get(bufferId) ?? new Map<string, Set<HeadlessClaim>>()
-  const claims = perBuffer.get(cellId) ?? new Set<HeadlessClaim>()
-  claims.add(claim)
-  perBuffer.set(cellId, claims)
+  state.nextGeneration = generation
+  state.claims.add(claim)
+  perBuffer.set(cellId, state)
   headlessClaims.set(bufferId, perBuffer)
 
   const abortFromExternal = () => claim.controller.abort(externalSignal?.reason)
@@ -129,18 +146,31 @@ const claimHeadlessRun = (
     signal: claim.controller.signal,
     launch: () => {
       stopExternal()
-      for (const other of claims) {
-        if (other !== claim && other.launched) {
-          other.controller.abort("superseded" satisfies RunCancelReason)
+      if (
+        claim.controller.signal.aborted ||
+        claim.generation < state.latestLaunchedGeneration
+      ) {
+        if (!claim.controller.signal.aborted) {
+          claim.controller.abort("superseded" satisfies RunCancelReason)
+        }
+        return false
+      }
+
+      state.latestLaunchedGeneration = claim.generation
+      for (const older of state.claims) {
+        if (older.generation < claim.generation) {
+          older.controller.abort("superseded" satisfies RunCancelReason)
         }
       }
-      claim.launched = true
+      return true
     },
-    isCurrent: () => !claim.controller.signal.aborted,
+    isCurrent: () =>
+      !claim.controller.signal.aborted &&
+      claim.generation === state.latestLaunchedGeneration,
     release: () => {
       stopExternal()
-      claims.delete(claim)
-      if (claims.size === 0 && perBuffer.get(cellId) === claims) {
+      state.claims.delete(claim)
+      if (state.claims.size === 0 && perBuffer.get(cellId) === state) {
         perBuffer.delete(cellId)
       }
       if (perBuffer.size === 0 && headlessClaims.get(bufferId) === perBuffer) {
@@ -156,8 +186,8 @@ export const cancelHeadlessBufferRuns = (
 ): void => {
   const perBuffer = headlessClaims.get(bufferId)
   if (!perBuffer) return
-  for (const claims of perBuffer.values()) {
-    for (const claim of claims) claim.controller.abort(reason)
+  for (const state of perBuffer.values()) {
+    for (const claim of state.claims) claim.controller.abort(reason)
   }
   headlessClaims.delete(bufferId)
 }
@@ -170,9 +200,9 @@ export const cancelHeadlessCellRuns = (
   const perBuffer = headlessClaims.get(bufferId)
   if (!perBuffer) return
   for (const cellId of cellIds) {
-    const claims = perBuffer.get(cellId)
-    if (!claims) continue
-    for (const claim of claims) claim.controller.abort(reason)
+    const state = perBuffer.get(cellId)
+    if (!state) continue
+    for (const claim of state.claims) claim.controller.abort(reason)
   }
 }
 
@@ -430,7 +460,9 @@ export const runHeadlessCell = async (
     }
     const classified = barrier.classified
 
-    claim.launch()
+    if (!claim.launch()) {
+      return cancelledBeforeLaunchSummary(runCancellationOf(claim.signal))
+    }
     // The queue is NOT held during execution, so runs on other cells of the
     // same notebook proceed in parallel; the commit re-reads and patches only
     // this cell.

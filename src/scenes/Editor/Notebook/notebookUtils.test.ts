@@ -965,7 +965,7 @@ describe("buildAppliedCells", () => {
       },
     ]
     const { nextCells } = buildAppliedCells(prev, {
-      cells: [{ id: "a", value: "INSERT INTO t  VALUES (1)" }],
+      cells: [{ id: "a", value: "INSERT INTO t VALUES (2)" }],
     })
     expect(nextCells[0].result).toBeNull()
     expect(nextCells[0].lastRunStatus).toBe("success")
@@ -996,6 +996,152 @@ describe("buildAppliedCells", () => {
     expect(nextCells[0].result).toBeNull()
     expect(nextCells[0].lastRunStatus).toBe("error")
     expect(nextCells[0].lastRunError).toBe("boom")
+  })
+
+  describe("mode change", () => {
+    const drawCell = (overrides: Partial<NotebookCell> = {}): NotebookCell => ({
+      id: "a",
+      position: 0,
+      value: "SELECT 1",
+      mode: "draw",
+      paneView: "editor_result",
+      chartConfig: { xColumn: null, queries: [null] },
+      bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT,
+      result: {
+        results: [
+          {
+            type: "dql",
+            query: "SELECT 1",
+            columns: [],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 0,
+      },
+      ...overrides,
+    })
+    const runCell = (overrides: Partial<NotebookCell> = {}): NotebookCell => ({
+      id: "a",
+      position: 0,
+      value: "SELECT 1",
+      paneView: "editor_result",
+      bottomHeight: 180,
+      ...overrides,
+    })
+
+    it("validates a draw-to-run height against the table floor", () => {
+      // Given a draw cell
+      const prev = [drawCell()]
+      // When the apply switches it to run with a table-legal height
+      const { nextCells } = buildAppliedCells(prev, {
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1",
+            mode: "run",
+            view: "editor_result",
+            resultHeight: 100,
+          },
+        ],
+      })
+      // Then the apply succeeds and the height is pinned
+      expect(nextCells[0].mode).toBeUndefined()
+      expect(nextCells[0].bottomHeight).toBe(100)
+      expect(nextCells[0].bottomResized).toBe(true)
+    })
+
+    it("validates a run-to-draw height against the chart floor", () => {
+      // Given a run cell
+      const prev = [runCell()]
+      // When the apply switches it to draw with a height below the chart floor
+      const apply = () =>
+        buildAppliedCells(prev, {
+          cells: [
+            {
+              id: "a",
+              value: "SELECT 1",
+              mode: "draw",
+              chartConfig: { xColumn: null, queries: [null] },
+              resultHeight: 100,
+            },
+          ],
+        })
+      // Then the chart minimum applies
+      expect(apply).toThrowError(/minimum is 296px/)
+    })
+
+    it("re-derives an unpinned height when draw becomes run", () => {
+      // Given a draw cell whose height is the draw seed, not a user pin
+      const prev = [drawCell()]
+      // When the apply switches it to run and preserves the height
+      const { nextCells } = buildAppliedCells(prev, {
+        cells: [
+          { id: "a", value: "SELECT 1", mode: "run", resultHeight: null },
+        ],
+      })
+      // Then the table height follows the carried result
+      const next = nextCells[0]
+      expect(next.bottomHeight).toBe(
+        computeResultBottomHeight(next.result, next.value),
+      )
+      expect(next.bottomHeight).not.toBe(DEFAULT_CHART_BOTTOM_HEIGHT)
+      expect(next.bottomResized).toBeFalsy()
+    })
+
+    it("re-seeds an unpinned height when run becomes draw", () => {
+      // Given a run cell with a result-derived height
+      const prev = [runCell()]
+      // When the apply switches it to draw and preserves the height
+      const { nextCells } = buildAppliedCells(prev, {
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1",
+            mode: "draw",
+            chartConfig: { xColumn: null, queries: [null] },
+            resultHeight: null,
+          },
+        ],
+      })
+      // Then the chart starts at its default height
+      expect(nextCells[0].bottomHeight).toBe(DEFAULT_CHART_BOTTOM_HEIGHT)
+    })
+
+    it("keeps a pinned height across a mode change", () => {
+      // Given a draw cell the user resized
+      const prev = [drawCell({ bottomHeight: 640, bottomResized: true })]
+      // When the apply switches it to run and preserves the height
+      const { nextCells } = buildAppliedCells(prev, {
+        cells: [
+          { id: "a", value: "SELECT 1", mode: "run", resultHeight: null },
+        ],
+      })
+      // Then the pin survives
+      expect(nextCells[0].bottomHeight).toBe(640)
+      expect(nextCells[0].bottomResized).toBe(true)
+    })
+
+    it("keeps the stored height when the mode does not change", () => {
+      // Given a draw cell
+      const prev = [drawCell()]
+      // When the apply keeps it in draw mode
+      const { nextCells } = buildAppliedCells(prev, {
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1",
+            mode: "draw",
+            chartConfig: { xColumn: null, queries: [null] },
+            resultHeight: null,
+          },
+        ],
+      })
+      // Then nothing re-seeds
+      expect(nextCells[0].bottomHeight).toBe(DEFAULT_CHART_BOTTOM_HEIGHT)
+      expect(nextCells[0].bottomResized).toBeFalsy()
+    })
   })
 
   it("keeps a released cell's persisted run history when the SQL changes", () => {
@@ -3962,6 +4108,28 @@ const resultOf = (
 })
 
 describe("reconcileResultsForStatements — content carryover", () => {
+  it("uses one canonical key space before reconciliation", () => {
+    const results = [dqlResult("select 1"), dqlResult("select 2")]
+    const previous = resultOf(results, {
+      activeStatementKey: statementKeysFor(["select 1"])[0],
+    })
+    const edited = ["select 1", "SELECT\n  2"]
+
+    // The render path must attach both results immediately, even before the
+    // refresh engine's debounced reconciliation runs.
+    const frame = deriveStatementFrame(edited, previous)
+    expect(frame?.slots.map((slot) => slot.result?.query)).toEqual([
+      "select 1",
+      "select 2",
+    ])
+
+    // Reconciliation uses exactly the same identities and keeps the active
+    // statement stable without needing a cache-priming render.
+    const reconciled = reconcileResultsForStatements(edited, previous)
+    expect(reconciled?.results).toEqual(results)
+    expect(reconciled?.activeStatementKey).toBe(previous.activeStatementKey)
+  })
+
   it("keeps results for unchanged statements across whitespace and semicolon edits", () => {
     // Given a two-statement frame
     const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
@@ -3975,6 +4143,25 @@ describe("reconcileResultsForStatements — content carryover", () => {
       "SELECT 1",
       "SELECT 2",
     ])
+  })
+
+  it("keeps results across internal whitespace, newlines, and keyword casing", () => {
+    const previous = resultOf([
+      dqlResult("select * from trades where sym = 'A'"),
+    ])
+
+    const reconciled = reconcileResultsForStatements(
+      ["SELECT  *\nFROM trades WHERE sym='A';"],
+      previous,
+    )
+
+    expect(reconciled?.results).toEqual(previous.results)
+  })
+
+  it("does not fold case inside SQL string values", () => {
+    const previous = resultOf([dqlResult("select 'A'")])
+
+    expect(reconcileResultsForStatements(["SELECT 'a'"], previous)).toBeNull()
   })
 
   it("drops an edited statement's result and keeps its siblings", () => {

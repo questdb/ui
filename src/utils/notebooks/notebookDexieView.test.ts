@@ -43,3 +43,62 @@ describe("migratePersistedNotebookView preferred view", () => {
     expect(cell).not.toHaveProperty("isViewMaximized")
   })
 })
+
+describe("migratePersistedNotebookView markdown sub-state", () => {
+  it("strips SQL-only draw and result state from markdown", () => {
+    // Given a markdown cell an older import left carrying draw state
+    const view = {
+      cells: [
+        {
+          id: "m",
+          position: 0,
+          value: "# Title",
+          type: "markdown",
+          mode: "draw",
+          chartConfig: { xColumn: null, queries: [null] },
+          autoRefresh: 5000,
+          bottomHeight: 350,
+          bottomResized: true,
+          result: { results: [], activeResultIndex: 0, timestamp: 0 },
+          lastRunStatus: "success",
+          lastRunError: "boom",
+          topHeight: 86,
+        },
+      ],
+    } as unknown as NotebookViewState
+    // When the persisted view is migrated
+    const cell = migratePersistedNotebookView(view).cells[0]
+    // Then only markdown's own fields survive
+    expect(cell).toEqual({
+      id: "m",
+      position: 0,
+      value: "# Title",
+      type: "markdown",
+      topHeight: 86,
+    })
+  })
+
+  it("keeps draw state on a SQL cell", () => {
+    // Given a draw cell
+    const view = {
+      cells: [
+        {
+          id: "s",
+          position: 0,
+          value: "SELECT 1",
+          mode: "draw",
+          chartConfig: { xColumn: null, queries: [null] },
+          autoRefresh: 5000,
+          bottomHeight: 350,
+        },
+      ],
+    } as unknown as NotebookViewState
+    // When the persisted view is migrated
+    const cell = migratePersistedNotebookView(view).cells[0]
+    // Then its draw state is untouched
+    expect(cell.mode).toBe("draw")
+    expect(cell.chartConfig).toBeDefined()
+    expect(cell.autoRefresh).toBe(5000)
+    expect(cell.bottomHeight).toBe(350)
+  })
+})

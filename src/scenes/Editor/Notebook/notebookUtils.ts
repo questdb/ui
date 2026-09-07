@@ -28,6 +28,7 @@ import {
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
+import { formatSql } from "../../../utils/formatSql"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
@@ -813,6 +814,36 @@ export const nextCopyLabel = (label: string): string => {
   return `${match[1]} (copy ${n + 1})`
 }
 
+// Result identity ignores presentation-only edits while preserving SQL values:
+// the formatter canonicalizes whitespace/newlines and keyword casing, but does
+// not fold string literals or quoted/unquoted identifiers. Invalid, mid-typing
+// SQL falls back to the editor's trim/trailing-semicolon normalization.
+const STATEMENT_IDENTITY_CACHE_MAX = 500
+const statementIdentityCache = new Map<string, string>()
+
+const cacheStatementIdentity = (key: string, identity: string) => {
+  if (statementIdentityCache.size >= STATEMENT_IDENTITY_CACHE_MAX) {
+    const oldest = statementIdentityCache.keys().next().value
+    if (oldest !== undefined) statementIdentityCache.delete(oldest)
+  }
+  statementIdentityCache.set(key, identity)
+}
+
+export const normalizeStatementIdentity = (query: string): string => {
+  const normalized = normalizeQueryText(query)
+  if (!normalized) return normalized
+  const cached = statementIdentityCache.get(normalized)
+  if (cached !== undefined) return cached
+  let identity: string
+  try {
+    identity = formatSql(normalized, { uppercase: true })
+  } catch {
+    identity = normalized
+  }
+  cacheStatementIdentity(normalized, identity)
+  return identity
+}
+
 export const snapshotResultsMatchQueries = (
   results: SingleQueryResult[],
   queries: string[],
@@ -821,7 +852,8 @@ export const snapshotResultsMatchQueries = (
   results.length === queries.length &&
   results.every(
     (result, index) =>
-      normalizeQueryText(result.query) === normalizeQueryText(queries[index]),
+      normalizeStatementIdentity(result.query) ===
+      normalizeStatementIdentity(queries[index]),
   )
 
 // Statement identity across edits: normalized text plus occurrence order for
@@ -830,15 +862,21 @@ export type StatementKey = string
 
 const STATEMENT_KEY_SEPARATOR = "\u0001"
 
-export const statementKeysFor = (texts: string[]): StatementKey[] => {
+const buildStatementKeys = (
+  texts: string[],
+  identityFor: (text: string) => string,
+): StatementKey[] => {
   const occurrences = new Map<string, number>()
   return texts.map((text) => {
-    const normalized = normalizeQueryText(text)
+    const normalized = identityFor(text)
     const occurrence = occurrences.get(normalized) ?? 0
     occurrences.set(normalized, occurrence + 1)
     return `${normalized}${STATEMENT_KEY_SEPARATOR}${occurrence}`
   })
 }
+
+export const statementKeysFor = (texts: string[]): StatementKey[] =>
+  buildStatementKeys(texts, normalizeStatementIdentity)
 
 const clampIndex = (index: number, length: number): number =>
   Math.min(Math.max(index, 0), Math.max(length - 1, 0))
@@ -904,6 +942,19 @@ export const reconcileResultsForStatements = (
     activeResultIndex: Math.max(0, survivorKeys.indexOf(activeStatementKey)),
   }
 }
+
+// Passive invalidation and mounted hydration must agree about whether a
+// snapshot contains anything displayable. In particular, matching
+// running/queued placeholders are not durable results.
+export const snapshotResultsHaveMatchingStatement = (
+  results: SingleQueryResult[],
+  statements: string[],
+): boolean =>
+  reconcileResultsForStatements(statements, {
+    results,
+    activeResultIndex: 0,
+    timestamp: 0,
+  }) !== null
 
 // Applies the carryover to a cell's in-memory result after an SQL edit:
 // unchanged statements keep their results, everything else drops. A frame
@@ -1251,8 +1302,9 @@ export const buildAppliedCells = (
     const dimensionCell: NotebookCell = {
       ...(existing ?? { id, position: index, value, type: resolvedType }),
       value,
-      ...(resolvedMode === "draw" ? { mode: "draw" as const } : {}),
     }
+    if (isDraw) dimensionCell.mode = "draw"
+    else delete dimensionCell.mode
     const validation = validateAgentCellDimensions(dimensionCell, {
       editorHeight: req.editorHeight,
       resultHeight: req.resultHeight,
@@ -1326,8 +1378,11 @@ export const buildAppliedCells = (
         else delete next.lastRunError
         resultsCleared.push(existing.id)
       }
-      if (resolvedMode === "draw") next.mode = "draw"
+      if (isDraw) next.mode = "draw"
       else delete next.mode
+      if ((existing.mode === "draw") !== isDraw) {
+        Object.assign(next, cellModeChangePatch(next, resolvedMode ?? "run"))
+      }
       if (chartConfig !== undefined) next.chartConfig = chartConfig
       else delete next.chartConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh

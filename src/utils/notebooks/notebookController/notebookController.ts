@@ -21,11 +21,16 @@ import {
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
   RESULT_CLEARED_MID_RUN_NOTE,
+  snapshotResultsHaveMatchingStatement,
   summarizeCellResults,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
-import { deleteCellSnapshot } from "../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  loadCellSnapshot,
+} from "../../../store/notebookResults"
+import { getQueriesFromText } from "../../../scenes/Editor/Monaco/utils"
 import { loadPassiveResultStatusReader } from "../notebookResultStatus"
 import { NotebookToolError } from "../notebookToolError"
 import { enqueueBufferTask } from "../notebookBufferQueue"
@@ -337,6 +342,17 @@ export const createDexieNotebookController = (
         if (commit === "archived") {
           throw notebookArchivedMidEdit(bufferId)
         }
+        const previousCellsById = new Map(
+          view.cells.map((cell) => [cell.id, cell]),
+        )
+        const changedSqlCells = out.parts.cells.flatMap((nextCell) => {
+          const previousCell = previousCellsById.get(nextCell.id)
+          return previousCell &&
+            nextCell.type !== "markdown" &&
+            previousCell.value !== nextCell.value
+            ? [{ cellId: nextCell.id, value: nextCell.value }]
+            : []
+        })
         // Invalidate only after the document commit succeeds. Because this is
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the
@@ -361,11 +377,31 @@ export const createDexieNotebookController = (
             clearChartZoom(cellId)
           }
         }
-        if (out.deleteSnapshots) {
-          for (const cellId of out.deleteSnapshots.cellIds) {
-            void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
+        const snapshotsToDelete = new Set(out.deleteSnapshots?.cellIds ?? [])
+        for (const { cellId, value } of changedSqlCells) {
+          try {
+            const snapshot = await loadCellSnapshot(bufferId, cellId)
+            if (
+              snapshot &&
+              !snapshotResultsHaveMatchingStatement(
+                snapshot.results,
+                getQueriesFromText(value),
+              )
+            ) {
+              snapshotsToDelete.add(cellId)
+            }
+          } catch {
+            // The document edit is already durable. A later hydration retries
+            // reconciliation if IndexedDB could not be inspected here.
           }
         }
+        // Semantic invalidation is awaited so an immediate passive read cannot
+        // observe a stale snapshot key after the mutation resolves.
+        await Promise.all(
+          [...snapshotsToDelete].map((cellId) =>
+            deleteCellSnapshot(bufferId, cellId).catch(() => undefined),
+          ),
+        )
         return out
       },
     )
