@@ -33,7 +33,12 @@ import React, {
 } from "react"
 import { getValue, setValue } from "../../utils/localStorage"
 import { StoreKey } from "../../utils/localStorage/types"
-import { parseInteger, parseBoolean, parseMaxColumnWidth } from "./utils"
+import {
+  parseInteger,
+  parseBoolean,
+  parseMaxColumnWidth,
+  parseRunWithSelectionMode,
+} from "./utils"
 import type { MaxColumnWidth } from "../../components/ResultGrid/types"
 import {
   AiAssistantSettings,
@@ -42,6 +47,7 @@ import {
   LeftPanelState,
   LeftPanelType,
   NotebookOnboarding,
+  RunWithSelectionMode,
 } from "./types"
 import { reconcileSettings } from "../../utils/ai/settings"
 
@@ -65,7 +71,7 @@ const defaultConfig: LocalConfig = {
   autoRefreshTables: true,
   useNewGrid: true,
   useQuickVis: false,
-  runWithSelection: true,
+  runWithSelectionMode: "partial",
   maxColumnWidth: "auto",
   aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
@@ -139,7 +145,7 @@ type ContextProps = {
   autoRefreshTables: boolean
   useNewGrid: boolean
   useQuickVis: boolean
-  runWithSelection: boolean
+  runWithSelectionMode: RunWithSelectionMode
   maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
@@ -183,7 +189,7 @@ const defaultValues: ContextProps = {
   autoRefreshTables: true,
   useNewGrid: true,
   useQuickVis: false,
-  runWithSelection: true,
+  runWithSelectionMode: "partial",
   maxColumnWidth: "auto",
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
@@ -238,12 +244,10 @@ export const LocalStorageProvider = ({
     getInitialBooleanFeature(QUICK_VIS_OVERRIDE),
   )
 
-  const [runWithSelection, setRunWithSelection] = useState<boolean>(
-    parseBoolean(
-      getValue(StoreKey.RUN_WITH_SELECTION),
-      defaultConfig.runWithSelection,
-    ),
-  )
+  const [runWithSelectionMode, setRunWithSelectionMode] =
+    useState<RunWithSelectionMode>(
+      parseRunWithSelectionMode(getValue(StoreKey.RUN_WITH_SELECTION)),
+    )
 
   const [maxColumnWidth, setMaxColumnWidth] = useState<MaxColumnWidth>(
     parseMaxColumnWidth(getValue(StoreKey.MAX_COLUMN_WIDTH)),
@@ -353,7 +357,7 @@ export const LocalStorageProvider = ({
         setUseQuickVis(value === "true")
         break
       case StoreKey.RUN_WITH_SELECTION:
-        setRunWithSelection(value === "true")
+        setRunWithSelectionMode(parseRunWithSelectionMode(value))
         break
       case StoreKey.MAX_COLUMN_WIDTH:
         setMaxColumnWidth(parseMaxColumnWidth(value))
@@ -388,7 +392,7 @@ export const LocalStorageProvider = ({
       autoRefreshTables,
       useNewGrid,
       useQuickVis,
-      runWithSelection,
+      runWithSelectionMode,
       maxColumnWidth,
       leftPanelState,
       updateLeftPanelState,
@@ -408,7 +412,7 @@ export const LocalStorageProvider = ({
       autoRefreshTables,
       useNewGrid,
       useQuickVis,
-      runWithSelection,
+      runWithSelectionMode,
       maxColumnWidth,
       leftPanelState,
       updateLeftPanelState,

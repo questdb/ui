@@ -186,7 +186,7 @@ describe("run query with selection", () => {
     // Then
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
 
     // When
@@ -344,6 +344,43 @@ describe("run query with selection", () => {
       .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
   })
 
+  it("should queue selected queries when starting a run while a script is busy", () => {
+    // Given a script is running
+    cy.intercept("/exec*", (req) => {
+      req.on("response", (res) => {
+        res.setDelay(1000)
+      })
+    })
+    cy.typeQuery("select 1;\nselect 2;\nselect 3;")
+    cy.clickRunScript()
+    cy.getByDataHook("loading-notification").should(
+      "contain",
+      'Running query "select 1"',
+    )
+
+    // When a strict subset is selected and run with the primary shortcut
+    cy.selectQueries({
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: 2,
+      endColumn: 10,
+    })
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+
+    // Then the selected run is queued for confirmation instead of discarded
+    cy.getByRole("dialog").should("be.visible")
+    cy.getByRole("dialog").should("contain", "Run selected queries")
+    cy.getByRole("dialog").should("contain", "2 selected queries")
+
+    // When confirmed, the active script is cancelled and the selection runs
+    cy.getByDataHook("run-all-queries-confirm").click()
+    cy.contains('[data-hook="success-notification"]', "Running completed", {
+      timeout: 20000,
+    })
+      .invoke("text")
+      .should("match", /Running completed in .+ with\s+2 successful\s+queries/)
+  })
+
   it("should run all queries when starting a run-all while a query is busy", () => {
     // Given a single query is running
     cy.intercept("/exec*", (req) => {
@@ -402,7 +439,7 @@ describe("run all queries in tab", () => {
     // Then
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 6 selected queries",
+      "Run selected queries",
     )
 
     // When
@@ -994,28 +1031,36 @@ describe("&query URL param", () => {
       params.set("executeQuery", "true")
       return `${baseUrl}/?${params.toString()}`
     }
+    const expectClipboardWrite = (callCount, sql) => {
+      cy.get("@clipboardWrite").should((writeText) => {
+        expect(writeText).to.have.callCount(callCount)
+        expect(writeText.lastCall.args).to.deep.eq([expectedUrl(sql)])
+      })
+    }
+    cy.window().then((win) => {
+      cy.stub(win.navigator.clipboard, "writeText")
+        .as("clipboardWrite")
+        .resolves()
+    })
 
     // When — glyph dropdown copies single full query
     cy.openRunDropdownInLine(1)
     cy.getByDataHook("dropdown-item-copy-query-link").click()
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;"))
+    expectClipboardWrite(1, "SELECT 1;")
 
-    // When — glyph dropdown copies a selection inside a single query
+    // When — glyph dropdown copies the complete query even with a
+    // fragment selected inside it
     cy.selectRange({ lineNumber: 2, column: 1 }, { lineNumber: 2, column: 7 })
     cy.getByDataHook("button-run-query").should("contain", "Run selected query")
     cy.openRunDropdownInLine(2)
-    cy.getByDataHook("dropdown-item-copy-query-link").click()
+    cy.getByDataHook("dropdown-item-copy-query-link")
+      .should("contain", 'Copy link to "SELECT 2"')
+      .click()
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT;"))
+    expectClipboardWrite(2, "SELECT 2;")
 
     // When — Alt+L copies single query at cursor
     cy.clickLine(3)
@@ -1023,33 +1068,24 @@ describe("&query URL param", () => {
     cy.realPress(["Alt", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 3;"))
+    expectClipboardWrite(3, "SELECT 3;")
 
     // When — Alt+L copies selection spanning multiple queries
     cy.selectRange({ lineNumber: 1, column: 1 }, { lineNumber: 2, column: 9 })
     cy.getByDataHook("button-run-query").should(
       "contain",
-      "Run 2 selected queries",
+      "Run selected queries",
     )
     cy.realPress(["Alt", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;"))
+    expectClipboardWrite(4, "SELECT 1;\n\nSELECT 2;")
 
     // When — Alt+Shift+L copies all queries in tab
     cy.realPress(["Alt", "Shift", "L"])
 
     // Then
-    cy.window()
-      .its("navigator.clipboard")
-      .then((clip) => clip.readText())
-      .should("eq", expectedUrl("SELECT 1;\n\nSELECT 2;\n\nSELECT 3;"))
+    expectClipboardWrite(5, "SELECT 1;\n\nSELECT 2;\n\nSELECT 3;")
   })
 })
 
@@ -2127,17 +2163,17 @@ describe("editor settings", () => {
     cy.getByDataHook("editor-settings-modal").should("be.visible")
   }
 
-  it("toggles 'Run with selection' from the modal and persists it", () => {
-    // Given the setting defaults to on
+  it("changes 'Run with selection' from the modal and persists it", () => {
+    // Given the setting defaults to partial
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").should(
-      "have.attr",
-      "aria-checked",
-      "true",
+      "contain",
+      "Partial queries",
     )
 
-    // When it is switched off and saved
+    // When it is set to off and saved
     cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-off").click()
     cy.getByDataHook("editor-settings-save").click()
     cy.getByDataHook("editor-settings-modal").should("not.exist")
 
@@ -2145,66 +2181,475 @@ describe("editor settings", () => {
     cy.window()
       .its("localStorage")
       .invoke("getItem", "editor.runWithSelection")
-      .should("eq", "false")
+      .should("eq", "off")
 
     // And reopening the modal shows it still off
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").should(
-      "have.attr",
-      "aria-checked",
-      "false",
+      "contain",
+      "Off",
     )
     cy.getByDataHook("editor-settings-cancel").click()
     cy.getByDataHook("editor-settings-modal").should("not.exist")
   })
 
-  it("runs the selected fragment when enabled and the whole query once disabled", () => {
+  // Only the legacy "false" is asserted here: "true" migrates to the same
+  // "partial" the default already produces, so seeding it could not fail.
+  it("migrates a legacy disabled setting to Off on boot", () => {
+    // Given a console booting with the boolean a previous version persisted
+    // under the same key the mode enum now uses
+    cy.loadConsoleWithAuth(false, { "editor.runWithSelection": "false" })
+    cy.getEditorContent().should("be.visible")
+
+    // When the settings modal is opened
+    openEditorSettings()
+
+    // Then the legacy value migrated to Off rather than the partial default
+    cy.getByDataHook("editor-settings-run-with-selection").should(
+      "contain",
+      "Off",
+    )
+    cy.getByDataHook("editor-settings-cancel").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+
+    // And the selection is genuinely ignored, not merely labelled Off
+    const query = `select a from ${runWithSelectionTable}`
+    const startColumn = query.indexOf(runWithSelectionTable) + 1
+    cy.typeQueryDirectly(query)
+    cy.selectRange(
+      { lineNumber: 1, column: startColumn },
+      { lineNumber: 1, column: startColumn + runWithSelectionTable.length },
+    )
+    cy.getByDataHook("button-run-query").should("contain", "Run query")
+    cy.clickRunQuery()
+    cy.get("[data-hook='grid-header-name']").should("have.length", 1)
+  })
+
+  it("resolves the selection per mode: partial fragment, complete query, ignored when off", () => {
     const table = runWithSelectionTable
     const query = `select a from ${table}`
     const startColumn = query.indexOf(table) + 1
     const endColumn = startColumn + table.length
+    const selectTableName = () =>
+      cy.selectRange(
+        { lineNumber: 1, column: startColumn },
+        { lineNumber: 1, column: endColumn },
+      )
+    const setMode = (mode) => {
+      openEditorSettings()
+      cy.getByDataHook("editor-settings-run-with-selection").click()
+      cy.getByDataHook(`run-with-selection-${mode}`).click()
+      cy.getByDataHook("editor-settings-save").click()
+    }
 
     // Given a query selecting one column, with the table name highlighted
     cy.typeQueryDirectly(query)
-    cy.selectRange(
-      { lineNumber: 1, column: startColumn },
-      { lineNumber: 1, column: endColumn },
-    )
+    selectTableName()
 
-    // When 'Run with selection' is enabled (default), the selection runs
+    // When the mode is partial (default), the selection runs as-is
     cy.getByDataHook("button-run-query").should("contain", "Run selected query")
     cy.clickRunQuery()
     // Then the bare table name returns every column
     cy.get("[data-hook='grid-header-name']").should("have.length", 3)
 
-    // When 'Run with selection' is turned off
-    openEditorSettings()
-    cy.getByDataHook("editor-settings-run-with-selection").click()
-    cy.getByDataHook("editor-settings-save").click()
+    // When the mode is set to complete
+    setMode("complete")
 
     // Then the run button reflects the new setting without any further
     // editor interaction
     cy.getByDataHook("button-run-query").should("contain", "Run query")
 
+    // And the same fragment expands to the whole query, returning one column
+    selectTableName()
+    cy.getByDataHook("button-run-query").should("contain", "Run query")
+    cy.clickRunQuery()
+    cy.get("[data-hook='grid-header-name']").should("have.length", 1)
+
+    // When the mode is set to off
+    setMode("off")
+
     // And the same fragment is selected and run again
-    cy.selectRange(
-      { lineNumber: 1, column: startColumn },
-      { lineNumber: 1, column: endColumn },
-    )
+    selectTableName()
     cy.getByDataHook("button-run-query").should("contain", "Run query")
     cy.clickRunQuery()
     // Then the whole cursor query runs, returning only the single column
     cy.get("[data-hook='grid-header-name']").should("have.length", 1)
   })
 
-  it("runs the share-link selection even when 'Run with selection' is off", () => {
+  it("expands a cross-statement selection to both whole queries in complete mode", () => {
+    // Given the mode is set to complete
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-complete").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    // And two statements with a selection cutting into both
+    cy.typeQueryDirectly("select 1; select 2;")
+    cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 1, column: 14 })
+
+    // When both expanded queries run
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run selected queries",
+    )
+    cy.clickRunQuery()
+
+    // Then the second whole query ran last, so its result shows
+    cy.getGridRows().should("have.length", 1)
+    cy.getGridRow(0).should("contain", "2")
+  })
+
+  it("runs the glyph's own query in complete mode while a selection spans both statements", () => {
+    // Given the mode is set to complete
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-complete").click()
+    cy.getByDataHook("editor-settings-save").click()
+
+    const execQueries = []
+    const statements = new Set(["select 1", "select 2"])
+    cy.intercept({ url: "/exec*" }, (request) => {
+      const query = new URL(request.url).searchParams.get("query")
+      if (statements.has(query)) execQueries.push(query)
+      request.continue()
+    })
+
+    // And two statements with a selection whose caret ends inside the second
+    cy.typeQueryDirectly("select 1;\nselect 2;")
+    cy.selectRange({ lineNumber: 1, column: 8 }, { lineNumber: 2, column: 9 })
+    cy.getByDataHook("button-run-query").should(
+      "contain",
+      "Run selected queries",
+    )
+
+    // When the second statement's run glyph is clicked
+    cy.getRunIconInLine(2).click({ force: true })
+
+    // Then that statement runs, never the first one the selection reaches back into
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+    cy.getGridRow(0).should("contain", "2")
+  })
+
+  it("disables run while the selection covers only a comment between statements", () => {
+    // Given a commented-out statement between two live statements
+    cy.typeQueryDirectly("select 1;\n-- old: delete from t\nselect 2;")
+
+    // When a word inside the comment is selected
+    cy.selectRange({ lineNumber: 2, column: 9 }, { lineNumber: 2, column: 15 })
+
+    // Then the run button disables instead of targeting a neighbouring
+    // statement
+    cy.getByDataHook("button-run-query").should("be.disabled")
+
+    // And the keyboard shortcut is also a no-op
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("not.exist")
+
+    // And moving the cursor back into a statement enables it again
+    cy.clickLine(1)
+    cy.getByDataHook("button-run-query").should("not.be.disabled")
+  })
+
+  it("disables run while the selection covers only a statement separator", () => {
+    // Given two statements, the second of which drops a table
+    cy.typeQueryDirectly("select 1;\ndrop table if exists t;")
+
+    // When only the first statement's terminating semicolon and the newline
+    // are selected, leaving the caret inside the second statement
+    cy.selectRange({ lineNumber: 1, column: 9 }, { lineNumber: 2, column: 1 })
+
+    // Then the run button disables rather than targeting the statement the
+    // caret happens to sit in
+    cy.getByDataHook("button-run-query").should("be.disabled")
+
+    // And the keyboard shortcut runs nothing either
+    cy.focused().type(`${ctrlOrCmd}{enter}`)
+    cy.getByDataHook("success-notification").should("not.exist")
+  })
+
+  it("resolves the notebook cell selection per mode: partial, complete, off", () => {
+    const table = runWithSelectionTable
+    const sql = `select a from ${table}; select 33`
+    const tableStart = sql.indexOf(table) + 1
+    const tableEnd = tableStart + table.length
+    // Reaches into the second statement's "sele", cutting both statements.
+    const crossEnd = sql.indexOf("; select") + 8
+
+    const setMode = (mode) => {
+      openEditorSettings()
+      cy.getByDataHook("editor-settings-run-with-selection").click()
+      cy.getByDataHook(`run-with-selection-${mode}`).click()
+      cy.getByDataHook("editor-settings-save").click()
+      cy.getByDataHook("editor-settings-modal").should("not.exist")
+    }
+    const selectCellRange = (startColumn, endColumn) =>
+      cy.withFocusedEditor((editor) =>
+        editor.setSelection({
+          startLineNumber: 1,
+          startColumn,
+          endLineNumber: 1,
+          endColumn,
+        }),
+      )
+    const runCellAtCursor = () =>
+      cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+    const cellResultTabs = () => cy.get("[role='tablist'] [role='tab']")
+
+    // And a resolved notebook whose focused cell holds two statements
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type(sql, { delay: 0 })
+    cy.withFocusedEditor((editor) => {
+      expect(editor.getValue()).to.eq(sql)
+    })
+
+    // Given the first cell exec request is held until the loader is observed
+    let releaseFirstExec
+    cy.intercept(
+      { url: "/exec*", times: 1 },
+      () =>
+        new Cypress.Promise((resolve) => {
+          releaseFirstExec = resolve
+        }),
+    ).as("heldExec")
+
+    // When the mode is partial (default) and the table name is selected
+    selectCellRange(tableStart, tableEnd)
+    runCellAtCursor()
+
+    // Then the table toggle spins while the fragment runs
+    cy.get("[aria-label='View table'][aria-busy='true']").should("exist")
+    cy.wrap(null).should(() => {
+      expect(releaseFirstExec).to.be.a("function")
+    })
+    cy.then(() => releaseFirstExec())
+    cy.wait("@heldExec")
+    cy.get("[aria-label='View table'][aria-busy='true']").should("not.exist")
+
+    // And only the bare fragment ran: a single result with every column
+    cy.get("[data-hook='grid-header-name']:visible").should("have.length", 3)
+    cellResultTabs().should("not.exist")
+    cy.get(".selectionSuccessHighlight").should("exist")
+
+    // When the mode is complete and the selection cuts into both statements
+    setMode("complete")
+    cy.focusNotebookCell()
+    selectCellRange(tableStart, crossEnd)
+    runCellAtCursor()
+
+    // Then both whole statements run to completion, first statement active
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      2,
+    )
+    cy.getByDataHook("result-tab-loading").should("not.exist")
+    cellResultTabs()
+      .eq(0)
+      .should("have.attr", "title", `select a from ${table}`)
+      .and("have.attr", "aria-selected", "true")
+    cellResultTabs().eq(1).should("have.attr", "title", "select 33")
+    cy.get(".selectionSuccessHighlight, .selectionErrorHighlight").should(
+      "not.exist",
+    )
+
+    // When the mode is off and the same selection is made
+    setMode("off")
+    cy.focusNotebookCell()
+    selectCellRange(tableStart, crossEnd)
+    runCellAtCursor()
+
+    // Then only the statement at the cursor runs, ignoring the selection
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      1,
+    )
+    cy.get("[role='tablist'] [data-hook='result-tab-not-run']").should(
+      "have.length",
+      1,
+    )
+    cy.get("[role='tablist'] [role='tab'][aria-selected='true']").should(
+      "have.attr",
+      "title",
+      "select 33",
+    )
+    cy.get("[data-hook='grid-header-name']:visible")
+      .should("have.length", 1)
+      .and("contain", "33")
+  })
+
+  it("runs the whole notebook cell from Run cell and Run All regardless of selection", () => {
+    // Given a cell with two statements and a comment-only selection
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
+    cy.withFocusedEditor((editor) =>
+      editor.setSelection({
+        startLineNumber: 2,
+        startColumn: 1,
+        endLineNumber: 2,
+        endColumn: 8,
+      }),
+    )
+
+    const execQueries = []
+    const cellQueries = new Set(["select 1", "select 2"])
+    cy.intercept({ url: "/exec*" }, (request) => {
+      const query = new URL(request.url).searchParams.get("query")
+      if (cellQueries.has(query)) execQueries.push(query)
+      request.continue()
+    })
+
+    // When Run cell is clicked, the selection does not narrow its scope
+    cy.get("[data-notebook-cell] button[aria-label='Run cell']")
+      .should("contain", "Run")
+      .and("have.attr", "aria-disabled", "false")
+      .click()
+
+    // Then every statement runs
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      2,
+    )
+    cy.wrap(null).should(() => {
+      expect([...execQueries].sort()).to.deep.eq(["select 1", "select 2"])
+    })
+
+    // And Cmd+Shift+Enter runs the whole cell even from the result area
+    cy.get("[role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[role='tablist'] [role='tab']").eq(1).should("have.focus")
+    cy.then(() => {
+      execQueries.length = 0
+    })
+    cy.window().then((win) => {
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", {
+          key: "Enter",
+          shiftKey: true,
+          metaKey: Cypress.platform === "darwin",
+          ctrlKey: Cypress.platform !== "darwin",
+          bubbles: true,
+        }),
+      )
+    })
+    cy.wrap(null).should(() => {
+      expect([...execQueries].sort()).to.deep.eq(["select 1", "select 2"])
+    })
+  })
+
+  it("never widens notebook Cmd+Enter beyond its focused query", () => {
+    // Given a fresh cell whose cursor is in the gap between two statements
+    cy.createNotebook()
+    cy.focusNotebookCell()
+    cy.focused().type("select 1;\n-- note\nselect 2;", { delay: 0 })
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 2, column: 4 }),
+    )
+
+    const execQueries = []
+    const cellQueries = new Set(["select 1", "select 2"])
+    cy.intercept({ url: "/exec*" }, (request) => {
+      const query = new URL(request.url).searchParams.get("query")
+      if (cellQueries.has(query)) execQueries.push(query)
+      request.continue()
+    })
+    const expectNothingToRun = () => {
+      cy.contains(".Toastify__toast--error", "Nothing to run")
+        .should("be.visible")
+        .within(() => {
+          cy.get("button[aria-label='close']").click()
+        })
+      cy.then(() => expect(execQueries).to.deep.eq([]))
+    }
+
+    // When Cmd+Enter is pressed in Monaco with no query at the cursor
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+
+    // Then it is a no-op, never an implicit Run All
+    expectNothingToRun()
+    cy.get("[data-hook='result-grid-tanstack']:visible").should("not.exist")
+
+    // When only the second statement is run
+    cy.focusNotebookCell()
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 3, column: 4 }),
+    )
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+
+    // Then both statement tabs fit alongside a fully visible result row
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+    cy.get("[role='tablist'] [data-hook='result-tab-not-run']").should(
+      "have.length",
+      1,
+    )
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      1,
+    )
+    cy.getGridRow(0).should("be.visible").and("contain", "2")
+    cy.then(() => {
+      execQueries.length = 0
+    })
+
+    // Given an explicit Run All has created a result tab for each statement
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run-all").run())
+    cy.get("[role='tablist'] [data-hook='result-tab-success']").should(
+      "have.length",
+      2,
+    )
+    cy.then(() => {
+      execQueries.length = 0
+    })
+
+    // When the second result tab has focus and Cmd+Enter is pressed
+    cy.get("[role='tablist'] [role='tab']").eq(1).click()
+    cy.get("[role='tablist'] [role='tab']")
+      .eq(1)
+      .should("have.focus")
+      .and("have.attr", "title", "select 2")
+    cy.window().then((win) => {
+      win.dispatchEvent(
+        new win.KeyboardEvent("keydown", {
+          key: "Enter",
+          metaKey: Cypress.platform === "darwin",
+          ctrlKey: Cypress.platform !== "darwin",
+          bubbles: true,
+        }),
+      )
+    })
+
+    // Then only that tab's statement runs
+    cy.wrap(null).should(() => {
+      expect(execQueries).to.deep.eq(["select 2"])
+    })
+
+    // And the same active tab never becomes a fallback for Monaco
+    cy.focusNotebookCell()
+    cy.withFocusedEditor((editor) =>
+      editor.setPosition({ lineNumber: 2, column: 4 }),
+    )
+    cy.then(() => {
+      execQueries.length = 0
+    })
+    cy.withFocusedEditor((editor) => editor.getAction("notebook-run").run())
+    expectNothingToRun()
+  })
+
+  it("isolates a shared fragment that only matches part of a query", () => {
     // Given the setting is turned off
     openEditorSettings()
     cy.getByDataHook("editor-settings-run-with-selection").click()
+    cy.getByDataHook("run-with-selection-off").click()
     cy.getByDataHook("editor-settings-save").click()
 
-    // And a buffer whose statement contains the shared fragment
+    // And a persisted buffer whose statement contains the shared fragment
     cy.typeQueryDirectly("select 1 union all select 2;")
+    cy.waitForActiveBufferValue("select 1 union all select 2;")
+    cy.reload()
+    cy.getEditorContent().should("have.value", "select 1 union all select 2;")
 
     // When a share link for the fragment auto-runs
     cy.visit(
@@ -2212,7 +2657,11 @@ describe("editor settings", () => {
     )
     cy.getEditorContent().should("be.visible")
 
-    // Then only the selected fragment runs, not the containing statement
+    // Then the fragment opens in its own buffer and only that SQL runs
+    cy.getEditorTabByTitle("Shared Query")
+      .should("be.visible")
+      .should("have.attr", "active")
+    cy.getEditorContent().should("have.value", "select 2")
     cy.getGridRows().should("have.length", 1)
     cy.getGridRow(0).should("contain", "2")
   })

@@ -60,7 +60,7 @@ export const CellRunDrawToggles: React.FC<Props> = ({
 }) => (
   <NotebookViewToggle role="group" aria-label="Cell execution mode">
     <Tooltip
-      content={runActive ? "Hide result" : `Run (${ctrlCmd}+Shift+Enter)`}
+      content={runActive ? "Hide result" : `Run cell (${ctrlCmd}+Shift+Enter)`}
     >
       <ToggleButton
         type="button"
@@ -79,7 +79,7 @@ export const CellRunDrawToggles: React.FC<Props> = ({
           }
           onRun()
         }}
-        aria-label={runActive ? "Hide result" : "Run"}
+        aria-label={runActive ? "Hide result" : "Run cell"}
       >
         <PlayIcon weight="fill" />
         {showLabels && "Run"}
