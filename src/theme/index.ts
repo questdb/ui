@@ -92,7 +92,6 @@ export const darkColors: ColorShape = {
   contentDisabled: "#747985",
   contentAccent: "#f0428b",
   contentAccentStrong: "#ee2b7c",
-  contentObject: "#81d3f9",
   contentSearchMatch: "rgb(163, 127, 96)",
 
   // Borders
@@ -106,14 +105,15 @@ export const darkColors: ColorShape = {
   interactionNeutral: "#32343e",
   interactionNeutralHover: "#292b35",
   interactionHover: "#ffffff0e",
-  interactionAccentHover: "rgba(240, 66, 139, 0.08)",
   interactionAccentActive: "rgba(240, 66, 139, 0.10)",
+  interactionSelected: "#ffffff1c",
   interactionGuide: "#6272a4",
   scrollbarThumb: "rgba(255, 255, 255, 0.13)",
   controlSurface: "#262833",
   controlSurfaceHover: "#32343e",
   controlTrack: "#262833",
-  controlKnob: "#f8f8f2",
+  controlTrackRest: "#262833",
+  controlTrackStroke: "rgba(255, 255, 255, 0.15)",
 
   // Actions and status
   actionPrimary: "#bd0f58",
@@ -133,12 +133,12 @@ export const darkColors: ColorShape = {
   statusSuccessBorder: "rgba(102, 187, 106, 0.24)",
   statusWarning: "#ffd54f",
   statusWarningSurface: "rgba(255, 213, 79, 0.10)",
-  statusWarningSurfaceHover: "rgba(255, 213, 79, 0.16)",
   statusAttention: "#e3ce78",
   statusInfo: "#81d3f9",
   statusInfoSubtle: "#b2e7ff",
   statusInfoControl: "#0c80f3",
   statusInfoSurface: "rgba(178, 231, 255, 0.05)",
+  statusInfoSurfaceStrong: "rgba(21, 156, 193, 0.30)",
   statusFeature: "#a99de8",
 
   // Shadows
@@ -163,7 +163,6 @@ export const darkColors: ColorShape = {
   gridRow: "#17181d",
   gridHeader: "#202126",
   gridSelection: "#252830",
-  gridFocus: "#6b7382",
 
   // Editor
   editorCanvas: "#17181d",
@@ -252,7 +251,6 @@ export const lightColors: ColorShape = {
   contentDisabled: "#596271",
   contentAccent: "#bd0f58",
   contentAccentStrong: "#8e0b42",
-  contentObject: "#b81447",
   contentSearchMatch: "rgba(202, 139, 44, 0.32)",
 
   // Borders
@@ -266,14 +264,15 @@ export const lightColors: ColorShape = {
   interactionNeutral: "#e8eaee",
   interactionNeutralHover: "#e2e5ea",
   interactionHover: "#1c202913",
-  interactionAccentHover: "rgba(189, 15, 88, 0.08)",
   interactionAccentActive: "rgba(189, 15, 88, 0.13)",
+  interactionSelected: "#1c202926",
   interactionGuide: "#56657f",
   scrollbarThumb: "#d7dbe3",
   controlSurface: "#f6f7f8",
   controlSurfaceHover: "#e7e9ed",
   controlTrack: "#e8eaee",
-  controlKnob: "#505968",
+  controlTrackRest: "#c9cdd4",
+  controlTrackStroke: "rgba(28, 32, 41, 0.25)",
 
   // Actions and status
   actionPrimary: "#8e0b42",
@@ -293,12 +292,12 @@ export const lightColors: ColorShape = {
   statusSuccessBorder: "rgba(8, 122, 80, 0.28)",
   statusWarning: "#8a570f",
   statusWarningSurface: "rgba(145, 82, 15, 0.14)",
-  statusWarningSurfaceHover: "rgba(145, 82, 15, 0.2)",
   statusAttention: "#745c00",
   statusInfo: "#176f87",
   statusInfoSubtle: "#159cc1",
   statusInfoControl: "#0a88db",
   statusInfoSurface: "rgba(21, 156, 193, 0.10)",
+  statusInfoSurfaceStrong: "rgba(21, 156, 193, 0.10)",
   statusFeature: "#6553aa",
 
   // Shadows
@@ -323,7 +322,6 @@ export const lightColors: ColorShape = {
   gridRow: "#f4f5f7",
   gridHeader: "#e7eaee",
   gridSelection: "#d8dce3",
-  gridFocus: "#828b99",
 
   // Editor
   editorCanvas: "#eef0f3",

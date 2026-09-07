@@ -155,8 +155,7 @@ const ColorSlider = styled.input.attrs({ type: "range", min: 0, max: 255 })`
   }
 
   &:focus-visible {
-    outline: 1px solid
-      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 

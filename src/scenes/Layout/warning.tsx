@@ -66,8 +66,7 @@ const WorkaroundLink = styled.a`
   }
 
   &:focus-visible {
-    outline: 1px solid
-      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
     border-radius: 0.2rem;
   }

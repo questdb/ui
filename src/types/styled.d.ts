@@ -45,7 +45,6 @@ export type ColorShape = {
   neutralInk: string
   contentAccent: string
   contentAccentStrong: string
-  contentObject: string
   contentSearchMatch: string
   borderSubtle: string
   borderDefault: string
@@ -55,14 +54,15 @@ export type ColorShape = {
   interactionNeutral: string
   interactionNeutralHover: string
   interactionHover: string
-  interactionAccentHover: string
   interactionAccentActive: string
+  interactionSelected: string
   interactionGuide: string
   scrollbarThumb: string
   controlSurface: string
   controlSurfaceHover: string
   controlTrack: string
-  controlKnob: string
+  controlTrackRest: string
+  controlTrackStroke: string
   actionPrimary: string
   actionPrimaryHover: string
   statusDanger: string
@@ -80,12 +80,12 @@ export type ColorShape = {
   statusSuccessBorder: string
   statusWarning: string
   statusWarningSurface: string
-  statusWarningSurfaceHover: string
   statusAttention: string
   statusInfo: string
   statusInfoSubtle: string
   statusInfoControl: string
   statusInfoSurface: string
+  statusInfoSurfaceStrong: string
   statusFeature: string
   statusAssistant: string
   statusAssistantStrong: string
@@ -104,7 +104,6 @@ export type ColorShape = {
   gridRow: string
   gridHeader: string
   gridSelection: string
-  gridFocus: string
   editorCanvas: string
   editorBorder: string
   editorSelection: string

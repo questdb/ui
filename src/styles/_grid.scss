@@ -268,19 +268,12 @@ $drag-handle-margin: 2px;
       theme-color(statusInfoSurface),
       theme-color(statusInfoSurface)
     ),
-    linear-gradient(rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.11)),
+    linear-gradient(
+      theme-color(interactionSelected),
+      theme-color(interactionSelected)
+    ),
     theme-color(gridRow);
   border-radius: 0.4rem;
-}
-
-html[data-theme="light"] .qg-c-active {
-  background:
-    linear-gradient(
-      theme-color(statusInfoSurface),
-      theme-color(statusInfoSurface)
-    ),
-    linear-gradient(rgba(28, 32, 41, 0.15), rgba(28, 32, 41, 0.15)),
-    theme-color(gridRow);
 }
 
 .qg-c-active-pulse {

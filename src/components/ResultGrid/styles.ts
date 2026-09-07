@@ -1,5 +1,4 @@
 import styled, { css, keyframes } from "styled-components"
-import { withAlpha } from "../../theme"
 import { color } from "../../utils"
 import { CopyButton } from "../CopyButton"
 import {
@@ -17,12 +16,6 @@ import {
 } from "./dimensions"
 
 export { HEADER_HEIGHT, ROW_HEIGHT }
-
-/** Exactly 2× `interactionHover`: white 11% dark, ink 15% light. */
-const selectionWash = (theme: { mode: string; color: { contentPrimary: string } }) =>
-  theme.mode === "light"
-    ? withAlpha(theme.color.contentPrimary, 0.15)
-    : "rgba(255, 255, 255, 0.11)"
 
 export const GridContainer = styled.div`
   flex: 1;
@@ -181,7 +174,10 @@ export const Row = styled.div<{ $active: boolean }>`
     $active &&
     css`
       background:
-        linear-gradient(${selectionWash(theme)}, ${selectionWash(theme)}),
+        linear-gradient(
+          ${theme.color.interactionSelected},
+          ${theme.color.interactionSelected}
+        ),
         ${theme.color.gridRow};
     `}
 
@@ -246,7 +242,7 @@ export const Cell = styled.div<{
     $frozen &&
     css`
       background: ${$rowActive
-        ? `linear-gradient(${selectionWash(theme)}, ${selectionWash(theme)}), ${theme.color.gridRow}`
+        ? `linear-gradient(${theme.color.interactionSelected}, ${theme.color.interactionSelected}), ${theme.color.gridRow}`
         : color("gridRow")};
     `}
 
@@ -258,7 +254,10 @@ export const Cell = styled.div<{
           ${theme.color.statusInfoSurface},
           ${theme.color.statusInfoSurface}
         ),
-        linear-gradient(${selectionWash(theme)}, ${selectionWash(theme)}),
+        linear-gradient(
+          ${theme.color.interactionSelected},
+          ${theme.color.interactionSelected}
+        ),
         ${theme.color.gridRow};
       border-right-color: transparent;
       border-bottom-color: transparent;
@@ -269,8 +268,8 @@ export const Cell = styled.div<{
   ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${pulseAnim(theme.color.statusInfo, theme.color.transparent)} 1s
-        ease-out;
+      animation: ${pulseAnim(theme.color.statusInfo, theme.color.transparent)}
+        1s ease-out;
     `}
 `
 

@@ -11,7 +11,6 @@ type Props = {
   checked?: boolean
   id?: string
   ariaDescribedBy?: string
-  tone?: "accent" | "success"
   size?: "sm" | "md"
   "aria-label"?: string
 }
@@ -26,14 +25,6 @@ const thumb = {
   md: { width: "24px", height: "16px", radius: "6px" },
 } as const
 
-const restStroke = (mode: "light" | "dark") =>
-  mode === "light" ? "rgba(28, 32, 41, 0.25)" : "rgba(255, 255, 255, 0.15)"
-
-const restTrack = (theme: {
-  mode: "light" | "dark"
-  color: { controlTrack: string }
-}) => (theme.mode === "light" ? "#c9cdd4" : theme.color.controlTrack)
-
 const Root = styled(SwitchPrimitive.Root)<{
   $size: "sm" | "md"
 }>`
@@ -46,7 +37,7 @@ const Root = styled(SwitchPrimitive.Root)<{
   height: ${({ $size }) => track[$size].height};
   border-radius: ${({ $size }) => track[$size].radius};
   border: none;
-  box-shadow: inset 0 0 0 0.5px ${({ theme }) => restStroke(theme.mode)};
+  box-shadow: inset 0 0 0 0.5px ${({ theme }) => theme.color.controlTrackStroke};
   appearance: none;
   position: relative;
   overflow: hidden;
@@ -55,26 +46,28 @@ const Root = styled(SwitchPrimitive.Root)<{
     box-shadow 120ms ease,
     opacity 120ms ease;
   cursor: pointer;
-  background: ${({ theme }) => restTrack(theme)};
+  background: ${({ theme }) => theme.color.controlTrackRest};
 
   &:hover:not([data-disabled]) {
-    box-shadow: inset 0 0 0 0.5px ${({ theme }) => restStroke(theme.mode)};
+    box-shadow: inset 0 0 0 0.5px
+      ${({ theme }) => theme.color.controlTrackStroke};
   }
 
   &:focus-visible {
-    outline: 1px solid
-      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 
   &[data-state="checked"] {
     background: ${({ theme }) => theme.color.statusSuccessFill};
-    box-shadow: inset 0 0 0 0.5px ${({ theme }) => restStroke(theme.mode)};
+    box-shadow: inset 0 0 0 0.5px
+      ${({ theme }) => theme.color.controlTrackStroke};
   }
 
   &[data-state="checked"]:hover:not([data-disabled]) {
     background: ${({ theme }) => theme.color.statusSuccessFill};
-    box-shadow: inset 0 0 0 0.5px ${({ theme }) => restStroke(theme.mode)};
+    box-shadow: inset 0 0 0 0.5px
+      ${({ theme }) => theme.color.controlTrackStroke};
   }
 
   &[data-disabled],

@@ -246,7 +246,6 @@ const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
-  color: ${color("contentSecondary")};
   margin-right: 1rem;
 `
 

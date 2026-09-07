@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from "react"
 import styled, { useTheme } from "styled-components"
+import { withAlpha } from "../../theme"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
@@ -204,9 +205,7 @@ const StatusChip = styled.span<{ $enabled: boolean }>`
   border: ${({ $enabled, theme }) =>
     theme.mode === "light"
       ? `1px solid ${
-          $enabled
-            ? theme.color.statusSuccessBorder
-            : theme.color.borderDefault
+          $enabled ? theme.color.statusSuccessBorder : theme.color.borderDefault
         }`
       : 0};
 `
@@ -330,9 +329,10 @@ const ResetProviderButton = styled(Button).attrs({ variant: "ghost" })`
 
   &&:hover:not(:disabled):not([aria-disabled="true"]) {
     background: ${({ theme }) =>
-      theme.mode === "light"
-        ? "rgba(189, 40, 40, 0.1)"
-        : "rgba(219, 36, 36, 0.3)"};
+      withAlpha(
+        theme.color.statusDangerSurface,
+        theme.mode === "light" ? 0.1 : 0.3,
+      )};
     color: ${({ theme }) => theme.color.statusDanger};
   }
 

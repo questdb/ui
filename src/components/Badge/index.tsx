@@ -104,11 +104,7 @@ const Root = styled.span<{
   height: ${({ $shape, $size }) =>
     $shape === "pill" ? ($size === "sm" ? "2rem" : "2.8rem") : "auto"};
   padding: ${({ $shape, $size }) =>
-    $shape === "pill"
-      ? $size === "sm"
-        ? "0 0.5rem"
-        : "0 0.9rem"
-      : "0.5rem"};
+    $shape === "pill" ? ($size === "sm" ? "0 0.5rem" : "0 0.9rem") : "0.5rem"};
   border: ${({ $shape, $variant, theme }) =>
     $shape === "pill"
       ? `1px solid ${withAlpha(getTone($variant, theme), 0.32)}`

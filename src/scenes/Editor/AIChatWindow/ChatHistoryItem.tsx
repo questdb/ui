@@ -40,8 +40,7 @@ const Container = styled.div<{ $disabled?: boolean }>`
   }
 
   &:focus-visible {
-    outline: 1px solid
-      ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 `
