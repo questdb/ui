@@ -103,6 +103,48 @@ const clearRunningCell = (
   })
 }
 
+const cancelledByUser = (query: string): SingleQueryResult => ({
+  type: "cancelled",
+  query,
+  reason: "user",
+})
+
+const cancelledExecResult = (query: string): QueryExecResult => ({
+  type: "error",
+  query,
+  columns: [],
+  dataset: [],
+  count: 0,
+  error: "Cancelled by user",
+})
+
+type StatementLaunch =
+  | { launched: true; exec: QueryExecResult }
+  | { launched: false }
+
+// The limiter rejects a queued statement when its signal aborts, before any
+// request exists. Only a launched statement can have reached the server, so
+// only that one lands as the unverifiable "Cancelled by user" error; a queued
+// one is plainly cancelled.
+export const launchStatement = async (
+  execute: () => Promise<QueryExecResult>,
+  signal: AbortSignal,
+  query: string,
+): Promise<StatementLaunch> => {
+  let launched = false
+  try {
+    const exec = await statementRequestLimiter(() => {
+      launched = true
+      return execute()
+    }, signal)
+    return { launched: true, exec }
+  } catch {
+    return launched
+      ? { launched: true, exec: cancelledExecResult(query) }
+      : { launched: false }
+  }
+}
+
 type Options = {
   bufferId: number
   cellsRef: MutableRefObject<NotebookCell[]>
@@ -238,28 +280,22 @@ export const useCellExecution = ({
 
       let successCount = 0
       let failedCount = 0
+      let cancelledCount = 0
+      const runSucceeded = () => failedCount === 0 && cancelledCount === 0
+      const cancelFrom = (index: number) => {
+        for (let j = index; j < queries.length; j++) {
+          const cancelled = cancelledByUser(queries[j])
+          finalResults[j] = cancelled
+          updateCellResult(cellId, j, cancelled)
+        }
+        cancelledCount += queries.length - index
+      }
 
       try {
         for (let i = 0; i < queries.length; i++) {
           const perQuery = controllers[i]
           if (perQuery.signal.aborted) {
-            failedCount++
-            const interrupted: SingleQueryResult = {
-              type: "error",
-              query: queries[i],
-              error: "Cancelled by user",
-            }
-            finalResults[i] = interrupted
-            updateCellResult(cellId, i, interrupted)
-            for (let j = i + 1; j < queries.length; j++) {
-              const skipped: SingleQueryResult = {
-                type: "cancelled",
-                query: queries[j],
-                reason: "priorFailure",
-              }
-              finalResults[j] = skipped
-              updateCellResult(cellId, j, skipped)
-            }
+            cancelFrom(i)
             break
           }
 
@@ -272,29 +308,23 @@ export const useCellExecution = ({
             isAuto ? i : undefined,
           )
 
-          let result: QueryExecResult
-          try {
-            result = await statementRequestLimiter(
-              () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
-              perQuery.signal,
-            )
-          } catch {
-            result = {
-              type: "error",
-              query: sql,
-              columns: [],
-              dataset: [],
-              count: 0,
-              error: "Cancelled by user",
-            }
-          }
+          const launch = await launchStatement(
+            () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
+            perQuery.signal,
+            sql,
+          )
           if (!isCurrentRun()) {
             return {
-              ok: failedCount === 0,
+              ok: runSucceeded(),
               superseded: true,
               cancelled: cancellationOf(controllers),
             }
           }
+          if (!launch.launched) {
+            cancelFrom(i)
+            break
+          }
+          const result = launch.exec
           const landed = singleResultFromExec(result, sql)
           finalResults[i] = landed
           updateCellResult(cellId, i, landed)
@@ -302,14 +332,20 @@ export const useCellExecution = ({
 
           if (result.type === "error") {
             failedCount++
-            for (let j = i + 1; j < queries.length; j++) {
-              const cancelled: SingleQueryResult = {
-                type: "cancelled",
-                query: queries[j],
-                reason: "priorFailure",
+            // An aborted statement ends the script by the user's hand, not by
+            // a failure: the rest is cancelled, not skipped.
+            if (perQuery.signal.aborted) {
+              cancelFrom(i + 1)
+            } else {
+              for (let j = i + 1; j < queries.length; j++) {
+                const skipped: SingleQueryResult = {
+                  type: "cancelled",
+                  query: queries[j],
+                  reason: "priorFailure",
+                }
+                finalResults[j] = skipped
+                updateCellResult(cellId, j, skipped)
               }
-              finalResults[j] = cancelled
-              updateCellResult(cellId, j, cancelled)
             }
             break
           }
@@ -319,7 +355,7 @@ export const useCellExecution = ({
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
         if (!liveCell) {
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             resultCleared: true,
           }
@@ -331,7 +367,7 @@ export const useCellExecution = ({
         )
         if (completion === "result_cleared") {
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             resultCleared: true,
           }
@@ -339,7 +375,7 @@ export const useCellExecution = ({
         if (completion === "cell_changed") {
           updateCell(cellId, { result: priorResult })
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             cellChanged: true,
           }
@@ -373,7 +409,7 @@ export const useCellExecution = ({
       }
 
       return {
-        ok: failedCount === 0,
+        ok: runSucceeded(),
         superseded: false,
         result: {
           results: finalResults,
@@ -477,6 +513,14 @@ export const useCellExecution = ({
       setRunningCellIds((prev) => new Set(prev).add(cellId))
 
       let failedCount = 0
+      let cancelledCount = 0
+      const runSucceeded = () => failedCount === 0 && cancelledCount === 0
+      const cancelStatement = (index: number, sql: string) => {
+        cancelledCount++
+        const cancelled = cancelledByUser(sql)
+        finalResults[index] = cancelled
+        if (isCurrentRun()) updateCellResult(cellId, index, cancelled)
+      }
       try {
         await Promise.all(
           queries.map(async (sql, index) => {
@@ -494,34 +538,21 @@ export const useCellExecution = ({
             }
             const perQuery = controllers[index]
             if (perQuery.signal.aborted) {
-              failedCount++
-              const interrupted: SingleQueryResult = {
-                type: "error",
-                query: sql,
-                error: "Cancelled by user",
-              }
-              finalResults[index] = interrupted
-              if (isCurrentRun()) updateCellResult(cellId, index, interrupted)
+              cancelStatement(index, sql)
               return
             }
             updateCellResult(cellId, index, { type: "running", query: sql })
-            let result: QueryExecResult
-            try {
-              result = await statementRequestLimiter(
-                () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
-                perQuery.signal,
-              )
-            } catch {
-              result = {
-                type: "error",
-                query: sql,
-                columns: [],
-                dataset: [],
-                count: 0,
-                error: "Cancelled by user",
-              }
-            }
+            const launch = await launchStatement(
+              () => executeSingle(sql, perQuery.signal, NOTEBOOK_ROW_CAP),
+              perQuery.signal,
+              sql,
+            )
             if (!isCurrentRun()) return
+            if (!launch.launched) {
+              cancelStatement(index, sql)
+              return
+            }
+            const result = launch.exec
             const landed = singleResultFromExec(result, sql)
             finalResults[index] = landed
             updateCellResult(cellId, index, landed)
@@ -531,7 +562,7 @@ export const useCellExecution = ({
 
         if (!isCurrentRun()) {
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: true,
             cancelled: cancellationOf(controllers),
           }
@@ -539,7 +570,7 @@ export const useCellExecution = ({
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
         if (!liveCell) {
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             resultCleared: true,
           }
@@ -551,7 +582,7 @@ export const useCellExecution = ({
         )
         if (completion === "result_cleared") {
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             resultCleared: true,
           }
@@ -559,7 +590,7 @@ export const useCellExecution = ({
         if (completion === "cell_changed") {
           updateCell(cellId, { result: priorResult })
           return {
-            ok: failedCount === 0,
+            ok: runSucceeded(),
             superseded: false,
             cellChanged: true,
           }
@@ -575,7 +606,7 @@ export const useCellExecution = ({
         }
         if (queries.length > 1) {
           setScriptSummary(cellId, {
-            successCount: queries.length - failedCount,
+            successCount: queries.length - failedCount - cancelledCount,
             failedCount,
             durationMs: Date.now() - startTime,
           })
@@ -595,7 +626,7 @@ export const useCellExecution = ({
       }
 
       return {
-        ok: failedCount === 0,
+        ok: runSucceeded(),
         superseded: false,
         result: {
           results: finalResults,
@@ -740,38 +771,24 @@ export const useCellExecution = ({
 
       setRunningCellIds((prev) => new Set(prev).add(cellId))
       try {
-        let execResult: QueryExecResult
-        try {
-          execResult = await statementRequestLimiter(
-            () => executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
-            ac.signal,
-          )
-        } catch {
-          execResult = {
-            type: "error",
-            query: queryText,
-            columns: [],
-            dataset: [],
-            count: 0,
-            error: "Cancelled by user",
-          }
-        }
+        const launch = await launchStatement(
+          () => executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
+          ac.signal,
+          queryText,
+        )
+        const ok = launch.launched && launch.exec.type !== "error"
         // A newer run (or a cancel) superseded this one; don't write its result.
         if (!isCurrentRun()) {
           return {
-            ok: execResult.type !== "error",
+            ok,
             superseded: true,
             cancelled: cancellationOf([ac]),
           }
         }
-        publishSchemaIfMutating(execResult)
+        if (launch.launched) publishSchemaIfMutating(launch.exec)
         const liveCell = cellsRef.current.find((c) => c.id === cellId)
         if (!liveCell) {
-          return {
-            ok: execResult.type !== "error",
-            superseded: false,
-            resultCleared: true,
-          }
+          return { ok, superseded: false, resultCleared: true }
         }
         const completion = resolveRunCompletion(
           liveCell,
@@ -779,22 +796,18 @@ export const useCellExecution = ({
           expectFullValue,
         )
         if (completion === "result_cleared") {
-          return {
-            ok: execResult.type !== "error",
-            superseded: false,
-            resultCleared: true,
-          }
+          return { ok, superseded: false, resultCleared: true }
         }
         if (completion === "cell_changed") {
           updateCell(cellId, { result: priorResult })
-          return {
-            ok: execResult.type !== "error",
-            superseded: false,
-            cellChanged: true,
-          }
+          return { ok, superseded: false, cellChanged: true }
         }
         const cellResult: CellResult = {
-          results: [singleResultFromExec(execResult, recordedQuery)],
+          results: [
+            launch.launched
+              ? singleResultFromExec(launch.exec, recordedQuery)
+              : cancelledByUser(recordedQuery),
+          ],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
@@ -803,11 +816,7 @@ export const useCellExecution = ({
           ...runHistoryPatch(cellResult),
         })
         persistSnapshot(cellId, cellResult)
-        return {
-          ok: execResult.type !== "error",
-          superseded: false,
-          result: cellResult,
-        }
+        return { ok, superseded: false, result: cellResult }
       } finally {
         externalSignal?.removeEventListener("abort", onExternalAbort)
         if (isCurrentRun()) {
@@ -944,7 +953,8 @@ export const useCellExecution = ({
 
   // Silently discard an in-flight run: no cancelled markers, no snapshot
   // delete. For ownership hand-offs (run→draw) where the chart engine takes
-  // over and the run must simply stop writing.
+  // over, and for a deleted cell; the run stops writing and reports the
+  // reason it was aborted with.
   const abortCellRun = useCallback(
     (cellId: string, reason: RunCancelReason) => {
       barrierAbortsRef.current.get(cellId)?.forEach((ac) => ac.abort(reason))

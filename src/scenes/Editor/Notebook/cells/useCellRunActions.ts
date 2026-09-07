@@ -73,6 +73,9 @@ export const useCellRunActions = ({
       })
       return false
     }
+    // A draw from an empty cell is its first run: the gate's validation is
+    // the phase the Stop button can end.
+    firstRunRef.current = cell.result == null
     const gate = await validateForDraw(cell.id)
     if (!gate.granted) {
       if (gate.reason !== undefined) {
@@ -91,6 +94,7 @@ export const useCellRunActions = ({
     return true
   }, [
     cell.id,
+    cell.result,
     isRunning,
     isDrawMode,
     setCellMode,

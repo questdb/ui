@@ -123,7 +123,8 @@ export type NotebookController = {
 
 // The subset of the live provider's actions the live controller composes over.
 // `applyTransition` runs a transition against React state (cancelling any run of
-// a deleted cell via its cleanup list); the reads are synchronous ref snapshots.
+// a deleted cell via its cleanup list) and settles once the document is
+// durable; the reads are synchronous ref snapshots.
 export type NotebookControllerActions = {
   readRefreshState: () => ReadonlyMap<string, CellRefreshView>
   readResultStatus: (cellId: string) => CellResultStatus
@@ -136,7 +137,7 @@ export type NotebookControllerActions = {
   ) => Promise<CellRunOutcome>
   applyTransition: <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
-  ) => T
+  ) => Promise<T>
   getCellsSnapshot: () => NotebookCell[]
   getSettings: () => NotebookSettings
   getMaximizedCellId: () => string | null
@@ -174,8 +175,9 @@ export const createNotebookController = (
   liveActionsRef: { current: NotebookControllerActions },
 ): NotebookController => {
   // The live surface's transition runner: apply the transition to React state
-  // (synchronously, via the provider's applyTransition), then normalize to a
-  // Promise so a transition's typed throw reaches the agent as a rejection.
+  // via the provider's applyTransition, which settles once the document is
+  // durable; the try normalizes a transition's synchronous typed throw into
+  // the same rejection channel.
   const applyMutation = <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ): Promise<T> => {

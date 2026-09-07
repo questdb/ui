@@ -30,6 +30,8 @@ export const notebookErrorHint = (code: NotebookToolErrorCode): string => {
       return "The notebook is at its cell limit. Delete a cell first, or restructure with apply_notebook_state."
     case "cell_too_large":
       return "The value exceeds the per-cell line limit. Split it across multiple cells."
+    case "persist_failed":
+      return "The change is applied in the open notebook but was not saved to local storage. Tell the user to free up space (clear old query history or notebooks). Call get_notebook_state to re-sync; do not repeat the change."
     case "validation":
       return "Correct the invalid notebook field and retry."
     default:

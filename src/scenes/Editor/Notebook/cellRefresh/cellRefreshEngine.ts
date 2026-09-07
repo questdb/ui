@@ -82,6 +82,9 @@ export type CellFetchState = {
   // after a partial round the succeeded slots are newer than their siblings.
   // Memory-only — a reload falls back to the frame's saved time.
   slotFetchedAt: ReadonlyMap<StatementKey, number>
+  // The user stopped the in-flight round. Until the next round starts, a
+  // chart with no data settles on a cancelled state instead of loading.
+  fetchCancelled: boolean
 }
 
 export type CellRefreshDeps = {
@@ -130,6 +133,7 @@ export const pendingCellFetchState = (sql: string): CellFetchState => {
     slotErrors: new Map(),
     cancelledSlots: new Set(),
     slotFetchedAt: new Map(),
+    fetchCancelled: false,
   }
 }
 
@@ -140,10 +144,12 @@ export const deriveChartLoading = (
 ): { loading: boolean; refreshing: boolean } => {
   const hasData =
     chartResult.kind === "settled" && chartResult.results.length > 0
+  const cancelled = state.fetchCancelled && !resultLoading
   const loading =
     state.queries.length > 0 &&
     state.classifyBlock === null &&
     !hasData &&
+    !cancelled &&
     (state.settledKey !== state.queriesKey ||
       resultLoading ||
       (state.fetching && chartResult.kind !== "settled"))
@@ -391,6 +397,16 @@ export class CellRefreshEngine {
   // execution; before the barrier it drops the execution intent only — the
   // validation still completes, so the barrier settles with every class known
   // and one DDL/DML statement still blocks the cell.
+  // Stops a chart's in-flight round. The marker lets a chart with no data
+  // settle on a cancelled state instead of spinning; the next round clears it.
+  cancelChartFetch(cellId: string) {
+    const entry = this.entries.get(cellId)
+    if (!entry || entry.kind !== "chart" || !entry.inFlight) return
+    this.abortRound(entry)
+    entry.manualRefreshInFlight = false
+    this.setState(entry, { fetchCancelled: true })
+  }
+
   cancelSlot(cellId: string, statementKey: StatementKey) {
     const entry = this.entries.get(cellId)
     if (!entry || entry.kind !== "grid") return
@@ -764,6 +780,7 @@ export class CellRefreshEngine {
       fetching: false,
       slotFetching: new Set(),
       cancelledSlots: new Set(),
+      fetchCancelled: false,
       slotErrors,
       slotFetchedAt,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
@@ -994,6 +1011,7 @@ export class CellRefreshEngine {
         slotFetching: new Set(),
         slotErrors: new Map(),
         cancelledSlots: new Set(),
+        fetchCancelled: false,
       })
       if (entry.kind === "chart") this.clearCellData(entry)
       return
@@ -1032,7 +1050,11 @@ export class CellRefreshEngine {
     }
     const ac = new AbortController()
     entry.inFlight = ac
-    this.setState(entry, { fetching: true, cancelledSlots: new Set() })
+    this.setState(entry, {
+      fetching: true,
+      cancelledSlots: new Set(),
+      fetchCancelled: false,
+    })
     const start = performance.now()
     // A refresh-all click on a polling cell redeems itself through the poll
     // loop's first tick, so the manual intent rides on the entry, not the call.

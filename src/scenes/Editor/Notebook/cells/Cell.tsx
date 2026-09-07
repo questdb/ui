@@ -9,6 +9,7 @@ import { CellDragHeader } from "./CellDragHeader"
 import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
 import { CellViewToggle } from "./CellViewToggle"
+import { CellStopButton } from "./CellStopButton"
 import { CellNameLabel } from "./CellNameLabel"
 import { useChartLoading } from "./useChartLoading"
 import { useChartZoomed } from "./useChartZoomed"
@@ -44,6 +45,7 @@ import {
   useCellVirtualizationEngine,
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
+import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
@@ -159,6 +161,7 @@ const CellInner: React.FC<Props> = ({
   const { loading: chartLoading, refreshing: chartRefreshing } =
     useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
+  const fetchState = useCellFetchState(cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()
   const resultStatus = useCellResultStatus(cell.id)
@@ -299,6 +302,12 @@ const CellInner: React.FC<Props> = ({
     applyHighlight,
     clearHighlight,
   })
+
+  // Stop exists for the first run or the first chart fetch only: a refresh
+  // keeps its rows or frame on screen and never locks the cell.
+  const showStopButton = isDrawMode
+    ? chartLoading && (fetchState?.fetching ?? false)
+    : isGridLoading
 
   const isExternalSyncRef = useRef(false)
 
@@ -455,57 +464,66 @@ const CellInner: React.FC<Props> = ({
           />
         }
         right={
-          toolbarTier === "compact" ? null : view === "none" ? (
-            // Neutral: action verbs (Run / Draw) — labelled only when expanded.
-            <CellRunDrawToggles
-              isCellBusy={isCellBusy}
-              isChartLoading={chartLoading}
-              runActive={runActive}
-              isDrawMode={isDrawMode}
-              canRun={canRun}
-              autoRefreshOn={effectiveAutoRefresh !== false}
-              showLabels={toolbarTier === "expanded"}
-              onRun={runAll}
-              onHideResult={() => {
-                signalUserEdit(bufferIdForEvents)
-                clearCellResult(cell.id)
-              }}
-              onDraw={() => {
-                void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
-                  mode: isDrawMode ? "run" : "draw",
-                })
-                void handleDrawClick()
-              }}
-            />
-          ) : toolbarTier === "expanded" ? (
-            <CellWideActions
-              cellId={cell.id}
-              view={view}
-              cellAutoRefresh={cell.autoRefresh}
-              autoRefreshDefault={autoRefreshDefault}
-              paneLayout={paneLayout}
-              isRunning={isRunning}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isChartRefreshing={chartRefreshing}
-              isCellBusy={isCellBusy}
-              chartZoomed={chartZoomed}
-              onResetZoomFocus={focusCellToolbar}
-            />
-          ) : (
-            // Standard tier with a result: the compact (label-less) view toggle.
-            <CellViewToggle
-              cellId={cell.id}
-              view={view}
-              paneLayout={paneLayout}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isCellBusy={isCellBusy}
-              chartZoomed={chartZoomed}
-              showLabels={false}
-              onResetZoomFocus={focusCellToolbar}
-            />
-          )
+          <>
+            {toolbarTier === "compact" ? null : view === "none" ? (
+              // Neutral: action verbs (Run / Draw) — labelled only when expanded.
+              <CellRunDrawToggles
+                isCellBusy={isCellBusy}
+                isChartLoading={chartLoading}
+                runActive={runActive}
+                isDrawMode={isDrawMode}
+                canRun={canRun}
+                autoRefreshOn={effectiveAutoRefresh !== false}
+                showLabels={toolbarTier === "expanded"}
+                onRun={runAll}
+                onHideResult={() => {
+                  signalUserEdit(bufferIdForEvents)
+                  clearCellResult(cell.id)
+                }}
+                onDraw={() => {
+                  void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
+                    mode: isDrawMode ? "run" : "draw",
+                  })
+                  void handleDrawClick()
+                }}
+              />
+            ) : toolbarTier === "expanded" ? (
+              <CellWideActions
+                cellId={cell.id}
+                view={view}
+                cellAutoRefresh={cell.autoRefresh}
+                autoRefreshDefault={autoRefreshDefault}
+                paneLayout={paneLayout}
+                isRunning={isRunning}
+                isGridLoading={isGridLoading}
+                isChartLoading={chartLoading}
+                isChartRefreshing={chartRefreshing}
+                isCellBusy={isCellBusy}
+                chartZoomed={chartZoomed}
+                onResetZoomFocus={focusCellToolbar}
+              />
+            ) : (
+              // Standard tier with a result: the compact (label-less) view toggle.
+              <CellViewToggle
+                cellId={cell.id}
+                view={view}
+                paneLayout={paneLayout}
+                isGridLoading={isGridLoading}
+                isChartLoading={chartLoading}
+                isCellBusy={isCellBusy}
+                chartZoomed={chartZoomed}
+                showLabels={false}
+                onResetZoomFocus={focusCellToolbar}
+              />
+            )}
+            {showStopButton && (
+              <CellStopButton
+                cellId={cell.id}
+                view={isDrawMode ? "chart" : "grid"}
+                onUnmountWhileFocused={focusCellToolbar}
+              />
+            )}
+          </>
         }
       />
       {!resultOnly && (

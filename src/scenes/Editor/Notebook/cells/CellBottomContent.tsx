@@ -19,7 +19,8 @@ import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
-  statementKeysFor,
+  createStatementKeyMemo,
+  statementKeysForResults,
 } from "../notebookUtils"
 
 // Mirrors DrawCanvas's EmptyState: a failed snapshot read keeps the reserved
@@ -67,11 +68,12 @@ export const CellBottomContent: React.FC<Props> = ({
     () => (cell.mode === "draw" ? [] : getQueriesFromText(cell.value)),
     [cell.mode, cell.value],
   )
+  const statementKeys = useMemo(() => createStatementKeyMemo(), [])
   const frame = useMemo(
     () =>
-      deriveStatementFrame(statements, cell.result) ??
+      deriveStatementFrame(statements, cell.result, statementKeys) ??
       derivePositionalFrame(cell.result),
-    [statements, cell.result],
+    [statements, cell.result, statementKeys],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),
@@ -80,9 +82,9 @@ export const CellBottomContent: React.FC<Props> = ({
 
   const resultIndexOf = useCallback(
     (statementKey: string): number =>
-      statementKeysFor(
-        (cell.result?.results ?? []).map((r) => r.query),
-      ).indexOf(statementKey),
+      cell.result
+        ? statementKeysForResults(cell.result.results).indexOf(statementKey)
+        : -1,
     [cell.result],
   )
   const reRunStatement = useCallback(

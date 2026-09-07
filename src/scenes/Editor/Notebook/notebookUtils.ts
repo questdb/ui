@@ -878,6 +878,41 @@ const buildStatementKeys = (
 export const statementKeysFor = (texts: string[]): StatementKey[] =>
   buildStatementKeys(texts, normalizeStatementIdentity)
 
+// A statement-list memo for one consumer. An edit changes one statement, so
+// only that statement's identity is computed; the rest reuse their last one by
+// raw text. Keeps a large script's keystrokes off the formatter regardless of
+// the shared identity cache's size.
+export const createStatementKeyMemo = (
+  identityFor: (text: string) => string = normalizeStatementIdentity,
+) => {
+  let identities = new Map<string, string>()
+  return (texts: string[]): StatementKey[] => {
+    const next = new Map<string, string>()
+    const keys = buildStatementKeys(texts, (text) => {
+      let identity = next.get(text) ?? identities.get(text)
+      if (identity === undefined) identity = identityFor(text)
+      next.set(text, identity)
+      return identity
+    })
+    identities = next
+    return keys
+  }
+}
+
+// A result frame changes only when a run lands, so its keys are computed once
+// per frame and shared by every render that re-derives slots from it.
+const resultStatementKeys = new WeakMap<SingleQueryResult[], StatementKey[]>()
+
+export const statementKeysForResults = (
+  results: SingleQueryResult[],
+): StatementKey[] => {
+  const cached = resultStatementKeys.get(results)
+  if (cached !== undefined) return cached
+  const keys = statementKeysFor(results.map((r) => r.query))
+  resultStatementKeys.set(results, keys)
+  return keys
+}
+
 const clampIndex = (index: number, length: number): number =>
   Math.min(Math.max(index, 0), Math.max(length - 1, 0))
 
@@ -1002,12 +1037,13 @@ export type StatementFrame = {
 export const deriveStatementFrame = (
   statements: string[],
   result: CellResult | null | undefined,
+  slotKeysFor: (texts: string[]) => StatementKey[] = statementKeysFor,
 ): StatementFrame | null => {
   if (!result || statements.length === 0 || result.results.length === 0) {
     return null
   }
-  const slotKeys = statementKeysFor(statements)
-  const resultKeys = statementKeysFor(result.results.map((r) => r.query))
+  const slotKeys = slotKeysFor(statements)
+  const resultKeys = statementKeysForResults(result.results)
   const resultByKey = new Map<StatementKey, SingleQueryResult>()
   resultKeys.forEach((key, index) => {
     resultByKey.set(key, result.results[index])

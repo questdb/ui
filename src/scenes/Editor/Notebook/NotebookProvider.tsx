@@ -61,6 +61,11 @@ import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { getQueriesFromText } from "../Monaco/utils"
 import { silently } from "../../../utils/notebooks/notebookToolError"
+import {
+  dropSnapshotsAfterPersist,
+  droppedSnapshotCellIds,
+  persistFailure,
+} from "../../../utils/notebooks/notebookSnapshotCleanup"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
   copyNotebookSnapshots,
@@ -178,12 +183,14 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   readResultStatus: () => "unrequested",
   flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
-    run({
-      cells: [],
-      settings: {},
-      maximizedCellId: null,
-      focusedCellId: null,
-    }).result,
+    Promise.resolve(
+      run({
+        cells: [],
+        settings: {},
+        maximizedCellId: null,
+        focusedCellId: null,
+      }).result,
+    ),
 }
 
 const NOTEBOOK_ACTION_KEYS = Object.keys(NOOP_ACTIONS) as Array<
@@ -394,7 +401,7 @@ export const NotebookProvider: React.FC<{
       const next = { ...settingsRef.current, ...updates }
       settingsRef.current = next
       setSettingsState(next)
-      persistImmediately(store.cellsRef.current)
+      void persistImmediately(store.cellsRef.current)
     },
     [persistImmediately, store.cellsRef],
   )
@@ -429,8 +436,10 @@ export const NotebookProvider: React.FC<{
     [execution, releaseCellExecution],
   )
 
-  const applyTransition = useCallback(
-    <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+  const commitTransition = useCallback(
+    <T,>(
+      run: (parts: ViewParts) => NotebookTransitionResult<T>,
+    ): { result: T; persisted: Promise<void> } => {
       const out = run({
         cells: store.cellsRef.current,
         settings: settingsRef.current,
@@ -449,14 +458,14 @@ export const NotebookProvider: React.FC<{
         setMaximizedCellIdState(parts.maximizedCellId)
         setFocusedCellState(parts.focusedCellId)
       })
-      persistImmediately(parts.cells, true)
-      // A deleted cell's in-flight run must be cancelled; the transition reports
-      // deleted cells via cleanup, so every delete route (UI or agent) cancels
-      // here rather than at each call site.
+      const persisted = persistImmediately(parts.cells, true)
+      // A deleted cell's in-flight run is discarded, not cancelled: superseding
+      // it makes a late completion report the deletion instead of a cleared
+      // result. The transition reports deleted cells via cleanup, so every
+      // delete route (UI or agent) lands here rather than at each call site.
       if (out.cleanup) {
         for (const cellId of out.cleanup.cellIds) {
-          cancelCell(cellId, "cell_deleted")
-          void deleteCellSnapshot(bufferId, cellId)
+          abortCellRun(cellId, "cell_deleted")
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
         }
@@ -469,20 +478,49 @@ export const NotebookProvider: React.FC<{
       // noteMissing collapses the cell's reserved result area immediately
       if (out.deleteSnapshots) {
         for (const cellId of out.deleteSnapshots.cellIds) {
-          void deleteCellSnapshot(bufferId, cellId)
           resultHydration.noteMissing(cellId)
         }
       }
-      return out.result
+      // Snapshot rows outlive a failed document write: the stored document
+      // still references them, so they go only once the new one is durable.
+      void dropSnapshotsAfterPersist(
+        persisted,
+        droppedSnapshotCellIds(out),
+        (cellId) => deleteCellSnapshot(bufferId, cellId),
+      )
+      return { result: out.result, persisted }
     },
-    [
-      store,
-      persistImmediately,
-      bufferId,
-      cancelCell,
-      abortCellRun,
-      resultHydration,
-    ],
+    [store, persistImmediately, bufferId, abortCellRun, resultHydration],
+  )
+
+  // A gesture sees its transition land at once; a failed document write only
+  // reaches the console, as with every other gesture-driven persist.
+  const applyTransition = useCallback(
+    <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+      const { result, persisted } = commitTransition(run)
+      persisted.catch((error) =>
+        console.warn(`notebook ${bufferId}: document write failed`, error),
+      )
+      return result
+    },
+    [commitTransition, bufferId],
+  )
+
+  // The agent route reports success only once the document is durable, and a
+  // failed write as a typed error the agent can act on.
+  const applyTransitionPersisted = useCallback(
+    <T,>(
+      run: (parts: ViewParts) => NotebookTransitionResult<T>,
+    ): Promise<T> => {
+      const { result, persisted } = commitTransition(run)
+      return persisted.then(
+        () => result,
+        (error) => {
+          throw persistFailure(error)
+        },
+      )
+    },
+    [commitTransition],
   )
 
   const setMaximizedCellId = useCallback(
@@ -845,7 +883,7 @@ export const NotebookProvider: React.FC<{
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
     readResultStatus: (cellId) => resultHydration.statusOf(cellId),
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
-    applyTransition,
+    applyTransition: applyTransitionPersisted,
   }
 
   const stateValue = useMemo<NotebookState>(
