@@ -223,7 +223,7 @@ const Spacer = styled.span`
 `
 
 const SortDownIcon = styled(SortDown)`
-  color: ${color("contentMuted")};
+  color: ${color("contentPrimary")};
   margin-right: 0.8rem;
   flex-shrink: 0;
 `
@@ -276,7 +276,7 @@ const TypeIcon = styled.div`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("contentMuted")};
+  color: ${color("contentPrimary")};
 `
 
 const TYPE_ICONS = {

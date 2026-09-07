@@ -934,6 +934,61 @@ change shipped together, split them.
 - Out of scope: retuning `statusInfo` / `statusInfoSurface` / `gridSelection`; `editorSelection`; notebook cell focus.
 - For Emre: Grid selection wash is local to ResultGrid, not a token. Cell ring is `statusInfo`, not `gridFocus`.
 
+### 2026-09-07 — Light metrics calendar: enabled light, disabled grey
+- Lift: binding
+- Status: applied locally
+- Modes: light (dark kept)
+- Tokens: none
+- Binding: `.react-calendar` `editorCanvas` → Overlay. Disabled tiles Overlay + Muted → Base + `contentDisabled`. Enabled type Secondary → Primary. Selected range stays `actionPrimary`.
+- Neighbors: Overlay `#fafbfc` is the popover. Base `#eef0f3` was the whole light calendar well, so enabled days looked greyed and future/`min`/`max` days looked lit.
+- Why: Zack: flip enabled vs disabled in light. Enabled light; disabled greyed out. Follow-up: selected range type must stay `contentInverse` in light — the enabled-tile Primary rule was winning.
+- Out of scope: dark; selected-range fill; neighboring-month type; popover stroke.
+- For Emre: Do not invert Overlay/Canvas globally. This is calendar tiles only. Selected type is Inverse, not Primary.
+
+### 2026-09-07 — Table-details warning count matches Figma pill
+- Lift: binding
+- Status: applied locally
+- Modes: both (geometry)
+- Tokens: none
+- Binding: `Badge` `shape="pill"` `sm` — 20px tall, 5px inline pad + 1px stroke (6px to icon), 4px gap, 12px icon/type Regular, 12% wash. Dropped `TabBadge` 18px height. Stroke stays tone @ 32% (not solid).
+- Neighbors: error count pill on the same tab uses the same geometry. Chip-shaped badges unchanged.
+- Why: Figma `1914:98448` is 36×20 with 6×4 pad, 4px gap, 12px glyph. The 18px override crushed it. Zack: keep the quieter 32% stroke, not the solid Figma border.
+- Out of scope: chip shape; StatusChip; retuning `statusWarningSurface`.
+- For Emre: Pill is the compact count. Do not restyle chips to this stadium. Stroke is 32% wash, not solid tone.
+
+### 2026-09-07 — Table and column icons step up to Primary
+- Lift: binding
+- Status: superseded the same day — glyphs went to Secondary
+- Modes: both (dark was the read)
+- Tokens: none
+- Binding: `TableIcon` / `MaterializedViewIcon` / `TypeIcon` / designated-timestamp `SortDownIcon` `contentMuted` → `contentPrimary`.
+- Neighbors: dark Muted `#858995` sits below Secondary `#9da1ad`. There is no content role between Secondary and Primary `#f8f8f2`. Table names were already Primary.
+- Why: Zack: icons not visible enough in dark; wanted closer to Primary than Secondary. They were on Muted, quieter than Secondary.
+- Out of scope: inventing a mid-content token; type *labels* stay Secondary; rail latches.
+- For Emre: Superseded. Glyphs are Secondary.
+
+### 2026-09-07 — Table and column glyphs are Secondary
+- Lift: binding
+- Status: superseded the same day — back to Primary
+- Modes: both
+- Tokens: none
+- Binding: table / mat-view / view / column-type / designated-timestamp glyphs `contentPrimary` → `contentSecondary`.
+- Neighbors: names stay Primary. Parenthetical type labels were already Secondary — glyphs now match that weight, one step above Muted.
+- Why: Zack: try Secondary after Primary.
+- Out of scope: type labels; rail latches; inventing a mid-content token.
+- For Emre: Superseded. Glyphs are Primary.
+
+### 2026-09-07 — Table and column glyphs settle on Primary
+- Lift: binding
+- Status: applied locally
+- Modes: both
+- Tokens: none
+- Binding: table / mat-view / view / column-type / designated-timestamp glyphs `contentSecondary` → `contentPrimary`.
+- Neighbors: names already Primary. Type labels stay Secondary.
+- Why: Zack: go back to Primary after the Secondary trial.
+- Out of scope: type labels; rail latches.
+- For Emre: Object-type marks are Primary, same as the name.
+
 ---
 
 ## Parking lot — not logged as decisions yet

@@ -22,7 +22,7 @@ const Root = styled.div<{ $size: string }>`
   height: ${({ $size }) => $size};
   position: relative;
   flex-shrink: 0;
-  color: ${color("contentMuted")};
+  color: ${color("contentPrimary")};
 
   svg {
     color: inherit;
@@ -59,7 +59,7 @@ const NonPartitionedTableIcon = ({
 )
 
 const MutedGlyph = styled.svg`
-  color: ${color("contentMuted")};
+  color: ${color("contentPrimary")};
   flex-shrink: 0;
 `
 

@@ -100,13 +100,13 @@ const Root = styled.span<{
   align-items: center;
   justify-content: center;
   position: relative;
-  gap: ${({ $shape }) => ($shape === "pill" ? "0.5rem" : "0.4rem")};
+  gap: 0.4rem;
   height: ${({ $shape, $size }) =>
-    $shape === "pill" ? ($size === "sm" ? "2.2rem" : "2.8rem") : "auto"};
+    $shape === "pill" ? ($size === "sm" ? "2rem" : "2.8rem") : "auto"};
   padding: ${({ $shape, $size }) =>
     $shape === "pill"
       ? $size === "sm"
-        ? "0 0.7rem"
+        ? "0 0.5rem"
         : "0 0.9rem"
       : "0.5rem"};
   border: ${({ $shape, $variant, theme }) =>
@@ -117,11 +117,12 @@ const Root = styled.span<{
   color: ${({ $variant, theme }) => getTone($variant, theme)};
   background: ${({ $shape, $variant, theme }) =>
     $shape === "pill"
-      ? withAlpha(getTone($variant, theme), 0.1)
+      ? withAlpha(getTone($variant, theme), 0.12)
       : chipBackground($variant, theme)};
   font-size: ${({ $shape, theme }) =>
     $shape === "pill" ? theme.fontSize.xs : "1.1rem"};
-  font-weight: ${({ $shape }) => ($shape === "pill" ? 600 : 400)};
+  font-weight: 400;
+  letter-spacing: ${({ $shape }) => ($shape === "pill" ? "0.1px" : "normal")};
   line-height: 1;
   white-space: nowrap;
 
@@ -147,8 +148,8 @@ const Icon = styled.div<{ hasGap: boolean; $shape: BadgeShape }>`
   ${({ hasGap }) => !hasGap && "margin: 0 -0.1rem;"}
 
   svg {
-    width: ${({ $shape }) => ($shape === "pill" ? "1.4rem" : "1.6rem")};
-    height: ${({ $shape }) => ($shape === "pill" ? "1.4rem" : "1.6rem")};
+    width: ${({ $shape }) => ($shape === "pill" ? "1.2rem" : "1.6rem")};
+    height: ${({ $shape }) => ($shape === "pill" ? "1.2rem" : "1.6rem")};
   }
 `
 
