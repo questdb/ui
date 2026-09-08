@@ -1644,14 +1644,16 @@ export const discardCellResult = (cell: NotebookCell): NotebookCell => {
 // `null`/omission preserves, "auto" clears the corresponding resize pin, and
 // a number fixes the pane at that pixel height. view:"editor" is an action,
 // not a stored value — callers apply discardCellResult for it.
+// A markdown cell's unpinned topHeight is the content measurement its
+// ResizeObserver keeps current, so "auto" only clears the pin: an unpinned
+// cell keeps its measurement, and a pinned one re-measures on the flip.
 export const agentCellDimensionsPatch = (
   cell: NotebookCell,
   dimensions: AgentCellDimensions,
 ): Partial<NotebookCell> => {
   const patch: Partial<NotebookCell> = {}
   if (dimensions.editorHeight === "auto") {
-    patch.topHeight =
-      cell.type === "markdown" ? undefined : topHeightForSql(cell.value)
+    if (cell.type !== "markdown") patch.topHeight = topHeightForSql(cell.value)
     patch.topResized = false
   } else if (typeof dimensions.editorHeight === "number") {
     patch.topHeight = dimensions.editorHeight

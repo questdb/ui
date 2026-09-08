@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
+  agentCellDimensionsPatch,
   agentCellPaneDimensions,
   buildAppliedNotebookState,
   attachScriptSummary,
@@ -4524,5 +4525,57 @@ describe("statementKeysForIdentities", () => {
     // Then they equal the keys built from the text, duplicates included
     expect(rebuilt).toEqual(keys)
     expect(keys[0]).not.toBe(keys[1])
+  })
+})
+
+describe("agentCellDimensionsPatch", () => {
+  const markdownCell = (patch: Partial<NotebookCell>): NotebookCell => ({
+    id: "m1",
+    position: 0,
+    value: "# Title\n\nSome prose",
+    type: "markdown",
+    ...patch,
+  })
+
+  it("keeps a markdown cell's measured height when the agent asks for auto", () => {
+    // Given an unpinned markdown cell whose observer measured its content
+    const cell = markdownCell({ topHeight: 236, topResized: false })
+
+    // When the agent sends editor_height "auto" again
+    const patch = agentCellDimensionsPatch(cell, { editorHeight: "auto" })
+
+    // Then only the pin clears and the measurement survives
+    expect(patch).toEqual({ topResized: false })
+  })
+
+  it("clears a pinned markdown cell so it re-measures on the flip", () => {
+    // Given a markdown cell pinned below its content height
+    const cell = markdownCell({ topHeight: 500, topResized: true })
+
+    // When the agent sends editor_height "auto"
+    const patch = agentCellDimensionsPatch(cell, { editorHeight: "auto" })
+
+    // Then the pin clears and the stale number is left for the observer
+    expect(patch).toEqual({ topResized: false })
+  })
+
+  it("restores the SQL editor's content height on auto", () => {
+    // Given a pinned SQL cell
+    const cell: NotebookCell = {
+      id: "s1",
+      position: 0,
+      value: "select 1",
+      topHeight: 400,
+      topResized: true,
+    }
+
+    // When the agent sends editor_height "auto"
+    const patch = agentCellDimensionsPatch(cell, { editorHeight: "auto" })
+
+    // Then the editor returns to its content height, unpinned
+    expect(patch).toEqual({
+      topHeight: topHeightForSql("select 1"),
+      topResized: false,
+    })
   })
 })
