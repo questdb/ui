@@ -80,6 +80,14 @@ before(() => {
   indexedDB.deleteDatabase("web-console")
 })
 
+afterEach(() => {
+  cy.then(() =>
+    Cypress.automation("remote:debugger:protocol", {
+      command: "HeapProfiler.collectGarbage",
+    }),
+  )
+})
+
 beforeEach(() => {
   cy.intercept(
     {
