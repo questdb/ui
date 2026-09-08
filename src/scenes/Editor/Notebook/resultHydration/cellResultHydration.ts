@@ -6,10 +6,7 @@ import type {
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
-import {
-  reconcileResultsForStatements,
-  statementKeysFor,
-} from "../notebookUtils"
+import { reconcileResultsForSlotKeys, statementKeysFor } from "../notebookUtils"
 
 // Legacy records hold the raw cell text — comments included — as the
 // statement's query. Parsing it back to the statement lets those results
@@ -231,7 +228,8 @@ export class CellResultHydrationEngine {
     snapshot: NotebookResultSnapshot,
   ) {
     const statements = getQueriesFromText(cell.value)
-    const reconciled = reconcileResultsForStatements(statements, {
+    const slotKeys = statementKeysFor(statements)
+    const reconciled = reconcileResultsForSlotKeys(statements, slotKeys, {
       results: snapshot.results.map(normalizeSnapshotResultQuery),
       activeResultIndex: snapshot.activeResultIndex ?? 0,
       ...(snapshot.activeStatementKey !== undefined
@@ -252,9 +250,9 @@ export class CellResultHydrationEngine {
       reconciled.results.some((result, index) => {
         return result !== snapshot.results[index]
       })
-    const slotKeys = new Set(statementKeysFor(statements))
+    const slotKeySet = new Set(slotKeys)
     const refreshErrors = snapshot.refreshErrors?.filter((error) =>
-      slotKeys.has(error.statementKey),
+      slotKeySet.has(error.statementKey),
     )
     if (frameChanged) {
       const rewritten: NotebookResultSnapshot = {

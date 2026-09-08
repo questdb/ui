@@ -818,30 +818,14 @@ export const nextCopyLabel = (label: string): string => {
 // the formatter canonicalizes whitespace/newlines and keyword casing, but does
 // not fold string literals or quoted/unquoted identifiers. Invalid, mid-typing
 // SQL falls back to the editor's trim/trailing-semicolon normalization.
-const STATEMENT_IDENTITY_CACHE_MAX = 500
-const statementIdentityCache = new Map<string, string>()
-
-const cacheStatementIdentity = (key: string, identity: string) => {
-  if (statementIdentityCache.size >= STATEMENT_IDENTITY_CACHE_MAX) {
-    const oldest = statementIdentityCache.keys().next().value
-    if (oldest !== undefined) statementIdentityCache.delete(oldest)
-  }
-  statementIdentityCache.set(key, identity)
-}
-
 export const normalizeStatementIdentity = (query: string): string => {
   const normalized = normalizeQueryText(query)
   if (!normalized) return normalized
-  const cached = statementIdentityCache.get(normalized)
-  if (cached !== undefined) return cached
-  let identity: string
   try {
-    identity = formatSql(normalized, { uppercase: true })
+    return formatSql(normalized, { uppercase: true })
   } catch {
-    identity = normalized
+    return normalized
   }
-  cacheStatementIdentity(normalized, identity)
-  return identity
 }
 
 export const snapshotResultsMatchQueries = (
@@ -862,56 +846,22 @@ export type StatementKey = string
 
 const STATEMENT_KEY_SEPARATOR = "\u0001"
 
-const buildStatementKeys = (
-  texts: string[],
-  identityFor: (text: string) => string,
+export const statementKeysForIdentities = (
+  identities: string[],
 ): StatementKey[] => {
   const occurrences = new Map<string, number>()
-  return texts.map((text) => {
-    const normalized = identityFor(text)
-    const occurrence = occurrences.get(normalized) ?? 0
-    occurrences.set(normalized, occurrence + 1)
-    return `${normalized}${STATEMENT_KEY_SEPARATOR}${occurrence}`
+  return identities.map((identity) => {
+    const occurrence = occurrences.get(identity) ?? 0
+    occurrences.set(identity, occurrence + 1)
+    return `${identity}${STATEMENT_KEY_SEPARATOR}${occurrence}`
   })
 }
 
 export const statementKeysFor = (texts: string[]): StatementKey[] =>
-  buildStatementKeys(texts, normalizeStatementIdentity)
+  statementKeysForIdentities(texts.map(normalizeStatementIdentity))
 
-// A statement-list memo for one consumer. An edit changes one statement, so
-// only that statement's identity is computed; the rest reuse their last one by
-// raw text. Keeps a large script's keystrokes off the formatter regardless of
-// the shared identity cache's size.
-export const createStatementKeyMemo = (
-  identityFor: (text: string) => string = normalizeStatementIdentity,
-) => {
-  let identities = new Map<string, string>()
-  return (texts: string[]): StatementKey[] => {
-    const next = new Map<string, string>()
-    const keys = buildStatementKeys(texts, (text) => {
-      let identity = next.get(text) ?? identities.get(text)
-      if (identity === undefined) identity = identityFor(text)
-      next.set(text, identity)
-      return identity
-    })
-    identities = next
-    return keys
-  }
-}
-
-// A result frame changes only when a run lands, so its keys are computed once
-// per frame and shared by every render that re-derives slots from it.
-const resultStatementKeys = new WeakMap<SingleQueryResult[], StatementKey[]>()
-
-export const statementKeysForResults = (
-  results: SingleQueryResult[],
-): StatementKey[] => {
-  const cached = resultStatementKeys.get(results)
-  if (cached !== undefined) return cached
-  const keys = statementKeysFor(results.map((r) => r.query))
-  resultStatementKeys.set(results, keys)
-  return keys
-}
+export const statementIdentityOfKey = (key: StatementKey): string =>
+  key.slice(0, key.lastIndexOf(STATEMENT_KEY_SEPARATOR))
 
 const clampIndex = (index: number, length: number): number =>
   Math.min(Math.max(index, 0), Math.max(length - 1, 0))
@@ -936,12 +886,12 @@ export type ReconciledCellResult = {
   activeResultIndex: number
 }
 
-export const reconcileResultsForStatements = (
+export const reconcileResultsForSlotKeys = (
   statements: string[],
+  slotKeys: StatementKey[],
   previous: CellResult,
 ): ReconciledCellResult | null => {
   if (statements.length === 0 || previous.results.length === 0) return null
-  const slotKeys = statementKeysFor(statements)
   const resultKeys = statementKeysFor(previous.results.map((r) => r.query))
   const oldIndexByKey = new Map<StatementKey, number>()
   resultKeys.forEach((key, index) => oldIndexByKey.set(key, index))
@@ -978,6 +928,16 @@ export const reconcileResultsForStatements = (
   }
 }
 
+export const reconcileResultsForStatements = (
+  statements: string[],
+  previous: CellResult,
+): ReconciledCellResult | null =>
+  reconcileResultsForSlotKeys(
+    statements,
+    statementKeysFor(statements),
+    previous,
+  )
+
 // Passive invalidation and mounted hydration must agree about whether a
 // snapshot contains anything displayable. In particular, matching
 // running/queued placeholders are not durable results.
@@ -995,9 +955,10 @@ export const snapshotResultsHaveMatchingStatement = (
 // unchanged statements keep their results, everything else drops. A frame
 // that loses slots also loses its script summary — the counts no longer
 // describe what is on screen. Zero survivors collapse the frame to null.
-export const reconcileCellResultForValue = (
+export const reconcileCellResultForStatements = (
   result: CellResult | null | undefined,
-  value: string,
+  statements: string[],
+  slotKeys: StatementKey[],
 ): CellResult | null => {
   if (result == null) return null
   // A pending frame is run-owned: the run writes results into it by position,
@@ -1005,10 +966,7 @@ export const reconcileCellResultForValue = (
   // stays pending until the run's last slot settles, and every completion step
   // after that runs synchronously — deferring the reconcile is always safe.
   if (hasPendingResult(result)) return result
-  const reconciled = reconcileResultsForStatements(
-    getQueriesFromText(value),
-    result,
-  )
+  const reconciled = reconcileResultsForSlotKeys(statements, slotKeys, result)
   if (!reconciled) return null
   const frameUnchanged =
     reconciled.results.length === result.results.length &&
@@ -1021,6 +979,18 @@ export const reconcileCellResultForValue = (
   }
   if (!frameUnchanged) delete next.script
   return next
+}
+
+export const reconcileCellResultForValue = (
+  result: CellResult | null | undefined,
+  value: string,
+): CellResult | null => {
+  const statements = getQueriesFromText(value)
+  return reconcileCellResultForStatements(
+    result,
+    statements,
+    statementKeysFor(statements),
+  )
 }
 
 export type StatementSlot = {
@@ -1037,13 +1007,12 @@ export type StatementFrame = {
 export const deriveStatementFrame = (
   statements: string[],
   result: CellResult | null | undefined,
-  slotKeysFor: (texts: string[]) => StatementKey[] = statementKeysFor,
 ): StatementFrame | null => {
   if (!result || statements.length === 0 || result.results.length === 0) {
     return null
   }
-  const slotKeys = slotKeysFor(statements)
-  const resultKeys = statementKeysForResults(result.results)
+  const slotKeys = statementKeysFor(statements)
+  const resultKeys = statementKeysFor(result.results.map((r) => r.query))
   const resultByKey = new Map<StatementKey, SingleQueryResult>()
   resultKeys.forEach((key, index) => {
     resultByKey.set(key, result.results[index])

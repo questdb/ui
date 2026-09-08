@@ -1081,6 +1081,48 @@ describe("CellRefreshEngine", () => {
     expect(state?.settledKey).toBe(state?.queriesKey)
   })
 
+  it("keeps the frame and skips refetching when a statement only changes whitespace or casing", async () => {
+    // Given a settled draw cell showing results
+    syncOnScreen([drawCell("c1", "select 1 as x", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    const frame = cellResults.get("c1")
+
+    // When the statement is reformatted without changing its SQL
+    engine.sync([drawCell("c1", "SELECT  1\nAS x", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the displayed frame survives without a refetch
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(cellResults.get("c1")).toBe(frame)
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("executes only the edited statement when auto-refresh is off", async () => {
+    // Given a settled two-statement draw cell with auto-refresh off
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+    // When one statement changes
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then only the changed statement executes and the other keeps its result
+    expect(
+      deps.executeSingle.mock.calls.slice(2).map((call) => call[0]),
+    ).toEqual(["select 3"])
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual([
+      "select 1",
+      "select 3",
+    ])
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
   it("never executes a query that fails validation, and blocks it once it resolves to a write", async () => {
     // Given a polling draw cell whose INSERT fails validation because its
     // target table does not exist yet (reachable via edit-in-draw or the

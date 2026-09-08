@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect } from "vitest"
 import {
   ApplyNotebookStateError,
   agentCellPaneDimensions,
@@ -55,9 +55,9 @@ import {
   derivePositionalFrame,
   deriveStatementFrame,
   resolveActiveStatementSql,
+  statementIdentityOfKey,
   statementKeysFor,
-  createStatementKeyMemo,
-  statementKeysForResults,
+  statementKeysForIdentities,
   removeCell,
   resolveRunCompletion,
   setResultAt,
@@ -4512,56 +4512,17 @@ describe("pane height ceiling", () => {
   })
 })
 
-describe("createStatementKeyMemo", () => {
-  it("identifies only the edited statement on a keystroke over a large script", () => {
-    // Given a script far larger than the shared identity cache, keyed once
-    const statements = Array.from({ length: 600 }, (_, i) => `select ${i}`)
-    const identityFor = vi.fn((text: string) => text.toUpperCase())
-    const keysFor = createStatementKeyMemo(identityFor)
-    const before = keysFor(statements)
-    expect(identityFor).toHaveBeenCalledTimes(600)
+describe("statementKeysForIdentities", () => {
+  it("rebuilds a frame's keys from the identities of the keys it was written under", () => {
+    // Given statements with a duplicate and presentation-only differences
+    const statements = ["select 1", "SELECT  1", "select 2"]
+    const keys = statementKeysFor(statements)
 
-    // When one statement is edited
-    identityFor.mockClear()
-    const edited = [...statements]
-    edited[300] = "select 300, 1"
-    const after = keysFor(edited)
+    // When the keys are rebuilt from their identities alone
+    const rebuilt = statementKeysForIdentities(keys.map(statementIdentityOfKey))
 
-    // Then only that statement is re-identified and every other key survives
-    expect(identityFor).toHaveBeenCalledTimes(1)
-    expect(identityFor).toHaveBeenCalledWith("select 300, 1")
-    expect(after[299]).toBe(before[299])
-    expect(after[599]).toBe(before[599])
-    expect(after[300]).not.toBe(before[300])
-  })
-
-  it("numbers duplicate statements by occurrence like the shared key builder", () => {
-    // Given a script that repeats a statement
-    const statements = ["select 1", "select 1", "select 2"]
-
-    // Then the memo yields the same keys as the shared builder
-    expect(createStatementKeyMemo()(statements)).toEqual(
-      statementKeysFor(statements),
-    )
-  })
-})
-
-describe("statementKeysForResults", () => {
-  it("computes a frame's keys once and reuses them while the frame is unchanged", () => {
-    // Given a result frame
-    const results: SingleQueryResult[] = [
-      { type: "queued", query: "select 1" },
-      { type: "queued", query: "select 2" },
-    ]
-
-    // When its keys are derived twice
-    const first = statementKeysForResults(results)
-
-    // Then the same keys come back for the same frame, and match the builder
-    expect(statementKeysForResults(results)).toBe(first)
-    expect(first).toEqual(statementKeysFor(["select 1", "select 2"]))
-
-    // And a new frame gets its own keys
-    expect(statementKeysForResults([...results])).not.toBe(first)
+    // Then they equal the keys built from the text, duplicates included
+    expect(rebuilt).toEqual(keys)
+    expect(keys[0]).not.toBe(keys[1])
   })
 })

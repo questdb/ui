@@ -19,8 +19,7 @@ import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
-  createStatementKeyMemo,
-  statementKeysForResults,
+  statementKeysFor,
 } from "../notebookUtils"
 
 // Mirrors DrawCanvas's EmptyState: a failed snapshot read keeps the reserved
@@ -61,19 +60,23 @@ export const CellBottomContent: React.FC<Props> = ({
   const resultStatus = useCellResultStatus(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
 
-  // Tabs follow the editor's statement list; results attach to it by content.
-  // A statement with no result renders the neutral "Not run" slot. A frame no
-  // statement claims (selection run) falls back to the results' own tabs.
+  // Tabs follow the engine's debounced statement list, so a keystroke never
+  // re-keys the cell; results attach to it by content. A statement with no
+  // result renders the neutral "Not run" slot. A frame no statement claims
+  // (selection run) falls back to the results' own tabs.
+  const debouncedQueries = fetchState?.queries
   const statements = useMemo(
-    () => (cell.mode === "draw" ? [] : getQueriesFromText(cell.value)),
-    [cell.mode, cell.value],
+    () =>
+      cell.mode === "draw"
+        ? []
+        : (debouncedQueries ?? getQueriesFromText(cell.value)),
+    [cell.mode, debouncedQueries, cell.value],
   )
-  const statementKeys = useMemo(() => createStatementKeyMemo(), [])
   const frame = useMemo(
     () =>
-      deriveStatementFrame(statements, cell.result, statementKeys) ??
+      deriveStatementFrame(statements, cell.result) ??
       derivePositionalFrame(cell.result),
-    [statements, cell.result, statementKeys],
+    [statements, cell.result],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),
@@ -83,7 +86,9 @@ export const CellBottomContent: React.FC<Props> = ({
   const resultIndexOf = useCallback(
     (statementKey: string): number =>
       cell.result
-        ? statementKeysForResults(cell.result.results).indexOf(statementKey)
+        ? statementKeysFor(cell.result.results.map((r) => r.query)).indexOf(
+            statementKey,
+          )
         : -1,
     [cell.result],
   )
