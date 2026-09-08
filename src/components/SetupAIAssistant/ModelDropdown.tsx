@@ -6,7 +6,6 @@ import { useAIStatus } from "../../providers/AIStatusProvider"
 import { StoreKey } from "../../utils/localStorage/types"
 import { OpenAIIcon } from "./OpenAIIcon"
 import { AnthropicIcon } from "./AnthropicIcon"
-import { BrainIcon } from "./BrainIcon"
 import { PlugsIcon, WarningCircleIcon } from "@phosphor-icons/react"
 import { SelectMenu } from "../SelectMenu"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
@@ -43,7 +42,6 @@ export const ModelDropdown = () => {
     return null
   }
 
-  // currentModel is guaranteed to be from MODEL_OPTIONS (set in modals)
   const displayModel = currentModel
     ? (enabledModels.find((m) => m.value === currentModel) ?? enabledModels[0])
     : (enabledModels[0] ?? null)
@@ -106,7 +104,6 @@ export const ModelDropdown = () => {
               >
                 <ModelName data-hook="ai-settings-model-item-label">
                   {model.label}
-                  {model.isSlow && <BrainIcon color="currentColor" />}
                 </ModelName>
               </SelectMenu.Item>
             ))}

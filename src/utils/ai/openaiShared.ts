@@ -3,6 +3,11 @@ import type { Tiktoken, TiktokenBPE } from "js-tiktoken/lite"
 import type { StatusCallback, AiAssistantAPIError } from "./aiAssistant"
 import { StreamingError, RefusalError, MaxTokensError } from "./shared"
 
+export function isReasoningRejection(error: unknown): boolean {
+  if (!(error instanceof OpenAI.APIError) || error.status !== 400) return false
+  return typeof error.param === "string" && error.param.startsWith("reasoning")
+}
+
 let tiktokenEncoder: Tiktoken | null = null
 
 export async function countTokensFromNativePayload(
@@ -88,7 +93,8 @@ export function classifyOpenAIError(
   if (error instanceof OpenAI.RateLimitError) {
     return {
       type: "rate_limit",
-      message: "Rate limit exceeded. Please try again later.",
+      message:
+        "The provider's rate or usage limit was reached. Check your provider account limits or try again later.",
       details: error.message,
     }
   }

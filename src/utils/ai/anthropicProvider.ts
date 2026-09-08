@@ -8,12 +8,13 @@ import type {
   StreamingCallback,
   TokenUsage,
 } from "./aiAssistant"
-import { getModelProps } from "./settings"
+import { stripModelNamespace } from "./settings"
 import type { ProviderId } from "./settings"
 import {
   type AIProvider,
   type ExecuteFlowParams,
   type FlowResult,
+  type ProviderModel,
   type ToolDefinition,
   type Message,
 } from "./types"
@@ -127,10 +128,6 @@ function toAnthropicTools(tools: ToolDefinition[]): AnthropicTool[] {
       ...(t.inputSchema.required ? { required: t.inputSchema.required } : {}),
     },
   }))
-}
-
-function toAnthropicModel(model: string): string {
-  return getModelProps(model).model
 }
 
 async function createAnthropicMessage(
@@ -397,7 +394,6 @@ async function handleToolCalls(
     system: systemPrompt,
     ...(!isLastRound && { tools }),
     messages: updatedHistory,
-    temperature: 0.3,
   }
 
   const followUpMessage = streaming
@@ -500,14 +496,13 @@ export function createAnthropicProvider(
 
       const toolContext: ToolExecutionContext = incomingToolContext ?? {}
 
-      const resolvedModel = toAnthropicModel(model)
+      const resolvedModel = stripModelNamespace(model, providerId)
 
       const messageParams: Parameters<typeof createAnthropicMessage>[1] = {
         model: resolvedModel,
         system: systemPrompt,
         tools: anthropicTools,
         messages: initialMessages,
-        temperature: 0.3,
       }
 
       const message = streaming
@@ -584,10 +579,9 @@ export function createAnthropicProvider(
     async generateTitle({ model, prompt }) {
       try {
         const message = await createAnthropicMessage(anthropic, {
-          model: toAnthropicModel(model),
+          model: stripModelNamespace(model, providerId),
           messages: [{ role: "user", content: prompt }],
           max_tokens: 100,
-          temperature: 0.3,
         })
 
         const textBlock = message.content.find((block) => block.type === "text")
@@ -611,7 +605,7 @@ export function createAnthropicProvider(
       let text = ""
       const stream = anthropic.messages.stream(
         {
-          ...getModelProps(model),
+          model: stripModelNamespace(model, providerId),
           max_tokens: 64_000,
           messages: [{ role: "user", content: userMessage }],
           system: systemPrompt,
@@ -629,54 +623,6 @@ export function createAnthropicProvider(
       return text
     },
 
-    async testConnection({ apiKey: testApiKey, model }) {
-      try {
-        const testClient = new Anthropic({
-          apiKey: testApiKey,
-          dangerouslyAllowBrowser: true,
-          ...(options?.baseURL ? { baseURL: options.baseURL } : {}),
-          ...(isCustom
-            ? {
-                fetch: createHeaderFilteredFetch(ANTHROPIC_ALLOWED_HEADERS),
-              }
-            : {}),
-        })
-
-        await createAnthropicMessage(testClient, {
-          model: toAnthropicModel(model),
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 16,
-        })
-        return { valid: true }
-      } catch (error: unknown) {
-        if (error instanceof MaxTokensError || error instanceof RefusalError) {
-          return { valid: true }
-        }
-        if (error instanceof Anthropic.AuthenticationError) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (error instanceof Anthropic.RateLimitError) {
-          return { valid: true }
-        }
-        const status =
-          (error as { status?: number })?.status ||
-          (error as { error?: { status?: number } })?.error?.status
-        if (status === 401) {
-          return { valid: false, error: "Invalid API key" }
-        }
-        if (status === 429) {
-          return { valid: true }
-        }
-        return {
-          valid: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to validate API key",
-        }
-      }
-    },
-
     async countTokens({ messages, systemPrompt, model }) {
       // Custom providers (non-default baseURL) use chars/3.5 estimation
       // because the actual tokenizer is unknown and most custom endpoints
@@ -690,19 +636,23 @@ export function createAnthropicProvider(
 
       const nativeMessages = toNativeMessages(messages)
       const response = await anthropic.messages.countTokens({
-        model: toAnthropicModel(model),
+        model: stripModelNamespace(model, providerId),
         system: systemPrompt,
         messages: nativeMessages,
       })
       return response.input_tokens
     },
 
-    async listModels(): Promise<string[]> {
-      const models: string[] = []
+    async listModels(): Promise<ProviderModel[]> {
+      const models: ProviderModel[] = []
       for await (const model of anthropic.models.list()) {
-        models.push(model.id)
+        models.push({
+          id: model.id,
+          label: model.display_name,
+          created: Math.floor(Date.parse(model.created_at) / 1000),
+        })
       }
-      return models.sort((a, b) => a.localeCompare(b))
+      return models.sort((a, b) => a.id.localeCompare(b.id))
     },
 
     classifyError(
@@ -767,7 +717,8 @@ export function createAnthropicProvider(
       if (error instanceof Anthropic.RateLimitError) {
         return {
           type: "rate_limit",
-          message: "Rate limit exceeded. Please try again later.",
+          message:
+            "The provider's rate or usage limit was reached. Check your provider account limits or try again later.",
           details: error.message,
         }
       }

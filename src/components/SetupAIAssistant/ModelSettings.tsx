@@ -9,15 +9,15 @@ import React, {
 import styled, { useTheme } from "styled-components"
 import { Box } from "../Box"
 import { Input } from "../Input"
-import { Checkbox } from "../Checkbox"
 import { Text } from "../Text"
 import { LoadingSpinner } from "../LoadingSpinner"
 import { Button } from "../Button"
 import { IconButton } from "../IconButton"
-import { TextButton } from "../TextButton"
 import { WarningIcon, XIcon } from "@phosphor-icons/react"
 import { createProviderByType } from "../../utils/ai/registry"
 import type { ProviderType } from "../../utils/ai/settings"
+import type { ProviderModel } from "../../utils/ai"
+import { ModelPicker } from "./ModelPicker"
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 import type { Permissions } from "../../utils/tools/permissions"
 
@@ -61,31 +61,6 @@ const WarningText = styled(Text)`
   color: ${({ theme }) => theme.color.statusWarning};
 `
 
-const ModelListContainer = styled.div`
-  max-height: 30rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  border: 0.1rem solid ${({ theme }) => theme.color.borderStrong};
-  border-radius: 0.4rem;
-  width: 100%;
-`
-
-const ModelRow = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  padding: 0.6rem 0.8rem;
-  cursor: pointer;
-  font-size: 1.4rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-
-  &:hover {
-    background: ${({ theme }) => theme.color.interactionNeutral};
-  }
-`
-
 const ModelChipsContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -122,18 +97,6 @@ const AddModelButton = styled(Button).attrs({ variant: "secondary" })`
   padding: 0 1.2rem;
   font-size: 1.4rem;
   white-space: nowrap;
-`
-
-const SelectAllRow = styled(Box).attrs({
-  gap: "2rem",
-  align: "center",
-})`
-  display: inline-flex;
-  margin-left: auto;
-`
-
-const SelectAllLink = styled(TextButton)`
-  font-size: 1.4rem;
 `
 
 const ContentSection = styled(Box).attrs({
@@ -193,7 +156,7 @@ export type ModelSettingsProps = {
 async function fetchProviderModels(
   config: FetchConfig,
   contextWindow: number,
-): Promise<string[] | null> {
+): Promise<ProviderModel[] | null> {
   try {
     const provider = createProviderByType(
       config.providerType,
@@ -215,7 +178,9 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
   ) => {
     const theme = useTheme()
 
-    const [fetchedModels, setFetchedModels] = useState<string[] | null>(null)
+    const [fetchedModels, setFetchedModels] = useState<ProviderModel[] | null>(
+      null,
+    )
     const [selectedModels, setSelectedModels] = useState<string[]>([])
     const [manualModels, setManualModels] = useState<string[]>(
       () => initialValues?.models ?? [],
@@ -252,13 +217,8 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
         if (cancelled) return
 
         if (models) {
-          // Auto mode: reconcile initialValues.models against fetched list
           setFetchedModels(models)
-          const selected = [
-            ...initModels.filter((m) => models.includes(m)),
-            ...initModels.filter((m) => !models.includes(m)),
-          ]
-          setSelectedModels(selected.length > 0 ? selected : [])
+          setSelectedModels([...initModels])
           setManualModels([])
         } else {
           // Manual mode
@@ -281,43 +241,14 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
 
     const isAutoMode = fetchedModels !== null
 
-    const handleToggleModel = useCallback((model: string) => {
-      setSelectedModels((prev) =>
-        prev.includes(model)
-          ? prev.filter((m) => m !== model)
-          : [...prev, model],
-      )
-    }, [])
-
-    const handleSelectAll = useCallback(() => {
-      setSelectedModels((prev) => {
-        if (!fetchedModels) return prev
-        const manual = prev.filter((m) => !fetchedModels.includes(m))
-        return [...fetchedModels, ...manual]
-      })
-    }, [fetchedModels])
-
-    const handleDeselectAll = useCallback(() => {
-      setSelectedModels((prev) =>
-        fetchedModels ? prev.filter((m) => !fetchedModels.includes(m)) : [],
-      )
-    }, [fetchedModels])
-
     const handleAddManualModel = useCallback(() => {
       const trimmed = manualModelInput.trim()
       if (!trimmed) return
-
-      if (isAutoMode) {
-        setSelectedModels((prev) =>
-          prev.includes(trimmed) ? prev : [...prev, trimmed],
-        )
-      } else {
-        setManualModels((prev) =>
-          prev.includes(trimmed) ? prev : [...prev, trimmed],
-        )
-      }
+      setManualModels((prev) =>
+        prev.includes(trimmed) ? prev : [...prev, trimmed],
+      )
       setManualModelInput("")
-    }, [manualModelInput, isAutoMode])
+    }, [manualModelInput])
 
     const handleRemoveManualModel = useCallback((model: string) => {
       setManualModels((prev) => prev.filter((m) => m !== model))
@@ -397,118 +328,64 @@ export const ModelSettings = forwardRef<ModelSettingsRef, ModelSettingsProps>(
             </WarningBanner>
           )}
           {isAutoMode && (
-            <InputSection align="flex-start">
-              <Box
-                flexDirection="row"
-                gap="1.2rem"
-                align="center"
-                style={{ width: "100%" }}
-              >
-                <InputLabel>Select Models</InputLabel>
-                <SelectAllRow>
-                  <SelectAllLink
-                    data-hook="custom-provider-select-all"
-                    type="button"
-                    onClick={handleSelectAll}
-                  >
-                    Select All
-                  </SelectAllLink>
-                  <SelectAllLink
-                    data-hook="custom-provider-deselect-all"
-                    type="button"
-                    onClick={handleDeselectAll}
-                  >
-                    Deselect All
-                  </SelectAllLink>
-                </SelectAllRow>
-              </Box>
-              <ModelListContainer>
-                {fetchedModels.map((model) => (
-                  <ModelRow key={model} data-hook="custom-provider-model-row">
-                    <Checkbox
-                      checked={selectedModels.includes(model)}
-                      onChange={() => handleToggleModel(model)}
-                    />
-                    {model}
-                  </ModelRow>
-                ))}
-              </ModelListContainer>
-            </InputSection>
+            <ModelPicker
+              listedModels={fetchedModels}
+              selectedModels={selectedModels}
+              manualInput={manualModelInput}
+              dataHookPrefix="custom-provider"
+              onSelectionChange={setSelectedModels}
+              onManualInputChange={setManualModelInput}
+            />
           )}
-          <InputSection align="flex-start">
-            {!isAutoMode && <InputLabel>Add Models</InputLabel>}
-            {isAutoMode && (
-              <HelperText>
-                Don&apos;t see your model? Add it manually:
-              </HelperText>
-            )}
-            <AddModelRow>
-              <StyledInput
-                type="text"
-                data-hook="custom-provider-manual-model-input"
-                value={manualModelInput}
-                onChange={(e) => setManualModelInput(e.target.value)}
-                placeholder="e.g., llama3, gpt-4o, claude-sonnet-4-20250514"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    handleAddManualModel()
-                  }
-                }}
-              />
-              <AddModelButton
-                type="button"
-                data-hook="custom-provider-add-model-button"
-                onClick={handleAddManualModel}
-                disabled={!manualModelInput.trim()}
-              >
-                Add
-              </AddModelButton>
-            </AddModelRow>
-            {isAutoMode &&
-              selectedModels.filter((m) => !fetchedModels.includes(m)).length >
-                0 && (
+          {!isAutoMode && (
+            <InputSection align="flex-start">
+              <InputLabel>Add Models</InputLabel>
+              <AddModelRow>
+                <StyledInput
+                  type="text"
+                  data-hook="custom-provider-manual-model-input"
+                  value={manualModelInput}
+                  onChange={(e) => setManualModelInput(e.target.value)}
+                  placeholder="e.g., llama3, gpt-4o, claude-sonnet-4-20250514"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      handleAddManualModel()
+                    }
+                  }}
+                />
+                <AddModelButton
+                  type="button"
+                  data-hook="custom-provider-add-model-button"
+                  onClick={handleAddManualModel}
+                  disabled={!manualModelInput.trim()}
+                >
+                  Add
+                </AddModelButton>
+              </AddModelRow>
+              {manualModels.length > 0 && (
                 <ModelChipsContainer>
-                  {selectedModels
-                    .filter((m) => !fetchedModels.includes(m))
-                    .map((model) => (
-                      <ModelChip
-                        key={model}
-                        data-hook="custom-provider-model-chip"
+                  {manualModels.map((model) => (
+                    <ModelChip
+                      key={model}
+                      data-hook="custom-provider-model-chip"
+                    >
+                      {model}
+                      <ChipRemoveButton
+                        label={`Remove ${model}`}
+                        variant="ghost"
+                        data-hook="custom-provider-remove-model"
+                        type="button"
+                        onClick={() => handleRemoveManualModel(model)}
                       >
-                        {model}
-                        <ChipRemoveButton
-                          label={`Remove ${model}`}
-                          variant="ghost"
-                          data-hook="custom-provider-remove-model"
-                          type="button"
-                          onClick={() => handleToggleModel(model)}
-                        >
-                          <XIcon size="12" weight="bold" />
-                        </ChipRemoveButton>
-                      </ModelChip>
-                    ))}
+                        <XIcon size="12" weight="bold" />
+                      </ChipRemoveButton>
+                    </ModelChip>
+                  ))}
                 </ModelChipsContainer>
               )}
-            {!isAutoMode && manualModels.length > 0 && (
-              <ModelChipsContainer>
-                {manualModels.map((model) => (
-                  <ModelChip key={model} data-hook="custom-provider-model-chip">
-                    {model}
-                    <ChipRemoveButton
-                      label={`Remove ${model}`}
-                      variant="ghost"
-                      data-hook="custom-provider-remove-model"
-                      type="button"
-                      onClick={() => handleRemoveManualModel(model)}
-                    >
-                      <XIcon size="12" weight="bold" />
-                    </ChipRemoveButton>
-                  </ModelChip>
-                ))}
-              </ModelChipsContainer>
-            )}
-          </InputSection>
+            </InputSection>
+          )}
           <HelperText>
             AI Assistant uses tools to gather information about QuestDB and your
             database. Make sure to select the models that support tool calling.

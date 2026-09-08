@@ -8,7 +8,10 @@ import type {
 import type { Permissions, ToolCategory } from "../tools/permissions"
 import type { ValidateQueryResult } from "../questdb/types"
 import type { ProviderId } from "./settings"
+import type { ProviderModel } from "./modelCatalog"
 import type { ToolExecutionContext } from "./shared"
+
+export { type ProviderModel }
 
 export type ToolSurface = "ai" | "mcp"
 
@@ -97,18 +100,13 @@ export interface AIProvider {
     abortSignal?: AbortSignal
   }): Promise<string>
 
-  testConnection(params: {
-    apiKey: string
-    model: string
-  }): Promise<{ valid: boolean; error?: string }>
-
   countTokens(params: {
     messages: Message[]
     systemPrompt: string
     model: string
   }): Promise<number>
 
-  listModels(): Promise<string[]>
+  listModels(): Promise<ProviderModel[]>
 
   classifyError(error: unknown, setStatus: StatusCallback): AiAssistantAPIError
   isNonRetryableError(error: unknown): boolean

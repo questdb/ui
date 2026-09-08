@@ -24,21 +24,22 @@ export {
 } from "./prompts"
 export type { HealthIssuePromptData } from "./prompts"
 export {
-  MODEL_OPTIONS,
   BUILTIN_PROVIDERS,
+  buildListingMetadata,
   providerForModel,
-  getModelProps,
   getProviderName,
   getAllProviders,
   getAllModelOptions,
   getAllEnabledModels,
+  getModelLabel,
   getSelectedModel,
   getNextModel,
-  getTestModel,
+  getUtilityModel,
   getProviderContextWindow,
   getApiKey,
-  makeCustomModelValue,
-  parseModelValue,
+  buildProviderSettings,
+  makeModelValue,
+  stripModelNamespace,
   isAiAssistantConfigured,
   canUseAiAssistant,
   hasSchemaAccess,
@@ -51,3 +52,12 @@ export type {
   ModelOption,
   CustomProviderDefinition,
 } from "./settings"
+export {
+  filterOpenAiChatModels,
+  formatModelLabel,
+  resolveUtilityModel,
+  sortModelsNewestFirst,
+  UTILITY_MODEL_TIERS,
+} from "./modelCatalog"
+export type { ProviderModel } from "./modelCatalog"
+export { getModelListingErrorMessage } from "./modelListingError"
