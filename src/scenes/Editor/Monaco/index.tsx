@@ -31,6 +31,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { useAIConversationActions } from "../../../providers/AIConversationProvider"
 import { useLocalStorage } from "../../../providers/LocalStorageProvider"
+import type { RunWithSelectionMode } from "../../../providers/LocalStorageProvider/types"
 import { actions, selectors } from "../../../store"
 import { RunningType } from "../../../store/Query/types"
 import { MAX_CELL_LINES } from "../../../store/notebook"
@@ -52,8 +53,10 @@ import {
   clearModelMarkers,
   clearValidationMarkers,
   findMatches,
+  isFullQueryMatch,
   getErrorRange,
   getQueryFromCursor,
+  getSelectedText,
   getQueryRequestFromEditor,
   getQueryRequestFromLastExecutedQuery,
   QuestDBLanguageName,
@@ -75,6 +78,7 @@ import {
   getQueryStartOffset,
   getQueriesToRun,
   getQueriesStartingFromLine,
+  getStatementOffsets,
   readShareLinkParams,
   clearShareLinkParams,
   buildShareLinkUrl,
@@ -102,6 +106,14 @@ type IndividualQueryResult = {
     | (Partial<NotificationShape> & { content: ReactNode; query: QueryKey })
     | null
 }
+
+type ScriptRunPlan = Readonly<{
+  runAll: boolean
+  queries?: readonly Request[]
+  bufferId: number
+  model: editor.ITextModel
+  modelVersionId: number
+}>
 
 export const LINE_NUMBER_HARD_LIMIT = MAX_CELL_LINES
 
@@ -282,7 +294,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   } = editorContext
   const { quest, questExecution } = useContext(QuestContext)
   const { canUse: canUseAI, status: aiStatus } = useAIStatus()
-  const { runWithSelection } = useLocalStorage()
+  const { runWithSelectionMode } = useLocalStorage()
   const {
     handleGlyphClick,
     hasConversationForQuery,
@@ -315,7 +327,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const queryOffsetsRef = useRef<
     { startOffset: number; endOffset: number }[] | null
   >([])
-  const pendingScriptRunRef = useRef<{ runAll: boolean } | undefined>(undefined)
+  const pendingScriptRunRef = useRef<ScriptRunPlan | undefined>(undefined)
+  const scriptRunPlanRef = useRef<ScriptRunPlan | undefined>(undefined)
+  const pendingQueryRequestRef = useRef<Request | undefined>(undefined)
   const queriesToRunRef = useRef<Request[]>([])
   const scriptStopRef = useRef(false)
   const stopAfterFailureRef = useRef(true)
@@ -328,8 +342,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const queryNotificationsRef = useRef(queryNotifications)
   const activeNotificationRef = useRef(activeNotification)
   const canUseAIRef = useRef(canUseAI)
-  const runWithSelectionRef = useRef(runWithSelection)
-  const shareLinkSelectionRunRef = useRef(false)
+  const runWithSelectionModeRef = useRef(runWithSelectionMode)
   const hasConversationForQueryRef = useRef(hasConversationForQuery)
   const shiftQueryKeysForBufferRef = useRef(shiftQueryKeysForBuffer)
   const findQueryByConversationIdRef = useRef(findQueryByConversationId)
@@ -456,9 +469,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         endColumn: endPosition.column,
       })
     } else {
+      const selection = editor.getSelection()
       const queryInCursor = getQueryFromCursor(editor)
       if (
         queryInCursor &&
+        (runWithSelectionModeRef.current === "off" ||
+          !selection ||
+          selection.isEmpty()) &&
         createQueryKeyFromRequest(editor, queryInCursor) ===
           createQueryKeyFromRequest(editor, query)
       ) {
@@ -511,9 +528,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
   }
 
-  const handleRunQuery = (query: Request) => {
+  const handleRunQuery = (query: Request, preserveSelection = false) => {
     setDropdownOpen(false)
-    runQueryAction(query, RunningType.QUERY)
+    runQueryAction(query, RunningType.QUERY, preserveSelection)
   }
 
   const handleExplainQuery = (query: Request) => {
@@ -528,7 +545,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       return
     }
     const sql = requests
-      .map((r) => (r.selection ? r.selection.queryText : r.query))
+      .map((r) => r.query)
       .join(";\n\n")
       .concat(";")
 
@@ -553,16 +570,54 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
   const syncQueriesToRun = (
     editor: editor.IStandaloneCodeEditor,
-    runWithSelection: boolean,
+    selectionMode: RunWithSelectionMode,
   ): Request[] => {
     const queriesToRun = getQueriesToRun(
       editor,
       queryOffsetsRef.current ?? [],
-      runWithSelection,
+      selectionMode,
     )
     queriesToRunRef.current = queriesToRun
     dispatch(actions.query.setQueriesToRun(queriesToRun))
     return queriesToRun
+  }
+
+  const createScriptRunPlan = (
+    runAll: boolean,
+    queries?: readonly Request[],
+  ): ScriptRunPlan | undefined => {
+    const model = editorRef.current?.getModel()
+    if (!model) return
+
+    return {
+      runAll,
+      queries: queries ? [...queries] : undefined,
+      bufferId: activeBufferRef.current.id as number,
+      model,
+      modelVersionId: model.getVersionId(),
+    }
+  }
+
+  const handlePrimaryRun = () => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    const selectionMode = runWithSelectionModeRef.current
+    const selectedText = getSelectedText(editor)
+    const resolvesSelection = selectionMode !== "off" && Boolean(selectedText)
+    const queries = resolvesSelection
+      ? getQueriesToRun(editor, getStatementOffsets(editor), selectionMode, {
+          queryOffsetsAreFresh: true,
+        })
+      : [getQueryRequestFromEditor(editor, selectionMode)].filter(
+          (request): request is Request => request !== undefined,
+        )
+
+    if (queries.length === 1) {
+      handleRunQuery(queries[0])
+    } else if (queries.length > 1) {
+      handleTriggerRunScript(false, queries)
+    }
   }
 
   const handleCopyLinkSelection = () => {
@@ -571,10 +626,10 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     })
     const editor = editorRef.current
     if (!editor) return
-    // Link sharing always honors the selection, independent of the
-    // run-with-selection setting.
+    // Link sharing always expands the selection to complete queries,
+    // independent of the run-with-selection setting.
     buildAndCopyShareLink(
-      getQueriesToRun(editor, queryOffsetsRef.current ?? [], true),
+      getQueriesToRun(editor, queryOffsetsRef.current ?? [], "complete"),
     )
   }
 
@@ -590,6 +645,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   const runQueryAction = (
     query: Request,
     type: RunningType.QUERY | RunningType.EXPLAIN,
+    preserveSelection = false,
   ) => {
     const editor = editorRef.current
     const model = editor?.getModel()
@@ -608,6 +664,8 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     }
 
     const targetBufferId = activeBufferRef.current.id as number
+    const targetModel = model
+    const targetModelVersionId = model.getVersionId()
     const queryKey = createQueryKeyFromRequest(editor, query)
 
     questExecution.requestExecution({
@@ -619,7 +677,21 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       },
       bufferId: targetBufferId,
       execute: () => {
-        setCursorBeforeRunning(query)
+        if (
+          activeBufferRef.current.id !== targetBufferId ||
+          editorRef.current?.getModel() !== targetModel ||
+          targetModel.getVersionId() !== targetModelVersionId
+        ) {
+          questExecution.releaseExecution(queryKey)
+          toast.error(
+            "The editor changed before the query could run. Run it again.",
+          )
+          return
+        }
+        pendingQueryRequestRef.current = query
+        if (!preserveSelection) {
+          setCursorBeforeRunning(query)
+        }
         toggleRunning(type)
       },
       queryKey,
@@ -632,9 +704,17 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
     pendingScriptRunRef.current = undefined
 
-    if (pending.runAll) {
-      queriesToRunRef.current = []
+    if (
+      activeBufferRef.current.id !== pending.bufferId ||
+      editorRef.current.getModel() !== pending.model ||
+      pending.model.getVersionId() !== pending.modelVersionId
+    ) {
+      toast.error(
+        "The editor changed before the queries could run. Run them again.",
+      )
+      return
     }
+    scriptRunPlanRef.current = pending
     dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
   }
 
@@ -954,11 +1034,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         editor,
         monaco,
         runQuery: () => {
-          if (queriesToRunRef.current.length === 1) {
-            handleRunQuery(queriesToRunRef.current[0])
-          } else if (queriesToRunRef.current.length > 1) {
-            handleTriggerRunScript()
-          }
+          handlePrimaryRun()
         },
         runScript: () => {
           handleTriggerRunScript(true)
@@ -992,7 +1068,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       }
 
       cursorChangeTimeoutRef.current = window.setTimeout(() => {
-        syncQueriesToRun(editor, runWithSelectionRef.current)
+        syncQueriesToRun(editor, runWithSelectionModeRef.current)
 
         if (monacoRef.current && editorRef.current) {
           applyLineMarkings(monaco, editor, e.source)
@@ -1166,7 +1242,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         applyGlyphsAndLineMarkings(monaco, editor)
       }
 
-      syncQueriesToRun(editor, runWithSelectionRef.current)
+      syncQueriesToRun(editor, runWithSelectionModeRef.current)
 
       contentJustChangedRef.current = false
       if (notificationKeyUpdates.size > 0) {
@@ -1271,11 +1347,15 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
         const trimmedQuery = query.trim()
         // Find if the query is already in the editor
         const matches = findMatches(model, trimmedQuery)
-        if (matches && matches.length > 0) {
-          editor.setSelection(matches[0].range)
+        const statementOffsets = getStatementOffsets(editor)
+        const fullQueryMatch = matches?.find((match) =>
+          isFullQueryMatch(editor, match.range, statementOffsets),
+        )
+        if (fullQueryMatch) {
+          editor.setSelection(fullQueryMatch.range)
           editor.revealPositionInCenter({
-            lineNumber: matches[0].range.startLineNumber,
-            column: matches[0].range.startColumn,
+            lineNumber: fullQueryMatch.range.startLineNumber,
+            column: fullQueryMatch.range.startColumn,
           })
           // otherwise, open the query in a new buffer
         } else {
@@ -1299,12 +1379,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
 
       // Initial decoration setup
       applyGlyphsAndLineMarkings(monaco, editor)
-      // A ?query link selects its statements to run them all; that selection
-      // must be honored even when the run-with-selection setting is off.
+      // A ?query link selects its statements to run them all; the selection
+      // always expands to complete queries, even when the run-with-selection
+      // setting is off.
       const runsShareLinkSelection = Boolean(query && executeQuery)
       const queriesToRun = syncQueriesToRun(
         editor,
-        runsShareLinkSelection || runWithSelectionRef.current,
+        runsShareLinkSelection ? "complete" : runWithSelectionModeRef.current,
       )
 
       if (!query || !executeQuery) {
@@ -1312,10 +1393,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       } else if (queriesToRun.length > 0) {
         const runQueries = () => {
           if (queriesToRun.length > 1) {
-            handleTriggerRunScript()
+            handleTriggerRunScript(false, queriesToRun)
           } else {
-            shareLinkSelectionRunRef.current = true
-            toggleRunning()
+            handleRunQuery(queriesToRun[0], true)
           }
         }
 
@@ -1532,33 +1612,41 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     setScriptConfirmationOpen(open)
   }
 
-  const handleTriggerRunScript = (runAll?: boolean) => {
-    if (running === RunningType.SCRIPT) {
+  const handleTriggerRunScript = (
+    runAll?: boolean,
+    selectedQueries?: readonly Request[],
+  ) => {
+    if (runningValueRef.current === RunningType.SCRIPT && runAll) {
       dispatch(actions.query.toggleRunning())
       return
     }
 
+    const runPlan = createScriptRunPlan(Boolean(runAll), selectedQueries)
+    if (!runPlan) return
+
+    if (!runPlan.runAll && (!runPlan.queries || runPlan.queries.length < 2)) {
+      return
+    }
+
     void trackEvent(ConsoleEvent.EDITOR_RUN_MULTIPLE, {
-      queryCount: queriesToRunRef.current?.length ?? 0,
+      queryCount: runPlan.queries?.length ?? 0,
       runAll,
     })
-
-    const hasMultipleSelection = queriesToRunRef.current.length > 1
-    const runsAllQueries = Boolean(runAll) || !hasMultipleSelection
 
     if (
       runningValueRef.current === RunningType.NONE &&
       !questExecution.isAnyRunning()
     ) {
-      if (runsAllQueries) {
+      if (runPlan.runAll) {
         setScriptConfirmation(true)
       } else {
+        scriptRunPlanRef.current = runPlan
         dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
       }
       return
     }
 
-    pendingScriptRunRef.current = { runAll: runsAllQueries }
+    pendingScriptRunRef.current = runPlan
     setScriptConfirmation(true)
   }
 
@@ -1576,7 +1664,9 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       return
     }
 
-    queriesToRunRef.current = []
+    const runPlan = createScriptRunPlan(true)
+    if (!runPlan) return
+    scriptRunPlanRef.current = runPlan
     dispatch(actions.query.toggleRunning(RunningType.SCRIPT))
   }
 
@@ -1612,10 +1702,25 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     const editor = editorRef.current
     const monaco = monacoRef.current
     if (!editor || !monaco) return
-    const queriesToRun =
-      queriesToRunRef.current && queriesToRunRef.current.length > 1
-        ? queriesToRunRef.current
-        : undefined
+    const runPlan = scriptRunPlanRef.current
+    scriptRunPlanRef.current = undefined
+    if (
+      !runPlan ||
+      activeBufferRef.current.id !== runPlan.bufferId ||
+      editor.getModel() !== runPlan.model ||
+      runPlan.model.getVersionId() !== runPlan.modelVersionId
+    ) {
+      toast.error(
+        "The editor changed before the queries could run. Run them again.",
+      )
+      dispatch(actions.query.stopRunning())
+      if (scriptQueryKeyRef.current !== null) {
+        questExecution.releaseExecution(scriptQueryKeyRef.current)
+        scriptQueryKeyRef.current = null
+      }
+      return
+    }
+    const queriesToRun = runPlan.runAll ? undefined : runPlan.queries
     const runningAllQueries = !queriesToRun
     // Clear all notifications & execution refs for the buffer
     const activeBufferId = activeBuffer.id as number
@@ -1755,7 +1860,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
             ? NotificationType.SUCCESS
             : NotificationType.ERROR,
         },
-        activeBufferRef.current.id as number,
+        activeBufferRef.current.id,
       ),
     )
     setTabsDisabled(false)
@@ -1771,11 +1876,11 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
   }
 
   useEffect(() => {
-    runWithSelectionRef.current = runWithSelection
+    runWithSelectionModeRef.current = runWithSelectionMode
     const editor = editorRef.current
     if (!editor) return
-    syncQueriesToRun(editor, runWithSelection)
-  }, [runWithSelection])
+    syncQueriesToRun(editor, runWithSelectionMode)
+  }, [runWithSelectionMode])
 
   useEffect(() => {
     canUseAIRef.current = canUseAI
@@ -1849,17 +1954,13 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
     if (![RunningType.NONE, RunningType.SCRIPT].includes(running)) {
       applyGlyphsAndLineMarkings(monaco, editor)
 
-      // Consumed once: only the share-link mount path sets it, right before
-      // dispatching this run.
-      const honorShareLinkSelection = shareLinkSelectionRunRef.current
-      shareLinkSelectionRunRef.current = false
+      const capturedRequest = pendingQueryRequestRef.current
+      pendingQueryRequestRef.current = undefined
       const request =
         running === RunningType.REFRESH
           ? getQueryRequestFromLastExecutedQuery(lastExecutedQuery)
-          : getQueryRequestFromEditor(
-              editor,
-              honorShareLinkSelection || runWithSelectionRef.current,
-            )
+          : (capturedRequest ??
+            getQueryRequestFromEditor(editor, runWithSelectionModeRef.current))
 
       const isRunningExplain = running === RunningType.EXPLAIN
 
@@ -2354,6 +2455,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
       <Content $hidden={hidden}>
         {!hidden && (
           <ButtonBar
+            onRunQuery={handlePrimaryRun}
             onTriggerRunScript={handleTriggerRunScript}
             onCopyLinkAllQueries={handleCopyLinkAllQueries}
             isTemporary={activeBuffer.isTemporary}
@@ -2452,7 +2554,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               )}
               <Text color="contentPrimary">
                 {isPendingSelectionRun
-                  ? `You are about to run ${queriesToRunRef.current.length} selected queries. This action may modify or delete your data permanently.`
+                  ? `You are about to run ${pendingScriptRunRef.current?.queries?.length ?? 0} selected queries. This action may modify or delete your data permanently.`
                   : "You are about to run all queries in this tab. This action may modify or delete your data permanently."}
               </Text>
               {!isPendingSelectionRun && (

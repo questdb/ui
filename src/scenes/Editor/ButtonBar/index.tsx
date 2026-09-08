@@ -12,6 +12,7 @@ import { RunningType } from "../../../store/Query/types"
 import { useQueryExecutionState } from "../../../hooks/useQueryExecutionState"
 
 type ButtonBarProps = {
+  onRunQuery: () => void
   onTriggerRunScript: (runAll?: boolean) => void
   onCopyLinkAllQueries: () => void
   isTemporary: boolean | undefined
@@ -133,6 +134,7 @@ const shortcutTitles = {
 const copyLinkShortcutTitle = `Copy query link (${altOption}+Shift+L)`
 
 const ButtonBar = ({
+  onRunQuery,
   onTriggerRunScript,
   onCopyLinkAllQueries,
   isTemporary,
@@ -153,12 +155,8 @@ const ButtonBar = ({
       dispatch(actions.query.toggleRunning())
       return
     }
-    if (queriesToRun.length > 1) {
-      onTriggerRunScript()
-    } else {
-      dispatch(actions.query.toggleRunning())
-    }
-  }, [dispatch, running, queriesToRun, onTriggerRunScript])
+    onRunQuery()
+  }, [dispatch, running, onRunQuery])
 
   const handleClickScriptButton = useCallback(() => {
     onTriggerRunScript(true)
@@ -291,7 +289,7 @@ const ButtonBar = ({
         return queriesToRun[0].selection ? "Run selected query" : "Run query"
       }
       if (numQueries > 1) {
-        return `Run ${numQueries} selected queries`
+        return "Run selected queries"
       }
       return "Run query"
     }
