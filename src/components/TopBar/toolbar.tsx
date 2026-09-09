@@ -236,6 +236,8 @@ const EnterpriseBadge = styled(StatusBadge).attrs({
   size: "sm",
 })`
   height: 1.8rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-weight: 600;
 
   &:not(:last-child) {
     margin-right: 0.25rem;

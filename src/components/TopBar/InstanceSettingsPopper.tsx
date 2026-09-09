@@ -69,6 +69,25 @@ const ColorOption = styled(ButtonBase)<{
   }
 `
 
+const DefaultColorOption = styled(ColorOption).attrs({
+  $colorValue: "default",
+})`
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    width: 100%;
+    height: 1px;
+    border-radius: 1px;
+    background: ${({ theme }) => theme.color.borderAccentStrong};
+    box-shadow: 0 0 0 0.5px ${({ theme }) => theme.color.contentPrimary};
+    transform: rotate(-45deg);
+  }
+`
+
 const ColorWheelOption = styled(ButtonBase)<{ $selected: boolean }>`
   &&:disabled {
     opacity: 0.5;
@@ -430,9 +449,8 @@ export const InstanceSettingsPopper = ({
               Color
             </FormLabel>
             <ColorSelector role="group" aria-labelledby="instance-color-label">
-              <ColorOption
+              <DefaultColorOption
                 type="button"
-                $colorValue="default"
                 $selected={!values.instance_rgb || values.instance_rgb === ""}
                 onClick={() => handleColorSelect("")}
                 data-hook="topbar-instance-color-option-default"
