@@ -8,6 +8,7 @@ import { makeButtonVariant } from "./variants"
 import {
   brandLinearGradientHorizontal,
   brandLinearGradientVertical,
+  statusInfoFocus,
 } from "../../theme"
 import { BUTTON_HEIGHTS } from "./tokens"
 
@@ -185,7 +186,7 @@ export const ButtonBase = styled.button.attrs<{
     filter 120ms ease;
 
   &&:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 
@@ -194,7 +195,7 @@ export const ButtonBase = styled.button.attrs<{
     cursor: not-allowed;
   }
 
-  &&:active:not(:disabled):not([aria-disabled="true"]) {
+  &&:active:not(:disabled):not([aria-disabled="true"]):not([role="tab"]) {
     filter: brightness(0.9);
   }
 `

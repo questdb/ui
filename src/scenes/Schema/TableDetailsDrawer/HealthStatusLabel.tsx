@@ -18,7 +18,7 @@ const LabelContainer = styled.div<{ $severity: HealthSeverity }>`
   background: ${({ theme, $severity }) => {
     switch ($severity) {
       case "critical":
-        return `${theme.color.statusDanger}1F`
+        return theme.color.statusDangerSurface
       case "warning":
         return `${theme.color.statusWarning}1F`
       case "recovering":

@@ -6,6 +6,7 @@ import {
   TrashSimpleIcon,
 } from "@phosphor-icons/react"
 import { color } from "../../../utils"
+import { statusInfoFocus } from "../../../theme"
 import type { ConversationMeta } from "../../../store/db"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
@@ -25,8 +26,12 @@ const Container = styled.div<{ $disabled?: boolean }>`
   text-align: left;
 
   &:hover {
-    background: ${({ $disabled }) =>
-      $disabled ? "transparent" : color("surfaceRaised")};
+    background: ${({ $disabled, theme }) =>
+      $disabled
+        ? "transparent"
+        : theme.mode === "light"
+          ? theme.color.interactionHover
+          : theme.color.surfaceInput};
 
     .chat-title {
       color: ${({ $disabled }) =>
@@ -35,7 +40,7 @@ const Container = styled.div<{ $disabled?: boolean }>`
   }
 
   &:focus-visible {
-    outline: 1px solid ${color("contentAccent")};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 `
@@ -69,7 +74,7 @@ const Title = styled.div.attrs({ className: "chat-title" })`
 const TitleInput = styled.input`
   color: ${color("contentPrimary")};
   background: transparent;
-  border: 1px solid ${color("actionPrimary")};
+  border: 1px solid ${color("borderStrong")};
   border-radius: 6px;
   outline: none;
   padding: 0.2rem 0.4rem;

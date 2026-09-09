@@ -160,6 +160,7 @@ const ErrorContainer = styled.div`
   border-radius: 0.8rem;
   border: 1.5px solid ${({ theme }) => theme.color.statusDangerMuted};
   border-left: 6px solid ${({ theme }) => theme.color.statusDangerMuted};
+  background: ${({ theme }) => theme.color.statusDangerSurface};
 `
 
 const RedirectErrorContainer = styled(ErrorContainer)`
@@ -443,13 +444,18 @@ export const Login = ({
             >
               <FormBody>
                 <Form.Item name="username" label="Username">
-                  <Form.Input name="username" placeholder="Enter username" />
+                  <Form.Input
+                    name="username"
+                    placeholder="Enter username"
+                    tone="accent"
+                  />
                 </Form.Item>
                 <Form.Item name="password" label="Password">
                   <Form.Input
                     name="password"
                     type="password"
                     placeholder="Enter password"
+                    tone="accent"
                   />
                 </Form.Item>
                 {errorMessage && (

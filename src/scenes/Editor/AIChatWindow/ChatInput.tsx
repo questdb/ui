@@ -43,7 +43,9 @@ const InputWrapper = styled(Box)`
   overflow: hidden;
 `
 
-const StyledTextArea = styled(TextArea)<{ $hasContext: boolean }>`
+const StyledTextArea = styled(TextArea).attrs({ $tone: "accent" })<{
+  $hasContext: boolean
+}>`
   flex: 1;
   min-height: 8rem;
   max-height: 30rem;

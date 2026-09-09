@@ -10,6 +10,7 @@ import { useAgentChanges } from "./useAgentChanges"
 import { Tone, accentColor, deriveTone } from "./tone"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
+import { statusInfoFocus } from "../../../theme"
 
 const pulse = keyframes`
   0%, 100% { opacity: 1; }
@@ -22,14 +23,39 @@ type PillStyleProps = {
   $newChanges: boolean
 }
 
-// New agent changes turn the pill magenta regardless of the connection tone —
-// they are the one state the user can act on straight from the footer.
+// New agent changes turn the pill cyan regardless of the connection tone —
+// they are the one state the user can act on straight from the footer, and
+// cyan is what the popover band already uses for the same message. Only the
+// outline and icon carry it; the surface stays whatever the tone gives.
 const accent = ({
   theme,
   $tone,
   $newChanges,
 }: PillStyleProps & { theme: DefaultTheme }) =>
-  $newChanges ? theme.color.contentAccent : theme.color[accentColor($tone)]
+  $newChanges ? theme.color.statusInfo : theme.color[accentColor($tone)]
+
+// Idle is neutral chrome, not a status: it outlines in the shared border the
+// neighbouring version badge uses, while its icon stays readable. Every other
+// tone — and any tone with agent changes — outlines in its own accent.
+const outline = (props: PillStyleProps & { theme: DefaultTheme }) =>
+  props.$tone === "idle" && !props.$newChanges
+    ? props.theme.color.borderStrong
+    : accent(props)
+
+// The pill carries no surface of its own where it would only restate the
+// footer: always on dark, and in the idle tone on light. It keeps its
+// outline, and gains a surface on hover.
+const isFlush = ({ theme, $tone }: PillStyleProps & { theme: DefaultTheme }) =>
+  theme.mode === "dark" || $tone === "idle"
+
+const flushStyles = css`
+  background: transparent;
+  box-shadow: none;
+
+  &:hover {
+    box-shadow: none;
+  }
+`
 
 const Wrapper = styled(ButtonBase)<PillStyleProps>`
   display: inline-flex;
@@ -37,7 +63,7 @@ const Wrapper = styled(ButtonBase)<PillStyleProps>`
   gap: 0.6rem;
   height: 3.2rem;
   padding: 0 1.2rem;
-  border: 1px solid ${accent};
+  border: 1px solid ${outline};
   border-radius: 0.6rem;
   background: ${({ theme }) => theme.color.controlSurface};
   box-shadow: 0 0.1rem 0.2rem ${({ theme }) => theme.color.shadowSubtle};
@@ -53,18 +79,16 @@ const Wrapper = styled(ButtonBase)<PillStyleProps>`
 
   &:hover {
     background: ${({ theme }) => theme.color.controlSurfaceHover};
-    border-color: ${accent};
+    border-color: ${outline};
     box-shadow: 0 0.2rem 0.5rem ${({ theme }) => theme.color.shadowSoft};
   }
 
   &:focus-visible {
-    outline: 1px solid
-      ${(props) =>
-        props.$tone === "idle"
-          ? props.theme.color.contentAccent
-          : accent(props)};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
+
+  ${(props) => isFlush(props) && flushStyles}
 
   svg {
     color: ${accent};

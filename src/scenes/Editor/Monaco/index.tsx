@@ -141,7 +141,7 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   }
 
   .monaco-scrollable-element > .scrollbar > .slider {
-    background: ${color("interactionNeutral")};
+    background: ${color("scrollbarThumb")};
   }
 
   .cursorQueryDecoration {

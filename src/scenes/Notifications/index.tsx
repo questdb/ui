@@ -54,7 +54,6 @@ const Wrapper = styled(PaneWrapper)<{ minimized: boolean }>`
   max-height: 35rem;
   min-height: ${(props) => (props.minimized ? "auto" : "10rem")};
   background: ${({ theme }) => theme.color.surfaceRaised};
-  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 const Menu = styled(PaneMenu)`

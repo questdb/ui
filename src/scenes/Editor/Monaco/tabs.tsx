@@ -59,8 +59,11 @@ const Root = styled(Box).attrs({
   z-index: 12;
   isolation: isolate;
   background: transparent;
-  border-bottom: 0;
-  box-shadow: 0 8px 20px ${({ theme }) => theme.color.shadowSoft};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  box-shadow: ${({ theme }) =>
+    theme.mode === "light"
+      ? `0 1px 2px ${theme.color.shadowSubtle}, 0 2px 6px ${theme.color.shadowSoft}`
+      : `0 8px 20px ${theme.color.shadowSoft}`};
   padding-right: 1rem;
   gap: 0.4rem;
 

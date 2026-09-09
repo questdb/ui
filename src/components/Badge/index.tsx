@@ -22,10 +22,15 @@ export const badgeVariants = [
 
 export type BadgeVariant = (typeof badgeVariants)[number]
 
+export type BadgeSize = "sm" | "md"
+export type BadgeShape = "chip" | "pill"
+
 type Props = React.ComponentPropsWithoutRef<"span"> & {
   type?: BadgeType
   variant?: BadgeVariant
-  size?: "sm" | "md"
+  size?: BadgeSize
+  /** `chip` is the default status badge. `pill` is reserved for compact count badges. */
+  shape?: BadgeShape
   icon?: React.ReactNode
   pulsate?: boolean
   children?: React.ReactNode
@@ -63,31 +68,57 @@ const getTone = (variant: BadgeVariant, theme: DefaultTheme) => {
     info: theme.color.statusInfo,
     success: theme.color.statusSuccess,
     warning: theme.color.statusWarning,
-    danger: theme.color.statusDanger,
+    danger: theme.color.statusDangerContrast,
   }
   return tones[variant]
 }
 
+const chipBackground = (variant: BadgeVariant, theme: DefaultTheme) => {
+  switch (variant) {
+    case "success":
+      return theme.color.statusSuccessSurface
+    case "danger":
+      return theme.color.statusDangerSurface
+    case "warning":
+      return theme.color.statusWarningSurface
+    case "info":
+      return theme.color.statusInfoSurface
+    case "neutral":
+      return theme.color.interactionNeutral
+    default:
+      return withAlpha(getTone(variant, theme), 0.1)
+  }
+}
+
 const Root = styled.span<{
   $variant: BadgeVariant
-  $size: "sm" | "md"
+  $size: BadgeSize
+  $shape: BadgeShape
   pulsate?: boolean
 }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  gap: 0.5rem;
-  height: ${({ $size }) => ($size === "sm" ? "2.2rem" : "2.8rem")};
-  padding: ${({ $size }) => ($size === "sm" ? "0 0.7rem" : "0 0.9rem")};
-  border: 1px solid
-    ${({ $variant, theme }) => withAlpha(getTone($variant, theme), 0.32)};
-  border-radius: 999px;
+  gap: 0.4rem;
+  height: ${({ $shape, $size }) =>
+    $shape === "pill" ? ($size === "sm" ? "2rem" : "2.8rem") : "auto"};
+  padding: ${({ $shape, $size }) =>
+    $shape === "pill" ? ($size === "sm" ? "0 0.5rem" : "0 0.9rem") : "0.5rem"};
+  border: ${({ $shape, $variant, theme }) =>
+    $shape === "pill"
+      ? `1px solid ${withAlpha(getTone($variant, theme), 0.32)}`
+      : 0};
+  border-radius: ${({ $shape }) => ($shape === "pill" ? "999px" : "0.4rem")};
   color: ${({ $variant, theme }) => getTone($variant, theme)};
-  background: ${({ $variant, theme }) =>
-    withAlpha(getTone($variant, theme), 0.1)};
-  font-size: ${({ theme }) => theme.fontSize.xs};
-  font-weight: 600;
+  background: ${({ $shape, $variant, theme }) =>
+    $shape === "pill"
+      ? withAlpha(getTone($variant, theme), 0.12)
+      : chipBackground($variant, theme)};
+  font-size: ${({ $shape, theme }) =>
+    $shape === "pill" ? theme.fontSize.xs : "1.1rem"};
+  font-weight: 400;
+  letter-spacing: ${({ $shape }) => ($shape === "pill" ? "0.1px" : "normal")};
   line-height: 1;
   white-space: nowrap;
 
@@ -105,7 +136,7 @@ const Root = styled.span<{
     `};
 `
 
-const Icon = styled.div<{ hasGap: boolean }>`
+const Icon = styled.div<{ hasGap: boolean; $shape: BadgeShape }>`
   display: flex;
   justify-content: center;
   align-items: center;
@@ -113,8 +144,8 @@ const Icon = styled.div<{ hasGap: boolean }>`
   ${({ hasGap }) => !hasGap && "margin: 0 -0.1rem;"}
 
   svg {
-    width: 1.4rem;
-    height: 1.4rem;
+    width: ${({ $shape }) => ($shape === "pill" ? "1.2rem" : "1.6rem")};
+    height: ${({ $shape }) => ($shape === "pill" ? "1.2rem" : "1.6rem")};
   }
 `
 
@@ -124,6 +155,7 @@ export const Badge = React.forwardRef<HTMLSpanElement, Props>(
       type,
       variant,
       size = "md",
+      shape = "chip",
       icon,
       pulsate,
       children,
@@ -139,10 +171,15 @@ export const Badge = React.forwardRef<HTMLSpanElement, Props>(
       className={className}
       $variant={getVariant(variant, type)}
       $size={size}
+      $shape={shape}
       pulsate={pulsate}
       data-hook={dataHook}
     >
-      {icon && <Icon hasGap={React.Children.count(children) > 0}>{icon}</Icon>}
+      {icon && (
+        <Icon $shape={shape} hasGap={React.Children.count(children) > 0}>
+          {icon}
+        </Icon>
+      )}
       {children}
     </Root>
   ),

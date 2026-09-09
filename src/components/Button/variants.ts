@@ -118,14 +118,14 @@ const themes: {
   },
   dangerGhost: {
     normal: {
-      background: "transparent",
-      border: "transparent",
-      color: "statusDanger",
-    },
-    hover: {
       background: "statusDangerSurface",
       border: "transparent",
-      color: "statusDanger",
+      color: "statusDangerContrast",
+    },
+    hover: {
+      background: "statusDangerSurfaceHover",
+      border: "transparent",
+      color: "statusDangerSubtle",
     },
     disabled: {
       background: "transparent",
@@ -135,14 +135,14 @@ const themes: {
   },
   danger: {
     normal: {
-      background: "statusDangerSurface",
-      border: "transparent",
-      color: "statusDangerStrong",
+      background: "statusDangerStrong",
+      border: "statusDangerStrong",
+      color: "contentInverse",
     },
     hover: {
-      background: "statusDangerSurfaceHover",
-      border: "transparent",
-      color: "statusDangerStrong",
+      background: "statusDanger",
+      border: "statusDanger",
+      color: "contentInverse",
     },
     disabled: {
       background: "surfaceRaised",
@@ -197,8 +197,14 @@ export const makeButtonVariant = (variant: ButtonVariant) => {
     }
 
     &&:hover:not(:disabled):not([aria-disabled="true"]) {
-      background: ${getColor(theme.hover.background)};
-      color: ${getColor(theme.hover.color)};
+      background: ${({ theme: t }) =>
+        variant === "ghost" && t.mode === "light"
+          ? t.color.interactionHover
+          : t.color[theme.hover.background]};
+      color: ${({ theme: t }) =>
+        variant === "dangerGhost" && t.mode === "dark"
+          ? t.color.statusDanger
+          : t.color[theme.hover.color]};
       border-color: ${getColor(theme.hover.border)};
     }
 

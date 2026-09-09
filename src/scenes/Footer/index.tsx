@@ -44,7 +44,10 @@ const Wrapper = styled.div`
   flex: 0 0 ${FOOTER_HEIGHT};
   height: ${FOOTER_HEIGHT};
   padding: 0 0.8rem 0 6.4rem;
-  background-color: ${({ theme }) => theme.color.surfaceBase};
+  background-color: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceRaised
+      : theme.color.surfaceBase};
   background-image: none;
   border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   box-shadow: none;

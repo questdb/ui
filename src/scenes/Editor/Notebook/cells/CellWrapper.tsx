@@ -23,7 +23,8 @@ export const CellWrapper = styled.div.attrs({
       border-color: ${color("contentAccent")};
       box-shadow:
         0 0 0 3px ${color("interactionAccentActive")},
-        0 18px 50px ${color("shadowMedium")};
+        0 1px 2px ${color("shadowSubtle")},
+        0 4px 10px ${color("shadowSoft")};
     `}
 
   ${({ $focused }) =>
@@ -31,7 +32,9 @@ export const CellWrapper = styled.div.attrs({
     css`
       &:hover {
         border-color: ${color("borderDefault")};
-        box-shadow: 0 16px 44px ${color("shadowSoft")};
+        box-shadow:
+          0 1px 2px ${color("shadowSubtle")},
+          0 3px 8px ${color("shadowSoft")};
       }
     `}
 

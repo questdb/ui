@@ -78,13 +78,14 @@ const SidebarSpacer = styled.div`
 `
 
 const SidePanelRight = styled.div`
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   height: 100%;
   border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 
 const Wrapper = styled.div`
   height: 100%;
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-right: 1px solid ${({ theme }) => theme.color.borderSubtle};
 `
 

@@ -107,7 +107,7 @@ const ChatWindowContent = styled.div`
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const InitialQueryContainer = styled.div`
@@ -182,7 +182,7 @@ const ChatPanel = styled(Box)`
   height: 100%;
   width: 100%;
   gap: 0;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const AIChatWindow: React.FC = () => {

@@ -141,8 +141,11 @@ const Tab = styled(TabButton)`
   }
 `
 
-const TabBadge = styled(Badge)`
-  height: 1.8rem;
+const TabBadge = styled(Badge).attrs({
+  shape: "pill" as const,
+  size: "sm" as const,
+})`
+  flex-shrink: 0;
 `
 
 export const TableDetailsDrawer = () => {

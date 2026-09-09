@@ -91,9 +91,9 @@ type Props = Readonly<{
   value?: string | React.ReactNode
 }>
 
-const copyPulse = (pink: string) => keyframes`
+const copyPulse = (color: string) => keyframes`
   0% {
-    box-shadow: ${pink} 0 0 0 1px;
+    box-shadow: ${color} 0 0 0 1px;
   }
   75% {
     box-shadow: transparent 0 0 0 16px;
@@ -138,7 +138,7 @@ const Wrapper = styled.div<{
   `}
 
   &:hover {
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    background: ${({ theme }) => theme.color.interactionHover};
     .table-menu-button {
       opacity: 1;
     }
@@ -148,14 +148,14 @@ const Wrapper = styled.div<{
     $focused &&
     `
     outline: none;
-    background: ${theme.color.interactionAccentActive};
-    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
+    background: ${theme.color.interactionNeutral};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
     .table-menu-button {
       opacity: 1;
     }
 
     &:hover {
-      background: ${theme.color.interactionAccentActive};
+      background: ${theme.color.interactionNeutral};
     }
   `}
 
@@ -168,7 +168,7 @@ const Wrapper = styled.div<{
   ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${copyPulse(theme.color.contentAccent)} 1000ms 0.1s;
+      animation: ${copyPulse(theme.color.borderDefault)} 1000ms 0.1s;
     `}
 `
 
@@ -198,10 +198,6 @@ const StyledTitle = styled(Title)`
     background-color: ${({ theme }) => theme.color.contentAccentStrong};
     color: ${({ theme }) => theme.color.contentInverse};
   }
-
-  svg {
-    color: ${color("contentAccent")};
-  }
 `
 
 const TableActions = styled.span`
@@ -227,7 +223,7 @@ const Spacer = styled.span`
 `
 
 const SortDownIcon = styled(SortDown)`
-  color: ${color("contentAccent")};
+  color: ${color("contentPrimary")};
   margin-right: 0.8rem;
   flex-shrink: 0;
 `
@@ -250,7 +246,6 @@ const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
-  color: ${color("contentSecondary")};
   margin-right: 1rem;
 `
 
@@ -280,7 +275,7 @@ const TypeIcon = styled.div`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("contentAccent")};
+  color: ${color("contentPrimary")};
 `
 
 const TYPE_ICONS = {
@@ -676,7 +671,7 @@ const Row = ({
           onClick={onOpenDetailsDrawer}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <InfoIcon size={18} color={theme.color.contentAccent} />
+          <InfoIcon size={18} color={theme.color.contentSecondary} />
         </DetailsDrawerButton>
       )}
     </Wrapper>

@@ -5,6 +5,7 @@ import { Stop } from "../../../components/icons"
 import { Key } from "../../../components"
 import { ChevronDown } from "../../../components/icons"
 import { Box, Button, PopperToggle } from "../../../components"
+import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import { ctrlCmd, altOption } from "../../../utils/platform"
@@ -63,22 +64,36 @@ const ButtonGroup = styled.div`
   }
 `
 
-const SuccessButton = styled(Button)`
+const RunButton = styled(Button)`
   margin-left: auto;
-  font-size: 1.5rem;
+
+  &&,
+  &&:hover:not(:disabled):not([aria-disabled="true"]),
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.statusSuccess};
+    border-color: ${({ theme }) => theme.color.statusSuccess};
+    color: ${({ theme }) => theme.color.editorCanvas};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    filter: brightness(1.3);
+  }
+
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    filter: brightness(0.9);
+  }
 `
 
 const StopButton = styled(Button)`
   margin-left: auto;
-  font-size: 1.5rem;
 `
 
-const MainRunButton = styled(SuccessButton)`
+const MainRunButton = styled(RunButton)`
   border-right: 0;
   overflow: hidden;
 `
 
-const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
+const DropdownButton = styled(RunButton)<{ $open: boolean }>`
   padding: 0 0.5rem;
   min-width: auto;
   svg {
@@ -89,16 +104,10 @@ const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
 const CopyLinkMenuButton = styled(Button)`
   justify-content: space-between;
   border-radius: 0;
-  font-size: 1.5rem;
 `
 
 const DropdownMenu = styled.div`
-  background: ${color("surfaceInset")};
-  border: 1px solid ${color("borderDefault")};
-  border-radius: 0.7rem;
-  box-shadow:
-    0 1.2rem 3rem ${({ theme }) => theme.color.shadowMedium},
-    0 0.2rem 0.6rem ${({ theme }) => theme.color.shadowSoft};
+  ${floatingSurfaceStyles}
   overflow: hidden;
   transform: translateX(-7rem) translateY(0.5rem);
   padding: 0;
@@ -106,18 +115,30 @@ const DropdownMenu = styled.div`
   display: flex;
   flex-direction: column;
 
-  > button {
+  /* Lock the item hairline; secondary Button hover would paint borderStrong. */
+  && > button {
     justify-content: space-between;
     width: 100%;
-    min-height: 4rem;
-    padding: 0.7rem 1.2rem;
+    min-height: 3.6rem;
+    padding: 0.6rem 1.2rem;
     border: 0;
     border-radius: 0;
-    font-size: 1.5rem;
+    background: transparent;
   }
 
-  > button + button {
+  && > button + button {
     border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  }
+
+  && > button:hover:not(:disabled):not([aria-disabled="true"]),
+  && > button:active:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.interactionHover};
+    filter: none;
+  }
+
+  && > button + button:hover:not(:disabled):not([aria-disabled="true"]),
+  && > button + button:active:not(:disabled):not([aria-disabled="true"]) {
+    border-top-color: ${({ theme }) => theme.color.borderSubtle};
   }
 `
 
@@ -237,7 +258,7 @@ const ButtonBar = ({
           variant="danger"
           data-hook="button-cancel-script"
           onClick={handleClickScriptButton}
-          prefixIcon={<Stop size="18px" />}
+          prefixIcon={<Stop size="14px" />}
           {...menuProps}
         >
           Cancel
@@ -259,9 +280,13 @@ const ButtonBar = ({
       >
         Run all queries
         <RunShortcut>
-          <Key keyString={ctrlCmd} color={color("contentSecondary")} />
-          <Key keyString="⇧" color={color("contentSecondary")} />
-          <Key keyString="Enter" color={color("contentSecondary")} />
+          <Key
+            size="sm"
+            keyString={ctrlCmd}
+            color={color("contentSecondary")}
+          />
+          <Key size="sm" keyString="⇧" color={color("contentSecondary")} />
+          <Key size="sm" keyString="Enter" color={color("contentSecondary")} />
         </RunShortcut>
       </CopyLinkMenuButton>
     )
@@ -275,7 +300,7 @@ const ButtonBar = ({
             variant="danger"
             data-hook="button-cancel-query"
             onClick={handleClickQueryButton}
-            prefixIcon={<Stop size="18px" />}
+            prefixIcon={<Stop size="14px" />}
           >
             Cancel
           </StopButton>
@@ -310,8 +335,16 @@ const ButtonBar = ({
         >
           {getQueryButtonText()}
           <RunShortcut>
-            <Key keyString={ctrlCmd} color={color("contentSecondary")} />
-            <Key keyString="Enter" color={color("contentSecondary")} />
+            <Key
+              size="sm"
+              keyString={ctrlCmd}
+              color={color("contentSecondary")}
+            />
+            <Key
+              size="sm"
+              keyString="Enter"
+              color={color("contentSecondary")}
+            />
           </RunShortcut>
         </MainRunButton>
         <PopperToggle
@@ -329,7 +362,7 @@ const ButtonBar = ({
               aria-expanded={dropdownActive}
               aria-controls={RUN_DROPDOWN_MENU_ID}
             >
-              <ChevronDown size="16px" />
+              <ChevronDown size="14px" />
             </DropdownButton>
           }
         >
@@ -345,9 +378,21 @@ const ButtonBar = ({
             >
               Copy link to all queries
               <RunShortcut>
-                <Key keyString={altOption} color={color("contentSecondary")} />
-                <Key keyString="⇧" color={color("contentSecondary")} />
-                <Key keyString="L" color={color("contentSecondary")} />
+                <Key
+                  size="sm"
+                  keyString={altOption}
+                  color={color("contentSecondary")}
+                />
+                <Key
+                  size="sm"
+                  keyString="⇧"
+                  color={color("contentSecondary")}
+                />
+                <Key
+                  size="sm"
+                  keyString="L"
+                  color={color("contentSecondary")}
+                />
               </RunShortcut>
             </CopyLinkMenuButton>
           </DropdownMenu>

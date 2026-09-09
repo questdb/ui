@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react"
 import styled from "styled-components"
-import { color } from "../../../utils"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 
@@ -11,24 +10,12 @@ const Wrapper = styled.div`
   min-width: 0;
 `
 
-const StatusIcon = styled.div<{ isConnected: boolean }>`
+const StatusIcon = styled.svg<{ $ok: boolean }>`
   width: 0.9rem;
   height: 0.9rem;
-  border-radius: 999px;
-  background-color: ${(props) =>
-    props.isConnected ? color("statusSuccess") : color("statusDanger")};
-  box-shadow:
-    0 0 0 3px
-      ${(props) =>
-        props.isConnected
-          ? props.theme.color.statusSuccessSurface
-          : props.theme.color.statusDangerSurface},
-    0 0 12px
-      ${(props) =>
-        props.isConnected
-          ? props.theme.color.statusSuccessBorder
-          : props.theme.color.statusDangerBorder};
   flex-shrink: 0;
+  color: ${({ $ok, theme }) =>
+    $ok ? theme.color.statusSuccess : theme.color.statusDanger};
 `
 
 const StatusText = styled.div`
@@ -70,7 +57,33 @@ const ConnectionStatus = () => {
 
   return (
     <Wrapper>
-      <StatusIcon isConnected={isConnected} />
+      <StatusIcon
+        $ok={isConnected}
+        viewBox="0 0 1 1"
+        fill="currentColor"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <rect
+          x="0.1"
+          y="0.1"
+          width="0.8"
+          height="0.8"
+          rx="0.15"
+          fill="currentColor"
+        />
+        <rect
+          x="0.05"
+          y="0.05"
+          width="0.9"
+          height="0.9"
+          rx="0.15"
+          stroke="currentColor"
+          strokeOpacity="0.32"
+          strokeWidth="0.1"
+          fill="none"
+        />
+      </StatusIcon>
       <StatusText>
         <Product>QuestDB</Product>
         <State isConnected={isConnected}>

@@ -18,7 +18,10 @@ const ToggleButton = styled(NotebookViewToggleSegment)`
     box-shadow:
       inset 0 0 0 1px ${({ theme }) => theme.color.glassBorder},
       inset 0 -2px 0 ${({ theme }) => theme.color.glassEdge},
-      0 3px 9px ${({ theme }) => theme.color.shadowSoft};
+      ${({ theme }) =>
+        theme.mode === "light"
+          ? `0 1px 1px ${theme.color.shadowSubtle}, 0 1px 3px ${theme.color.shadowSoft}`
+          : `0 3px 9px ${theme.color.shadowSoft}`};
     backdrop-filter: blur(2px) saturate(150%);
     -webkit-backdrop-filter: blur(2px) saturate(150%);
   }
