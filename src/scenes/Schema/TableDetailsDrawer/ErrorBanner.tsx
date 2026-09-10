@@ -8,7 +8,7 @@ import { SchemaAIButton } from "./SchemaAIButton"
 type Props = {
   title: string
   description?: string
-  onAskAI: () => void
+  onAskAI?: () => void
   docsUrl?: string
   showResumeButton?: boolean
   onResume?: () => void
@@ -72,6 +72,10 @@ export const ErrorBanner = ({
   showResumeButton,
   onResume,
 }: Props) => {
+  const hasActions = Boolean(
+    onAskAI || docsUrl || (showResumeButton && onResume),
+  )
+
   return (
     <BannerContainer data-hook="table-details-error-banner">
       <ContentSection>
@@ -85,31 +89,35 @@ export const ErrorBanner = ({
         </TitleRow>
         {description && <RedText size="sm">{description}</RedText>}
       </ContentSection>
-      <ActionsSection>
-        {showResumeButton && onResume && (
-          <ResumeButton
-            variant="gradient"
-            onClick={onResume}
-            data-hook="table-details-resume-wal-button"
-          >
-            Resume WAL
-          </ResumeButton>
-        )}
-        <SchemaAIButton
-          onClick={onAskAI}
-          data-hook="table-details-error-ask-ai"
-        >
-          Ask AI
-        </SchemaAIButton>
-        {docsUrl && (
-          <DocumentationLink
-            href={docsUrl}
-            data-hook="table-details-error-docs-link"
-          >
-            View explanation in docs
-          </DocumentationLink>
-        )}
-      </ActionsSection>
+      {hasActions && (
+        <ActionsSection>
+          {showResumeButton && onResume && (
+            <ResumeButton
+              variant="gradient"
+              onClick={onResume}
+              data-hook="table-details-resume-wal-button"
+            >
+              Resume WAL
+            </ResumeButton>
+          )}
+          {onAskAI && (
+            <SchemaAIButton
+              onClick={onAskAI}
+              data-hook="table-details-error-ask-ai"
+            >
+              Ask AI
+            </SchemaAIButton>
+          )}
+          {docsUrl && (
+            <DocumentationLink
+              href={docsUrl}
+              data-hook="table-details-error-docs-link"
+            >
+              View explanation in docs
+            </DocumentationLink>
+          )}
+        </ActionsSection>
+      )}
     </BannerContainer>
   )
 }

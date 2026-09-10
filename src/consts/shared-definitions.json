@@ -5,7 +5,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Get a list of all tables and materialized views in the QuestDB database",
+    "description": "Get a list of all tables, materialized views, views and live views in the QuestDB database",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -18,14 +18,14 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Get the full schema definition (DDL) for a specific table or materialized view",
+    "description": "Get the full schema definition (DDL) for a specific table, materialized view, view or live view",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "table_name": {
           "type": "string",
-          "description": "The name of the table or materialized view to get schema for"
+          "description": "The name of the table, materialized view, view or live view to get schema for"
         }
       },
       "required": ["table_name"]
@@ -37,14 +37,14 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": false,
     "createsNotebook": false,
-    "description": "Get the runtime details/statistics of a specific table or materialized view",
+    "description": "Get the runtime details/statistics of a specific table, materialized view, view or live view",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "table_name": {
           "type": "string",
-          "description": "The name of the table or materialized view to get details for"
+          "description": "The name of the table, materialized view, view or live view to get details for"
         }
       },
       "required": ["table_name"]

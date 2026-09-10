@@ -12,7 +12,6 @@ import {
   Table,
   Column,
   Options,
-  RawData,
   RawResult,
   Release,
   NewsItem,
@@ -25,6 +24,9 @@ import {
   Permission,
   SymbolColumnDetails,
   View,
+  LiveView,
+  MaterializedView,
+  TableKind,
   ValidateQueryResult,
   ValidateQuerySuccessResult,
   ValidateQueryErrorResult,
@@ -32,6 +34,22 @@ import {
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export type QueryId = number
+
+export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
+
+export const buildDDLQuery = (name: string, kind: TableKind): string => {
+  const escapedName = escapeSqlLiteral(name)
+  switch (kind) {
+    case "table":
+      return `SHOW CREATE TABLE '${escapedName}';`
+    case "matview":
+      return `SHOW CREATE MATERIALIZED VIEW '${escapedName}';`
+    case "view":
+      return `SHOW CREATE VIEW '${escapedName}';`
+    case "liveview":
+      return `SHOW CREATE LIVE VIEW '${escapedName}';`
+  }
+}
 
 export class Client {
   private _controllers = new Map<QueryId, AbortController>()
@@ -121,20 +139,36 @@ export class Client {
 
   static transformQueryRawResult = <T extends Record<string, unknown>>(
     result: QueryRawResult,
+    options?: { convertLongsToBigInt?: boolean },
   ): QueryResult<T> => {
     if (result.type === Type.DQL) {
       const { columns, count, dataset, timings } = result
 
-      const parsed = dataset.map(
-        (row) =>
-          row.reduce(
-            (acc: RawData, val: Value, idx) => ({
-              ...acc,
-              [columns[idx].name]: val,
-            }),
-            {},
-          ) as RawData,
-      ) as unknown as T[]
+      const parsed = dataset.map((row) =>
+        row.reduce<Record<string, unknown>>((acc, val: Value | null, idx) => {
+          const column = columns[idx]
+          let value: unknown = val
+
+          if (
+            options?.convertLongsToBigInt &&
+            column.type === "LONG" &&
+            val !== null
+          ) {
+            if (typeof val === "string" && /^-?\d+$/.test(val)) {
+              value = BigInt(val)
+            } else if (typeof val === "number" && Number.isSafeInteger(val)) {
+              value = BigInt(val)
+            } else {
+              throw new TypeError(
+                `Invalid LONG value for column ${column.name}: ${String(val)}`,
+              )
+            }
+          }
+
+          acc[column.name] = value
+          return acc
+        }, {}),
+      ) as T[]
 
       return {
         columns,
@@ -156,6 +190,21 @@ export class Client {
     const result = await this.queryRaw(query, options)
 
     return Client.transformQueryRawResult<T>(result)
+  }
+
+  /**
+   * QuestDB returns LONG columns as decimal strings for console requests so
+   * their full 64-bit precision survives JSON. Catalog consumers opt into
+   * bigint conversion here; regular query results intentionally stay as-is.
+   */
+  async queryCatalog<T extends Record<string, unknown>>(
+    query: string,
+    options?: Options,
+  ): Promise<QueryResult<T>> {
+    const result = await this.queryRaw(query, options)
+    return Client.transformQueryRawResult<T>(result, {
+      convertLongsToBigInt: true,
+    })
   }
 
   private removeController(queryId: QueryId) {
@@ -417,7 +466,7 @@ export class Client {
   }
 
   async showTables(): Promise<QueryResult<Table>> {
-    const response = await this.query<Table>("tables();")
+    const response = await this.queryCatalog<Table>("tables();")
 
     if (response.type === Type.DQL) {
       return {
@@ -465,23 +514,28 @@ export class Client {
   }
 
   async getTableDetails(table: string): Promise<QueryResult<Table>> {
-    return await this.query<Table>(`tables() where table_name = '${table}';`)
+    return await this.queryCatalog<Table>(
+      `tables() where table_name = '${escapeSqlLiteral(table)}';`,
+    )
   }
 
-  async showMatViewDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE MATERIALIZED VIEW '${table}';`)
-  }
-
-  async showViewDDL(viewName: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE VIEW '${viewName}';`)
+  async showMaterializedViews(): Promise<QueryResult<MaterializedView>> {
+    return await this.queryCatalog<MaterializedView>("materialized_views()")
   }
 
   async showViews(): Promise<QueryResult<View>> {
     return await this.query<View>("views();")
   }
 
-  async showTableDDL(table: string): Promise<QueryResult<{ ddl: string }>> {
-    return this.queryDDL(`SHOW CREATE TABLE '${table}';`)
+  async showLiveViews(): Promise<QueryResult<LiveView>> {
+    return await this.queryCatalog<LiveView>("live_views();")
+  }
+
+  async showDDL(
+    name: string,
+    kind: TableKind,
+  ): Promise<QueryResult<{ ddl: string }>> {
+    return this.queryDDL(buildDDLQuery(name, kind))
   }
 
   private async queryDDL(sql: string): Promise<QueryResult<{ ddl: string }>> {

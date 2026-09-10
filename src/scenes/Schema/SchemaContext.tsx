@@ -1,21 +1,17 @@
 import React, { createContext, useContext, useState, useMemo } from "react"
-import { TreeNodeKind } from "./Row"
+import type { TableKind } from "../../utils/questdb/types"
+
+export type SelectedTable = { name: string; type: TableKind }
 
 export const SchemaContext = createContext<{
   query: string
   setQuery: (query: string) => void
   selectOpen: boolean
   setSelectOpen: (open: boolean) => void
-  selectedTables: { name: string; type: TreeNodeKind }[]
-  setSelectedTables: (tables: { name: string; type: TreeNodeKind }[]) => void
-  handleSelectToggle: ({
-    name,
-    type,
-  }: {
-    name: string
-    type: TreeNodeKind
-  }) => void
-  selectedTablesMap: Map<string, { name: string; type: TreeNodeKind }>
+  selectedTables: SelectedTable[]
+  setSelectedTables: (tables: SelectedTable[]) => void
+  handleSelectToggle: (table: SelectedTable) => void
+  selectedTablesMap: Map<string, SelectedTable>
   focusedIndex: number | null
   setFocusedIndex: (index: number | null) => void
 }>({
@@ -44,9 +40,7 @@ export const SchemaProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [query, setQuery] = useState("")
   const [selectOpen, _setSelectOpen] = useState(false)
-  const [selectedTables, setSelectedTables] = useState<
-    { name: string; type: TreeNodeKind }[]
-  >([])
+  const [selectedTables, setSelectedTables] = useState<SelectedTable[]>([])
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null)
 
   const selectedTablesMap = useMemo(
@@ -57,13 +51,7 @@ export const SchemaProvider: React.FC<{ children: React.ReactNode }> = ({
     [selectedTables],
   )
 
-  const handleSelectToggle = ({
-    name,
-    type,
-  }: {
-    name: string
-    type: TreeNodeKind
-  }) => {
+  const handleSelectToggle = ({ name, type }: SelectedTable) => {
     const key = `${name}-${type}`
     if (selectedTablesMap.has(key)) {
       setSelectedTables(

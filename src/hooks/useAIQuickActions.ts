@@ -17,27 +17,28 @@ import type {
 } from "../scenes/Schema/TableDetailsDrawer/healthCheck"
 import * as QuestDB from "../utils/questdb"
 import { selectors } from "../store"
-import type { PartitionBy, QueryResult, Table } from "../utils/questdb/types"
+import { getTableKindLabel } from "../utils/questdb/types"
+import type {
+  LiveView,
+  MaterializedView,
+  PartitionBy,
+  QueryResult,
+  Table,
+  TableKind,
+} from "../utils/questdb/types"
+
+type HealthIssueDiagnosticContext = {
+  source: "materialized_views()" | "live_views()"
+  data: MaterializedView | LiveView
+  guidance?: string
+}
 
 type SchemaDisplayData = {
   tableName: string
-  kind: "table" | "matview" | "view"
+  kind: TableKind
   partitionBy?: PartitionBy
   walEnabled?: boolean
   designatedTimestamp?: string
-}
-
-const getTableKindLabel = (kind: "table" | "matview" | "view") => {
-  switch (kind) {
-    case "table":
-      return "Table"
-    case "matview":
-      return "Materialized view"
-    case "view":
-      return "View"
-    default:
-      return ""
-  }
 }
 
 export const useAIQuickActions = () => {
@@ -70,27 +71,18 @@ export const useAIQuickActions = () => {
 
   const getTableSchema = async (
     tableName: string,
-    kind: "table" | "matview" | "view",
+    kind: TableKind,
   ): Promise<string | null> => {
     try {
-      const response =
-        kind === "matview"
-          ? await quest.showMatViewDDL(tableName)
-          : kind === "view"
-            ? await quest.showViewDDL(tableName)
-            : await quest.showTableDDL(tableName)
+      const response = await quest.showDDL(tableName, kind)
 
       if (response?.type === QuestDB.Type.DQL && response.data?.[0]?.ddl) {
         return response.data[0].ddl
       }
     } catch (_error) {
-      const kindLabel =
-        kind === "matview"
-          ? "materialized view"
-          : kind === "view"
-            ? "view"
-            : "table"
-      toast.error(`Cannot fetch schema for ${kindLabel} '${tableName}'`)
+      toast.error(
+        `Cannot fetch schema for ${getTableKindLabel(kind).toLowerCase()} '${tableName}'`,
+      )
     }
     return null
   }
@@ -98,7 +90,7 @@ export const useAIQuickActions = () => {
   const handleExplainSchema = async (
     id: number,
     name: string,
-    kind: "table" | "matview" | "view",
+    kind: TableKind,
     schemaDisplayData?: Omit<SchemaDisplayData, "tableName" | "kind">,
   ) => {
     if (isBlockingAIStatus(status)) {
@@ -202,6 +194,7 @@ export const useAIQuickActions = () => {
     tableName: string,
     issue: HealthIssue,
     trendSamples?: TimestampedSample[],
+    diagnosticContext?: HealthIssueDiagnosticContext,
   ) => {
     if (isBlockingAIStatus(status)) {
       return
@@ -231,7 +224,16 @@ export const useAIQuickActions = () => {
       toast.error(`Cannot fetch details for table '${tableName}'`)
       return
     }
-    const tableDetails = JSON.stringify(tableDetailsResponse.data[0], null, 2)
+    const tableDetails = QuestDB.stringifyWithBigInts(
+      tableDetailsResponse.data[0],
+      2,
+    )
+    const diagnosticDetails = diagnosticContext
+      ? {
+          source: diagnosticContext.source,
+          data: QuestDB.stringifyWithBigInts(diagnosticContext.data, 2),
+        }
+      : undefined
 
     let monitoringDocs: string
     try {
@@ -256,10 +258,12 @@ export const useAIQuickActions = () => {
             id: issue.id,
             field: issue.field,
             message: issue.message,
-            currentValue: issue.currentValue,
+            currentValue: issue.promptValue ?? issue.currentValue,
             severity: issue.severity as "critical" | "warning",
           },
           tableDetails,
+          diagnosticDetails,
+          issueGuidance: diagnosticContext?.guidance,
           monitoringDocs,
           trendSamples,
           settings: { model: currentModel, apiKey },
@@ -305,10 +309,12 @@ export const useAIQuickActions = () => {
           id: issue.id,
           field: issue.field,
           message: issue.message,
-          currentValue: issue.currentValue,
+          currentValue: issue.promptValue ?? issue.currentValue,
           severity: issue.severity as "critical" | "warning",
         },
         tableDetails,
+        diagnosticDetails,
+        issueGuidance: diagnosticContext?.guidance,
         monitoringDocs,
         trendSamples,
         settings: { model: currentModel, apiKey },

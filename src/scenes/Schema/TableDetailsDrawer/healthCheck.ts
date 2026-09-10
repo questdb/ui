@@ -1,21 +1,42 @@
-import type { Table, MaterializedView } from "../../../utils/questdb/types"
+import { type Table, type LiveView } from "../../../utils/questdb/types"
+import type { TableKindData } from "./types"
+import { formatMicrosDuration } from "./utils"
 
 const DOCS_BASE_URL = "https://questdb.com/docs"
 const MONITORING_DOCS_URL = `${DOCS_BASE_URL}/operations/monitoring-alerting`
+const LIVE_VIEWS_MONITORING_DOCS_URL = `${DOCS_BASE_URL}/concepts/live-views/#monitoring`
 
 export const ISSUE_DOCS_URLS: Record<string, string> = {
   R1: `${MONITORING_DOCS_URL}/#detect-suspended-tables`, // WAL suspended
   R2: `${MONITORING_DOCS_URL}/#detect-invalid-materialized-views`, // MatView invalid
   R3: `${MONITORING_DOCS_URL}/#detect-memory-pressure`, // Memory backoff (level 2)
   R4: `${DOCS_BASE_URL}/concepts/views/#view-invalidation`, // View invalid
+  R5: LIVE_VIEWS_MONITORING_DOCS_URL, // Live view invalid
+  R6: LIVE_VIEWS_MONITORING_DOCS_URL, // Live view format version unsupported
+  R7: LIVE_VIEWS_MONITORING_DOCS_URL, // Live view state unreadable
   Y1: `${MONITORING_DOCS_URL}/#detect-transaction-lag-and-pending-rows`, // Transaction lag increasing
   Y2: `${MONITORING_DOCS_URL}/#detect-transaction-lag-and-pending-rows`, // Pending rows increasing
   Y3: `${MONITORING_DOCS_URL}/#detect-small-transactions`, // Small transactions
   Y4: `${MONITORING_DOCS_URL}/#detect-high-write-amplification`, // High write amplification
   Y5: `${MONITORING_DOCS_URL}/#detect-memory-pressure`, // Reduced parallelism (level 1)
+  Y7: LIVE_VIEWS_MONITORING_DOCS_URL, // Live view flush writer stalled
 }
 
-export type HealthSeverity = "critical" | "warning" | "healthy" | "recovering"
+const LIVE_VIEW_ISSUE_GUIDANCE: Record<LiveViewFailure["issueId"], string> = {
+  R5: "Invalidation is permanent. Save the definition with SHOW CREATE LIVE VIEW, then drop and recreate the view. RESUME WAL does not recover an invalid live view.",
+  R6: "The on-disk format is not readable by this server build, usually after a binary downgrade. Restore the newer binary and restart. If the binary is correct, the file header is damaged: drop and recreate the view. The view does not refresh until this is resolved.",
+  R7: "The view state files are corrupt or missing, and automatic recovery failed. A restart does not fix this. Save the definition with SHOW CREATE LIVE VIEW, then drop and recreate the view. Existing rows stay queryable but frozen.",
+}
+
+export const getLiveViewIssueGuidance = (issueId: string): string | undefined =>
+  (LIVE_VIEW_ISSUE_GUIDANCE as Partial<Record<string, string>>)[issueId]
+
+export type HealthSeverity =
+  | "critical"
+  | "warning"
+  | "unknown"
+  | "healthy"
+  | "recovering"
 
 export type TrendDirection = "increasing" | "decreasing" | "stable"
 
@@ -25,6 +46,7 @@ export type HealthIssue = {
   field: string
   message: string
   currentValue?: string
+  promptValue?: string
 }
 
 export type TrendIndicator = {
@@ -36,13 +58,14 @@ export type TrendIndicator = {
 
 export type HealthStatus = {
   overallSeverity: HealthSeverity
+  hasUnavailableSource: boolean
   issues: HealthIssue[]
   fieldIssues: Map<string, HealthIssue>
   trendIndicators: Map<string, TrendIndicator>
 }
 
 export type TimestampedSample = {
-  value: number
+  value: bigint
   timestamp: number
 }
 
@@ -52,13 +75,19 @@ export type TrendData = {
   ingestionMetric: TimestampedSample[]
 }
 
+// The drawer polls live_views() on this period for point-in-time status and
+// metrics. lag_seqtxn is deliberately not trended: it is a flush-cadence
+// sawtooth, and a drawer session is usually too short to observe enough flush
+// cycles across QuestDB's full supported interval range.
+export const LIVE_VIEW_POLL_MS = 1_000
+
 const TREND_WINDOW_MS = 30_000
 export const MAX_TREND_SAMPLES = 150
 const RATE_THRESHOLD = 0.5
 
 function getRecentSamples(
   samples: TimestampedSample[],
-  now: number = Date.now(),
+  now: number,
 ): TimestampedSample[] {
   const cutoff = now - TREND_WINDOW_MS
   return samples.filter((s) => s.timestamp >= cutoff)
@@ -72,9 +101,12 @@ export function calculateTrendRate(
   if (recent.length < 2) return 0
 
   const first = recent[0].timestamp
+  const firstValue = recent[0].value
   const points = recent.map((s) => ({
     t: (s.timestamp - first) / 1000,
-    v: s.value,
+    // Trend rates are intentionally floating point. Source counters and their
+    // subtraction stay exact until this derived value is calculated.
+    v: Number(s.value - firstValue),
   }))
 
   const n = points.length
@@ -107,12 +139,64 @@ export function detectIngestionActive(samples: TimestampedSample[]): boolean {
   return false
 }
 
+const BIGINT_ZERO = BigInt(0)
+const BIGINT_ONE_HUNDRED = BigInt(100)
+const LIVE_VIEW_WRITER_STALL_WARNING_MICROS = BigInt(5_000_000)
+const HIGH_WRITE_AMPLIFICATION_THRESHOLD = 3
+
+export type LiveViewFailure = {
+  issueId: "R5" | "R6" | "R7"
+  message: string
+}
+
+export const getLiveViewFailure = (
+  liveView: LiveView,
+): LiveViewFailure | null => {
+  switch (liveView.view_status) {
+    case "invalid":
+      return {
+        issueId: "R5",
+        message: liveView.invalidation_reason
+          ? `Live view is invalid: ${liveView.invalidation_reason}`
+          : "Live view is invalid",
+      }
+    case "version_unsupported":
+      return {
+        issueId: "R6",
+        message: "Live view format is not readable by this server build",
+      }
+    case "state_unreadable":
+      return {
+        issueId: "R7",
+        message: "Live view state files are unreadable",
+      }
+    default:
+      return null
+  }
+}
+
+export const isLiveViewLoadFailure = (liveView: LiveView | null): boolean =>
+  liveView?.view_status === "version_unsupported" ||
+  liveView?.view_status === "state_unreadable"
+
 export function calculateHealthStatus(
   tableData: Table,
-  matViewData: MaterializedView | null,
+  kindData: TableKindData,
   trendData: TrendData,
-  isMatView: boolean,
 ): HealthStatus {
+  const matViewData =
+    kindData.kind === "matview" && kindData.matView.status === "ready"
+      ? kindData.matView.data
+      : null
+  const liveViewData =
+    kindData.kind === "liveview" && kindData.liveView.status === "ready"
+      ? kindData.liveView.data
+      : null
+  const kindSourceUnavailable =
+    (kindData.kind === "view" && kindData.view.status === "unavailable") ||
+    (kindData.kind === "matview" &&
+      kindData.matView.status === "unavailable") ||
+    (kindData.kind === "liveview" && kindData.liveView.status === "unavailable")
   const issues: HealthIssue[] = []
 
   // ============================================================
@@ -130,12 +214,14 @@ export function calculateHealthStatus(
   }
 
   // R2: MatView Invalid (affects header dot only, UI has dedicated section)
-  if (isMatView && matViewData?.view_status === "invalid") {
+  if (matViewData?.view_status === "invalid") {
     issues.push({
       id: "R2",
       severity: "critical",
       field: "viewStatus",
-      message: `Materialized view is invalid: ${matViewData.invalidation_reason}`,
+      message: matViewData.invalidation_reason
+        ? `Materialized view is invalid: ${matViewData.invalidation_reason}`
+        : "Materialized view is invalid",
     })
   }
 
@@ -146,6 +232,18 @@ export function calculateHealthStatus(
       severity: "critical",
       field: "memoryPressure",
       message: "Memory backoff - system under pressure",
+    })
+  }
+
+  // R5: invalid; R6/R7: failed to load at boot (stub states that never
+  // refresh again). Shared with the schema tree via getLiveViewFailure.
+  const liveViewFailure = liveViewData ? getLiveViewFailure(liveViewData) : null
+  if (liveViewFailure) {
+    issues.push({
+      id: liveViewFailure.issueId,
+      severity: "critical",
+      field: "viewStatus",
+      message: liveViewFailure.message,
     })
   }
 
@@ -164,12 +262,13 @@ export function calculateHealthStatus(
     const pendingDirection = getTrendDirection(pendingRate)
 
     const currentLag =
-      trendData.transactionLag[trendData.transactionLag.length - 1]?.value ?? 0
+      trendData.transactionLag[trendData.transactionLag.length - 1]?.value ??
+      BIGINT_ZERO
     const currentPending =
       trendData.walPendingRowCount[trendData.walPendingRowCount.length - 1]
-        ?.value ?? 0
+        ?.value ?? BIGINT_ZERO
 
-    if (currentLag > 0 && txLagDirection !== "stable") {
+    if (currentLag > BIGINT_ZERO && txLagDirection !== "stable") {
       trendIndicators.set("transactionLag", {
         field: "transactionLag",
         direction: txLagDirection,
@@ -187,12 +286,13 @@ export function calculateHealthStatus(
           severity: "warning",
           field: "transactionLag",
           message: "Transaction lag increasing",
-          currentValue: `${currentLag} txns`,
+          currentValue: `${currentLag.toLocaleString()} txns`,
+          promptValue: `${currentLag.toString()} txns`,
         })
       }
     }
 
-    if (currentPending > 0 && pendingDirection !== "stable") {
+    if (currentPending > BIGINT_ZERO && pendingDirection !== "stable") {
       trendIndicators.set("pendingRows", {
         field: "pendingRows",
         direction: pendingDirection,
@@ -211,6 +311,7 @@ export function calculateHealthStatus(
           field: "pendingRows",
           message: "Pending rows accumulating",
           currentValue: `${currentPending.toLocaleString()} rows`,
+          promptValue: `${currentPending.toString()} rows`,
         })
       }
     }
@@ -218,22 +319,22 @@ export function calculateHealthStatus(
     // Y3: Small Transactions (p90 < 100 rows, but > 0 to exclude empty tables)
     if (
       tableData.wal_tx_size_p90 != null &&
-      tableData.wal_tx_size_p90 > 0 &&
-      tableData.wal_tx_size_p90 < 100
+      tableData.wal_tx_size_p90 > BIGINT_ZERO &&
+      tableData.wal_tx_size_p90 < BIGINT_ONE_HUNDRED
     ) {
       issues.push({
         id: "Y3",
         severity: "warning",
         field: "txSizeP90",
         message: "Small transactions - consider batching",
-        currentValue: `${tableData.wal_tx_size_p90} rows`,
+        currentValue: `${tableData.wal_tx_size_p90.toLocaleString()} rows`,
       })
     }
 
-    // Y4: High Write Amplification (p50 > 2.0 means significant O3 merge overhead)
+    // Y4: High Write Amplification (p50 >= 3.0 means significant O3 merge overhead)
     if (
       tableData.table_write_amp_p50 != null &&
-      tableData.table_write_amp_p50 > 2.0
+      tableData.table_write_amp_p50 >= HIGH_WRITE_AMPLIFICATION_THRESHOLD
     ) {
       issues.push({
         id: "Y4",
@@ -256,13 +357,30 @@ export function calculateHealthStatus(
     }
   }
 
+  if (liveViewData) {
+    // Y7: Flush writer stalled
+    if (
+      liveViewData.writer_stall_micros != null &&
+      liveViewData.writer_stall_micros > LIVE_VIEW_WRITER_STALL_WARNING_MICROS
+    ) {
+      issues.push({
+        id: "Y7",
+        severity: "warning",
+        field: "writerStall",
+        message: "Live view flush writer stalled",
+        currentValue: formatMicrosDuration(liveViewData.writer_stall_micros),
+      })
+    }
+  }
+
   // Build field -> issue map (highest severity wins per field)
   const fieldIssues = new Map<string, HealthIssue>()
   const severityOrder: Record<HealthSeverity, number> = {
     critical: 0,
     warning: 1,
-    recovering: 2,
-    healthy: 3,
+    unknown: 2,
+    recovering: 3,
+    healthy: 4,
   }
 
   for (const issue of issues) {
@@ -280,9 +398,17 @@ export function calculateHealthStatus(
     overallSeverity = "critical"
   } else if (issues.some((i) => i.severity === "warning")) {
     overallSeverity = "warning"
+  } else if (kindSourceUnavailable) {
+    overallSeverity = "unknown"
   } else if (issues.some((i) => i.severity === "recovering")) {
     overallSeverity = "recovering"
   }
 
-  return { overallSeverity, issues, fieldIssues, trendIndicators }
+  return {
+    overallSeverity,
+    hasUnavailableSource: kindSourceUnavailable,
+    issues,
+    fieldIssues,
+    trendIndicators,
+  }
 }
