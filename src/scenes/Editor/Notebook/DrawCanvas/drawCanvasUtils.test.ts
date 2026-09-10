@@ -95,6 +95,12 @@ describe("resultsEquivalent", () => {
     expect(resultsEquivalent(a, b)).toBe(true)
   })
 
+  it("ignores internal whitespace and keyword casing", () => {
+    const a = [dql([{ name: "x", type: "INT" }], [[1]], "select  1\nas x")]
+    const b = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
+    expect(resultsEquivalent(a, b)).toBe(true)
+  })
+
   it("returns false when result counts differ", () => {
     const a = dql([{ name: "x", type: "INT" }], [[1]])
     const b = { ...a, count: 2 }
@@ -243,6 +249,15 @@ describe("resultMatchesQueries", () => {
     )
     expect(
       resultMatchesQueries(cellResult(["  SELECT 1\n"]), ["SELECT 1"]),
+    ).toBe(true)
+  })
+
+  it("matches across internal whitespace and keyword casing", () => {
+    // Given a result produced by the statement in one presentation
+    // When the cell now carries the same statement reformatted
+    // Then it still matches — a presentation-only edit never re-fetches
+    expect(
+      resultMatchesQueries(cellResult(["select  1\nas x"]), ["SELECT 1 AS x"]),
     ).toBe(true)
   })
 

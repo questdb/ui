@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import styled, { css } from "styled-components"
 import {
   ResponsiveGridLayout,
@@ -35,15 +42,11 @@ import { NotebookToolbar } from "./NotebookToolbar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
-  cellChromePx,
-  cellHeightPatchForRows,
-  computeCellGridH,
+  paneHeightsFromGridRows,
+  computeCellGridBounds,
   generateDefaultLayout as generateDefaultLayoutPure,
-  isDoubleView,
   isExpectingResult,
   mergeCellLayout,
-  MIN_BOTTOM_HEIGHT_PX,
-  minTopHeightFor,
   NOTEBOOK_GRID_COLS,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
@@ -135,7 +138,7 @@ const GridCellWrapper = React.forwardRef<HTMLDivElement, GridCellWrapperProps>(
   ),
 )
 
-const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
+const GridScrollContainer = styled.div<{ $suppressTransitions: boolean }>`
   flex: 1;
   overflow-y: auto;
   padding: 3rem;
@@ -155,13 +158,18 @@ const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
     opacity: 1;
   }
 
-  /* On first mount, react-grid-layout's items would otherwise animate from
-     their initial state to their computed position/size (the "expanding"
-     glitch). Kill the transition until the layout has settled; it's re-enabled
-     for drag/resize. */
+  /* Height is excluded: a pane switch mounts its content in the same commit
+     the item height changes, so the two must land together. */
+  .react-grid-item {
+    transition-property: left, top, width;
+  }
+
+  /* While the container is being resized the geometry tracks every frame;
+     react-grid-layout's stock transitions would chase each one. */
   ${({ $suppressTransitions }) =>
     $suppressTransitions &&
     css`
+      .react-grid-layout,
       .react-grid-item {
         transition: none !important;
       }
@@ -206,6 +214,23 @@ const LAYOUT_OPTS = {
 
 const generateDefaultLayout = (cells: { id: string }[]): CellLayoutItem[] =>
   generateDefaultLayoutPure(cells, LAYOUT_OPTS)
+
+const CONTAINER_RESIZE_SETTLE_MS = 200
+
+const useContainerResizeInFlight = (containerWidth: number): boolean => {
+  const [inFlight, setInFlight] = useState(true)
+
+  useLayoutEffect(() => {
+    setInFlight(true)
+    const timer = window.setTimeout(
+      () => setInFlight(false),
+      CONTAINER_RESIZE_SETTLE_MS,
+    )
+    return () => window.clearTimeout(timer)
+  }, [containerWidth])
+
+  return inFlight
+}
 
 const ADDED_CELL_SCROLL_SETTLE_MS = 250
 const ADDED_CELL_SCROLL_BOTTOM_GAP_PX = 20
@@ -398,26 +423,11 @@ const GridLayout: React.FC = () => {
     containerRef,
     mounted: gridMeasured,
   } = useContainerWidth({ measureBeforeMount: true })
+  const suppressTransitions = useContainerResizeInFlight(containerWidth)
   const autoScroll = useGridDragAutoScroll(
     containerRef as React.RefObject<HTMLElement>,
   )
   useScrollUserAddedCellIntoView()
-
-  // Suppress react-grid-layout's item transition until the grid has rendered
-  // and the width has settled, so cells don't animate into place on mount.
-  // Two frames cover the initial render + the ResizeObserver's first callback.
-  const [gridReady, setGridReady] = useState(false)
-  useEffect(() => {
-    if (!gridMeasured) return
-    let raf2 = 0
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setGridReady(true))
-    })
-    return () => {
-      cancelAnimationFrame(raf1)
-      cancelAnimationFrame(raf2)
-    }
-  }, [gridMeasured])
 
   // Derive each cell's grid h from topHeight + bottomHeight + chrome.
   // The h value in settings.layout is ignored on read — it's a stale
@@ -440,19 +450,14 @@ const GridLayout: React.FC = () => {
         cell,
         resultHydration?.statusOf(cell.id) ?? "unrequested",
       )
-      const minBottomPx =
-        isDoubleView(cell) || expectingResult ? MIN_BOTTOM_HEIGHT_PX : 0
-      const minTotalPx =
-        minTopHeightFor(cell) +
-        minBottomPx +
-        cellChromePx(cell, expectingResult)
-      const minH = Math.ceil(
-        (minTotalPx + GRID_MARGIN_Y) / (ROW_HEIGHT + GRID_MARGIN_Y),
-      )
       return {
         ...item,
-        h: computeCellGridH(cell, ROW_HEIGHT, GRID_MARGIN_Y, expectingResult),
-        minH,
+        ...computeCellGridBounds(
+          cell,
+          ROW_HEIGHT,
+          GRID_MARGIN_Y,
+          expectingResult,
+        ),
       }
     })
     return {
@@ -460,7 +465,7 @@ const GridLayout: React.FC = () => {
       layoutKey: computed
         .map(
           (item) =>
-            `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}`,
+            `${item.i}:${item.x}:${item.y}:${item.w}:${item.h}:${item.minH}:${item.maxH}`,
         )
         .join("|"),
     }
@@ -527,22 +532,22 @@ const GridLayout: React.FC = () => {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region })
       }
       updateSettings({ layout: mapLayoutXYW(newLayout) })
-      const cellById = new Map(cells.map((c) => [c.id, c]))
-      for (const item of newLayout) {
-        const cell = cellById.get(item.i)
-        if (!cell) continue
-        // rgl reports every cell; the helper no-ops those whose h is unchanged.
-        const patch = cellHeightPatchForRows(
-          cell,
-          item.h,
-          ROW_HEIGHT,
-          GRID_MARGIN_Y,
-          isExpectingResult(
+      if (oldItem && newItem && oldItem.h !== newItem.h) {
+        const cell = cells.find((candidate) => candidate.id === newItem.i)
+        if (cell) {
+          const expectingResult = isExpectingResult(
             cell,
             resultHydration?.statusOf(cell.id) ?? "unrequested",
-          ),
-        )
-        if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+          )
+          const patch = paneHeightsFromGridRows(
+            cell,
+            newItem.h,
+            ROW_HEIGHT,
+            GRID_MARGIN_Y,
+            expectingResult,
+          )
+          if (Object.keys(patch).length > 0) updateCell(cell.id, patch)
+        }
       }
       if (typeof activeBuffer.id === "number") {
         emitUserAction({
@@ -606,7 +611,7 @@ const GridLayout: React.FC = () => {
     <GridScrollContainer
       ref={containerRef as React.RefObject<HTMLDivElement>}
       id="notebook-scroll-container"
-      $suppressTransitions={!gridReady}
+      $suppressTransitions={suppressTransitions}
       onMouseDown={(e) => {
         const target = e.target as HTMLElement
         const gridItem = target.closest<HTMLElement>("[data-cell-id]")

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
 import { SideChip } from "./chips"
@@ -78,7 +78,9 @@ type Props = {
   onResize: (height: number) => void
   onResizeEnd: (height: number) => void
   onDoubleClick: () => void
-  minHeight?: number
+  minHeight: number
+  maxHeight: number
+  ariaLabel: string
   background?: string
   doubleView?: boolean
   // The cell's bottom-edge handle: an absolute strip straddling the cell edge
@@ -90,21 +92,59 @@ type Props = {
 // mouseup is a click and must not commit a resize (which would pin the
 // cell's auto-height).
 const DRAG_THRESHOLD_PX = 3
+const KEYBOARD_STEP_PX = 10
+const KEYBOARD_LARGE_STEP_PX = 50
+
+export const resizeHeightForKey = (
+  key: string,
+  currentHeight: number,
+  minHeight: number,
+  maxHeight: number,
+  largeStep = false,
+): number | null => {
+  const step = largeStep ? KEYBOARD_LARGE_STEP_PX : KEYBOARD_STEP_PX
+  let next: number
+  switch (key) {
+    case "ArrowUp":
+      next = currentHeight - step
+      break
+    case "ArrowDown":
+      next = currentHeight + step
+      break
+    case "Home":
+      next = minHeight
+      break
+    case "End":
+      next = maxHeight
+      break
+    default:
+      return null
+  }
+  return Math.min(maxHeight, Math.max(minHeight, next))
+}
 
 export const ResizeHandle: React.FC<Props> = ({
   targetRef,
   onResize,
   onResizeEnd,
   onDoubleClick,
-  minHeight = 48,
+  minHeight,
+  maxHeight,
+  ariaLabel,
   background,
   doubleView,
   overlay,
 }) => {
+  const [targetHeight, setTargetHeight] = useState<number>()
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
   const endDragRef = useRef<(() => void) | null>(null)
+
+  const clampHeight = useCallback(
+    (height: number) => Math.min(maxHeight, Math.max(minHeight, height)),
+    [maxHeight, minHeight],
+  )
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -120,7 +160,7 @@ export const ResizeHandle: React.FC<Props> = ({
         const delta = moveEvent.clientY - startYRef.current
         if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
         dragged = true
-        const newHeight = Math.max(minHeight, startHeightRef.current + delta)
+        const newHeight = clampHeight(startHeightRef.current + delta)
         lastHeightRef.current = newHeight
         onResize(newHeight)
       }
@@ -144,22 +184,41 @@ export const ResizeHandle: React.FC<Props> = ({
       document.addEventListener("mouseup", handleMouseUp)
       endDragRef.current = endDrag
     },
-    [targetRef, onResize, onResizeEnd, minHeight],
+    [targetRef, onResize, onResizeEnd, clampHeight],
   )
 
-  // Enter/Space on a focused handle resets to default. This is the only
-  // keyboard-accessible interaction we offer — mouse-drag resizing has no
-  // ergonomic keyboard equivalent here, so don't pretend otherwise in
-  // the aria-label.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault()
         onDoubleClick()
+        return
       }
+      if (!targetRef.current) return
+      const next = resizeHeightForKey(
+        e.key,
+        targetRef.current.getBoundingClientRect().height,
+        minHeight,
+        maxHeight,
+        e.shiftKey,
+      )
+      if (next === null) return
+      e.preventDefault()
+      onResize(next)
+      onResizeEnd(next)
     },
-    [onDoubleClick],
+    [maxHeight, minHeight, onDoubleClick, onResize, onResizeEnd, targetRef],
   )
+
+  useEffect(() => {
+    const target = targetRef.current
+    if (!target) return
+    const observer = new ResizeObserver(() =>
+      setTargetHeight(Math.round(target.getBoundingClientRect().height)),
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [targetRef])
 
   useEffect(() => () => endDragRef.current?.(), [])
 
@@ -173,10 +232,11 @@ export const ResizeHandle: React.FC<Props> = ({
       onKeyDown={handleKeyDown}
       role="separator"
       aria-orientation="horizontal"
-      // Sighted mouse users hover for the tooltip; screen-reader users
-      // hear the aria-label. Two audiences, two affordances.
-      aria-label="Resize handle. Press Enter to reset to default size."
-      title="Drag to resize. Double-click to reset."
+      aria-label={ariaLabel}
+      aria-valuemin={Math.round(minHeight)}
+      aria-valuemax={Math.round(maxHeight)}
+      aria-valuenow={targetHeight}
+      title="Drag or use arrow keys to resize. Double-click or press Enter to reset."
       tabIndex={0}
     >
       <span className="resize-line" />

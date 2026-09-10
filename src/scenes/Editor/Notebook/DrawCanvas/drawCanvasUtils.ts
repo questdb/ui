@@ -1,8 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { hasPendingResult } from "../notebookUtils"
-import { normalizeQueryText } from "../../Monaco/utils"
+import { hasPendingResult, normalizeStatementIdentity } from "../notebookUtils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,
@@ -73,7 +72,8 @@ export const resultMatchesQueries = (
   result.results.every(
     (r, i) =>
       !(r.type === "dql" && r.truncated) &&
-      normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
+      normalizeStatementIdentity(r.query) ===
+        normalizeStatementIdentity(queries[i]),
   )
 
 export type ChartResult =
@@ -110,11 +110,15 @@ export const resultsEquivalent = (
   for (let i = 0; i < a.length; i++) {
     const x = a[i]
     const y = b[i]
-    // Query identity is the primary discriminator. Formatting differences
-    // introduced by parsing (surrounding whitespace / trailing semicolon) do
-    // not make a new result, but different SQL must always replace the prior
-    // frame even when it happens to return identical rows.
-    if (normalizeQueryText(x.query) !== normalizeQueryText(y.query)) {
+    // Query identity is the primary discriminator. Presentation-only edits
+    // (whitespace, newlines, keyword casing) do not make a new result, but
+    // different SQL must always replace the prior frame even when it happens
+    // to return identical rows.
+    if (
+      x.query !== y.query &&
+      normalizeStatementIdentity(x.query) !==
+        normalizeStatementIdentity(y.query)
+    ) {
       return false
     }
     if (x.type !== y.type) return false

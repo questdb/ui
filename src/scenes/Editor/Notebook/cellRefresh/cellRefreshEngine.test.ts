@@ -14,6 +14,7 @@ import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import {
   CellRefreshEngine,
   deriveChartLoading,
+  pendingCellFetchState,
   type CellRefreshDeps,
 } from "./cellRefreshEngine"
 import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
@@ -82,7 +83,9 @@ const makeDeps = () => {
   const loadStatuses = new Map<string, CellResultStatus>()
   const loadListeners = new Map<string, Set<() => void>>()
   const deps = {
-    executeSingle: vi.fn((sql: string) => Promise.resolve(dqlResult(sql))),
+    executeSingle: vi.fn((sql: string, _signal?: AbortSignal) =>
+      Promise.resolve(dqlResult(sql)),
+    ),
     validateWithGlobals: vi.fn().mockResolvedValue(dqlValidation),
     setCellResult: vi.fn((cellId: string, result: CellResult | undefined) => {
       cellResults.set(cellId, result)
@@ -519,7 +522,7 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
       // When the user switches the cell back to run mode
-      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
       await vi.advanceTimersByTimeAsync(15_000)
 
       // Then the blocked frame never persists — saving it would resurrect the
@@ -581,6 +584,121 @@ describe("CellRefreshEngine", () => {
 
       // Then the blocked frame never persists — no orphan record
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe("stopping the first chart fetch", () => {
+    // Like the real client, the fake rejects once its signal aborts.
+    const deferFetch = () => {
+      let resolveFetch: () => void = () => {}
+      deps.executeSingle = vi.fn(
+        (sql: string, signal?: AbortSignal) =>
+          new Promise<QueryExecResult>((resolve, reject) => {
+            resolveFetch = () => resolve(dqlResult(sql))
+            signal?.addEventListener(
+              "abort",
+              () => reject(new Error("aborted")),
+              { once: true },
+            )
+          }),
+      )
+      return () => resolveFetch()
+    }
+
+    it("aborts the round, settles the canvas as cancelled, and discards the late response", async () => {
+      // Given a draw cell whose first fetch is still in flight
+      const resolveFetch = deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(engine.getState("c1")?.fetching).toBe(true)
+
+      // When the user stops the fetch
+      engine.cancelChartFetch("c1")
+
+      // Then the round is over and the chart no longer reads as loading
+      const state = engine.getState("c1")!
+      expect(state.fetching).toBe(false)
+      expect(state.fetchCancelled).toBe(true)
+      expect(deriveChartLoading(state, { kind: "missing" }, false)).toEqual({
+        loading: false,
+        refreshing: false,
+      })
+
+      // And the aborted response never lands
+      resolveFetch()
+      await flushAsync()
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+    })
+
+    it("a retry clears the cancelled marker and fetches again", async () => {
+      // Given a stopped first fetch
+      const resolveFetch = deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the user retries
+      void engine.refresh("c1")
+      await flushAsync()
+
+      // Then a fresh round is in flight without the marker
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+      expect(engine.getState("c1")?.fetching).toBe(true)
+
+      // And its response settles the chart
+      resolveFetch()
+      await flushAsync()
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+      const state = engine.getState("c1")!
+      expect(state.settledKey).toBe(state.queriesKey)
+    })
+
+    it("the next auto-refresh tick fetches again after a stop", async () => {
+      // Given a polling draw cell whose first fetch was stopped
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the poll interval elapses
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Then the marker is gone and a new round is in flight
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+      expect(engine.getState("c1")?.fetching).toBe(true)
+    })
+
+    it("is a no-op once the round has settled", async () => {
+      // Given a draw cell whose first fetch already landed
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+
+      // When a stale stop arrives
+      engine.cancelChartFetch("c1")
+
+      // Then the settled frame is untouched
+      const state = engine.getState("c1")!
+      expect(state.fetchCancelled).toBe(false)
+      expect(state.settledKey).toBe(state.queriesKey)
+    })
+
+    it("a snapshot load still shows loading over a cancelled marker", () => {
+      // Given a cancelled state whose result snapshot is hydrating
+      const state = {
+        ...pendingCellFetchState("select 1"),
+        fetchCancelled: true,
+      }
+
+      // Then hydration wins until the snapshot settles
+      expect(deriveChartLoading(state, { kind: "missing" }, true).loading).toBe(
+        true,
+      )
+      expect(
+        deriveChartLoading(state, { kind: "missing" }, false).loading,
+      ).toBe(false)
     })
   })
 
@@ -841,7 +959,7 @@ describe("CellRefreshEngine", () => {
 
     // When the user switches to the grid and back — the cell never leaves the
     // viewport, so the visibility observer reports nothing new
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
     engine.sync([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
@@ -874,7 +992,7 @@ describe("CellRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
     // When the cell is no longer in draw mode
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
 
     // Then no further fetches happen and the entry's state is gone
     await vi.advanceTimersByTimeAsync(10_000)
@@ -959,6 +1077,48 @@ describe("CellRefreshEngine", () => {
     // Then the displayed frame survives without a refetch
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
     expect(cellResults.get("c1")).toBe(frame)
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("keeps the frame and skips refetching when a statement only changes whitespace or casing", async () => {
+    // Given a settled draw cell showing results
+    syncOnScreen([drawCell("c1", "select 1 as x", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    const frame = cellResults.get("c1")
+
+    // When the statement is reformatted without changing its SQL
+    engine.sync([drawCell("c1", "SELECT  1\nAS x", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the displayed frame survives without a refetch
+    expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+    expect(cellResults.get("c1")).toBe(frame)
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("executes only the edited statement when auto-refresh is off", async () => {
+    // Given a settled two-statement draw cell with auto-refresh off
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+    // When one statement changes
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then only the changed statement executes and the other keeps its result
+    expect(
+      deps.executeSingle.mock.calls.slice(2).map((call) => call[0]),
+    ).toEqual(["select 3"])
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual([
+      "select 1",
+      "select 3",
+    ])
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
   })
@@ -1274,6 +1434,7 @@ describe("CellRefreshEngine", () => {
       slotErrors: new Map<string, string>(),
       cancelledSlots: new Set<string>(),
       slotFetchedAt: new Map<string, number>(),
+      fetchCancelled: false,
     }
 
     // Then the recovery fetch after a failed restore shows the spinner
@@ -1847,7 +2008,7 @@ describe("CellRefreshEngine", () => {
       engine.refreshAll()
 
       // When the cell exits draw mode and returns while still hidden
-      engine.sync([{ ...drawCell("c1", "select 1", false), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", false), mode: undefined }])
       engine.sync([drawCell("c1", "select 1", false)])
       await flushAsync()
 
@@ -2099,7 +2260,7 @@ describe("CellRefreshEngine", () => {
     ): NotebookCell => {
       const result = gridFrame(queries)
       cellResults.set(id, result)
-      return { id, position: 0, value, mode: "run", autoRefresh, result }
+      return { id, position: 0, value, mode: undefined, autoRefresh, result }
     }
 
     const errorValidation = (sql: string, error: string) => ({
@@ -2286,7 +2447,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
       }
 
@@ -2305,7 +2466,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
         lastRunStatus: "success",
       }
@@ -2844,7 +3005,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },
@@ -2900,7 +3061,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },

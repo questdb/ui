@@ -29,6 +29,7 @@ import {
 } from "./notebookController"
 import {
   summarizeCellResults,
+  CELL_DELETED_MID_RUN_NOTE,
   SUPERSEDED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { __resetNotebookBufferQueuesForTests } from "./notebookBufferQueue"
@@ -65,6 +66,18 @@ const makeController = (
         maximizedCellId: null,
         focusedCellId: null,
       }).result,
+    ),
+  mutateWithResultStatus: (transition) =>
+    Promise.resolve(
+      transition(
+        {
+          cells: [],
+          settings: {},
+          maximizedCellId: null,
+          focusedCellId: null,
+        },
+        () => "unrequested",
+      ).result,
     ),
   readView: () => Promise.resolve(emptyState),
   runCell: () =>
@@ -469,12 +482,12 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       updateSettings: () => undefined,
       setCellMode: () => undefined,
       setCellChartConfig: () => undefined,
-      setCellViewMaximized: () => undefined,
+      setCellPaneView: () => undefined,
       setMaximizedCellId: vi.fn(),
       updateCells: () => undefined,
       applyTransition: <T>(
         run: (parts: ViewParts) => NotebookTransitionResult<T>,
-      ): T => {
+      ): Promise<T> => {
         const out = run({
           cells: prevCells,
           settings: {},
@@ -482,16 +495,31 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
           focusedCellId: null,
         })
         applied.parts = out.parts
-        return out.result
+        return Promise.resolve(out.result)
       },
       getCellsSnapshot: () => prevCells,
       getSettings: () => ({}),
       getMaximizedCellId: () => currentMaximizedId,
       flushChartSnapshots: () => Promise.resolve(),
       readRefreshState: () => new Map(),
+      readResultStatus: () => "unrequested" as const,
     }
     return { live, applied }
   }
+
+  it("reads a cell's snapshot-load status through the live actions", () => {
+    // Given a live controller whose provider reports per-cell statuses
+    const { live } = makeLiveActions([cellA])
+    const controller = createNotebookController(1, {
+      current: {
+        ...live,
+        readResultStatus: (id) => (id === "a" ? "loaded" : "unrequested"),
+      },
+    })
+    // Then the controller delegates mount-independently
+    expect(controller.readResultStatus?.("a")).toBe("loaded")
+    expect(controller.readResultStatus?.("zzz")).toBe("unrequested")
+  })
 
   it("clears a provided maximized id that does not survive the apply", async () => {
     const { live, applied } = makeLiveActions([cellA, cellB])
@@ -542,17 +570,20 @@ describe("createNotebookController — live runCell supersession", () => {
   ): NotebookControllerActions => ({
     runCell,
     applyTransition: (run) =>
-      run({
-        cells: snapshot(),
-        settings: {},
-        maximizedCellId: null,
-        focusedCellId: null,
-      }).result,
+      Promise.resolve(
+        run({
+          cells: snapshot(),
+          settings: {},
+          maximizedCellId: null,
+          focusedCellId: null,
+        }).result,
+      ),
     getCellsSnapshot: snapshot,
     getSettings: () => ({}),
     getMaximizedCellId: () => null,
     flushChartSnapshots: () => Promise.resolve(),
     readRefreshState: () => new Map(),
+    readResultStatus: () => "unrequested" as const,
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({
@@ -593,6 +624,31 @@ describe("createNotebookController — live runCell supersession", () => {
     // Then the agent is told to re-sync, not handed the user's pending result.
     expect(summary.unverified).toBe(true)
     expect(summary.note).toBe(SUPERSEDED_RUN_NOTE)
+    expect(summary.results).toEqual([])
+  })
+
+  it("reports a live run whose cell was deleted mid-flight as deleted, not cleared", async () => {
+    // Given the agent's run launched, then the user deleted the cell while it
+    // ran: the mounted runner supersedes the run and carries the reason.
+    let cells = [cellWith(dmlResult(1))]
+    const snapshot = () => cells
+    const runCell = () => {
+      cells = []
+      return Promise.resolve({
+        ok: false,
+        superseded: true,
+        cancelled: "cell_deleted" as const,
+      })
+    }
+    const controller = createNotebookController(1, {
+      current: liveActions(snapshot, runCell),
+    })
+    const summary = await controller.runCell(cellId)
+
+    // Then the agent learns the cell is gone, with nothing to trust as a result
+    expect(summary.cancelled).toBe("cell_deleted")
+    expect(summary.note).toBe(CELL_DELETED_MID_RUN_NOTE)
+    expect(summary.unverified).toBe(true)
     expect(summary.results).toEqual([])
   })
 

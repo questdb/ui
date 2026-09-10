@@ -8,18 +8,18 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
+  MAX_PANE_HEIGHT_PX,
+  clampPaneHeight,
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
-  MIN_BOTTOM_HEIGHT_PX,
+  minBottomHeightFor,
   partitionCellHeights,
-  scaleCellHeights,
   topHeightForSql,
 } from "../notebookUtils"
 
-// Minimum content area heights. `MIN_EDITOR_HEIGHT` matches Monaco's reported
-// content height for an empty editor (one line + padding); the previous
-// `MAX_EDITOR_HEIGHT` cap is gone — the editor now auto-grows freely with
-// pasted content (user-confirmed: unbounded).
+// `MIN_EDITOR_HEIGHT` matches Monaco's reported content height for an empty
+// editor (one line + padding). The editor auto-grows with content up to the
+// shared pane ceiling and scrolls inside past it.
 export const MIN_EDITOR_HEIGHT = 72
 
 type Options = {
@@ -34,7 +34,7 @@ type Options = {
 }
 
 // Every way a cell's editor / result split can be resized — the inner split
-// handle, the bottom-edge handle, the maximized-chart handle, the spotlight
+// handle, the bottom-edge handle, the spotlight
 // ratio, and their double-click resets — plus the derived top/bottom heights
 // the layout renders from.
 export const useCellResizeOrchestration = ({
@@ -57,7 +57,7 @@ export const useCellResizeOrchestration = ({
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
     return contentHeight != null
-      ? Math.max(MIN_EDITOR_HEIGHT, contentHeight)
+      ? clampPaneHeight(MIN_EDITOR_HEIGHT, contentHeight)
       : topHeightForSql(cell.value)
   }, [cell.value, getEditorContentHeight])
 
@@ -90,7 +90,7 @@ export const useCellResizeOrchestration = ({
     }, [cell.id, readResetTopHeight, updateCell]),
   )
   const bottomResize = useCellResize(
-    MIN_BOTTOM_HEIGHT_PX,
+    minBottomHeightFor(cell),
     useCallback(
       (height: number) =>
         updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
@@ -108,6 +108,9 @@ export const useCellResizeOrchestration = ({
     liveBottomHeight: bottomResize.liveHeight,
     expectingResult,
   })
+  const middleMaxHeight = isMaximized
+    ? MAX_PANE_HEIGHT_PX
+    : topHeight + bottomHeight - minBottomHeightFor(cell)
 
   const spotlightEditorRatio =
     spotlightLiveRatio ??
@@ -127,7 +130,7 @@ export const useCellResizeOrchestration = ({
       middleSum(),
       height,
       MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
+      minBottomHeightFor(cell),
     )
     if (isMaximized) {
       setSpotlightLiveRatio(top / (top + bottom))
@@ -143,7 +146,7 @@ export const useCellResizeOrchestration = ({
       middleSum(),
       height,
       MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
+      minBottomHeightFor(cell),
     )
     if (isMaximized) {
       setSpotlightLiveRatio(null)
@@ -206,33 +209,6 @@ export const useCellResizeOrchestration = ({
     updateCell,
   ])
 
-  // When a chart is maximized the BottomSlot fills the whole cell, so its
-  // measured height IS the cell total — scale top/bottom to that new total
-  // (preserving the split so it's intact when the chart is restored).
-  const maximizedChartResizeLive = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
-  }
-
-  const maximizedChartResizeEnd = (newTotalHeight: number) => {
-    const { top, bottom } = scaleCellHeights(
-      topHeight,
-      bottomHeight,
-      newTotalHeight,
-      MIN_EDITOR_HEIGHT,
-      MIN_BOTTOM_HEIGHT_PX,
-    )
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
-  }
-
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
@@ -249,11 +225,10 @@ export const useCellResizeOrchestration = ({
     spotlightEditorRatio,
     topResize,
     bottomResize,
+    middleMaxHeight,
     middleResizeLive,
     middleResizeEnd,
     resetToDefaults,
     resetBottomArea,
-    maximizedChartResizeLive,
-    maximizedChartResizeEnd,
   }
 }
