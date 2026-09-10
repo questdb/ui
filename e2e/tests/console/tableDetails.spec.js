@@ -138,6 +138,14 @@ function interceptAIRequest(responseText = "Test AI response", sql = null) {
   }).as("openaiRequest")
 }
 
+afterEach(() => {
+  cy.then(() =>
+    Cypress.automation("remote:debugger:protocol", {
+      command: "HeapProfiler.collectGarbage",
+    }),
+  )
+})
+
 describe("TableDetailsDrawer", () => {
   beforeEach(() => {
     cy.intercept("POST", PROVIDERS.openai.endpoint, (req) => {
