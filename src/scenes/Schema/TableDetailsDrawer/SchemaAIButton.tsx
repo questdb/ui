@@ -12,26 +12,37 @@ const AIButtonStyled = styled(Button).attrs({
   prefixIcon: <AISparkle size={14} variant="hollow" />,
 })``
 
+type SchemaAIButtonProps = ButtonProps &
+  (
+    | { disabled: boolean; disabledTooltip: string }
+    | { disabled?: undefined; disabledTooltip?: undefined }
+  )
+
 export const SchemaAIButton = ({
   onClick,
   children,
+  disabled,
+  disabledTooltip,
   ...props
-}: ButtonProps) => {
+}: SchemaAIButtonProps) => {
   const { hasSchemaAccess, canUse, status } = useAIStatus()
   const isOperationInProgress = isBlockingAIStatus(status)
+  const aiDisabled = !canUse || !hasSchemaAccess || isOperationInProgress
+  const aiDisabledTooltip = !canUse
+    ? "AI Assistant is not configured"
+    : !hasSchemaAccess
+      ? "Schema access is not granted to this model"
+      : isOperationInProgress
+        ? "An operation is in progress"
+        : undefined
+
   return (
     <AIButtonStyled
       onClick={onClick}
-      disabled={!canUse || !hasSchemaAccess || isOperationInProgress}
-      disabledTooltip={
-        !canUse
-          ? "AI Assistant is not configured"
-          : !hasSchemaAccess
-            ? "Schema access is not granted to this model"
-            : isOperationInProgress
-              ? "An operation is in progress"
-              : undefined
-      }
+      disabled={disabled || aiDisabled}
+      // The AI blocker outranks the caller's: it is the reason the button stays
+      // disabled after the caller's transient condition clears.
+      disabledTooltip={aiDisabledTooltip ?? disabledTooltip}
       {...props}
     >
       {children}

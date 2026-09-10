@@ -57,9 +57,9 @@ export const getUnifiedPrompt = (
 - Use the suggest_query tool to suggest a SQL query to the user. The query will be displayed as an accept/reject suggestion that updates the editor. This is the ONLY way to suggest SQL queries.
 `
   const schemaAccess = grantSchemaAccess
-    ? `- Use the get_tables tool to retrieve all tables and materialized views in the database instance
-- Use the get_table_schema tool to get detailed schema information for a specific table or a materialized view
-- Use the get_table_details tool to get detailed information for a specific table or a materialized view. Each property is described in meta functions docs.
+    ? `- Use the get_tables tool to retrieve all tables, materialized views, views and live views in the database instance
+- Use the get_table_schema tool to get detailed schema information for a specific table, materialized view, view or live view
+- Use the get_table_details tool to get detailed information for a specific table, materialized view, view or live view. Each property is described in meta functions docs.
 `
     : ""
   const permsBlock = perms
@@ -157,13 +157,13 @@ ${schema}
 |--------|------|-------------|
 | column_name | \`data_type\` | Brief description |
 
-3. If this is a table or materialized view (not a view), add a "## Storage Details" section with bullet points about:
+3. If this is a table, materialized view or live view (not a regular view), add a "## Storage Details" section with bullet points about:
 - WAL enablement
 - Partitioning strategy
 - Designated timestamp column
 - Any other storage considerations
 
-For views, skip the Storage Details section.`
+For regular views, skip the Storage Details section.`
 
 export type HealthIssuePromptData = {
   tableName: string
@@ -174,12 +174,25 @@ export type HealthIssuePromptData = {
     currentValue?: string
   }
   tableDetails: string
+  diagnosticDetails?: {
+    source: "materialized_views()" | "live_views()"
+    data: string
+  }
+  issueGuidance?: string
   monitoringDocs: string
-  trendSamples?: Array<{ value: number; timestamp: number }>
+  trendSamples?: Array<{ value: bigint; timestamp: number }>
 }
 
 export const getHealthIssuePrompt = (data: HealthIssuePromptData): string => {
-  const { tableName, issue, tableDetails, monitoringDocs, trendSamples } = data
+  const {
+    tableName,
+    issue,
+    tableDetails,
+    diagnosticDetails,
+    issueGuidance,
+    monitoringDocs,
+    trendSamples,
+  } = data
 
   let trendSection = ""
   if (trendSamples && trendSamples.length > 0) {
@@ -189,9 +202,24 @@ export const getHealthIssuePrompt = (data: HealthIssuePromptData): string => {
 ### Trend Data (Recent Samples)
 | Timestamp | Value |
 |-----------|-------|
-${recentSamples.map((s) => `| ${new Date(s.timestamp).toISOString()} | ${s.value.toLocaleString()} |`).join("\n")}
+${recentSamples.map((s) => `| ${new Date(s.timestamp).toISOString()} | ${s.value.toString()} |`).join("\n")}
 `
   }
+
+  const diagnosticDetailsSection = diagnosticDetails
+    ? `
+
+## Kind-specific Details (from ${diagnosticDetails.source})
+\`\`\`json
+${diagnosticDetails.data}
+\`\`\``
+    : ""
+  const issueGuidanceSection = issueGuidance
+    ? `
+
+## Issue-specific Guidance
+${issueGuidance}`
+    : ""
 
   return `You are a QuestDB expert assistant helping diagnose and resolve table health issues.
 
@@ -206,7 +234,7 @@ ${issue.currentValue ? `- **Current Value**: ${issue.currentValue}` : ""}${trend
 ## Table Details (from tables() function)
 \`\`\`json
 ${tableDetails}
-\`\`\`
+\`\`\`${diagnosticDetailsSection}${issueGuidanceSection}
 
 ## QuestDB Monitoring Documentation
 ${monitoringDocs}

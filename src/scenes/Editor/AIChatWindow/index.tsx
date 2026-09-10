@@ -47,7 +47,7 @@ import {
   createFixFlowConfig,
   createSchemaExplainFlowConfig,
 } from "../../../utils/ai/executeAIFlow"
-import { getTableKindLabel } from "../../Schema/VirtualTables"
+import { getTableKind, getTableKindLabel } from "../../../utils/questdb/types"
 import * as QuestDB from "../../../utils/questdb"
 import { QuestContext } from "../../../providers"
 import { useDispatch, useSelector } from "react-redux"
@@ -615,8 +615,7 @@ const AIChatWindow: React.FC = () => {
             type: "tableDetails",
             payload: {
               tableName: table.table_name,
-              isMatView: table.table_type === "M",
-              isView: table.table_type === "V",
+              kind: getTableKind(table),
             },
           }),
         )
@@ -783,12 +782,10 @@ const AIChatWindow: React.FC = () => {
           const schemaData = userMessage.displaySchemaData
 
           try {
-            const ddlResult =
-              schemaData.kind === "matview"
-                ? await quest.showMatViewDDL(schemaData.tableName)
-                : schemaData.kind === "view"
-                  ? await quest.showViewDDL(schemaData.tableName)
-                  : await quest.showTableDDL(schemaData.tableName)
+            const ddlResult = await quest.showDDL(
+              schemaData.tableName,
+              schemaData.kind,
+            )
 
             if (
               ddlResult?.type !== QuestDB.Type.DQL ||

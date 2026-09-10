@@ -15,6 +15,6 @@ describe("CSV import in enterprise", () => {
     })
     cy.getByDataHook("import-table-column-schema").should("be.visible")
     cy.getByDataHook("import-table-column-owner").should("be.visible")
-    cy.contains("option", "admin").should("exist")
+    cy.getByDataHook("import-table-owner-select").should("contain", "admin")
   })
 })

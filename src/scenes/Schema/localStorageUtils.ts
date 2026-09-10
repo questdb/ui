@@ -2,6 +2,7 @@ const STORAGE_KEY_PREFIX = "questdb:expanded:"
 export const TABLES_GROUP_KEY = `${STORAGE_KEY_PREFIX}tables`
 export const MATVIEWS_GROUP_KEY = `${STORAGE_KEY_PREFIX}matviews`
 export const VIEWS_GROUP_KEY = `${STORAGE_KEY_PREFIX}views`
+export const LIVEVIEWS_GROUP_KEY = `${STORAGE_KEY_PREFIX}liveviews`
 
 export const getItemFromStorage = (key: string): boolean => {
   try {
