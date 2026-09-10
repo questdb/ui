@@ -16,7 +16,15 @@ import {
   MemoryIcon,
 } from "@phosphor-icons/react"
 import { SquareWithShadow } from "./HealthStatusLabel"
-import { Badge, Box, CopyButton, Text, Tooltip } from "../../../components"
+import {
+  Badge,
+  Box,
+  CopyButton,
+  IconButton,
+  Text,
+  Tooltip,
+} from "../../../components"
+import { useToggletip } from "../../../components/Tooltip/useToggletip"
 import { type LiveView, type Table } from "../../../utils/questdb/types"
 import type { BaseTableStatus, TableKindData } from "./types"
 import {
@@ -163,6 +171,38 @@ const ConfigItem = styled(Box).attrs<{
 const RateText = styled(Text)`
   transform: translateY(1px);
 `
+
+const HelperIconButton = styled(IconButton).attrs({
+  variant: "ghost",
+  size: "sm",
+})`
+  && {
+    width: 1.6rem;
+    min-width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    cursor: pointer;
+  }
+`
+
+const HelperTooltip = ({
+  label,
+  content,
+}: {
+  label: string
+  content: React.ReactNode
+}) => {
+  const theme = useTheme()
+  const { tooltipProps, triggerProps } = useToggletip()
+
+  return (
+    <Tooltip content={content} {...tooltipProps}>
+      <HelperIconButton label={`About ${label}`} {...triggerProps}>
+        <InfoIcon size={12} color={theme.color.contentPrimary} />
+      </HelperIconButton>
+    </Tooltip>
+  )
+}
 
 const IngestionStatusContainer = styled(Box).attrs({
   flexDirection: "row",
@@ -450,11 +490,7 @@ const ConfigItemWithHealth = ({
         <Text color="contentSecondary" size="sm">
           {label}
         </Text>
-        {helperText && (
-          <Tooltip content={helperText}>
-            <InfoIcon size={12} color={theme.color.contentPrimary} />
-          </Tooltip>
-        )}
+        {helperText && <HelperTooltip label={label} content={helperText} />}
         {issue && <WarningIcon size={12} weight="fill" color={iconColor} />}
       </Box>
       {showTrend ? (

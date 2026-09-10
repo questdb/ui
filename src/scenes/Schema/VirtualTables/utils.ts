@@ -103,28 +103,28 @@ const createColumnNodes = (
 const createStorageDetailsNodes = (
   table: QuestDB.Table,
   parentId: string,
+  kind: QuestDB.TableKind,
 ): TreeNode[] => {
-  return [
-    {
-      id: `${parentId}:partitionBy`,
-      kind: "detail",
-      name: "Partitioning",
-      parent: parentId,
-      value:
-        table.partitionBy && table.partitionBy !== "NONE"
-          ? `By ${table.partitionBy.toLowerCase()}`
-          : "None",
-      children: [],
-    },
-    {
-      id: `${parentId}:walEnabled`,
-      kind: "detail",
-      name: "WAL",
-      parent: parentId,
-      value: table.walEnabled ? "Enabled" : "Disabled",
-      children: [],
-    },
-  ]
+  const partitionByNode: TreeNode = {
+    id: `${parentId}:partitionBy`,
+    kind: "detail",
+    name: "Partitioning",
+    parent: parentId,
+    value:
+      table.partitionBy && table.partitionBy !== "NONE"
+        ? `By ${table.partitionBy.toLowerCase()}`
+        : "None",
+    children: [],
+  }
+  const walNode: TreeNode = {
+    id: `${parentId}:walEnabled`,
+    kind: "detail",
+    name: "WAL",
+    parent: parentId,
+    value: table.walEnabled ? "Enabled" : "Disabled",
+    children: [],
+  }
+  return kind === "liveview" ? [partitionByNode] : [partitionByNode, walNode]
 }
 
 export const createTableNode = (
@@ -186,7 +186,11 @@ export const createTableNode = (
               name: "Storage details",
               parent: tableId,
               isExpanded: getSectionExpanded(storageDetailsId),
-              children: createStorageDetailsNodes(table, storageDetailsId),
+              children: createStorageDetailsNodes(
+                table,
+                storageDetailsId,
+                kind,
+              ),
             },
           ]
         : []),

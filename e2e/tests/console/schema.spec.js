@@ -827,6 +827,24 @@ describe("live views", () => {
     }
   })
 
+  it("should show storage details without the WAL row for a live view", () => {
+    // Given
+    cy.expandLiveViews()
+    cy.getByDataHook("schema-liveview-title")
+      .contains("btc_trades_lv")
+      .dblclick()
+
+    // When
+    cy.getByDataHook("schema-row").contains("Storage details").dblclick()
+
+    // Then: live views are always WAL-based, so the row would carry no information
+    cy.getByDataHook("schema-row").should(($el) => {
+      expect($el.text()).to.include("Partitioning:")
+      expect($el.text()).to.include("By day")
+      expect($el.text()).not.to.include("WAL:")
+    })
+  })
+
   it("should not offer creating a materialized view from a live view", () => {
     // Given
     cy.expandLiveViews()
