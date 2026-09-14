@@ -14,8 +14,8 @@ import { useSelector } from "react-redux"
 import { actions, selectors } from "../../store"
 import { Sidebar } from "../../components/Sidebar"
 import { Navigation } from "../../components/Sidebar/navigation"
-import { Database2, Grid, FileSearch } from "../../components/icons"
-import { ChartLineIcon } from "@phosphor-icons/react"
+import { Database2, FileSearch } from "../../components/icons"
+import { ChartLineIcon, GridNineIcon } from "@phosphor-icons/react"
 import { ResultViewMode } from "./types"
 import { SIDEBAR_ICON_SIZE } from "../../consts"
 import { PrimaryToggleButton } from "../../components"
@@ -95,7 +95,7 @@ const viewModes: {
   tooltipText: string
 }[] = [
   {
-    icon: <Grid size={SIDEBAR_ICON_SIZE} />,
+    icon: <GridNineIcon size={SIDEBAR_ICON_SIZE} />,
     mode: "grid",
     tooltipText: "Grid",
   },

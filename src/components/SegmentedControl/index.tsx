@@ -399,15 +399,23 @@ export const SegmentedControlButton = styled(
       `
     }
 
+    const accentStroke = css`
+      box-shadow:
+        inset 0 0 0 1.5px ${theme.color.brandAccentBorder},
+        inset 0 -1.5px 0 ${theme.color.brandAccentBorder};
+    `
+
     return css`
       && {
-        background: ${theme.color.interactionAccentActive};
-        color: ${theme.color.contentAccent};
+        background: ${theme.color.brandAccentActive};
+        color: ${theme.color.brandAccent};
+        ${accentStroke}
       }
 
       &&:hover:not(:disabled):not([aria-disabled="true"]) {
-        background: ${theme.color.interactionAccentActive};
-        color: ${theme.color.contentAccent};
+        background: ${theme.color.brandAccentActive};
+        color: ${theme.color.brandAccent};
+        ${accentStroke}
       }
     `
   }}

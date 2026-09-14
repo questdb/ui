@@ -45,6 +45,9 @@ export type ColorShape = {
   neutralInk: string
   contentAccent: string
   contentAccentStrong: string
+  brandAccent: string
+  brandAccentActive: string
+  brandAccentBorder: string
   contentSearchMatch: string
   borderSubtle: string
   borderDefault: string
@@ -65,6 +68,10 @@ export type ColorShape = {
   controlTrackStroke: string
   actionPrimary: string
   actionPrimaryHover: string
+  brandAction: string
+  brandActionHover: string
+  brandActionBorder: string
+  brandActionForeground: string
   statusDanger: string
   statusDangerStrong: string
   statusDangerContrast: string

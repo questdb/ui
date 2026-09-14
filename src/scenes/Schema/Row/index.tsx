@@ -24,7 +24,7 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled, { useTheme, keyframes, css } from "styled-components"
-import { SortDown, Bracket, InfoCircle } from "../../../components/icons"
+import { Bracket, InfoCircle } from "../../../components/icons"
 import { Error as ErrorIcon } from "../../../components/icons"
 import { CheckboxBlankCircle, Loader4 } from "../../../components/icons"
 import type { StyledIcon } from "../../../components/icons"
@@ -54,14 +54,17 @@ import { color, copyToClipboard } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { Tooltip } from "../../../components/Tooltip"
-import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
+import {
+  isTimestamp,
+  mapColumnTypeToUI,
+} from "../../../scenes/Import/ImportCSVFiles/utils"
 import {
   MATVIEWS_GROUP_KEY,
   TABLES_GROUP_KEY,
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
-import { CaretRightIcon, InfoIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, ClockIcon, InfoIcon } from "@phosphor-icons/react"
 
 export type TreeNodeKind =
   | "column"
@@ -222,10 +225,13 @@ const Spacer = styled.span`
   flex: 1;
 `
 
-const SortDownIcon = styled(SortDown)`
-  color: ${color("contentPrimary")};
+const TimestampTypeIcon = styled.div<{ $designated: boolean }>`
   margin-right: 0.8rem;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  color: ${({ $designated, theme }) =>
+    $designated ? theme.color.statusInfoSubtle : theme.color.statusInfo};
 `
 
 const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
@@ -308,7 +314,7 @@ const TYPE_ICONS = {
   },
   time: {
     types: ["TIMESTAMP", "INTERVAL", "TIMESTAMP_NS"],
-    icon: SortDown,
+    icon: ClockIcon,
   },
   network: {
     types: ["IPV4"],
@@ -353,16 +359,30 @@ export const ColumnIcon = ({
 }) => {
   if (!type) return null
 
-  if (isDesignatedTimestamp) {
-    return (
-      <IconWithTooltip
-        icon={
-          <SortDownIcon data-hook="designated-timestamp-icon" size="14px" />
-        }
-        placement="top"
-        tooltip="Designated timestamp"
-      />
+  if (isTimestamp(mapColumnTypeToUI(type))) {
+    const glyph = (
+      <TimestampTypeIcon $designated={isDesignatedTimestamp}>
+        <ClockIcon
+          data-hook={
+            isDesignatedTimestamp ? "designated-timestamp-icon" : undefined
+          }
+          size={14}
+          weight={isDesignatedTimestamp ? "fill" : "regular"}
+        />
+      </TimestampTypeIcon>
     )
+
+    if (isDesignatedTimestamp) {
+      return (
+        <IconWithTooltip
+          icon={glyph}
+          placement="top"
+          tooltip="Designated timestamp"
+        />
+      )
+    }
+
+    return glyph
   }
 
   return getIcon(type)

@@ -92,6 +92,9 @@ export const darkColors: ColorShape = {
   contentDisabled: "#747985",
   contentAccent: "#f0428b",
   contentAccentStrong: "#ee2b7c",
+  brandAccent: "#f0428b",
+  brandAccentActive: "rgba(240, 66, 139, 0.10)",
+  brandAccentBorder: "transparent",
   contentSearchMatch: "rgb(163, 127, 96)",
 
   // Borders
@@ -118,6 +121,10 @@ export const darkColors: ColorShape = {
   // Actions and status
   actionPrimary: "#bd0f58",
   actionPrimaryHover: "#d41162",
+  brandAction: "#bd0f58",
+  brandActionHover: "#d41162",
+  brandActionBorder: "#bd0f58",
+  brandActionForeground: "#f8f8f2",
   statusDanger: "#ff3333",
   statusDangerStrong: "#db2424",
   statusDangerContrast: "#ff4d4d",
@@ -251,6 +258,9 @@ export const lightColors: ColorShape = {
   contentDisabled: "#596271",
   contentAccent: "#bd0f58",
   contentAccentStrong: "#8e0b42",
+  brandAccent: "#bd0f58",
+  brandAccentActive: "rgba(189, 15, 88, 0.13)",
+  brandAccentBorder: "transparent",
   contentSearchMatch: "rgba(202, 139, 44, 0.32)",
 
   // Borders
@@ -277,6 +287,10 @@ export const lightColors: ColorShape = {
   // Actions and status
   actionPrimary: "#8e0b42",
   actionPrimaryHover: "#bd0f58",
+  brandAction: "#8e0b42",
+  brandActionHover: "#bd0f58",
+  brandActionBorder: "#8e0b42",
+  brandActionForeground: "#f8f8f2",
   statusDanger: "#ce1717",
   statusDangerStrong: "#ce1717",
   statusDangerContrast: "#b81414",

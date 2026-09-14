@@ -12,6 +12,36 @@ legacy SCSS can read it. A small set of deliberately theme-invariant roles is
 defined once and composed independently into both palettes; light mode never
 inherits the dark palette.
 
+## Review overlays (temporary)
+
+This PR compares three palettes without forking the shipped console. `/` is
+control. Append `?treatment=a` or `?treatment=b`, then toggle light/dark in the
+theme menu. `/review/a` and `/review/b` are aliases when the host has a SPA
+fallback; the Vite dev server does not, so use the query string locally.
+
+| Treatment | Rail latch | Run query | Leftover chrome |
+| --------- | ---------- | --------- | --------------- |
+| control   | Shipped magenta, no stroke | Solid primary | Unchanged |
+| A         | Brighter magenta, no stroke | Solid brighter primary | Unchanged |
+| B         | Info cyan well + stroke | Secondary success | Unchanged |
+
+Look at both light and dark for each. Leftover chrome that must not move:
+tab underlines, `SelectMenu` checks, drag chrome, Save/Connect, non-rail info
+latches, switches, checkboxes, and keyboard focus.
+
+Overlays live in [`treatments.ts`](./treatments.ts). Remove that file and the
+`ThemeModeProvider` merge before landing on main. Keep the isolated `brand*`
+roles.
+
+Shared (not treatment-gated) follow-ups in this pass, visible on `/` as well:
+
+- Timestamp clocks in the schema tree and table-details Columns are
+  `statusInfo`; the designated timestamp is a filled clock at `statusInfoSubtle`.
+- The left-rail Grid result-panel glyph is Phosphor `GridNine`, matching the
+  Chart glyph beside it.
+- The Run-query menu is `bottom-end` on the chevron, not a hardcoded
+  `translateX`.
+
 ## Palette shape
 
 The palette has two kinds of roles:
@@ -147,8 +177,11 @@ shared by light mode.
 | `contentInverse`      | `#f8f8f2` / same                  | Porcelain content on saturated fills: primary and danger buttons, switch thumbs, checkbox ticks.                        |
 | `contentOnWarning`    | `#000000` / same                  | Text/icons on bright yellow warning fills.                                                                              |
 | `neutralInk`          | `#000000` / same                  | Opaque mask and picker anchor used on arbitrary fills rather than themed surfaces.                                      |
-| `contentAccent`       | `#f0428b` / `#bd0f58`             | Brand accent on chrome: rail navigation, tab underlines, `SelectMenu` check, drag chrome. Do not treat it as body text. |
+| `contentAccent`       | `#f0428b` / `#bd0f58`             | Brand accent on leftover chrome: tab underlines, `SelectMenu` check, drag chrome. Do not treat it as body text. |
 | `contentAccentStrong` | `#ee2b7c` / `#8e0b42`             | Saturated accent for copy-pulse highlights, prominent identity, and cases that pair with porcelain content.             |
+| `brandAccent`         | `#f0428b` / `#bd0f58`             | Isolated brand on the left-rail latch icon. Control copies `contentAccent`; A brightens; B uses `statusInfo`.           |
+| `brandAccentActive`   | brand accent at `.10` / `.13`     | Isolated latch well behind rail navigation. Control copies `interactionAccentActive`; A brightens; B is info at `.075`. |
+| `brandAccentBorder`   | `transparent` / `transparent`     | Isolated latch stroke on accent toggles (both rails). Control and A stay transparent; B is info at `.14`.            |
 | `contentSearchMatch`  | `rgb(163, 127, 96)` / amber `.32` | Search-match emphasis inside text; its light value matches Monaco's search highlight for consistent recognition.        |
 
 ### Borders
@@ -169,7 +202,7 @@ shared by light mode.
 | `interactionNeutralHover` | `#292b35` / `#e2e5ea`                         | Hover one step below a selected neutral well, and hover inside a `controlTrack`.              |
 | `interactionHover`        | white `.055` / ink `.075`                     | Inverting hover wash for menus, lists, tree rows, ghost buttons, tabs, and grid rows.         |
 | `interactionSelected`     | white `.11` / ink `.15`                       | Result-grid selected row; exactly twice `interactionHover`.                                   |
-| `interactionAccentActive` | brand accent at `.10` / brand accent at `.13` | Branded latch well behind the rail navigation and Add Cell.                                   |
+| `interactionAccentActive` | brand accent at `.10` / brand accent at `.13` | Branded latch well behind Add Cell. Rail navigation reads `brandAccentActive` instead.        |
 | `interactionGuide`        | `#6272a4` / `#56657f`                         | Drag guides, resize handles, text selection helpers, and Monaco's auxiliary/inactive markers. |
 | `scrollbarThumb`          | white `.13` / `#d7dbe3`                       | Native, webkit, and Monaco scrollbar handles; chrome, not content.                            |
 | `controlSurface`          | `#262833` / `#f6f7f8`                         | Default solid secondary button, toolbar select trigger, and keycap face.                      |
@@ -183,6 +216,9 @@ shared by light mode.
 | Token(s)                                                                | Dark / light                                            | Purpose and allowed use                                                                             |
 | ----------------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `actionPrimary`, `actionPrimaryHover`                                   | `#bd0f58`, `#d41162` / `#8e0b42`, `#bd0f58`             | Primary-button rest and hover fills, and the selected calendar range. Both keep porcelain contrast. |
+| `brandAction`, `brandActionHover`                                       | `#bd0f58`, `#d41162` / `#8e0b42`, `#bd0f58`             | Isolated Run-query well and hover. Control copies `actionPrimary`; A brightens; B is a success well. |
+| `brandActionBorder`                                                     | copies `brandAction` / copies `brandAction`             | Isolated Run-query stroke. Control and A match the well; B is a distinct jewel / forest outline.     |
+| `brandActionForeground`                                                 | `contentInverse` / `contentInverse`                     | Type on the Run-query well. Control and A stay porcelain; B light uses `contentPrimary`.             |
 | `statusDanger`, `statusDangerStrong`                                    | `#ff3333`, `#db2424` / `#ce1717`, `#ce1717`             | Danger type/icons, and the opaque destructive fill. Light Strong equals Text on purpose.            |
 | `statusDangerContrast`, `statusDangerSubtle`                            | `#ff4d4d`, `#ff8080` / `#b81414`, `#8a0f0f`             | Danger type on the 15% wash and on the 40% hover wash. These are type colors, not fills.            |
 | `statusDangerMuted`                                                     | Strong at `.72` / Strong at `.72`                       | Muted destructive decoration and dark-mode banner strokes.                                          |
@@ -410,11 +446,19 @@ building or reviewing a component.
   Notebook cell focus stays branded.
 - Non-rail latched toggles use `activeTone="info"`: glyph `statusInfoSubtle`,
   well `statusInfoSurface`. Rail navigation stays `activeTone="accent"` with
-  `contentAccent` on `interactionAccentActive`.
+  `brandAccent` on `brandAccentActive`, with `brandAccentBorder` for the
+  selected stroke (1.5px inset, 3px on the bottom). That stroke is the
+  accent-latch counterpart to the `glassBorder` / `glassEdge` lens on
+  neutral segmented controls. Treatment B overlays those roles onto the info
+  cyan family (Figma 2041:51489 / 2041:48716) without moving leftover chrome.
 
 ### Controls
 
-- Primary buttons are `actionPrimary` with `contentInverse`.
+- Primary buttons are `actionPrimary` with `contentInverse`. Run query reads
+  `brandAction`, `brandActionBorder`, and `brandActionForeground` so treatments
+  can restyle it without moving Save/Connect. Control and A are solid fills.
+  Treatment B is a secondary success: green well, distinct stroke, porcelain
+  type in dark and `contentPrimary` in light.
 - Danger buttons are solid `statusDangerStrong` with `contentInverse`; hover is
   `statusDanger`. The `dangerGhost` variant rests on `statusDangerSurface` with
   `statusDangerContrast` type and hovers to `statusDangerSurfaceHover`; hover
@@ -438,9 +482,10 @@ building or reviewing a component.
 
 ### Object identity and type
 
-- Table, materialized-view, view, column-type, and designated-timestamp glyphs
-  are `contentPrimary`, the same as the object name. Parenthetical type labels
-  stay `contentSecondary`.
+- Table, materialized-view, view, and ordinary column-type glyphs are
+  `contentPrimary`, the same as the object name. Parenthetical type labels stay
+  `contentSecondary`. Timestamp clocks are `statusInfo`; the designated
+  timestamp is a filled clock at `statusInfoSubtle`.
 - Result-grid header names are `contentPrimary` at weight 600. The result row
   count is `fontSize.lg` at weight 600 in the UI font, not monospace.
 - Notebook title glyphs and chrome-tab notebook/metrics favicons are
@@ -526,9 +571,10 @@ surfaces beside it, and its own rest, hover, active, focus, and disabled states.
 
 ## Contribution rules
 
-1. Never add a literal UI color outside `index.ts`. Immutable supplied brand
-   artwork such as `QuestDBLogo` is the sole exception and must not be recolored
-   through theme roles.
+1. Never add a literal UI color outside `index.ts`. Review overlays in
+   `treatments.ts` are the other allowed source, and must be removed before
+   merging to main. Immutable supplied brand artwork such as `QuestDBLogo` is
+   the remaining exception and must not be recolored through theme roles.
 2. Never add a first-party CSS custom property for theming.
 3. Use a semantic role, not a hue name and not a component name.
 4. Keep every runtime token directly under `theme.color`; organize source groups
