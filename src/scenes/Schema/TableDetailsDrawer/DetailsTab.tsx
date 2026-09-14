@@ -1,4 +1,4 @@
-import React, { useMemo } from "react"
+import React from "react"
 import styled, { useTheme } from "styled-components"
 import {
   CodeIcon,
@@ -10,13 +10,14 @@ import {
 } from "@phosphor-icons/react"
 import { Box, Text, CopyButton, TextButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
-import type {
-  Table,
-  MaterializedView,
-  View,
-  Column,
-} from "../../../utils/questdb/types"
-import { formatTTL, extractStoragePolicyClauses } from "./utils"
+import type { Table, Column, StoragePolicy } from "../../../utils/questdb/types"
+import type { BaseTableStatus, SourceState, TableKindData } from "./types"
+import {
+  formatTTL,
+  formatInterval,
+  formatUtcTimestamp,
+  formatStoragePolicyClauses,
+} from "./utils"
 import { ColumnIcon } from "../Row"
 import {
   Section,
@@ -25,25 +26,25 @@ import {
   SectionTitleClickable,
   SectionTitleContainer,
   CaretIcon,
+  UnavailableValue,
 } from "./shared-styles"
 import { SchemaAIButton } from "./SchemaAIButton"
 import { ErrorBanner } from "./ErrorBanner"
-import { ISSUE_DOCS_URLS } from "./healthCheck"
+import { ISSUE_DOCS_URLS, isLiveViewLoadFailure } from "./healthCheck"
 import { useEditor } from "../../../providers"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
 export interface DetailsTabProps {
   tableData: Table
-  matViewData: MaterializedView | null
-  viewData: View | null
-  columns: Column[]
-  ddl: string
-  isMatView: boolean
-  isView: boolean
+  kindData: TableKindData
+  columnsState: SourceState<Column[]>
+  ddlState: SourceState<string>
+  storagePolicyState: SourceState<StoragePolicy | null>
   isEnterprise: boolean
   truncatedDDL: { text: string; grayedOutLines: [number, number] | null }
-  baseTableStatus: "Valid" | "Suspended" | "Dropped" | null
+  baseTableName: string | undefined
+  baseTableStatus: BaseTableStatus
   columnsExpanded: boolean
   onColumnsExpandedChange: (expanded: boolean) => void
   onNavigateToBaseTable: () => void
@@ -140,14 +141,13 @@ const ButtonsContainer = styled(Box).attrs({
 
 export const DetailsTab = ({
   tableData,
-  matViewData,
-  viewData,
-  columns,
-  ddl,
-  isMatView,
-  isView,
+  kindData,
+  columnsState,
+  ddlState,
+  storagePolicyState,
   isEnterprise,
   truncatedDDL,
+  baseTableName,
   baseTableStatus,
   columnsExpanded,
   onColumnsExpandedChange,
@@ -157,33 +157,60 @@ export const DetailsTab = ({
 }: DetailsTabProps) => {
   const { addBuffer } = useEditor()
   const theme = useTheme()
+  const viewState = kindData.kind === "view" ? kindData.view : null
+  const matViewState = kindData.kind === "matview" ? kindData.matView : null
+  const liveViewState = kindData.kind === "liveview" ? kindData.liveView : null
+  const view = viewState?.status === "ready" ? viewState.data : null
+  const matView = matViewState?.status === "ready" ? matViewState.data : null
+  const liveView = liveViewState?.status === "ready" ? liveViewState.data : null
+  const kindSourceUnavailable =
+    viewState?.status === "unavailable" ||
+    matViewState?.status === "unavailable" ||
+    liveViewState?.status === "unavailable"
+  const liveViewUnavailable = liveViewState?.status === "unavailable"
+  const liveViewDiagnosticsUnavailable =
+    liveViewUnavailable || isLiveViewLoadFailure(liveView)
+  const matViewUnavailable = matViewState?.status === "unavailable"
+  const columns = columnsState.status === "ready" ? columnsState.data : []
+  const ddl = ddlState.status === "ready" ? ddlState.data : ""
   const baseTableExists =
     baseTableStatus === "Valid" || baseTableStatus === "Suspended"
-  const storagePolicyClauses = useMemo(
-    () => extractStoragePolicyClauses(ddl),
-    [ddl],
-  )
+  const storagePolicy =
+    storagePolicyState.status === "ready" ? storagePolicyState.data : null
+  const storagePolicyClauses = formatStoragePolicyClauses(storagePolicy)
+  const storagePolicyDisabled = storagePolicy?.status === "D"
   const hasStoragePolicy = storagePolicyClauses.length > 0
   const hasTtl = (tableData.ttlValue ?? 0) !== 0
-  const showStoragePolicySection = isEnterprise || hasStoragePolicy
+  const showStoragePolicySection = kindData.kind === "table" && isEnterprise
+  const showDetailsSection =
+    kindData.kind === "table" ||
+    kindData.kind === "matview" ||
+    liveView !== null ||
+    liveViewUnavailable
 
   return (
     <>
-      {isMatView && matViewData && (
+      {(baseTableName ||
+        ((kindData.kind === "matview" || kindData.kind === "liveview") &&
+          kindSourceUnavailable)) && (
         <HorizontalSection data-hook="table-details-base-table-section">
           <Text color="contentSecondary" size="sm" lineHeight="1.7">
             Base Table
           </Text>
           <BaseTableLinkButton
-            disabled={baseTableExists === false}
+            disabled={!baseTableName || !baseTableExists}
             onClick={onNavigateToBaseTable}
             data-hook="table-details-base-table-link"
           >
-            <Text
-              color={baseTableExists ? "contentPrimary" : "contentSecondary"}
-            >
-              {matViewData.base_table_name}
-            </Text>
+            {kindSourceUnavailable ? (
+              <UnavailableValue />
+            ) : (
+              <Text
+                color={baseTableExists ? "contentPrimary" : "contentSecondary"}
+              >
+                {baseTableName}
+              </Text>
+            )}
             {baseTableExists && (
               <ArrowSquareInIcon
                 weight="bold"
@@ -195,11 +222,11 @@ export const DetailsTab = ({
         </HorizontalSection>
       )}
 
-      {isView && viewData?.view_status === "invalid" && (
+      {view?.view_status === "invalid" && (
         <Section>
           <ErrorBanner
             title="View is invalid"
-            description={viewData.invalidation_reason || undefined}
+            description={view.invalidation_reason || undefined}
             onAskAI={onAskAIForViewIssue}
             docsUrl={ISSUE_DOCS_URLS["R4"]}
           />
@@ -214,12 +241,19 @@ export const DetailsTab = ({
           <ButtonsContainer>
             <SchemaAIButton
               onClick={onExplainWithAI}
+              disabled={ddlState.status !== "ready"}
+              disabledTooltip={
+                ddlState.status === "loading"
+                  ? "DDL is loading"
+                  : "DDL is unavailable"
+              }
               data-hook="table-details-explain-ai"
             >
               Explain with AI
             </SchemaAIButton>
             <CopyButton
               text={ddl}
+              disabled={ddlState.status !== "ready"}
               iconOnly
               size="sm"
               data-hook="table-details-copy-ddl"
@@ -229,7 +263,13 @@ export const DetailsTab = ({
             />
           </ButtonsContainer>
         </SectionTitleContainer>
-        {ddl && (
+        {ddlState.status === "unavailable" ? (
+          <UnavailableValue data-hook="table-details-ddl-unavailable" />
+        ) : ddlState.status === "loading" ? (
+          <Text color="contentSecondary" data-hook="table-details-ddl-loading">
+            Loading…
+          </Text>
+        ) : ddl ? (
           <LiteEditor
             value={truncatedDDL.text}
             compactToolbar
@@ -238,11 +278,35 @@ export const DetailsTab = ({
             }}
             grayedOutLines={truncatedDDL.grayedOutLines}
           />
-        )}
+        ) : null}
       </Section>
 
       {/* Columns Section */}
-      {columns.length === 0 ? (
+      {columnsState.status === "unavailable" ? (
+        <Section data-hook="table-details-columns-unavailable">
+          <SectionTitleContainer>
+            <TextColumnsIcon
+              size="16px"
+              weight="bold"
+              style={{ transform: "translateY(1px)" }}
+            />
+            <SectionTitle>Columns</SectionTitle>
+          </SectionTitleContainer>
+          <UnavailableValue />
+        </Section>
+      ) : columnsState.status === "loading" ? (
+        <Section>
+          <SectionTitleContainer>
+            <TextColumnsIcon
+              size="16px"
+              weight="bold"
+              style={{ transform: "translateY(1px)" }}
+            />
+            <SectionTitle>Columns</SectionTitle>
+          </SectionTitleContainer>
+          <Text color="contentSecondary">Loading…</Text>
+        </Section>
+      ) : columns.length === 0 ? (
         <Section style={{ opacity: 0.5 }}>
           <SectionTitleContainer>
             <TextColumnsIcon
@@ -306,15 +370,75 @@ export const DetailsTab = ({
         </Section>
       )}
 
-      {/* Details Section - layout differs by type, hidden for views */}
-      {!isView && (
+      {/* Details Section - layout differs by type and stays hidden for views. */}
+      {showDetailsSection && (
         <Section data-hook="table-details-details-section">
           <SectionTitleContainer>
             <InfoIcon size="16px" weight="bold" />
             <SectionTitle>Details</SectionTitle>
           </SectionTitleContainer>
 
-          {isMatView && matViewData ? (
+          {liveView || liveViewUnavailable ? (
+            /* Live view: 4 cards (2×2). TTL, dedup and refresh type do not apply. */
+            <MetricsGrid $columns={2}>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-flush-every-card"
+              >
+                <MetricLabel>Flush Every</MetricLabel>
+                <MetricValue>
+                  {liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : (
+                    formatInterval(
+                      liveView?.flush_every_interval ?? null,
+                      liveView?.flush_every_interval_unit ?? null,
+                    )
+                  )}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-in-memory-card"
+              >
+                <MetricLabel>In Memory</MetricLabel>
+                <MetricValue>
+                  {liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : (
+                    formatInterval(
+                      liveView?.in_memory_interval ?? null,
+                      liveView?.in_memory_interval_unit ?? null,
+                    )
+                  )}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard
+                $background={theme.color.surfaceInset}
+                data-hook="table-details-start-from-card"
+              >
+                <MetricLabel>Start From</MetricLabel>
+                <MetricValue>
+                  {liveViewDiagnosticsUnavailable ? (
+                    <UnavailableValue />
+                  ) : liveView?.view_lower_bound_timestamp ? (
+                    formatUtcTimestamp(liveView.view_lower_bound_timestamp)
+                  ) : (
+                    "Beginning"
+                  )}
+                </MetricValue>
+              </MetricCard>
+              <MetricCard $background={theme.color.surfaceInset}>
+                <MetricLabel>Partitioning</MetricLabel>
+                <MetricValue>
+                  {tableData.partitionBy === "NONE"
+                    ? "None"
+                    : tableData.partitionBy.charAt(0).toUpperCase() +
+                      tableData.partitionBy.slice(1).toLowerCase()}
+                </MetricValue>
+              </MetricCard>
+            </MetricsGrid>
+          ) : kindData.kind === "matview" ? (
             /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 2 : 3}>
               {hasTtl && (
@@ -343,13 +467,19 @@ export const DetailsTab = ({
               <MetricCard $background={theme.color.surfaceInset}>
                 <MetricLabel>Refresh Type</MetricLabel>
                 <MetricValue>
-                  {matViewData.refresh_type.charAt(0).toUpperCase() +
-                    matViewData.refresh_type.slice(1).toLowerCase()}
+                  {matViewUnavailable ? (
+                    <UnavailableValue />
+                  ) : matView ? (
+                    matView.refresh_type.charAt(0).toUpperCase() +
+                    matView.refresh_type.slice(1).toLowerCase()
+                  ) : (
+                    <Text color="contentSecondary">Loading…</Text>
+                  )}
                 </MetricValue>
               </MetricCard>
             </MetricsGrid>
-          ) : (
-            /* Table: 3 cards (1 row) when TTL is configured, 2 cards (1 row) when not. */
+          ) : kindData.kind === "table" ? (
+            /* Table: 3 cards when TTL is configured, 2 when not. */
             <MetricsGrid $columns={hasTtl ? 3 : 2}>
               {hasTtl && (
                 <MetricCard $background={theme.color.surfaceInset}>
@@ -375,28 +505,53 @@ export const DetailsTab = ({
                 </MetricValue>
               </MetricCard>
             </MetricsGrid>
-          )}
+          ) : null}
         </Section>
       )}
 
-      {!isView && showStoragePolicySection && (
+      {showStoragePolicySection && (
         <Section data-hook="table-details-storage-policy-section">
           <SectionTitleContainer>
             <DatabaseIcon size="16px" weight="bold" />
             <SectionTitle>Storage policy</SectionTitle>
           </SectionTitleContainer>
-          {hasStoragePolicy ? (
-            <MetricsGrid $columns={storagePolicyClauses.length}>
-              {storagePolicyClauses.map((clause) => (
-                <MetricCard
-                  key={clause.action}
-                  $background={theme.color.surfaceInset}
+          {storagePolicyState.status === "unavailable" ? (
+            <UnavailableValue data-hook="table-details-storage-unavailable" />
+          ) : storagePolicyState.status === "loading" ? (
+            <Text
+              color="contentSecondary"
+              data-hook="table-details-storage-loading"
+            >
+              Loading…
+            </Text>
+          ) : hasStoragePolicy ? (
+            <Box gap="1rem" flexDirection="column" align="stretch">
+              {storagePolicyDisabled && (
+                <Box
+                  gap="0.5rem"
+                  align="center"
+                  data-hook="table-details-storage-disabled"
                 >
-                  <MetricLabel>{clause.action}</MetricLabel>
-                  <MetricValue>{clause.duration}</MetricValue>
-                </MetricCard>
-              ))}
-            </MetricsGrid>
+                  <XCircleIcon
+                    size="16px"
+                    weight="fill"
+                    color={theme.color.contentSecondary}
+                  />
+                  <Text color="contentSecondary">Disabled</Text>
+                </Box>
+              )}
+              <MetricsGrid $columns={storagePolicyClauses.length}>
+                {storagePolicyClauses.map((clause) => (
+                  <MetricCard
+                    key={clause.action}
+                    $background={theme.color.surfaceInset}
+                  >
+                    <MetricLabel>{clause.action}</MetricLabel>
+                    <MetricValue>{clause.duration}</MetricValue>
+                  </MetricCard>
+                ))}
+              </MetricsGrid>
+            </Box>
           ) : (
             <Box gap="0.5rem" align="center">
               <XCircleIcon
