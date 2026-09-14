@@ -1,4 +1,4 @@
-import type { PartitionBy } from "../../utils/questdb"
+import type { PartitionBy, TableKind } from "../../utils/questdb"
 import type { QueryKey } from "../../scenes/Editor/Monaco/utils"
 import type { Message } from "../../utils/ai/types"
 import type { RanStatus } from "../../utils/ai/runStatus"
@@ -10,7 +10,7 @@ export type ConversationId = string
 
 export type SchemaDisplayData = {
   tableName: string
-  kind: "table" | "matview" | "view"
+  kind: TableKind
   partitionBy?: PartitionBy
   walEnabled?: boolean
   designatedTimestamp?: string

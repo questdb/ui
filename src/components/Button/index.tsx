@@ -52,6 +52,7 @@ type BaseButtonProps = {
   onClick?: (event: MouseEvent) => void
   onDoubleClick?: (event: MouseEvent) => void
   onMouseDown?: (event: MouseEvent) => void
+  onPointerDown?: (event: React.PointerEvent<HTMLButtonElement>) => void
   onMouseEnter?: (event: MouseEvent) => void
   onMouseLeave?: (event: MouseEvent) => void
   onDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void
