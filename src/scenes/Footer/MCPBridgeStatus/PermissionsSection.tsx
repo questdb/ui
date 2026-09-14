@@ -62,8 +62,12 @@ const FieldLabel = styled.span`
   font-weight: 600;
 `
 
+const RichField = styled(Field)`
+  gap: 1.6rem;
+`
+
 const RichTitle = styled.span`
-  font-size: 1.8rem;
+  font-size: 1.6rem;
   font-weight: 600;
   color: ${({ theme }) => theme.color.contentPrimary};
 `
@@ -123,13 +127,13 @@ export const PermissionsSection: React.FC<Props> = ({
 
   if (variant === "rich") {
     return (
-      <Field data-hook="permissions">
+      <RichField data-hook="permissions">
         <RichTitle>Permissions</RichTitle>
         <SelectMenu.Root modal={false}>
           {trigger}
           {content}
         </SelectMenu.Root>
-      </Field>
+      </RichField>
     )
   }
 
