@@ -11,10 +11,21 @@ import type {
   CellLayoutItem,
   NotebookCell,
   NotebookSettings,
+  NotebookVariable,
+  TimeRange,
 } from "../../store/notebook"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "./executeAIFlow"
-import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { effectiveVariables } from "../../scenes/Editor/Notebook/variables/scope"
+import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
+import {
+  GLOBAL_OPTIONS_OWNER,
+  loadStoredOptions,
+  notebookOptionsOwner,
+  type StoredVariableOptions,
+} from "../../store/notebookOptions"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
 import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
@@ -70,7 +81,10 @@ export type NotebookContextSnapshot =
       // Absent when the notebook has no configured default.
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
-      variables?: Array<{ name: string; value: string }>
+      variables?: NotebookVariable[]
+      global_variables?: NotebookVariable[]
+      variable_values?: VariableValuesStatus[]
+      time_range?: TimeRange
       cells: NotebookContextCell[]
     }
   | {
@@ -78,6 +92,10 @@ export type NotebookContextSnapshot =
       buffer_id: number
       label?: string
     }
+
+export type VariableValuesStatus =
+  | { name: string; count: number; fetched_at: number }
+  | { name: string; fetched: false }
 
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
@@ -235,7 +253,61 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
+  const globals = effectiveVariables(
+    normalizeVariables((await getNotebookGlobals())?.variables),
+    variables,
+  )
+    .filter(({ scope }) => scope === "global")
+    .map(({ variable }) => variable)
+  if (globals.length > 0) {
+    out.global_variables = globals
+  }
+  const values = [
+    ...variableValuesStatus(
+      variables,
+      await loadStoredOptions(notebookOptionsOwner(bufferId)),
+    ),
+    ...variableValuesStatus(
+      globals,
+      await loadStoredOptions(GLOBAL_OPTIONS_OWNER),
+    ),
+  ]
+  if (values.length > 0) {
+    out.variable_values = values
+  }
+  if (settings.timeRange) {
+    out.time_range = settings.timeRange
+  }
   return out
+}
+
+const variableValuesStatus = (
+  variables: NotebookVariable[],
+  rows: StoredVariableOptions[],
+): VariableValuesStatus[] =>
+  variables.filter(isQueryList).map(({ name }) => {
+    const row = rows.find((r) => r.name === name)
+    return row
+      ? { name, count: row.options.length, fetched_at: row.fetchedAt }
+      : { name, fetched: false }
+  })
+
+const describeVariable = (variable: NotebookVariable): string => {
+  switch (variable.kind) {
+    case "expression":
+      return JSON.stringify(sanitizeForPromptContext(variable.value))
+    case "text":
+      return `text ${JSON.stringify(sanitizeForPromptContext(variable.value))}`
+    case "list": {
+      const selected =
+        variable.selected === "all"
+          ? "all"
+          : JSON.stringify(
+              variable.selected.map((o) => sanitizeForPromptContext(o.value)),
+            )
+      return `list ${selected}${variable.multi ? " (multi)" : ""}`
+    }
+  }
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
@@ -269,12 +341,33 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.time_range) {
+    lines.push(
+      `  time_range: ${JSON.stringify(snap.time_range.from)} .. ${JSON.stringify(snap.time_range.to)}`,
+    )
+  }
+  const values = new Map(
+    (snap.variable_values ?? []).map((status) => [status.name, status]),
+  )
+  const describeWithValues = (variable: NotebookVariable): string => {
+    const status = values.get(variable.name)
+    if (!status) return describeVariable(variable)
+    const suffix =
+      "fetched" in status
+        ? "values not fetched yet"
+        : `${status.count} values fetched at ${new Date(status.fetched_at).toISOString()}`
+    return `${describeVariable(variable)} [${suffix}]`
+  }
   if (snap.variables && snap.variables.length > 0) {
     lines.push("  variables:")
-    for (const { name, value } of snap.variables) {
-      lines.push(
-        `    ${name}: ${JSON.stringify(sanitizeForPromptContext(value))}`,
-      )
+    for (const variable of snap.variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
+    }
+  }
+  if (snap.global_variables && snap.global_variables.length > 0) {
+    lines.push("  global_variables (shared by every notebook, read-only here):")
+    for (const variable of snap.global_variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
     }
   }
   lines.push("  cells:")

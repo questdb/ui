@@ -49,6 +49,11 @@ import {
   pruneToRecentNotebooks,
   saveCellSnapshot,
 } from "../../store/notebookResults"
+import {
+  loadStoredOptions,
+  notebookOptionsOwner,
+  saveStoredOptions,
+} from "../../store/notebookOptions"
 import type { Client } from "../questdb/client"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -183,6 +188,7 @@ beforeEach(async () => {
   clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
+  await db.notebook_options.clear()
 })
 
 describe("createDexieNotebookController — structural edits", () => {
@@ -1272,7 +1278,7 @@ describe("createDexieNotebookController — field preservation", () => {
           { i: "a", x: 0, y: 0, w: 12, h: 4 },
           { i: "b", x: 0, y: 4, w: 12, h: 4 },
         ],
-        variables: [{ name: "sym", value: "'AAPL'" }],
+        variables: [{ name: "sym", kind: "expression", value: "'AAPL'" }],
       },
     })
     const { quest, respondNext } = makeQuest()
@@ -1296,7 +1302,9 @@ describe("createDexieNotebookController — field preservation", () => {
     // And the untouched sibling and notebook settings survive intact
     expect(b).toMatchObject({ value: "SELECT 2", chartConfig: chartFor("sym") })
     expect(b?.lastRunStatus).toBeUndefined()
-    expect(view.settings?.variables).toEqual([{ name: "sym", value: "'AAPL'" }])
+    expect(view.settings?.variables).toEqual([
+      { name: "sym", kind: "expression", value: "'AAPL'" },
+    ])
     expect(view.settings?.layout).toEqual([
       { i: "a", x: 0, y: 0, w: 12, h: 4 },
       { i: "b", x: 0, y: 4, w: 12, h: 4 },
@@ -1311,7 +1319,9 @@ describe("createDexieNotebookController — field preservation", () => {
         cell("a", "old"),
         cell("b", "keep", { position: 1, chartConfig: chartFor("sym") }),
       ],
-      settings: { variables: [{ name: "sym", value: "'AAPL'" }] },
+      settings: {
+        variables: [{ name: "sym", kind: "expression", value: "'AAPL'" }],
+      },
     })
     const controller = makeController()
     // When cell "a" is updated
@@ -1322,7 +1332,9 @@ describe("createDexieNotebookController — field preservation", () => {
     expect(view.cells.find((c) => c.id === "b")?.chartConfig).toEqual(
       chartFor("sym"),
     )
-    expect(view.settings?.variables).toEqual([{ name: "sym", value: "'AAPL'" }])
+    expect(view.settings?.variables).toEqual([
+      { name: "sym", kind: "expression", value: "'AAPL'" },
+    ])
   })
 })
 
@@ -1355,6 +1367,293 @@ describe("createDexieNotebookController — persisted snapshot cap", () => {
       expect(notebooks.has(BUFFER_ID)).toBe(true)
       expect(notebooks.has(101)).toBe(false)
       expect(notebooks.has(102)).toBe(false)
+    })
+  })
+})
+
+describe("createDexieNotebookController — query-list variable values", () => {
+  const symbolValidation = {
+    query: "q",
+    columns: [{ name: "symbol", type: "SYMBOL" }],
+    timestamp: 0,
+  }
+  const pairList = {
+    name: "pair",
+    kind: "list" as const,
+    source: {
+      type: "query" as const,
+      query: "SELECT DISTINCT symbol FROM fx_trades",
+      refresh: "onLoad" as const,
+    },
+    sort: "none" as const,
+    multi: true,
+    includeAll: true,
+    all: { mode: "list" as const },
+    selected: "all" as const,
+  }
+  const pairRows = {
+    type: "dql",
+    columns: [{ name: "symbol", type: "SYMBOL" }],
+    dataset: [["EURUSD"], ["GBPUSD"]],
+    count: 2,
+  }
+
+  it("declares a query list from its stored values without fetching", async () => {
+    // Given a notebook whose list already has stored values
+    await seedNotebook({
+      cells: [cell("a", "SELECT * FROM fx_trades WHERE symbol IN @pair")],
+      settings: { variables: [pairList] },
+    })
+    await saveStoredOptions({
+      owner: notebookOptionsOwner(BUFFER_ID),
+      name: "pair",
+      options: [
+        { value: "'EURUSD'", label: "EURUSD" },
+        { value: "'GBPUSD'", label: "GBPUSD" },
+      ],
+      fetchedAt: 1,
+    })
+    const { quest, pending, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent runs the cell
+    const run = controller.runCell("a")
+    await vi.waitFor(() => respondNext(dqlResult))
+    const summary = await run
+
+    // Then the only query is the cell, with the stored literals declared
+    expect(summary.success).toBe(true)
+    expect(pending).toHaveLength(0)
+  })
+
+  it("fetches a list without stored values, saves them, then runs the cell", async () => {
+    // Given a notebook whose list was never fetched
+    await seedNotebook({
+      cells: [cell("a", "SELECT * FROM fx_trades WHERE symbol IN @pair")],
+      settings: { variables: [pairList] },
+    })
+    const sent: string[] = []
+    const { quest, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const original = quest.queryRaw.bind(quest)
+    quest.queryRaw = ((sql: string, options: unknown) => {
+      sent.push(sql)
+      return original(sql, options as never)
+    }) as Client["queryRaw"]
+    const controller = makeController({}, quest)
+
+    // When the agent runs the cell
+    const run = controller.runCell("a")
+    await vi.waitFor(() => respondNext(pairRows))
+    await vi.waitFor(() => respondNext(dqlResult))
+    const summary = await run
+
+    // Then the option query ran first, the row was saved, and the cell saw the values
+    expect(summary.success).toBe(true)
+    expect(sent[0]).toBe("SELECT DISTINCT symbol FROM fx_trades")
+    expect(sent[1]).toContain("@pair := ('EURUSD', 'GBPUSD')")
+    const rows = await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))
+    expect(rows.map((r) => r.options.map((o) => o.value))).toEqual([
+      ["'EURUSD'", "'GBPUSD'"],
+    ])
+  })
+
+  it("refuses to run a cell that references a list whose values failed to load", async () => {
+    // Given a list whose query fails
+    await seedNotebook({
+      cells: [cell("a", "SELECT * FROM fx_trades WHERE symbol IN @pair")],
+      settings: { variables: [pairList] },
+    })
+    const { quest, pending, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent runs the cell
+    const run = controller.runCell("a")
+    await vi.waitFor(() =>
+      respondNext({ type: "error", error: "table does not exist" }),
+    )
+
+    // Then the tool fails with the variable error and the cell never ran
+    await expect(run).rejects.toMatchObject({
+      code: "variable_options",
+      message: "Could not load the values of @pair: table does not exist",
+    })
+    expect(pending).toHaveLength(0)
+    expect(await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))).toEqual([])
+  })
+
+  it("still runs a cell that does not reference the failed list", async () => {
+    // Given a list whose query fails and a cell that ignores it
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: { variables: [pairList] },
+    })
+    const { quest, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent runs the cell
+    const run = controller.runCell("a")
+    await vi.waitFor(() =>
+      respondNext({ type: "error", error: "table does not exist" }),
+    )
+    await vi.waitFor(() => respondNext(dqlResult))
+
+    // Then the cell ran
+    expect((await run).success).toBe(true)
+  })
+})
+
+describe("createDexieNotebookController — syncVariableOptions", () => {
+  const symbolValidation = {
+    query: "q",
+    columns: [{ name: "symbol", type: "SYMBOL" }],
+    timestamp: 0,
+  }
+  const queryList = (
+    name: string,
+    query: string,
+    refresh: "onLoad" | "onTimeRangeChange" = "onLoad",
+  ) => ({
+    name,
+    kind: "list" as const,
+    source: { type: "query" as const, query, refresh },
+    sort: "none" as const,
+    multi: true,
+    includeAll: true,
+    all: { mode: "list" as const },
+    selected: "all" as const,
+  })
+  const storedRow = (name: string, value: string) =>
+    saveStoredOptions({
+      owner: notebookOptionsOwner(BUFFER_ID),
+      name,
+      options: [{ value: `'${value}'`, label: value }],
+      fetchedAt: 1,
+    })
+  const rows = {
+    type: "dql",
+    columns: [{ name: "symbol", type: "SYMBOL" }],
+    dataset: [["EURUSD"], ["GBPUSD"]],
+    count: 2,
+  }
+
+  it("refetches a stored list that references a changed variable and leaves the rest alone", async () => {
+    // Given two stored lists, one of them built on @venue
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: {
+        variables: [
+          { name: "venue", kind: "text", value: "'LSE'" },
+          queryList("pair", "SELECT symbol FROM t WHERE venue = @venue"),
+          queryList("other", "SELECT symbol FROM u"),
+        ],
+      },
+    })
+    await storedRow("pair", "USDJPY")
+    await storedRow("other", "USDJPY")
+    const { quest, pending, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent's apply changed @venue
+    const sync = controller.syncVariableOptions({
+      changed: ["venue"],
+      redefined: ["venue"],
+      timeRangeChanged: false,
+    })
+    await vi.waitFor(() => respondNext(rows))
+    const report = await sync
+
+    // Then only the dependent list was fetched and its row replaced
+    expect(pending).toHaveLength(0)
+    expect(report.map((e) => e.name)).toEqual(["pair"])
+    const stored = await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))
+    expect(
+      stored.find((r) => r.name === "pair")?.options.map((o) => o.label),
+    ).toEqual(["EURUSD", "GBPUSD"])
+    expect(
+      stored.find((r) => r.name === "other")?.options.map((o) => o.label),
+    ).toEqual(["USDJPY"])
+  })
+
+  it("refetches the time-dependent lists when the time range changed", async () => {
+    // Given a stored list that refreshes on time range changes
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: {
+        variables: [
+          queryList("pair", "SELECT symbol FROM t", "onTimeRangeChange"),
+        ],
+        timeRange: { from: "now-1d", to: "now" },
+      },
+    })
+    await storedRow("pair", "USDJPY")
+    const { quest, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent's apply moved the time range
+    const sync = controller.syncVariableOptions({
+      changed: [],
+      redefined: [],
+      timeRangeChanged: true,
+    })
+    await vi.waitFor(() => respondNext(rows))
+
+    // Then the list was fetched again
+    expect((await sync).map((e) => e.name)).toEqual(["pair"])
+  })
+
+  it("reports every list it would fetch when the agent runtime is not ready", async () => {
+    // Given a list without stored values and no agent client
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: { variables: [queryList("pair", "SELECT symbol FROM t")] },
+    })
+    const controller = makeController()
+
+    // When the agent's apply is synced
+    const report = await controller.syncVariableOptions({
+      changed: ["pair"],
+      redefined: ["pair"],
+      timeRangeChanged: false,
+    })
+
+    // Then the agent learns the fetch could not run
+    expect(report).toEqual([
+      { name: "pair", error: "Notebook agent runtime is not ready yet." },
+    ])
+  })
+
+  it("drops the stored values of a list the apply redefined", async () => {
+    // Given a stored list
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: { variables: [queryList("pair", "SELECT symbol FROM t")] },
+    })
+    await storedRow("pair", "USDJPY")
+    const controller = makeController()
+
+    // When the agent rewrites its query
+    await controller.applyNotebookState({
+      variables: [queryList("pair", "SELECT DISTINCT symbol FROM t")],
+      cells: [{ id: "a", preserveValue: true }],
+    })
+
+    // Then the stale values are gone
+    await vi.waitFor(async () => {
+      expect(await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))).toEqual(
+        [],
+      )
     })
   })
 })

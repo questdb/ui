@@ -4,6 +4,7 @@ import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
+  hasLegacyVariables,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
   migrateLegacyCellNames,
@@ -14,6 +15,7 @@ import type {
   NotebookViewState,
 } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
@@ -26,8 +28,19 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
+const upgradeVariables = (view: NotebookViewState): NotebookViewState =>
+  hasLegacyVariables(view)
+    ? {
+        ...view,
+        settings: {
+          ...view.settings,
+          variables: normalizeVariables(view.settings?.variables),
+        },
+      }
+    : view
+
 export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  dropLegacyChartConfigs(migrateLegacyCellNames(view))
+  upgradeVariables(dropLegacyChartConfigs(migrateLegacyCellNames(view)))
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

@@ -1,25 +1,23 @@
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
 import styled from "styled-components"
-import {
-  metricDurations,
-  durationToHumanReadable,
-  durationTokenToDate,
-  isDateToken,
-  MAX_DATE_RANGE,
-} from "./utils"
-import { DateRange } from "./types"
+import { formatISO, subMonths } from "date-fns"
+import { useFormContext } from "react-hook-form"
+import Joi from "joi"
+import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
 import {
   Calendar as CalendarIcon,
   Time,
   World,
 } from "../../../components/icons"
-import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
-import { getLocalTimeZone, getLocalGMTOffset } from "../../../utils"
-import { formatISO, subMonths } from "date-fns"
-import { useFormContext } from "react-hook-form"
-import Joi from "joi"
-import { utcToLocal } from "../../../utils"
+import { getLocalGMTOffset, getLocalTimeZone, utcToLocal } from "../../../utils"
 import { EditorRefreshIntervalTriggerButton } from "../ToolbarRefreshControls"
+import {
+  durationToHumanReadable,
+  durationTokenToDate,
+  isDateToken,
+  type DateRange,
+  type DurationPreset,
+} from "./utils"
 
 const Root = styled(Box).attrs({
   gap: "1rem",
@@ -41,20 +39,22 @@ const DatePickers = styled(Box).attrs({
   align: "flex-start",
 })`
   width: 70%;
-  align-self: flex-start;
+  flex: 0 0 70%;
+  align-self: stretch;
   padding-right: 1rem;
   padding-left: 1rem;
 `
 
-const MetricDurations = styled.ul`
-  width: 40%;
+const Presets = styled.ul`
+  width: 30%;
+  flex: 0 0 30%;
   list-style: none;
   margin: 0;
   padding: 0 0 0 1rem;
   border-left: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
-const MetricDurationItem = styled.li<{ selected?: boolean }>`
+const PresetItem = styled.li<{ selected?: boolean }>`
   cursor: pointer;
   height: 3rem;
   padding: 0 1rem;
@@ -75,47 +75,33 @@ const MetricDurationItem = styled.li<{ selected?: boolean }>`
 `
 
 const Footer = styled(Box).attrs({
-  gap: 0,
+  gap: "1rem",
   align: "center",
+  justifyContent: "space-between",
 })`
   width: 100%;
   padding: 1rem 0;
   border-top: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
+const FooterActions = styled(Box).attrs({ gap: "1rem", align: "center" })``
+
 const DatePickerItem = ({
   min,
   max,
   name,
   label,
+  placeholder,
   dateFrom,
   dateTo,
-  onChange,
 }: DateRange & {
   min: Date
   max: Date
   name: string
   label: string
-  onChange: (date: string[]) => void
+  placeholder: string
 }) => {
   const { setValue } = useFormContext()
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValue(name, e.target.value)
-    try {
-      const dateValue = durationTokenToDate(e.target.value)
-      if (dateValue === "Invalid date") {
-        return
-      }
-      if (name === "dateFrom") {
-        onChange([dateValue, dateTo])
-      } else if (name === "dateTo") {
-        onChange([dateFrom, dateValue])
-      }
-    } catch (e) {
-      console.error(e)
-    }
-  }
 
   const fromDate = durationTokenToDate(dateFrom)
   const toDate = durationTokenToDate(dateTo)
@@ -123,7 +109,7 @@ const DatePickerItem = ({
   return (
     <Form.Item name={name} label={label}>
       <Box gap="0.5rem" align="center">
-        <Form.Input name={name} onChange={handleChange} placeholder="now" />
+        <Form.Input name={name} placeholder={placeholder} />
         <Popover
           trigger={
             <Button variant="secondary">
@@ -146,12 +132,8 @@ const DatePickerItem = ({
               })
             }}
             value={[
-              fromDate !== "Invalid date"
-                ? new Date(durationTokenToDate(dateFrom))
-                : new Date(),
-              toDate == "Invalid date"
-                ? new Date(durationTokenToDate(dateTo))
-                : new Date(),
+              fromDate !== "Invalid date" ? new Date(fromDate) : new Date(),
+              toDate !== "Invalid date" ? new Date(toDate) : new Date(),
             ]}
             selectRange
           />
@@ -163,21 +145,40 @@ const DatePickerItem = ({
 
 type FormValues = DateRange
 
-export const DateTimePicker = ({
+type Props = {
+  dateFrom?: string
+  dateTo?: string
+  presets: DurationPreset[]
+  maxRangeSeconds?: number
+  renderPreview?: (dateFrom: string, dateTo: string) => React.ReactNode
+  onApply: (dateFrom: string, dateTo: string) => Promise<void> | void
+  onClear?: () => void
+  dataHook?: string
+}
+
+export const TimeRangePicker = ({
   dateFrom,
   dateTo,
-  onDateFromToChange,
-}: DateRange & {
-  // This can be either a date string or something like `now-2h` which does not exist on the list
-  onDateFromToChange: (dateFrom: string, dateTo: string) => Promise<void>
-}) => {
+  presets,
+  maxRangeSeconds,
+  renderPreview,
+  onApply,
+  onClear,
+  dataHook,
+}: Props) => {
+  const appliedRange = { dateFrom: dateFrom ?? "", dateTo: dateTo ?? "" }
   const [mainOpen, setMainOpen] = useState(false)
-  const [currentDateFrom, setCurrentDateFrom] = useState(dateFrom)
-  const [currentDateTo, setCurrentDateTo] = useState(dateTo)
+  const [draft, setDraft] = useState<DateRange>(appliedRange)
+  const hasRange = dateFrom !== undefined && dateTo !== undefined
+
+  const handleOpenChange = (open: boolean) => {
+    if (open) setDraft(appliedRange)
+    setMainOpen(open)
+  }
 
   const handleSubmit = async (values: FormValues) => {
     if (values.dateFrom && values.dateTo) {
-      await onDateFromToChange(
+      await onApply(
         isDateToken(values.dateFrom)
           ? values.dateFrom
           : formatISO(values.dateFrom),
@@ -187,8 +188,16 @@ export const DateTimePicker = ({
     }
   }
 
+  const handleClear = () => {
+    onClear?.()
+    setMainOpen(false)
+  }
+
   const min = subMonths(new Date(), 12)
   const max = new Date()
+  const maxRangeDays = maxRangeSeconds
+    ? Math.round(maxRangeSeconds / 86400)
+    : undefined
 
   const errorMessages = {
     "string.empty": "Please enter a date or duration",
@@ -198,8 +207,11 @@ export const DateTimePicker = ({
     "string.fromIsAfterTo": "From date must be before To date",
     "string.sameValues": "From and To dates cannot be the same",
     "any.custom": "One of the values is invalid",
-    "string.maxDateRange": "Date range cannot exceed 7 days",
+    "string.maxDateRange": `Date range cannot exceed ${maxRangeDays} days`,
   }
+
+  const exceedsMaxRange = (spanMs: number) =>
+    maxRangeSeconds !== undefined && spanMs > maxRangeSeconds * 1000
 
   const schema = Joi.object({
     dateFrom: Joi.any()
@@ -222,7 +234,7 @@ export const DateTimePicker = ({
             return helpers.error("string.dateInFuture")
           } else if (timeValue === timeNow) {
             return helpers.error("string.sameValues")
-          } else if (timeTo - timeValue > MAX_DATE_RANGE * 1000) {
+          } else if (exceedsMaxRange(timeTo - timeValue)) {
             return helpers.error("string.maxDateRange")
           }
           return value
@@ -250,7 +262,7 @@ export const DateTimePicker = ({
           return helpers.error("string.dateInFuture")
         } else if (timeValue === timeNow) {
           return helpers.error("string.sameValues")
-        } else if (timeValue - timeFrom > MAX_DATE_RANGE * 1000) {
+        } else if (exceedsMaxRange(timeValue - timeFrom)) {
           return helpers.error("string.maxDateRange")
         }
         return value
@@ -258,33 +270,24 @@ export const DateTimePicker = ({
       .messages(errorMessages),
   })
 
-  const datePickerProps = {
-    min,
-    max,
-    dateFrom: currentDateFrom,
-    dateTo: currentDateTo,
-    onChange: ([from, to]: string[]) => {
-      setCurrentDateFrom(from)
-      setCurrentDateTo(to)
-    },
-  }
-
-  useEffect(() => {
-    setCurrentDateFrom(dateFrom)
-    setCurrentDateTo(dateTo)
-  }, [dateFrom, dateTo])
+  const datePickerProps = { min, max, ...draft }
 
   return (
     <Popover
       open={mainOpen}
-      onOpenChange={setMainOpen}
+      onOpenChange={handleOpenChange}
       trigger={
         <EditorRefreshIntervalTriggerButton
-          label={durationToHumanReadable(dateFrom, dateTo)}
+          label={
+            hasRange
+              ? durationToHumanReadable(dateFrom, dateTo, presets)
+              : "Time range"
+          }
           leadingIcon={<Time size="18px" />}
           type="button"
           aria-label="Time range"
           aria-expanded={mainOpen}
+          data-hook={dataHook}
         />
       }
     >
@@ -297,36 +300,51 @@ export const DateTimePicker = ({
             <Form
               name="dateRanges"
               onSubmit={handleSubmit}
-              defaultValues={{ dateFrom, dateTo }}
+              onChange={(values) =>
+                setDraft({
+                  dateFrom: values.dateFrom ?? "",
+                  dateTo: values.dateTo ?? "",
+                })
+              }
+              defaultValues={appliedRange}
               validationSchema={schema}
             >
               <Box flexDirection="column" gap="1rem" align="flex-start">
                 <DatePickerItem
                   name="dateFrom"
                   label="From"
+                  placeholder="now-1h"
                   {...datePickerProps}
                 />
-                <DatePickerItem name="dateTo" label="To" {...datePickerProps} />
+                <DatePickerItem
+                  name="dateTo"
+                  label="To"
+                  placeholder="now"
+                  {...datePickerProps}
+                />
                 <Form.Submit>Apply</Form.Submit>
               </Box>
             </Form>
+            <Box margin="auto 0 0 0">
+              {renderPreview?.(draft.dateFrom, draft.dateTo)}
+            </Box>
           </DatePickers>
-          <MetricDurations>
-            {Object.values(metricDurations).map(
-              ({ label, dateFrom: mFrom, dateTo: mTo }) => (
-                <MetricDurationItem
+          <Presets>
+            {presets.map(
+              ({ label, dateFrom: presetFrom, dateTo: presetTo }) => (
+                <PresetItem
                   key={label}
-                  selected={dateFrom === mFrom && dateTo === mTo}
+                  selected={dateFrom === presetFrom && dateTo === presetTo}
                   onClick={async () => {
-                    await onDateFromToChange(mFrom, mTo)
+                    await onApply(presetFrom, presetTo)
                     setMainOpen(false)
                   }}
                 >
                   {label}
-                </MetricDurationItem>
+                </PresetItem>
               ),
             )}
-          </MetricDurations>
+          </Presets>
         </Cols>
         <Footer>
           <Box gap="0.5rem" align="center">
@@ -335,6 +353,13 @@ export const DateTimePicker = ({
               {getLocalTimeZone()} ({getLocalGMTOffset()})
             </Text>
           </Box>
+          <FooterActions>
+            {onClear && hasRange && (
+              <Button variant="secondary" onClick={handleClear}>
+                Clear
+              </Button>
+            )}
+          </FooterActions>
         </Footer>
       </Root>
     </Popover>

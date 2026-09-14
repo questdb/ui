@@ -18,6 +18,12 @@ import {
 } from "../notebooks/notebookController"
 import { __resetNotebookBufferQueuesForTests } from "../notebooks/notebookBufferQueue"
 import { db } from "../../store/db"
+import { saveNotebookGlobals } from "../../store/notebookGlobals"
+import {
+  GLOBAL_OPTIONS_OWNER,
+  notebookOptionsOwner,
+  saveStoredOptions,
+} from "../../store/notebookOptions"
 import type {
   NotebookCell,
   NotebookSettings,
@@ -44,6 +50,8 @@ const makeController = (
 ): NotebookController => ({
   bufferId,
   kind: "live",
+  syncVariableOptions: () => Promise.resolve([]),
+  waitForVariableOptions: () => Promise.resolve([]),
   mutate: (transition) =>
     Promise.resolve(
       transition({ cells, settings, maximizedCellId, focusedCellId: null })
@@ -217,8 +225,8 @@ describe("buildSnapshot", () => {
       cells,
       settings: {
         variables: [
-          { name: "x", value: "10" },
-          { name: "sym", value: "'BTC'" },
+          { name: "x", kind: "expression", value: "10" },
+          { name: "sym", kind: "expression", value: "'BTC'" },
         ],
       },
     })
@@ -227,13 +235,90 @@ describe("buildSnapshot", () => {
     const b = await buildSnapshot(withoutVarsId)
     if (a?.status === "ok" && b?.status === "ok") {
       expect(a.variables).toEqual([
-        { name: "x", value: "10" },
-        { name: "sym", value: "'BTC'" },
+        { name: "x", kind: "expression", value: "10" },
+        { name: "sym", kind: "expression", value: "'BTC'" },
       ])
       expect(b.variables).toBeUndefined()
     } else {
       throw new Error("expected ok snapshots")
     }
+  })
+
+  it("reports the stored values of every query list, notebook and global", async () => {
+    // Given a notebook list with stored values and a global list without
+    const queryList = (name: string) => ({
+      name,
+      kind: "list" as const,
+      source: {
+        type: "query" as const,
+        query: "SELECT DISTINCT symbol FROM fx_trades",
+        refresh: "onLoad" as const,
+      },
+      sort: "none" as const,
+      multi: true,
+      includeAll: true,
+      all: { mode: "list" as const },
+      selected: "all" as const,
+    })
+    await saveNotebookGlobals([queryList("venue")])
+    const id = await seedNotebook({
+      cells: [sql("a", "SELECT 1")],
+      settings: { variables: [queryList("pair")] },
+    })
+    await saveStoredOptions({
+      owner: notebookOptionsOwner(id),
+      name: "pair",
+      options: [
+        { value: "'EURUSD'", label: "EURUSD" },
+        { value: "'GBPUSD'", label: "GBPUSD" },
+      ],
+      fetchedAt: Date.UTC(2026, 8, 10, 12, 0, 0),
+    })
+    await db.notebook_options
+      .where("owner")
+      .equals(GLOBAL_OPTIONS_OWNER)
+      .delete()
+
+    // When
+    const snap = await buildSnapshot(id)
+    await saveNotebookGlobals([])
+
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
+    expect(snap.variable_values).toEqual([
+      { name: "pair", count: 2, fetched_at: Date.UTC(2026, 8, 10, 12, 0, 0) },
+      { name: "venue", fetched: false },
+    ])
+    const text = formatSnapshot(snap)
+    expect(text).toContain(
+      "pair: list all (multi) [2 values fetched at 2026-09-10T12:00:00.000Z]",
+    )
+    expect(text).toContain("venue: list all (multi) [values not fetched yet]")
+  })
+
+  it("lists global variables the notebook does not override", async () => {
+    // Given
+    await saveNotebookGlobals([
+      { name: "sym", kind: "expression", value: "'EURUSD'" },
+      { name: "venue", kind: "expression", value: "'LSE'" },
+    ])
+    const id = await seedNotebook({
+      cells: [sql("a", "SELECT @sym FROM trades")],
+      settings: {
+        variables: [{ name: "sym", kind: "expression", value: "'GBPUSD'" }],
+      },
+    })
+
+    // When
+    const snap = await buildSnapshot(id)
+    await saveNotebookGlobals([])
+
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
+    expect(snap.global_variables).toEqual([
+      { name: "venue", kind: "expression", value: "'LSE'" },
+    ])
+    expect(formatSnapshot(snap)).toContain("global_variables")
   })
 
   it("reports auto_refresh_default only when the notebook configured one", async () => {
@@ -372,8 +457,8 @@ describe("formatSnapshot", () => {
       cells: [sql("a", "SELECT @x")],
       settings: {
         variables: [
-          { name: "x", value: "10" },
-          { name: "sym", value: "'BTC'" },
+          { name: "x", kind: "expression", value: "10" },
+          { name: "sym", kind: "expression", value: "'BTC'" },
         ],
       },
     })

@@ -5,6 +5,8 @@ import { Editor } from "@monaco-editor/react"
 import { QuestDBLanguageName, stripSQLComments } from "../../Monaco/utils"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useGlobalVariablesActions } from "../variables/globals/GlobalVariablesProvider"
+import { variableSuggestions } from "../variables/variableSuggestions"
 import { CellDragHeader } from "./CellDragHeader"
 import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
@@ -42,7 +44,7 @@ import {
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
-import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
+import { useValidateWithGlobals } from "../variables/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
@@ -130,8 +132,15 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
-    useNotebookActions()
+  const {
+    setCellChartConfig,
+    clearCellResult,
+    updateCell,
+    setFocusedCell,
+    getVariables,
+    getDeclareEntries,
+  } = useNotebookActions()
+  const globals = useGlobalVariablesActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const bufferIdForEvents = useNotebookBufferId()
@@ -249,6 +258,12 @@ const CellInner: React.FC<Props> = ({
     onRunAll: () => runAll(),
     onContentHeightChange: handleContentHeightChange,
     validate: validateWithGlobals,
+    getVariableSuggestions: () =>
+      variableSuggestions(
+        globals.getVariables(),
+        getVariables() ?? [],
+        getDeclareEntries(),
+      ),
   })
 
   const { applyHighlight, clearHighlight } = useCellSelectionDecoration(

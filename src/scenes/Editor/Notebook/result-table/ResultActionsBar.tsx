@@ -38,7 +38,7 @@ export const ResultActionsBar: React.FC<Props> = ({
   isRunning,
   onReRun,
 }) => {
-  const { getVariables } = useNotebookActions()
+  const { getDeclareEntries } = useNotebookActions()
   const [isCopied, setIsCopied] = useState(false)
 
   const copyMarkdown = () => {
@@ -80,7 +80,7 @@ export const ResultActionsBar: React.FC<Props> = ({
         : ConsoleEvent.GRID_CSV_DOWNLOAD,
       { source: "notebook" },
     )
-    downloadQueryResult(expandGlobals(data.query, getVariables()), format)
+    downloadQueryResult(expandGlobals(data.query, getDeclareEntries()), format)
   }
 
   return (

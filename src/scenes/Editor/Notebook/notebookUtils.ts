@@ -9,6 +9,7 @@ import type {
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
+  TimeRange,
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
@@ -27,6 +28,7 @@ import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptCon
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
+import { normalizeVariables } from "./variables/normalizeVariables"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -708,6 +710,7 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  timeRange?: TimeRange | null
   cells: ApplyCellRequest[]
 }
 
@@ -966,7 +969,7 @@ export const cloneNotebookViewStateWithCellIdMap = (
         .map((item) => ({ ...item, i: idMap.get(item.i) as string }))
     }
     if (source.settings.variables) {
-      settings.variables = source.settings.variables.map((v) => ({ ...v }))
+      settings.variables = normalizeVariables(source.settings.variables)
     }
     next.settings = settings
   }
@@ -1815,6 +1818,12 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
+  }
+  if (request.timeRange !== undefined) {
+    const { timeRange, ...withoutTimeRange } = nextSettings
+    nextSettings = request.timeRange
+      ? { ...withoutTimeRange, timeRange: request.timeRange }
+      : withoutTimeRange
   }
 
   let nextMaximizedCellId = current.maximizedCellId

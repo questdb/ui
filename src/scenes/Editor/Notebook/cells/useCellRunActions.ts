@@ -4,7 +4,7 @@ import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
-import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
+import { useValidateWithGlobals } from "../variables/useValidateWithGlobals"
 import {
   getQueryFromCursor,
   normalizeQueryText,

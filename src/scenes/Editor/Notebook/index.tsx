@@ -32,6 +32,7 @@ import type { AutoRefresh, NotebookCell } from "../../../store/notebook"
 import { AddCellBottom, AddCellBetween } from "./cells/AddCellButton"
 import { Button, LoadingSpinner } from "../../../components"
 import { NotebookToolbar } from "./NotebookToolbar"
+import { VariablesBar } from "./variables/bar/VariablesBar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
@@ -824,6 +825,7 @@ const NotebookContent: React.FC = () => {
   return (
     <NotebookWrapper>
       <NotebookToolbar />
+      <VariablesBar />
       {layoutMode === "grid" ? <GridLayout /> : <ListLayout />}
     </NotebookWrapper>
   )

@@ -5,10 +5,10 @@ import { createValidateWithGlobals } from "../declareUtils"
 
 export const useValidateWithGlobals = () => {
   const { quest } = useContext(QuestContext)
-  const { getVariables } = useNotebookActions()
+  const { getDeclareEntries } = useNotebookActions()
 
   return useMemo(
-    () => createValidateWithGlobals(quest, getVariables),
-    [quest, getVariables],
+    () => createValidateWithGlobals(quest, getDeclareEntries),
+    [quest, getDeclareEntries],
   )
 }

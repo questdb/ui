@@ -24,7 +24,8 @@ import {
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
-import { VariablesPopover } from "./globals/VariablesPopover"
+import { VariablesDialog } from "./variables/editor/VariablesDialog"
+import { NotebookTimeRangeControl } from "./variables/NotebookTimeRangeControl"
 import { NotebookRefreshControl } from "./NotebookRefreshControl"
 import { NotebookLayoutToggle } from "./NotebookViewToggle"
 import { NotebookRenameInput } from "./NotebookRenameInput"
@@ -332,7 +333,8 @@ export const NotebookToolbar: React.FC = () => {
             <DownloadSimpleIcon size={18} />
           </Button>
         </TooltipButton>
-        <VariablesPopover />
+        <VariablesDialog />
+        <NotebookTimeRangeControl />
         <NotebookRefreshControl />
         <NotebookLayoutToggle
           mode={mode}

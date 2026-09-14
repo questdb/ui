@@ -14,7 +14,9 @@ import { QuestContext } from "../../../providers/QuestProvider"
 import type {
   CellResult,
   NotebookCell,
+  DeclareEntry,
   NotebookVariable,
+  TimeRange,
   NotebookViewState,
   NotebookSettings,
   CellMode,
@@ -39,6 +41,7 @@ import {
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
+  type VariableSettingsDiff,
   type ViewParts,
 } from "../../../utils/notebooks/notebookController"
 import {
@@ -66,10 +69,22 @@ import {
   pinNotebookSnapshots,
   pruneToRecentNotebooks,
 } from "../../../store/notebookResults"
+import { notebookOptionsOwner } from "../../../store/notebookOptions"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
 import { createValidateWithGlobals } from "./declareUtils"
+import { buildDeclareEntries } from "./variables/declareEntries"
+import {
+  changedVariableNames,
+  redefinedVariableNames,
+} from "./variables/variableChanges"
+import { useGlobalVariablesActions } from "./variables/globals/GlobalVariablesProvider"
+import type { PrefetchedVariableOptions } from "./variables/options/fetchVariableOptions"
+import {
+  useVariableOptions,
+  type VariableOptionsByName,
+} from "./variables/useVariableOptions"
 import {
   CellRefreshProvider,
   useCellRefreshEngine,
@@ -100,11 +115,23 @@ export type NotebookState = {
   focusedCellId: string | null
   maximizedCellId: string | null
   runningCellIds: Set<string>
+  listOptions: VariableOptionsByName
 }
 
 export type NotebookActions = {
   getVariables: () => NotebookVariable[] | undefined
+  getDeclareEntries: () => DeclareEntry[]
   updateSettings: (updates: Partial<NotebookSettings>) => void
+  setTimeRange: (range: TimeRange | null) => void
+  applyVariables: (
+    variables: NotebookVariable[],
+    prefetched: PrefetchedVariableOptions,
+  ) => void
+  updateVariable: (
+    name: string,
+    update: (variable: NotebookVariable) => NotebookVariable,
+  ) => void
+  refreshVariableOptions: (name: string) => void
   addCell: (afterCellId?: string, value?: string, type?: CellType) => string
   deleteCell: (cellId: string) => void
   updateCell: (cellId: string, updates: Partial<NotebookCell>) => void
@@ -140,7 +167,12 @@ type ActionMap = Record<string, (...args: never[]) => unknown>
 
 const NOOP_ACTIONS: NotebookActions = {
   getVariables: () => undefined,
+  getDeclareEntries: () => [],
   updateSettings: () => undefined,
+  setTimeRange: () => undefined,
+  applyVariables: () => undefined,
+  updateVariable: () => undefined,
+  refreshVariableOptions: () => undefined,
   addCell: () => "",
   deleteCell: () => undefined,
   updateCell: () => undefined,
@@ -170,6 +202,7 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   getMaximizedCellId: () => null,
   readRefreshState: () => new Map(),
   flushChartSnapshots: () => Promise.resolve(),
+  settleVariableOptions: () => Promise.resolve([]),
   applyTransition: (run) =>
     run({
       cells: [],
@@ -200,6 +233,7 @@ const EMPTY_STATE: NotebookState = {
   focusedCellId: null,
   maximizedCellId: null,
   runningCellIds: new Set(),
+  listOptions: {},
 }
 
 const createNotebookQueryKey = (
@@ -226,6 +260,7 @@ export const NotebookProvider: React.FC<{
 }> = ({ initialState, bufferId, preview = false, children }) => {
   const { updateBuffer } = useEditor()
   const { quest, questExecution } = useContext(QuestContext)
+  const globals = useGlobalVariablesActions()
 
   const [focusedCellId, setFocusedCellState] = useState<string | null>(
     initialState.focusedCellId ?? null,
@@ -248,7 +283,52 @@ export const NotebookProvider: React.FC<{
   const notebookRunIdRef = useRef(0)
   const liveActionsRef = useRef<LiveNotebookActions>(NOOP_LIVE_ACTIONS)
 
-  const { executeSingle } = useQueryExecution(settings.variables)
+  const getSettings = useCallback(() => settingsRef.current, [])
+  const {
+    listOptions,
+    listOptionsRef,
+    refetch: refetchVariableOptions,
+    load: loadVariableOptions,
+    refetchChanged: refetchChangedVariableOptions,
+    refetchForTimeRange: refetchVariableOptionsForTimeRange,
+    settle: settleVariableOptions,
+    prune: pruneVariableOptions,
+  } = useVariableOptions({
+    quest,
+    owner: notebookOptionsOwner(bufferId),
+    getSettings,
+    getPrefixEntries: globals.getDeclareEntries,
+  })
+
+  const getDeclareEntries = useCallback(
+    () =>
+      buildDeclareEntries(
+        settingsRef.current,
+        listOptionsRef.current,
+        globals.getDeclareEntries(),
+      ),
+    [globals, listOptionsRef],
+  )
+
+  useEffect(() => {
+    void loadVariableOptions()
+  }, [bufferId, loadVariableOptions])
+
+  useEffect(() => {
+    if (preview) return
+    return globals.attachNotebook(bufferId, {
+      getTimeRange: () => settingsRef.current.timeRange,
+      onGlobalsChanged: (names) => {
+        const local = new Set(
+          (settingsRef.current.variables ?? []).map((v) => v.name),
+        )
+        const visible = names.filter((name) => !local.has(name))
+        void refetchChangedVariableOptions(visible, [], "change")
+      },
+    })
+  }, [bufferId, globals, preview, refetchChangedVariableOptions])
+
+  const { executeSingle } = useQueryExecution(getDeclareEntries)
 
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
@@ -355,7 +435,7 @@ export const NotebookProvider: React.FC<{
   }, [bufferId, cellsRef])
 
   const validateWithGlobals = useMemo(
-    () => createValidateWithGlobals(quest, () => settingsRef.current.variables),
+    () => createValidateWithGlobals(quest, getDeclareEntries),
     [quest],
   )
 
@@ -422,6 +502,29 @@ export const NotebookProvider: React.FC<{
     [execution, releaseCellExecution],
   )
 
+  const syncVariableOptionsAfterAgentEdit = useCallback(
+    (diff: VariableSettingsDiff) => {
+      if (diff.changed.length > 0) {
+        pruneVariableOptions()
+        void refetchChangedVariableOptions(
+          diff.changed,
+          diff.redefined,
+          "change",
+        )
+      }
+      if (diff.timeRangeChanged) {
+        void refetchVariableOptionsForTimeRange("change")
+        globals.noteTimeRangeChanged()
+      }
+    },
+    [
+      globals,
+      pruneVariableOptions,
+      refetchChangedVariableOptions,
+      refetchVariableOptionsForTimeRange,
+    ],
+  )
+
   const applyTransition = useCallback(
     <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
       const out = run({
@@ -465,6 +568,7 @@ export const NotebookProvider: React.FC<{
           resultHydration.noteMissing(cellId)
         }
       }
+      if (out.variables) syncVariableOptionsAfterAgentEdit(out.variables)
       return out.result
     },
     [
@@ -474,6 +578,7 @@ export const NotebookProvider: React.FC<{
       cancelCell,
       abortCellRun,
       resultHydration,
+      syncVariableOptionsAfterAgentEdit,
     ],
   )
 
@@ -686,6 +791,70 @@ export const NotebookProvider: React.FC<{
     [bufferId, cancelCell, questExecution, runCellNow],
   )
 
+  const setTimeRange = useCallback(
+    (range: TimeRange | null) => {
+      updateSettings({ timeRange: range ?? undefined })
+      signalUserEdit(bufferId)
+      void trackEvent(
+        range
+          ? ConsoleEvent.NOTEBOOK_TIME_RANGE_APPLY
+          : ConsoleEvent.NOTEBOOK_TIME_RANGE_CLEAR,
+      )
+      void refetchVariableOptionsForTimeRange("change")
+      globals.noteTimeRangeChanged()
+    },
+    [bufferId, globals, refetchVariableOptionsForTimeRange, updateSettings],
+  )
+
+  const commitVariables = useCallback(
+    (
+      variables: NotebookVariable[],
+      changed: string[],
+      redefined: string[],
+      prefetched: PrefetchedVariableOptions,
+    ) => {
+      updateSettings({ variables })
+      signalUserEdit(bufferId)
+      pruneVariableOptions()
+      void refetchChangedVariableOptions(
+        changed,
+        redefined,
+        "change",
+        prefetched,
+      )
+    },
+    [
+      bufferId,
+      pruneVariableOptions,
+      refetchChangedVariableOptions,
+      updateSettings,
+    ],
+  )
+
+  const applyVariables = useCallback(
+    (variables: NotebookVariable[], prefetched: PrefetchedVariableOptions) =>
+      commitVariables(
+        variables,
+        changedVariableNames(settingsRef.current.variables ?? [], variables),
+        redefinedVariableNames(settingsRef.current.variables ?? [], variables),
+        prefetched,
+      ),
+    [commitVariables],
+  )
+
+  const updateVariable = useCallback(
+    (name: string, update: (variable: NotebookVariable) => NotebookVariable) =>
+      commitVariables(
+        (settingsRef.current.variables ?? []).map((variable) =>
+          variable.name === name ? update(variable) : variable,
+        ),
+        [name],
+        [],
+        {},
+      ),
+    [commitVariables],
+  )
+
   const deleteCell = useCallback(
     // applyTransition cancels the deleted cell's in-flight run via its cleanup.
     (cellId: string) =>
@@ -789,7 +958,13 @@ export const NotebookProvider: React.FC<{
 
   liveActionsRef.current = {
     getVariables: () => settingsRef.current.variables,
+    getDeclareEntries,
     updateSettings,
+    setTimeRange,
+    applyVariables,
+    updateVariable,
+    refreshVariableOptions: (name) =>
+      void refetchVariableOptions([name], "change"),
     addCell,
     deleteCell,
     updateCell: store.updateCell,
@@ -836,6 +1011,7 @@ export const NotebookProvider: React.FC<{
     getMaximizedCellId: () => maximizedCellIdRef.current,
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
+    settleVariableOptions,
     applyTransition,
   }
 
@@ -846,6 +1022,7 @@ export const NotebookProvider: React.FC<{
       focusedCellId,
       maximizedCellId,
       runningCellIds: execution.runningCellIds,
+      listOptions,
     }),
     [
       store.cells,
@@ -853,6 +1030,7 @@ export const NotebookProvider: React.FC<{
       focusedCellId,
       maximizedCellId,
       execution.runningCellIds,
+      listOptions,
     ],
   )
 

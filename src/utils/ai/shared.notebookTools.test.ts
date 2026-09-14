@@ -39,6 +39,7 @@ import type { ValidateQueryResult } from "../questdb/types"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
+import type { VariableValuesEntry } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
 
 const cell = (
@@ -67,6 +68,7 @@ const mountLive = (
     validate?: (sql: string) => Promise<ValidateQueryResult>
     // Fires on each readView — lets a test simulate a user edit racing a read.
     onRead?: () => void
+    variableValues?: VariableValuesEntry[]
   } = {},
 ) => {
   const state: { parts: ViewParts } = {
@@ -116,6 +118,12 @@ const mountLive = (
   const controller: NotebookController = {
     bufferId,
     kind: "live",
+    syncVariableOptions: vi.fn(() =>
+      Promise.resolve(opts.variableValues ?? []),
+    ),
+    waitForVariableOptions: vi.fn(() =>
+      Promise.resolve(opts.variableValues ?? []),
+    ),
     mutate: (transition) => {
       try {
         const out = transition(state.parts)
@@ -136,7 +144,12 @@ const mountLive = (
     runCell: vi.fn(runCell),
   }
   registerController(controller)
-  return { state, runCell: controller.runCell }
+  return {
+    state,
+    runCell: controller.runCell,
+    syncVariableOptions: controller.syncVariableOptions,
+    waitForVariableOptions: controller.waitForVariableOptions,
+  }
 }
 
 const cellIds = (state: { parts: ViewParts }): string[] =>
@@ -1161,8 +1174,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("apply_notebook_state applies ordered variables; null preserves, [] clears", async () => {
     const variables = [
-      { name: "x", value: "10" },
-      { name: "from_ts", value: "dateadd('d', -7, now())" },
+      { name: "x", kind: "expression", value: "10" },
+      { name: "from_ts", kind: "expression", value: "dateadd('d', -7, now())" },
     ]
     // Ordered variables are written to settings.
     const a = mountLive(1)
@@ -1182,7 +1195,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
     // null preserves the notebook's existing variables.
     const b = mountLive(1, [], {
-      settings: { variables: [{ name: "keep", value: "1" }] },
+      settings: {
+        variables: [{ name: "keep", kind: "expression", value: "1" }],
+      },
     })
     await dispatchTool(
       "apply_notebook_state",
@@ -1197,12 +1212,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
     expect(b.state.parts.settings.variables).toEqual([
-      { name: "keep", value: "1" },
+      { name: "keep", kind: "expression", value: "1" },
     ])
 
     // [] clears them.
     const c = mountLive(1, [], {
-      settings: { variables: [{ name: "gone", value: "1" }] },
+      settings: {
+        variables: [{ name: "gone", kind: "expression", value: "1" }],
+      },
     })
     await dispatchTool(
       "apply_notebook_state",
@@ -1227,7 +1244,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         layout_mode: null,
         maximized_cell_id: null,
-        variables: [{ name: "bad-name", value: "1" }],
+        variables: [{ name: "bad-name", kind: "expression", value: "1" }],
         cells: [{ value: "SELECT 1" }],
       },
       client,
@@ -1268,6 +1285,49 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     }
   })
 
+  it("apply_notebook_state rejects a list whose option query the server classifies as a write", async () => {
+    const client = makeClient()
+    const validateSql = vi.fn((sql: string) =>
+      Promise.resolve(
+        sql.includes("INSERT")
+          ? { query: sql, queryType: "INSERT" }
+          : { query: sql, columns: [], timestamp: 0 },
+      ),
+    )
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [
+          {
+            name: "venue",
+            kind: "list",
+            source: { type: "query", query: "INSERT INTO t VALUES (1)" },
+            multi: false,
+            include_all: true,
+            all: { mode: "list" },
+            sort: "none",
+            selected: "all",
+          },
+        ],
+        cells: [{ value: "SELECT 1" }],
+      },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as {
+      error_code: string
+      message: string
+    }
+    expect(parsed.error_code).toBe("validation")
+    expect(parsed.message).toContain("must be a SELECT, not INSERT")
+  })
+
   it("apply_notebook_state rejects multi-assignment value injection before validateSql", async () => {
     const client = makeClient()
     const validateSql = vi.fn()
@@ -1277,7 +1337,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         layout_mode: null,
         maximized_cell_id: null,
-        variables: [{ name: "x", value: "1, @evil := 999" }],
+        variables: [
+          { name: "x", kind: "expression", value: "1, @evil := 999" },
+        ],
         cells: [{ value: "SELECT 1" }],
       },
       client,
@@ -1297,7 +1359,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("apply_notebook_state validates ordered variable prefixes with QuestDB", async () => {
     const client = makeClient()
-    const validateSql = vi.fn(() =>
+    const validateSql = vi.fn((_sql: string) =>
       Promise.resolve({
         query: "SELECT 1",
         columns: [{ name: "1", type: "INT" }],
@@ -1311,8 +1373,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         layout_mode: null,
         maximized_cell_id: null,
         variables: [
-          { name: "base", value: "10" },
-          { name: "derived", value: "@base + 1" },
+          { name: "base", kind: "expression", value: "10" },
+          { name: "derived", kind: "expression", value: "@base + 1" },
         ],
         cells: [{ value: "SELECT @derived" }],
       },
@@ -1321,13 +1383,11 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       validateSql,
     )
-    expect(validateSql).toHaveBeenNthCalledWith(
-      1,
-      "DECLARE\n  @base := 10\nSELECT 1",
-    )
-    expect(validateSql).toHaveBeenNthCalledWith(
-      2,
-      "DECLARE\n  @base := 10,\n  @derived := @base + 1\nSELECT 1",
+    const sent = validateSql.mock.calls.map(([sql]) => sql)
+    expect(sent[0]).toContain("@timeFilter := interval(@timeFrom, @timeTo)")
+    expect(sent[0]).toMatch(/,\n {2}@base := 10\nSELECT 1$/)
+    expect(sent[1]).toMatch(
+      /,\n {2}@base := 10,\n {2}@derived := @base \+ 1\nSELECT 1$/,
     )
     // The apply committed: the requested cell is now present.
     expect(live.state.parts.cells).toHaveLength(1)
@@ -1348,7 +1408,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
-        variables: [{ name: "base", value: "10" }],
+        variables: [{ name: "base", kind: "expression", value: "10" }],
         cells: [{ value: "SELECT @base" }],
       },
       client,
@@ -1398,6 +1458,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const controller: NotebookController = {
       bufferId: 1,
       kind: "live",
+      syncVariableOptions: () => Promise.resolve([]),
+      waitForVariableOptions: () => Promise.resolve([]),
       mutate: (transition) => {
         try {
           const out = transition(state.parts)
@@ -2861,6 +2923,80 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
     )
     expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
       kind: "autoRun",
+    })
+  })
+})
+
+describe("dispatchTool — query-list variable values", () => {
+  const pairList = {
+    name: "pair",
+    kind: "list",
+    source: {
+      type: "query",
+      query: "SELECT DISTINCT symbol FROM fx_trades",
+      refresh: "onLoad",
+    },
+    sort: "none",
+    multi: true,
+    includeAll: true,
+    all: { mode: "list" },
+    selected: "all",
+  }
+  const fetched: VariableValuesEntry[] = [
+    { name: "pair", count: 3, fetched_at: 1_700_000_000_000 },
+  ]
+
+  it("apply_notebook_state syncs the values of the changed lists and reports them", async () => {
+    // Given a mounted notebook that reports one fetched list
+    const nb = mountLive(1, [], { variableValues: fetched })
+
+    // When the agent defines a query list
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [pairList],
+        cells: [{ value: "SELECT 1" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the sync saw the definition change and its report is in the response
+    expect(nb.syncVariableOptions).toHaveBeenCalledWith({
+      changed: ["pair"],
+      redefined: ["pair"],
+      timeRangeChanged: false,
+    })
+    const parsed = JSON.parse(res.content) as {
+      applied: unknown
+      variable_values: VariableValuesEntry[]
+      runs: unknown[]
+    }
+    expect(parsed.variable_values).toEqual(fetched)
+    expect(Object.keys(parsed)).toEqual(["applied", "variable_values", "runs"])
+  })
+
+  it("activate_notebook waits for the notebook's values and reports them", async () => {
+    // Given a mounted notebook whose values are still loading
+    const nb = mountLive(1, [], { variableValues: fetched })
+
+    // When the agent activates it
+    const res = await dispatchTool(
+      "activate_notebook",
+      { buffer_id: 1 },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the response carries the values that finished loading
+    expect(nb.waitForVariableOptions).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(res.content)).toEqual({
+      activated: true,
+      buffer_id: 1,
+      variable_values: fetched,
     })
   })
 })

@@ -2,7 +2,7 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type {
   CellResult,
-  NotebookVariable,
+  DeclareEntry,
   NotebookViewState,
   SingleQueryResult,
 } from "../../store/notebook"
@@ -40,6 +40,10 @@ import {
 } from "../../scenes/Editor/Notebook/notebookUtils"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { referencesAny } from "../../scenes/Editor/Notebook/variables/references"
+import { resolveHeadlessDeclareEntries } from "./notebookVariableOptions"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
 import {
   commitView,
   partsOf,
@@ -138,7 +142,7 @@ const emptySummary = (): RunCellSummary => ({
 const executeCellQueries = async (args: {
   queries: string[]
   queryText: string
-  variables: NotebookVariable[] | undefined
+  variables: DeclareEntry[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
@@ -233,7 +237,7 @@ const executeCellQueries = async (args: {
 const executeCellQueriesParallel = async (args: {
   queries: string[]
   classified: ClassifiedStatement[]
-  variables: NotebookVariable[] | undefined
+  variables: DeclareEntry[] | undefined
   quest: Client
   signal?: AbortSignal
   supersedeSignal: AbortSignal
@@ -329,7 +333,8 @@ export const runHeadlessCell = async (
     const view = await readNotebookView(bufferId)
     return {
       cell: requireCellIn(view.cells, cellId, bufferId),
-      variables: view.settings?.variables,
+      settings: view.settings ?? {},
+      globals: normalizeVariables((await getNotebookGlobals())?.variables),
       seqAtPrep: deps.getBufferSeq(),
       mountEpochAtPrep: getMountEpoch(bufferId),
     }
@@ -355,10 +360,28 @@ export const runHeadlessCell = async (
     )
   }
 
+  const { entries: variables, report } = await resolveHeadlessDeclareEntries({
+    bufferId,
+    quest,
+    settings: prep.settings,
+    globals: prep.globals,
+    signal: signal ?? new AbortController().signal,
+  })
+  const failed = report.find(
+    (entry) => "error" in entry && referencesAny(queryText, [entry.name]),
+  )
+  if (failed && "error" in failed) {
+    throw new NotebookToolError(
+      "variable_options",
+      `Could not load the values of @${failed.name}: ${failed.error}`,
+    )
+  }
+  if (signal?.aborted) return emptySummary()
+
   // The runner's barrier classification is the single decision for permission
   // enforcement, auto-run eligibility, and strategy — dispatch never
   // classifies separately (live-path parity).
-  const validate = createValidateWithGlobals(quest, () => prep.variables)
+  const validate = createValidateWithGlobals(quest, () => variables)
   const barrier = await resolveRunBarrier(
     queryText,
     queries.length,
@@ -385,7 +408,7 @@ export const runHeadlessCell = async (
         ? await executeCellQueriesParallel({
             queries,
             classified,
-            variables: prep.variables,
+            variables,
             quest,
             signal,
             supersedeSignal: run.signal,
@@ -393,7 +416,7 @@ export const runHeadlessCell = async (
         : await executeCellQueries({
             queries,
             queryText,
-            variables: prep.variables,
+            variables,
             quest,
             signal,
             supersedeSignal: run.signal,

@@ -1,45 +1,19 @@
 import { parse, tokenize } from "@questdb/sql-parser"
 import type { CstNode, IToken } from "@chevrotain/types"
-import type { NotebookVariable } from "../../../store/notebook"
+import type { DeclareEntry } from "../../../store/notebook"
 import type { Client } from "../../../utils/questdb/client"
 
 const NAME_RE = /^[a-zA-Z\u0080-\uFFFF_][a-zA-Z0-9\u0080-\uFFFF_]*$/
 
 export const isValidVariableName = (name: string): boolean => NAME_RE.test(name)
 
-const isVariableLike = (value: unknown): value is NotebookVariable => {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as { name?: unknown; value?: unknown }
-  return (
-    typeof candidate.name === "string" && typeof candidate.value === "string"
-  )
-}
+export const expandGlobals = (
+  sql: string,
+  entries: DeclareEntry[] | undefined,
+): string =>
+  entries && entries.length > 0 ? prependGlobalsDeclare(sql, entries).sql : sql
 
-export const normalizeVariables = (raw: unknown): NotebookVariable[] => {
-  if (Array.isArray(raw)) {
-    return raw.flatMap((v) =>
-      isVariableLike(v) ? [{ name: v.name, value: v.value }] : [],
-    )
-  }
-  if (raw && typeof raw === "object") {
-    return Object.entries(raw).flatMap(([name, value]) =>
-      typeof value === "string" ? [{ name, value }] : [],
-    )
-  }
-  return []
-}
-
-export const expandGlobals = (sql: string, globals: unknown): string => {
-  const normalized = normalizeVariables(globals)
-  return normalized.length > 0
-    ? prependGlobalsDeclare(sql, normalized).sql
-    : sql
-}
-
-export const stripLeadingAt = (raw: string): string =>
-  raw.startsWith("@") ? raw.slice(1) : raw
-
-export const renderDeclareBlock = (variables: NotebookVariable[]): string => {
+export const renderDeclareBlock = (variables: DeclareEntry[]): string => {
   const valid = variables.filter(({ name }) => isValidVariableName(name))
   if (valid.length === 0) return ""
   const lines = valid.map(({ name, value }) => `  @${name} := ${value}`)
@@ -47,7 +21,7 @@ export const renderDeclareBlock = (variables: NotebookVariable[]): string => {
 }
 
 export const renderDeclareValidationQuery = (
-  variables: NotebookVariable[],
+  variables: DeclareEntry[],
 ): string => {
   const block = renderDeclareBlock(variables)
   return block ? `${block}\nSELECT 1` : "SELECT 1"
@@ -146,10 +120,10 @@ const extractLeadingDeclare = (text: string): LeadingDeclareInfo | null => {
   }
 }
 
-export const parseDeclareBlock = (text: string): NotebookVariable[] => {
+export const parseDeclareBlock = (text: string): DeclareEntry[] => {
   const info = extractLeadingDeclare(text)
   if (!info) return []
-  const out: NotebookVariable[] = []
+  const out: DeclareEntry[] = []
   for (const a of info.assignments) {
     // Strip leading OVERRIDABLE for the map-style consumer (popover etc.).
     const eqIdx = a.originalText.indexOf(":=")
@@ -166,7 +140,7 @@ export type VariableShapeError =
   | { kind: "value"; expected: string; actual: string }
 
 export const validateVariableShape = (
-  variable: NotebookVariable,
+  variable: DeclareEntry,
 ): VariableShapeError | null => {
   if (!isValidVariableName(variable.name)) return { kind: "parse" }
   const block = renderDeclareBlock([variable])
@@ -219,13 +193,13 @@ export const mapWireErrorPosition = (
 export const createValidateWithGlobals =
   (
     quest: Pick<Client, "validateQuery">,
-    getVariables: () => NotebookVariable[] | undefined,
+    getEntries: () => DeclareEntry[] | undefined,
   ) =>
   async (sql: string, signal?: AbortSignal) => {
-    const variables = normalizeVariables(getVariables())
+    const entries = getEntries() ?? []
     const prepared =
-      variables.length > 0
-        ? prependGlobalsDeclare(sql, variables)
+      entries.length > 0
+        ? prependGlobalsDeclare(sql, entries)
         : { sql, insertedRange: null }
     const result = await quest.validateQuery(prepared.sql, signal)
     if (!("error" in result) || !prepared.insertedRange) return result
@@ -244,7 +218,7 @@ export const createValidateWithGlobals =
 const NO_OP = (sql: string): PreparedSql => ({ sql, insertedRange: null })
 
 const renderMergedDeclare = (
-  globals: NotebookVariable[],
+  globals: DeclareEntry[],
   userAssignments: UserDeclareAssignment[],
 ): string => {
   const validGlobalLines = globals
@@ -300,7 +274,7 @@ const analyzeStatement = (text: string): StatementShape => {
 
 export const prependGlobalsDeclare = (
   sql: string,
-  globals: NotebookVariable[],
+  globals: DeclareEntry[],
 ): PreparedSql => {
   if (globals.length === 0) return NO_OP(sql)
 

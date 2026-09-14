@@ -481,7 +481,12 @@ export const dispatchTool = async (
               `Could not activate notebook ${buffer_id}.`,
             )
           }
-          return { activated: true, buffer_id }
+          const variable_values = await withBoundNotebook(
+            buffer_id,
+            (ctrl) => ctrl.waitForVariableOptions(),
+            signal,
+          )
+          return { activated: true, buffer_id, variable_values }
         })
       }
       case "duplicate_notebook": {
