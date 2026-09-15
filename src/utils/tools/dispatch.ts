@@ -45,6 +45,10 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { ToolExecutionContext } from "../ai/shared"
 import { formatSql } from "../formatSql"
+import {
+  dispatchApplyGlobalVariables,
+  readGlobalVariables,
+} from "./globalVariables"
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
@@ -302,6 +306,10 @@ export const dispatchTool = async (
   }
   try {
     switch (toolName) {
+      case "get_global_variables":
+        return routeNotebookTool(readGlobalVariables)
+      case "apply_global_variables":
+        return await dispatchApplyGlobalVariables(input, validateSql, signal)
       case "suggest_query": {
         const query = (input as { query: string })?.query
         if (!query) {

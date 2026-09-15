@@ -1,3 +1,5 @@
+import type { NotebookVariable } from "../../store/notebook"
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null
 
@@ -46,3 +48,43 @@ export const describeWireVariableError = (raw: unknown): string | null => {
   }
   return typeof raw.value === "string" ? null : "must have a string value"
 }
+
+// Read responses use the same field names and nullable shape accepted by tools.
+export const storedVariableToWire = (variable: NotebookVariable) => ({
+  name: variable.name,
+  kind: variable.kind,
+  label: variable.label ?? null,
+  description: variable.description ?? null,
+  value: variable.kind === "list" ? null : variable.value,
+  source:
+    variable.kind !== "list"
+      ? null
+      : {
+          type: variable.source.type,
+          query:
+            variable.source.type === "query" ? variable.source.query : null,
+          refresh:
+            variable.source.type === "query" ? variable.source.refresh : null,
+          label_column:
+            variable.source.type === "query"
+              ? (variable.source.labelColumn ?? null)
+              : null,
+          entries:
+            variable.source.type === "custom" ? variable.source.entries : null,
+          regex:
+            variable.source.type === "query"
+              ? (variable.source.regex ?? null)
+              : null,
+        },
+  sort: variable.kind === "list" ? variable.sort : null,
+  multi: variable.kind === "list" ? variable.multi : null,
+  include_all: variable.kind === "list" ? variable.includeAll : null,
+  all:
+    variable.kind === "list"
+      ? {
+          mode: variable.all.mode,
+          value: variable.all.mode === "custom" ? variable.all.value : null,
+        }
+      : null,
+  selected: variable.kind === "list" ? variable.selected : null,
+})

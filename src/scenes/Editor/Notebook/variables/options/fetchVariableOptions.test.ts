@@ -55,7 +55,7 @@ describe("fetchVariableOptions", () => {
     vi.useRealTimers()
 
     // Then
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       kind: "ready",
       fetched: {
         options: [

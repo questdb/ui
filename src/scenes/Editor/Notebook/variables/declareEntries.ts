@@ -18,13 +18,21 @@ export type ListOptionsByName = Record<string, ListOptionsState>
 const renderValues = (values: string[]): string =>
   values.length === 1 ? values[0] : `(${values.join(", ")})`
 
+export const listOptionsState = <T extends ListOptionsState>(
+  listOptions: Record<string, T>,
+  name: string,
+): T | undefined =>
+  Object.prototype.hasOwnProperty.call(listOptions, name)
+    ? listOptions[name]
+    : undefined
+
 const listOptionsFor = (
   variable: ListVariable,
   listOptions: ListOptionsByName,
 ): ListOptionsState | null =>
   variable.source.type === "custom"
     ? { options: customListOptions(variable) }
-    : (listOptions[variable.name] ?? null)
+    : (listOptionsState(listOptions, variable.name) ?? null)
 
 const listValue = (
   variable: ListVariable,

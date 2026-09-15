@@ -7,6 +7,8 @@ import { listsAffectedByChange } from "../options/affectedLists"
 import {
   fetchVariableOptions,
   isQueryList,
+  requiresTimeRange,
+  TIME_RANGE_REQUIRED,
   type PrefetchedVariableOptions,
 } from "../options/fetchVariableOptions"
 import type { VariableScope } from "../scope"
@@ -46,7 +48,7 @@ export type DraftPreparation =
   | { kind: "error"; name: string; error: string }
 
 type Args = {
-  quest: Client
+  quest: Client | undefined
   drafts: VariableDraft[]
   timeRange: TimeRange | undefined
   changed: string[]
@@ -87,6 +89,16 @@ export const prepareDrafts = async ({
     const problem = await validate(index, known)
     if (problem) return { kind: "error", name: variable.name, error: problem }
     if (!isQueryList(variable) || !affected.has(lower(variable.name))) continue
+    if (!quest) {
+      return {
+        kind: "error",
+        name: variable.name,
+        error: "Notebook agent runtime is not ready yet.",
+      }
+    }
+    if (!timeRange && requiresTimeRange(variable)) {
+      return { kind: "error", name: variable.name, error: TIME_RANGE_REQUIRED }
+    }
     onStep({ kind: "fetching", name: variable.name })
     const result = await fetchVariableOptions(
       quest,

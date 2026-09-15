@@ -13,9 +13,13 @@ export const findVariableReferences = (sql: string): Set<string> => {
 
 const sourceText = (variable: NotebookVariable): string => {
   if (variable.kind !== "list") return variable.value
-  return variable.source.type === "query"
-    ? variable.source.query
-    : variable.source.entries
+  const source =
+    variable.source.type === "query"
+      ? variable.source.query
+      : variable.source.entries
+  return variable.all.mode === "custom"
+    ? `${source}\n${variable.all.value}`
+    : source
 }
 
 export const variableReferences = (variable: NotebookVariable): Set<string> =>

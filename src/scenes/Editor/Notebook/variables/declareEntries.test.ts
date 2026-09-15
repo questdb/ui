@@ -104,6 +104,9 @@ describe("variableToDeclareEntry", () => {
 
   it("omits a query list whose options are not loaded", () => {
     expect(entry(queryList({ selected: "all" }))).toBeNull()
+    expect(
+      entry(queryList({ name: "constructor", selected: "all" })),
+    ).toBeNull()
   })
 
   it("renders a query list from its loaded literals exactly as fetched", () => {

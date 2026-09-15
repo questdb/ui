@@ -365,7 +365,9 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     }
   }
   if (snap.global_variables && snap.global_variables.length > 0) {
-    lines.push("  global_variables (shared by every notebook, read-only here):")
+    lines.push(
+      "  global_variables (shared by every notebook; use get_global_variables / apply_global_variables to edit):",
+    )
     for (const variable of snap.global_variables) {
       lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
     }

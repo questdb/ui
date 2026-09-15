@@ -8,6 +8,7 @@ import {
   notebookOptionsOwner,
   saveStoredOptions,
 } from "../../store/notebookOptions"
+import { variableOptionsContext } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import type { Client } from "../questdb/client"
 import {
   resolveHeadlessDeclareEntries,
@@ -80,6 +81,13 @@ describe("resolveHeadlessDeclareEntries", () => {
       name: "pair",
       options: [{ value: "'EURUSD'", label: "EURUSD" }],
       fetchedAt: 1,
+      context: variableOptionsContext(
+        queryList(
+          "pair",
+          "SELECT DISTINCT symbol FROM fx_trades",
+        ) as Parameters<typeof variableOptionsContext>[0],
+        [],
+      ),
     })
     const { quest, sent } = makeQuest([])
 
@@ -186,5 +194,59 @@ describe("resolveHeadlessDeclareEntries", () => {
     // Then
     expect(report).toEqual([{ name: "pair", error: "Set a time range first." }])
     expect(sent).toEqual([])
+  })
+  it("resolves each notebook's range and dependent lists while reusing matching inputs", async () => {
+    const globals = [
+      queryList("venue", "SELECT cast(@timeFrom as string) venue"),
+    ]
+    const variables = [queryList("pair", "SELECT @venue symbol")]
+    const jan = { from: "2025-01-01", to: "2025-01-02" }
+    const feb = { from: "2025-02-01", to: "2025-02-02" }
+    const { quest, sent } = makeQuest([
+      symbolRows(["January"]),
+      symbolRows(["January"]),
+      symbolRows(["February"]),
+      symbolRows(["February"]),
+      symbolRows(["January"]),
+    ])
+    const run = (bufferId: number, timeRange: typeof jan) =>
+      resolveHeadlessDeclareEntries({
+        bufferId,
+        quest,
+        settings: { timeRange, variables },
+        globals,
+        signal: new AbortController().signal,
+      })
+    await run(7, jan)
+    await run(8, feb)
+    const again = await run(7, jan)
+    expect(again.entries.find((entry) => entry.name === "venue")?.value).toBe(
+      "'January'",
+    )
+    expect(again.entries.find((entry) => entry.name === "pair")?.value).toBe(
+      "'January'",
+    )
+    expect(sent).toHaveLength(5)
+    expect(sent[2]).toContain("2025-02-01")
+    expect(sent[4]).toContain("2025-01-01")
+    // The local January cache is still valid; a repeat also reuses the global.
+    await run(7, jan)
+    expect(sent).toHaveLength(5)
+  })
+
+  it("refreshes legacy cache rows and excludes stale declarations after a failed fetch", async () => {
+    await saveStoredOptions({
+      owner: GLOBAL_OPTIONS_OWNER,
+      name: "venue",
+      options: [{ value: "'OLD'", label: "OLD" }],
+      fetchedAt: 1,
+    })
+    const { quest, sent } = makeQuest([{ type: "error", error: "offline" }])
+    const result = await resolve(quest, {}, [
+      queryList("venue", "SELECT venue FROM t"),
+    ])
+    expect(sent).toHaveLength(1)
+    expect(result.entries).toEqual([])
+    expect(result.report).toEqual([{ name: "venue", error: "offline" }])
   })
 })

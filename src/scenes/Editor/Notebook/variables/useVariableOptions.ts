@@ -9,7 +9,11 @@ import {
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import type { Client } from "../../../../utils/questdb/client"
-import { declareEntriesAbove, type ListOptionsState } from "./declareEntries"
+import {
+  declareEntriesAbove,
+  listOptionsState,
+  type ListOptionsState,
+} from "./declareEntries"
 import {
   listsAffectedByChange,
   listsAffectedByTimeRange,
@@ -37,8 +41,6 @@ export type VariableOptionsState = ListOptionsState & {
 }
 
 export type VariableOptionsByName = Record<string, VariableOptionsState>
-
-export type RefetchCause = "load" | "change"
 
 const EMPTY_STATE: VariableOptionsState = {
   status: "loading",
@@ -110,17 +112,14 @@ export const useVariableOptions = ({
   }, [])
 
   const runRefetch = useCallback(
-    async (
-      names: Iterable<string>,
-      cause: RefetchCause,
-    ): Promise<VariableValuesEntry[]> => {
+    async (names: Iterable<string>): Promise<VariableValuesEntry[]> => {
       const wanted = new Set([...names].map(lower))
       const report: VariableValuesEntry[] = []
       const patch = (name: string, state: Partial<VariableOptionsState>) =>
         commit({
           ...listOptionsRef.current,
           [name]: {
-            ...(listOptionsRef.current[name] ?? EMPTY_STATE),
+            ...(listOptionsState(listOptionsRef.current, name) ?? EMPTY_STATE),
             ...state,
           },
         })
@@ -168,9 +167,10 @@ export const useVariableOptions = ({
           name,
           options: result.fetched.options,
           fetchedAt: result.fetched.fetchedAt,
+          context: result.fetched.context,
         }).catch(() => undefined)
         report.push(fetchedValuesEntry(name, result.fetched))
-        if (cause === "change") onRefetched?.(name)
+        onRefetched?.(name)
       }
       return report
     },
@@ -186,8 +186,7 @@ export const useVariableOptions = ({
   )
 
   const refetch = useCallback(
-    (names: Iterable<string>, cause: RefetchCause) =>
-      track(runRefetch(names, cause)),
+    (names: Iterable<string>) => track(runRefetch(names)),
     [runRefetch, track],
   )
 
@@ -205,7 +204,7 @@ export const useVariableOptions = ({
             seeded[row.name] = seedState(seeded[row.name], row)
           }
           commit(seeded)
-          return runRefetch(names, "load")
+          return runRefetch(names)
         })(),
       ),
     [commit, owner, queryLists, runRefetch, track],
@@ -240,6 +239,7 @@ export const useVariableOptions = ({
             name,
             options: fetched.options,
             fetchedAt: fetched.fetchedAt,
+            context: fetched.context,
           }).catch(() => undefined),
         ),
       ),
@@ -250,7 +250,6 @@ export const useVariableOptions = ({
     (
       changedNames: string[],
       redefinedNames: string[],
-      cause: RefetchCause,
       prefetched: PrefetchedVariableOptions = {},
     ) =>
       track(
@@ -268,18 +267,14 @@ export const useVariableOptions = ({
             () => undefined,
           )
           await savePrefetched(prefetched)
-          return [...adopted, ...(await runRefetch(names, cause))]
+          return [...adopted, ...(await runRefetch(names))]
         })(),
       ),
     [adoptPrefetched, owner, runRefetch, savePrefetched, track, variables],
   )
 
   const refetchForTimeRange = useCallback(
-    (cause: RefetchCause) =>
-      refetch(
-        listsAffectedByTimeRange(variables()).map((v) => v.name),
-        cause,
-      ),
+    () => refetch(listsAffectedByTimeRange(variables()).map((v) => v.name)),
     [refetch, variables],
   )
 

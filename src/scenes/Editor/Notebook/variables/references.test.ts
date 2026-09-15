@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
+import type { NotebookVariable } from "../../../../store/notebook"
 import {
   findVariableReferences,
   referencedDeclareEntries,
   referencesAny,
+  variableReferences,
 } from "./references"
 
 describe("findVariableReferences", () => {
@@ -33,6 +35,29 @@ describe("referencesAny", () => {
   it("matches case-insensitively against the given names", () => {
     expect(referencesAny("SELECT @timeFrom", ["TIMEFROM"])).toBe(true)
     expect(referencesAny("SELECT 1", ["timeFrom"])).toBe(false)
+  })
+})
+
+describe("variableReferences", () => {
+  it("reads a list's query and its custom All value", () => {
+    // Given
+    const list: NotebookVariable = {
+      name: "pair",
+      kind: "list",
+      source: {
+        type: "query",
+        query: "SELECT symbol FROM t",
+        refresh: "onLoad",
+      },
+      sort: "none",
+      multi: true,
+      includeAll: true,
+      all: { mode: "custom", value: "@venue" },
+      selected: "all",
+    }
+
+    // When / Then
+    expect([...variableReferences(list)]).toEqual(["venue"])
   })
 })
 

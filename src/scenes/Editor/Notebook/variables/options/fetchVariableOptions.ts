@@ -5,8 +5,8 @@ import type {
   VariableOption,
 } from "../../../../../store/notebook"
 import type { Client } from "../../../../../utils/questdb/client"
-import { referencesAny } from "../references"
-import { TIME_VARIABLE_NAMES } from "../timeRange"
+import { referencedDeclareEntries, referencesAny } from "../references"
+import { isTimeVariableName, TIME_VARIABLE_NAMES } from "../timeRange"
 import { fetchQueryRows } from "./fetchQueryRows"
 import { normalizeQueryOptions } from "./normalizeQueryOptions"
 
@@ -28,6 +28,7 @@ export type FetchedVariableOptions = {
   truncated: boolean
   warnings: string[]
   fetchedAt: number
+  context?: string
 }
 
 export type PrefetchedVariableOptions = Record<string, FetchedVariableOptions>
@@ -48,6 +49,22 @@ export const fetchedValuesEntry = (
 export type FetchVariableOptionsResult =
   | { kind: "ready"; fetched: FetchedVariableOptions }
   | { kind: "error"; error: string }
+
+// Include the resolved dependency values, not just the shared variable name.
+// Refresh-on-range-change lists also depend on the range without referencing it.
+export const variableOptionsContext = (
+  variable: QueryListVariable,
+  entriesAbove: DeclareEntry[],
+): string =>
+  JSON.stringify({
+    source: variable.source,
+    sort: variable.sort,
+    entries: referencedDeclareEntries(variable.source.query, entriesAbove),
+    timeRange:
+      variable.source.refresh === "onTimeRangeChange"
+        ? entriesAbove.filter((entry) => isTimeVariableName(entry.name))
+        : undefined,
+  })
 
 export const fetchVariableOptions = async (
   quest: Client,
@@ -71,6 +88,7 @@ export const fetchVariableOptions = async (
       truncated: result.rows.truncated,
       warnings: normalized.warnings,
       fetchedAt: Date.now(),
+      context: variableOptionsContext(variable, entriesAbove),
     },
   }
 }

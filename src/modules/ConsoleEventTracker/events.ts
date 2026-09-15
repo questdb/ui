@@ -162,6 +162,8 @@ export enum ConsoleEvent {
   MCP_LIST_CELLS = "mcp.list_cells",
   MCP_GET_CELL = "mcp.get_cell",
   MCP_GET_NOTEBOOK_STATE = "mcp.get_notebook_state",
+  MCP_GET_GLOBAL_VARIABLES = "mcp.get_global_variables",
+  MCP_APPLY_GLOBAL_VARIABLES = "mcp.apply_global_variables",
   MCP_MOVE_CELL_UP = "mcp.move_cell_up",
   MCP_MOVE_CELL_DOWN = "mcp.move_cell_down",
   MCP_DUPLICATE_CELL = "mcp.duplicate_cell",

@@ -14,6 +14,7 @@ import {
 import { customListOptions } from "../listOptions"
 import { effectiveVariables, type VariableScope } from "../scope"
 import { isQueryList } from "../options/fetchVariableOptions"
+import { listOptionsState } from "../declareEntries"
 import { ListPicker } from "./ListPicker"
 import { TextPicker } from "./TextPicker"
 
@@ -90,8 +91,8 @@ export const VariablesBar: React.FC = () => {
       return (
         <ListPicker
           variable={variable}
-          options={options[variable.name]?.options ?? []}
-          status={options[variable.name]}
+          options={listOptionsState(options, variable.name)?.options ?? []}
+          status={listOptionsState(options, variable.name)}
           onChange={(selected) => selectList(scope, variable, selected)}
           onRefresh={() =>
             scope === "global"

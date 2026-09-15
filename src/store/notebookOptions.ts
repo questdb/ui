@@ -6,6 +6,7 @@ export type StoredVariableOptions = {
   name: string
   options: VariableOption[]
   fetchedAt: number
+  context?: string
 }
 
 export const GLOBAL_OPTIONS_OWNER = "global"

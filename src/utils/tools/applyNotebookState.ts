@@ -1,6 +1,9 @@
 import type { StatusCallback } from "../ai/aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
+import {
+  getAgentQuest,
+  getBufferActionSeq,
+} from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import {
   applyNotebookStateTransition,
@@ -12,7 +15,6 @@ import {
 import type {
   CellMode,
   CellType,
-  DeclareEntry,
   NotebookVariable,
   TimeRange,
 } from "../../store/notebook"
@@ -31,18 +33,15 @@ import {
   validateVariableShape,
 } from "../../scenes/Editor/Notebook/declareUtils"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
-import { listOptionsFromStored } from "../../scenes/Editor/Notebook/variables/options/storedOptions"
 import { getNotebookGlobals } from "../../store/notebookGlobals"
+import { draftsFromVariables } from "../../scenes/Editor/Notebook/variables/variableDrafts"
 import {
-  GLOBAL_OPTIONS_OWNER,
-  loadStoredOptions,
-} from "../../store/notebookOptions"
+  draftDeclareEntries,
+  prepareDrafts,
+} from "../../scenes/Editor/Notebook/variables/editor/prepareDrafts"
 import { classifyOptionQuery } from "../../scenes/Editor/Notebook/variables/options/classifyOptionQuery"
 import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
-import {
-  buildDeclareEntries,
-  variableToDeclareEntry,
-} from "../../scenes/Editor/Notebook/variables/declareEntries"
+import { variableToDeclareEntry } from "../../scenes/Editor/Notebook/variables/declareEntries"
 import {
   isTimeVariableName,
   isValidTimeRange,
@@ -69,21 +68,6 @@ type ToolResult = { content: string; is_error?: boolean }
 const isAbortError = (e: unknown): boolean =>
   e instanceof Error && e.name === "AbortError"
 
-const CLASSIFICATION_TIME_RANGE = { from: "now-1h", to: "now" }
-
-const globalDeclareEntries = async (): Promise<DeclareEntry[]> => {
-  try {
-    return buildDeclareEntries(
-      {
-        variables: normalizeVariables((await getNotebookGlobals())?.variables),
-      },
-      listOptionsFromStored(await loadStoredOptions(GLOBAL_OPTIONS_OWNER)),
-    )
-  } catch {
-    return []
-  }
-}
-
 const validationError = (message: string): ToolResult => ({
   content: JSON.stringify({
     error_code: "validation",
@@ -99,6 +83,9 @@ type VariablesValidation =
 const validateApplyVariables = async (
   variables: unknown,
   validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  bufferId: number,
+  timeRange: TimeRange | null | undefined,
+  signal: AbortSignal | undefined,
 ): Promise<VariablesValidation> => {
   if (variables === undefined || variables === null) {
     return { variables: undefined }
@@ -152,45 +139,54 @@ const validateApplyVariables = async (
       }
     }
   }
-  if (validateSql) {
-    const globalEntries = await globalDeclareEntries()
-    for (let idx = 0; idx < normalized.length; idx += 1) {
-      const variable = normalized[idx]
-      const entries = buildDeclareEntries(
-        {
-          timeRange: CLASSIFICATION_TIME_RANGE,
-          variables: normalized.slice(0, idx + 1),
-        },
-        {},
-        globalEntries,
-      )
-      const result = await validateSql(renderDeclareValidationQuery(entries))
-      if ("error" in result) {
-        return {
-          error: validationError(
-            `variables[${idx}] (${variable.name}) failed QuestDB validation: ${result.error}`,
-          ),
-        }
-      }
-      if (!isQueryList(variable)) continue
-      const verdict = await classifyOptionQuery(
-        variable.source.query,
-        buildDeclareEntries(
-          {
-            timeRange: CLASSIFICATION_TIME_RANGE,
-            variables: normalized.slice(0, idx),
-          },
-          {},
-          globalEntries,
+  if (validateSql && normalized.length > 0) {
+    const effectiveRange =
+      timeRange === undefined
+        ? await withBoundNotebookReadOnly(
+            bufferId,
+            (view) => Promise.resolve(view.settings?.timeRange),
+            signal,
+          )
+        : (timeRange ?? undefined)
+    const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+    const drafts = [
+      ...draftsFromVariables(globals, "global"),
+      ...draftsFromVariables(normalized, "notebook"),
+    ]
+    // Use the dialog's sequential preparation: each dependent declaration sees
+    // fetched upstream values. Nothing is persisted during this preflight.
+    const prepared = await prepareDrafts({
+      quest: getAgentQuest(),
+      drafts,
+      timeRange: effectiveRange,
+      changed: [],
+      redefined: drafts.map(({ variable }) => variable.name),
+      options: { global: {}, notebook: {} },
+      signal: signal ?? new AbortController().signal,
+      onStep: () => undefined,
+      validate: async (index, known) => {
+        const { variable } = drafts[index]
+        const entries = draftDeclareEntries(
+          drafts.slice(0, index + 1),
+          effectiveRange,
+          known,
+        )
+        const result = await validateSql(renderDeclareValidationQuery(entries))
+        if ("error" in result) return result.error
+        if (!isQueryList(variable)) return null
+        const verdict = await classifyOptionQuery(
+          variable.source.query,
+          draftDeclareEntries(drafts.slice(0, index), effectiveRange, known),
+          validateSql,
+        )
+        return verdict.ok ? null : verdict.error
+      },
+    })
+    if (prepared.kind === "error") {
+      return {
+        error: validationError(
+          `Variable ${prepared.name} failed QuestDB validation: ${prepared.error}`,
         ),
-        validateSql,
-      )
-      if (!verdict.ok) {
-        return {
-          error: validationError(
-            `variables[${idx}] (${variable.name}) option query rejected: ${verdict.error}`,
-          ),
-        }
       }
     }
   }
@@ -418,11 +414,6 @@ export const dispatchApplyNotebookState = async (
     if (typeof c.id !== "string") return null
     return basics.get(c.id)?.value ?? null
   }
-  const variablesValidation = await validateApplyVariables(
-    variables,
-    validateSql,
-  )
-  if ("error" in variablesValidation) return variablesValidation.error
   if (
     time_range !== undefined &&
     time_range !== null &&
@@ -438,6 +429,14 @@ export const dispatchApplyNotebookState = async (
       : isValidTimeRange(time_range)
         ? time_range
         : null
+  const variablesValidation = await validateApplyVariables(
+    variables,
+    validateSql,
+    buffer_id,
+    timeRange,
+    signal,
+  )
+  if ("error" in variablesValidation) return variablesValidation.error
   // Shared by the draw-invariant gate (below) and the post-apply
   // auto-run loop's mode resolution.
   const existingModes = new Map<string, CellMode | undefined>()

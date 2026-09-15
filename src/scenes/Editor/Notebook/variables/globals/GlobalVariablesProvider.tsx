@@ -142,7 +142,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
     const range = activeTimeRange()
     if (sameTimeRange(range, fetchedRangeRef.current)) return
     fetchedRangeRef.current = range
-    void refetchForTimeRange("change")
+    void refetchForTimeRange()
   }, [activeTimeRange, refetchForTimeRange])
 
   const attachNotebook = useCallback(
@@ -174,7 +174,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
       variablesRef.current = next
       if (changed.length > 0) {
         prune()
-        void refetchChanged(changed, redefined, "change", prefetched)
+        void refetchChanged(changed, redefined, prefetched)
         notify(changed, adoptedBy)
       }
       await saveNotebookGlobals(next)
@@ -193,7 +193,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   )
 
   const refreshOptions = useCallback(
-    (name: string) => void refetch([name], "change"),
+    (name: string) => void refetch([name]),
     [refetch],
   )
 
@@ -213,11 +213,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
     const changed = changedVariableNames(previous, variables)
     if (changed.length === 0) return
     prune()
-    void refetchChanged(
-      changed,
-      redefinedVariableNames(previous, variables),
-      "change",
-    )
+    void refetchChanged(changed, redefinedVariableNames(previous, variables))
     notify(changed)
   }, [loaded, variables, activeTimeRange, notify, prune, load, refetchChanged])
 

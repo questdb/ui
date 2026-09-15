@@ -1,4 +1,5 @@
 import "../../test/stubBrowserGlobals"
+import { variableOptionsContext } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { clearStatementClassCache } from "../tools/permissions"
 
@@ -50,10 +51,12 @@ import {
   saveCellSnapshot,
 } from "../../store/notebookResults"
 import {
+  GLOBAL_OPTIONS_OWNER,
   loadStoredOptions,
   notebookOptionsOwner,
   saveStoredOptions,
 } from "../../store/notebookOptions"
+import { saveNotebookGlobals } from "../../store/notebookGlobals"
 import type { Client } from "../questdb/client"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -189,6 +192,7 @@ beforeEach(async () => {
   await db.buffers.clear()
   await db.notebook_results.clear()
   await db.notebook_options.clear()
+  await db.notebook_globals.clear()
 })
 
 describe("createDexieNotebookController — structural edits", () => {
@@ -1412,6 +1416,7 @@ describe("createDexieNotebookController — query-list variable values", () => {
         { value: "'GBPUSD'", label: "GBPUSD" },
       ],
       fetchedAt: 1,
+      context: variableOptionsContext(pairList, []),
     })
     const { quest, pending, respondNext } = makeQuest({
       validate: () => symbolValidation,
@@ -1530,12 +1535,13 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
     all: { mode: "list" as const },
     selected: "all" as const,
   })
-  const storedRow = (name: string, value: string) =>
+  const storedRow = (name: string, value: string, context?: string) =>
     saveStoredOptions({
       owner: notebookOptionsOwner(BUFFER_ID),
       name,
       options: [{ value: `'${value}'`, label: value }],
       fetchedAt: 1,
+      context,
     })
   const rows = {
     type: "dql",
@@ -1557,7 +1563,11 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
       },
     })
     await storedRow("pair", "USDJPY")
-    await storedRow("other", "USDJPY")
+    await storedRow(
+      "other",
+      "USDJPY",
+      variableOptionsContext(queryList("other", "SELECT symbol FROM u"), []),
+    )
     const { quest, pending, respondNext } = makeQuest({
       validate: () => symbolValidation,
     })
@@ -1611,6 +1621,45 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
 
     // Then the list was fetched again
     expect((await sync).map((e) => e.name)).toEqual(["pair"])
+  })
+
+  it("refetches a time-dependent global and the notebook list built on it when the time range changed", async () => {
+    // Given a stored global that refreshes on time range changes and a stored notebook list built on it
+    await saveNotebookGlobals([
+      queryList("venue", "SELECT venue FROM t", "onTimeRangeChange"),
+    ])
+    await saveStoredOptions({
+      owner: GLOBAL_OPTIONS_OWNER,
+      name: "venue",
+      options: [{ value: "'LSE'", label: "LSE" }],
+      fetchedAt: 1,
+    })
+    await seedNotebook({
+      cells: [cell("a", "SELECT 1")],
+      settings: {
+        variables: [
+          queryList("pair", "SELECT symbol FROM t WHERE venue = @venue"),
+        ],
+        timeRange: { from: "now-1d", to: "now" },
+      },
+    })
+    await storedRow("pair", "USDJPY")
+    const { quest, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent's apply moved the time range
+    const sync = controller.syncVariableOptions({
+      changed: [],
+      redefined: [],
+      timeRangeChanged: true,
+    })
+    await vi.waitFor(() => respondNext(rows))
+    await vi.waitFor(() => respondNext(rows))
+
+    // Then the global was fetched first and the notebook list after it
+    expect((await sync).map((e) => e.name)).toEqual(["venue", "pair"])
   })
 
   it("reports every list it would fetch when the agent runtime is not ready", async () => {

@@ -7,6 +7,7 @@ import {
   emitUserAction,
   getBufferActionSeq,
   signalUserEdit,
+  registerNotebookAgentDeps,
 } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import {
@@ -35,6 +36,7 @@ import {
   clearStatementClassCache,
   type RunCellGate,
 } from "../tools/permissions"
+import type { Client } from "../questdb/client"
 import type { ValidateQueryResult } from "../questdb/types"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
@@ -1285,6 +1287,89 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     }
   })
 
+  it.each(["2", "@b + 1", "@a + @missing"])(
+    "prepares cold All dependencies before validating %s and committing",
+    async (value) => {
+      const validateSql = vi.fn((sql: string) =>
+        Promise.resolve(
+          sql.includes("@missing") ||
+            (sql.includes("@a +") && !sql.includes("@a := 1"))
+            ? { query: sql, error: "undeclared variable", position: 0 }
+            : { query: sql, columns: [], timestamp: 0 },
+        ),
+      )
+      const queryRaw = vi.fn(() => ({
+        queryId: "options",
+        promise: Promise.resolve({
+          type: "dql",
+          columns: [{ name: "n", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        }),
+      }))
+      registerNotebookAgentDeps({
+        getQuest: () =>
+          ({
+            validateQuery: validateSql,
+            queryRaw,
+            abort: () => undefined,
+          }) as unknown as Client,
+      })
+      const before = structuredClone(live.state.parts)
+      const res = await dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          variables: [
+            {
+              name: "a",
+              kind: "list",
+              source: { type: "query", query: "SELECT 1 AS n" },
+              multi: false,
+              include_all: true,
+              all: { mode: "list" },
+              sort: "none",
+              selected: "all",
+            },
+            {
+              name: "b",
+              kind: "expression",
+              value: value.includes("missing") ? value : "@a + 1",
+            },
+            ...(value.includes("missing")
+              ? []
+              : [{ name: "c", kind: "expression", value }]),
+          ],
+          cells: [{ value: "SELECT 42" }],
+        },
+        makeClient(),
+        noopStatus,
+        undefined,
+        validateSql,
+      )
+      expect(queryRaw).toHaveBeenCalledTimes(1)
+      expect(
+        validateSql.mock.calls.some(
+          ([sql]) => sql.includes("@a := 1") && sql.includes("@b :="),
+        ),
+      ).toBe(true)
+      if (value.includes("missing")) {
+        expect(res.is_error).toBe(true)
+        expect(live.state.parts).toEqual(before)
+        expect(live.syncVariableOptions).not.toHaveBeenCalled()
+        expect(live.runCell).not.toHaveBeenCalled()
+      } else {
+        expect(res.is_error).toBeFalsy()
+        expect(live.state.parts.settings.variables).toHaveLength(3)
+        expect(
+          validateSql.mock.calls.some(([sql]) =>
+            sql.includes(`@c := ${value}`),
+          ),
+        ).toBe(true)
+      }
+    },
+  )
+
   it("apply_notebook_state rejects a list whose option query the server classifies as a write", async () => {
     const client = makeClient()
     const validateSql = vi.fn((sql: string) =>
@@ -1370,6 +1455,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
+        time_range: { from: "2025-01-01", to: "2025-01-02" },
         layout_mode: null,
         maximized_cell_id: null,
         variables: [

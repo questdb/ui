@@ -20,6 +20,7 @@ import {
   isQueryList,
   requiresTimeRange,
   TIME_RANGE_REQUIRED,
+  variableOptionsContext,
   type VariableValuesEntry,
 } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import {
@@ -59,10 +60,16 @@ const fetchMissingOptions = async (
   prefixEntries: DeclareEntry[],
   report: VariableValuesEntry[],
 ): Promise<ListOptionsByName> => {
-  const options = listOptionsFromStored(await loadStoredOptions(owner))
+  const stored = await loadStoredOptions(owner)
+  const options = listOptionsFromStored(stored)
+  const contexts = new Map(stored.map((row) => [row.name, row.context]))
   for (const variable of (settings.variables ?? []).filter(isQueryList)) {
     const { name } = variable
-    if (options[name] && !force.has(lower(name))) continue
+    const entries = declareEntriesAbove(settings, options, prefixEntries, name)
+    const context = variableOptionsContext(variable, entries)
+    if (contexts.get(name) === context && !force.has(lower(name))) continue
+    // A failed refresh must not leave a mismatched value in the declarations.
+    delete options[name]
     if (!quest) {
       report.push({ name, error: QUEST_UNAVAILABLE })
       continue
@@ -71,12 +78,7 @@ const fetchMissingOptions = async (
       report.push({ name, error: TIME_RANGE_REQUIRED })
       continue
     }
-    const result = await fetchVariableOptions(
-      quest,
-      variable,
-      declareEntriesAbove(settings, options, prefixEntries, name),
-      signal,
-    )
+    const result = await fetchVariableOptions(quest, variable, entries, signal)
     if (result.kind === "error") {
       report.push({ name, error: result.error })
       continue
@@ -88,6 +90,7 @@ const fetchMissingOptions = async (
       name,
       options: fetched.options,
       fetchedAt: fetched.fetchedAt,
+      context: fetched.context,
     }).catch(() => undefined)
     report.push(fetchedValuesEntry(name, fetched))
   }
@@ -164,7 +167,7 @@ export const syncHeadlessVariableOptions = async (
     {
       quest: deps.getQuest(),
       signal: signal ?? new AbortController().signal,
-      force: forcedByDiff(settings.variables ?? [], diff),
+      force: forcedByDiff([...globals, ...(settings.variables ?? [])], diff),
     },
     bufferId,
     settings,

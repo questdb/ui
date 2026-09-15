@@ -224,6 +224,7 @@ export const VariableList = ({
         $dragging={draggingKey === draft.key}
         onClick={() => onSelect(draft.key)}
         onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
             onSelect(draft.key)

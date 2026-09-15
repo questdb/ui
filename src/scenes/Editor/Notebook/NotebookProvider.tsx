@@ -323,7 +323,7 @@ export const NotebookProvider: React.FC<{
           (settingsRef.current.variables ?? []).map((v) => v.name),
         )
         const visible = names.filter((name) => !local.has(name))
-        void refetchChangedVariableOptions(visible, [], "change")
+        void refetchChangedVariableOptions(visible, [])
       },
     })
   }, [bufferId, globals, preview, refetchChangedVariableOptions])
@@ -506,14 +506,10 @@ export const NotebookProvider: React.FC<{
     (diff: VariableSettingsDiff) => {
       if (diff.changed.length > 0) {
         pruneVariableOptions()
-        void refetchChangedVariableOptions(
-          diff.changed,
-          diff.redefined,
-          "change",
-        )
+        void refetchChangedVariableOptions(diff.changed, diff.redefined)
       }
       if (diff.timeRangeChanged) {
-        void refetchVariableOptionsForTimeRange("change")
+        void refetchVariableOptionsForTimeRange()
         globals.noteTimeRangeChanged()
       }
     },
@@ -800,7 +796,7 @@ export const NotebookProvider: React.FC<{
           ? ConsoleEvent.NOTEBOOK_TIME_RANGE_APPLY
           : ConsoleEvent.NOTEBOOK_TIME_RANGE_CLEAR,
       )
-      void refetchVariableOptionsForTimeRange("change")
+      void refetchVariableOptionsForTimeRange()
       globals.noteTimeRangeChanged()
     },
     [bufferId, globals, refetchVariableOptionsForTimeRange, updateSettings],
@@ -816,12 +812,7 @@ export const NotebookProvider: React.FC<{
       updateSettings({ variables })
       signalUserEdit(bufferId)
       pruneVariableOptions()
-      void refetchChangedVariableOptions(
-        changed,
-        redefined,
-        "change",
-        prefetched,
-      )
+      void refetchChangedVariableOptions(changed, redefined, prefetched)
     },
     [
       bufferId,
@@ -963,8 +954,7 @@ export const NotebookProvider: React.FC<{
     setTimeRange,
     applyVariables,
     updateVariable,
-    refreshVariableOptions: (name) =>
-      void refetchVariableOptions([name], "change"),
+    refreshVariableOptions: (name) => void refetchVariableOptions([name]),
     addCell,
     deleteCell,
     updateCell: store.updateCell,

@@ -29,6 +29,7 @@ import {
   useNotebookBufferId,
   useNotebookState,
 } from "../../NotebookProvider"
+import { listOptionsState } from "../declareEntries"
 import { classifyOptionQuery } from "../options/classifyOptionQuery"
 import {
   useGlobalVariablesActions,
@@ -471,11 +472,12 @@ export const VariablesDialog: React.FC = () => {
                     .slice(0, selectedIndex)
                     .map((d) => d.variable.name)}
                   hasTimeRange={settings.timeRange !== undefined}
-                  savedOptions={
-                    (selectedDraft.scope === "global"
+                  savedOptions={listOptionsState(
+                    selectedDraft.scope === "global"
                       ? globalListOptions
-                      : listOptions)[selectedDraft.variable.name]
-                  }
+                      : listOptions,
+                    selectedDraft.variable.name,
+                  )}
                   onChange={(variable) =>
                     updateDraft(selectedDraft.key, (d) => ({ ...d, variable }))
                   }
