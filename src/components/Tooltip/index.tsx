@@ -37,6 +37,8 @@ type Props = {
   maxWidth?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  onEscapeKeyDown?: RadixTooltip.TooltipContentProps["onEscapeKeyDown"]
+  onPointerDownOutside?: RadixTooltip.TooltipContentProps["onPointerDownOutside"]
   collisionBoundary?: Element | null | Array<Element | null>
   collisionPadding?: number
   hoverBridge?: boolean
@@ -227,6 +229,8 @@ export const Tooltip = ({
   maxWidth,
   open,
   onOpenChange,
+  onEscapeKeyDown,
+  onPointerDownOutside,
   collisionBoundary,
   collisionPadding,
   hoverBridge,
@@ -249,6 +253,8 @@ export const Tooltip = ({
           sideOffset={0}
           collisionBoundary={collisionBoundary}
           collisionPadding={collisionPadding}
+          onEscapeKeyDown={onEscapeKeyDown}
+          onPointerDownOutside={onPointerDownOutside}
         >
           <Text color="contentSecondary" data-hook="tooltip">
             {content}

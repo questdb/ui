@@ -190,9 +190,10 @@ export function createModelToolsClient(
                 return null
               }
 
-              const ddlResponse = table.matView
-                ? await questClient.showMatViewDDL(tableName)
-                : await questClient.showTableDDL(tableName)
+              const ddlResponse = await questClient.showDDL(
+                tableName,
+                getTableKind(table),
+              )
 
               if (
                 ddlResponse?.type === Type.DQL &&

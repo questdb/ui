@@ -230,6 +230,7 @@ export const FilesToUpload = ({
         <SelectMenuControl
           name="table_owner"
           ariaLabel="Table owner"
+          dataHook="import-table-owner-select"
           value={data.table_owner || ownedByList[0] || ""}
           modal={false}
           onValueChange={(value) =>
