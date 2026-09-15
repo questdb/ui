@@ -12,10 +12,7 @@ const supportedExtensions = new Set([
   ".tsx",
 ])
 const ignoredDirectories = new Set(["__tests__"])
-const paletteFiles = new Set([
-  join("src", "theme", "index.ts"),
-  join("src", "theme", "treatments.ts"),
-])
+const paletteFile = join("src", "theme", "index.ts")
 const fixedBrandAssets = new Set([
   join("src", "providers", "SettingsProvider", "QuestDBLogo.tsx"),
 ])
@@ -60,8 +57,7 @@ const violations = []
 
 for (const file of files) {
   const projectPath = toProjectPath(file)
-  if (paletteFiles.has(projectPath) || fixedBrandAssets.has(projectPath))
-    continue
+  if (projectPath === paletteFile || fixedBrandAssets.has(projectPath)) continue
 
   const lines = (await readFile(file, "utf8")).split(/\r?\n/)
   lines.forEach((line, index) => {

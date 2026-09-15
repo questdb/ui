@@ -4,7 +4,7 @@ import { ButtonBase } from "../Button"
 
 type TabButtonProps = { $active?: boolean }
 
-/** Shared tab treatment for editor, drawer, and result-panel navigation. */
+/** Shared tab styling for editor, drawer, and result-panel navigation. */
 export const TabButton = styled(ButtonBase).attrs<TabButtonProps>(
   ({ $active, role }) =>
     role === "tab" ? { "aria-selected": $active } : { "aria-pressed": $active },

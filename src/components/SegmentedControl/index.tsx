@@ -11,6 +11,7 @@ import { ButtonBase } from "../Button"
 import { clamp } from "../../utils/clamp"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
+import { withAlpha } from "../../theme"
 
 export type SegmentedControlTone = "neutral" | "success" | "info"
 
@@ -399,23 +400,35 @@ export const SegmentedControlButton = styled(
       `
     }
 
-    const accentStroke = css`
-      box-shadow:
-        inset 0 0 0 1.5px ${theme.color.brandAccentBorder},
-        inset 0 -1.5px 0 ${theme.color.brandAccentBorder};
+    const accentShadow = css`
+      box-shadow: ${theme.mode === "light"
+        ? `0 1px 1px ${theme.color.shadowSubtle}, 0 1px 3px ${theme.color.shadowSoft}`
+        : `0 3px 9px ${theme.color.shadowSoft}`};
     `
 
     return css`
       && {
+        position: relative;
         background: ${theme.color.brandAccentActive};
         color: ${theme.color.brandAccent};
-        ${accentStroke}
+        ${accentShadow}
+      }
+
+      &&::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 1px solid ${theme.color.brandAccentBorder};
+        border-bottom-width: 2px;
+        border-bottom-color: ${withAlpha(theme.color.brandAccentBorder, 0.22)};
+        border-radius: inherit;
+        pointer-events: none;
       }
 
       &&:hover:not(:disabled):not([aria-disabled="true"]) {
         background: ${theme.color.brandAccentActive};
         color: ${theme.color.brandAccent};
-        ${accentStroke}
+        ${accentShadow}
       }
     `
   }}

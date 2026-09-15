@@ -41,7 +41,6 @@ export type ColorShape = {
   contentMuted: string
   contentDisabled: string
   contentInverse: string
-  contentOnWarning: string
   neutralInk: string
   contentAccent: string
   contentAccentStrong: string
@@ -94,8 +93,8 @@ export type ColorShape = {
   statusInfoSurface: string
   statusInfoSurfaceStrong: string
   statusFeature: string
-  statusAssistant: string
-  statusAssistantStrong: string
+  aiPinkStart: string
+  aiPinkEnd: string
   shadowSubtle: string
   shadowSoft: string
   shadowMedium: string
@@ -104,10 +103,6 @@ export type ColorShape = {
   glassSurface: string
   glassBorder: string
   glassEdge: string
-  brandGradientStart: string
-  brandGradientEnd: string
-  aiGradientStart: string
-  aiGradientEnd: string
   gridRow: string
   gridHeader: string
   gridSelection: string

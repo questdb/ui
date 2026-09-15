@@ -18,6 +18,7 @@ import {
 } from "../../../components"
 import type { SchemaDisplayData } from "../../../providers/AIConversationProvider/types"
 import { color, getTableKind } from "../../../utils"
+import { withAlpha } from "../../../theme"
 import type {
   ConversationMessage,
   UserMessageDisplayType,
@@ -144,8 +145,8 @@ const BadgeIconContainer = styled(Box).attrs({
   align: "center",
   justifyContent: "center",
 })`
-  background: ${color("interactionAccentActive")};
-  border: 1px solid ${color("borderAccent")};
+  background: ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.12)};
+  border: 1px solid ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.42)};
   border-radius: 0.4rem;
   padding: 0.8rem;
   width: 4.8rem;
@@ -159,7 +160,7 @@ const BadgeIconWrapper = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: ${({ theme }) => theme.color.contentAccent};
+  color: ${({ theme }) => theme.color.aiPinkStart};
 
   svg {
     width: 100%;

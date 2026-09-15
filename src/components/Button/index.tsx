@@ -6,8 +6,8 @@ import type { FontSize } from "../../types"
 import type { ButtonVariant } from "./variants"
 import { makeButtonVariant } from "./variants"
 import {
-  brandLinearGradientHorizontal,
-  brandLinearGradientVertical,
+  assistantLinearGradientHorizontal,
+  assistantLinearGradientVertical,
   statusInfoFocus,
 } from "../../theme"
 import { BUTTON_HEIGHTS } from "./tokens"
@@ -18,13 +18,15 @@ export const sizes = ["sm", "md", "lg"] as const
 export type Size = (typeof sizes)[number]
 type Type = "button" | "submit"
 
-const getPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) =>
+const getAssistantGradient = (props: ButtonProps & { theme: DefaultTheme }) =>
   props.gradientStyle === "vertical"
-    ? brandLinearGradientVertical(props.theme.color)
-    : brandLinearGradientHorizontal(props.theme.color)
+    ? assistantLinearGradientVertical(props.theme.color)
+    : assistantLinearGradientHorizontal(props.theme.color)
 
-const getHoverPinkGradient = (props: ButtonProps & { theme: DefaultTheme }) => {
-  const base = getPinkGradient(props)
+const getHoverAssistantGradient = (
+  props: ButtonProps & { theme: DefaultTheme },
+) => {
+  const base = getAssistantGradient(props)
   return base.includes("180deg")
     ? base.replace("180deg", "0deg")
     : base.replace("90deg", "270deg")
@@ -252,7 +254,7 @@ const StyledButton = styled(ButtonBase)<ButtonProps>`
         border: ${getBorderWidth} solid transparent;
         background:
           linear-gradient(${getFillColor}, ${getFillColor}) padding-box,
-          ${getPinkGradient} border-box;
+          ${getAssistantGradient} border-box;
         color: ${props.theme.color.contentPrimary};
       }
 
@@ -260,7 +262,7 @@ const StyledButton = styled(ButtonBase)<ButtonProps>`
         background:
           linear-gradient(${getHoverFillColor}, ${getHoverFillColor})
             padding-box,
-          ${getHoverPinkGradient} border-box;
+          ${getHoverAssistantGradient} border-box;
         color: ${props.theme.color.contentPrimary};
       }
 

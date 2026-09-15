@@ -215,7 +215,7 @@ const CodeBadgeText = styled.span`
 const CheckIcon = styled(CheckIconRaw)`
   width: 1.6rem;
   height: 1.6rem;
-  color: ${color("statusAssistant")};
+  color: ${color("aiPinkStart")};
   flex-shrink: 0;
 `
 

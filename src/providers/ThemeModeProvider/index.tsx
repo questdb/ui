@@ -7,12 +7,7 @@ import React, {
   useState,
 } from "react"
 import { ThemeProvider } from "styled-components"
-import { darkTheme, lightTheme, createTheme } from "../../theme"
-import {
-  readThemeTreatment,
-  themeTreatments,
-  type ThemeTreatmentId,
-} from "../../theme/treatments"
+import { darkTheme, lightTheme } from "../../theme"
 import { setRuntimeTheme } from "../../theme/runtime"
 import type { ThemeMode, ThemePreference } from "../../types"
 import { getValue, setValue } from "../../utils/localStorage"
@@ -24,7 +19,6 @@ import { EventType } from "../../modules/EventBus/types"
 type ThemeModeContextValue = {
   preference: ThemePreference
   mode: ThemeMode
-  treatment: ThemeTreatmentId
   setPreference: (preference: ThemePreference) => void
 }
 
@@ -50,7 +44,6 @@ const readSystemMode = (): ThemeMode =>
 const ThemeModeContext = createContext<ThemeModeContextValue>({
   preference: "system",
   mode: "dark",
-  treatment: "control",
   setPreference: () => undefined,
 })
 
@@ -63,30 +56,13 @@ export const ThemeModeProvider = ({
     readInitialPreference,
   )
   const [systemMode, setSystemMode] = useState<ThemeMode>(readSystemMode)
-  const [treatment, setTreatment] = useState<ThemeTreatmentId>(
-    readThemeTreatment,
-  )
   const mode = preference === "system" ? systemMode : preference
-  const overlay = themeTreatments[treatment][mode]
-  const baseTheme = mode === "light" ? lightTheme : darkTheme
-  const activeTheme = useMemo(
-    () =>
-      Object.keys(overlay).length === 0
-        ? baseTheme
-        : createTheme({ ...baseTheme.color, ...overlay }, mode),
-    [baseTheme, mode, overlay],
-  )
+  const activeTheme = mode === "light" ? lightTheme : darkTheme
   setRuntimeTheme(activeTheme)
 
   const setPreference = useCallback((nextPreference: ThemePreference) => {
     setPreferenceState(nextPreference)
     setValue(StoreKey.THEME_PREFERENCE, nextPreference)
-  }, [])
-
-  useEffect(() => {
-    const handleTreatmentChange = () => setTreatment(readThemeTreatment())
-    window.addEventListener("popstate", handleTreatmentChange)
-    return () => window.removeEventListener("popstate", handleTreatmentChange)
   }, [])
 
   useEffect(() => {
@@ -120,15 +96,14 @@ export const ThemeModeProvider = ({
 
   useEffect(() => {
     document.documentElement.dataset.theme = mode
-    document.documentElement.dataset.treatment = treatment
     document.documentElement.style.colorScheme = mode
     void monacoPromise.then((monaco) => applyMonacoTheme(monaco, mode))
     eventBus.publish(EventType.MSG_THEME_CHANGED, mode)
-  }, [mode, treatment])
+  }, [mode])
 
   const value = useMemo(
-    () => ({ preference, mode, treatment, setPreference }),
-    [preference, mode, treatment, setPreference],
+    () => ({ preference, mode, setPreference }),
+    [preference, mode, setPreference],
   )
 
   return (

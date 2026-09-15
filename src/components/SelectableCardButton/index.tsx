@@ -6,7 +6,7 @@ type SelectableCardButtonProps = {
   $selected?: boolean
 }
 
-/** Shared large-target treatment for provider cards and similar choices. */
+/** Shared large-target styling for provider cards and similar choices. */
 export const SelectableCardButton = styled(
   ButtonBase,
 ).attrs<SelectableCardButtonProps>(({ $selected }) => ({

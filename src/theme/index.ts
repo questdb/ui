@@ -36,15 +36,14 @@ const invariantColors = {
 
   // Content on fixed saturated surfaces
   contentInverse: "#f8f8f2",
-  contentOnWarning: "#000000",
 
   // Opaque black anchor for masks, picker gradients, and glyphs that sit on
   // arbitrary fills rather than on themed surfaces
   neutralInk: "#000000",
 
-  // Assistant progress and completion feedback
-  statusAssistant: "#d14671",
-  statusAssistantStrong: "#892c6c",
+  // AI pink gradient
+  aiPinkStart: "#d14671",
+  aiPinkEnd: "#892c6c",
 
   // Fixed-purpose colors
   instancePreset1: "rgb(199, 7, 45)",
@@ -92,9 +91,9 @@ export const darkColors: ColorShape = {
   contentDisabled: "#747985",
   contentAccent: "#f0428b",
   contentAccentStrong: "#ee2b7c",
-  brandAccent: "#f0428b",
-  brandAccentActive: "rgba(240, 66, 139, 0.10)",
-  brandAccentBorder: "transparent",
+  brandAccent: "#81d3f9",
+  brandAccentActive: "rgba(178, 231, 255, 0.075)",
+  brandAccentBorder: "rgba(178, 231, 255, 0.14)",
   contentSearchMatch: "rgb(163, 127, 96)",
 
   // Borders
@@ -121,9 +120,9 @@ export const darkColors: ColorShape = {
   // Actions and status
   actionPrimary: "#bd0f58",
   actionPrimaryHover: "#d41162",
-  brandAction: "#bd0f58",
-  brandActionHover: "#d41162",
-  brandActionBorder: "#bd0f58",
+  brandAction: "#27723a",
+  brandActionHover: "#367f47",
+  brandActionBorder: "#34d55c",
   brandActionForeground: "#f8f8f2",
   statusDanger: "#ff3333",
   statusDangerStrong: "#db2424",
@@ -159,12 +158,6 @@ export const darkColors: ColorShape = {
   glassSurface: "rgba(255, 255, 255, 0.075)",
   glassBorder: "rgba(255, 255, 255, 0.14)",
   glassEdge: "rgba(255, 255, 255, 0.22)",
-
-  // Brand
-  brandGradientStart: "#e21269",
-  brandGradientEnd: "#8e0b42",
-  aiGradientStart: "#ee2b7c",
-  aiGradientEnd: "#8e0b42",
 
   // Result grid
   gridRow: "#17181d",
@@ -258,9 +251,9 @@ export const lightColors: ColorShape = {
   contentDisabled: "#596271",
   contentAccent: "#bd0f58",
   contentAccentStrong: "#8e0b42",
-  brandAccent: "#bd0f58",
-  brandAccentActive: "rgba(189, 15, 88, 0.13)",
-  brandAccentBorder: "transparent",
+  brandAccent: "#176f87",
+  brandAccentActive: "rgba(21, 156, 193, 0.075)",
+  brandAccentBorder: "rgba(21, 156, 193, 0.14)",
   contentSearchMatch: "rgba(202, 139, 44, 0.32)",
 
   // Borders
@@ -287,10 +280,10 @@ export const lightColors: ColorShape = {
   // Actions and status
   actionPrimary: "#8e0b42",
   actionPrimaryHover: "#bd0f58",
-  brandAction: "#8e0b42",
-  brandActionHover: "#bd0f58",
-  brandActionBorder: "#8e0b42",
-  brandActionForeground: "#f8f8f2",
+  brandAction: "#b3e5c1",
+  brandActionHover: "#88dda0",
+  brandActionBorder: "#27723c",
+  brandActionForeground: "#1c2029",
   statusDanger: "#ce1717",
   statusDangerStrong: "#ce1717",
   statusDangerContrast: "#b81414",
@@ -325,12 +318,6 @@ export const lightColors: ColorShape = {
   glassSurface: "rgba(255, 255, 255, 0.58)",
   glassBorder: "rgba(28, 32, 41, 0.14)",
   glassEdge: "rgba(28, 32, 41, 0.22)",
-
-  // Brand
-  brandGradientStart: "#bd0f58",
-  brandGradientEnd: "#8e0b42",
-  aiGradientStart: "#bd0f58",
-  aiGradientEnd: "#8e0b42",
 
   // Result grid
   gridRow: "#f4f5f7",
@@ -477,9 +464,9 @@ export const darkTheme = createTheme(darkColors, "dark")
 export const lightTheme = createTheme(lightColors, "light")
 export const theme = darkTheme
 
-export const brandLinearGradientHorizontal = (color: ColorShape) =>
-  `linear-gradient(90deg, ${color.brandGradientStart} 0%, ${color.brandGradientEnd} 100%)`
-export const brandLinearGradientVertical = (color: ColorShape) =>
-  `linear-gradient(180deg, ${color.brandGradientStart} 0%, ${color.brandGradientEnd} 100%)`
+export const assistantLinearGradientHorizontal = (color: ColorShape) =>
+  `linear-gradient(90deg, ${color.aiPinkStart} 0%, ${color.aiPinkEnd} 100%)`
+export const assistantLinearGradientVertical = (color: ColorShape) =>
+  `linear-gradient(180deg, ${color.aiPinkStart} 0%, ${color.aiPinkEnd} 100%)`
 
 export type ThemeShape = typeof theme
