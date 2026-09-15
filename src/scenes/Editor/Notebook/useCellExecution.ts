@@ -1,3 +1,4 @@
+import type { CapturedExecution } from "./variables/captureExecution"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Dispatch, MutableRefObject, SetStateAction } from "react"
 import type {
@@ -73,6 +74,7 @@ const clearRunningCell = (
 }
 
 type Options = {
+  captureExecution: (signal?: AbortSignal) => Promise<CapturedExecution>
   bufferId: number
   cellsRef: MutableRefObject<NotebookCell[]>
   executeSingle: (
@@ -100,6 +102,7 @@ type Options = {
 }
 
 export const useCellExecution = ({
+  captureExecution,
   bufferId,
   cellsRef,
   executeSingle,
@@ -166,6 +169,7 @@ export const useCellExecution = ({
       externalSignal: AbortSignal | undefined,
       expectFullValue: boolean,
       valueAtRunStart: string,
+      executeSingle: CapturedExecution["executeSingle"],
     ): Promise<CellRunOutcome> => {
       if (queries.length === 0) return { ok: false, superseded: false }
 
@@ -370,6 +374,7 @@ export const useCellExecution = ({
       externalSignal: AbortSignal | undefined,
       expectFullValue: boolean,
       valueAtRunStart: string,
+      executeSingle: CapturedExecution["executeSingle"],
     ): Promise<CellRunOutcome> => {
       const prior = abortControllersRef.current.get(cellId)
       prior?.forEach((c) => c.abort())
@@ -582,17 +587,22 @@ export const useCellExecution = ({
       barrierAbortsRef.current.set(cellId, claims)
 
       let barrier: RunBarrierOutcome
+      let captured: CapturedExecution
       try {
+        captured = await captureExecution(barrierAc.signal)
         barrier = await resolveRunBarrier(
           queryText,
           queries.length,
           gate,
           (stmt) =>
             statementRequestLimiter(
-              () => validateWithGlobals(stmt, barrierAc.signal),
+              () => captured.validateWithGlobals(stmt, barrierAc.signal),
               barrierAc.signal,
             ),
         )
+      } catch (error) {
+        if (barrierAc.signal.aborted || externalSignal?.aborted) return notRun
+        throw error
       } finally {
         externalSignal?.removeEventListener("abort", onBarrierAbort)
         claims.delete(barrierAc)
@@ -623,6 +633,7 @@ export const useCellExecution = ({
           externalSignal,
           expectFullValue,
           valueAtRunStart,
+          captured.executeSingle,
         )
       }
       if (queries.length > 1) {
@@ -632,6 +643,7 @@ export const useCellExecution = ({
           externalSignal,
           expectFullValue,
           valueAtRunStart,
+          captured.executeSingle,
         )
       }
 
@@ -665,7 +677,8 @@ export const useCellExecution = ({
         let execResult: QueryExecResult
         try {
           execResult = await statementRequestLimiter(
-            () => executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
+            () =>
+              captured.executeSingle(queryText, ac.signal, NOTEBOOK_ROW_CAP),
             ac.signal,
           )
         } catch {
@@ -742,6 +755,7 @@ export const useCellExecution = ({
       cellsRef,
       executeSingle,
       validateWithGlobals,
+      captureExecution,
       updateCell,
       runScript,
       runParallel,

@@ -1,3 +1,9 @@
+import { prepareNotebookVariables } from "../notebooks/notebookVariableOptions"
+import { changedVariableNames } from "../../scenes/Editor/Notebook/variables/variableChanges"
+import {
+  sameTimeRange,
+  TIME_VARIABLE_NAMES,
+} from "../../scenes/Editor/Notebook/variables/timeRange"
 import type { StatusCallback } from "../ai/aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
@@ -29,18 +35,11 @@ import { isAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
   isValidVariableName,
-  renderDeclareValidationQuery,
   validateVariableShape,
 } from "../../scenes/Editor/Notebook/declareUtils"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
 import { getNotebookGlobals } from "../../store/notebookGlobals"
-import { draftsFromVariables } from "../../scenes/Editor/Notebook/variables/variableDrafts"
-import {
-  draftDeclareEntries,
-  prepareDrafts,
-} from "../../scenes/Editor/Notebook/variables/editor/prepareDrafts"
-import { classifyOptionQuery } from "../../scenes/Editor/Notebook/variables/options/classifyOptionQuery"
-import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
+import { PROBLEM_MESSAGES } from "../../scenes/Editor/Notebook/variables/variableDrafts"
 import { variableToDeclareEntry } from "../../scenes/Editor/Notebook/variables/declareEntries"
 import {
   isTimeVariableName,
@@ -82,10 +81,6 @@ type VariablesValidation =
 
 const validateApplyVariables = async (
   variables: unknown,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
-  bufferId: number,
-  timeRange: TimeRange | null | undefined,
-  signal: AbortSignal | undefined,
 ): Promise<VariablesValidation> => {
   if (variables === undefined || variables === null) {
     return { variables: undefined }
@@ -104,7 +99,8 @@ const validateApplyVariables = async (
     }
   }
   const normalized = normalizeVariables(variables.map(wireVariableToStored))
-  const seen = new Set<string>()
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+  const seen = new Set(globals.map((variable) => variable.name.toLowerCase()))
   for (const [idx, variable] of normalized.entries()) {
     const { name } = variable
     if (!isValidVariableName(name)) {
@@ -121,71 +117,20 @@ const validateApplyVariables = async (
         ),
       }
     }
-    if (seen.has(name)) {
+    if (seen.has(name.toLowerCase())) {
       return {
         error: validationError(
-          `duplicate variable name "${name}". Variables are ordered, but each name may only appear once.`,
+          `Variable ${name}: ${PROBLEM_MESSAGES.duplicateName}`,
         ),
       }
     }
-    seen.add(name)
+    seen.add(name.toLowerCase())
     const entry = variableToDeclareEntry(variable, {})
     const shapeError = entry ? validateVariableShape(entry) : null
     if (shapeError) {
       return {
         error: validationError(
           `variables[${idx}] (${name}) shape check failed (${shapeError.kind}). Each value must be a single expression with no embedded assignments, top-level commas, or DECLARE syntax. Use parentheses to group expressions if commas are needed.`,
-        ),
-      }
-    }
-  }
-  if (validateSql && normalized.length > 0) {
-    const effectiveRange =
-      timeRange === undefined
-        ? await withBoundNotebookReadOnly(
-            bufferId,
-            (view) => Promise.resolve(view.settings?.timeRange),
-            signal,
-          )
-        : (timeRange ?? undefined)
-    const globals = normalizeVariables((await getNotebookGlobals())?.variables)
-    const drafts = [
-      ...draftsFromVariables(globals, "global"),
-      ...draftsFromVariables(normalized, "notebook"),
-    ]
-    // Use the dialog's sequential preparation: each dependent declaration sees
-    // fetched upstream values. Nothing is persisted during this preflight.
-    const prepared = await prepareDrafts({
-      quest: getAgentQuest(),
-      drafts,
-      timeRange: effectiveRange,
-      changed: [],
-      redefined: drafts.map(({ variable }) => variable.name),
-      options: { global: {}, notebook: {} },
-      signal: signal ?? new AbortController().signal,
-      onStep: () => undefined,
-      validate: async (index, known) => {
-        const { variable } = drafts[index]
-        const entries = draftDeclareEntries(
-          drafts.slice(0, index + 1),
-          effectiveRange,
-          known,
-        )
-        const result = await validateSql(renderDeclareValidationQuery(entries))
-        if ("error" in result) return result.error
-        if (!isQueryList(variable)) return null
-        const verdict = await classifyOptionQuery(
-          variable.source.query,
-          draftDeclareEntries(drafts.slice(0, index), effectiveRange, known),
-          validateSql,
-        )
-        return verdict.ok ? null : verdict.error
-      },
-    })
-    if (prepared.kind === "error") {
-      return {
-        error: validationError(
-          `Variable ${prepared.name} failed QuestDB validation: ${prepared.error}`,
         ),
       }
     }
@@ -429,13 +374,7 @@ export const dispatchApplyNotebookState = async (
       : isValidTimeRange(time_range)
         ? time_range
         : null
-  const variablesValidation = await validateApplyVariables(
-    variables,
-    validateSql,
-    buffer_id,
-    timeRange,
-    signal,
-  )
+  const variablesValidation = await validateApplyVariables(variables)
   if ("error" in variablesValidation) return variablesValidation.error
   // Shared by the draw-invariant gate (below) and the post-apply
   // auto-run loop's mode resolution.
@@ -509,6 +448,40 @@ export const dispatchApplyNotebookState = async (
       return cell
     }),
   }
+  const currentSettings = await withBoundNotebookReadOnly(
+    buffer_id,
+    (view) => Promise.resolve(view.settings ?? {}),
+    signal,
+  )
+  const nextSettings = {
+    ...currentSettings,
+    ...(variablesValidation.variables !== undefined
+      ? { variables: variablesValidation.variables }
+      : {}),
+    ...(timeRange !== undefined ? { timeRange: timeRange ?? undefined } : {}),
+  }
+  const changedNames = changedVariableNames(
+    currentSettings.variables ?? [],
+    nextSettings.variables ?? [],
+  )
+  const preparedVariables = await prepareNotebookVariables(
+    {
+      quest: getAgentQuest(),
+      signal: signal ?? new AbortController().signal,
+      validateSql,
+      force: new Set(
+        [
+          ...changedNames,
+          ...(!sameTimeRange(currentSettings.timeRange, nextSettings.timeRange)
+            ? TIME_VARIABLE_NAMES
+            : []),
+        ].map((name) => name.toLowerCase()),
+      ),
+    },
+    buffer_id,
+    nextSettings,
+    normalizeVariables((await getNotebookGlobals())?.variables),
+  )
   if (signal?.aborted) {
     return {
       content: JSON.stringify({
@@ -531,13 +504,20 @@ export const dispatchApplyNotebookState = async (
     const { out, variable_values } = await withBoundNotebook(
       buffer_id,
       async (ctrl) => {
-        const applied = await ctrl.mutate((parts) =>
-          applyNotebookStateTransition(parts, request),
+        const applied = await ctrl.mutate(
+          (parts) => ({
+            ...applyNotebookStateTransition(parts, request),
+            preparedVariables,
+          }),
+          signal,
         )
         committed = applied
         return {
           out: applied,
-          variable_values: await ctrl.syncVariableOptions(applied.variables),
+          variable_values: [
+            ...preparedVariables.global.report,
+            ...preparedVariables.notebook.report,
+          ],
         }
       },
       signal,

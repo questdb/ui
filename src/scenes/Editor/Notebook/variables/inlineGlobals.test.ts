@@ -69,13 +69,13 @@ describe("referencedGlobals", () => {
     expect(included.map((v) => v.name)).toEqual(["venue", "pairs"])
   })
 
-  it("skips a global that the notebook overrides", () => {
+  it("keeps a referenced global even when saved local names conflict", () => {
     // Given
     const globals = [text("venue", "'LSE'")]
     const notebook = view([cell("SELECT @venue")], [text("venue", "'NYSE'")])
 
     // Then
-    expect(referencedGlobals(notebook, globals)).toEqual([])
+    expect(referencedGlobals(notebook, globals)).toEqual(globals)
   })
 })
 

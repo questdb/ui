@@ -4,12 +4,11 @@ import { DotsSixVerticalIcon, PlusIcon } from "@phosphor-icons/react"
 import { Badge, Button, IconButton, Text } from "../../../../../components"
 import { Trash } from "../../../../../components/icons"
 import type { TimeRange } from "../../../../../store/notebook"
-import { declaresName, type VariableScope } from "../scope"
+import type { VariableScope } from "../scope"
 import { TIME_VARIABLE_NAMES, timeRangeToDeclareEntries } from "../timeRange"
 import { DeclarationLines } from "../TimeRangeDeclarations"
 import {
   draftsInScope,
-  variablesFromDrafts,
   type DraftProblem,
   type VariableDraft,
 } from "../variableDrafts"
@@ -162,6 +161,7 @@ type Props = {
   drafts: VariableDraft[]
   selectedKey: string | null
   problems: Record<string, DraftProblem | null>
+  errors: Record<string, string>
   timeRange: TimeRange | undefined
   onSelect: (key: string) => void
   onAdd: () => void
@@ -173,6 +173,7 @@ export const VariableList = ({
   drafts,
   selectedKey,
   problems,
+  errors,
   timeRange,
   onSelect,
   onAdd,
@@ -180,8 +181,6 @@ export const VariableList = ({
   onMove,
 }: Props) => {
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
-
-  const globalNames = variablesFromDrafts(draftsInScope(drafts, "global"))
 
   const handleDragStart = (
     e: React.DragEvent<HTMLButtonElement>,
@@ -209,11 +208,7 @@ export const VariableList = ({
 
   const renderRow = (draft: VariableDraft, index: number) => {
     const { variable, scope } = draft
-    const problem = problems[draft.key]
-    const overrides =
-      scope === "notebook" &&
-      variable.name !== "" &&
-      declaresName(globalNames, variable.name)
+    const problem = problems[draft.key] ?? errors[draft.key]
     return (
       <Row
         key={draft.key}
@@ -248,16 +243,6 @@ export const VariableList = ({
           {variable.name ? `@${variable.name}` : "unnamed"}
         </Name>
         <Badges>
-          {overrides && (
-            <Badge
-              size="sm"
-              variant="neutral"
-              title="Overrides the global variable with the same name in this notebook"
-              data-hook="variable-overrides"
-            >
-              overrides
-            </Badge>
-          )}
           {problem && (
             <Badge size="sm" variant="danger" title="Needs attention">
               fix

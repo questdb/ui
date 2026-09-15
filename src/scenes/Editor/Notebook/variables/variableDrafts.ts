@@ -62,17 +62,6 @@ export const orderDraftsByScope = (
   ...draftsInScope(drafts, "notebook"),
 ]
 
-export const redefinedAtOrAbove = (
-  drafts: VariableDraft[],
-  index: number,
-  redefinedNames: Iterable<string>,
-): boolean => {
-  const redefined = new Set(redefinedNames)
-  return drafts
-    .slice(0, index + 1)
-    .some((draft) => redefined.has(draft.variable.name))
-}
-
 export const variablesFromDrafts = (
   drafts: VariableDraft[],
 ): NotebookVariable[] =>
@@ -96,12 +85,16 @@ export const NAME_PROBLEMS: DraftProblem[] = [
   "duplicateName",
 ]
 
+export const isBlockingDraftProblem = (problem: DraftProblem | null): boolean =>
+  problem !== null &&
+  (NAME_PROBLEMS.includes(problem) || problem === "invalidShape")
+
 export const PROBLEM_MESSAGES: Record<DraftProblem, string> = {
   emptyName: "Give the variable a name.",
   invalidName:
     "Names start with a letter, underscore, or Unicode character; then letters, digits, underscores, or Unicode characters.",
   reservedName: "This name is declared by the time range.",
-  duplicateName: "Name already used.",
+  duplicateName: "This variable is already defined.",
   emptyValue: "Give the variable a value.",
   emptyQuery: "Write the query that fetches the values.",
   emptyValues: "Add at least one value.",
@@ -114,14 +107,15 @@ export const draftProblem = (
   drafts: VariableDraft[],
   index: number,
 ): DraftProblem | null => {
-  const { variable, scope } = drafts[index]
+  const { variable } = drafts[index]
   if (variable.name === "") return "emptyName"
   if (!isValidVariableName(variable.name)) return "invalidName"
   if (isTimeVariableName(variable.name)) return "reservedName"
   if (
     drafts.some(
       (d, i) =>
-        i < index && d.scope === scope && d.variable.name === variable.name,
+        i < index &&
+        d.variable.name.toLowerCase() === variable.name.toLowerCase(),
     )
   ) {
     return "duplicateName"

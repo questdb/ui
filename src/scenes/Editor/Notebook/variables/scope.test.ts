@@ -9,7 +9,7 @@ const text = (name: string, value: string): NotebookVariable => ({
 })
 
 describe("effectiveVariables", () => {
-  it("lists globals first and drops a global that the notebook overrides", () => {
+  it("lists globals first and keeps conflicting names visible for correction", () => {
     // Given
     const globals = [text("pair", "'EURUSD'"), text("venue", "'LSE'")]
     const local = [text("side", "'BUY'"), text("pair", "'GBPUSD'")]
@@ -20,7 +20,7 @@ describe("effectiveVariables", () => {
     // Then
     expect(
       effective.map(({ variable, scope }) => `${scope}:${variable.name}`),
-    ).toEqual(["global:venue", "notebook:side", "notebook:pair"])
-    expect(effective[2].variable).toEqual(text("pair", "'GBPUSD'"))
+    ).toEqual(["global:pair", "global:venue", "notebook:side", "notebook:pair"])
+    expect(effective[3].variable).toEqual(text("pair", "'GBPUSD'"))
   })
 })

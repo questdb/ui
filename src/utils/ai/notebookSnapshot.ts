@@ -17,7 +17,6 @@ import type {
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
-import { effectiveVariables } from "../../scenes/Editor/Notebook/variables/scope"
 import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import {
   GLOBAL_OPTIONS_OWNER,
@@ -253,12 +252,7 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
-  const globals = effectiveVariables(
-    normalizeVariables((await getNotebookGlobals())?.variables),
-    variables,
-  )
-    .filter(({ scope }) => scope === "global")
-    .map(({ variable }) => variable)
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
   if (globals.length > 0) {
     out.global_variables = globals
   }

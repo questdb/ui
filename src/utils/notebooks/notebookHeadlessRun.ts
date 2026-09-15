@@ -41,7 +41,6 @@ import {
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
-import { referencesAny } from "../../scenes/Editor/Notebook/variables/references"
 import { resolveHeadlessDeclareEntries } from "./notebookVariableOptions"
 import { getNotebookGlobals } from "../../store/notebookGlobals"
 import {
@@ -360,22 +359,13 @@ export const runHeadlessCell = async (
     )
   }
 
-  const { entries: variables, report } = await resolveHeadlessDeclareEntries({
+  const { entries: variables } = await resolveHeadlessDeclareEntries({
     bufferId,
     quest,
     settings: prep.settings,
     globals: prep.globals,
     signal: signal ?? new AbortController().signal,
   })
-  const failed = report.find(
-    (entry) => "error" in entry && referencesAny(queryText, [entry.name]),
-  )
-  if (failed && "error" in failed) {
-    throw new NotebookToolError(
-      "variable_options",
-      `Could not load the values of @${failed.name}: ${failed.error}`,
-    )
-  }
   if (signal?.aborted) return emptySummary()
 
   // The runner's barrier classification is the single decision for permission

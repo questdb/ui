@@ -47,6 +47,11 @@ export const listsAffectedByChange = (
   )
 }
 
+export const listsRefreshedWith = (
+  variables: NotebookVariable[],
+  name: string,
+): QueryListVariable[] => listsAffectedByChange(variables, [name], [name])
+
 export const listsAffectedByTimeRange = (
   variables: NotebookVariable[],
 ): QueryListVariable[] =>

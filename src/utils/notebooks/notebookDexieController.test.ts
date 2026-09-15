@@ -900,11 +900,12 @@ describe("createDexieNotebookController — runCell", () => {
 
   it("a run whose cell was deleted mid-flight records nothing and says so", async () => {
     await seedNotebook({ cells: [cell("a", "SELECT 1"), cell("b")] })
-    const { quest, respondNext } = makeQuest()
+    const { quest, respondNext, pending: queries } = makeQuest()
     const controller = makeController({}, quest)
     const pending = controller.runCell("a")
     // The cell disappears while the query is in flight (the queue is not held
     // during execution, so the delete lands before the commit).
+    await vi.waitFor(() => expect(queries).toHaveLength(1))
     await controller.deleteCell("a")
     respondNext(dqlResult)
     const summary = await pending
@@ -1466,31 +1467,50 @@ describe("createDexieNotebookController — query-list variable values", () => {
     ])
   })
 
-  it("refuses to run a cell that references a list whose values failed to load", async () => {
-    // Given a list whose query fails
-    await seedNotebook({
-      cells: [cell("a", "SELECT * FROM fx_trades WHERE symbol IN @pair")],
-      settings: { variables: [pairList] },
-    })
-    const { quest, pending, respondNext } = makeQuest({
-      validate: () => symbolValidation,
-    })
-    const controller = makeController({}, quest)
+  it.each([
+    {
+      sql: "SELECT @pair",
+      response: { type: "error", error: "undeclared variable: @pair" },
+      success: false,
+    },
+    {
+      sql: "DECLARE @pair := 'EURUSD' SELECT @pair",
+      response: dqlResult,
+      success: true,
+    },
+  ])(
+    "lets QuestDB evaluate $sql after a list fetch fails",
+    async ({ sql, response, success }) => {
+      // Given a list whose query fails
+      await seedNotebook({
+        cells: [cell("a", sql)],
+        settings: { variables: [pairList] },
+      })
+      const { quest, pending, respondNext } = makeQuest({
+        validate: () => symbolValidation,
+      })
+      const controller = makeController({}, quest)
 
-    // When the agent runs the cell
-    const run = controller.runCell("a")
-    await vi.waitFor(() =>
-      respondNext({ type: "error", error: "table does not exist" }),
-    )
+      // When the agent runs the cell
+      const run = controller.runCell("a")
+      await vi.waitFor(() =>
+        respondNext({ type: "error", error: "table does not exist" }),
+      )
 
-    // Then the tool fails with the variable error and the cell never ran
-    await expect(run).rejects.toMatchObject({
-      code: "variable_options",
-      message: "Could not load the values of @pair: table does not exist",
-    })
-    expect(pending).toHaveLength(0)
-    expect(await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))).toEqual([])
-  })
+      await vi.waitFor(() => expect(pending[0]?.sql).toBe(sql))
+      respondNext(response)
+
+      // Then the cell result comes from QuestDB despite the variable error
+      const summary = await run
+      expect(summary.success).toBe(success)
+      if (!success)
+        expect(summary.results).toEqual(["ERROR: undeclared variable: @pair"])
+      expect(pending).toHaveLength(0)
+      expect(await loadStoredOptions(notebookOptionsOwner(BUFFER_ID))).toEqual(
+        [],
+      )
+    },
+  )
 
   it("still runs a cell that does not reference the failed list", async () => {
     // Given a list whose query fails and a cell that ignores it

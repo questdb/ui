@@ -268,6 +268,8 @@ const analyzeStatement = (text: string): StatementShape => {
     return { kind: "skip" }
   }
 
+  if (stmt.children.implicitSelectStatement) return { kind: "select" }
+
   // INSERT / CREATE / UPDATE / DELETE / ALTER / DROP / SHOW / TRUNCATE / etc.
   return { kind: "skip" }
 }

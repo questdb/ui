@@ -252,6 +252,20 @@ describe("prependGlobalsDeclare", () => {
     expect(sql.startsWith("DECLARE\n  @x := 1\nWITH ")).toBe(true)
   })
 
+  it("prepends DECLARE before an implicit select", () => {
+    const { sql, insertedRange } = prependGlobalsDeclare(
+      "trades WHERE symbol = @x",
+      vars({ x: "'EURUSD'" }),
+    )
+    expect(sql).toBe("DECLARE\n  @x := 'EURUSD'\ntrades WHERE symbol = @x")
+    expect(insertedRange?.start).toBe(0)
+  })
+
+  it("prepends DECLARE before a bare variable used as the table name", () => {
+    const { sql } = prependGlobalsDeclare("@t", vars({ t: "'trades'" }))
+    expect(sql).toBe("DECLARE\n  @t := 'trades'\n@t")
+  })
+
   it("preserves a leading line comment, with insertion offset AFTER the comment", () => {
     const { sql, insertedRange } = prependGlobalsDeclare(
       "-- header\nSELECT @x",

@@ -127,7 +127,7 @@ describe("global variable tools", () => {
     expect(definition?.inputSchema.required).toContain("expected_revision")
   })
 
-  it("reads every global in reusable wire format, including names shadowed by locals", async () => {
+  it("reads every global in reusable wire format, including conflicting names in saved notebooks", async () => {
     const list = queryList("g", "SELECT 1")
     await saveNotebookGlobals([list, expression("other", "2")])
     await db.buffers.put({
@@ -148,6 +148,47 @@ describe("global variable tools", () => {
     ])
     expect(validate).not.toHaveBeenCalled()
     expect(queryRaw).not.toHaveBeenCalled()
+  })
+
+  it("rejects a global name used in another notebook before SQL validation", async () => {
+    // Given
+    await db.buffers.put({
+      id: 2,
+      label: "Other notebook",
+      position: 0,
+      value: "",
+      notebookViewState: {
+        cells: [],
+        settings: { variables: [expression("RATE", "2")] },
+      },
+    })
+
+    // When
+    const result = await apply([expression("rate", "5")], 0)
+
+    // Then
+    expect(result.is_error).toBe(true)
+    expect((JSON.parse(result.content) as { message: string }).message).toBe(
+      "Variable rate: This variable is already defined.",
+    )
+    expect(await getNotebookGlobals()).toBeNull()
+    expect(validate).not.toHaveBeenCalled()
+  })
+
+  it("rejects repeated global names, ignoring case", async () => {
+    // Given
+    const variables = [expression("rate", "5"), expression("RATE", "2")]
+
+    // When
+    const result = await apply(variables, 0)
+
+    // Then
+    expect(result.is_error).toBe(true)
+    expect((JSON.parse(result.content) as { message: string }).message).toBe(
+      "Variable RATE: This variable is already defined.",
+    )
+    expect(await getNotebookGlobals()).toBeNull()
+    expect(validate).not.toHaveBeenCalled()
   })
 
   it("preserves with null, creates/updates/deletes with full arrays, and clears with []", async () => {
@@ -202,7 +243,6 @@ describe("global variable tools", () => {
     [expression("timeFrom", "1")],
     [expression("g", "1"), expression("g", "2")],
     [expression("g", "1, @injected := 2")],
-    [queryList("g", "INSERT INTO t VALUES (1)")],
   ])(
     "rejects invalid definitions before any write or option execution",
     async (...variables) => {
@@ -213,6 +253,23 @@ describe("global variable tools", () => {
       expect(queryRaw).not.toHaveBeenCalled()
     },
   )
+
+  it("records a non-SELECT list error without executing the query", async () => {
+    // Given
+    const variables = [queryList("g", "INSERT INTO t VALUES (1)")]
+    // When
+    const result = await apply(variables, 0)
+    // Then
+    expect(result.is_error).toBeFalsy()
+    expect(
+      (
+        JSON.parse(result.content) as {
+          variable_errors: Record<string, string>
+        }
+      ).variable_errors.g,
+    ).toContain("must be a SELECT")
+    expect(queryRaw).not.toHaveBeenCalled()
+  })
 
   it("resolves a cold All list before its dependent expressions and notifies database subscribers", async () => {
     const changes: number[] = []
@@ -237,14 +294,15 @@ describe("global variable tools", () => {
       ).toBe(true)
       expect(queryRaw).toHaveBeenCalledTimes(1)
       await vi.waitFor(() => expect(changes).toContain(1))
-      // Preflight values are temporary; consumers fetch in their own context.
-      expect(await loadStoredOptions(GLOBAL_OPTIONS_OWNER)).toEqual([])
+      expect(
+        (await loadStoredOptions(GLOBAL_OPTIONS_OWNER)).map((row) => row.name),
+      ).toEqual(["a"])
     } finally {
       subscription.unsubscribe()
     }
   })
 
-  it("rejects malformed dependent expressions without changing definitions or cached rows", async () => {
+  it("commits valid fetched values and reports dependent expression errors", async () => {
     await saveNotebookGlobals([expression("keep", "1")])
     await saveStoredOptions({
       owner: GLOBAL_OPTIONS_OWNER,
@@ -252,16 +310,23 @@ describe("global variable tools", () => {
       options: [{ value: "1", label: "1" }],
       fetchedAt: 1,
     })
-    const before = await getNotebookGlobals()
-    const options = await loadStoredOptions(GLOBAL_OPTIONS_OWNER)
     const result = await apply(
       [queryList("a", "SELECT 1 AS n"), expression("b", "@a + @missing")],
       1,
     )
-    expect(result.is_error).toBe(true)
-    expect(result.content).toContain("undeclared @missing")
-    expect(await getNotebookGlobals()).toEqual(before)
-    expect(await loadStoredOptions(GLOBAL_OPTIONS_OWNER)).toEqual(options)
+    expect(result.is_error).toBeFalsy()
+    const parsed = JSON.parse(result.content) as {
+      applied: boolean
+      variable_errors: Record<string, string>
+    }
+    expect(parsed.applied).toBe(true)
+    expect(parsed.variable_errors.b).toContain("@missing")
+    expect(
+      (await getNotebookGlobals())?.variables.map((variable) => variable.name),
+    ).toEqual(["a", "b"])
+    expect(
+      (await loadStoredOptions(GLOBAL_OPTIONS_OWNER)).map((row) => row.name),
+    ).toEqual(["a"])
   })
 
   it("rejects an edit that races validation, including a UI save", async () => {

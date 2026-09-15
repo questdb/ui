@@ -1,6 +1,11 @@
-import React, { useContext, useMemo, useRef, useState } from "react"
+import type { VariableStep as DraftStep } from "../prepareVariables"
+import React, { useMemo, useRef, useState } from "react"
 import styled from "styled-components"
-import { AtIcon, ClipboardTextIcon } from "@phosphor-icons/react"
+import {
+  AtIcon,
+  ClipboardTextIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react"
 import {
   Button,
   Dialog,
@@ -8,69 +13,52 @@ import {
   LoadingSpinner,
   Overlay,
   Text,
+  Tooltip,
 } from "../../../../../components"
 import { CopyButton } from "../../../../../components/CopyButton"
 import { toast } from "../../../../../components/Toast"
-import { QuestContext } from "../../../../../providers/QuestProvider"
 import { trackEvent } from "../../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../../modules/ConsoleEventTracker/events"
-import type {
-  DeclareEntry,
-  NotebookVariable,
-} from "../../../../../store/notebook"
+import type { NotebookVariable } from "../../../../../store/notebook"
 import { readFromClipboard } from "../../../../../utils/copyToClipboard"
-import {
-  parseDeclareBlock,
-  renderDeclareBlock,
-  renderDeclareValidationQuery,
-} from "../../declareUtils"
+import { parseDeclareBlock, renderDeclareBlock } from "../../declareUtils"
 import {
   useNotebookActions,
   useNotebookBufferId,
   useNotebookState,
 } from "../../NotebookProvider"
 import { listOptionsState } from "../declareEntries"
-import { classifyOptionQuery } from "../options/classifyOptionQuery"
-import {
-  useGlobalVariablesActions,
-  useGlobalVariablesState,
-} from "../globals/GlobalVariablesProvider"
-import { queryPrecheck } from "../queryChecks"
+import { useGlobalVariablesState } from "../globals/GlobalVariablesProvider"
+import { globalNameConflict } from "../globals/globalNameConflict"
 import { effectiveVariables, type VariableScope } from "../scope"
 import { TIME_VARIABLE_NAMES } from "../timeRange"
-import { isQueryList } from "../options/fetchVariableOptions"
-import {
-  changedVariableNames,
-  redefinedVariableNames,
-  variablesEqual,
-} from "../variableChanges"
+import { variablesEqual } from "../variableChanges"
 import {
   PROBLEM_MESSAGES,
   draftProblem,
+  isBlockingDraftProblem,
   draftsFromVariables,
   draftsInScope,
   createVariable,
   newDraftKey,
   orderDraftsByScope,
-  redefinedAtOrAbove,
   variablesFromDrafts,
   type DraftProblem,
   type VariableDraft,
 } from "../variableDrafts"
 import {
   draftDeclareEntries,
-  prepareDrafts,
-  type DraftStep,
   type ScopedListOptions,
-} from "./prepareDrafts"
+} from "./draftDeclareEntries"
+import { FooterMessage } from "./FooterMessage"
 import { VariableForm } from "./VariableForm"
 import { VariableList } from "./VariableList"
 
-const Trigger = styled(Button).attrs({ variant: "secondary" })`
-  svg {
-    transform: translateY(1px);
-  }
+const ErrorIcon = styled(WarningCircleIcon)`
+  color: ${({ theme }) => theme.color.statusDanger};
 `
+
+const Trigger = styled(Button).attrs({ variant: "secondary" })``
 
 const Content = styled(Dialog.Content).attrs({ maxwidth: "104rem" })`
   display: flex;
@@ -126,13 +114,6 @@ const FooterStatus = styled.div`
   min-width: 0;
 `
 
-const FooterMessage = styled(Text).attrs({ size: "sm" })`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`
-
 const FooterGroup = styled.div`
   display: flex;
   align-items: center;
@@ -140,13 +121,15 @@ const FooterGroup = styled.div`
 `
 
 export const VariablesDialog: React.FC = () => {
-  const { quest } = useContext(QuestContext)
-  const { settings, listOptions } = useNotebookState()
+  const { settings, listOptions, variableErrors, variablesPending } =
+    useNotebookState()
   const { applyVariables } = useNotebookActions()
   const bufferId = useNotebookBufferId()
-  const { variables: currentGlobals, listOptions: globalListOptions } =
-    useGlobalVariablesState()
-  const globals = useGlobalVariablesActions()
+  const {
+    variables: currentGlobals,
+    listOptions: globalListOptions,
+    errors: globalErrors,
+  } = useGlobalVariablesState()
   const [open, setOpen] = useState(false)
   const [drafts, setDrafts] = useState<VariableDraft[]>([])
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -154,9 +137,13 @@ export const VariablesDialog: React.FC = () => {
   const [progress, setProgress] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const committingRef = useRef(false)
   const prefetchAbortRef = useRef<AbortController | null>(null)
 
   const currentLocal = settings.variables ?? []
+  const hasVariableErrors =
+    Object.keys(globalErrors).length > 0 ||
+    Object.keys(variableErrors).length > 0
 
   const problems = useMemo(
     () =>
@@ -190,14 +177,6 @@ export const VariablesDialog: React.FC = () => {
       : null)
   const localDirty = !variablesEqual(currentLocal, localVariables)
   const globalDirty = !variablesEqual(currentGlobals, globalVariables)
-  const changed = [
-    ...changedVariableNames(currentGlobals, globalVariables),
-    ...changedVariableNames(currentLocal, localVariables),
-  ]
-  const redefined = [
-    ...redefinedVariableNames(currentGlobals, globalVariables),
-    ...redefinedVariableNames(currentLocal, localVariables),
-  ]
   const canApply = localDirty || globalDirty
   const busy = progress !== null
   const selectedIndex = drafts.findIndex((draft) => draft.key === selectedKey)
@@ -221,12 +200,22 @@ export const VariablesDialog: React.FC = () => {
     ]
     setDrafts(next)
     setSelectedKey(next[0]?.key ?? null)
-    setServerErrors({})
+    setServerErrors(
+      Object.fromEntries(
+        next.flatMap((draft) => {
+          const error = (
+            draft.scope === "global" ? globalErrors : variableErrors
+          )[draft.variable.name]
+          return error ? [[draft.key, error]] : []
+        }),
+      ),
+    )
     setApplyError(null)
     setSubmitted(false)
   }
 
   const handleOpenChange = (next: boolean) => {
+    if (committingRef.current) return
     if (next) {
       void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_OPEN)
       openWith()
@@ -301,52 +290,18 @@ export const VariablesDialog: React.FC = () => {
     setApplyError(`@${name}: ${error}`)
   }
 
-  const queryProblem = async (
-    index: number,
-    entriesAbove: DeclareEntry[],
-  ): Promise<string | null> => {
-    const { variable } = drafts[index]
-    if (!isQueryList(variable)) return null
-    const { query } = variable.source
-    const precheck = queryPrecheck(query, {
-      declaredAbove: drafts.slice(0, index).map((d) => d.variable.name),
-      hasTimeRange: settings.timeRange !== undefined,
-    })
-    if (precheck) return precheck
-    if (!redefinedAtOrAbove(drafts, index, redefined)) return null
-    const verdict = await classifyOptionQuery(query, entriesAbove, (sql) =>
-      quest.validateQuery(sql),
-    )
-    return verdict.ok ? null : verdict.error
-  }
-
-  const validateDraft = async (
-    index: number,
-    known: ScopedListOptions,
-  ): Promise<string | null> => {
-    const problem = await queryProblem(
-      index,
-      entriesFor(drafts.slice(0, index), known),
-    )
-    if (problem) return problem
-    if (!redefinedAtOrAbove(drafts, index, redefined)) return null
-    const result = await quest.validateQuery(
-      renderDeclareValidationQuery(
-        entriesFor(drafts.slice(0, index + 1), known),
-      ),
-    )
-    return "error" in result ? result.error : null
-  }
-
   const stepMessage = ({ kind, name }: DraftStep) =>
-    kind === "validating"
-      ? `Validating @${name}...`
-      : `Loading values for @${name}...`
+    kind === "committing"
+      ? "Saving variables..."
+      : kind === "validating"
+        ? `Validating @${name}...`
+        : `Loading values for @${name}...`
 
   const handleApply = async () => {
+    committingRef.current = false
     setSubmitted(true)
-    const failingIndex = drafts.findIndex(
-      (_, index) => draftProblem(drafts, index) !== null,
+    const failingIndex = drafts.findIndex((_, index) =>
+      isBlockingDraftProblem(draftProblem(drafts, index)),
     )
     if (failingIndex >= 0) {
       setSelectedKey(drafts[failingIndex].key)
@@ -356,22 +311,24 @@ export const VariablesDialog: React.FC = () => {
     prefetchAbortRef.current = controller
     setProgress("Validating variables...")
     try {
-      const preparation = await prepareDrafts({
-        quest,
-        drafts,
-        timeRange: settings.timeRange,
-        changed,
-        redefined,
-        options: scopedListOptions,
-        signal: controller.signal,
-        validate: validateDraft,
-        onStep: (step) => setProgress(stepMessage(step)),
-      })
-      if (controller.signal.aborted) return
-      if (preparation.kind === "error") {
-        failFor(preparation.name, preparation.error)
-        return
+      if (globalDirty) {
+        const conflict = await globalNameConflict(globalVariables, bufferId)
+        if (controller.signal.aborted) return
+        if (conflict) {
+          failFor(conflict, PROBLEM_MESSAGES.duplicateName)
+          return
+        }
       }
+      await applyVariables(
+        localVariables,
+        globalVariables,
+        controller.signal,
+        (step) => {
+          committingRef.current = step.kind === "committing"
+          setProgress(stepMessage(step))
+        },
+      )
+      if (controller.signal.aborted) return
       setServerErrors({})
       void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
         variableCount: localVariables.length + globalVariables.length,
@@ -380,19 +337,14 @@ export const VariablesDialog: React.FC = () => {
           .map((v) => v.kind)
           .join(","),
       })
-      const { prefetched } = preparation
-      if (globalDirty) {
-        await globals.applyVariables(
-          globalVariables,
-          prefetched.global,
-          bufferId,
-        )
-      }
-      if (localDirty || Object.keys(prefetched.notebook).length > 0) {
-        applyVariables(localVariables, prefetched.notebook)
-      }
       setOpen(false)
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setApplyError(
+          error instanceof Error ? error.message : "Could not update variables",
+        )
     } finally {
+      committingRef.current = false
       setProgress(null)
     }
   }
@@ -429,14 +381,35 @@ export const VariablesDialog: React.FC = () => {
 
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Trigger asChild>
-        <Trigger
-          prefixIcon={<AtIcon size={14} />}
-          data-hook="notebook-variables"
-        >
-          Variables{variableCount > 0 ? ` (${variableCount})` : ""}
-        </Trigger>
-      </Dialog.Trigger>
+      <Tooltip
+        content={hasVariableErrors ? "Some variables cannot be applied" : null}
+      >
+        <Dialog.Trigger asChild>
+          <Trigger
+            prefixIcon={
+              hasVariableErrors ? (
+                <ErrorIcon
+                  size={16}
+                  aria-label="Variable errors"
+                  data-hook="variable-errors"
+                />
+              ) : (
+                <AtIcon size={16} />
+              )
+            }
+            aria-busy={variablesPending}
+            title={
+              variablesPending && !hasVariableErrors
+                ? "Checking variables..."
+                : undefined
+            }
+            data-hook="notebook-variables"
+          >
+            Variables{variableCount > 0 ? ` (${variableCount})` : ""}
+            {variablesPending && <LoadingSpinner />}
+          </Trigger>
+        </Dialog.Trigger>
+      </Tooltip>
       <Dialog.Portal>
         <ForwardRef>
           <Overlay primitive={Dialog.Overlay} />
@@ -453,6 +426,7 @@ export const VariablesDialog: React.FC = () => {
                 drafts={drafts}
                 selectedKey={selectedKey}
                 problems={problems}
+                errors={serverErrors}
                 timeRange={settings.timeRange}
                 onSelect={setSelectedKey}
                 onAdd={handleAdd}
@@ -518,16 +492,11 @@ export const VariablesDialog: React.FC = () => {
               />
             </FooterGroup>
             <FooterStatus>
-              {busy && (
-                <LoadingSpinner size="14px" color="contentAccentStrong" />
-              )}
+              {busy && <LoadingSpinner size="14px" />}
               <FooterMessage
-                color={busy ? "contentAccentStrong" : "statusDanger"}
-                title={progress ?? footerMessage ?? undefined}
-                data-hook="variables-footer-message"
-              >
-                {progress ?? footerMessage}
-              </FooterMessage>
+                message={progress ?? footerMessage}
+                color={busy ? "contentSecondary" : "statusDanger"}
+              />
             </FooterStatus>
             <FooterGroup>
               <Button

@@ -6,7 +6,6 @@ import type {
   VariableOption,
 } from "../../../../store/notebook"
 import { customListOptions } from "./listOptions"
-import { declaresName } from "./scope"
 import { timeRangeToDeclareEntries } from "./timeRange"
 
 export type ListOptionsState = {
@@ -98,7 +97,7 @@ export const buildDeclareEntries = (
     ...(settings.timeRange
       ? timeRangeToDeclareEntries(settings.timeRange)
       : []),
-    ...globalEntries.filter((entry) => !declaresName(local, entry.name)),
+    ...globalEntries,
     ...local.flatMap((variable) => {
       const entry = variableToDeclareEntry(variable, listOptions)
       return entry ? [entry] : []

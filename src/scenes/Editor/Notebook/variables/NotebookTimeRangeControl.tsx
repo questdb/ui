@@ -17,8 +17,26 @@ export const NotebookTimeRangeControl: React.FC = () => {
       renderPreview={(from, to) => (
         <TimeRangeDeclarations from={from} to={to} />
       )}
-      onApply={(from, to) => setTimeRange({ from, to })}
-      onClear={() => setTimeRange(null)}
+      onApply={(from, to, signal, onProgress) =>
+        setTimeRange({ from, to }, signal, (step) =>
+          onProgress(
+            step.kind === "committing"
+              ? "Saving time range..."
+              : `${step.kind === "fetching" ? "Loading values for" : "Validating"} @${step.name}...`,
+            step.kind === "committing",
+          ),
+        )
+      }
+      onClear={(signal, onProgress) =>
+        setTimeRange(null, signal, (step) =>
+          onProgress(
+            step.kind === "committing"
+              ? "Saving time range..."
+              : `Validating @${step.name}...`,
+            step.kind === "committing",
+          ),
+        )
+      }
       dataHook="notebook-time-range"
     />
   )

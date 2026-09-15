@@ -1,9 +1,18 @@
-import React, { useState } from "react"
+import { FooterMessage } from "../../../components/FooterMessage"
+import React, { useState, useRef, useEffect } from "react"
 import styled from "styled-components"
 import { formatISO, subMonths } from "date-fns"
 import { useFormContext } from "react-hook-form"
 import Joi from "joi"
-import { Box, Button, Calendar, Form, Popover, Text } from "../../../components"
+import {
+  Box,
+  Button,
+  Calendar,
+  Form,
+  Popover,
+  Text,
+  LoadingSpinner,
+} from "../../../components"
 import {
   Calendar as CalendarIcon,
   Time,
@@ -43,6 +52,10 @@ const DatePickers = styled(Box).attrs({
   align-self: stretch;
   padding-right: 1rem;
   padding-left: 1rem;
+
+  form {
+    width: 100%;
+  }
 `
 
 const Presets = styled.ul`
@@ -109,7 +122,11 @@ const DatePickerItem = ({
   return (
     <Form.Item name={name} label={label}>
       <Box gap="0.5rem" align="center">
-        <Form.Input name={name} placeholder={placeholder} />
+        <Form.Input
+          name={name}
+          placeholder={placeholder}
+          data-hook={`time-range-${name}`}
+        />
         <Popover
           trigger={
             <Button variant="secondary">
@@ -151,8 +168,16 @@ type Props = {
   presets: DurationPreset[]
   maxRangeSeconds?: number
   renderPreview?: (dateFrom: string, dateTo: string) => React.ReactNode
-  onApply: (dateFrom: string, dateTo: string) => Promise<void> | void
-  onClear?: () => void
+  onApply: (
+    dateFrom: string,
+    dateTo: string,
+    signal: AbortSignal,
+    onProgress: (message: string, committing: boolean) => void,
+  ) => Promise<void> | void
+  onClear?: (
+    signal: AbortSignal,
+    onProgress: (message: string, committing: boolean) => void,
+  ) => Promise<void> | void
   dataHook?: string
 }
 
@@ -169,29 +194,79 @@ export const TimeRangePicker = ({
   const appliedRange = { dateFrom: dateFrom ?? "", dateTo: dateTo ?? "" }
   const [mainOpen, setMainOpen] = useState(false)
   const [draft, setDraft] = useState<DateRange>(appliedRange)
+  const [progress, setProgress] = useState<string | null>(null)
+  const [applyError, setApplyError] = useState<string | null>(null)
+  const operationRef = useRef<{
+    controller: AbortController
+    committing: boolean
+  } | null>(null)
   const hasRange = dateFrom !== undefined && dateTo !== undefined
 
   const handleOpenChange = (open: boolean) => {
-    if (open) setDraft(appliedRange)
+    if (operationRef.current?.committing) return
+    if (open) {
+      setDraft(appliedRange)
+      setApplyError(null)
+    } else {
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+      setProgress(null)
+    }
     setMainOpen(open)
   }
 
+  const apply = async (from: string | null, to: string | null) => {
+    if (operationRef.current) return
+    const operation = { controller: new AbortController(), committing: false }
+    operationRef.current = operation
+    setApplyError(null)
+    setProgress("Checking variables...")
+    const onProgress = (message: string, committing: boolean) => {
+      if (operationRef.current !== operation) return
+      operation.committing = committing
+      setProgress(message)
+    }
+    try {
+      if (from === null || to === null)
+        await onClear?.(operation.controller.signal, onProgress)
+      else await onApply(from, to, operation.controller.signal, onProgress)
+      if (
+        !operation.controller.signal.aborted &&
+        operationRef.current === operation
+      )
+        setMainOpen(false)
+    } catch (error) {
+      if (!operation.controller.signal.aborted)
+        setApplyError(
+          error instanceof Error
+            ? error.message
+            : "Could not update time range",
+        )
+    } finally {
+      if (operationRef.current === operation) {
+        operationRef.current = null
+        setProgress(null)
+      }
+    }
+  }
+
   const handleSubmit = async (values: FormValues) => {
-    if (values.dateFrom && values.dateTo) {
-      await onApply(
+    if (values.dateFrom && values.dateTo)
+      await apply(
         isDateToken(values.dateFrom)
           ? values.dateFrom
           : formatISO(values.dateFrom),
         isDateToken(values.dateTo) ? values.dateTo : formatISO(values.dateTo),
       )
-      setMainOpen(false)
-    }
   }
+  const handleClear = () => void apply(null, null)
 
-  const handleClear = () => {
-    onClear?.()
-    setMainOpen(false)
-  }
+  useEffect(
+    () => () => {
+      operationRef.current?.controller.abort()
+    },
+    [],
+  )
 
   const min = subMonths(new Date(), 12)
   const max = new Date()
@@ -291,7 +366,7 @@ export const TimeRangePicker = ({
         />
       }
     >
-      <Root>
+      <Root data-hook="time-range-picker">
         <Cols>
           <DatePickers>
             <Text weight={600} color="contentPrimary" size="lg">
@@ -322,7 +397,21 @@ export const TimeRangePicker = ({
                   placeholder="now"
                   {...datePickerProps}
                 />
-                <Form.Submit>Apply</Form.Submit>
+                <Box flexDirection="row" align="center" gap="1rem">
+                  <Form.Submit
+                    disabled={progress !== null}
+                    data-hook="time-range-apply"
+                  >
+                    Apply
+                  </Form.Submit>
+                  {progress && <LoadingSpinner />}
+                  <span role="status" data-hook="time-range-status">
+                    <FooterMessage
+                      message={applyError ?? progress}
+                      color={applyError ? "statusDanger" : "contentSecondary"}
+                    />
+                  </span>
+                </Box>
               </Box>
             </Form>
             <Box margin="auto 0 0 0">
@@ -334,11 +423,10 @@ export const TimeRangePicker = ({
               ({ label, dateFrom: presetFrom, dateTo: presetTo }) => (
                 <PresetItem
                   key={label}
+                  data-hook="time-range-preset"
                   selected={dateFrom === presetFrom && dateTo === presetTo}
-                  onClick={async () => {
-                    await onApply(presetFrom, presetTo)
-                    setMainOpen(false)
-                  }}
+                  aria-disabled={progress !== null}
+                  onClick={() => void apply(presetFrom, presetTo)}
                 >
                   {label}
                 </PresetItem>
@@ -355,7 +443,12 @@ export const TimeRangePicker = ({
           </Box>
           <FooterActions>
             {onClear && hasRange && (
-              <Button variant="secondary" onClick={handleClear}>
+              <Button
+                variant="secondary"
+                disabled={progress !== null}
+                onClick={handleClear}
+                data-hook="time-range-clear"
+              >
                 Clear
               </Button>
             )}

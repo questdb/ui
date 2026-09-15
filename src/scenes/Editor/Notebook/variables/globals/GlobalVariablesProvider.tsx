@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react"
 import { useLiveQuery } from "dexie-react-hooks"
 import { QuestContext } from "../../../../../providers/QuestProvider"
@@ -20,10 +21,11 @@ import {
 import { GLOBAL_OPTIONS_OWNER } from "../../../../../store/notebookOptions"
 import { buildDeclareEntries } from "../declareEntries"
 import { normalizeVariables } from "../normalizeVariables"
-import type { PrefetchedVariableOptions } from "../options/fetchVariableOptions"
+import type { PreparedVariables, VariableErrors } from "../prepareVariables"
 import { sameTimeRange } from "../timeRange"
 import {
   useVariableOptions,
+  showVariableUpdateError,
   type VariableOptionsByName,
 } from "../useVariableOptions"
 import {
@@ -39,37 +41,44 @@ export type NotebookHandle = {
 export type GlobalVariablesState = {
   variables: NotebookVariable[]
   listOptions: VariableOptionsByName
+  errors: VariableErrors
 }
 
 export type GlobalVariablesActions = {
   getVariables: () => NotebookVariable[]
   getDeclareEntries: () => DeclareEntry[]
-  applyVariables: (
+  getErrors: () => VariableErrors
+  settle: () => Promise<unknown>
+  adoptVariables: (
     variables: NotebookVariable[],
-    prefetched: PrefetchedVariableOptions,
+    prepared: PreparedVariables,
     adoptedBy: number,
-  ) => Promise<void>
+  ) => void
   updateVariable: (
     name: string,
     update: (variable: NotebookVariable) => NotebookVariable,
   ) => Promise<void>
   refreshOptions: (name: string) => void
   attachNotebook: (bufferId: number, handle: NotebookHandle) => () => void
-  noteTimeRangeChanged: () => void
 }
 
 const NO_PREFIX_ENTRIES = (): DeclareEntry[] => []
 
-const EMPTY_STATE: GlobalVariablesState = { variables: [], listOptions: {} }
+const EMPTY_STATE: GlobalVariablesState = {
+  variables: [],
+  listOptions: {},
+  errors: {},
+}
 
 const NOOP_ACTIONS: GlobalVariablesActions = {
   getVariables: () => [],
   getDeclareEntries: () => [],
-  applyVariables: () => Promise.resolve(),
+  getErrors: () => ({}),
+  settle: () => Promise.resolve(),
+  adoptVariables: () => undefined,
   updateVariable: () => Promise.resolve(),
   refreshOptions: () => undefined,
   attachNotebook: () => () => undefined,
-  noteTimeRangeChanged: () => undefined,
 }
 
 const StateContext = createContext<GlobalVariablesState>(EMPTY_STATE)
@@ -82,6 +91,8 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   const { quest } = useContext(QuestContext)
   const stored = useLiveQuery(getNotebookGlobals, [])
 
+  const [variables, setVariables] = useState<NotebookVariable[]>([])
+
   const variablesRef = useRef<NotebookVariable[]>([])
   const previousRef = useRef<NotebookVariable[] | null>(null)
   const notebooksRef = useRef(new Map<number, NotebookHandle>())
@@ -89,7 +100,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   const fetchedRangeRef = useRef<TimeRange | undefined>(undefined)
 
   const loaded = stored !== undefined
-  const variables = useMemo(
+  const storedVariables = useMemo(
     () => normalizeVariables(stored?.variables),
     [stored],
   )
@@ -102,6 +113,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   }, [])
 
   const notify = useCallback((names: string[], except?: number) => {
+    if (names.length === 0) return
     for (const [bufferId, handle] of notebooksRef.current) {
       if (bufferId !== except) handle.onGlobalsChanged(names)
     }
@@ -111,16 +123,20 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
     () => ({ variables: variablesRef.current, timeRange: activeTimeRange() }),
     [activeTimeRange],
   )
-  const onRefetched = useCallback((name: string) => notify([name]), [notify])
+  const onRefetched = useCallback((names: string[]) => notify(names), [notify])
 
   const {
     listOptions,
     listOptionsRef,
-    refetch,
+    errors,
+    getErrors,
+    settle,
+    apply,
+    adopt,
+    refetchWithDependents,
     load,
     refetchChanged,
     refetchForTimeRange,
-    prune,
   } = useVariableOptions({
     quest,
     owner: GLOBAL_OPTIONS_OWNER,
@@ -132,17 +148,21 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   const getDeclareEntries = useCallback(
     () =>
       buildDeclareEntries(
-        { variables: variablesRef.current },
+        {
+          variables: variablesRef.current.filter(
+            (variable) => !getErrors()[variable.name],
+          ),
+        },
         listOptionsRef.current,
       ),
-    [listOptionsRef],
+    [listOptionsRef, getErrors],
   )
 
   const syncTimeRange = useCallback(() => {
     const range = activeTimeRange()
     if (sameTimeRange(range, fetchedRangeRef.current)) return
     fetchedRangeRef.current = range
-    void refetchForTimeRange()
+    void refetchForTimeRange().catch(showVariableUpdateError)
   }, [activeTimeRange, refetchForTimeRange])
 
   const attachNotebook = useCallback(
@@ -161,84 +181,106 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
     [syncTimeRange],
   )
 
-  const applyVariables = useCallback(
-    async (
+  const adoptVariables = useCallback(
+    (
       next: NotebookVariable[],
-      prefetched: PrefetchedVariableOptions,
+      prepared: PreparedVariables,
       adoptedBy: number,
     ) => {
-      const previous = variablesRef.current
-      const changed = changedVariableNames(previous, next)
-      const redefined = redefinedVariableNames(previous, next)
+      const changed = changedVariableNames(variablesRef.current, next)
       previousRef.current = next
       variablesRef.current = next
-      if (changed.length > 0) {
-        prune()
-        void refetchChanged(changed, redefined, prefetched)
-        notify(changed, adoptedBy)
-      }
-      await saveNotebookGlobals(next)
+      setVariables(next)
+      adopt(prepared)
+      notify(
+        [...changed, ...prepared.report.map((entry) => entry.name)],
+        adoptedBy,
+      )
     },
-    [notify, prune, refetchChanged],
+    [adopt, notify],
   )
 
   const updateVariable = useCallback(
-    (name: string, update: (variable: NotebookVariable) => NotebookVariable) =>
-      saveNotebookGlobals(
-        variablesRef.current.map((variable) =>
-          variable.name === name ? update(variable) : variable,
-        ),
-      ),
-    [],
+    async (
+      name: string,
+      update: (variable: NotebookVariable) => NotebookVariable,
+    ) => {
+      await apply(
+        () => ({
+          variables: variablesRef.current.map((variable) =>
+            variable.name === name ? update(variable) : variable,
+          ),
+          timeRange: activeTimeRange(),
+        }),
+        {
+          saveSettings: (prepared) =>
+            saveNotebookGlobals(prepared.settings.variables ?? []),
+          onCommit: (prepared) => {
+            const next = prepared.settings.variables ?? []
+            previousRef.current = next
+            variablesRef.current = next
+            setVariables(next)
+          },
+        },
+      )
+    },
+    [apply, activeTimeRange],
   )
 
   const refreshOptions = useCallback(
-    (name: string) => void refetch([name]),
-    [refetch],
+    (name: string) =>
+      void refetchWithDependents(name).catch(showVariableUpdateError),
+    [refetchWithDependents],
   )
 
   useEffect(() => {
-    variablesRef.current = variables
-  }, [variables])
+    if (!loaded) return
+    variablesRef.current = storedVariables
+    setVariables(storedVariables)
+  }, [loaded, storedVariables])
 
   useEffect(() => {
     if (!loaded) return
     const previous = previousRef.current
-    previousRef.current = variables
+    previousRef.current = storedVariables
     if (previous === null) {
       fetchedRangeRef.current = activeTimeRange()
       void load()
       return
     }
-    const changed = changedVariableNames(previous, variables)
+    const changed = changedVariableNames(previous, storedVariables)
     if (changed.length === 0) return
-    prune()
-    void refetchChanged(changed, redefinedVariableNames(previous, variables))
+    void refetchChanged(
+      changed,
+      redefinedVariableNames(previous, storedVariables),
+    ).catch(showVariableUpdateError)
     notify(changed)
-  }, [loaded, variables, activeTimeRange, notify, prune, load, refetchChanged])
+  }, [loaded, storedVariables, activeTimeRange, notify, load, refetchChanged])
 
   const stateValue = useMemo<GlobalVariablesState>(
-    () => ({ variables, listOptions }),
-    [variables, listOptions],
+    () => ({ variables, listOptions, errors }),
+    [variables, listOptions, errors],
   )
 
   const actionsValue = useMemo<GlobalVariablesActions>(
     () => ({
       getVariables: () => variablesRef.current,
       getDeclareEntries,
-      applyVariables,
+      getErrors,
+      settle,
+      adoptVariables,
       updateVariable,
       refreshOptions,
       attachNotebook,
-      noteTimeRangeChanged: syncTimeRange,
     }),
     [
       getDeclareEntries,
-      applyVariables,
+      getErrors,
+      settle,
+      adoptVariables,
       updateVariable,
       refreshOptions,
       attachNotebook,
-      syncTimeRange,
     ],
   )
 

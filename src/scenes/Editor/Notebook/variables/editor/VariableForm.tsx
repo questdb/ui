@@ -211,7 +211,10 @@ export const VariableForm = ({
             labelFontSize="1.4rem"
             name="variable-scope"
             value={draft.scope}
-            options={SCOPE_OPTIONS}
+            options={SCOPE_OPTIONS.map((option) => ({
+              ...option,
+              dataHook: `variable-scope-${option.value}`,
+            }))}
             onValueChange={(scope) => onScopeChange(scope as VariableScope)}
             dataHook="variable-scope"
           />
@@ -221,7 +224,10 @@ export const VariableForm = ({
             labelFontSize="1.4rem"
             name="variable-type"
             value={variableTypeOf(variable)}
-            options={TYPE_OPTIONS}
+            options={TYPE_OPTIONS.map((option) => ({
+              ...option,
+              dataHook: `variable-type-${option.value}`,
+            }))}
             onValueChange={(type) =>
               onChange(withVariableType(variable, type as VariableType))
             }

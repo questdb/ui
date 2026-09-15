@@ -6,6 +6,7 @@ import type {
 import {
   listsAffectedByChange,
   listsAffectedByTimeRange,
+  listsRefreshedWith,
 } from "./affectedLists"
 
 const list = (
@@ -100,5 +101,23 @@ describe("listsAffectedByTimeRange", () => {
 
     // Then
     expect(affected.map((l) => l.name)).toEqual(["venue", "pair"])
+  })
+})
+
+describe("listsRefreshedWith", () => {
+  it("refreshes the list itself and every list below that depends on it", () => {
+    // Given
+    const lists = [
+      list("venue", "SELECT venue FROM t"),
+      list("pair", "SELECT symbol FROM t WHERE venue = @venue"),
+      list("size", "SELECT size FROM t WHERE symbol = @pair"),
+      list("side", "SELECT side FROM t"),
+    ]
+
+    // When
+    const refreshed = listsRefreshedWith(lists, "venue")
+
+    // Then
+    expect(refreshed.map((l) => l.name)).toEqual(["venue", "pair", "size"])
   })
 })

@@ -75,8 +75,12 @@ export const SelectionOptions = ({ variable, onChange }: Props) => {
             <SelectMenuControl
               labelFontSize="1.4rem"
               name="all-mode"
+              dataHook="variable-all-mode"
               value={variable.all.mode}
-              options={ALL_MODE_OPTIONS}
+              options={ALL_MODE_OPTIONS.map((option) => ({
+                ...option,
+                dataHook: `variable-all-mode-${option.value}`,
+              }))}
               onValueChange={setAllMode}
             />
           </Field>
@@ -84,6 +88,7 @@ export const SelectionOptions = ({ variable, onChange }: Props) => {
             <Field label="Custom value">
               <MonoInput
                 value={variable.all.value}
+                data-hook="variable-all-value"
                 placeholder="'.*'"
                 autoComplete="off"
                 spellCheck={false}

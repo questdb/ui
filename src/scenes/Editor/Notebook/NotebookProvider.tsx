@@ -1,3 +1,4 @@
+import { useNotebookVariableUpdates } from "./variables/useNotebookVariableUpdates"
 import React, {
   createContext,
   useCallback,
@@ -23,7 +24,8 @@ import type {
   CellType,
 } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
-import { useQueryExecution } from "../../../hooks/useQueryExecution"
+import { captureExecution } from "./variables/captureExecution"
+import type { VariableErrors, VariableStep } from "./variables/prepareVariables"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
@@ -41,7 +43,6 @@ import {
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
-  type VariableSettingsDiff,
   type ViewParts,
 } from "../../../utils/notebooks/notebookController"
 import {
@@ -73,16 +74,11 @@ import { notebookOptionsOwner } from "../../../store/notebookOptions"
 import { removeNotebookCellLayouts } from "./notebookColumnLayoutStore"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import type { QueryKey } from "../../../store/Query/types"
-import { createValidateWithGlobals } from "./declareUtils"
 import { buildDeclareEntries } from "./variables/declareEntries"
-import {
-  changedVariableNames,
-  redefinedVariableNames,
-} from "./variables/variableChanges"
 import { useGlobalVariablesActions } from "./variables/globals/GlobalVariablesProvider"
-import type { PrefetchedVariableOptions } from "./variables/options/fetchVariableOptions"
 import {
   useVariableOptions,
+  showVariableUpdateError,
   type VariableOptionsByName,
 } from "./variables/useVariableOptions"
 import {
@@ -116,17 +112,25 @@ export type NotebookState = {
   maximizedCellId: string | null
   runningCellIds: Set<string>
   listOptions: VariableOptionsByName
+  variableErrors: VariableErrors
+  variablesPending: boolean
 }
 
 export type NotebookActions = {
   getVariables: () => NotebookVariable[] | undefined
   getDeclareEntries: () => DeclareEntry[]
   updateSettings: (updates: Partial<NotebookSettings>) => void
-  setTimeRange: (range: TimeRange | null) => void
+  setTimeRange: (
+    range: TimeRange | null,
+    signal?: AbortSignal,
+    onStep?: (step: VariableStep) => void,
+  ) => Promise<void>
   applyVariables: (
     variables: NotebookVariable[],
-    prefetched: PrefetchedVariableOptions,
-  ) => void
+    globals: NotebookVariable[],
+    signal: AbortSignal,
+    onStep: (step: VariableStep) => void,
+  ) => Promise<void>
   updateVariable: (
     name: string,
     update: (variable: NotebookVariable) => NotebookVariable,
@@ -169,8 +173,8 @@ const NOOP_ACTIONS: NotebookActions = {
   getVariables: () => undefined,
   getDeclareEntries: () => [],
   updateSettings: () => undefined,
-  setTimeRange: () => undefined,
-  applyVariables: () => undefined,
+  setTimeRange: () => Promise.resolve(),
+  applyVariables: () => Promise.resolve(),
   updateVariable: () => undefined,
   refreshVariableOptions: () => undefined,
   addCell: () => "",
@@ -234,6 +238,8 @@ const EMPTY_STATE: NotebookState = {
   maximizedCellId: null,
   runningCellIds: new Set(),
   listOptions: {},
+  variableErrors: {},
+  variablesPending: false,
 }
 
 const createNotebookQueryKey = (
@@ -287,27 +293,36 @@ export const NotebookProvider: React.FC<{
   const {
     listOptions,
     listOptionsRef,
-    refetch: refetchVariableOptions,
+    errors: variableErrors,
+    pending: variablesPending,
+    apply: applyVariableChanges,
+    getErrors: getVariableErrors,
+    refetchWithDependents: refetchVariableOptionsWithDependents,
     load: loadVariableOptions,
     refetchChanged: refetchChangedVariableOptions,
-    refetchForTimeRange: refetchVariableOptionsForTimeRange,
     settle: settleVariableOptions,
-    prune: pruneVariableOptions,
   } = useVariableOptions({
     quest,
     owner: notebookOptionsOwner(bufferId),
     getSettings,
     getPrefixEntries: globals.getDeclareEntries,
+    getPrefixErrors: globals.getErrors,
+    waitForPrefix: globals.settle,
   })
 
   const getDeclareEntries = useCallback(
     () =>
       buildDeclareEntries(
-        settingsRef.current,
+        {
+          ...settingsRef.current,
+          variables: settingsRef.current.variables?.filter(
+            (variable) => !getVariableErrors()[variable.name],
+          ),
+        },
         listOptionsRef.current,
         globals.getDeclareEntries(),
       ),
-    [globals, listOptionsRef],
+    [globals, listOptionsRef, getVariableErrors],
   )
 
   useEffect(() => {
@@ -319,16 +334,35 @@ export const NotebookProvider: React.FC<{
     return globals.attachNotebook(bufferId, {
       getTimeRange: () => settingsRef.current.timeRange,
       onGlobalsChanged: (names) => {
-        const local = new Set(
-          (settingsRef.current.variables ?? []).map((v) => v.name),
+        void refetchChangedVariableOptions(names, []).catch(
+          showVariableUpdateError,
         )
-        const visible = names.filter((name) => !local.has(name))
-        void refetchChangedVariableOptions(visible, [])
       },
     })
   }, [bufferId, globals, preview, refetchChangedVariableOptions])
 
-  const { executeSingle } = useQueryExecution(getDeclareEntries)
+  const captureVariableExecution = useCallback(
+    (signal?: AbortSignal) =>
+      captureExecution(
+        quest,
+        async () => {
+          await globals.settle()
+          await settleVariableOptions()
+        },
+        getDeclareEntries,
+        signal,
+      ),
+    [quest, globals, settleVariableOptions, getDeclareEntries],
+  )
+  const executeSingle = useCallback(
+    async (sql: string, signal?: AbortSignal, limit?: number) =>
+      (await captureVariableExecution(signal)).executeSingle(
+        sql,
+        signal,
+        limit,
+      ),
+    [captureVariableExecution],
+  )
 
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
@@ -434,12 +468,14 @@ export const NotebookProvider: React.FC<{
     }
   }, [bufferId, cellsRef])
 
-  const validateWithGlobals = useMemo(
-    () => createValidateWithGlobals(quest, getDeclareEntries),
-    [quest],
+  const validateWithGlobals = useCallback(
+    async (sql: string, signal?: AbortSignal) =>
+      (await captureVariableExecution(signal)).validateWithGlobals(sql, signal),
+    [captureVariableExecution],
   )
 
   const execution = useCellExecution({
+    captureExecution: captureVariableExecution,
     bufferId,
     cellsRef,
     executeSingle,
@@ -502,25 +538,6 @@ export const NotebookProvider: React.FC<{
     [execution, releaseCellExecution],
   )
 
-  const syncVariableOptionsAfterAgentEdit = useCallback(
-    (diff: VariableSettingsDiff) => {
-      if (diff.changed.length > 0) {
-        pruneVariableOptions()
-        void refetchChangedVariableOptions(diff.changed, diff.redefined)
-      }
-      if (diff.timeRangeChanged) {
-        void refetchVariableOptionsForTimeRange()
-        globals.noteTimeRangeChanged()
-      }
-    },
-    [
-      globals,
-      pruneVariableOptions,
-      refetchChangedVariableOptions,
-      refetchVariableOptionsForTimeRange,
-    ],
-  )
-
   const applyTransition = useCallback(
     <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
       const out = run({
@@ -541,7 +558,7 @@ export const NotebookProvider: React.FC<{
         setMaximizedCellIdState(parts.maximizedCellId)
         setFocusedCellState(parts.focusedCellId)
       })
-      persistImmediately(parts.cells, true)
+      if (!out.persisted) persistImmediately(parts.cells, true)
       // A deleted cell's in-flight run must be cancelled; the transition reports
       // deleted cells via cleanup, so every delete route (UI or agent) cancels
       // here rather than at each call site.
@@ -564,7 +581,6 @@ export const NotebookProvider: React.FC<{
           resultHydration.noteMissing(cellId)
         }
       }
-      if (out.variables) syncVariableOptionsAfterAgentEdit(out.variables)
       return out.result
     },
     [
@@ -574,7 +590,6 @@ export const NotebookProvider: React.FC<{
       cancelCell,
       abortCellRun,
       resultHydration,
-      syncVariableOptionsAfterAgentEdit,
     ],
   )
 
@@ -644,6 +659,7 @@ export const NotebookProvider: React.FC<{
     cells: store.cells,
     autoRefreshDefault: settings.autoRefreshDefault,
     deps: {
+      captureExecution: captureVariableExecution,
       executeSingle,
       validateWithGlobals,
       setCellResult,
@@ -787,64 +803,23 @@ export const NotebookProvider: React.FC<{
     [bufferId, cancelCell, questExecution, runCellNow],
   )
 
-  const setTimeRange = useCallback(
-    (range: TimeRange | null) => {
-      updateSettings({ timeRange: range ?? undefined })
-      signalUserEdit(bufferId)
-      void trackEvent(
-        range
-          ? ConsoleEvent.NOTEBOOK_TIME_RANGE_APPLY
-          : ConsoleEvent.NOTEBOOK_TIME_RANGE_CLEAR,
-      )
-      void refetchVariableOptionsForTimeRange()
-      globals.noteTimeRangeChanged()
-    },
-    [bufferId, globals, refetchVariableOptionsForTimeRange, updateSettings],
-  )
-
-  const commitVariables = useCallback(
-    (
-      variables: NotebookVariable[],
-      changed: string[],
-      redefined: string[],
-      prefetched: PrefetchedVariableOptions,
-    ) => {
-      updateSettings({ variables })
-      signalUserEdit(bufferId)
-      pruneVariableOptions()
-      void refetchChangedVariableOptions(changed, redefined, prefetched)
-    },
-    [
-      bufferId,
-      pruneVariableOptions,
-      refetchChangedVariableOptions,
-      updateSettings,
-    ],
-  )
-
-  const applyVariables = useCallback(
-    (variables: NotebookVariable[], prefetched: PrefetchedVariableOptions) =>
-      commitVariables(
-        variables,
-        changedVariableNames(settingsRef.current.variables ?? [], variables),
-        redefinedVariableNames(settingsRef.current.variables ?? [], variables),
-        prefetched,
-      ),
-    [commitVariables],
-  )
-
-  const updateVariable = useCallback(
-    (name: string, update: (variable: NotebookVariable) => NotebookVariable) =>
-      commitVariables(
-        (settingsRef.current.variables ?? []).map((variable) =>
-          variable.name === name ? update(variable) : variable,
-        ),
-        [name],
-        [],
-        {},
-      ),
-    [commitVariables],
-  )
+  const {
+    setTimeRange,
+    applyVariables,
+    updateVariable,
+    applyVariableTransition,
+  } = useNotebookVariableUpdates({
+    bufferId,
+    quest,
+    globals,
+    settingsRef,
+    cellsRef: store.cellsRef,
+    maximizedCellIdRef,
+    focusedCellIdRef,
+    setSettingsState,
+    applyVariableChanges,
+    applyTransition,
+  })
 
   const deleteCell = useCallback(
     // applyTransition cancels the deleted cell's in-flight run via its cleanup.
@@ -954,7 +929,10 @@ export const NotebookProvider: React.FC<{
     setTimeRange,
     applyVariables,
     updateVariable,
-    refreshVariableOptions: (name) => void refetchVariableOptions([name]),
+    refreshVariableOptions: (name) =>
+      void refetchVariableOptionsWithDependents(name).catch(
+        showVariableUpdateError,
+      ),
     addCell,
     deleteCell,
     updateCell: store.updateCell,
@@ -1003,6 +981,7 @@ export const NotebookProvider: React.FC<{
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
     settleVariableOptions,
     applyTransition,
+    applyVariableTransition,
   }
 
   const stateValue = useMemo<NotebookState>(
@@ -1013,6 +992,8 @@ export const NotebookProvider: React.FC<{
       maximizedCellId,
       runningCellIds: execution.runningCellIds,
       listOptions,
+      variableErrors,
+      variablesPending,
     }),
     [
       store.cells,
@@ -1021,6 +1002,8 @@ export const NotebookProvider: React.FC<{
       maximizedCellId,
       execution.runningCellIds,
       listOptions,
+      variableErrors,
+      variablesPending,
     ],
   )
 

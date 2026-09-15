@@ -3,7 +3,6 @@ import type {
   NotebookViewState,
 } from "../../../../store/notebook"
 import { findVariableReferences, variableReferences } from "./references"
-import { declaresName } from "./scope"
 
 export const referencedGlobals = (
   view: NotebookViewState,
@@ -21,10 +20,7 @@ export const referencedGlobals = (
   const included: NotebookVariable[] = []
   for (let index = globals.length - 1; index >= 0; index -= 1) {
     const global = globals[index]
-    if (
-      !wanted.has(global.name.toLowerCase()) ||
-      declaresName(local, global.name)
-    ) {
+    if (!wanted.has(global.name.toLowerCase())) {
       continue
     }
     included.unshift(global)

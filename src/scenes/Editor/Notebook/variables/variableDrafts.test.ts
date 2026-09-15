@@ -6,7 +6,6 @@ import {
   draftProblem,
   draftsFromVariables,
   orderDraftsByScope,
-  redefinedAtOrAbove,
 } from "./variableDrafts"
 
 const draftsOf = (...variables: NotebookVariable[]) =>
@@ -36,19 +35,27 @@ describe("draftProblem", () => {
     ])
   })
 
-  it("allows the same name in the global and the notebook scope", () => {
-    // Given
-    const drafts = [
-      ...draftsFromVariables([createVariable("text", "sym")], "global"),
-      ...draftsFromVariables([createVariable("text", "sym")], "notebook"),
-    ]
+  it.each([
+    ["global", "notebook"],
+    ["notebook", "global"],
+    ["global", "global"],
+    ["notebook", "notebook"],
+  ] as const)(
+    "rejects duplicate names across %s and %s scopes, ignoring case",
+    (first, second) => {
+      // Given
+      const drafts = [
+        ...draftsFromVariables([createVariable("text", "sym")], first),
+        ...draftsFromVariables([createVariable("text", "SYM")], second),
+      ]
 
-    // When
-    const problems = drafts.map((_, i) => draftProblem(drafts, i))
+      // When
+      const problems = drafts.map((_, i) => draftProblem(drafts, i))
 
-    // Then
-    expect(problems).toEqual([null, null])
-  })
+      // Then
+      expect(problems).toEqual([null, "duplicateName"])
+    },
+  )
 
   it("flags an expression with no value and a text value that breaks the DECLARE shape", () => {
     // Given
@@ -116,20 +123,5 @@ describe("orderDraftsByScope", () => {
 
     // Then
     expect(ordered.map((d) => d.variable.name)).toEqual(["g", "a", "b"])
-  })
-})
-
-describe("redefinedAtOrAbove", () => {
-  it("is true for a redefined draft and for every draft below it", () => {
-    // Given
-    const drafts = draftsFromVariables(
-      ["a", "b", "c"].map((name) => createVariable("text", name)),
-      "notebook",
-    )
-
-    // When / Then
-    expect(redefinedAtOrAbove(drafts, 0, ["b"])).toBe(false)
-    expect(redefinedAtOrAbove(drafts, 1, ["b"])).toBe(true)
-    expect(redefinedAtOrAbove(drafts, 2, ["b"])).toBe(true)
   })
 })

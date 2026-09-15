@@ -1,25 +1,21 @@
+import { prepareVariables } from "../../scenes/Editor/Notebook/variables/prepareVariables"
+import { commitVariables } from "../../scenes/Editor/Notebook/variables/commitVariables"
+import { GLOBAL_OPTIONS_OWNER } from "../../store/notebookOptions"
 import {
   getNotebookGlobals,
   GlobalsChangedError,
   replaceNotebookGlobals,
 } from "../../store/notebookGlobals"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { globalNameConflict } from "../../scenes/Editor/Notebook/variables/globals/globalNameConflict"
 import {
   draftProblem,
+  isBlockingDraftProblem,
   draftsFromVariables,
   PROBLEM_MESSAGES,
 } from "../../scenes/Editor/Notebook/variables/variableDrafts"
-import {
-  draftDeclareEntries,
-  prepareDrafts,
-} from "../../scenes/Editor/Notebook/variables/editor/prepareDrafts"
-import { renderDeclareValidationQuery } from "../../scenes/Editor/Notebook/declareUtils"
 import { isValidTimeRange } from "../../scenes/Editor/Notebook/variables/timeRange"
-import {
-  fetchedValuesEntry,
-  isQueryList,
-} from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
-import { classifyOptionQuery } from "../../scenes/Editor/Notebook/variables/options/classifyOptionQuery"
+import { fetchedValuesEntry } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import { getAgentQuest } from "../notebooks/notebookAIBridge"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
@@ -92,11 +88,18 @@ export const dispatchApplyGlobalVariables = async (
   const drafts = draftsFromVariables(next, "global")
   for (const [index, { variable }] of drafts.entries()) {
     const problem = draftProblem(drafts, index)
-    if (problem)
+    if (problem && isBlockingDraftProblem(problem))
       return failure(
         "validation",
         `Variable ${variable.name}: ${PROBLEM_MESSAGES[problem]}`,
       )
+  }
+  const conflict = await globalNameConflict(next)
+  if (conflict) {
+    return failure(
+      "validation",
+      `Variable ${conflict}: ${PROBLEM_MESSAGES.duplicateName}`,
+    )
   }
   const quest = getAgentQuest()
   const validate =
@@ -109,54 +112,38 @@ export const dispatchApplyGlobalVariables = async (
     )
   }
   const timeRange = isValidTimeRange(time_range) ? time_range : undefined
-  const prepared = await prepareDrafts({
+  const prepared = await prepareVariables({
     quest,
-    drafts,
-    timeRange,
-    changed: [],
-    redefined: next.map((v) => v.name),
-    options: { global: {}, notebook: {} },
+    settings: { variables: next, timeRange },
+    prefixEntries: [],
+    options: {},
+    errors: {},
+    changed: next.map((variable) => variable.name),
+    refresh: next.map((variable) => variable.name),
     signal: signal ?? new AbortController().signal,
-    onStep: () => undefined,
-    validate: async (index, known) => {
-      if (signal?.aborted) return "Operation cancelled."
-      if (!validate) return "SQL validation is unavailable."
-      const entries = draftDeclareEntries(
-        drafts.slice(0, index + 1),
-        timeRange,
-        known,
-      )
-      const result = await validate(renderDeclareValidationQuery(entries))
-      if ("error" in result) return result.error
-      const { variable } = drafts[index]
-      if (!isQueryList(variable)) return null
-      const verdict = await classifyOptionQuery(
-        variable.source.query,
-        draftDeclareEntries(drafts.slice(0, index), timeRange, known),
-        validate,
-      )
-      return verdict.ok ? null : verdict.error
-    },
+    validateSql: validate,
   })
-  if (prepared.kind === "error") {
-    return failure("validation", `Variable ${prepared.name}: ${prepared.error}`)
-  }
   try {
-    const revision = await replaceNotebookGlobals(
-      next,
-      expected_revision,
-      signal,
+    let revision = expected_revision
+    await commitVariables(
+      GLOBAL_OPTIONS_OWNER,
+      prepared,
+      async () => {
+        revision = await replaceNotebookGlobals(next, expected_revision, signal)
+      },
+      signal ?? new AbortController().signal,
     )
     // The provider's live query observes this write, refreshes changed lists,
     // and notifies mounted notebooks. Headless runs resolve their own context.
     return {
       content: JSON.stringify({
         applied: true,
+        variable_errors: prepared.errors,
         revision,
         variables: next.map(storedVariableToWire),
-        validated_variable_values: Object.entries(
-          prepared.prefetched.global,
-        ).map(([name, fetched]) => fetchedValuesEntry(name, fetched)),
+        validated_variable_values: Object.entries(prepared.options).map(
+          ([name, fetched]) => fetchedValuesEntry(name, fetched),
+        ),
       }),
     }
   } catch (error) {

@@ -1,20 +1,17 @@
-import React, { useState } from "react"
+import React, { useRef, useState } from "react"
 import styled from "styled-components"
-import * as RadixDropdownMenu from "@radix-ui/react-dropdown-menu"
+import * as RadixPopover from "@radix-ui/react-popover"
 import { formatDistanceToNow } from "date-fns"
-import {
-  ArrowClockwiseIcon,
-  CheckIcon,
-  WarningIcon,
-} from "@phosphor-icons/react"
+import { ArrowClockwiseIcon, WarningIcon } from "@phosphor-icons/react"
 import {
   IconButton,
   Input,
-  SelectMenu,
   SelectMenuTriggerButton,
   Text,
 } from "../../../../../components"
-import { menuItemStyles } from "../../../../../components/menuStyles"
+import { menuContainerStyles } from "../../../../../components/menuStyles"
+import type { VirtualizedTreeHandle } from "../../../../../components/VirtualizedTree"
+import { ListPickerOptions, type PickerOption } from "./ListPickerOptions"
 import type {
   ListVariable,
   VariableOption,
@@ -29,9 +26,6 @@ import {
 import { PickerLabel } from "./PickerLabel"
 
 const SEARCH_THRESHOLD = 8
-const ALL_VALUE = "__all__"
-const NONE_VALUE = "__none__"
-const STALE_SUFFIX = " (not in current values)"
 
 const Trigger = styled(SelectMenuTriggerButton)`
   min-width: 16rem;
@@ -50,38 +44,10 @@ const SearchBox = styled.div`
   }
 `
 
-const Options = styled.div`
-  max-height: 32rem;
-  overflow-y: auto;
-`
-
-const CheckItem = styled(RadixDropdownMenu.CheckboxItem)`
-  ${menuItemStyles}
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 1.8rem;
-  gap: 0.8rem;
-  padding: 0.7rem 0.8rem;
-`
-
-const ItemLabel = styled.span<{ $stale?: boolean }>`
-  min-width: 0;
-  overflow: hidden;
-  font-size: 1.3rem;
-  font-weight: 500;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${({ $stale, theme }) =>
-    $stale ? theme.color.contentMuted : "inherit"};
-`
-
-const ItemIndicator = styled(RadixDropdownMenu.ItemIndicator)`
-  display: inline-flex;
-  width: 1.8rem;
-  height: 1.8rem;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.contentAccent};
+const Content = styled(RadixPopover.Content)`
+  ${menuContainerStyles}
+  width: 28rem;
+  max-width: calc(100vw - 1.6rem);
 `
 
 const Empty = styled.div`
@@ -149,12 +115,14 @@ export const ListPicker = ({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [draft, setDraft] = useState<SelectionDraft | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const optionsRef = useRef<VirtualizedTreeHandle>(null)
+
   const current =
     draft !== null && draft.base === variable.selected
       ? draft.selection
       : variable.selected
   const selected = current === "all" ? [] : current
-  const selectedValues = new Set(selected.map((o) => o.value))
   const known = new Set(options.map((o) => o.value))
   const stale = selected.filter((o) => !known.has(o.value))
   const listed = [...options, ...stale]
@@ -164,19 +132,48 @@ export const ListPicker = ({
     : listed
   const showSearch = listed.length > SEARCH_THRESHOLD
 
-  const pickSingle = (value: string) => {
-    if (value === ALL_VALUE) {
-      onChange("all")
-      return
+  const items: PickerOption[] = open
+    ? [
+        ...(variable.includeAll && !lowered
+          ? [{ id: "all", option: null, stale: false }]
+          : []),
+        ...visible.map((option) => ({
+          id: `option:${option.value}`,
+          option,
+          stale: !known.has(option.value),
+        })),
+      ]
+    : []
+
+  const selectItem = ({ option }: PickerOption) => {
+    const selection =
+      option === null
+        ? "all"
+        : variable.multi
+          ? toggleOption(current, option)
+          : [option]
+    if (variable.multi) {
+      setDraft({ base: variable.selected, selection })
+    } else {
+      if (!sameSelection(selection, variable.selected)) onChange(selection)
+      setOpen(false)
+      setQuery("")
     }
-    const option = listed.find((o) => o.value === value)
-    onChange(option ? [option] : [])
   }
 
-  const editMulti = (selection: ListSelection) =>
-    setDraft({ base: variable.selected, selection })
-
-  const isStale = (option: VariableOption) => stale.includes(option)
+  const handleSearchKeyDown = (event: React.KeyboardEvent) => {
+    if (items.length === 0) return
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault()
+      optionsRef.current?.focus()
+      optionsRef.current?.navigateInTree({
+        to: event.key === "ArrowDown" ? "start" : "end",
+      })
+    } else if (event.key === "Enter") {
+      event.preventDefault()
+      selectItem(items[0])
+    }
+  }
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
@@ -187,12 +184,12 @@ export const ListPicker = ({
   }
 
   return (
-    <RadixDropdownMenu.Root open={open} onOpenChange={handleOpenChange}>
+    <RadixPopover.Root open={open} onOpenChange={handleOpenChange}>
       <PickerLabel
         variable={variable}
         onPointerDown={() => handleOpenChange(!open)}
       />
-      <RadixDropdownMenu.Trigger asChild>
+      <RadixPopover.Trigger asChild>
         <Trigger
           label={summarize(current, options)}
           labelFontSize="1.3rem"
@@ -206,78 +203,48 @@ export const ListPicker = ({
           aria-label={variable.label ?? `@${variable.name}`}
           data-hook={`variable-list-${variable.name}`}
         />
-      </RadixDropdownMenu.Trigger>
-      <RadixDropdownMenu.Portal>
-        <SelectMenu.Content sideOffset={4} align="start" minWidth="25rem">
+      </RadixPopover.Trigger>
+      <RadixPopover.Portal>
+        <Content
+          data-hook="variable-list-popover"
+          sideOffset={4}
+          align="start"
+          aria-label={variable.label ?? `@${variable.name}`}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            if (showSearch) inputRef.current?.focus()
+            else optionsRef.current?.focus()
+          }}
+        >
           {showSearch && (
             <SearchBox>
               <Input
+                ref={inputRef}
                 value={query}
+                aria-label={`Search ${variable.label ?? `@${variable.name}`} values`}
                 placeholder="Search"
-                autoFocus
+                data-hook="variable-list-search"
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
+                onKeyDown={handleSearchKeyDown}
               />
             </SearchBox>
           )}
-          <Options>
-            {variable.multi ? (
-              <>
-                {variable.includeAll && !lowered && (
-                  <CheckItem
-                    checked={current === "all"}
-                    onCheckedChange={() => editMulti("all")}
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <ItemLabel>All</ItemLabel>
-                    <ItemIndicator>
-                      <CheckIcon size={16} weight="bold" />
-                    </ItemIndicator>
-                  </CheckItem>
-                )}
-                {visible.map((option) => (
-                  <CheckItem
-                    key={option.value}
-                    checked={selectedValues.has(option.value)}
-                    onCheckedChange={() =>
-                      editMulti(toggleOption(current, option))
-                    }
-                    onSelect={(e) => e.preventDefault()}
-                  >
-                    <ItemLabel $stale={isStale(option)}>
-                      {option.label}
-                      {isStale(option) ? STALE_SUFFIX : ""}
-                    </ItemLabel>
-                    <ItemIndicator>
-                      <CheckIcon size={16} weight="bold" />
-                    </ItemIndicator>
-                  </CheckItem>
-                ))}
-              </>
-            ) : (
-              <RadixDropdownMenu.RadioGroup
-                value={
-                  variable.selected === "all"
-                    ? ALL_VALUE
-                    : (selected[0]?.value ?? NONE_VALUE)
-                }
-                onValueChange={pickSingle}
-              >
-                {variable.includeAll && !lowered && (
-                  <SelectMenu.Item value={ALL_VALUE}>All</SelectMenu.Item>
-                )}
-                {visible.map((option) => (
-                  <SelectMenu.Item key={option.value} value={option.value}>
-                    {option.label}
-                    {isStale(option) ? STALE_SUFFIX : ""}
-                  </SelectMenu.Item>
-                ))}
-              </RadixDropdownMenu.RadioGroup>
-            )}
-            {visible.length === 0 && status?.status !== "loading" && (
-              <Empty>No matching values</Empty>
-            )}
-          </Options>
+          {items.length > 0 ? (
+            <ListPickerOptions
+              key={query}
+              ref={optionsRef}
+              items={items}
+              selected={current}
+              multi={variable.multi}
+              label={variable.label ?? `@${variable.name}`}
+              id={`variable-option-${variable.name}`}
+              searchRef={inputRef}
+              onSearch={setQuery}
+              onSelect={selectItem}
+            />
+          ) : status?.status !== "loading" ? (
+            <Empty data-hook="variable-list-empty">No matching values</Empty>
+          ) : null}
           {status && (
             <Footer data-hook={`variable-list-status-${variable.name}`}>
               <Text
@@ -293,6 +260,7 @@ export const ListPicker = ({
               {onRefresh && (
                 <IconButton
                   label="Refresh values"
+                  data-hook="variable-list-refresh"
                   variant="ghost"
                   size="sm"
                   onClick={onRefresh}
@@ -303,8 +271,8 @@ export const ListPicker = ({
               )}
             </Footer>
           )}
-        </SelectMenu.Content>
-      </RadixDropdownMenu.Portal>
-    </RadixDropdownMenu.Root>
+        </Content>
+      </RadixPopover.Portal>
+    </RadixPopover.Root>
   )
 }

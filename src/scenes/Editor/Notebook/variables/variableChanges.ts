@@ -31,13 +31,18 @@ export const changedVariableNames = (
   after: NotebookVariable[],
 ): string[] => {
   const beforeByName = new Map(before.map((v) => [v.name, serialize(v)]))
-  const afterByName = new Map(after.map((v) => [v.name, serialize(v)]))
+  const afterNames = new Set(after.map((v) => v.name))
   const names = new Set<string>()
-  for (const [name, serialized] of afterByName) {
-    if (beforeByName.get(name) !== serialized) names.add(name)
+  for (const [index, variable] of after.entries()) {
+    const { name } = variable
+    if (
+      beforeByName.get(name) !== serialize(variable) ||
+      before[index]?.name !== name
+    )
+      names.add(name)
   }
   for (const name of beforeByName.keys()) {
-    if (!afterByName.has(name)) names.add(name)
+    if (!afterNames.has(name)) names.add(name)
   }
   return [...names]
 }
@@ -47,3 +52,15 @@ export const redefinedVariableNames = (
   after: NotebookVariable[],
 ): string[] =>
   changedVariableNames(before.map(definitionOf), after.map(definitionOf))
+
+export const firstRedefinedIndex = (
+  before: NotebookVariable[],
+  after: NotebookVariable[],
+): number => {
+  const index = after.findIndex(
+    (variable, i) =>
+      before[i] === undefined ||
+      serialize(definitionOf(before[i])) !== serialize(definitionOf(variable)),
+  )
+  return index === -1 ? after.length : index
+}

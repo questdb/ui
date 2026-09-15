@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { queryPrecheck } from "./queryChecks"
+import type { NotebookVariable } from "../../../../store/notebook"
+import { queryPrecheck, variablePrecheck } from "./queryChecks"
 
 const context = { declaredAbove: ["exchange"], hasTimeRange: true }
 
@@ -27,5 +28,30 @@ describe("queryPrecheck", () => {
         hasTimeRange: false,
       }),
     ).toContain("Set a time range")
+  })
+})
+
+describe("variablePrecheck", () => {
+  it("rejects an expression that references a variable declared below it", () => {
+    // Given
+    const variable: NotebookVariable = {
+      name: "pair",
+      kind: "expression",
+      value: "@base || '-' || @quote",
+    }
+
+    // When / Then
+    expect(
+      variablePrecheck(variable, {
+        declaredAbove: ["base"],
+        hasTimeRange: false,
+      }),
+    ).toContain("@quote is not declared")
+    expect(
+      variablePrecheck(variable, {
+        declaredAbove: ["base", "quote"],
+        hasTimeRange: false,
+      }),
+    ).toBeNull()
   })
 })

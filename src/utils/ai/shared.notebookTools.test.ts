@@ -208,6 +208,7 @@ beforeEach(async () => {
   clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
+  await db.notebook_globals.clear()
   // A backing Dexie row so buildSnapshot (get_notebook_state) can read meta.
   await db.buffers.put({
     id: 1,
@@ -1238,6 +1239,39 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(c.state.parts.settings.variables).toEqual([])
   })
 
+  it.each(["global", "notebook"])(
+    "rejects a local name that conflicts with a %s variable without SQL validation",
+    async (scope) => {
+      // Given
+      const first = { name: "rate", kind: "expression", value: "5" }
+      if (scope === "global") {
+        await db.notebook_globals.put({
+          id: "globals",
+          variables: [{ ...first, kind: "expression" }],
+        })
+      }
+      const variables = [
+        ...(scope === "notebook" ? [first] : []),
+        { name: "RATE", kind: "expression", value: "2" },
+      ]
+
+      // When
+      const result = await dispatchTool(
+        "apply_notebook_state",
+        { buffer_id: 1, variables, cells: [{ value: "SELECT 1" }] },
+        makeClient(),
+        noopStatus,
+      )
+
+      // Then
+      expect(result.is_error).toBe(true)
+      expect(
+        (JSON.parse(result.content) as { message: string }).message,
+      ).toContain("Variable RATE: This variable is already defined.")
+      expect(live.state.parts.settings.variables).toBeUndefined()
+    },
+  )
+
   it("apply_notebook_state rejects invalid variable names with a VALIDATION_ERROR", async () => {
     const client = makeClient()
     const res = await dispatchTool(
@@ -1257,8 +1291,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(parsed.error_code).toBe("validation")
   })
 
-  it("apply_notebook_state rejects invalid variable values via QuestDB validation", async () => {
-    for (const value of ["", "select", "(1,2,3)"]) {
+  it("apply_notebook_state commits variable errors returned by validation", async () => {
+    for (const value of ["unknown_column", "@missing", "1 / 0"]) {
       const client = makeClient()
       const validateSql = vi.fn(() =>
         Promise.resolve({
@@ -1281,9 +1315,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         undefined,
         validateSql,
       )
-      expect(res.is_error).toBe(true)
-      const parsed = JSON.parse(res.content) as { error_code: string }
-      expect(parsed.error_code).toBe("validation")
+      expect(res.is_error, res.content).toBeFalsy()
+      const parsed = JSON.parse(res.content) as {
+        variable_values: VariableValuesEntry[]
+      }
+      expect(parsed.variable_values.map((entry) => entry.name)).toEqual(["x"])
+      expect("error" in parsed.variable_values[0]).toBe(true)
+      expect(live.state.parts.settings.variables?.[0]).toMatchObject({ value })
     }
   })
 
@@ -1315,7 +1353,6 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             abort: () => undefined,
           }) as unknown as Client,
       })
-      const before = structuredClone(live.state.parts)
       const res = await dispatchTool(
         "apply_notebook_state",
         {
@@ -1348,16 +1385,23 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         validateSql,
       )
       expect(queryRaw).toHaveBeenCalledTimes(1)
-      expect(
-        validateSql.mock.calls.some(
-          ([sql]) => sql.includes("@a := 1") && sql.includes("@b :="),
-        ),
-      ).toBe(true)
       if (value.includes("missing")) {
-        expect(res.is_error).toBe(true)
-        expect(live.state.parts).toEqual(before)
-        expect(live.syncVariableOptions).not.toHaveBeenCalled()
-        expect(live.runCell).not.toHaveBeenCalled()
+        expect(res.is_error).toBeFalsy()
+        expect(
+          (
+            JSON.parse(res.content) as {
+              variable_values: VariableValuesEntry[]
+            }
+          ).variable_values,
+        ).toEqual([
+          expect.objectContaining({ name: "a", count: 1 }),
+          expect.objectContaining({
+            name: "b",
+            error:
+              "@missing is not declared above this variable. Define it first, or move it up.",
+          }),
+        ])
+        expect(live.state.parts.settings.variables).toHaveLength(2)
       } else {
         expect(res.is_error).toBeFalsy()
         expect(live.state.parts.settings.variables).toHaveLength(3)
@@ -1370,7 +1414,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     },
   )
 
-  it("apply_notebook_state rejects a list whose option query the server classifies as a write", async () => {
+  it("apply_notebook_state records an error for a list query classified as a write", async () => {
     const client = makeClient()
     const validateSql = vi.fn((sql: string) =>
       Promise.resolve(
@@ -1404,13 +1448,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       validateSql,
     )
-    expect(res.is_error).toBe(true)
+    expect(res.is_error).toBeFalsy()
     const parsed = JSON.parse(res.content) as {
-      error_code: string
-      message: string
+      variable_values: VariableValuesEntry[]
     }
-    expect(parsed.error_code).toBe("validation")
-    expect(parsed.message).toContain("must be a SELECT, not INSERT")
+    expect(parsed.variable_values).toEqual([
+      {
+        name: "venue",
+        error: "The option query must be a SELECT, not INSERT.",
+      },
+    ])
   })
 
   it("apply_notebook_state rejects multi-assignment value injection before validateSql", async () => {
@@ -1470,10 +1517,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       validateSql,
     )
     const sent = validateSql.mock.calls.map(([sql]) => sql)
-    expect(sent[0]).toContain("@timeFilter := interval(@timeFrom, @timeTo)")
-    expect(sent[0]).toMatch(/,\n {2}@base := 10\nSELECT 1$/)
+    expect(sent[0]).toBe("DECLARE\n  @base := 10\nSELECT 1")
     expect(sent[1]).toMatch(
-      /,\n {2}@base := 10,\n {2}@derived := @base \+ 1\nSELECT 1$/,
+      /DECLARE\n {2}@base := 10,\n {2}@derived := @base \+ 1\nSELECT 1$/,
     )
     // The apply committed: the requested cell is now present.
     expect(live.state.parts.cells).toHaveLength(1)
@@ -2603,8 +2649,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     )
     // Flush microtasks so dispatchTool resumes past the apply and fires every
     // runCell concurrently.
-    await new Promise((r) => setTimeout(r, 0))
-    expect(order).toHaveLength(3)
+    await vi.waitFor(() => expect(order).toHaveLength(3))
     // Finish out of submission order — only possible if all three are in
     // flight simultaneously.
     finish[order[2]]()
@@ -3036,6 +3081,24 @@ describe("dispatchTool — query-list variable values", () => {
     // Given a mounted notebook that reports one fetched list
     const nb = mountLive(1, [], { variableValues: fetched })
 
+    registerNotebookAgentDeps({
+      getQuest: () =>
+        ({
+          validateQuery: (query: string) =>
+            Promise.resolve({ query, columns: [], timestamp: -1 }),
+          queryRaw: () => ({
+            queryId: "q",
+            promise: Promise.resolve({
+              type: "dql",
+              columns: [{ name: "symbol", type: "SYMBOL" }],
+              dataset: [["A"], ["B"], ["C"]],
+              count: 3,
+            }),
+          }),
+          abort: () => undefined,
+        }) as unknown as Client,
+    })
+
     // When the agent defines a query list
     const res = await dispatchTool(
       "apply_notebook_state",
@@ -3050,18 +3113,15 @@ describe("dispatchTool — query-list variable values", () => {
       noopStatus,
     )
 
-    // Then the sync saw the definition change and its report is in the response
-    expect(nb.syncVariableOptions).toHaveBeenCalledWith({
-      changed: ["pair"],
-      redefined: ["pair"],
-      timeRangeChanged: false,
-    })
+    // Then preparation supplies the values without a second refresh after commit.
+    expect(nb.syncVariableOptions).not.toHaveBeenCalled()
     const parsed = JSON.parse(res.content) as {
       applied: unknown
       variable_values: VariableValuesEntry[]
       runs: unknown[]
     }
-    expect(parsed.variable_values).toEqual(fetched)
+    expect(parsed.variable_values).toMatchObject([{ name: "pair", count: 3 }])
+    expect("fetched_at" in parsed.variable_values[0]).toBe(true)
     expect(Object.keys(parsed)).toEqual(["applied", "variable_values", "runs"])
   })
 

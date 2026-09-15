@@ -1,3 +1,4 @@
+import type { CapturedExecution } from "../variables/captureExecution"
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { runAdaptivePollLoop } from "../../../../hooks/useAdaptivePoll"
 import { sleep } from "../../../../utils/sleep"
@@ -85,6 +86,7 @@ export type CellFetchState = {
 }
 
 export type CellRefreshDeps = {
+  captureExecution?: (signal?: AbortSignal) => Promise<CapturedExecution>
   executeSingle: (
     sql: string,
     signal?: AbortSignal,
@@ -1049,10 +1051,11 @@ export class CellRefreshEngine {
   private classifyForRound(
     entry: Entry,
     round: AbortController,
+    execution: CapturedExecution,
   ): Promise<ClassifiedStatement[]> {
     return classifyStatements(entry.sql, (sql) =>
       this.limitRequest(
-        () => this.getDeps().validateWithGlobals(sql, round.signal),
+        () => execution.validateWithGlobals(sql, round.signal),
         round.signal,
       ),
     )
@@ -1062,6 +1065,9 @@ export class CellRefreshEngine {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
     try {
+      const execution = deps.captureExecution
+        ? await deps.captureExecution(ac.signal)
+        : deps
       // Runtime backstop: a user typing DDL into an already-draw cell would
       // otherwise reach executeSingle on the next poll tick. A query failing
       // validation is never executed — re-validating it every tick means an
@@ -1069,7 +1075,7 @@ export class CellRefreshEngine {
       // gets blocked, instead of silently running.
       let classified: ClassifiedStatement[]
       try {
-        classified = await this.classifyForRound(entry, ac)
+        classified = await this.classifyForRound(entry, ac, execution)
       } catch (e) {
         if (ac.signal.aborted) return
         const message = e instanceof Error ? e.message : "validate failed"
@@ -1104,7 +1110,7 @@ export class CellRefreshEngine {
               errorExecResult(q, stmt.error ?? "Invalid statement"),
             )
           return this.limitRequest(
-            () => deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
+            () => execution.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
             ac.signal,
           ).catch((e) => errorExecResult(q, e))
         }),
@@ -1168,9 +1174,12 @@ export class CellRefreshEngine {
     const deps = this.getDeps()
     const { queries, queriesKey } = entry.state
     try {
+      const execution = deps.captureExecution
+        ? await deps.captureExecution(round.signal)
+        : deps
       let classified: ClassifiedStatement[]
       try {
-        classified = await this.classifyForRound(entry, round)
+        classified = await this.classifyForRound(entry, round, execution)
       } catch (e) {
         if (round.signal.aborted) return
         const message = e instanceof Error ? e.message : "validate failed"
@@ -1232,7 +1241,7 @@ export class CellRefreshEngine {
           try {
             const exec = await this.limitRequest(
               () =>
-                deps.executeSingle(
+                execution.executeSingle(
                   queries[index],
                   slotAbort.signal,
                   NOTEBOOK_ROW_CAP,

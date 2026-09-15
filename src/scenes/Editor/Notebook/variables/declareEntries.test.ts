@@ -151,7 +151,7 @@ describe("buildDeclareEntries", () => {
     expect(buildDeclareEntries({})).toEqual([])
   })
 
-  it("declares globals after the time built-ins and lets a notebook variable override one", () => {
+  it("preserves global and notebook declarations in displayed order for validation", () => {
     // Given
     const globalEntries = [
       { name: "side", value: "'SELL'" },
@@ -170,10 +170,36 @@ describe("buildDeclareEntries", () => {
       "timeTo",
       "timeFrom",
       "timeFilter",
+      "side",
       "venue",
       "side",
     ])
-    expect(entries.find((e) => e.name === "side")?.value).toBe("'BUY'")
+    expect(
+      entries.filter((e) => e.name === "side").map((e) => e.value),
+    ).toEqual(["'SELL'", "'BUY'"])
+  })
+
+  it("keeps dependencies in their displayed order without moving local declarations", () => {
+    // Given
+    const globals = [
+      { name: "a", value: "5" },
+      { name: "b", value: "@a + 5" },
+    ]
+    const variables = [
+      { name: "c", kind: "expression" as const, value: "@b + 10" },
+      { name: "d", kind: "expression" as const, value: "@c + 10" },
+    ]
+
+    // When
+    const entries = buildDeclareEntries({ variables }, {}, globals)
+
+    // Then
+    expect(entries).toEqual([
+      { name: "a", value: "5" },
+      { name: "b", value: "@a + 5" },
+      { name: "c", value: "@b + 10" },
+      { name: "d", value: "@c + 10" },
+    ])
   })
 })
 

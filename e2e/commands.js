@@ -134,6 +134,10 @@ Cypress.Commands.add("getByDataHook", (name, options) =>
   cy.get(`[data-hook="${name}"]`, options),
 )
 
+Cypress.Commands.add("containsByDataHook", (name, text, options) =>
+  cy.contains(`[data-hook="${name}"]`, text, options),
+)
+
 Cypress.Commands.add("getByRole", (name) => cy.get(`[role="${name}"]`))
 
 Cypress.Commands.add("getGrid", () =>
@@ -526,6 +530,8 @@ Cypress.Commands.add("selectRange", (startPos, endPos) => {
 Cypress.Commands.add("createNotebook", () => {
   cy.get(".chrome-tabs .new-tab-button").click()
   cy.getByDataHook("new-tab-notebook").click()
+  cy.get(".chrome-tab-was-just-added").should("be.visible")
+  cy.get(".chrome-tab-was-just-added").should("not.exist")
   cy.getByDataHook("notebook-toolbar").should("be.visible")
   cy.getByDataHook("cell-editor-shimmer").should("not.exist")
   cy.getByDataHook("cell-grid-shimmer").should("not.exist")
@@ -921,4 +927,191 @@ Cypress.Commands.add("setupCustomProvider", (config = {}) => {
   const { getCustomProviderConfiguredSettings } = require("./utils/aiAssistant")
   const settings = getCustomProviderConfiguredSettings(config)
   cy.loadConsoleWithAuth(false, settings)
+})
+
+Cypress.Commands.add("setSqlInput", (dataHook, value) => {
+  cy.getByDataHook(dataHook).within(() => {
+    cy.getEditorHitbox().click()
+  })
+  cy.withFocusedEditor((editor) => editor.setValue(value))
+})
+
+Cypress.Commands.add(
+  "addNotebookVariable",
+  ({ name, kind, value, scope = "notebook", multi = false, allValue }) => {
+    cy.getByDataHook("variable-add").click()
+    cy.getByDataHook("variable-name").clear().type(name)
+    cy.getByDataHook("variable-type").click()
+    cy.getByDataHook(`variable-type-${kind}`).click()
+    if (scope === "global") {
+      cy.getByDataHook("variable-scope").click()
+      cy.getByDataHook("variable-scope-global").click()
+    }
+    if (kind === "custom") {
+      cy.setSqlInput("variable-query", value)
+      cy.getByDataHook("variable-run-query").click()
+      cy.getByDataHook("variable-run-query").should("contain", "Run query")
+      if (multi) cy.getByDataHook("variable-multi").check({ force: true })
+      else cy.getByDataHook("variable-multi").uncheck({ force: true })
+      if (allValue !== undefined) {
+        cy.getByDataHook("variable-all-mode").click()
+        cy.getByDataHook("variable-all-mode-custom").click()
+        cy.getByDataHook("variable-all-value").clear().type(allValue)
+      }
+    } else {
+      cy.getByDataHook(
+        kind === "text" ? "variable-text-value" : "variable-expression-value",
+      )
+        .clear()
+        .type(value)
+    }
+  },
+)
+
+Cypress.Commands.add("applyNotebookVariables", () => {
+  cy.getByDataHook("variables-apply").should("not.be.disabled").click()
+  cy.getByDataHook("variables-dialog").should("not.exist")
+  cy.getByDataHook("notebook-variables").should(
+    "have.attr",
+    "aria-busy",
+    "false",
+  )
+})
+
+Cypress.Commands.add("moveNotebookVariableBefore", (name, beforeName) => {
+  const dataTransfer = new DataTransfer()
+  cy.containsByDataHook("variable-row", `@${name}`).within(() => {
+    cy.getByDataHook("drag-handle").trigger("dragstart", { dataTransfer })
+  })
+  cy.containsByDataHook("variable-row", `@${beforeName}`).trigger(
+    "dragover",
+    "topLeft",
+    { dataTransfer },
+  )
+  cy.containsByDataHook("variable-row", `@${name}`).within(() => {
+    cy.getByDataHook("drag-handle").trigger("dragend", { dataTransfer })
+  })
+})
+
+Cypress.Commands.add("selectNotebookVariable", (name, label) => {
+  cy.getByDataHook(`variable-list-${name}`).click()
+  cy.containsByDataHook(
+    "variable-list-option",
+    new RegExp(`^${escapeRegExp(label)}$`),
+  ).click()
+})
+
+Cypress.Commands.add("runNotebookQuery", (query) => {
+  cy.focusNotebookCell()
+  cy.withFocusedEditor((editor) => editor.setValue(query))
+  cy.getEditorContent().type(`${ctrlOrCmd}{shift}{enter}`)
+})
+
+Cypress.Commands.add("getNotebookVariableState", () => {
+  const Dexie = require("dexie").default
+  return cy.window().then(async (win) => {
+    const database = new Dexie("web-console", {
+      indexedDB: win.indexedDB,
+      IDBKeyRange: win.IDBKeyRange,
+    })
+    try {
+      await database.open()
+      return await database.transaction(
+        "r",
+        ["editor_settings", "buffers", "notebook_options"],
+        async () => {
+          const active = await database
+            .table("editor_settings")
+            .where("key")
+            .equals("activeBufferId")
+            .first()
+          const notebook = await database.table("buffers").get(active.value)
+          const options = await database
+            .table("notebook_options")
+            .where("owner")
+            .equals(`buffer:${active.value}`)
+            .toArray()
+          return { settings: notebook.notebookViewState.settings, options }
+        },
+      )
+    } finally {
+      database.close()
+    }
+  })
+})
+
+Cypress.Commands.add("connectMcpBridge", () => {
+  const {
+    installFakeWebSocket,
+    TEST_BRIDGE_TOKEN,
+    TEST_BRIDGE_URL,
+  } = require("./utils/mcpFakeWebSocket")
+  const url = `${baseUrl}/?mcp-pair=1&mcp-ws=${encodeURIComponent(TEST_BRIDGE_URL)}&mcp-token=${encodeURIComponent(TEST_BRIDGE_TOKEN)}`
+  cy.handleStorageAndVisit(
+    url,
+    false,
+    {
+      "mcp:permissions": JSON.stringify({
+        grantSchemaAccess: true,
+        read: true,
+        write: true,
+      }),
+    },
+    installFakeWebSocket,
+  )
+  cy.getByDataHook("mcp-pair-consent-connect").click()
+  cy.window().should((win) => {
+    expect(win.__mcpFakeWS.framesOfType("hello")).not.to.be.empty
+  })
+  cy.window().then((win) => win.__mcpFakeWS.helloAck())
+  cy.getByDataHook("mcp-status-pill").should("contain", "MCP connected")
+})
+
+Cypress.Commands.add("callMcpTool", (name, args) => {
+  return cy.window().then((win) => {
+    const id = win.__mcpFakeWS.toolCall(name, args)
+    const result = () =>
+      win.__mcpFakeWS
+        .framesOfType("tool_result")
+        .find((frame) => frame.requestId === id)
+    return cy
+      .window()
+      .should(() => {
+        expect(result(), `result for ${name}`).to.exist
+      })
+      .then(() => {
+        const response = result()
+        expect(response.isError, response.content[0].text).not.to.equal(true)
+        const payload = response.content[0].text
+          .split("\n")
+          .find((line) => line.trimStart().startsWith("{"))
+        return JSON.parse(payload)
+      })
+  })
+})
+
+Cypress.Commands.add("holdQueryResponse", (query, alias) => {
+  let release
+  const responseGate = new Cypress.Promise((resolve) => {
+    release = resolve
+  })
+  const pending = { release, received: false }
+  cy.intercept("**/exec*", (req) => {
+    if (!(new URL(req.url).searchParams.get("query") ?? "").includes(query))
+      return
+    req.alias = alias
+    req.continue(() => {
+      pending.received = true
+      return responseGate
+    })
+  })
+  Cypress.once("test:after:run", () => release())
+  return cy.wrap(pending, { log: false })
+})
+
+Cypress.Commands.add("selectNotebook", (title) => {
+  cy.getEditorTabByTitle(title).find(".chrome-tab-content").click()
+  cy.getEditorTabByTitle(title).should("have.attr", "active")
+  cy.getByDataHook("notebook-toolbar-name").should("have.text", title)
+  cy.getByDataHook("cell-editor-shimmer").should("not.exist")
 })

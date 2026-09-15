@@ -1,36 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { unstable_batchedUpdates } from "react-dom"
+import { toast } from "../../../../components/Toast"
 import type { DeclareEntry, NotebookSettings } from "../../../../store/notebook"
-import {
-  deleteStoredOptions,
-  loadStoredOptions,
-  saveStoredOptions,
-  type StoredVariableOptions,
-} from "../../../../store/notebookOptions"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { loadStoredOptions } from "../../../../store/notebookOptions"
+import { enqueueBufferTask } from "../../../../utils/notebooks/notebookBufferQueue"
 import type { Client } from "../../../../utils/questdb/client"
+import type { ListOptionsState } from "./declareEntries"
 import {
-  declareEntriesAbove,
-  listOptionsState,
-  type ListOptionsState,
-} from "./declareEntries"
-import {
-  listsAffectedByChange,
-  listsAffectedByTimeRange,
-} from "./options/affectedLists"
-import {
-  fetchedValuesEntry,
-  fetchVariableOptions,
   isQueryList,
-  requiresTimeRange,
-  TIME_RANGE_REQUIRED,
-  type PrefetchedVariableOptions,
-  type QueryListVariable,
+  fetchedValuesEntry,
   type VariableValuesEntry,
 } from "./options/fetchVariableOptions"
+import { listsAffectedByTimeRange } from "./options/affectedLists"
+import { changedVariableNames, redefinedVariableNames } from "./variableChanges"
+import { TIME_VARIABLE_NAMES, sameTimeRange } from "./timeRange"
+import { commitVariables } from "./commitVariables"
+import {
+  prepareVariables,
+  requireNotAborted,
+  type PreparedVariables,
+  type VariableErrors,
+  type VariableStep,
+} from "./prepareVariables"
+
+export const showVariableUpdateError = (error: unknown): void => {
+  if (error instanceof Error && error.name === "AbortError") return
+  toast.error(
+    error instanceof Error ? error.message : "Could not update variables",
+  )
+}
 
 export type VariableOptionsStatus = "loading" | "ready" | "error"
-
 export type VariableOptionsState = ListOptionsState & {
   status: VariableOptionsStatus
   columns: string[]
@@ -39,36 +39,19 @@ export type VariableOptionsState = ListOptionsState & {
   warnings: string[]
   error?: string
 }
-
 export type VariableOptionsByName = Record<string, VariableOptionsState>
-
-const EMPTY_STATE: VariableOptionsState = {
-  status: "loading",
-  options: [],
-  columns: [],
-  truncated: false,
-  warnings: [],
-}
-
-const lower = (name: string) => name.toLowerCase()
-
-const sameSource = (a: QueryListVariable, b: QueryListVariable): boolean =>
-  JSON.stringify(a.source) === JSON.stringify(b.source)
-
-const seedState = (
-  current: VariableOptionsState | undefined,
-  row: StoredVariableOptions,
-): VariableOptionsState => {
-  if (current === undefined) {
-    return {
-      ...EMPTY_STATE,
-      status: "ready",
-      options: row.options,
-      fetchedAt: row.fetchedAt,
-    }
-  }
-  if (current.fetchedAt !== undefined) return current
-  return { ...current, options: row.options, fetchedAt: row.fetchedAt }
+export type VariableUpdate = {
+  signal?: AbortSignal
+  prepare?: (
+    settings: NotebookSettings,
+    signal: AbortSignal,
+  ) => Promise<PreparedVariables>
+  onStep?: (step: VariableStep) => void
+  changed?: string[]
+  refresh?: string[]
+  loadStored?: boolean
+  saveSettings?: (prepared: PreparedVariables) => Promise<void>
+  onCommit?: (prepared: PreparedVariables) => void
 }
 
 type Args = {
@@ -76,245 +59,251 @@ type Args = {
   owner: string
   getSettings: () => NotebookSettings
   getPrefixEntries: () => DeclareEntry[]
-  onRefetched?: (name: string) => void
+  getPrefixErrors?: () => VariableErrors
+  waitForPrefix?: () => Promise<unknown>
+  onRefetched?: (names: string[]) => void
 }
+
+const listStates = (prepared: PreparedVariables): VariableOptionsByName =>
+  Object.fromEntries(
+    (prepared.settings.variables ?? []).filter(isQueryList).map(({ name }) => [
+      name,
+      {
+        ...(prepared.options[name] ?? {
+          options: [],
+          columns: [],
+          truncated: false,
+          warnings: [],
+        }),
+        status: prepared.errors[name] ? "error" : "ready",
+        error: prepared.errors[name],
+      },
+    ]),
+  )
 
 export const useVariableOptions = ({
   quest,
   owner,
   getSettings,
   getPrefixEntries,
+  getPrefixErrors,
+  waitForPrefix,
   onRefetched,
 }: Args) => {
-  const [listOptions, setListOptions] = useState<VariableOptionsByName>({})
+  const [state, setState] = useState<{
+    listOptions: VariableOptionsByName
+    errors: VariableErrors
+  }>({ listOptions: {}, errors: {} })
+  const [pending, setPending] = useState(0)
   const listOptionsRef = useRef<VariableOptionsByName>({})
-  const abortsRef = useRef(new Map<string, AbortController>())
-  const inFlightRef = useRef(new Set<Promise<VariableValuesEntry[]>>())
+  const snapshotRef = useRef<PreparedVariables>({
+    settings: getSettings(),
+    options: {},
+    errors: {},
+    entries: [],
+    report: [],
+  })
+  const operationsRef = useRef(new Set<Promise<PreparedVariables>>())
+  const controllersRef = useRef(new Set<AbortController>())
+  const loadingRef = useRef<Promise<PreparedVariables> | null>(null)
+  const tailRef = useRef<Promise<unknown>>(Promise.resolve())
 
-  const commit = useCallback((next: VariableOptionsByName) => {
-    listOptionsRef.current = next
-    setListOptions(next)
+  const adopt = useCallback((prepared: PreparedVariables) => {
+    snapshotRef.current = prepared
+    const listOptions = listStates(prepared)
+    listOptionsRef.current = listOptions
+    setState({ listOptions, errors: prepared.errors })
   }, [])
 
-  const variables = useCallback(
-    () => getSettings().variables ?? [],
-    [getSettings],
-  )
-  const queryLists = useCallback(
-    () => variables().filter(isQueryList),
-    [variables],
-  )
-
-  const track = useCallback((work: Promise<VariableValuesEntry[]>) => {
-    inFlightRef.current.add(work)
-    void work.finally(() => inFlightRef.current.delete(work))
-    return work
-  }, [])
-
-  const runRefetch = useCallback(
-    async (names: Iterable<string>): Promise<VariableValuesEntry[]> => {
-      const wanted = new Set([...names].map(lower))
-      const report: VariableValuesEntry[] = []
-      const patch = (name: string, state: Partial<VariableOptionsState>) =>
-        commit({
-          ...listOptionsRef.current,
-          [name]: {
-            ...(listOptionsState(listOptionsRef.current, name) ?? EMPTY_STATE),
-            ...state,
-          },
-        })
-      for (const planned of queryLists()) {
-        const { name } = planned
-        if (!wanted.has(lower(name))) continue
-        const variable = queryLists().find((list) => list.name === name)
-        if (!variable || !sameSource(variable, planned)) continue
-        abortsRef.current.get(name)?.abort()
-        const controller = new AbortController()
-        abortsRef.current.set(name, controller)
-        if (!getSettings().timeRange && requiresTimeRange(variable)) {
-          patch(name, { status: "error", error: TIME_RANGE_REQUIRED })
-          report.push({ name, error: TIME_RANGE_REQUIRED })
-          continue
+  const apply = useCallback(
+    (
+      proposal: NotebookSettings | (() => NotebookSettings),
+      update: VariableUpdate = {},
+    ): Promise<PreparedVariables> => {
+      const controller = new AbortController()
+      const abort = () => controller.abort()
+      update.signal?.addEventListener("abort", abort, { once: true })
+      if (update.signal?.aborted) abort()
+      controllersRef.current.add(controller)
+      setPending((count) => count + 1)
+      const run = async () => {
+        requireNotAborted(controller.signal)
+        await waitForPrefix?.()
+        requireNotAborted(controller.signal)
+        const settings = typeof proposal === "function" ? proposal() : proposal
+        const before = snapshotRef.current
+        let options = before.options
+        if (update.loadStored) {
+          const rows = await loadStoredOptions(owner)
+          requireNotAborted(controller.signal)
+          options = Object.fromEntries(
+            rows.map((row) => [
+              row.name,
+              { ...row, columns: [], truncated: false, warnings: [] },
+            ]),
+          )
+          adopt({ ...before, settings, options })
         }
-        patch(name, { status: "loading", error: undefined })
-        const result = await fetchVariableOptions(
-          quest,
-          variable,
-          declareEntriesAbove(
-            getSettings(),
-            listOptionsRef.current,
-            getPrefixEntries(),
-            name,
-          ),
+        const variables = settings.variables ?? []
+        const rangeChanged = !sameTimeRange(
+          before.settings.timeRange,
+          settings.timeRange,
+        )
+        const changed =
+          update.changed ??
+          changedVariableNames(before.settings.variables ?? [], variables)
+        const refresh =
+          update.refresh ??
+          redefinedVariableNames(before.settings.variables ?? [], variables)
+        const prepared = update.prepare
+          ? await update.prepare(settings, controller.signal)
+          : await prepareVariables({
+              quest,
+              settings,
+              prefixEntries: getPrefixEntries(),
+              prefixErrors: getPrefixErrors?.(),
+              options,
+              errors: before.errors,
+              changed: [
+                ...changed,
+                ...(rangeChanged ? TIME_VARIABLE_NAMES : []),
+              ],
+              refresh: [
+                ...refresh,
+                ...(rangeChanged
+                  ? listsAffectedByTimeRange(variables).map((v) => v.name)
+                  : []),
+              ],
+              signal: controller.signal,
+              onStep: update.onStep,
+            })
+        requireNotAborted(controller.signal)
+        update.onStep?.({ kind: "committing", name: "" })
+        const saveSettings = update.saveSettings
+        await commitVariables(
+          owner,
+          prepared,
+          () => (saveSettings ? saveSettings(prepared) : Promise.resolve()),
           controller.signal,
         )
-        if (controller.signal.aborted) continue
-        if (result.kind === "error") {
-          patch(name, { status: "error", error: result.error })
-          report.push({ name, error: result.error })
-          void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLE_OPTIONS_FETCH, {
-            status: "error",
-          })
-          continue
-        }
-        patch(name, { status: "ready", ...result.fetched, error: undefined })
-        void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLE_OPTIONS_FETCH, {
-          status: "ready",
-          truncated: result.fetched.truncated,
+        unstable_batchedUpdates(() => {
+          update.onCommit?.(prepared)
+          adopt(prepared)
         })
-        await saveStoredOptions({
-          owner,
-          name,
-          options: result.fetched.options,
-          fetchedAt: result.fetched.fetchedAt,
-          context: result.fetched.context,
-        }).catch(() => undefined)
-        report.push(fetchedValuesEntry(name, result.fetched))
-        onRefetched?.(name)
+        onRefetched?.([
+          ...new Set([
+            ...changed,
+            ...prepared.report.map((entry) => entry.name),
+          ]),
+        ])
+        return prepared
       }
-      return report
+      const bufferId = owner.startsWith("buffer:")
+        ? Number(owner.slice(7))
+        : null
+      const work =
+        bufferId === null
+          ? tailRef.current.catch(() => undefined).then(run)
+          : enqueueBufferTask(bufferId, run)
+      tailRef.current = work
+      operationsRef.current.add(work)
+      void work
+        .then(
+          () => undefined,
+          () => undefined,
+        )
+        .finally(() => {
+          operationsRef.current.delete(work)
+          controllersRef.current.delete(controller)
+          update.signal?.removeEventListener("abort", abort)
+          setPending((count) => count - 1)
+        })
+      return work
     },
     [
-      commit,
+      adopt,
       getPrefixEntries,
-      getSettings,
+      getPrefixErrors,
       onRefetched,
       owner,
       quest,
-      queryLists,
+      waitForPrefix,
     ],
   )
 
-  const refetch = useCallback(
-    (names: Iterable<string>) => track(runRefetch(names)),
-    [runRefetch, track],
-  )
-
-  const load = useCallback(
-    () =>
-      track(
-        (async () => {
-          const rows = await loadStoredOptions(owner).catch(
-            (): StoredVariableOptions[] => [],
-          )
-          const names = new Set(queryLists().map((v) => v.name))
-          const seeded = { ...listOptionsRef.current }
-          for (const row of rows) {
-            if (!names.has(row.name)) continue
-            seeded[row.name] = seedState(seeded[row.name], row)
-          }
-          commit(seeded)
-          return runRefetch(names)
-        })(),
-      ),
-    [commit, owner, queryLists, runRefetch, track],
-  )
-
-  const adoptPrefetched = useCallback(
-    (prefetched: PrefetchedVariableOptions): VariableValuesEntry[] => {
-      const next = { ...listOptionsRef.current }
-      for (const [name, fetched] of Object.entries(prefetched)) {
-        abortsRef.current.get(name)?.abort()
-        next[name] = {
-          ...(next[name] ?? EMPTY_STATE),
-          status: "ready",
-          ...fetched,
-          error: undefined,
-        }
-      }
-      commit(next)
-      return Object.entries(prefetched).map(([name, fetched]) =>
-        fetchedValuesEntry(name, fetched),
-      )
-    },
-    [commit],
-  )
-
-  const savePrefetched = useCallback(
-    (prefetched: PrefetchedVariableOptions) =>
-      Promise.all(
-        Object.entries(prefetched).map(([name, fetched]) =>
-          saveStoredOptions({
-            owner,
-            name,
-            options: fetched.options,
-            fetchedAt: fetched.fetchedAt,
-            context: fetched.context,
-          }).catch(() => undefined),
-        ),
-      ),
-    [owner],
-  )
+  const load = useCallback(() => {
+    const work = apply(getSettings, {
+      loadStored: true,
+      refresh: (getSettings().variables ?? []).map((v) => v.name),
+    })
+    loadingRef.current = work
+    void work.catch(() => undefined)
+    return work
+  }, [apply, getSettings])
 
   const refetchChanged = useCallback(
-    (
-      changedNames: string[],
-      redefinedNames: string[],
-      prefetched: PrefetchedVariableOptions = {},
-    ) =>
-      track(
-        (async () => {
-          const adopted = adoptPrefetched(prefetched)
-          const skip = new Set(Object.keys(prefetched).map(lower))
-          const names = listsAffectedByChange(
-            variables(),
-            changedNames,
-            redefinedNames,
-          )
-            .map((v) => v.name)
-            .filter((name) => !skip.has(lower(name)))
-          await deleteStoredOptions(owner, redefinedNames).catch(
-            () => undefined,
-          )
-          await savePrefetched(prefetched)
-          return [...adopted, ...(await runRefetch(names))]
-        })(),
-      ),
-    [adoptPrefetched, owner, runRefetch, savePrefetched, track, variables],
+    async (changed: string[], redefined: string[]) =>
+      (await apply(getSettings, { changed, refresh: redefined })).report,
+    [apply, getSettings],
   )
-
+  const refetchWithDependents = useCallback(
+    async (name: string) =>
+      (await apply(getSettings, { changed: [name], refresh: [name] })).report,
+    [apply, getSettings],
+  )
   const refetchForTimeRange = useCallback(
-    () => refetch(listsAffectedByTimeRange(variables()).map((v) => v.name)),
-    [refetch, variables],
+    async () =>
+      (
+        await apply(getSettings, {
+          changed: [...TIME_VARIABLE_NAMES],
+          refresh: listsAffectedByTimeRange(getSettings().variables ?? []).map(
+            (v) => v.name,
+          ),
+        })
+      ).report,
+    [apply, getSettings],
   )
-
   const settle = useCallback(async (): Promise<VariableValuesEntry[]> => {
-    const reports = await Promise.all([...inFlightRef.current])
-    return reports.flat()
-  }, [])
-
-  const prune = useCallback(() => {
-    const keep = new Set(queryLists().map((v) => v.name))
-    const removed = Object.keys(listOptionsRef.current).filter(
-      (name) => !keep.has(name),
-    )
-    if (removed.length === 0) return
-    for (const name of removed) abortsRef.current.get(name)?.abort()
-    commit(
-      Object.fromEntries(
-        Object.entries(listOptionsRef.current).filter(([name]) =>
-          keep.has(name),
-        ),
+    await loadingRef.current?.catch(() => undefined)
+    while (operationsRef.current.size > 0)
+      await Promise.allSettled([...operationsRef.current])
+    const { options, errors } = snapshotRef.current
+    return [
+      ...Object.entries(options).map(([name, fetched]) =>
+        fetchedValuesEntry(name, fetched),
       ),
-    )
-    void deleteStoredOptions(owner, removed).catch(() => undefined)
-  }, [commit, owner, queryLists])
+      ...Object.entries(errors).map(([name, error]) => ({ name, error })),
+    ]
+  }, [])
+  const getErrors = useCallback(() => snapshotRef.current.errors, [])
 
   useEffect(() => {
-    const aborts = abortsRef.current
+    const controllers = controllersRef.current
     return () => {
-      for (const controller of aborts.values()) controller.abort()
+      for (const controller of controllers) controller.abort()
     }
   }, [])
 
   return {
-    listOptions,
+    ...state,
+    listOptions:
+      pending > 0
+        ? Object.fromEntries(
+            Object.entries(state.listOptions).map(([name, options]) => [
+              name,
+              { ...options, status: "loading" as const },
+            ]),
+          )
+        : state.listOptions,
+    pending: pending > 0,
     listOptionsRef,
-    refetch,
+    apply,
+    adopt,
+    getErrors,
     load,
     refetchChanged,
+    refetchWithDependents,
     refetchForTimeRange,
     settle,
-    prune,
   }
 }

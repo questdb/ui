@@ -10,6 +10,7 @@ type Props = {
 export const TextForm = ({ variable, onChange }: Props) => (
   <Field label="Default value">
     <MonoInput
+      aria-label="Default value"
       value={variable.value}
       autoComplete="off"
       spellCheck={false}

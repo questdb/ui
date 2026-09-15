@@ -1,4 +1,8 @@
-import { findVariableReferences } from "./references"
+import type {
+  NotebookVariable,
+  VariableOption,
+} from "../../../../store/notebook"
+import { findVariableReferences, variableReferences } from "./references"
 import { isTimeVariableName } from "./timeRange"
 
 type Context = {
@@ -6,13 +10,12 @@ type Context = {
   hasTimeRange: boolean
 }
 
-export const queryPrecheck = (
-  query: string,
+const referencePrecheck = (
+  references: Iterable<string>,
   { declaredAbove, hasTimeRange }: Context,
 ): string | null => {
-  if (query.trim() === "") return "Write the query that fetches the values."
   const above = new Set(declaredAbove.map((name) => name.toLowerCase()))
-  for (const reference of findVariableReferences(query)) {
+  for (const reference of references) {
     if (isTimeVariableName(reference)) {
       if (!hasTimeRange) return "Set a time range in the toolbar first."
       continue
@@ -23,3 +26,22 @@ export const queryPrecheck = (
   }
   return null
 }
+
+export const queryPrecheck = (
+  query: string,
+  context: Context,
+): string | null =>
+  query.trim() === ""
+    ? "Write the query that fetches the values."
+    : referencePrecheck(findVariableReferences(query), context)
+
+export const variablePrecheck = (
+  variable: NotebookVariable,
+  context: Context,
+): string | null => referencePrecheck(variableReferences(variable), context)
+
+const SQL_LITERAL =
+  /^(?:'(?:[^']|'')*'|[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?|true|false|null)$/i
+
+export const isLiteralListSelection = (selected: VariableOption[]): boolean =>
+  selected.every((option) => SQL_LITERAL.test(option.value.trim()))

@@ -1,3 +1,4 @@
+import type { PreparedNotebookVariables } from "../notebookVariableOptions"
 import {
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
@@ -74,6 +75,8 @@ export type NotebookTransitionResult<T = void> = {
   cancelRuns?: { cellIds: string[] }
   deleteSnapshots?: { cellIds: string[] }
   variables?: VariableSettingsDiff
+  preparedVariables?: PreparedNotebookVariables
+  persisted?: boolean
 }
 
 const variableSettingsDiff = (

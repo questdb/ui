@@ -296,7 +296,7 @@ describe("buildSnapshot", () => {
     expect(text).toContain("venue: list all (multi) [values not fetched yet]")
   })
 
-  it("lists global variables the notebook does not override", async () => {
+  it("keeps global variables visible when saved local names conflict", async () => {
     // Given
     await saveNotebookGlobals([
       { name: "sym", kind: "expression", value: "'EURUSD'" },
@@ -316,6 +316,7 @@ describe("buildSnapshot", () => {
     // Then
     if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
     expect(snap.global_variables).toEqual([
+      { name: "sym", kind: "expression", value: "'EURUSD'" },
       { name: "venue", kind: "expression", value: "'LSE'" },
     ])
     expect(formatSnapshot(snap)).toContain("global_variables")

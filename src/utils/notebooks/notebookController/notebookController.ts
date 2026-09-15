@@ -1,3 +1,6 @@
+import { getNotebookGlobals } from "../../../store/notebookGlobals"
+import { normalizeVariables } from "../../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { TIME_VARIABLE_NAMES } from "../../../scenes/Editor/Notebook/variables/timeRange"
 import type {
   AutoRefresh,
   CellType,
@@ -38,10 +41,10 @@ import {
 import type { RunCellGate } from "../../tools/permissions"
 import type { VariableValuesEntry } from "../../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import {
-  deleteStoredOptions,
-  notebookOptionsOwner,
-} from "../../../store/notebookOptions"
-import { syncHeadlessVariableOptions } from "../notebookVariableOptions"
+  syncHeadlessVariableOptions,
+  prepareNotebookVariables,
+  commitNotebookVariables,
+} from "../notebookVariableOptions"
 import type {
   NotebookTransitionResult,
   VariableSettingsDiff,
@@ -70,6 +73,7 @@ export type RunCellSummary = {
 // identically on both routes.
 export type NotebookMutate = <T>(
   transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+  signal?: AbortSignal,
 ) => Promise<T>
 
 // Live-only refresh state, read straight off the refresh engine. Absent for
@@ -114,6 +118,7 @@ export type NotebookControllerActions = {
     expectFullValue?: boolean,
     gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
+  applyVariableTransition?: NotebookMutate
   applyTransition: <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ) => T
@@ -156,7 +161,9 @@ export const createNotebookController = (
   // The live surface's transition runner: apply the transition to React state
   // (synchronously, via the provider's applyTransition), then normalize to a
   // Promise so a transition's typed throw reaches the agent as a rejection.
-  const mutate: NotebookMutate = (transition) => {
+  const mutate: NotebookMutate = (transition, signal) => {
+    if (liveActionsRef.current.applyVariableTransition)
+      return liveActionsRef.current.applyVariableTransition(transition, signal)
     try {
       return Promise.resolve(liveActionsRef.current.applyTransition(transition))
     } catch (error) {
@@ -288,6 +295,7 @@ export const createDexieNotebookController = (
     }
   }
 
+  let variableReport: VariableValuesEntry[] | undefined
   const mutate: NotebookMutate = async (transition) => {
     requireActive()
     requireUnclaimed()
@@ -297,7 +305,44 @@ export const createDexieNotebookController = (
         const view = await readNotebookView(bufferId)
         const out = transition(partsOf(view))
         requireActive()
-        const commit = await commitView(bufferId, out.parts)
+        let commit: Awaited<ReturnType<typeof commitView>> = "committed"
+        if (out.variables) {
+          const diff = out.variables
+          const operationSignal = signal ?? new AbortController().signal
+          const prepared =
+            out.preparedVariables ??
+            (await prepareNotebookVariables(
+              {
+                quest: deps.getQuest(),
+                signal: operationSignal,
+                force: new Set(
+                  [
+                    ...diff.changed,
+                    ...diff.redefined,
+                    ...(diff.timeRangeChanged ? TIME_VARIABLE_NAMES : []),
+                  ].map((name) => name.toLowerCase()),
+                ),
+              },
+              bufferId,
+              out.parts.settings,
+              normalizeVariables((await getNotebookGlobals())?.variables),
+            ))
+          requireActive()
+          requireUnclaimed()
+          await commitNotebookVariables(
+            bufferId,
+            prepared,
+            async () => {
+              commit = await commitView(bufferId, out.parts)
+              if (commit !== "committed") throw notebookGone(bufferId)
+            },
+            operationSignal,
+          )
+          variableReport = [
+            ...prepared.global.report,
+            ...prepared.notebook.report,
+          ]
+        } else commit = await commitView(bufferId, out.parts)
         if (commit === "deleted") {
           throw notebookGone(bufferId)
         }
@@ -319,12 +364,6 @@ export const createDexieNotebookController = (
             void deleteCellSnapshot(bufferId, cellId).catch(() => undefined)
           }
         }
-        if (out.variables) {
-          void deleteStoredOptions(
-            notebookOptionsOwner(bufferId),
-            out.variables.redefined,
-          ).catch(() => undefined)
-        }
         return out
       },
     )
@@ -341,7 +380,9 @@ export const createDexieNotebookController = (
     runCell: (cellId, signal, sql, gate) =>
       runHeadlessCell(bufferId, deps, cellId, signal, sql, gate),
     syncVariableOptions: (diff) =>
-      syncHeadlessVariableOptions(bufferId, deps, diff, signal),
+      variableReport
+        ? Promise.resolve(variableReport)
+        : syncHeadlessVariableOptions(bufferId, deps, diff, signal),
     waitForVariableOptions: () => Promise.resolve([]),
   }
 }

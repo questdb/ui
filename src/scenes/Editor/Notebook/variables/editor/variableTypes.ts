@@ -45,7 +45,7 @@ export const SCOPE_OPTIONS: {
     value: "global",
     label: "All notebooks",
     description:
-      "Set this variable for all notebooks. A local variable with the same name overrides it.",
+      "Set this variable for all notebooks. Variable names must be unique.",
   },
 ]
 
