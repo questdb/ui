@@ -163,7 +163,7 @@ describe("Query Activity drawer", () => {
     )
   })
 
-  it("sorts by duration and grades memory-heavy queries", () => {
+  it("sorts by memory by default and grades memory-heavy queries", () => {
     // Given
     interceptListing([SELF_ROW, WAL_ROW, WARNING_ROW, CRITICAL_ROW])
 

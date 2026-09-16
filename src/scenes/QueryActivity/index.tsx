@@ -54,7 +54,7 @@ export const QueryActivityDrawer = () => {
   const { addBuffer } = useEditor()
   const [filter, setFilter] = useState("")
   const [order, setOrder] = useState<QueryActivityOrder>({
-    sort: "duration",
+    sort: "memory",
     direction: "desc",
   })
   const [cancelTarget, setCancelTarget] = useState<QueryActivityRow | null>(

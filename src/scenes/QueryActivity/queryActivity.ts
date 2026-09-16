@@ -277,7 +277,7 @@ export const filterQueryActivityRows = (
   )
 }
 
-export const describeQueryStatus = (
+export const describeMemoryStatus = (
   row: QueryActivityRow,
   severity: Severity,
   thresholds: QueryActivityThresholds,

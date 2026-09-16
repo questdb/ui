@@ -4,7 +4,7 @@ import {
   buildQueryActivityItems,
   classifyQuery,
   collectFinishedQueries,
-  describeQueryStatus,
+  describeMemoryStatus,
   expireFinishedQueries,
   filterQueryActivityRows,
   getElapsedMs,
@@ -233,10 +233,10 @@ describe("filterQueryActivityRows", () => {
   })
 })
 
-describe("describeQueryStatus", () => {
+describe("describeMemoryStatus", () => {
   const describe_ = (overrides: Partial<QueryActivityRow>) => {
     const current = row(overrides)
-    return describeQueryStatus(
+    return describeMemoryStatus(
       current,
       classifyQuery(current, QUERY_ACTIVITY_THRESHOLDS),
       QUERY_ACTIVITY_THRESHOLDS,

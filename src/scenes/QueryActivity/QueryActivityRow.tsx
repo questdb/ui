@@ -27,7 +27,7 @@ import {
 } from "../../utils/format"
 import { TimestampUnderline } from "../Schema/TableDetailsDrawer/shared-styles"
 import {
-  describeQueryStatus,
+  describeMemoryStatus,
   FINISHED_FADE_MS,
   type QueryActivityItem,
   type QueryPhase,
@@ -119,9 +119,7 @@ const QueryId = styled(TruncatedText)`
   flex: 0 1 auto;
   text-align: right;
   color: ${({ theme }) => theme.color.contentSecondary};
-  font-size: ${({ theme }) => theme.fontSize.md};
   font-variant-numeric: tabular-nums;
-  line-height: 1;
   white-space: nowrap;
 `
 
@@ -224,6 +222,7 @@ const MetaLine = styled(Box).attrs({
   gap: "1.6rem",
 })`
   min-width: 0;
+  height: ${BUTTON_HEIGHTS.sm};
   color: ${({ theme }) => theme.color.contentSecondary};
   font-size: ${({ theme }) => theme.fontSize.sm};
 `
@@ -263,12 +262,15 @@ export const QueryActivityRow = ({
   const workerLabel = row.workerPool
     ? `${row.workerPool} #${row.workerId}`
     : `worker #${row.workerId}`
+  const workerTooltip = row.workerPool
+    ? "Worker pool and worker id"
+    : "Worker id"
   const startedAt = new Date(row.queryStart).toISOString()
   const formattedQuery = useMemo(() => formatQuery(row.query), [row.query])
-  const status =
-    phase === "finished"
-      ? FINISHED_STATUS
-      : describeQueryStatus(row, severity, QUERY_ACTIVITY_THRESHOLDS)
+  const memoryDetail =
+    row.memoryUsed === null
+      ? "Memory usage is not available for this query"
+      : describeMemoryStatus(row, severity, QUERY_ACTIVITY_THRESHOLDS)
 
   const updateHold = (nextHovered: boolean, nextFocused: boolean) => {
     setHovered(nextHovered)
@@ -279,6 +281,12 @@ export const QueryActivityRow = ({
     <StatusIcon data-hook="query-activity-row-status">
       {PHASE_ICONS[phase]}
     </StatusIcon>
+  )
+  const memoryTooltip = (
+    <Box flexDirection="column" align="flex-start" gap="0.4rem">
+      <span>Memory usage</span>
+      {memoryDetail !== null && <span>{memoryDetail}</span>}
+    </Box>
   )
   const preview = buildQueryPreview(formattedQuery)
 
@@ -303,30 +311,32 @@ export const QueryActivityRow = ({
     >
       <HeadLine>
         <Identity>
-          {status === null ? (
-            indicator
-          ) : (
-            <Tooltip content={status} placement="bottom">
+          {phase === "finished" ? (
+            <Tooltip content={FINISHED_STATUS} placement="bottom">
               {indicator}
             </Tooltip>
+          ) : (
+            indicator
           )}
           <StateLabel data-hook="query-activity-row-state">
             {PHASE_LABELS[phase]}
           </StateLabel>
         </Identity>
-        {row.memoryUsed === null ? (
-          <MemoryUnavailable>
-            <MemoryIcon size={16} />
-            N/A
-          </MemoryUnavailable>
-        ) : (
-          <Memory $severity={severity} data-hook="query-activity-row-memory">
-            <MemoryIcon size={16} />
-            {formatBytes(row.memoryUsed)}
-            {row.memoryLimit !== null &&
-              ` / ${formatBytes(row.memoryLimit)} used`}
-          </Memory>
-        )}
+        <Tooltip content={memoryTooltip} placement="bottom">
+          {row.memoryUsed === null ? (
+            <MemoryUnavailable>
+              <MemoryIcon size={16} />
+              N/A
+            </MemoryUnavailable>
+          ) : (
+            <Memory $severity={severity} data-hook="query-activity-row-memory">
+              <MemoryIcon size={16} />
+              {formatBytes(row.memoryUsed)}
+              {row.memoryLimit !== null &&
+                ` / ${formatBytes(row.memoryLimit)} used`}
+            </Memory>
+          )}
+        </Tooltip>
 
         <Tooltip
           content={
@@ -378,10 +388,12 @@ export const QueryActivityRow = ({
             <UserIcon size={16} />
             <TruncatedText>{row.username ?? "unknown"}</TruncatedText>
           </MetaItem>
-          <MetaItem>
-            <WrenchIcon size={16} />
-            <TruncatedText>{workerLabel}</TruncatedText>
-          </MetaItem>
+          <Tooltip content={workerTooltip} placement="bottom">
+            <MetaItem>
+              <WrenchIcon size={16} />
+              <TruncatedText>{workerLabel}</TruncatedText>
+            </MetaItem>
+          </Tooltip>
           {row.isWal && <Tag data-hook="query-activity-row-wal">WAL</Tag>}
         </MetaGroup>
         <Actions>
