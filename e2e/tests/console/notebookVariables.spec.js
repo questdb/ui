@@ -311,12 +311,14 @@ describe("Notebook variables", () => {
     cy.getByDataHook("variable-list-venues")
       .should("contain", "10000")
       .and("contain", "9999")
+    cy.intercept("**/exec*").as("venueQueries")
     cy.runNotebookQuery(
       "select x from long_sequence(10000) where x in @venues order by x",
     )
-    // Then the cell uses both selected values.
-    cy.getGridRow(0).should("contain", "9999")
-    cy.getGridRow(1).should("contain", "10000")
+    // Then the run declares both selected values.
+    cy.wait("@venueQueries").then((call) =>
+      expect(queryOf(call)).to.include("@venues := (10000, 9999)"),
+    )
     cy.getByDataHook("variable-list-venues").click()
     cy.getByDataHook("variable-list-search").type("{downarrow}")
     cy.focused().type("{home}")

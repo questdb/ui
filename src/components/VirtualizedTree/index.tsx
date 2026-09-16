@@ -286,7 +286,9 @@ function VirtualizedTreeComponent<T extends VirtualizedTreeItem>(
     >
       <Virtuoso
         totalCount={items.length}
-        initialTopMostItemIndex={initialTopMostItemIndex}
+        {...(initialTopMostItemIndex !== undefined && {
+          initialTopMostItemIndex,
+        })}
         ref={virtuosoRef}
         rangeChanged={(newRange) => {
           rangeRef.current = newRange
