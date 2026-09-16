@@ -41,11 +41,12 @@ export type ColorShape = {
   contentMuted: string
   contentDisabled: string
   contentInverse: string
-  contentOnWarning: string
   neutralInk: string
   contentAccent: string
   contentAccentStrong: string
-  contentObject: string
+  brandAccent: string
+  brandAccentActive: string
+  brandAccentBorder: string
   contentSearchMatch: string
   borderSubtle: string
   borderDefault: string
@@ -55,35 +56,45 @@ export type ColorShape = {
   interactionNeutral: string
   interactionNeutralHover: string
   interactionHover: string
-  interactionAccentHover: string
   interactionAccentActive: string
+  interactionSelected: string
   interactionGuide: string
   scrollbarThumb: string
   controlSurface: string
   controlSurfaceHover: string
   controlTrack: string
-  controlKnob: string
+  controlTrackRest: string
+  controlTrackStroke: string
   actionPrimary: string
   actionPrimaryHover: string
+  brandAction: string
+  brandActionHover: string
+  brandActionBorder: string
+  brandActionForeground: string
   statusDanger: string
   statusDangerStrong: string
+  statusDangerContrast: string
+  statusDangerSubtle: string
   statusDangerMuted: string
   statusDangerSurface: string
   statusDangerSurfaceHover: string
   statusDangerBorder: string
   statusSuccess: string
   statusSuccessStrong: string
+  statusSuccessFill: string
   statusSuccessSurface: string
   statusSuccessBorder: string
   statusWarning: string
   statusWarningSurface: string
-  statusWarningSurfaceHover: string
   statusAttention: string
   statusInfo: string
+  statusInfoSubtle: string
+  statusInfoControl: string
   statusInfoSurface: string
+  statusInfoSurfaceStrong: string
   statusFeature: string
-  statusAssistant: string
-  statusAssistantStrong: string
+  aiPinkStart: string
+  aiPinkEnd: string
   shadowSubtle: string
   shadowSoft: string
   shadowMedium: string
@@ -92,14 +103,9 @@ export type ColorShape = {
   glassSurface: string
   glassBorder: string
   glassEdge: string
-  brandGradientStart: string
-  brandGradientEnd: string
-  aiGradientStart: string
-  aiGradientEnd: string
   gridRow: string
   gridHeader: string
   gridSelection: string
-  gridFocus: string
   editorCanvas: string
   editorBorder: string
   editorSelection: string

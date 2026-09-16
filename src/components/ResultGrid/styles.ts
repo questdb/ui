@@ -9,6 +9,7 @@ import {
   HEADER_GAP_PX,
   HEADER_HEIGHT,
   HEADER_NAME_FONT_SIZE_PX,
+  HEADER_NAME_FONT_WEIGHT,
   HEADER_PADDING_PX,
   HEADER_TYPE_FONT_SIZE_PX,
   ROW_HEIGHT,
@@ -80,12 +81,13 @@ export const HeaderNameRow = styled.div<{ $align: string }>`
 `
 
 export const HeaderName = styled.span`
-  color: ${color("contentObject")};
+  color: ${color("contentPrimary")};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
   font-size: ${HEADER_NAME_FONT_SIZE_PX}px;
+  font-weight: ${HEADER_NAME_FONT_WEIGHT};
 `
 
 export const HeaderType = styled.span`
@@ -138,7 +140,7 @@ export const ColResizer = styled.div`
   }
 
   &:hover::after {
-    background: ${color("contentAccent")};
+    background: ${color("borderStrong")};
   }
 `
 
@@ -157,7 +159,7 @@ export const ResizeGhost = styled.div`
   top: 0;
   bottom: 0;
   width: 2px;
-  background: ${color("contentAccent")};
+  background: ${color("borderStrong")};
   pointer-events: none;
   /* Above the resizer overlay (z-index 6) so the drag line isn't clipped. */
   z-index: 7;
@@ -171,7 +173,12 @@ export const Row = styled.div<{ $active: boolean }>`
   ${({ $active, theme }) =>
     $active &&
     css`
-      background: ${theme.color.gridSelection};
+      background:
+        linear-gradient(
+          ${theme.color.interactionSelected},
+          ${theme.color.interactionSelected}
+        ),
+        ${theme.color.gridRow};
     `}
 
   ${({ $active, theme }) =>
@@ -180,16 +187,16 @@ export const Row = styled.div<{ $active: boolean }>`
       &:hover {
         background:
           linear-gradient(
-            ${theme.color.interactionAccentHover},
-            ${theme.color.interactionAccentHover}
+            ${theme.color.interactionHover},
+            ${theme.color.interactionHover}
           ),
           ${theme.color.surfaceInset};
 
         [data-frozen="true"] {
           background:
             linear-gradient(
-              ${theme.color.interactionAccentHover},
-              ${theme.color.interactionAccentHover}
+              ${theme.color.interactionHover},
+              ${theme.color.interactionHover}
             ),
             ${theme.color.surfaceInset};
         }
@@ -197,8 +204,8 @@ export const Row = styled.div<{ $active: boolean }>`
     `}
 `
 
-const pulseAnim = (pink: string, transparent: string) => keyframes`
-  0% { box-shadow: ${pink} 0 0 0 1px; }
+const pulseAnim = (ring: string, transparent: string) => keyframes`
+  0% { box-shadow: ${ring} 0 0 0 1px; }
   75% { box-shadow: ${transparent} 0 0 0 16px; }
 `
 
@@ -234,22 +241,35 @@ export const Cell = styled.div<{
   ${({ $frozen, $rowActive, theme }) =>
     $frozen &&
     css`
-      background: ${$rowActive ? theme.color.gridSelection : color("gridRow")};
+      background: ${$rowActive
+        ? `linear-gradient(${theme.color.interactionSelected}, ${theme.color.interactionSelected}), ${theme.color.gridRow}`
+        : color("gridRow")};
     `}
 
   ${({ $isActive, theme }) =>
     $isActive &&
     css`
-      background: ${theme.color.gridSelection};
-      box-shadow: inset 0 0 0 1px ${theme.color.gridFocus};
+      background:
+        linear-gradient(
+          ${theme.color.statusInfoSurface},
+          ${theme.color.statusInfoSurface}
+        ),
+        linear-gradient(
+          ${theme.color.interactionSelected},
+          ${theme.color.interactionSelected}
+        ),
+        ${theme.color.gridRow};
+      border-right-color: transparent;
+      border-bottom-color: transparent;
+      box-shadow: inset 0 0 0 1px ${theme.color.statusInfo};
       border-radius: 0;
     `}
 
   ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${pulseAnim(theme.color.gridFocus, theme.color.transparent)} 1s
-        ease-out;
+      animation: ${pulseAnim(theme.color.statusInfo, theme.color.transparent)}
+        1s ease-out;
     `}
 `
 
@@ -350,7 +370,7 @@ export const FreezeHandle = styled.div<{
     !$dragging &&
     css`
       &:hover::after {
-        background: ${color("contentAccent")};
+        background: ${color("borderStrong")};
       }
     `}
 `

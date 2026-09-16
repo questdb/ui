@@ -23,7 +23,7 @@ const Wrapper = styled.div`
   width: 100%;
   height: 100%;
   padding: 2rem;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-left: 0.2rem ${color("surfaceInset")} solid;
 `
 

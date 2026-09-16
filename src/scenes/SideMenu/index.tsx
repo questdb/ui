@@ -58,7 +58,7 @@ const Wrapper = styled.div`
   width: ${RESPONSIVE_WIDTH};
   min-height: 0;
   overflow: hidden;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
   z-index: 25;
 

@@ -3,17 +3,20 @@ import React from "react"
 
 export type InputVariant = "transparent" | "error"
 
+export type InputTone = "neutral" | "accent"
+
 export type InputStyleProps = {
   variant?: InputVariant
+  $tone?: InputTone
 }
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & InputStyleProps
 
 const errorStyle = css`
-  border-color: ${({ theme }) => theme.color.statusDanger};
+  border-color: ${({ theme }) => theme.color.statusDangerStrong};
   background-color: ${({ theme }) => theme.color.statusDangerSurface};
   &:focus {
-    border-color: ${({ theme }) => theme.color.statusDanger};
+    border-color: ${({ theme }) => theme.color.statusDangerStrong};
     background: ${({ theme }) => theme.color.statusDangerSurface};
   }
 `
@@ -42,7 +45,10 @@ export const inputStyles = css<InputStyleProps>`
   &:focus-visible {
     outline: none;
     box-shadow: none;
-    border-color: ${({ theme }) => theme.color.contentAccent};
+    border-color: ${({ theme, $tone }) =>
+      $tone === "accent"
+        ? theme.color.contentAccent
+        : theme.color.borderStrong};
     background: ${({ theme }) => theme.color.surfaceInput};
   }
 

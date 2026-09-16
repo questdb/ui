@@ -41,12 +41,12 @@ const TitleRow = styled.div`
 `
 
 const RedText = styled(Text)`
-  color: ${({ theme }) => theme.color.statusDangerStrong};
+  color: ${({ theme }) => theme.color.statusDanger};
 `
 
 const IconWrapper = styled.div`
   flex-shrink: 0;
-  color: ${({ theme }) => theme.color.statusDangerMuted};
+  color: ${({ theme }) => theme.color.statusDangerStrong};
   display: flex;
   align-items: center;
   justify-content: center;

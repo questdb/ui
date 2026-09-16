@@ -11,6 +11,7 @@ import {
   type OperationHistory,
 } from "../../providers/AIStatusProvider"
 import { color } from "../../utils"
+import { statusInfoFocus } from "../../theme"
 import { BrainIcon } from "../SetupAIAssistant/BrainIcon"
 import {
   buildOperationSections,
@@ -121,7 +122,8 @@ const ModeHeaderTop = styled.div<{
       }
 
       &:focus-visible {
-        outline: 1px solid ${color("contentAccent")};
+        outline: 1px solid
+          ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
         outline-offset: 2px;
       }
 
@@ -213,7 +215,7 @@ const CodeBadgeText = styled.span`
 const CheckIcon = styled(CheckIconRaw)`
   width: 1.6rem;
   height: 1.6rem;
-  color: ${color("statusAssistant")};
+  color: ${color("aiPinkStart")};
   flex-shrink: 0;
 `
 

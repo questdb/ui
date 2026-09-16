@@ -4,6 +4,7 @@ import { theme } from "../../theme"
 import {
   CELL_FONT_SIZE_PX,
   HEADER_NAME_FONT_SIZE_PX,
+  HEADER_NAME_FONT_WEIGHT,
   HEADER_TYPE_FONT_SIZE_PX,
   CELL_PADDING_PX,
   CELL_BORDER_PX,
@@ -28,7 +29,7 @@ const HEADER_CHROME_PX =
 const CELL_CHROME_PX = CELL_PADDING_PX + CELL_BORDER_PX
 
 const CELL_FONT = `${CELL_FONT_SIZE_PX}px ${theme.fontMonospace}`
-const HEADER_NAME_FONT = `${HEADER_NAME_FONT_SIZE_PX}px ${theme.font}`
+const HEADER_NAME_FONT = `${HEADER_NAME_FONT_WEIGHT} ${HEADER_NAME_FONT_SIZE_PX}px ${theme.font}`
 const HEADER_TYPE_FONT = `${HEADER_TYPE_FONT_SIZE_PX}px ${theme.font}`
 const TEXT_MEASUREMENT_SAFETY_PX = 4
 

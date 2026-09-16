@@ -26,7 +26,7 @@ const Label = styled(ButtonBase)<{ $placeholder: boolean }>`
 
   &:hover,
   &:focus-visible {
-    border-color: ${({ theme }) => theme.color.contentAccent};
+    border-color: ${({ theme }) => theme.color.borderStrong};
   }
 
   ${({ $placeholder, theme }) =>
@@ -41,12 +41,6 @@ const Input = styled(NotebookRenameInput)`
   min-width: 8rem;
   height: 2.4rem;
   flex: 1;
-  border-color: ${({ theme }) => theme.color.contentAccent};
-
-  &:focus,
-  &:focus-visible {
-    border-color: ${({ theme }) => theme.color.contentAccent};
-  }
 `
 
 type Props = {

@@ -19,6 +19,8 @@ const Container = styled.div`
   align-items: flex-start;
   gap: 0.8rem;
   padding: 1.2rem;
+  background: ${({ theme }) =>
+    theme.mode === "light" ? theme.color.surfaceValue : "transparent"};
   border: 1.5px dashed ${color("contentAccent")};
   border-radius: 0.4rem;
 `
