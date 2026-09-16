@@ -531,6 +531,10 @@ export class Client {
     return await this.queryCatalog<LiveView>("live_views();")
   }
 
+  async cancelQuery(queryId: bigint): Promise<QueryResult<never>> {
+    return await this.query<never>(`CANCEL QUERY ${queryId};`)
+  }
+
   async showDDL(
     name: string,
     kind: TableKind,
