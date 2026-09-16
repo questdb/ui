@@ -244,6 +244,7 @@ export const VariableForm = ({
           <NameRow>
             <At>@</At>
             <NameInput
+              aria-label="Name"
               value={variable.name}
               placeholder="symbol"
               autoComplete="off"
@@ -258,6 +259,7 @@ export const VariableForm = ({
         </Field>
         <Field label="Label" hint="Label to show in the variables bar">
           <Input
+            aria-label="Label"
             value={variable.label ?? ""}
             onChange={(e) =>
               onChange({ ...variable, label: e.target.value || undefined })
@@ -267,6 +269,7 @@ export const VariableForm = ({
       </FieldRow>
       <Field label="Description">
         <DescriptionArea
+          aria-label="Description"
           rows={1}
           resize="vertical"
           value={variable.description ?? ""}

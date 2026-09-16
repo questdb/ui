@@ -26,6 +26,7 @@ import { OptionsPreview } from "./OptionsPreview"
 import { SelectionOptions } from "./SelectionOptions"
 
 const NONE_COLUMN = "__none__"
+const REGEX_PREVIEW_DELAY_MS = 200
 
 const REFRESH_OPTIONS: {
   value: ListRefresh
@@ -90,6 +91,9 @@ export const QueryListForm = ({
 }: Props) => {
   const { quest } = useContext(QuestContext)
   const [rows, setRows] = useState<QueryRows | null>(null)
+  const [rowsPreview, setRowsPreview] = useState<Preview | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [filtering, setFiltering] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -99,11 +103,10 @@ export const QueryListForm = ({
   const columns = rows
     ? rows.columns.map((column) => column.name)
     : (saved?.columns ?? [])
-  const preview: Preview | null = rows
-    ? normalizeQueryOptions(rows, variable)
-    : saved
-      ? { options: saved.options, warnings: saved.warnings }
-      : null
+  const preview: Preview | null =
+    rowsPreview ??
+    (saved ? { options: saved.options, warnings: saved.warnings } : null)
+  const showPreview = preview !== null && !runError && !previewError
   const returnedNoRows = rows !== null && rows.rows.length === 0
 
   const setSource = (patch: Partial<QueryListVariable["source"]>) =>
@@ -129,6 +132,7 @@ export const QueryListForm = ({
     setRunning(false)
     if (result.kind === "error") {
       setRows(null)
+      setRowsPreview(null)
       setRunError(result.error)
       return
     }
@@ -137,6 +141,34 @@ export const QueryListForm = ({
   }
 
   useEffect(() => () => abortRef.current?.abort(), [])
+
+  useEffect(() => {
+    if (!rows) return
+    const controller = new AbortController()
+    setFiltering(source.regex !== undefined)
+    const timer = setTimeout(
+      async () => {
+        const result = await normalizeQueryOptions(
+          rows,
+          variable,
+          controller.signal,
+        )
+        if (controller.signal.aborted) return
+        setFiltering(false)
+        if (result.kind === "error") {
+          setPreviewError(result.error)
+          return
+        }
+        setPreviewError(null)
+        setRowsPreview({ options: result.options, warnings: result.warnings })
+      },
+      source.regex ? REGEX_PREVIEW_DELAY_MS : 0,
+    )
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [rows, source.regex, source.labelColumn, variable.sort])
 
   return (
     <Fields>
@@ -167,18 +199,29 @@ export const QueryListForm = ({
         >
           {running ? "Running..." : "Run query"}
         </Button>
-        {preview && !runError && (
+        {filtering ? (
           <Text size="sm" color="contentSecondary">
-            {preview.options.length.toLocaleString()} value
-            {preview.options.length === 1 ? "" : "s"}
+            Filtering values...
           </Text>
+        ) : (
+          showPreview && (
+            <Text size="sm" color="contentSecondary">
+              {preview.options.length.toLocaleString()} value
+              {preview.options.length === 1 ? "" : "s"}
+            </Text>
+          )
         )}
       </RunRow>
-      {preview && !runError && <OptionsPreview options={preview.options} />}
+      {showPreview && <OptionsPreview options={preview.options} />}
       <Notices>
         {runError && (
           <Notice tone="danger" dataHook="variable-query-error">
             {runError}
+          </Notice>
+        )}
+        {previewError && !runError && (
+          <Notice tone="danger" dataHook="variable-regex-error">
+            {previewError}
           </Notice>
         )}
         {hasResult && columns.length > 1 && (
@@ -190,11 +233,12 @@ export const QueryListForm = ({
         {returnedNoRows && (
           <Notice tone="warning">The query returned no values.</Notice>
         )}
-        {preview?.warnings.map((warning) => (
-          <Notice key={warning} tone="warning">
-            {warning}
-          </Notice>
-        ))}
+        {showPreview &&
+          preview.warnings.map((warning) => (
+            <Notice key={warning} tone="warning">
+              {warning}
+            </Notice>
+          ))}
       </Notices>
       {hasResult && (
         <>
@@ -237,6 +281,7 @@ export const QueryListForm = ({
               hint="Keep only matching values from the list."
             >
               <MonoInput
+                aria-label="Regex filter"
                 value={source.regex ?? ""}
                 placeholder="^EUR"
                 autoComplete="off"

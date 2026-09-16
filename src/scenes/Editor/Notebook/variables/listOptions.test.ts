@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
-  applyRegex,
   dedupeOptions,
+  matchOption,
   parseCustomEntries,
   sortOptions,
 } from "./listOptions"
@@ -48,32 +48,32 @@ describe("parseCustomEntries", () => {
   })
 })
 
-describe("applyRegex", () => {
-  it("filters when the pattern has no groups", () => {
-    expect(applyRegex(options("EURUSD", "GBPJPY", "AUDUSD"), "USD$")).toEqual(
-      options("EURUSD", "AUDUSD"),
+describe("matchOption", () => {
+  it("keeps the option when the pattern has no groups", () => {
+    expect(matchOption(options("EURUSD")[0], /USD$/)).toEqual(
+      options("EURUSD")[0],
     )
   })
 
-  it("extracts the first group as the value", () => {
-    expect(applyRegex(options("EURUSD", "GBPJPY"), "/^(\\w{3})/")).toEqual(
-      options("EUR", "GBP"),
+  it("removes the option when the pattern does not match", () => {
+    expect(matchOption(options("GBPJPY")[0], /USD$/)).toBeNull()
+  })
+
+  it("extracts the first group as the value and label", () => {
+    expect(matchOption(options("EURUSD")[0], /^(\w{3})/)).toEqual(
+      options("EUR")[0],
     )
   })
 
   it("maps named text and value groups", () => {
     // Given
-    const pattern = "^(?<text>\\w{3})(?<value>\\w{3})$"
+    const pattern = new RegExp("^(?<text>\\w{3})(?<value>\\w{3})$")
 
     // When
-    const mapped = applyRegex(options("EURUSD"), pattern)
+    const mapped = matchOption(options("EURUSD")[0], pattern)
 
     // Then
-    expect(mapped).toEqual([{ value: "USD", label: "EUR" }])
-  })
-
-  it("leaves options untouched for an invalid pattern", () => {
-    expect(applyRegex(options("a"), "(")).toEqual(options("a"))
+    expect(mapped).toEqual({ value: "USD", label: "EUR" })
   })
 })
 

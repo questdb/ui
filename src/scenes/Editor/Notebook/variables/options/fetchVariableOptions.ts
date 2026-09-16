@@ -79,7 +79,8 @@ export const fetchVariableOptions = async (
     signal,
   )
   if (result.kind === "error") return result
-  const normalized = normalizeQueryOptions(result.rows, variable)
+  const normalized = await normalizeQueryOptions(result.rows, variable, signal)
+  if (normalized.kind === "error") return normalized
   return {
     kind: "ready",
     fetched: {

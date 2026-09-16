@@ -4,6 +4,7 @@ import type {
 } from "../../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../../utils/questdb/types"
 import { deriveListOptions } from "../listOptions"
+import { filterOptionsWithRegex } from "./regexFilter"
 
 export const MAX_OPTIONS = 10_000
 
@@ -23,10 +24,9 @@ export type QueryRows = {
   truncated: boolean
 }
 
-export type NormalizedQueryOptions = {
-  options: VariableOption[]
-  warnings: string[]
-}
+export type NormalizeQueryOptionsResult =
+  | { kind: "ready"; options: VariableOption[]; warnings: string[] }
+  | { kind: "error"; error: string }
 
 export const sqlStringLiteral = (value: string): string =>
   `'${value.replace(/'/g, "''")}'`
@@ -43,12 +43,13 @@ const labelIndex = (
 const cellText = (value: boolean | string | number | null): string | null =>
   value === null ? null : String(value)
 
-export const normalizeQueryOptions = (
+export const normalizeQueryOptions = async (
   rows: QueryRows,
   variable: ListVariable & { source: { type: "query" } },
-): NormalizedQueryOptions => {
+  signal: AbortSignal,
+): Promise<NormalizeQueryOptionsResult> => {
   const { columns } = rows
-  if (columns.length === 0) return { options: [], warnings: [] }
+  if (columns.length === 0) return { kind: "ready", options: [], warnings: [] }
   const valueIndex = 0
   const label = labelIndex(columns, variable.source.labelColumn)
   const bare = BARE_TYPES.has(columns[valueIndex].type.toUpperCase())
@@ -63,7 +64,13 @@ export const normalizeQueryOptions = (
     const text = label === null ? null : cellText(row[label])
     mapped.push({ value, label: text ?? value })
   }
-  const options = deriveListOptions(variable, mapped).map((option) =>
+  const filtered = await filterOptionsWithRegex(
+    mapped,
+    variable.source.regex,
+    signal,
+  )
+  if (filtered.kind === "error") return filtered
+  const options = deriveListOptions(variable, filtered.options).map((option) =>
     bare ? option : { ...option, value: sqlStringLiteral(option.value) },
   )
   const duplicates = mapped.length - new Set(mapped.map((o) => o.value)).size
@@ -81,5 +88,5 @@ export const normalizeQueryOptions = (
   if (nulls > 0) {
     warnings.push(`${nulls} null value${nulls === 1 ? "" : "s"} skipped.`)
   }
-  return { options, warnings }
+  return { kind: "ready", options, warnings }
 }

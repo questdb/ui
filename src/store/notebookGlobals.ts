@@ -28,6 +28,15 @@ export class GlobalsChangedError extends Error {
 export const getNotebookGlobals = async (): Promise<NotebookGlobals | null> =>
   (await db.notebook_globals.get(GLOBALS_ID)) ?? null
 
+export const assertNotebookGlobalsRevision = async (
+  expectedRevision: number,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const revision = (await getNotebookGlobals())?.revision ?? 0
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
+  if (revision !== expectedRevision) throw new GlobalsChangedError()
+}
+
 // The comparison and write share a transaction, including edits from the UI
 // and other browser tabs. Network validation must finish before calling this.
 export const replaceNotebookGlobals = (

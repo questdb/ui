@@ -20,7 +20,9 @@ import { toast } from "../../../../../components/Toast"
 import { trackEvent } from "../../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../../modules/ConsoleEventTracker/events"
 import type { NotebookVariable } from "../../../../../store/notebook"
+import { GlobalsChangedError } from "../../../../../store/notebookGlobals"
 import { readFromClipboard } from "../../../../../utils/copyToClipboard"
+import { signalUserEdit } from "../../../../../utils/notebooks/notebookAIBridge"
 import { parseDeclareBlock, renderDeclareBlock } from "../../declareUtils"
 import {
   useNotebookActions,
@@ -31,8 +33,13 @@ import { listOptionsState } from "../declareEntries"
 import { useGlobalVariablesState } from "../globals/GlobalVariablesProvider"
 import { globalNameConflict } from "../globals/globalNameConflict"
 import { effectiveVariables, type VariableScope } from "../scope"
-import { TIME_VARIABLE_NAMES } from "../timeRange"
+import { sameTimeRange, TIME_VARIABLE_NAMES } from "../timeRange"
 import { variablesEqual } from "../variableChanges"
+import {
+  VARIABLES_UPDATED_MESSAGE,
+  VariablesUpdatedError,
+  type VariableApplyBaseline,
+} from "../variableApplyConflict"
 import {
   PROBLEM_MESSAGES,
   draftProblem,
@@ -129,6 +136,7 @@ export const VariablesDialog: React.FC = () => {
     variables: currentGlobals,
     listOptions: globalListOptions,
     errors: globalErrors,
+    revision: globalRevision,
   } = useGlobalVariablesState()
   const [open, setOpen] = useState(false)
   const [drafts, setDrafts] = useState<VariableDraft[]>([])
@@ -137,8 +145,16 @@ export const VariablesDialog: React.FC = () => {
   const [progress, setProgress] = useState<string | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [baseline, setBaseline] = useState<VariableApplyBaseline>({
+    localVariables: [],
+    timeRange: undefined,
+    globalRevision: 0,
+  })
+  const [baselineGlobals, setBaselineGlobals] = useState<NotebookVariable[]>([])
+  const [conflictDetected, setConflictDetected] = useState(false)
   const committingRef = useRef(false)
   const prefetchAbortRef = useRef<AbortController | null>(null)
+  const draftEditSignaledRef = useRef(false)
 
   const currentLocal = settings.variables ?? []
   const hasVariableErrors =
@@ -168,16 +184,23 @@ export const VariablesDialog: React.FC = () => {
   const variableCount =
     effectiveVariables(currentGlobals, currentLocal).length + builtInCount
   const firstProblem = drafts.find((draft) => problems[draft.key] !== null)
+  const variablesUpdated =
+    conflictDetected ||
+    (open &&
+      (globalRevision !== baseline.globalRevision ||
+        !variablesEqual(currentGlobals, baselineGlobals) ||
+        !variablesEqual(currentLocal, baseline.localVariables) ||
+        !sameTimeRange(settings.timeRange, baseline.timeRange)))
   const footerMessage =
-    applyError ??
+    (variablesUpdated ? VARIABLES_UPDATED_MESSAGE : applyError) ??
     (firstProblem
       ? `@${firstProblem.variable.name || "unnamed"}: ${
           PROBLEM_MESSAGES[problems[firstProblem.key] as DraftProblem]
         }`
       : null)
-  const localDirty = !variablesEqual(currentLocal, localVariables)
-  const globalDirty = !variablesEqual(currentGlobals, globalVariables)
-  const canApply = localDirty || globalDirty
+  const localDirty = !variablesEqual(baseline.localVariables, localVariables)
+  const globalDirty = !variablesEqual(baselineGlobals, globalVariables)
+  const canApply = (localDirty || globalDirty) && !variablesUpdated
   const busy = progress !== null
   const selectedIndex = drafts.findIndex((draft) => draft.key === selectedKey)
   const selectedDraft = selectedIndex >= 0 ? drafts[selectedIndex] : null
@@ -199,6 +222,14 @@ export const VariablesDialog: React.FC = () => {
       ...draftsFromVariables(currentLocal, "notebook"),
     ]
     setDrafts(next)
+    setBaseline({
+      localVariables: currentLocal,
+      timeRange: settings.timeRange,
+      globalRevision,
+    })
+    setBaselineGlobals(currentGlobals)
+    setConflictDetected(false)
+    draftEditSignaledRef.current = false
     setSelectedKey(next[0]?.key ?? null)
     setServerErrors(
       Object.fromEntries(
@@ -212,6 +243,12 @@ export const VariablesDialog: React.FC = () => {
     )
     setApplyError(null)
     setSubmitted(false)
+  }
+
+  const signalDraftEdit = () => {
+    if (draftEditSignaledRef.current) return
+    draftEditSignaledRef.current = true
+    signalUserEdit(bufferId)
   }
 
   const handleOpenChange = (next: boolean) => {
@@ -229,6 +266,7 @@ export const VariablesDialog: React.FC = () => {
     key: string,
     update: (draft: VariableDraft) => VariableDraft,
   ) => {
+    signalDraftEdit()
     setDrafts((prev) =>
       orderDraftsByScope(prev.map((d) => (d.key === key ? update(d) : d))),
     )
@@ -237,6 +275,7 @@ export const VariablesDialog: React.FC = () => {
   }
 
   const handleAdd = () => {
+    signalDraftEdit()
     setSubmitted(false)
     const draft: VariableDraft = {
       key: newDraftKey(),
@@ -248,6 +287,7 @@ export const VariablesDialog: React.FC = () => {
   }
 
   const handleDelete = (key: string) => {
+    signalDraftEdit()
     const next = drafts.filter((d) => d.key !== key)
     setDrafts(next)
     if (selectedKey === key) setSelectedKey(next[0]?.key ?? null)
@@ -255,6 +295,7 @@ export const VariablesDialog: React.FC = () => {
   }
 
   const handleMove = (key: string, scope: VariableScope, toIndex: number) => {
+    signalDraftEdit()
     setDrafts((prev) => {
       const moving = prev.find((d) => d.key === key)
       if (!moving) return prev
@@ -298,6 +339,7 @@ export const VariablesDialog: React.FC = () => {
         : `Loading values for @${name}...`
 
   const handleApply = async () => {
+    if (variablesUpdated) return
     committingRef.current = false
     setSubmitted(true)
     const failingIndex = drafts.findIndex((_, index) =>
@@ -322,6 +364,7 @@ export const VariablesDialog: React.FC = () => {
       await applyVariables(
         localVariables,
         globalVariables,
+        baseline,
         controller.signal,
         (step) => {
           committingRef.current = step.kind === "committing"
@@ -339,10 +382,17 @@ export const VariablesDialog: React.FC = () => {
       })
       setOpen(false)
     } catch (error) {
-      if (!controller.signal.aborted)
+      if (
+        error instanceof GlobalsChangedError ||
+        error instanceof VariablesUpdatedError
+      ) {
+        setConflictDetected(true)
+        setApplyError(VARIABLES_UPDATED_MESSAGE)
+      } else if (!controller.signal.aborted) {
         setApplyError(
           error instanceof Error ? error.message : "Could not update variables",
         )
+      }
     } finally {
       committingRef.current = false
       setProgress(null)
@@ -359,6 +409,7 @@ export const VariablesDialog: React.FC = () => {
       void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_IMPORT, {
         importedCount: parsed.length,
       })
+      signalDraftEdit()
       setDrafts((prev) => {
         const next = prev.slice()
         for (const { name, value } of parsed) {
@@ -510,7 +561,11 @@ export const VariablesDialog: React.FC = () => {
                 onClick={handleApply}
                 disabled={!canApply || busy}
                 disabledTooltip={
-                  busy ? "Applying variables" : "No changes to apply"
+                  variablesUpdated
+                    ? VARIABLES_UPDATED_MESSAGE
+                    : busy
+                      ? "Applying variables"
+                      : "No changes to apply"
                 }
                 data-hook="variables-apply"
               >

@@ -17,7 +17,11 @@ import {
   type ViewParts,
 } from "../../../../utils/notebooks/notebookDexieView"
 import { prepareNotebookVariables } from "../../../../utils/notebooks/notebookVariableOptions"
-import { saveNotebookGlobals } from "../../../../store/notebookGlobals"
+import {
+  assertNotebookGlobalsRevision,
+  replaceNotebookGlobals,
+  saveNotebookGlobals,
+} from "../../../../store/notebookGlobals"
 import { GLOBAL_OPTIONS_OWNER } from "../../../../store/notebookOptions"
 import {
   getBufferActionSeq,
@@ -29,6 +33,10 @@ import type { NotebookTransitionResult } from "../../../../utils/notebooks/noteb
 import { commitVariables as commitPreparedVariables } from "./commitVariables"
 import type { PreparedVariables, VariableStep } from "./prepareVariables"
 import { changedVariableNames } from "./variableChanges"
+import {
+  assertNotebookVariablesUnchanged,
+  type VariableApplyBaseline,
+} from "./variableApplyConflict"
 import type { GlobalVariablesActions } from "./globals/GlobalVariablesProvider"
 import type { useVariableOptions } from "./useVariableOptions"
 
@@ -60,17 +68,24 @@ export const useNotebookVariableUpdates = ({
   applyTransition,
 }: Args) => {
   const saveVariableSettings = useCallback(
-    async (prepared: PreparedVariables) => {
-      const outcome = await commitView(bufferId, {
-        cells: cellsRef.current,
-        settings: {
-          ...settingsRef.current,
-          variables: prepared.settings.variables,
-          timeRange: prepared.settings.timeRange,
+    async (prepared: PreparedVariables, baseline?: VariableApplyBaseline) => {
+      const outcome = await commitView(
+        bufferId,
+        {
+          cells: cellsRef.current,
+          settings: {
+            ...settingsRef.current,
+            variables: prepared.settings.variables,
+            timeRange: prepared.settings.timeRange,
+          },
+          maximizedCellId: maximizedCellIdRef.current,
+          focusedCellId: focusedCellIdRef.current,
         },
-        maximizedCellId: maximizedCellIdRef.current,
-        focusedCellId: focusedCellIdRef.current,
-      })
+        baseline
+          ? (view) =>
+              assertNotebookVariablesUnchanged(view.settings ?? {}, baseline)
+          : undefined,
+      )
       if (outcome !== "committed")
         throw new Error("Notebook is no longer available.")
     },
@@ -96,6 +111,7 @@ export const useNotebookVariableUpdates = ({
       signal: AbortSignal,
       onStep?: (step: VariableStep) => void,
       globalVariables?: NotebookVariable[],
+      baseline?: VariableApplyBaseline,
     ) => {
       let preparedGlobal: PreparedVariables
       let nextGlobals: NotebookVariable[]
@@ -136,12 +152,24 @@ export const useNotebookVariableUpdates = ({
             GLOBAL_OPTIONS_OWNER,
             preparedGlobal,
             async () => {
-              if (globalChanged.length > 0)
+              if (baseline && globalChanged.length > 0) {
+                await replaceNotebookGlobals(
+                  nextGlobals,
+                  baseline.globalRevision,
+                  signal,
+                )
+              } else if (baseline) {
+                await assertNotebookGlobalsRevision(
+                  baseline.globalRevision,
+                  signal,
+                )
+              } else if (globalChanged.length > 0) {
                 await saveNotebookGlobals(nextGlobals)
+              }
             },
             signal,
           )
-          await saveVariableSettings(prepared)
+          await saveVariableSettings(prepared, baseline)
         },
         onCommit: (prepared) => {
           publishVariableSettings(prepared)
@@ -265,6 +293,7 @@ export const useNotebookVariableUpdates = ({
     async (
       variables: NotebookVariable[],
       globalVariables: NotebookVariable[],
+      baseline: VariableApplyBaseline,
       signal: AbortSignal,
       onStep: (step: VariableStep) => void,
     ) => {
@@ -273,6 +302,7 @@ export const useNotebookVariableUpdates = ({
         signal,
         onStep,
         globalVariables,
+        baseline,
       )
     },
     [applyNotebookSettings],

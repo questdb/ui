@@ -26,6 +26,7 @@ import type {
 import type { ChartConfig } from "./CellChart/chartTypes"
 import { captureExecution } from "./variables/captureExecution"
 import type { VariableErrors, VariableStep } from "./variables/prepareVariables"
+import type { VariableApplyBaseline } from "./variables/variableApplyConflict"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
@@ -128,6 +129,7 @@ export type NotebookActions = {
   applyVariables: (
     variables: NotebookVariable[],
     globals: NotebookVariable[],
+    baseline: VariableApplyBaseline,
     signal: AbortSignal,
     onStep: (step: VariableStep) => void,
   ) => Promise<void>

@@ -42,6 +42,7 @@ export type GlobalVariablesState = {
   variables: NotebookVariable[]
   listOptions: VariableOptionsByName
   errors: VariableErrors
+  revision: number
 }
 
 export type GlobalVariablesActions = {
@@ -68,6 +69,7 @@ const EMPTY_STATE: GlobalVariablesState = {
   variables: [],
   listOptions: {},
   errors: {},
+  revision: 0,
 }
 
 const NOOP_ACTIONS: GlobalVariablesActions = {
@@ -91,7 +93,10 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   const { quest } = useContext(QuestContext)
   const stored = useLiveQuery(getNotebookGlobals, [])
 
-  const [variables, setVariables] = useState<NotebookVariable[]>([])
+  const [definitions, setDefinitions] = useState<{
+    variables: NotebookVariable[]
+    revision: number
+  }>({ variables: [], revision: 0 })
 
   const variablesRef = useRef<NotebookVariable[]>([])
   const previousRef = useRef<NotebookVariable[] | null>(null)
@@ -190,8 +195,9 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
       const changed = changedVariableNames(variablesRef.current, next)
       previousRef.current = next
       variablesRef.current = next
-      setVariables(next)
+      setDefinitions((current) => ({ ...current, variables: next }))
       adopt(prepared)
+      fetchedRangeRef.current = prepared.settings.timeRange
       notify(
         [...changed, ...prepared.report.map((entry) => entry.name)],
         adoptedBy,
@@ -219,7 +225,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
             const next = prepared.settings.variables ?? []
             previousRef.current = next
             variablesRef.current = next
-            setVariables(next)
+            setDefinitions((current) => ({ ...current, variables: next }))
           },
         },
       )
@@ -236,8 +242,11 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   useEffect(() => {
     if (!loaded) return
     variablesRef.current = storedVariables
-    setVariables(storedVariables)
-  }, [loaded, storedVariables])
+    setDefinitions({
+      variables: storedVariables,
+      revision: stored?.revision ?? 0,
+    })
+  }, [loaded, storedVariables, stored?.revision])
 
   useEffect(() => {
     if (!loaded) return
@@ -258,8 +267,8 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   }, [loaded, storedVariables, activeTimeRange, notify, load, refetchChanged])
 
   const stateValue = useMemo<GlobalVariablesState>(
-    () => ({ variables, listOptions, errors }),
-    [variables, listOptions, errors],
+    () => ({ ...definitions, listOptions, errors }),
+    [definitions, listOptions, errors],
   )
 
   const actionsValue = useMemo<GlobalVariablesActions>(

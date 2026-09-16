@@ -35,6 +35,24 @@ const cellRequest = (value) => ({
   chart_config: null,
   grid: null,
 })
+const preservedCellRequest = (id) => ({
+  ...cellRequest(null),
+  id,
+  preserve_value: true,
+})
+const expressionVariable = (name, value) => ({
+  name,
+  kind: "expression",
+  label: null,
+  description: null,
+  value,
+  source: null,
+  sort: null,
+  multi: null,
+  include_all: null,
+  all: null,
+  selected: null,
+})
 
 describe("Notebook variables", () => {
   beforeEach(() => {
@@ -443,6 +461,123 @@ describe("Notebook variables", () => {
     cy.runNotebookQuery("select @rangeValue as restored_range")
     cy.getGridRow(0).should("contain", firstRange.from)
     cy.dropTable("variable_ranges")
+  })
+
+  it("refreshes global list values when switching notebook time ranges", () => {
+    // Given two notebooks with the same range and one global range list.
+    cy.dropTableIfExists("variable_ranges")
+    cy.execQuery("create table variable_ranges as (select 1 as id)")
+    cy.createNotebook()
+    setCalendarRange(firstRange)
+    cy.getByDataHook("notebook-variables").click()
+    cy.addNotebookVariable({
+      name: "globalRange",
+      kind: "custom",
+      value: rangeQuery,
+      scope: "global",
+    })
+    cy.applyNotebookVariables()
+    cy.createNotebook()
+    setCalendarRange(firstRange)
+    cy.selectNotebook("Notebook 1")
+
+    // When the first notebook changes its range before returning to the second.
+    setCalendarRange(nextRange)
+    cy.selectNotebook("Notebook 2")
+    cy.getByDataHook("notebook-variables").should(
+      "have.attr",
+      "aria-busy",
+      "false",
+    )
+    cy.runNotebookQuery("select @globalRange as notebook_range")
+
+    // Then the global list uses the active notebook range.
+    cy.getGridRow(0).should("contain", firstRange.from)
+    cy.dropTable("variable_ranges")
+  })
+
+  it("blocks stale variable drafts after agent updates", () => {
+    // Given one global and one local variable in an active notebook.
+    cy.connectMcpBridge()
+    cy.callMcpTool("get_global_variables", {}).then(({ revision }) =>
+      cy.callMcpTool("apply_global_variables", {
+        variables: [expressionVariable("globalSetting", "1")],
+        expected_revision: revision,
+        time_range: null,
+      }),
+    )
+    cy.callMcpTool("create_notebook", { label: "Conflict NB" }).then(
+      ({ bufferId }) => {
+        cy.callMcpTool("apply_notebook_state", {
+          buffer_id: bufferId,
+          layout_mode: null,
+          auto_refresh_default: null,
+          maximized_cell_id: null,
+          variables: [expressionVariable("localSetting", "1")],
+          time_range: null,
+          cells: [cellRequest("select 1")],
+        }).then((applied) => {
+          cy.wrap(applied.applied.added[0]).as("conflictCellId")
+        })
+        cy.callMcpTool("activate_notebook", {
+          buffer_id: bufferId,
+          cell_to_focus: null,
+        })
+        cy.getEditorTabByTitle("Conflict NB").should("have.attr", "active")
+
+        // When the agent changes locals after the user edits a local draft.
+        cy.getByDataHook("notebook-variables").click()
+        cy.containsByDataHook("variable-row", "@localSetting").click()
+        cy.getByDataHook("variable-expression-value").clear().type("10")
+        cy.callMcpTool("get_notebook_state", { buffer_id: bufferId })
+        cy.get("@conflictCellId").then((cellId) =>
+          cy.callMcpTool("apply_notebook_state", {
+            buffer_id: bufferId,
+            layout_mode: null,
+            auto_refresh_default: null,
+            maximized_cell_id: null,
+            variables: [expressionVariable("localSetting", "2")],
+            time_range: null,
+            cells: [preservedCellRequest(cellId)],
+          }),
+        )
+
+        // Then Apply stays blocked until the dialog reopens.
+        cy.getByDataHook("variables-footer-message").should(
+          "contain",
+          "Variables updated while this dialog was open. Reload them before applying.",
+        )
+        cy.getByDataHook("variables-apply").should("be.disabled")
+        cy.contains("button", "Cancel").click()
+        cy.getByDataHook("notebook-variables").click()
+        cy.containsByDataHook("variable-row", "@localSetting").click()
+        cy.getByDataHook("variable-expression-value").should("have.value", "2")
+        cy.contains("button", "Cancel").click()
+
+        // When the agent changes globals after the user edits a global draft.
+        cy.getByDataHook("notebook-variables").click()
+        cy.containsByDataHook("variable-row", "@globalSetting").click()
+        cy.getByDataHook("variable-expression-value").clear().type("10")
+        cy.callMcpTool("get_global_variables", {}).then(({ revision }) =>
+          cy.callMcpTool("apply_global_variables", {
+            variables: [expressionVariable("globalSetting", "2")],
+            expected_revision: revision,
+            time_range: null,
+          }),
+        )
+
+        // Then the global draft also stays blocked until the dialog reopens.
+        cy.getByDataHook("variables-footer-message").should(
+          "contain",
+          "Variables updated while this dialog was open. Reload them before applying.",
+        )
+        cy.getByDataHook("variables-apply").should("be.disabled")
+        cy.contains("button", "Cancel").click()
+        cy.getByDataHook("notebook-variables").click()
+        cy.containsByDataHook("variable-row", "@globalSetting").click()
+        cy.getByDataHook("variable-expression-value").should("have.value", "2")
+      },
+    )
   })
 
   it("prepares agent changes before execution and shows cached list values during reload", () => {

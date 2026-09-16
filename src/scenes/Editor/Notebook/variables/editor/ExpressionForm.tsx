@@ -11,6 +11,7 @@ type Props = {
 export const ExpressionForm = ({ variable, invalid, onChange }: Props) => (
   <Field label="Value" required>
     <MonoInput
+      aria-label="Value"
       value={variable.value}
       autoComplete="off"
       spellCheck={false}

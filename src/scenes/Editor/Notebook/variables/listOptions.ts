@@ -91,7 +91,7 @@ export const parseCustomEntries = (entries: string): VariableOption[] =>
     .filter((entry) => entry !== "")
     .map(toOption)
 
-const stripDelimiters = (pattern: string): string =>
+export const stripDelimiters = (pattern: string): string =>
   pattern.length > 2 && pattern.startsWith("/") && pattern.endsWith("/")
     ? pattern.slice(1, -1)
     : pattern
@@ -104,7 +104,7 @@ export const compileRegex = (pattern: string): RegExp | null => {
   }
 }
 
-const matchOption = (
+export const matchOption = (
   option: VariableOption,
   regex: RegExp,
 ): VariableOption | null => {
@@ -118,19 +118,6 @@ const matchOption = (
     return { value: match[1], label: match[1] }
   }
   return option
-}
-
-export const applyRegex = (
-  options: VariableOption[],
-  pattern: string | undefined,
-): VariableOption[] => {
-  if (!pattern) return options
-  const regex = compileRegex(pattern)
-  if (!regex) return options
-  return options.flatMap((option) => {
-    const matched = matchOption(option, regex)
-    return matched ? [matched] : []
-  })
 }
 
 export const dedupeOptions = (options: VariableOption[]): VariableOption[] => {
@@ -163,16 +150,7 @@ export const sortOptions = (
 export const deriveListOptions = (
   variable: ListVariable,
   options: VariableOption[],
-): VariableOption[] =>
-  sortOptions(
-    dedupeOptions(
-      applyRegex(
-        options,
-        variable.source.type === "query" ? variable.source.regex : undefined,
-      ),
-    ),
-    variable.sort,
-  )
+): VariableOption[] => sortOptions(dedupeOptions(options), variable.sort)
 
 export const customListOptions = (variable: ListVariable): VariableOption[] =>
   variable.source.type === "custom"

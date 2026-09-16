@@ -135,6 +135,7 @@ export type CommitOutcome = "committed" | "archived" | "deleted"
 export const commitView = async (
   bufferId: number,
   parts: ViewParts,
+  validateCurrent?: (view: NotebookViewState) => void,
 ): Promise<CommitOutcome> => {
   const outcome = await db.transaction(
     "rw",
@@ -143,6 +144,9 @@ export const commitView = async (
       const buffer = await bufferStore.getById(bufferId)
       if (!buffer) return "deleted"
       if (buffer.archived) return "archived"
+      if (validateCurrent && buffer.notebookViewState) {
+        validateCurrent(migratePersistedNotebookView(buffer.notebookViewState))
+      }
       const updated = await bufferStore.update(bufferId, {
         notebookViewState: buildPersistPayload(
           parts.cells,

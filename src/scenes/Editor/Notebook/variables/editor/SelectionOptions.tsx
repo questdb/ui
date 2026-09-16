@@ -12,8 +12,7 @@ const ALL_MODE_OPTIONS = [
   {
     value: "custom",
     label: "Custom value",
-    description:
-      "Selecting \"all\" option inserts one value of your choice, such as '.*'.",
+    description: 'Selecting "all" option inserts one value of your choice.',
   },
 ]
 
@@ -87,6 +86,7 @@ export const SelectionOptions = ({ variable, onChange }: Props) => {
           {variable.all.mode === "custom" && (
             <Field label="Custom value">
               <MonoInput
+                aria-label="Custom value"
                 value={variable.all.value}
                 data-hook="variable-all-value"
                 placeholder="'.*'"
