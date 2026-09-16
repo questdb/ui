@@ -1,11 +1,14 @@
 import React from "react"
 import { TimeRangePicker } from "../../TimeRangePicker"
-import { useNotebookActions, useNotebookState } from "../NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookVariablesState,
+} from "../NotebookProvider"
 import { NOTEBOOK_TIME_PRESETS } from "./timeRange"
 import { TimeRangeDeclarations } from "./TimeRangeDeclarations"
 
 export const NotebookTimeRangeControl: React.FC = () => {
-  const { settings } = useNotebookState()
+  const { settings } = useNotebookVariablesState()
   const { setTimeRange } = useNotebookActions()
   const range = settings.timeRange
 

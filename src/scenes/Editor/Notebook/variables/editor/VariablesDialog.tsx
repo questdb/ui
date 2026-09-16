@@ -27,7 +27,7 @@ import { parseDeclareBlock, renderDeclareBlock } from "../../declareUtils"
 import {
   useNotebookActions,
   useNotebookBufferId,
-  useNotebookState,
+  useNotebookVariablesState,
 } from "../../NotebookProvider"
 import { listOptionsState } from "../declareEntries"
 import { useGlobalVariablesState } from "../globals/GlobalVariablesProvider"
@@ -129,7 +129,7 @@ const FooterGroup = styled.div`
 
 export const VariablesDialog: React.FC = () => {
   const { settings, listOptions, variableErrors, variablesPending } =
-    useNotebookState()
+    useNotebookVariablesState()
   const { applyVariables } = useNotebookActions()
   const bufferId = useNotebookBufferId()
   const {

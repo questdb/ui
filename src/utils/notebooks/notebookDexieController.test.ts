@@ -1388,7 +1388,6 @@ describe("createDexieNotebookController — query-list variable values", () => {
     source: {
       type: "query" as const,
       query: "SELECT DISTINCT symbol FROM fx_trades",
-      refresh: "onLoad" as const,
     },
     sort: "none" as const,
     multi: true,
@@ -1541,14 +1540,10 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
     columns: [{ name: "symbol", type: "SYMBOL" }],
     timestamp: 0,
   }
-  const queryList = (
-    name: string,
-    query: string,
-    refresh: "onLoad" | "onTimeRangeChange" = "onLoad",
-  ) => ({
+  const queryList = (name: string, query: string) => ({
     name,
     kind: "list" as const,
-    source: { type: "query" as const, query, refresh },
+    source: { type: "query" as const, query },
     sort: "none" as const,
     multi: true,
     includeAll: true,
@@ -1615,12 +1610,12 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
   })
 
   it("refetches the time-dependent lists when the time range changed", async () => {
-    // Given a stored list that refreshes on time range changes
+    // Given a stored list whose query uses the time range
     await seedNotebook({
       cells: [cell("a", "SELECT 1")],
       settings: {
         variables: [
-          queryList("pair", "SELECT symbol FROM t", "onTimeRangeChange"),
+          queryList("pair", "SELECT symbol FROM t WHERE ts > @timeFrom"),
         ],
         timeRange: { from: "now-1d", to: "now" },
       },
@@ -1644,9 +1639,9 @@ describe("createDexieNotebookController — syncVariableOptions", () => {
   })
 
   it("refetches a time-dependent global and the notebook list built on it when the time range changed", async () => {
-    // Given a stored global that refreshes on time range changes and a stored notebook list built on it
+    // Given a stored global whose query uses the time range and a stored notebook list built on it
     await saveNotebookGlobals([
-      queryList("venue", "SELECT venue FROM t", "onTimeRangeChange"),
+      queryList("venue", "SELECT venue FROM t WHERE ts > @timeFrom"),
     ])
     await saveStoredOptions({
       owner: GLOBAL_OPTIONS_OWNER,

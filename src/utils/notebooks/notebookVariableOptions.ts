@@ -46,6 +46,8 @@ type Fetcher = {
   quest: Client | undefined
   signal: AbortSignal
   force: Set<string>
+  validateAll: boolean
+  previousErrors?: (owner: string) => VariableErrors
   validateSql?: (sql: string) => Promise<ValidateQueryResult>
   onStep?: (step: VariableStep) => void
 }
@@ -53,7 +55,15 @@ type Fetcher = {
 const lower = (name: string) => name.toLowerCase()
 
 const prepareScope = async (
-  { quest, signal, force, onStep, validateSql }: Fetcher,
+  {
+    quest,
+    signal,
+    force,
+    validateAll,
+    previousErrors,
+    onStep,
+    validateSql,
+  }: Fetcher,
   owner: string,
   settings: NotebookSettings,
   prefixEntries: DeclareEntry[],
@@ -93,12 +103,12 @@ const prepareScope = async (
     prefixEntries,
     prefixErrors,
     options,
-    errors: {},
+    errors: previousErrors?.(owner) ?? {},
     changed: [...force],
     refresh,
     signal,
     onStep,
-    validateAll: true,
+    validateAll,
     validateSql,
   })
 }
@@ -124,8 +134,15 @@ export const prepareNotebookVariables = async (
   const globalEntries = global.entries.filter(
     (entry) => !isTimeVariableName(entry.name),
   )
+  const previousGlobalErrors = fetcher.previousErrors?.(GLOBAL_OPTIONS_OWNER)
+  const repairedGlobals = Object.keys(previousGlobalErrors ?? {}).filter(
+    (name) => !(name in global.errors),
+  )
   const notebook = await prepareScope(
-    fetcher,
+    {
+      ...fetcher,
+      force: new Set([...fetcher.force, ...repairedGlobals.map(lower)]),
+    },
     notebookOptionsOwner(bufferId),
     settings,
     globalEntries,
@@ -188,7 +205,12 @@ export const resolveHeadlessDeclareEntries = (args: {
   signal: AbortSignal
 }): Promise<HeadlessDeclareEntries> =>
   resolveDeclareEntries(
-    { quest: args.quest, signal: args.signal, force: new Set() },
+    {
+      quest: args.quest,
+      signal: args.signal,
+      force: new Set(),
+      validateAll: true,
+    },
     args.bufferId,
     args.settings,
     args.globals,
@@ -220,6 +242,7 @@ export const syncHeadlessVariableOptions = async (
       quest: deps.getQuest(),
       signal: signal ?? new AbortController().signal,
       force: forcedByDiff([...globals, ...(settings.variables ?? [])], diff),
+      validateAll: true,
     },
     bufferId,
     settings,

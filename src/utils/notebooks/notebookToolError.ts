@@ -11,7 +11,6 @@ export type NotebookToolErrorCode =
   | "last_cell"
   | "cell_limit"
   | "cell_too_large"
-  | "variable_options"
 
 export class NotebookToolError extends Error {
   readonly code: NotebookToolErrorCode

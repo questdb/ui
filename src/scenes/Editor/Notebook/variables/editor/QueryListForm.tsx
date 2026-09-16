@@ -6,7 +6,6 @@ import { SqlInput } from "../../../../../components/SqlInput"
 import { QuestContext } from "../../../../../providers/QuestProvider"
 import type {
   DeclareEntry,
-  ListRefresh,
   ListSort,
   ListVariable,
   VariableOption,
@@ -27,23 +26,6 @@ import { SelectionOptions } from "./SelectionOptions"
 
 const NONE_COLUMN = "__none__"
 const REGEX_PREVIEW_DELAY_MS = 200
-
-const REFRESH_OPTIONS: {
-  value: ListRefresh
-  label: string
-  description: string
-}[] = [
-  {
-    value: "onLoad",
-    label: "On notebook load",
-    description: "Values are fetched when the notebook opens.",
-  },
-  {
-    value: "onTimeRangeChange",
-    label: "On time range change",
-    description: "Values are fetched again whenever the time range changes.",
-  },
-]
 
 const SORT_OPTIONS: { value: ListSort; label: string }[] = [
   { value: "none", label: "As returned" },
@@ -260,17 +242,6 @@ export const QueryListForm = ({
                     labelColumn:
                       labelColumn === NONE_COLUMN ? undefined : labelColumn,
                   })
-                }
-              />
-            </Field>
-            <Field label="Refresh list">
-              <SelectMenuControl
-                labelFontSize="1.4rem"
-                name="refresh"
-                value={source.refresh}
-                options={REFRESH_OPTIONS}
-                onValueChange={(refresh) =>
-                  setSource({ refresh: refresh as ListRefresh })
                 }
               />
             </Field>

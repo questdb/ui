@@ -6,7 +6,10 @@ import type {
   ListVariable,
   NotebookVariable,
 } from "../../../../../store/notebook"
-import { useNotebookActions, useNotebookState } from "../../NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookVariablesState,
+} from "../../NotebookProvider"
 import {
   useGlobalVariablesActions,
   useGlobalVariablesState,
@@ -36,7 +39,7 @@ const Picker = styled.div`
 `
 
 export const VariablesBar: React.FC = () => {
-  const { settings, listOptions } = useNotebookState()
+  const { settings, listOptions } = useNotebookVariablesState()
   const { updateVariable, refreshVariableOptions } = useNotebookActions()
   const { variables: globalVariables, listOptions: globalListOptions } =
     useGlobalVariablesState()

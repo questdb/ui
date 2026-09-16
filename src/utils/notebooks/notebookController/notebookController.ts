@@ -315,6 +315,7 @@ export const createDexieNotebookController = (
               {
                 quest: deps.getQuest(),
                 signal: operationSignal,
+                validateAll: true,
                 force: new Set(
                   [
                     ...diff.changed,

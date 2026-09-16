@@ -427,7 +427,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Execute a SQL cell. A cell whose statements are all reads runs them in PARALLEL: one failure skips nothing, and a statement the server rejects at validation is skipped with its validation error as that statement's result. A cell containing any DDL/DML runs sequentially instead, and a failure stops the remaining statements. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`. Query-list variables use their stored values; a list the cell references that was never loaded is fetched first, and if that fetch fails the cell does not run and the error is `error_code: \"variable_options\"` with the variable name and the server message.",
+    "description": "Execute a SQL cell. A cell whose statements are all reads runs them in PARALLEL: one failure skips nothing, and a statement the server rejects at validation is skipped with its validation error as that statement's result. A cell containing any DDL/DML runs sequentially instead, and a failure stops the remaining statements. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`. Query-list variables use their stored values; a list the cell references that was never loaded is fetched first. If that fetch fails, the cell still runs without that variable, so QuestDB reports an undeclared variable unless the cell DECLAREs it itself; fix the variable with apply_notebook_state or apply_global_variables and rerun.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -816,10 +816,6 @@
                     "type": ["string", "null"],
                     "description": "query source: a single SELECT; the first column is always the value, label_column may name another column to show."
                   },
-                  "refresh": {
-                    "type": ["string", "null"],
-                    "enum": ["onLoad", "onTimeRangeChange", null]
-                  },
                   "label_column": {
                     "type": ["string", "null"]
                   },
@@ -835,7 +831,6 @@
                 "required": [
                   "type",
                   "query",
-                  "refresh",
                   "label_column",
                   "entries",
                   "regex"
@@ -1029,17 +1024,6 @@
                     ],
                     "description": "query source: a single SELECT; the first column is always the value, label_column may name another column to show."
                   },
-                  "refresh": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "enum": [
-                      "onLoad",
-                      "onTimeRangeChange",
-                      null
-                    ]
-                  },
                   "label_column": {
                     "type": [
                       "string",
@@ -1064,7 +1048,6 @@
                 "required": [
                   "type",
                   "query",
-                  "refresh",
                   "label_column",
                   "entries",
                   "regex"

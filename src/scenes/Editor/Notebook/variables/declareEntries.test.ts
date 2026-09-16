@@ -21,7 +21,7 @@ const customList = (overrides: Partial<ListVariable>): ListVariable => ({
 const queryList = (overrides: Partial<ListVariable>): ListVariable =>
   customList({
     name: "id",
-    source: { type: "query", query: "SELECT id FROM t", refresh: "onLoad" },
+    source: { type: "query", query: "SELECT id FROM t" },
     ...overrides,
   })
 

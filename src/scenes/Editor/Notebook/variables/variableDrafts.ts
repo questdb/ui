@@ -22,7 +22,7 @@ export const newDraftKey = (): string => `v${++draftKeySequence}`
 export const createListVariable = (name = ""): ListVariable => ({
   name,
   kind: "list",
-  source: { type: "query", query: "", refresh: "onLoad" },
+  source: { type: "query", query: "" },
   sort: "none",
   multi: false,
   includeAll: true,

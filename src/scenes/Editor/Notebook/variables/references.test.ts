@@ -47,7 +47,6 @@ describe("variableReferences", () => {
       source: {
         type: "query",
         query: "SELECT symbol FROM t",
-        refresh: "onLoad",
       },
       sort: "none",
       multi: true,

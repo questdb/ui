@@ -54,9 +54,4 @@ export const listsRefreshedWith = (
 
 export const listsAffectedByTimeRange = (
   variables: NotebookVariable[],
-): QueryListVariable[] =>
-  closeOver(
-    variables,
-    TIME_VARIABLE_NAMES,
-    (list) => list.source.refresh === "onTimeRangeChange",
-  )
+): QueryListVariable[] => closeOver(variables, TIME_VARIABLE_NAMES, () => false)

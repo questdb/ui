@@ -103,15 +103,20 @@ import {
 import { CellResultHydrationProvider } from "./resultHydration/CellResultHydrationContext"
 import { resetChartEntryAnimation } from "./CellChart/chartEntryAnimation"
 
-// State and actions live in SEPARATE contexts: action-only consumers never
-// re-render when state changes (the actions value is ref-stable for life).
+// Cell state, variable state and actions live in SEPARATE contexts: a cell
+// edit never re-renders variable-only consumers (pickers, dialog, time range),
+// and action-only consumers never re-render at all (the actions value is
+// ref-stable for life).
 
-export type NotebookState = {
+export type NotebookCellsState = {
   cells: NotebookCell[]
-  settings: NotebookSettings
   focusedCellId: string | null
   maximizedCellId: string | null
   runningCellIds: Set<string>
+}
+
+export type NotebookVariablesState = {
+  settings: NotebookSettings
   listOptions: VariableOptionsByName
   variableErrors: VariableErrors
   variablesPending: boolean
@@ -233,12 +238,15 @@ const createStableActionProxy = <T extends ActionMap, K extends keyof T>(
     ]),
   ) as Pick<T, K>
 
-const EMPTY_STATE: NotebookState = {
+const EMPTY_CELLS_STATE: NotebookCellsState = {
   cells: [],
-  settings: {},
   focusedCellId: null,
   maximizedCellId: null,
   runningCellIds: new Set(),
+}
+
+const EMPTY_VARIABLES_STATE: NotebookVariablesState = {
+  settings: {},
   listOptions: {},
   variableErrors: {},
   variablesPending: false,
@@ -253,11 +261,17 @@ const createNotebookQueryKey = (
 const createNotebookScopeKey = (bufferId: number, cellId: string): string =>
   `notebook:${bufferId}:${cellId}`
 
-const NotebookStateContext = createContext<NotebookState>(EMPTY_STATE)
+const NotebookCellsStateContext =
+  createContext<NotebookCellsState>(EMPTY_CELLS_STATE)
+const NotebookVariablesStateContext = createContext<NotebookVariablesState>(
+  EMPTY_VARIABLES_STATE,
+)
 const NotebookActionsContext = createContext<NotebookActions>(NOOP_ACTIONS)
 const NotebookBufferIdContext = createContext<number>(0)
 
-export const useNotebookState = () => useContext(NotebookStateContext)
+export const useNotebookCellsState = () => useContext(NotebookCellsStateContext)
+export const useNotebookVariablesState = () =>
+  useContext(NotebookVariablesStateContext)
 export const useNotebookActions = () => useContext(NotebookActionsContext)
 export const useNotebookBufferId = () => useContext(NotebookBufferIdContext)
 
@@ -819,6 +833,7 @@ export const NotebookProvider: React.FC<{
     maximizedCellIdRef,
     focusedCellIdRef,
     setSettingsState,
+    getVariableErrors,
     applyVariableChanges,
     applyTransition,
   })
@@ -986,27 +1001,19 @@ export const NotebookProvider: React.FC<{
     applyVariableTransition,
   }
 
-  const stateValue = useMemo<NotebookState>(
+  const cellsStateValue = useMemo<NotebookCellsState>(
     () => ({
       cells: store.cells,
-      settings,
       focusedCellId,
       maximizedCellId,
       runningCellIds: execution.runningCellIds,
-      listOptions,
-      variableErrors,
-      variablesPending,
     }),
-    [
-      store.cells,
-      settings,
-      focusedCellId,
-      maximizedCellId,
-      execution.runningCellIds,
-      listOptions,
-      variableErrors,
-      variablesPending,
-    ],
+    [store.cells, focusedCellId, maximizedCellId, execution.runningCellIds],
+  )
+
+  const variablesStateValue = useMemo<NotebookVariablesState>(
+    () => ({ settings, listOptions, variableErrors, variablesPending }),
+    [settings, listOptions, variableErrors, variablesPending],
   )
 
   const actionsValue = useMemo<NotebookActions>(
@@ -1036,15 +1043,17 @@ export const NotebookProvider: React.FC<{
   return (
     <NotebookBufferIdContext.Provider value={bufferId}>
       <NotebookActionsContext.Provider value={actionsValue}>
-        <NotebookStateContext.Provider value={stateValue}>
-          <CellRefreshProvider value={cellRefreshEngine}>
-            <CellVirtualizationProvider value={cellVirtualizationEngine}>
-              <CellResultHydrationProvider value={resultHydration}>
-                {children}
-              </CellResultHydrationProvider>
-            </CellVirtualizationProvider>
-          </CellRefreshProvider>
-        </NotebookStateContext.Provider>
+        <NotebookCellsStateContext.Provider value={cellsStateValue}>
+          <NotebookVariablesStateContext.Provider value={variablesStateValue}>
+            <CellRefreshProvider value={cellRefreshEngine}>
+              <CellVirtualizationProvider value={cellVirtualizationEngine}>
+                <CellResultHydrationProvider value={resultHydration}>
+                  {children}
+                </CellResultHydrationProvider>
+              </CellVirtualizationProvider>
+            </CellRefreshProvider>
+          </NotebookVariablesStateContext.Provider>
+        </NotebookCellsStateContext.Provider>
       </NotebookActionsContext.Provider>
     </NotebookBufferIdContext.Provider>
   )

@@ -600,7 +600,7 @@ describe("Notebook variables", () => {
             {
               name: "pair",
               kind: "list",
-              source: { type: "query", query: pairQuery, refresh: "onLoad" },
+              source: { type: "query", query: pairQuery },
               sort: "none",
               multi: true,
               include_all: true,

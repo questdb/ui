@@ -31,7 +31,12 @@ import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { NotebookTransitionResult } from "../../../../utils/notebooks/notebookController/notebookTransitions"
 import { commitVariables as commitPreparedVariables } from "./commitVariables"
-import type { PreparedVariables, VariableStep } from "./prepareVariables"
+import type {
+  PreparedVariables,
+  VariableErrors,
+  VariableStep,
+} from "./prepareVariables"
+import { sameTimeRange, TIME_VARIABLE_NAMES } from "./timeRange"
 import { changedVariableNames } from "./variableChanges"
 import {
   assertNotebookVariablesUnchanged,
@@ -49,10 +54,19 @@ type Args = {
   maximizedCellIdRef: MutableRefObject<string | null>
   focusedCellIdRef: MutableRefObject<string | null>
   setSettingsState: Dispatch<SetStateAction<NotebookSettings>>
+  getVariableErrors: () => VariableErrors
   applyVariableChanges: ReturnType<typeof useVariableOptions>["apply"]
   applyTransition: <T>(
     transition: (parts: ViewParts) => NotebookTransitionResult<T>,
   ) => T
+}
+
+type ApplySettingsOptions = {
+  signal: AbortSignal
+  onStep?: (step: VariableStep) => void
+  validateAll: boolean
+  globalVariables?: NotebookVariable[]
+  baseline?: VariableApplyBaseline
 }
 
 export const useNotebookVariableUpdates = ({
@@ -64,6 +78,7 @@ export const useNotebookVariableUpdates = ({
   maximizedCellIdRef,
   focusedCellIdRef,
   setSettingsState,
+  getVariableErrors,
   applyVariableChanges,
   applyTransition,
 }: Args) => {
@@ -108,10 +123,13 @@ export const useNotebookVariableUpdates = ({
   const applyNotebookSettings = useCallback(
     async (
       updateSettings: (current: NotebookSettings) => NotebookSettings,
-      signal: AbortSignal,
-      onStep?: (step: VariableStep) => void,
-      globalVariables?: NotebookVariable[],
-      baseline?: VariableApplyBaseline,
+      {
+        signal,
+        onStep,
+        validateAll,
+        globalVariables,
+        baseline,
+      }: ApplySettingsOptions,
     ) => {
       let preparedGlobal: PreparedVariables
       let nextGlobals: NotebookVariable[]
@@ -129,15 +147,26 @@ export const useNotebookVariableUpdates = ({
             globals.getVariables(),
             nextGlobals,
           )
+          const rangeChanged = !sameTimeRange(
+            settingsRef.current.timeRange,
+            settings.timeRange,
+          )
           const result = await prepareNotebookVariables(
             {
               quest,
               signal,
               force: new Set(
-                [...changed, ...globalChanged].map((name) =>
-                  name.toLowerCase(),
-                ),
+                [
+                  ...changed,
+                  ...globalChanged,
+                  ...(rangeChanged ? TIME_VARIABLE_NAMES : []),
+                ].map((name) => name.toLowerCase()),
               ),
+              validateAll,
+              previousErrors: (owner) =>
+                owner === GLOBAL_OPTIONS_OWNER
+                  ? globals.getErrors()
+                  : getVariableErrors(),
               onStep,
             },
             bufferId,
@@ -180,10 +209,12 @@ export const useNotebookVariableUpdates = ({
     [
       applyVariableChanges,
       bufferId,
+      getVariableErrors,
       globals,
       publishVariableSettings,
       quest,
       saveVariableSettings,
+      settingsRef,
     ],
   )
 
@@ -221,6 +252,7 @@ export const useNotebookVariableUpdates = ({
               {
                 quest,
                 signal,
+                validateAll: true,
                 force: new Set(
                   [
                     ...diff.changed,
@@ -277,8 +309,7 @@ export const useNotebookVariableUpdates = ({
     ) => {
       await applyNotebookSettings(
         (settings) => ({ ...settings, timeRange: range ?? undefined }),
-        signal,
-        onStep,
+        { signal, onStep, validateAll: false },
       )
       void trackEvent(
         range
@@ -297,13 +328,13 @@ export const useNotebookVariableUpdates = ({
       signal: AbortSignal,
       onStep: (step: VariableStep) => void,
     ) => {
-      await applyNotebookSettings(
-        (settings) => ({ ...settings, variables }),
+      await applyNotebookSettings((settings) => ({ ...settings, variables }), {
         signal,
         onStep,
+        validateAll: true,
         globalVariables,
         baseline,
-      )
+      })
     },
     [applyNotebookSettings],
   )

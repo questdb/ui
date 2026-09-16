@@ -50,6 +50,7 @@ export type VariableUpdate = {
   changed?: string[]
   refresh?: string[]
   loadStored?: boolean
+  validateEntries?: boolean
   saveSettings?: (prepared: PreparedVariables) => Promise<void>
   onCommit?: (prepared: PreparedVariables) => void
 }
@@ -175,6 +176,7 @@ export const useVariableOptions = ({
                   : []),
               ],
               signal: controller.signal,
+              validateEntries: update.validateEntries,
               onStep: update.onStep,
             })
         requireNotAborted(controller.signal)
@@ -235,6 +237,7 @@ export const useVariableOptions = ({
     const work = apply(getSettings, {
       loadStored: true,
       refresh: (getSettings().variables ?? []).map((v) => v.name),
+      validateEntries: false,
     })
     loadingRef.current = work
     void work.catch(() => undefined)

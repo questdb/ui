@@ -469,6 +469,7 @@ export const dispatchApplyNotebookState = async (
       quest: getAgentQuest(),
       signal: signal ?? new AbortController().signal,
       validateSql,
+      validateAll: true,
       force: new Set(
         [
           ...changedNames,

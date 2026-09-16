@@ -359,6 +359,8 @@ export const runHeadlessCell = async (
     )
   }
 
+  // Failed lists are not surfaced here on purpose: a cell may DECLARE the name
+  // itself, so QuestDB decides (undeclared-variable error vs. shadowed list).
   const { entries: variables } = await resolveHeadlessDeclareEntries({
     bufferId,
     quest,

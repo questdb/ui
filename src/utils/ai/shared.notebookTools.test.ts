@@ -3065,7 +3065,6 @@ describe("dispatchTool — query-list variable values", () => {
     source: {
       type: "query",
       query: "SELECT DISTINCT symbol FROM fx_trades",
-      refresh: "onLoad",
     },
     sort: "none",
     multi: true,

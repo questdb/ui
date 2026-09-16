@@ -63,8 +63,6 @@ export const storedVariableToWire = (variable: NotebookVariable) => ({
           type: variable.source.type,
           query:
             variable.source.type === "query" ? variable.source.query : null,
-          refresh:
-            variable.source.type === "query" ? variable.source.refresh : null,
           label_column:
             variable.source.type === "query"
               ? (variable.source.labelColumn ?? null)

@@ -67,24 +67,32 @@ const Presets = styled.ul`
   border-left: 1px solid ${({ theme }) => theme.color.interactionNeutral};
 `
 
-const PresetItem = styled.li<{ selected?: boolean }>`
-  cursor: pointer;
-  height: 3rem;
-  padding: 0 1rem;
-  line-height: 3rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
+const PresetButton = styled(Button).attrs({
+  variant: "ghost",
+  size: "sm",
+  fullWidth: true,
+})<{ $selected: boolean }>`
+  && {
+    height: 3rem;
+    padding: 0 1rem;
+    justify-content: flex-start;
+    border-radius: 0;
+    background: ${({ $selected, theme }) =>
+      $selected ? theme.color.interactionNeutral : "transparent"};
+    color: ${({ $selected, theme }) =>
+      $selected ? theme.color.contentPrimary : theme.color.contentSecondary};
+  }
 
-  &:hover {
+  &&:hover:not(:disabled),
+  &&:focus-visible {
     background: ${({ theme }) => theme.color.interactionNeutral};
     color: ${({ theme }) => theme.color.contentPrimary};
   }
 
-  ${({ selected, theme }) =>
-    selected &&
-    `& {
-      background: ${theme.color.interactionNeutral};
-      color: ${theme.color.contentPrimary};
-    }`}
+  &&:focus-visible {
+    outline: 1px solid ${({ theme }) => theme.color.borderAccent};
+    outline-offset: -1px;
+  }
 `
 
 const Footer = styled(Box).attrs({
@@ -421,15 +429,20 @@ export const TimeRangePicker = ({
           <Presets>
             {presets.map(
               ({ label, dateFrom: presetFrom, dateTo: presetTo }) => (
-                <PresetItem
-                  key={label}
-                  data-hook="time-range-preset"
-                  selected={dateFrom === presetFrom && dateTo === presetTo}
-                  aria-disabled={progress !== null}
-                  onClick={() => void apply(presetFrom, presetTo)}
-                >
-                  {label}
-                </PresetItem>
+                <li key={label}>
+                  <PresetButton
+                    type="button"
+                    data-hook="time-range-preset"
+                    $selected={dateFrom === presetFrom && dateTo === presetTo}
+                    aria-pressed={
+                      dateFrom === presetFrom && dateTo === presetTo
+                    }
+                    disabled={progress !== null}
+                    onClick={() => void apply(presetFrom, presetTo)}
+                  >
+                    {label}
+                  </PresetButton>
+                </li>
               ),
             )}
           </Presets>

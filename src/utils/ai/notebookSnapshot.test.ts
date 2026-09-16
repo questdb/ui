@@ -252,7 +252,6 @@ describe("buildSnapshot", () => {
       source: {
         type: "query" as const,
         query: "SELECT DISTINCT symbol FROM fx_trades",
-        refresh: "onLoad" as const,
       },
       sort: "none" as const,
       multi: true,

@@ -33,7 +33,7 @@ const expression = (name: string, value: string): NotebookVariable => ({
 const queryList = (name: string, query: string): NotebookVariable => ({
   name,
   kind: "list",
-  source: { type: "query", query, refresh: "onLoad" },
+  source: { type: "query", query },
   sort: "none",
   multi: true,
   includeAll: true,

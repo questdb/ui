@@ -55,8 +55,6 @@ const readSource = (raw: unknown): ListSource | null => {
     return {
       type: "query",
       query: raw.query,
-      refresh:
-        raw.refresh === "onTimeRangeChange" ? "onTimeRangeChange" : "onLoad",
       labelColumn: optionalString(raw.labelColumn),
       regex: optionalString(raw.regex),
     }

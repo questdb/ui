@@ -7,7 +7,7 @@ import { prepareVariables } from "./prepareVariables"
 const list = (name: string, query: string): ListVariable => ({
   name,
   kind: "list",
-  source: { type: "query", query, refresh: "onLoad" },
+  source: { type: "query", query },
   sort: "none",
   multi: true,
   includeAll: true,
@@ -180,6 +180,60 @@ describe("prepareVariables", () => {
     expect(quest.queryRaw.mock.calls[0][0]).toContain("@middle := @a + 1")
     expect(prepared.options.a).toBe(options.a)
     expect(prepared.options.b.options[0].value).toBe("3")
+  })
+
+  it("re-validates an untouched variable with an old error when validateAll is set", async () => {
+    // Given an expression that failed earlier and nothing that references it
+    const quest = client([])
+    const variables = [
+      { name: "limit", kind: "expression" as const, value: "42" },
+    ]
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: { variables },
+      prefixEntries: [],
+      options: {},
+      errors: { limit: "table missing" },
+      changed: [],
+      refresh: [],
+      validateAll: true,
+      signal: new AbortController().signal,
+    })
+    // Then the server was asked again and the old error is gone
+    expect(quest.validateQuery).toHaveBeenCalledTimes(1)
+    expect(prepared.errors).toEqual({})
+    expect(prepared.entries.map((entry) => entry.name)).toEqual(["limit"])
+  })
+
+  it("fetches on load without validating the DECLARE entries", async () => {
+    // Given a list whose stored selection is validated after a normal fetch
+    const prepare = (validateEntries: boolean) => {
+      const quest = client([rows(2)])
+      const a = list("a", "SELECT n FROM numbers")
+      a.selected = [{ value: "2", label: "2" }]
+      return prepareVariables({
+        quest: quest as unknown as Client,
+        settings: { variables: [a] },
+        prefixEntries: [],
+        options: {},
+        errors: {},
+        changed: [],
+        refresh: ["a"],
+        validateEntries,
+        signal: new AbortController().signal,
+      }).then((prepared) => ({ prepared, quest }))
+    }
+    // When
+    const normal = await prepare(true)
+    const load = await prepare(false)
+    // Then the load skips the DECLARE round trip and keeps only the source query check
+    expect(normal.quest.validateQuery).toHaveBeenCalledTimes(2)
+    expect(normal.quest.validateQuery.mock.calls[1][0]).toContain("@a := 2")
+    expect(load.quest.validateQuery).toHaveBeenCalledTimes(1)
+    expect(load.quest.validateQuery.mock.calls[0][0]).not.toContain("@a :=")
+    expect(load.prepared.options.a.options[0].value).toBe("2")
+    expect(load.prepared.errors).toEqual({})
   })
 
   it("validates the source query but keeps all 10,000 fetched options without validating their expansion", async () => {

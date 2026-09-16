@@ -10,7 +10,10 @@ import {
 } from "../../store/notebookOptions"
 import { variableOptionsContext } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import type { Client } from "../questdb/client"
+import { TIME_VARIABLE_NAMES } from "../../scenes/Editor/Notebook/variables/timeRange"
+import type { VariableErrors } from "../../scenes/Editor/Notebook/variables/prepareVariables"
 import {
+  prepareNotebookVariables,
   resolveHeadlessDeclareEntries,
   type VariableValuesEntry,
 } from "./notebookVariableOptions"
@@ -20,7 +23,7 @@ const BUFFER_ID = 7
 const queryList = (name: string, query: string): ListVariable => ({
   name,
   kind: "list",
-  source: { type: "query", query, refresh: "onLoad" },
+  source: { type: "query", query },
   sort: "none",
   multi: true,
   includeAll: true,
@@ -248,5 +251,124 @@ describe("resolveHeadlessDeclareEntries", () => {
     expect(sent).toHaveLength(1)
     expect(result.entries).toEqual([])
     expect(result.report).toEqual([{ name: "venue", error: "offline" }])
+  })
+})
+
+describe("prepareNotebookVariables", () => {
+  beforeEach(async () => {
+    await db.notebook_options.clear()
+  })
+
+  it("checks only the time-bound variables on a time range change and keeps the other errors", async () => {
+    // Given a stored list unrelated to the time range, an expression that failed earlier, and a time-bound list
+    const unrelated = queryList("symbol", "SELECT symbol FROM trades")
+    unrelated.selected = [{ value: "'EURUSD'", label: "EURUSD" }]
+    const broken = {
+      name: "limit",
+      kind: "expression" as const,
+      value: "(SELECT max(n) FROM missing)",
+    }
+    const bound = queryList(
+      "pair",
+      "SELECT symbol FROM trades WHERE ts > @timeFrom",
+    )
+    await saveStoredOptions({
+      owner: notebookOptionsOwner(BUFFER_ID),
+      name: "symbol",
+      options: [{ value: "'EURUSD'", label: "EURUSD" }],
+      fetchedAt: 1,
+      context: variableOptionsContext(
+        unrelated as Parameters<typeof variableOptionsContext>[0],
+        [],
+      ),
+    })
+    const validated: string[] = []
+    const sent: string[] = []
+    const quest = {
+      validateQuery: (sql: string) => {
+        validated.push(sql)
+        return Promise.resolve({
+          query: sql,
+          columns: [{ name: "symbol", type: "SYMBOL" }],
+          timestamp: -1,
+        })
+      },
+      queryRaw: (sql: string) => {
+        sent.push(sql)
+        return {
+          promise: Promise.resolve(symbolRows(["GBPUSD"])),
+          queryId: "q",
+        }
+      },
+      abort: () => undefined,
+    } as unknown as Client
+
+    // When the time range moves
+    const prepared = await prepareNotebookVariables(
+      {
+        quest,
+        signal: new AbortController().signal,
+        force: new Set(TIME_VARIABLE_NAMES.map((name) => name.toLowerCase())),
+        validateAll: false,
+        previousErrors: (owner): VariableErrors =>
+          owner === GLOBAL_OPTIONS_OWNER ? {} : { limit: "table missing" },
+      },
+      BUFFER_ID,
+      {
+        timeRange: { from: "2025-01-01", to: "2025-01-02" },
+        variables: [unrelated, broken, bound],
+      },
+      [],
+    )
+
+    // Then only the time-bound list ran, the unrelated list kept its stored values, and the old error survived
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain("@timeFrom")
+    expect(validated.some((sql) => sql.includes("@symbol"))).toBe(false)
+    expect(validated.some((sql) => sql.includes("missing"))).toBe(false)
+    expect(prepared.notebook.options.symbol.options[0].label).toBe("EURUSD")
+    expect(prepared.notebook.errors).toEqual({ limit: "table missing" })
+    expect(prepared.notebook.options.pair.options[0].label).toBe("GBPUSD")
+  })
+
+  it("rechecks a notebook variable that depends on a global the time range change repaired", async () => {
+    // Given a global time-bound list that failed earlier and a notebook expression blocked by it
+    const venue = queryList(
+      "venue",
+      "SELECT venue FROM trades WHERE ts > @timeFrom",
+    )
+    const settings = {
+      timeRange: { from: "2025-01-01", to: "2025-01-02" },
+      variables: [
+        { name: "first", kind: "expression" as const, value: "@venue" },
+      ],
+    }
+    const { quest, sent } = makeQuest([symbolRows(["LSE"])])
+    const previousErrors = (owner: string): VariableErrors =>
+      owner === GLOBAL_OPTIONS_OWNER
+        ? { venue: "table missing" }
+        : { first: "Cannot validate because @venue failed." }
+
+    // When the time range moves and the global query succeeds
+    const prepared = await prepareNotebookVariables(
+      {
+        quest,
+        signal: new AbortController().signal,
+        force: new Set(TIME_VARIABLE_NAMES.map((name) => name.toLowerCase())),
+        validateAll: false,
+        previousErrors,
+      },
+      BUFFER_ID,
+      settings,
+      [venue],
+    )
+
+    // Then both scopes are clean and the expression is declared again
+    expect(sent).toHaveLength(1)
+    expect(prepared.global.errors).toEqual({})
+    expect(prepared.notebook.errors).toEqual({})
+    expect(prepared.notebook.entries.map((entry) => entry.name)).toContain(
+      "first",
+    )
   })
 })

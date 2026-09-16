@@ -155,13 +155,10 @@ export type TextVariable = VariableBase & {
   value: string
 }
 
-export type ListRefresh = "onLoad" | "onTimeRangeChange"
-
 export type ListSource =
   | {
       type: "query"
       query: string
-      refresh: ListRefresh
       labelColumn?: string
       regex?: string
     }

@@ -94,7 +94,6 @@ describe("draftProblem", () => {
       source: {
         type: "query",
         query: "SELECT s FROM t",
-        refresh: "onLoad",
         regex: "(",
       },
       sort: "none",

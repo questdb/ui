@@ -85,7 +85,7 @@ export const withListSource = (
     ...variable,
     source:
       source === "query"
-        ? { type: "query", query: "", refresh: "onLoad" }
+        ? { type: "query", query: "" }
         : { type: "custom", entries: "" },
   }
 }

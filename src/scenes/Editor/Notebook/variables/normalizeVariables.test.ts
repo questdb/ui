@@ -76,7 +76,7 @@ describe("normalizeVariables", () => {
 
     // Then
     expect(variable).toMatchObject({
-      source: { type: "query", refresh: "onLoad" },
+      source: { type: "query" },
       selected: [],
     })
   })

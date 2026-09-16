@@ -35,7 +35,6 @@ const queryList = (
   source: {
     type: "query",
     query: "SELECT symbol FROM t",
-    refresh: "onLoad",
     ...source,
   },
   sort: "none",

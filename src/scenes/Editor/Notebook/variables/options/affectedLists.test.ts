@@ -12,11 +12,10 @@ import {
 const list = (
   name: string,
   query: string,
-  refresh: "onLoad" | "onTimeRangeChange" = "onLoad",
 ): ListVariable & { source: { type: "query" } } => ({
   name,
   kind: "list",
-  source: { type: "query", query, refresh },
+  source: { type: "query", query },
   sort: "none",
   multi: true,
   includeAll: true,
@@ -73,11 +72,11 @@ describe("listsAffectedByChange", () => {
 })
 
 describe("listsAffectedByTimeRange", () => {
-  it("picks the lists that refresh on the range or reference a time variable", () => {
+  it("picks the lists that reference a time variable", () => {
     // Given
     const lists = [
       list("pair", "SELECT symbol FROM t WHERE ts > @timeFrom"),
-      list("side", "SELECT side FROM t", "onTimeRangeChange"),
+      list("side", "SELECT side FROM t WHERE @timeFilter"),
       list("size", "SELECT size FROM t"),
     ]
 
@@ -91,7 +90,7 @@ describe("listsAffectedByTimeRange", () => {
   it("follows the chain from a time-dependent list", () => {
     // Given
     const lists = [
-      list("venue", "SELECT venue FROM t", "onTimeRangeChange"),
+      list("venue", "SELECT venue FROM t WHERE ts < @timeTo"),
       list("pair", "SELECT symbol FROM t WHERE venue = @venue"),
       list("size", "SELECT size FROM t"),
     ]

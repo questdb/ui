@@ -113,6 +113,10 @@ const DragHandle = styled(IconButton).attrs({
   padding: 0;
   opacity: 0.35;
 
+  &:focus-visible {
+    opacity: 1;
+  }
+
   && {
     cursor: grab;
   }
@@ -210,6 +214,17 @@ export const VariableList = ({
 
   const handleDragEnd = () => setDraggingKey(null)
 
+  const handleHandleKeyDown = (
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    key: string,
+    scope: VariableScope,
+    index: number,
+  ) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
+    e.preventDefault()
+    onMove(key, scope, e.key === "ArrowUp" ? index - 1 : index + 2)
+  }
+
   const renderRow = (draft: VariableDraft, index: number) => {
     const { variable, scope } = draft
     const problem = problems[draft.key] ?? errors[draft.key]
@@ -235,10 +250,11 @@ export const VariableList = ({
         data-scope={scope}
       >
         <DragHandle
-          label={`Drag ${variable.name || "variable"} to reorder`}
+          label={`Reorder ${variable.name || "variable"} (drag or arrow keys)`}
           draggable
           onDragStart={(e) => handleDragStart(e, draft.key)}
           onDragEnd={handleDragEnd}
+          onKeyDown={(e) => handleHandleKeyDown(e, draft.key, scope, index)}
           onClick={(e) => e.stopPropagation()}
         >
           <DotsSixVerticalIcon size={15} />

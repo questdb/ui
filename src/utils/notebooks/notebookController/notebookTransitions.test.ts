@@ -473,7 +473,7 @@ describe("applyNotebookStateTransition — variables diff", () => {
   const list = (query: string) => ({
     name: "pair",
     kind: "list" as const,
-    source: { type: "query" as const, query, refresh: "onLoad" as const },
+    source: { type: "query" as const, query },
     sort: "none" as const,
     multi: true,
     includeAll: true,

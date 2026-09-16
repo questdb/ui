@@ -9,7 +9,6 @@ const pairList: ListVariable & { source: { type: "query" } } = {
   source: {
     type: "query",
     query: "SELECT DISTINCT symbol FROM fx_trades",
-    refresh: "onLoad",
   },
   sort: "none",
   multi: true,

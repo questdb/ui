@@ -49,6 +49,7 @@ export type PrepareVariablesArgs = {
   refresh: string[]
   signal: AbortSignal
   validateAll?: boolean
+  validateEntries?: boolean
   prefixErrors?: VariableErrors
   validateSql?: (sql: string) => Promise<ValidateQueryResult>
   onStep?: (step: VariableStep) => void
@@ -72,6 +73,7 @@ export const prepareVariables = async ({
   signal,
   prefixErrors = {},
   validateAll = false,
+  validateEntries = true,
   validateSql,
   onStep,
 }: PrepareVariablesArgs): Promise<PreparedVariables> => {
@@ -135,7 +137,7 @@ export const prepareVariables = async ({
     let error = dependency
       ? `Cannot validate because @${dependency} failed.`
       : undefined
-    if (!needsCheck && !error) error = previousErrors[name]
+    if (!needsCheck && !validateAll && !error) error = previousErrors[name]
     if (previousOptions[name]) options[name] = previousOptions[name]
     if ((needsCheck || validateAll) && !error) {
       onStep?.({ kind: "validating", name })
@@ -182,7 +184,12 @@ export const prepareVariables = async ({
         }
         if (!error) {
           const entry = variableToDeclareEntry(variable, options)
-          if (entry && !usesAllQueryOptions && !reusesSelection) {
+          if (
+            entry &&
+            validateEntries &&
+            !usesAllQueryOptions &&
+            !reusesSelection
+          ) {
             if (!validate) error = "SQL validation is unavailable."
             else {
               const dependencies = referencedDeclareEntries(

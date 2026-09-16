@@ -6,7 +6,7 @@ import type {
 } from "../../../../../store/notebook"
 import type { Client } from "../../../../../utils/questdb/client"
 import { referencedDeclareEntries, referencesAny } from "../references"
-import { isTimeVariableName, TIME_VARIABLE_NAMES } from "../timeRange"
+import { TIME_VARIABLE_NAMES } from "../timeRange"
 import { fetchQueryRows } from "./fetchQueryRows"
 import { normalizeQueryOptions } from "./normalizeQueryOptions"
 
@@ -51,7 +51,6 @@ export type FetchVariableOptionsResult =
   | { kind: "error"; error: string }
 
 // Include the resolved dependency values, not just the shared variable name.
-// Refresh-on-range-change lists also depend on the range without referencing it.
 export const variableOptionsContext = (
   variable: QueryListVariable,
   entriesAbove: DeclareEntry[],
@@ -60,10 +59,6 @@ export const variableOptionsContext = (
     source: variable.source,
     sort: variable.sort,
     entries: referencedDeclareEntries(variable.source.query, entriesAbove),
-    timeRange:
-      variable.source.refresh === "onTimeRangeChange"
-        ? entriesAbove.filter((entry) => isTimeVariableName(entry.name))
-        : undefined,
   })
 
 export const fetchVariableOptions = async (

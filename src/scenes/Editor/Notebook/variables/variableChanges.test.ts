@@ -74,10 +74,7 @@ describe("variablesEqual", () => {
   it("sees a change inside the source or the selection", () => {
     // Given
     const custom = list({ type: "custom", entries: "a, b" }, "all")
-    const query = list(
-      { type: "query", query: "SELECT a", refresh: "onLoad" },
-      "all",
-    )
+    const query = list({ type: "query", query: "SELECT a" }, "all")
     const picked = list({ type: "custom", entries: "a, b" }, [
       { value: "a", label: "a" },
     ])
