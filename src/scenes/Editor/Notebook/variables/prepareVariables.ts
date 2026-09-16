@@ -58,12 +58,15 @@ export const requireNotAborted = (signal: AbortSignal): void => {
   if (signal.aborted) throw new DOMException("Aborted", "AbortError")
 }
 
+const ownRecord = <T>(record: Record<string, T>): Record<string, T> =>
+  Object.assign(Object.create(null) as Record<string, T>, record)
+
 export const prepareVariables = async ({
   quest,
   settings,
   prefixEntries,
-  options: previousOptions,
-  errors: previousErrors,
+  options: staleOptions,
+  errors: staleErrors,
   changed,
   refresh,
   signal,
@@ -75,8 +78,10 @@ export const prepareVariables = async ({
   requireNotAborted(signal)
   const variables = settings.variables ?? []
   const drafts = draftsFromVariables(variables, "notebook")
-  const options: PrefetchedVariableOptions = {}
-  const errors: VariableErrors = {}
+  const previousOptions = ownRecord(staleOptions)
+  const previousErrors = ownRecord(staleErrors)
+  const options: PrefetchedVariableOptions = ownRecord({})
+  const errors: VariableErrors = ownRecord({})
   const report: VariableValuesEntry[] = []
   const affected = new Set(
     [...changed, ...refresh].map((name) => name.toLowerCase()),

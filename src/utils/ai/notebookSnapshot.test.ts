@@ -244,8 +244,8 @@ describe("buildSnapshot", () => {
     }
   })
 
-  it("reports the stored values of every query list, notebook and global", async () => {
-    // Given a notebook list with stored values and a global list without
+  it("reports stored values for notebook lists only, never for globals", async () => {
+    // Given a notebook list and a global list, both with stored values
     const queryList = (name: string) => ({
       name,
       kind: "list" as const,
@@ -274,26 +274,31 @@ describe("buildSnapshot", () => {
       ],
       fetchedAt: Date.UTC(2026, 8, 10, 12, 0, 0),
     })
+    await saveStoredOptions({
+      owner: GLOBAL_OPTIONS_OWNER,
+      name: "venue",
+      options: [{ value: "'LSE'", label: "LSE" }],
+      fetchedAt: Date.UTC(2026, 8, 10, 12, 0, 0),
+    })
+
+    // When
+    const snap = await buildSnapshot(id)
+    await saveNotebookGlobals([])
     await db.notebook_options
       .where("owner")
       .equals(GLOBAL_OPTIONS_OWNER)
       .delete()
 
-    // When
-    const snap = await buildSnapshot(id)
-    await saveNotebookGlobals([])
-
     // Then
     if (snap?.status !== "ok") throw new Error("expected an ok snapshot")
     expect(snap.variable_values).toEqual([
       { name: "pair", count: 2, fetched_at: Date.UTC(2026, 8, 10, 12, 0, 0) },
-      { name: "venue", fetched: false },
     ])
     const text = formatSnapshot(snap)
     expect(text).toContain(
       "pair: list all (multi) [2 values fetched at 2026-09-10T12:00:00.000Z]",
     )
-    expect(text).toContain("venue: list all (multi) [values not fetched yet]")
+    expect(text).toContain("venue: list all (multi)\n")
   })
 
   it("keeps global variables visible when saved local names conflict", async () => {

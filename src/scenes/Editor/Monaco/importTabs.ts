@@ -302,7 +302,11 @@ const hasMatchingGlobal = (
   globals: NotebookVariable[],
   variable: NotebookVariable,
 ): boolean =>
-  globals.some((g) => g.name === variable.name && g.kind === variable.kind)
+  globals.some(
+    (g) =>
+      g.name.toLowerCase() === variable.name.toLowerCase() &&
+      g.kind === variable.kind,
+  )
 
 export const importNotebookVariables = (
   item: Record<string, unknown>,

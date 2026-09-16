@@ -191,7 +191,7 @@ export const ListPicker = ({
       />
       <RadixPopover.Trigger asChild>
         <Trigger
-          label={summarize(current, options)}
+          label={summarize(current, listed)}
           labelFontSize="1.3rem"
           leadingIcon={
             status?.status === "error" ? (

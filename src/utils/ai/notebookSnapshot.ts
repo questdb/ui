@@ -19,7 +19,6 @@ import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
 import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import {
-  GLOBAL_OPTIONS_OWNER,
   loadStoredOptions,
   notebookOptionsOwner,
   type StoredVariableOptions,
@@ -256,16 +255,10 @@ export const buildSnapshot = async (
   if (globals.length > 0) {
     out.global_variables = globals
   }
-  const values = [
-    ...variableValuesStatus(
-      variables,
-      await loadStoredOptions(notebookOptionsOwner(bufferId)),
-    ),
-    ...variableValuesStatus(
-      globals,
-      await loadStoredOptions(GLOBAL_OPTIONS_OWNER),
-    ),
-  ]
+  const values = variableValuesStatus(
+    variables,
+    await loadStoredOptions(notebookOptionsOwner(bufferId)),
+  )
   if (values.length > 0) {
     out.variable_values = values
   }

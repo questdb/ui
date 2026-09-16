@@ -301,6 +301,61 @@ describe("prepareVariables", () => {
     },
   )
 
+  it("keeps a list named __proto__ as its own fetched entry", async () => {
+    // Given
+    const quest = client([rows(7)])
+    const variables = [list("__proto__", "SELECT 7")]
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: { variables },
+      prefixEntries: [],
+      options: {},
+      errors: {},
+      changed: ["__proto__"],
+      refresh: ["__proto__"],
+      signal: new AbortController().signal,
+    })
+    // Then
+    expect(quest.queryRaw).toHaveBeenCalledTimes(1)
+    expect(Object.keys(prepared.options)).toEqual(["__proto__"])
+    expect(prepared.entries).toEqual([{ name: "__proto__", value: "7" }])
+    expect(prepared.errors).toEqual({})
+  })
+
+  it("does not read an inherited Object member as a previous error or option", async () => {
+    // Given
+    const quest = client([rows(1)])
+    const variables = [list("a", "SELECT 1"), list("toString", "SELECT 2")]
+    const options = {
+      toString: {
+        options: [{ value: "2", label: "2" }],
+        columns: ["n"],
+        truncated: false,
+        warnings: [],
+        fetchedAt: 1,
+      },
+    }
+    // When
+    const prepared = await prepareVariables({
+      quest: quest as unknown as Client,
+      settings: { variables },
+      prefixEntries: [],
+      options,
+      errors: {},
+      changed: ["a"],
+      refresh: ["a"],
+      signal: new AbortController().signal,
+    })
+    // Then
+    expect(quest.queryRaw).toHaveBeenCalledTimes(1)
+    expect(prepared.errors).toEqual({})
+    expect(prepared.entries.map((entry) => entry.name)).toEqual([
+      "a",
+      "toString",
+    ])
+  })
+
   it("discards a late response after cancellation", async () => {
     // Given
     const controller = new AbortController()

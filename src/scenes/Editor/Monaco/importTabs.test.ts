@@ -1345,6 +1345,22 @@ describe("importNotebookVariables", () => {
     expect(result.dropped).toEqual([])
   })
 
+  it("reuses a console global whose name differs only by case", () => {
+    // Given
+    const globals = [{ name: "venue", kind: "text" as const, value: "'NYSE'" }]
+
+    // When
+    const result = importNotebookVariables(
+      { globals: [{ ...venue, name: "Venue" }], variables: [pair] },
+      globals,
+    )
+
+    // Then
+    expect(result.variables.map((v) => v.name)).toEqual(["pair"])
+    expect(result.reusedGlobals).toEqual(["Venue"])
+    expect(result.localizedGlobals).toEqual([])
+  })
+
   it("reports the entries it cannot read", () => {
     // When
     const result = importNotebookVariables(

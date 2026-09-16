@@ -54,7 +54,7 @@ export const VariablesBar: React.FC = () => {
     updater: (current: NotebookVariable) => NotebookVariable,
   ) => {
     if (scope === "global") {
-      void globals.updateVariable(name, updater)
+      globals.updateVariable(name, updater)
     } else {
       updateVariable(name, updater)
     }

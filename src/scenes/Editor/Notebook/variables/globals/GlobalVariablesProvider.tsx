@@ -16,7 +16,7 @@ import type {
 } from "../../../../../store/notebook"
 import {
   getNotebookGlobals,
-  saveNotebookGlobals,
+  replaceNotebookGlobals,
 } from "../../../../../store/notebookGlobals"
 import { GLOBAL_OPTIONS_OWNER } from "../../../../../store/notebookOptions"
 import { buildDeclareEntries } from "../declareEntries"
@@ -58,7 +58,7 @@ export type GlobalVariablesActions = {
   updateVariable: (
     name: string,
     update: (variable: NotebookVariable) => NotebookVariable,
-  ) => Promise<void>
+  ) => void
   refreshOptions: (name: string) => void
   attachNotebook: (bufferId: number, handle: NotebookHandle) => () => void
 }
@@ -78,7 +78,7 @@ const NOOP_ACTIONS: GlobalVariablesActions = {
   getErrors: () => ({}),
   settle: () => Promise.resolve(),
   adoptVariables: () => undefined,
-  updateVariable: () => Promise.resolve(),
+  updateVariable: () => undefined,
   refreshOptions: () => undefined,
   attachNotebook: () => () => undefined,
 }
@@ -99,6 +99,7 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   }>({ variables: [], revision: 0 })
 
   const variablesRef = useRef<NotebookVariable[]>([])
+  const revisionRef = useRef(0)
   const previousRef = useRef<NotebookVariable[] | null>(null)
   const notebooksRef = useRef(new Map<number, NotebookHandle>())
   const activeBufferIdRef = useRef<number | null>(null)
@@ -207,28 +208,38 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
   )
 
   const updateVariable = useCallback(
-    async (
+    (
       name: string,
       update: (variable: NotebookVariable) => NotebookVariable,
     ) => {
-      await apply(
-        () => ({
-          variables: variablesRef.current.map((variable) =>
-            variable.name === name ? update(variable) : variable,
-          ),
-          timeRange: activeTimeRange(),
-        }),
+      let expectedRevision = 0
+      let committedRevision = 0
+      void apply(
+        () => {
+          expectedRevision = revisionRef.current
+          return {
+            variables: variablesRef.current.map((variable) =>
+              variable.name === name ? update(variable) : variable,
+            ),
+            timeRange: activeTimeRange(),
+          }
+        },
         {
-          saveSettings: (prepared) =>
-            saveNotebookGlobals(prepared.settings.variables ?? []),
+          saveSettings: async (prepared) => {
+            committedRevision = await replaceNotebookGlobals(
+              prepared.settings.variables ?? [],
+              expectedRevision,
+            )
+          },
           onCommit: (prepared) => {
             const next = prepared.settings.variables ?? []
             previousRef.current = next
             variablesRef.current = next
-            setDefinitions((current) => ({ ...current, variables: next }))
+            revisionRef.current = committedRevision
+            setDefinitions({ variables: next, revision: committedRevision })
           },
         },
-      )
+      ).catch(showVariableUpdateError)
     },
     [apply, activeTimeRange],
   )
@@ -241,11 +252,10 @@ export const GlobalVariablesProvider: React.FC = ({ children }) => {
 
   useEffect(() => {
     if (!loaded) return
+    const revision = stored?.revision ?? 0
     variablesRef.current = storedVariables
-    setDefinitions({
-      variables: storedVariables,
-      revision: stored?.revision ?? 0,
-    })
+    revisionRef.current = revision
+    setDefinitions({ variables: storedVariables, revision })
   }, [loaded, storedVariables, stored?.revision])
 
   useEffect(() => {

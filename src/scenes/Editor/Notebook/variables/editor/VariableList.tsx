@@ -147,6 +147,10 @@ const DeleteButton = styled(IconButton).attrs({
 })`
   padding: 0.2rem;
   opacity: 0;
+
+  &:focus-visible {
+    opacity: 1;
+  }
 `
 
 const AddButton = styled(Button).attrs({
