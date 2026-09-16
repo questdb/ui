@@ -69,6 +69,7 @@ const defaultConfig: LocalConfig = {
   resultsSplitterBasis: 350,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  autoRefreshQueryActivity: true,
   useNewGrid: true,
   useQuickVis: false,
   runWithSelectionMode: "partial",
@@ -143,6 +144,7 @@ type ContextProps = {
   updateSettings: (key: StoreKey, value: SettingsType) => void
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  autoRefreshQueryActivity: boolean
   useNewGrid: boolean
   useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode
@@ -187,6 +189,7 @@ const defaultValues: ContextProps = {
   updateSettings: (_key: StoreKey, _value: SettingsType) => undefined,
   exampleQueriesVisited: false,
   autoRefreshTables: true,
+  autoRefreshQueryActivity: true,
   useNewGrid: true,
   useQuickVis: false,
   runWithSelectionMode: "partial",
@@ -235,6 +238,14 @@ export const LocalStorageProvider = ({
       ? getValue(StoreKey.AUTO_REFRESH_TABLES) === "true"
       : defaultConfig.autoRefreshTables,
   )
+
+  const [autoRefreshQueryActivity, setAutoRefreshQueryActivity] =
+    useState<boolean>(
+      parseBoolean(
+        getValue(StoreKey.AUTO_REFRESH_QUERY_ACTIVITY),
+        defaultConfig.autoRefreshQueryActivity,
+      ),
+    )
 
   const [useNewGrid, setUseNewGrid] = useState<boolean>(() =>
     getInitialBooleanFeature(NEW_GRID_OVERRIDE),
@@ -350,6 +361,9 @@ export const LocalStorageProvider = ({
       case StoreKey.AUTO_REFRESH_TABLES:
         setAutoRefreshTables(value === "true")
         break
+      case StoreKey.AUTO_REFRESH_QUERY_ACTIVITY:
+        setAutoRefreshQueryActivity(value === "true")
+        break
       case StoreKey.USE_NEW_GRID:
         setUseNewGrid(value === "true")
         break
@@ -390,6 +404,7 @@ export const LocalStorageProvider = ({
       updateSettings,
       exampleQueriesVisited,
       autoRefreshTables,
+      autoRefreshQueryActivity,
       useNewGrid,
       useQuickVis,
       runWithSelectionMode,
@@ -410,6 +425,7 @@ export const LocalStorageProvider = ({
       updateSettings,
       exampleQueriesVisited,
       autoRefreshTables,
+      autoRefreshQueryActivity,
       useNewGrid,
       useQuickVis,
       runWithSelectionMode,

@@ -55,6 +55,7 @@ export type LocalConfig = {
   resultsSplitterBasis: number
   exampleQueriesVisited: boolean
   autoRefreshTables: boolean
+  autoRefreshQueryActivity: boolean
   useNewGrid: boolean
   useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode

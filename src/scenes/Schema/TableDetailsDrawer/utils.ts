@@ -1,22 +1,8 @@
-import { formatDistance } from "date-fns"
 import type { TimestampedSample, TrendData } from "./healthCheck"
 import type { StoragePolicy } from "../../../utils/questdb/types"
-import { fetchUserLocale, getLocaleFromLanguage } from "../../../utils"
 
 const BIGINT_ZERO = BigInt(0)
 const BIGINT_ONE = BigInt(1)
-
-export function formatRelativeTimestamp(timestamp: string | null): string {
-  if (!timestamp) return "Never"
-  const date = new Date(timestamp)
-  if (isNaN(date.getTime()) || date.getTime() === 0) return "Never"
-  const userLocale = fetchUserLocale()
-  const locale = getLocaleFromLanguage(userLocale)
-  return formatDistance(date, new Date(), {
-    locale,
-    addSuffix: true,
-  })
-}
 
 export function formatMemoryPressure(level: number | null): string {
   if (level == null) return "N/A"
@@ -59,45 +45,9 @@ export function formatInterval(
   return `${value.toLocaleString()} ${formatDurationUnit(value, unit)}`
 }
 
-// String-based so the server's microsecond precision survives: Date only
-// keeps milliseconds, and a START FROM NOW boundary is a microsecond value.
-export function formatUtcTimestamp(timestamp: string): string {
-  const isoMatch = timestamp.match(
-    /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z$/,
-  )
-  if (isoMatch) {
-    const [, date, time, fraction = ""] = isoMatch
-    const subSeconds = fraction.replace(/0+$/, "")
-    return `${date} ${time}${subSeconds ? `.${subSeconds}` : ""} UTC`
-  }
-  const date = new Date(timestamp)
-  if (isNaN(date.getTime())) return timestamp
-  return `${date
-    .toISOString()
-    .replace("T", " ")
-    .replace(/\.\d{3}Z$/, "")} UTC`
-}
-
 export function formatTxnCount(count: bigint | null): string {
   if (count == null) return "Unknown"
   return `${count.toLocaleString()} txn${count === BIGINT_ONE ? "" : "s"}`
-}
-
-export function formatMicrosDuration(micros: bigint): string {
-  const value = Number(micros)
-  if (value < 1_000_000) return `${Math.round(value / 1_000)} ms`
-  if (value < 60_000_000) return `${(value / 1_000_000).toFixed(1)} s`
-  if (value < 3_600_000_000) return `${(value / 60_000_000).toFixed(1)} min`
-  return `${(value / 3_600_000_000).toFixed(1)} h`
-}
-
-export function formatBytes(bytes: bigint | null): string {
-  if (bytes == null) return "Unknown"
-  const value = Number(bytes)
-  if (value < 1024) return `${value} B`
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KiB`
-  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MiB`
-  return `${(value / 1024 ** 3).toFixed(1)} GiB`
 }
 
 export function getTrendSamplesForIssue(

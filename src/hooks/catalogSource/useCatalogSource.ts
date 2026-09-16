@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
-import { QuestContext } from "../../../providers"
-import * as QuestDB from "../../../utils/questdb"
+import { QuestContext } from "../../providers"
+import * as QuestDB from "../../utils/questdb"
 import {
   createSourceMachineState,
   nextSourceState,

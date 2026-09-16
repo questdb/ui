@@ -5,7 +5,6 @@ import { selectors, actions } from "../../../store"
 import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
 import {
   Drawer,
-  Box,
   Text,
   Dialog,
   CopyButton,
@@ -45,13 +44,22 @@ import {
 import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
-import { useCatalogSource } from "./useCatalogSource"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
+import {
+  useCatalogSource,
+  type SourceState,
+} from "../../../hooks/catalogSource"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
-import type { BaseTableStatus, SourceState, TableKindData } from "./types"
+import type { BaseTableStatus, TableKindData } from "./types"
+import {
+  EmptyState,
+  EmptyStateHeading,
+  EmptyStateSubheading,
+  LoadingContainer,
+} from "./shared-styles"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -60,44 +68,6 @@ const TypeBadge = styled(Badge).attrs({ variant: "neutral", size: "sm" })`
 `
 
 const BIGINT_ZERO = BigInt(0)
-
-const LoadingContainer = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  padding: 4rem;
-  height: 100%;
-`
-
-const EmptyState = styled(Box).attrs({
-  flexDirection: "column",
-  align: "flex-start",
-  justifyContent: "center",
-})`
-  gap: 1.2rem;
-  padding: 1.8rem;
-  flex: 1 1 auto;
-  min-height: 0;
-  max-width: 40rem;
-  margin: 0 auto;
-`
-
-const EmptyStateHeading = styled.h2`
-  font-size: 2rem;
-  font-weight: 600;
-  text-align: left;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  margin: 0;
-`
-
-const EmptyStateSubheading = styled.p`
-  font-size: 1.4rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  text-align: left;
-  margin: 0;
-  line-height: 1.5;
-`
 
 const MetadataErrorBannerWrapper = styled.div`
   padding: 1.5rem;
