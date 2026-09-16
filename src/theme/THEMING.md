@@ -146,7 +146,7 @@ shared by light mode.
 
 | Token                 | Dark / light                      | Purpose and allowed use                                                                                          |
 | --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `contentPrimary`      | `#f8f8f2` / `#1c2029`             | Primary body text, titles, default icons, result-grid column names, and table/column type glyphs.                |
+| `contentPrimary`      | `#f8f8f2` / `#1c2029`             | Primary body text, titles, default icons, and result-grid column names.                                          |
 | `contentSecondary`    | `#9da1ad` / `#505968`             | Supporting text, parenthetical type labels, and neutral toolbar icons.                                           |
 | `contentMuted`        | `#858995` / `#565f6e`             | Metadata and low-emphasis labels that remain readable on the raised surface.                                     |
 | `contentDisabled`     | `#747985` / `#596271`             | Disabled text/icons only; never use it merely to make something “quiet,” and never as a border.                  |
@@ -458,10 +458,14 @@ building or reviewing a component.
 
 ### Object identity and type
 
-- Table, materialized-view, view, and ordinary column-type glyphs are
-  `contentPrimary`, the same as the object name. Parenthetical type labels stay
-  `contentSecondary`. Timestamp clocks are `statusInfo`; the designated
-  timestamp is a filled clock at `statusInfoSubtle`.
+- Table, materialized-view, view, live-view, and ordinary column-type glyphs
+  are `statusInfo`, the same cyan as the rail latch. So are the schema tree's
+  storage detail marks and the table details trigger. Expand carets stay on
+  the ghost button's `contentSecondary`. Object
+  names stay `contentPrimary` and parenthetical type labels stay
+  `contentSecondary`.
+- Symbol column glyphs are `statusWarning`. The designated timestamp is a
+  filled clock at `statusSuccess`; other timestamp clocks stay `statusInfo`.
 - Result-grid header names are `contentPrimary` at weight 600. The result row
   count is `fontSize.lg` at weight 600 in the UI font, not monospace.
 - Notebook title glyphs and chrome-tab notebook/metrics favicons are

@@ -28,6 +28,7 @@ import { Bracket, InfoCircle } from "../../../components/icons"
 import { Error as ErrorIcon } from "../../../components/icons"
 import { CheckboxBlankCircle, Loader4 } from "../../../components/icons"
 import type { StyledIcon } from "../../../components/icons"
+import type { Color } from "../../../types"
 import {
   OneHundredTwentyThree,
   CalendarMinus,
@@ -243,7 +244,7 @@ const TimestampTypeIcon = styled.div<{ $designated: boolean }>`
   align-items: center;
   flex-shrink: 0;
   color: ${({ $designated, theme }) =>
-    $designated ? theme.color.statusInfoSubtle : theme.color.statusInfo};
+    $designated ? theme.color.statusSuccess : theme.color.statusInfo};
 `
 
 const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
@@ -289,11 +290,17 @@ const ErrorItem = styled.div`
   gap: 0.5rem;
 `
 
-const TypeIcon = styled.div`
+const TypeIcon = styled.div<{ $color: Color }>`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("contentPrimary")};
+  color: ${({ $color, theme }) => theme.color[$color]};
+`
+
+const DetailIcon = styled.div`
+  display: flex;
+  align-items: center;
+  color: ${color("statusInfo")};
 `
 
 const TYPE_ICONS = {
@@ -344,22 +351,27 @@ const TYPE_ICONS = {
 
 const IconWrapper = ({
   icon: Icon,
+  color,
   size = "14px",
 }: {
   icon: StyledIcon
+  color: Color
   size?: string
 }) => (
-  <TypeIcon>
+  <TypeIcon $color={color}>
     <Icon size={size} />
   </TypeIcon>
 )
 
 const getIcon = (type: string) => {
+  const uiType = mapColumnTypeToUI(type)
   const iconConfig = Object.values(TYPE_ICONS).find(({ types }) =>
-    types.some((t) => t === mapColumnTypeToUI(type)),
+    types.some((t) => t === uiType),
   )
+  const iconColor: Color =
+    iconConfig === TYPE_ICONS.symbol ? "statusWarning" : "statusInfo"
 
-  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} color={iconColor} />
 }
 
 export const ColumnIcon = ({
@@ -642,7 +654,11 @@ const Row = ({
                 kind={kind}
               />
             )}
-            {kind === "detail" && <InfoCircle size="14px" />}
+            {kind === "detail" && (
+              <DetailIcon>
+                <InfoCircle size="14px" />
+              </DetailIcon>
+            )}
             {["column", "table", "matview", "view", "liveview"].includes(
               kind,
             ) ? (
@@ -707,7 +723,7 @@ const Row = ({
           onClick={onOpenDetailsDrawer}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <InfoIcon size={18} color={theme.color.contentSecondary} />
+          <InfoIcon size={18} color={theme.color.statusInfo} />
         </DetailsDrawerButton>
       )}
     </Wrapper>
