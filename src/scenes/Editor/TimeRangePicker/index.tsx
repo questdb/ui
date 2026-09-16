@@ -78,15 +78,18 @@ const PresetButton = styled(Button).attrs({
     justify-content: flex-start;
     border-radius: 0;
     background: ${({ $selected, theme }) =>
-      $selected ? theme.color.interactionNeutral : "transparent"};
+      $selected ? theme.color.interactionNeutral : "transparent"} !important;
     color: ${({ $selected, theme }) =>
-      $selected ? theme.color.contentPrimary : theme.color.contentSecondary};
+      $selected
+        ? theme.color.contentPrimary
+        : theme.color.contentSecondary} !important;
   }
 
   &&:hover:not(:disabled),
+  &&:active:not(:disabled),
   &&:focus-visible {
-    background: ${({ theme }) => theme.color.interactionNeutral};
-    color: ${({ theme }) => theme.color.contentPrimary};
+    background: ${({ theme }) => theme.color.interactionNeutral} !important;
+    color: ${({ theme }) => theme.color.contentPrimary} !important;
   }
 
   &&:focus-visible {
