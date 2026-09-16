@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   formatBytes,
   formatCompactElapsedDuration,
@@ -78,6 +78,14 @@ describe("formatBytes", () => {
 })
 
 describe("formatElapsedDuration", () => {
+  beforeAll(() => {
+    vi.stubGlobal("navigator", { languages: ["en-US"], language: "en-US" })
+  })
+
+  afterAll(() => {
+    vi.unstubAllGlobals()
+  })
+
   it("spells out minutes and seconds", () => {
     expect(formatElapsedDuration(156_000)).toBe("2 minutes 36 seconds")
   })
