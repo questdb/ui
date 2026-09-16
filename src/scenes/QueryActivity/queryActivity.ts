@@ -187,17 +187,17 @@ const classifyMemory = (
   row: QueryActivityRow,
   thresholds: QueryActivityThresholds,
 ): Severity => {
-  if (row.memoryUsed === null) return "none"
-
-  if (row.memoryLimit !== null && row.memoryLimit > BigInt(0)) {
-    const ratio = Number(row.memoryUsed) / Number(row.memoryLimit)
-    if (ratio >= thresholds.memoryLimitCriticalRatio) return "critical"
-    if (ratio >= thresholds.memoryLimitWarningRatio) return "warning"
+  if (
+    row.memoryUsed === null ||
+    row.memoryLimit === null ||
+    row.memoryLimit <= BigInt(0)
+  ) {
     return "none"
   }
 
-  if (row.memoryUsed >= thresholds.memoryCriticalBytes) return "critical"
-  if (row.memoryUsed >= thresholds.memoryWarningBytes) return "warning"
+  const ratio = Number(row.memoryUsed) / Number(row.memoryLimit)
+  if (ratio >= thresholds.memoryLimitCriticalRatio) return "critical"
+  if (ratio >= thresholds.memoryLimitWarningRatio) return "warning"
   return "none"
 }
 
@@ -283,7 +283,6 @@ export const describeMemoryStatus = (
   thresholds: QueryActivityThresholds,
 ): string | null => {
   if (severity === "none") return null
-  if (row.memoryLimit === null) return "High memory usage"
   const ratio =
     severity === "critical"
       ? thresholds.memoryLimitCriticalRatio

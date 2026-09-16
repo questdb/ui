@@ -171,19 +171,13 @@ describe("classifyQuery", () => {
     ).toBe("critical")
   })
 
-  it("grades memory against absolute bytes when the query is unlimited", () => {
+  it("never grades a query without a memory limit", () => {
     expect(
       classifyQuery(
-        row({ memoryUsed: BigInt(512) * MIB }),
+        row({ memoryUsed: BigInt(4096) * MIB }),
         QUERY_ACTIVITY_THRESHOLDS,
       ),
-    ).toBe("warning")
-    expect(
-      classifyQuery(
-        row({ memoryUsed: BigInt(2048) * MIB }),
-        QUERY_ACTIVITY_THRESHOLDS,
-      ),
-    ).toBe("critical")
+    ).toBe("none")
   })
 
   it("never grades a cancelled query", () => {
@@ -257,13 +251,8 @@ describe("describeMemoryStatus", () => {
     ).toBe("More than 80% of the available memory used")
   })
 
-  it("reports high memory usage for an unlimited query", () => {
-    expect(describe_({ memoryUsed: BigInt(600) * MIB })).toBe(
-      "High memory usage",
-    )
-    expect(describe_({ memoryUsed: BigInt(3000) * MIB })).toBe(
-      "High memory usage",
-    )
+  it("says nothing for an unlimited query however much it uses", () => {
+    expect(describe_({ memoryUsed: BigInt(4096) * MIB })).toBeNull()
   })
 
   it("says nothing for a cancelled query", () => {
