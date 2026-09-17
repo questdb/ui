@@ -21,6 +21,7 @@ import { normalizeVariableList } from "../Notebook/variables/normalizeVariables"
 import { isValidTimeRange } from "../Notebook/variables/timeRange"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
 import { isAutoRefresh } from "../Notebook/notebookUtils"
+import { readCellTime } from "../Notebook/variables/cellTime"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -273,6 +274,7 @@ const sanitizeNotebookCell = (
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+  Object.assign(cell, readCellTime(item, cell.type))
   if (typeof item.isViewMaximized === "boolean")
     cell.isViewMaximized = item.isViewMaximized
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight

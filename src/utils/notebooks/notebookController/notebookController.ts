@@ -140,6 +140,9 @@ export type ApplyNotebookStateCellRequest = {
   type?: CellType | null
   mode?: "run" | "draw" | null
   autoRefresh?: AutoRefresh | null
+  timeRange?: TimeRange | null
+  timeShift?: string | null
+  showTimeRange?: boolean | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null

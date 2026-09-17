@@ -1511,6 +1511,37 @@ describe("createDexieNotebookController — query-list variable values", () => {
     },
   )
 
+  it("declares the cell's own time range and shift for an agent run", async () => {
+    // Given a notebook on the last hour and a cell overriding it to the last 15 minutes, one day back
+    await seedNotebook({
+      cells: [
+        cell("a", "SELECT @timeFrom", {
+          timeRange: { from: "now-15m", to: "now" },
+          timeShift: "-1d",
+        }),
+      ],
+      settings: { timeRange: { from: "now-1h", to: "now" } },
+    })
+    const { quest, pending, respondNext } = makeQuest({
+      validate: () => symbolValidation,
+    })
+    const controller = makeController({}, quest)
+
+    // When the agent runs the cell
+    const run = controller.runCell("a")
+    await vi.waitFor(() =>
+      expect(pending[0]?.sql).toContain("SELECT @timeFrom"),
+    )
+    const sent = pending[0].sql
+    respondNext(dqlResult)
+
+    // Then the DECLARE block carries the cell range, shifted once
+    expect(sent).toContain("@timeTo := dateadd('d', -1, now())")
+    expect(sent).toContain("@timeFrom := dateadd('m', -15, @timeTo)")
+    expect(sent).not.toContain("dateadd('h', -1")
+    expect((await run).success).toBe(true)
+  })
+
   it("still runs a cell that does not reference the failed list", async () => {
     // Given a list whose query fails and a cell that ignores it
     await seedNotebook({

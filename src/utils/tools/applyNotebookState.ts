@@ -1,3 +1,7 @@
+import {
+  parseTimeShift,
+  TIME_SHIFT_ERROR,
+} from "../../scenes/Editor/Notebook/variables/cellTime"
 import { prepareNotebookVariables } from "../notebooks/notebookVariableOptions"
 import { changedVariableNames } from "../../scenes/Editor/Notebook/variables/variableChanges"
 import {
@@ -243,6 +247,9 @@ export const dispatchApplyNotebookState = async (
         type?: "sql" | "markdown" | null
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
+        time_range?: { from?: unknown; to?: unknown } | null
+        time_shift?: string | null
+        show_time_range?: boolean | null
         is_view_maximized?: boolean | null
         chart_config?: {
           x_column?: string | null
@@ -304,6 +311,38 @@ export const dispatchApplyNotebookState = async (
         content: JSON.stringify({
           error_code: "validation",
           message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+        }),
+        is_error: true,
+      }
+    }
+    if (c.time_range != null && !isValidTimeRange(c.time_range)) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}].time_range must be {from, to} with valid bounds, for example {from: "now-15m", to: "now"}.`,
+        }),
+        is_error: true,
+      }
+    }
+    if (typeof c.time_shift === "string" && !parseTimeShift(c.time_shift)) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}].time_shift: ${TIME_SHIFT_ERROR}`,
+        }),
+        is_error: true,
+      }
+    }
+    if (
+      c.type === "markdown" &&
+      (c.time_range != null ||
+        c.time_shift != null ||
+        c.show_time_range != null)
+    ) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}] is markdown; time_range, time_shift and show_time_range must be null.`,
         }),
         is_error: true,
       }
@@ -431,6 +470,11 @@ export const dispatchApplyNotebookState = async (
       if (c.type === "sql" || c.type === "markdown") cell.type = c.type
       if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
       if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
+      if (isValidTimeRange(c.time_range)) {
+        cell.timeRange = { from: c.time_range.from, to: c.time_range.to }
+      }
+      if (typeof c.time_shift === "string") cell.timeShift = c.time_shift
+      if (c.show_time_range === true) cell.showTimeRange = true
       if (c.is_view_maximized !== undefined && c.is_view_maximized !== null)
         cell.isViewMaximized = c.is_view_maximized
       if (c.chart_config) {

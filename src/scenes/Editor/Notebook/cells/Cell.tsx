@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
@@ -12,6 +12,8 @@ import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
 import { CellViewToggle } from "./CellViewToggle"
 import { CellNameLabel } from "./CellNameLabel"
+import { CellTimeControl } from "./time/CellTimeControl"
+import { CellTimeDialog } from "./time/CellTimeDialog"
 import { useChartLoading } from "./useChartLoading"
 import { useChartZoomed } from "./useChartZoomed"
 import { useCellToolbarTier } from "./useCellToolbarTier"
@@ -138,12 +140,13 @@ const CellInner: React.FC<Props> = ({
     updateCell,
     setFocusedCell,
     getVariables,
-    getDeclareEntries,
+    getCellDeclareEntries,
   } = useNotebookActions()
   const globals = useGlobalVariablesActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const bufferIdForEvents = useNotebookBufferId()
+  const [timeRangeOpen, setTimeRangeOpen] = useState(false)
   const isDrawMode = cell.mode === "draw"
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
@@ -170,7 +173,7 @@ const CellInner: React.FC<Props> = ({
     [],
   )
 
-  const validateWithGlobals = useValidateWithGlobals()
+  const validateWithGlobals = useValidateWithGlobals(cell.id)
 
   const handleChartConfigChange = (config: ChartConfig) => {
     signalUserEdit(bufferIdForEvents)
@@ -262,7 +265,7 @@ const CellInner: React.FC<Props> = ({
       variableSuggestions(
         globals.getVariables(),
         getVariables() ?? [],
-        getDeclareEntries(),
+        getCellDeclareEntries(cell.id),
       ),
   })
 
@@ -452,6 +455,7 @@ const CellInner: React.FC<Props> = ({
         headerRef={headerRef}
         toolbarTier={toolbarTier}
         chartZoomed={chartZoomed}
+        onOpenTimeRange={() => setTimeRangeOpen(true)}
         left={
           <CellNameLabel
             name={cell.name}
@@ -466,56 +470,67 @@ const CellInner: React.FC<Props> = ({
           />
         }
         right={
-          toolbarTier === "compact" ? null : view === "none" ? (
-            // Neutral: action verbs (Run / Draw) — labelled only when expanded.
-            <CellRunDrawToggles
-              isRunning={isRunning}
-              isChartLoading={chartLoading}
-              runActive={runActive}
-              isDrawMode={isDrawMode}
-              canRun={canRun}
-              autoRefreshOn={effectiveAutoRefresh !== false}
-              showLabels={toolbarTier === "expanded"}
-              onRun={runAll}
-              onHideResult={() => {
-                signalUserEdit(bufferIdForEvents)
-                clearCellResult(cell.id)
-              }}
-              onDraw={() => {
-                void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
-                  mode: isDrawMode ? "run" : "draw",
-                })
-                void handleDrawClick()
-              }}
-            />
-          ) : toolbarTier === "expanded" ? (
-            <CellWideActions
-              cellId={cell.id}
-              view={view}
-              cellAutoRefresh={cell.autoRefresh}
-              autoRefreshDefault={autoRefreshDefault}
-              isViewMaximized={isViewMaximized}
-              isRunning={isRunning}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isChartRefreshing={chartRefreshing}
-              chartZoomed={chartZoomed}
-            />
-          ) : (
-            // Standard tier with a result: the compact (label-less) view toggle.
-            <CellViewToggle
-              cellId={cell.id}
-              view={view}
-              isViewMaximized={isViewMaximized}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isRunning={isRunning}
-              chartZoomed={chartZoomed}
-              showLabels={false}
-            />
+          toolbarTier === "compact" ? null : (
+            <>
+              <CellTimeControl
+                cell={cell}
+                onClick={() => setTimeRangeOpen(true)}
+              />
+              {view === "none" ? (
+                // Neutral: action verbs (Run / Draw) — labelled only when expanded.
+                <CellRunDrawToggles
+                  isRunning={isRunning}
+                  isChartLoading={chartLoading}
+                  runActive={runActive}
+                  isDrawMode={isDrawMode}
+                  canRun={canRun}
+                  autoRefreshOn={effectiveAutoRefresh !== false}
+                  showLabels={toolbarTier === "expanded"}
+                  onRun={runAll}
+                  onHideResult={() => {
+                    signalUserEdit(bufferIdForEvents)
+                    clearCellResult(cell.id)
+                  }}
+                  onDraw={() => {
+                    void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
+                      mode: isDrawMode ? "run" : "draw",
+                    })
+                    void handleDrawClick()
+                  }}
+                />
+              ) : toolbarTier === "expanded" ? (
+                <CellWideActions
+                  cellId={cell.id}
+                  view={view}
+                  cellAutoRefresh={cell.autoRefresh}
+                  autoRefreshDefault={autoRefreshDefault}
+                  isViewMaximized={isViewMaximized}
+                  isRunning={isRunning}
+                  isGridLoading={isGridLoading}
+                  isChartLoading={chartLoading}
+                  isChartRefreshing={chartRefreshing}
+                  chartZoomed={chartZoomed}
+                />
+              ) : (
+                // Standard tier with a result: the compact (label-less) view toggle.
+                <CellViewToggle
+                  cellId={cell.id}
+                  view={view}
+                  isViewMaximized={isViewMaximized}
+                  isGridLoading={isGridLoading}
+                  isChartLoading={chartLoading}
+                  isRunning={isRunning}
+                  chartZoomed={chartZoomed}
+                  showLabels={false}
+                />
+              )}
+            </>
           )
         }
       />
+      {timeRangeOpen && (
+        <CellTimeDialog cell={cell} onClose={() => setTimeRangeOpen(false)} />
+      )}
       {!isViewMaximized && (
         <EditorContainer
           ref={editorContainerRef}

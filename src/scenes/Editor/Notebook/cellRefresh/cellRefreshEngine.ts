@@ -86,7 +86,10 @@ export type CellFetchState = {
 }
 
 export type CellRefreshDeps = {
-  captureExecution?: (signal?: AbortSignal) => Promise<CapturedExecution>
+  captureExecution?: (
+    cellId: string,
+    signal?: AbortSignal,
+  ) => Promise<CapturedExecution>
   executeSingle: (
     sql: string,
     signal?: AbortSignal,
@@ -1066,7 +1069,7 @@ export class CellRefreshEngine {
     const { queries, queriesKey } = entry.state
     try {
       const execution = deps.captureExecution
-        ? await deps.captureExecution(ac.signal)
+        ? await deps.captureExecution(entry.cellId, ac.signal)
         : deps
       // Runtime backstop: a user typing DDL into an already-draw cell would
       // otherwise reach executeSingle on the next poll tick. A query failing
@@ -1175,7 +1178,7 @@ export class CellRefreshEngine {
     const { queries, queriesKey } = entry.state
     try {
       const execution = deps.captureExecution
-        ? await deps.captureExecution(round.signal)
+        ? await deps.captureExecution(entry.cellId, round.signal)
         : deps
       let classified: ClassifiedStatement[]
       try {

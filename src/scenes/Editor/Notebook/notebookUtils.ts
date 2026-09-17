@@ -700,6 +700,9 @@ type ApplyCellRequest = {
   type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: AutoRefresh | null
+  timeRange?: TimeRange | null
+  timeShift?: string | null
+  showTimeRange?: boolean | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
@@ -1162,6 +1165,11 @@ export const buildAppliedCells = (
           ? true
           : undefined
     const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
+    const timeRange = req.timeRange != null ? req.timeRange : undefined
+    const timeShift = req.timeShift != null ? req.timeShift : undefined
+    const showTimeRange =
+      req.showTimeRange === true &&
+      (timeRange !== undefined || timeShift !== undefined)
 
     if (existing) {
       updated.push(existing.id)
@@ -1204,6 +1212,12 @@ export const buildAppliedCells = (
       else delete next.autoRefresh
       if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
       else delete next.isViewMaximized
+      if (timeRange !== undefined) next.timeRange = timeRange
+      else delete next.timeRange
+      if (timeShift !== undefined) next.timeShift = timeShift
+      else delete next.timeShift
+      if (showTimeRange) next.showTimeRange = true
+      else delete next.showTimeRange
       if (resolvedType === "markdown") {
         // Markdown cells carry none of the SQL/chart sub-state.
         next.type = "markdown"
@@ -1212,6 +1226,9 @@ export const buildAppliedCells = (
         delete next.chartConfig
         delete next.autoRefresh
         delete next.isViewMaximized
+        delete next.timeRange
+        delete next.timeShift
+        delete next.showTimeRange
         delete next.bottomHeight
         delete next.lastRunStatus
         delete next.lastRunError
@@ -1248,6 +1265,9 @@ export const buildAppliedCells = (
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
+    if (timeRange !== undefined) created.timeRange = timeRange
+    if (timeShift !== undefined) created.timeShift = timeShift
+    if (showTimeRange) created.showTimeRange = true
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.
@@ -1820,7 +1840,7 @@ export const buildAppliedNotebookState = (
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
   }
   if (request.timeRange !== undefined) {
-    const { timeRange, ...withoutTimeRange } = nextSettings
+    const { timeRange: _timeRange, ...withoutTimeRange } = nextSettings
     nextSettings = request.timeRange
       ? { ...withoutTimeRange, timeRange: request.timeRange }
       : withoutTimeRange

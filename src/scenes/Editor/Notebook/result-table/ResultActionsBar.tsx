@@ -22,6 +22,7 @@ import { ActionButton, ActionsBar, FreezeToggle } from "./styles"
 const preventFocusSteal = (e: React.MouseEvent) => e.preventDefault()
 
 type Props = {
+  cellId: string
   data: DqlQueryResult
   gridRef: React.RefObject<ResultGridHandle | null>
   isFrozen: boolean
@@ -31,6 +32,7 @@ type Props = {
 }
 
 export const ResultActionsBar: React.FC<Props> = ({
+  cellId,
   data,
   gridRef,
   isFrozen,
@@ -38,7 +40,7 @@ export const ResultActionsBar: React.FC<Props> = ({
   isRunning,
   onReRun,
 }) => {
-  const { getDeclareEntries } = useNotebookActions()
+  const { getCellDeclareEntries } = useNotebookActions()
   const [isCopied, setIsCopied] = useState(false)
 
   const copyMarkdown = () => {
@@ -80,7 +82,10 @@ export const ResultActionsBar: React.FC<Props> = ({
         : ConsoleEvent.GRID_CSV_DOWNLOAD,
       { source: "notebook" },
     )
-    downloadQueryResult(expandGlobals(data.query, getDeclareEntries()), format)
+    downloadQueryResult(
+      expandGlobals(data.query, getCellDeclareEntries(cellId)),
+      format,
+    )
   }
 
   return (

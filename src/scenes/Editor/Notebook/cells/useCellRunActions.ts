@@ -59,7 +59,7 @@ export const useCellRunActions = ({
     getCellsSnapshot,
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
-  const validateWithGlobals = useValidateWithGlobals()
+  const validateWithGlobals = useValidateWithGlobals(cell.id)
   const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 

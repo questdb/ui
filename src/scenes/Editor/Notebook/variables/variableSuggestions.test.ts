@@ -27,16 +27,16 @@ describe("variableSuggestions", () => {
 
     // Then
     expect(suggestions).toEqual([
-      { name: "timeTo", value: "now()", description: "Notebook time range" },
+      { name: "timeTo", value: "now()", description: "Time range" },
       {
         name: "timeFrom",
         value: "dateadd('h', -1, @timeTo)",
-        description: "Notebook time range",
+        description: "Time range",
       },
       {
         name: "timeFilter",
         value: "interval(@timeFrom, @timeTo)",
-        description: "Notebook time range",
+        description: "Time range",
       },
       { name: "venue", value: "'LSE'", description: "Venue" },
       { name: "pair", value: "'EURUSD'", description: "All notebooks" },

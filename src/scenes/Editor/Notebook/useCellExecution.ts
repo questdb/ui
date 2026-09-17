@@ -74,14 +74,12 @@ const clearRunningCell = (
 }
 
 type Options = {
-  captureExecution: (signal?: AbortSignal) => Promise<CapturedExecution>
+  captureExecution: (
+    cellId: string,
+    signal?: AbortSignal,
+  ) => Promise<CapturedExecution>
   bufferId: number
   cellsRef: MutableRefObject<NotebookCell[]>
-  executeSingle: (
-    sql: string,
-    signal?: AbortSignal,
-    limit?: number,
-  ) => Promise<QueryExecResult>
   validateWithGlobals: (
     sql: string,
     signal?: AbortSignal,
@@ -105,7 +103,6 @@ export const useCellExecution = ({
   captureExecution,
   bufferId,
   cellsRef,
-  executeSingle,
   validateWithGlobals,
   updateCellResult,
   updateCell,
@@ -353,7 +350,6 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
       updateCell,
       updateCellResult,
       setScriptSummary,
@@ -535,7 +531,6 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
       updateCell,
       updateCellResult,
       setScriptSummary,
@@ -589,7 +584,7 @@ export const useCellExecution = ({
       let barrier: RunBarrierOutcome
       let captured: CapturedExecution
       try {
-        captured = await captureExecution(barrierAc.signal)
+        captured = await captureExecution(cellId, barrierAc.signal)
         barrier = await resolveRunBarrier(
           queryText,
           queries.length,
@@ -753,7 +748,6 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
       validateWithGlobals,
       captureExecution,
       updateCell,
@@ -793,8 +787,9 @@ export const useCellExecution = ({
       try {
         let execResult: QueryExecResult
         try {
+          const captured = await captureExecution(cellId, ac.signal)
           execResult = await statementRequestLimiter(
-            () => executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP),
+            () => captured.executeSingle(sql, ac.signal, NOTEBOOK_ROW_CAP),
             ac.signal,
           )
         } catch {
@@ -827,7 +822,7 @@ export const useCellExecution = ({
     },
     [
       cellsRef,
-      executeSingle,
+      captureExecution,
       updateCellResult,
       stampRunHistory,
       persistSnapshot,

@@ -775,6 +775,207 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.name).toBe("orig")
   })
 
+  it("set_cell_time_range sets the range, the shift and the header flag", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c")])
+
+    // When
+    await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: "-1d",
+        show_in_header: true,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(cellById(state, "c")).toMatchObject({
+      timeRange: { from: "now-15m", to: "now" },
+      timeShift: "-1d",
+      showTimeRange: true,
+    })
+  })
+
+  it("set_cell_time_range clears every field with nulls", async () => {
+    // Given
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+    ])
+
+    // When
+    await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: null,
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    const after = cellById(state, "c")
+    expect(after?.timeRange).toBeUndefined()
+    expect(after?.timeShift).toBeUndefined()
+    expect(after?.showTimeRange).toBeUndefined()
+  })
+
+  it("set_cell_time_range rejects a shift without a sign and a bad range", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c")])
+
+    // When
+    const badShift = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: null,
+        time_shift: "1d",
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const badRange = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "yesterday", to: "now" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(badShift.is_error).toBe(true)
+    expect(badShift.content).toContain("time_shift")
+    expect(badRange.is_error).toBe(true)
+    expect(badRange.content).toContain("time_range")
+    expect(cellById(state, "c")?.timeShift).toBeUndefined()
+  })
+
+  it("set_cell_time_range rejects a markdown cell", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "# note", { type: "markdown" })])
+
+    // When
+    const res = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    expect(res.content).toContain("markdown")
+    expect(cellById(state, "c")?.timeRange).toBeUndefined()
+  })
+
+  it("apply_notebook_state clears a cell's time fields when omitted and sets them when given", async () => {
+    // Given a cell with an override
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+    ])
+
+    // When the agent re-applies the cell without the fields
+    await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ id: "c", preserve_value: true }] },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then they are gone
+    expect(cellById(state, "c")?.timeRange).toBeUndefined()
+    expect(cellById(state, "c")?.timeShift).toBeUndefined()
+
+    // When the agent applies them again
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "c",
+            preserve_value: true,
+            time_range: { from: "now-1h", to: "now" },
+            time_shift: "+2h",
+            show_time_range: true,
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then they are set
+    expect(cellById(state, "c")).toMatchObject({
+      timeRange: { from: "now-1h", to: "now" },
+      timeShift: "+2h",
+      showTimeRange: true,
+    })
+  })
+
+  it("apply_notebook_state rejects time fields on a markdown cell and a bad shift", async () => {
+    // Given
+    mountLive(1, [cell("c")])
+
+    // When
+    const markdown = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: null, value: "# note", type: "markdown", time_shift: "-1d" },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const badShift = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [{ id: null, value: "SELECT 1", time_shift: "1d" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(markdown.is_error).toBe(true)
+    expect(markdown.content).toContain("markdown")
+    expect(badShift.is_error).toBe(true)
+    expect(badShift.content).toContain("time_shift")
+  })
+
   it("run_query flags a transport-dropped error as unverified, a server error as not", async () => {
     const transport = makeClient({
       runQueryRaw: vi.fn(() =>

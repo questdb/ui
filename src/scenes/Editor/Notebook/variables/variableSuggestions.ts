@@ -3,7 +3,7 @@ import type { DeclareEntry, NotebookVariable } from "../../../../store/notebook"
 import { effectiveVariables } from "./scope"
 import { isTimeVariableName } from "./timeRange"
 
-const TIME_RANGE_DESCRIPTION = "Notebook time range"
+const TIME_RANGE_DESCRIPTION = "Time range"
 
 export const variableSuggestions = (
   globals: NotebookVariable[],

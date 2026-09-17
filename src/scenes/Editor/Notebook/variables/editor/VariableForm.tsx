@@ -74,7 +74,7 @@ const DescriptionArea = styled(TextArea)`
   line-height: 1.4;
 `
 
-const Problem = styled(Text).attrs({ size: "xs", color: "statusDanger" })``
+const Problem = styled(Text).attrs({ size: "sm", color: "statusDanger" })``
 
 const Divider = styled.div`
   height: 1px;

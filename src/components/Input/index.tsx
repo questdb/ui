@@ -1,5 +1,6 @@
 import styled, { css } from "styled-components"
 import React from "react"
+import { withAlpha } from "../../theme"
 
 export type InputVariant = "transparent" | "error"
 
@@ -35,7 +36,7 @@ export const inputStyles = css<InputStyleProps>`
   max-width: 100%;
 
   &::placeholder {
-    color: ${({ theme }) => theme.color.contentSecondary};
+    color: ${({ theme }) => withAlpha(theme.color.contentSecondary, 0.8)};
   }
 
   &:focus,

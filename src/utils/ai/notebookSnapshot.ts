@@ -58,6 +58,9 @@ export type NotebookContextCell = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -167,6 +170,21 @@ const refreshFields = (
   }
 }
 
+type CellTimeWire = {
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
+}
+
+const cellTimeWire = (cell: NotebookCell): CellTimeWire => {
+  if (cell.type === "markdown") return {}
+  const out: CellTimeWire = {}
+  if (cell.timeRange) out.time_range = cell.timeRange
+  if (cell.timeShift) out.time_shift = cell.timeShift
+  if (cell.showTimeRange) out.show_time_range = true
+  return out
+}
+
 const buildCell = (
   cell: NotebookCell,
   gridByCellId: Map<string, CellLayoutItem>,
@@ -187,6 +205,7 @@ const buildCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   if (typeof cell.isViewMaximized === "boolean") {
     out.is_view_maximized = cell.isViewMaximized
   }
@@ -375,6 +394,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     if (c.mode) lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
+    if (c.time_range)
+      lines.push(`      time_range: ${JSON.stringify(c.time_range)}`)
+    if (c.time_shift) lines.push(`      time_shift: ${c.time_shift}`)
+    if (c.show_time_range) lines.push(`      show_time_range: true`)
     if (c.is_view_maximized !== undefined)
       lines.push(`      is_view_maximized: ${c.is_view_maximized}`)
     if (c.chart_config) {
@@ -499,6 +522,9 @@ export type NotebookCellSummary = {
   position: number
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   last_run_status?: RunStatus
   // Live-only (mounted notebook); see NotebookContextCell.
   refreshing?: true
@@ -516,6 +542,9 @@ export type NotebookCellDetails = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -544,6 +573,7 @@ export const summarizeCells = (
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
     if (cell.mode) summary.mode = cell.mode
+    Object.assign(summary, cellTimeWire(cell))
     return summary
   })
 
@@ -586,6 +616,7 @@ export const serializeCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   if (typeof cell.isViewMaximized === "boolean")
     out.is_view_maximized = cell.isViewMaximized
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))

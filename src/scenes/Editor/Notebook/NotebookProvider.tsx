@@ -102,6 +102,7 @@ import {
 } from "./resultHydration/cellResultHydration"
 import { CellResultHydrationProvider } from "./resultHydration/CellResultHydrationContext"
 import { resetChartEntryAnimation } from "./CellChart/chartEntryAnimation"
+import { withCellTime } from "./variables/cellTime"
 
 // Cell state, variable state and actions live in SEPARATE contexts: a cell
 // edit never re-renders variable-only consumers (pickers, dialog, time range),
@@ -125,6 +126,7 @@ export type NotebookVariablesState = {
 export type NotebookActions = {
   getVariables: () => NotebookVariable[] | undefined
   getDeclareEntries: () => DeclareEntry[]
+  getCellDeclareEntries: (cellId: string) => DeclareEntry[]
   updateSettings: (updates: Partial<NotebookSettings>) => void
   setTimeRange: (
     range: TimeRange | null,
@@ -179,6 +181,7 @@ type ActionMap = Record<string, (...args: never[]) => unknown>
 const NOOP_ACTIONS: NotebookActions = {
   getVariables: () => undefined,
   getDeclareEntries: () => [],
+  getCellDeclareEntries: () => [],
   updateSettings: () => undefined,
   setTimeRange: () => Promise.resolve(),
   applyVariables: () => Promise.resolve(),
@@ -357,29 +360,6 @@ export const NotebookProvider: React.FC<{
     })
   }, [bufferId, globals, preview, refetchChangedVariableOptions])
 
-  const captureVariableExecution = useCallback(
-    (signal?: AbortSignal) =>
-      captureExecution(
-        quest,
-        async () => {
-          await globals.settle()
-          await settleVariableOptions()
-        },
-        getDeclareEntries,
-        signal,
-      ),
-    [quest, globals, settleVariableOptions, getDeclareEntries],
-  )
-  const executeSingle = useCallback(
-    async (sql: string, signal?: AbortSignal, limit?: number) =>
-      (await captureVariableExecution(signal)).executeSingle(
-        sql,
-        signal,
-        limit,
-      ),
-    [captureVariableExecution],
-  )
-
   const cellRefreshEngineRef = useRef<CellRefreshEngine | null>(null)
 
   const { persistCells, persistImmediately, persistDebounced } =
@@ -403,6 +383,44 @@ export const NotebookProvider: React.FC<{
   })
 
   const { hydrateCells, cellsRef } = store
+
+  const getCellDeclareEntries = useCallback(
+    (cellId: string) =>
+      withCellTime(
+        getDeclareEntries(),
+        settingsRef.current.timeRange,
+        cellsRef.current.find((cell) => cell.id === cellId) ?? {},
+      ),
+    [getDeclareEntries, cellsRef],
+  )
+
+  const captureFor = useCallback(
+    (read: () => DeclareEntry[], signal?: AbortSignal) =>
+      captureExecution(
+        quest,
+        async () => {
+          await globals.settle()
+          await settleVariableOptions()
+        },
+        read,
+        signal,
+      ),
+    [quest, globals, settleVariableOptions],
+  )
+  const captureVariableExecution = useCallback(
+    (cellId: string, signal?: AbortSignal) =>
+      captureFor(() => getCellDeclareEntries(cellId), signal),
+    [captureFor, getCellDeclareEntries],
+  )
+  const executeSingle = useCallback(
+    async (sql: string, signal?: AbortSignal, limit?: number) =>
+      (await captureFor(getDeclareEntries, signal)).executeSingle(
+        sql,
+        signal,
+        limit,
+      ),
+    [captureFor, getDeclareEntries],
+  )
 
   useEffect(() => {
     const unpin = pinNotebookSnapshots(bufferId)
@@ -486,15 +504,17 @@ export const NotebookProvider: React.FC<{
 
   const validateWithGlobals = useCallback(
     async (sql: string, signal?: AbortSignal) =>
-      (await captureVariableExecution(signal)).validateWithGlobals(sql, signal),
-    [captureVariableExecution],
+      (await captureFor(getDeclareEntries, signal)).validateWithGlobals(
+        sql,
+        signal,
+      ),
+    [captureFor, getDeclareEntries],
   )
 
   const execution = useCellExecution({
     captureExecution: captureVariableExecution,
     bufferId,
     cellsRef,
-    executeSingle,
     validateWithGlobals,
     updateCellResult: store.updateCellResult,
     updateCell: store.updateCell,
@@ -942,6 +962,7 @@ export const NotebookProvider: React.FC<{
   liveActionsRef.current = {
     getVariables: () => settingsRef.current.variables,
     getDeclareEntries,
+    getCellDeclareEntries,
     updateSettings,
     setTimeRange,
     applyVariables,

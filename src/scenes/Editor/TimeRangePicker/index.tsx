@@ -1,29 +1,22 @@
 import { FooterMessage } from "../../../components/FooterMessage"
 import React, { useState, useRef, useEffect } from "react"
 import styled from "styled-components"
-import { formatISO, subMonths } from "date-fns"
-import { useFormContext } from "react-hook-form"
-import Joi from "joi"
+import { subMonths } from "date-fns"
 import {
   Box,
   Button,
-  Calendar,
   Form,
   Popover,
   Text,
   LoadingSpinner,
 } from "../../../components"
-import {
-  Calendar as CalendarIcon,
-  Time,
-  World,
-} from "../../../components/icons"
-import { getLocalGMTOffset, getLocalTimeZone, utcToLocal } from "../../../utils"
+import { Time, World } from "../../../components/icons"
+import { getLocalGMTOffset, getLocalTimeZone } from "../../../utils"
 import { EditorRefreshIntervalTriggerButton } from "../ToolbarRefreshControls"
+import { DateBoundField } from "./DateBoundField"
+import { timeRangeSchema, toStoredBound } from "./rangeSchema"
 import {
   durationToHumanReadable,
-  durationTokenToDate,
-  isDateToken,
   type DateRange,
   type DurationPreset,
 } from "./utils"
@@ -110,68 +103,13 @@ const Footer = styled(Box).attrs({
 
 const FooterActions = styled(Box).attrs({ gap: "1rem", align: "center" })``
 
-const DatePickerItem = ({
-  min,
-  max,
-  name,
-  label,
-  placeholder,
-  dateFrom,
-  dateTo,
-}: DateRange & {
-  min: Date
-  max: Date
-  name: string
-  label: string
-  placeholder: string
-}) => {
-  const { setValue } = useFormContext()
-
-  const fromDate = durationTokenToDate(dateFrom)
-  const toDate = durationTokenToDate(dateTo)
-
-  return (
-    <Form.Item name={name} label={label}>
-      <Box gap="0.5rem" align="center">
-        <Form.Input
-          name={name}
-          placeholder={placeholder}
-          data-hook={`time-range-${name}`}
-        />
-        <Popover
-          trigger={
-            <Button variant="secondary">
-              {" "}
-              <CalendarIcon size="18px" />{" "}
-            </Button>
-          }
-          align="center"
-        >
-          <Calendar
-            min={min}
-            max={max}
-            onChange={(values) => {
-              const vals = values as string[]
-
-              ;["dateFrom", "dateTo"].forEach((name, index) => {
-                if (values && vals[index]) {
-                  setValue(name, utcToLocal(new Date(vals[index]).getTime()))
-                }
-              })
-            }}
-            value={[
-              fromDate !== "Invalid date" ? new Date(fromDate) : new Date(),
-              toDate !== "Invalid date" ? new Date(toDate) : new Date(),
-            ]}
-            selectRange
-          />
-        </Popover>
-      </Box>
-    </Form.Item>
-  )
-}
-
 type FormValues = DateRange
+
+type OnProgress = (message: string, committing: boolean) => void
+
+type ApplyAction =
+  | { kind: "range"; dateFrom: string; dateTo: string }
+  | { kind: "clear" }
 
 type Props = {
   dateFrom?: string
@@ -183,11 +121,11 @@ type Props = {
     dateFrom: string,
     dateTo: string,
     signal: AbortSignal,
-    onProgress: (message: string, committing: boolean) => void,
+    onProgress: OnProgress,
   ) => Promise<void> | void
   onClear?: (
     signal: AbortSignal,
-    onProgress: (message: string, committing: boolean) => void,
+    onProgress: OnProgress,
   ) => Promise<void> | void
   dataHook?: string
 }
@@ -212,10 +150,11 @@ export const TimeRangePicker = ({
     committing: boolean
   } | null>(null)
   const hasRange = dateFrom !== undefined && dateTo !== undefined
+  const emptyDraft = draft.dateFrom === "" && draft.dateTo === ""
 
-  const handleOpenChange = (open: boolean) => {
+  const handleOpenChange = (next: boolean) => {
     if (operationRef.current?.committing) return
-    if (open) {
+    if (next) {
       setDraft(appliedRange)
       setApplyError(null)
     } else {
@@ -223,10 +162,23 @@ export const TimeRangePicker = ({
       operationRef.current = null
       setProgress(null)
     }
-    setMainOpen(open)
+    setMainOpen(next)
   }
 
-  const apply = async (from: string | null, to: string | null) => {
+  const run = (
+    action: ApplyAction,
+    signal: AbortSignal,
+    onProgress: OnProgress,
+  ) => {
+    switch (action.kind) {
+      case "range":
+        return onApply(action.dateFrom, action.dateTo, signal, onProgress)
+      case "clear":
+        return onClear?.(signal, onProgress)
+    }
+  }
+
+  const apply = async (action: ApplyAction) => {
     if (operationRef.current) return
     const operation = { controller: new AbortController(), committing: false }
     operationRef.current = operation
@@ -238,9 +190,7 @@ export const TimeRangePicker = ({
       setProgress(message)
     }
     try {
-      if (from === null || to === null)
-        await onClear?.(operation.controller.signal, onProgress)
-      else await onApply(from, to, operation.controller.signal, onProgress)
+      await run(action, operation.controller.signal, onProgress)
       if (
         !operation.controller.signal.aborted &&
         operationRef.current === operation
@@ -262,15 +212,14 @@ export const TimeRangePicker = ({
   }
 
   const handleSubmit = async (values: FormValues) => {
-    if (values.dateFrom && values.dateTo)
-      await apply(
-        isDateToken(values.dateFrom)
-          ? values.dateFrom
-          : formatISO(values.dateFrom),
-        isDateToken(values.dateTo) ? values.dateTo : formatISO(values.dateTo),
-      )
+    if (!values.dateFrom || !values.dateTo) return
+    await apply({
+      kind: "range",
+      dateFrom: toStoredBound(values.dateFrom),
+      dateTo: toStoredBound(values.dateTo),
+    })
   }
-  const handleClear = () => void apply(null, null)
+  const handleClear = () => void apply({ kind: "clear" })
 
   useEffect(
     () => () => {
@@ -281,80 +230,7 @@ export const TimeRangePicker = ({
 
   const min = subMonths(new Date(), 12)
   const max = new Date()
-  const maxRangeDays = maxRangeSeconds
-    ? Math.round(maxRangeSeconds / 86400)
-    : undefined
-
-  const errorMessages = {
-    "string.empty": "Please enter a date or duration",
-    "string.invalidDate": "Date format or duration is invalid",
-    "string.toIsBeforeFrom": "To date must be after From date",
-    "string.dateInFuture": "Please set a date in the past or use `now`",
-    "string.fromIsAfterTo": "From date must be before To date",
-    "string.sameValues": "From and To dates cannot be the same",
-    "any.custom": "One of the values is invalid",
-    "string.maxDateRange": `Date range cannot exceed ${maxRangeDays} days`,
-  }
-
-  const exceedsMaxRange = (spanMs: number) =>
-    maxRangeSeconds !== undefined && spanMs > maxRangeSeconds * 1000
-
-  const schema = Joi.object({
-    dateFrom: Joi.any()
-      .required()
-      .custom((value: string, helpers) => {
-        const dateValue = durationTokenToDate(value)
-        const timeValue = new Date(dateValue).getTime()
-        const timeNow = new Date().getTime()
-        try {
-          const timeTo = new Date(
-            durationTokenToDate(
-              (helpers.state.ancestors as unknown as FormValues[])[0].dateTo,
-            ),
-          ).getTime()
-          if (dateValue === "Invalid date") {
-            return helpers.error("string.invalidDate")
-          } else if (timeValue >= timeTo) {
-            return helpers.error("string.fromIsAfterTo")
-          } else if (timeValue > timeNow) {
-            return helpers.error("string.dateInFuture")
-          } else if (timeValue === timeNow) {
-            return helpers.error("string.sameValues")
-          } else if (exceedsMaxRange(timeTo - timeValue)) {
-            return helpers.error("string.maxDateRange")
-          }
-          return value
-        } catch (e) {
-          return helpers.error("any.custom")
-        }
-      })
-      .messages(errorMessages),
-    dateTo: Joi.any()
-      .required()
-      .custom((value: string, helpers) => {
-        const dateValue = durationTokenToDate(value)
-        const timeValue = new Date(dateValue).getTime()
-        const timeNow = new Date().getTime()
-        const timeFrom = new Date(
-          durationTokenToDate(
-            (helpers.state.ancestors as unknown as FormValues[])[0].dateFrom,
-          ),
-        ).getTime()
-        if (dateValue === "Invalid date") {
-          return helpers.error("string.invalidDate")
-        } else if (timeValue <= timeFrom) {
-          return helpers.error("string.toIsBeforeFrom")
-        } else if (timeValue > timeNow) {
-          return helpers.error("string.dateInFuture")
-        } else if (timeValue === timeNow) {
-          return helpers.error("string.sameValues")
-        } else if (exceedsMaxRange(timeValue - timeFrom)) {
-          return helpers.error("string.maxDateRange")
-        }
-        return value
-      })
-      .messages(errorMessages),
-  })
+  const schema = timeRangeSchema({ maxRangeSeconds })
 
   const datePickerProps = { min, max, ...draft }
 
@@ -396,13 +272,13 @@ export const TimeRangePicker = ({
               validationSchema={schema}
             >
               <Box flexDirection="column" gap="1rem" align="flex-start">
-                <DatePickerItem
+                <DateBoundField
                   name="dateFrom"
                   label="From"
                   placeholder="now-1h"
                   {...datePickerProps}
                 />
-                <DatePickerItem
+                <DateBoundField
                   name="dateTo"
                   label="To"
                   placeholder="now"
@@ -410,7 +286,7 @@ export const TimeRangePicker = ({
                 />
                 <Box flexDirection="row" align="center" gap="1rem">
                   <Form.Submit
-                    disabled={progress !== null}
+                    disabled={progress !== null || emptyDraft}
                     data-hook="time-range-apply"
                   >
                     Apply
@@ -441,7 +317,13 @@ export const TimeRangePicker = ({
                       dateFrom === presetFrom && dateTo === presetTo
                     }
                     disabled={progress !== null}
-                    onClick={() => void apply(presetFrom, presetTo)}
+                    onClick={() =>
+                      void apply({
+                        kind: "range",
+                        dateFrom: presetFrom,
+                        dateTo: presetTo,
+                      })
+                    }
                   >
                     {label}
                   </PresetButton>

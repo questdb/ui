@@ -1,7 +1,12 @@
 import React, { useState } from "react"
 import styled from "styled-components"
-import { DotsSixVerticalIcon, PlusIcon } from "@phosphor-icons/react"
-import { Badge, Button, IconButton, Text } from "../../../../../components"
+import {
+  DotsSixVerticalIcon,
+  PlusIcon,
+  WarningIcon,
+} from "@phosphor-icons/react"
+import { useTheme } from "styled-components"
+import { Button, IconButton, Text } from "../../../../../components"
 import { Trash } from "../../../../../components/icons"
 import type { TimeRange } from "../../../../../store/notebook"
 import type { VariableScope } from "../scope"
@@ -188,6 +193,7 @@ export const VariableList = ({
   onDelete,
   onMove,
 }: Props) => {
+  const theme = useTheme()
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
 
   const handleDragStart = (
@@ -264,9 +270,7 @@ export const VariableList = ({
         </Name>
         <Badges>
           {problem && (
-            <Badge size="sm" variant="danger" title="Needs attention">
-              fix
-            </Badge>
+            <WarningIcon size={18} color={theme.color.statusDanger} />
           )}
         </Badges>
         <DeleteButton

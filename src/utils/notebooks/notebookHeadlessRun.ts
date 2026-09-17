@@ -42,6 +42,7 @@ import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSna
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
 import { resolveHeadlessDeclareEntries } from "./notebookVariableOptions"
+import { withCellTime } from "../../scenes/Editor/Notebook/variables/cellTime"
 import { getNotebookGlobals } from "../../store/notebookGlobals"
 import {
   commitView,
@@ -361,13 +362,14 @@ export const runHeadlessCell = async (
 
   // Failed lists are not surfaced here on purpose: a cell may DECLARE the name
   // itself, so QuestDB decides (undeclared-variable error vs. shadowed list).
-  const { entries: variables } = await resolveHeadlessDeclareEntries({
+  const { entries } = await resolveHeadlessDeclareEntries({
     bufferId,
     quest,
     settings: prep.settings,
     globals: prep.globals,
     signal: signal ?? new AbortController().signal,
   })
+  const variables = withCellTime(entries, prep.settings.timeRange, prep.cell)
   if (signal?.aborted) return emptySummary()
 
   // The runner's barrier classification is the single decision for permission

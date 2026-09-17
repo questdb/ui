@@ -6,6 +6,7 @@ import {
   formatDigest,
   formatNotebookContextPrefix,
   formatSnapshot,
+  serializeCell,
   summarizeCells,
   type NotebookContextSnapshot,
 } from "./notebookSnapshot"
@@ -144,6 +145,46 @@ describe("buildSnapshot", () => {
     if (snap?.status === "ok") {
       expect(snap.cells[0].preview).toBe("persisted")
     }
+  })
+
+  it("reports a cell's time range, shift and header flag only when set, never on markdown", async () => {
+    // Given
+    const cells = [
+      sql("a", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+      sql("b", "SELECT 2"),
+      sql("c", "# note", {
+        type: "markdown",
+        timeRange: { from: "now-15m", to: "now" },
+      }),
+    ]
+    const id = await seedNotebook({ cells })
+
+    // When
+    const snap = await buildSnapshot(id)
+    const summaries = summarizeCells(cells)
+    const details = serializeCell(cells, "a", id, false)
+
+    // Then
+    expect(snap?.status).toBe("ok")
+    if (snap?.status === "ok") {
+      expect(snap.cells[0]).toMatchObject({
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: "-1d",
+        show_time_range: true,
+      })
+      expect(snap.cells[1].time_range).toBeUndefined()
+      expect(snap.cells[1].time_shift).toBeUndefined()
+      expect(snap.cells[2].time_range).toBeUndefined()
+      expect(formatSnapshot(snap)).toContain("time_shift: -1d")
+    }
+    expect(summaries[0].time_shift).toBe("-1d")
+    expect(summaries[1].time_shift).toBeUndefined()
+    expect(details.time_range).toEqual({ from: "now-15m", to: "now" })
+    expect(details.show_time_range).toBe(true)
   })
 
   it("truncates previews to 120 chars and escapes newlines", async () => {

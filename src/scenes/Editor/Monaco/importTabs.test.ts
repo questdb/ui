@@ -835,6 +835,59 @@ describe("sanitizeBuffer", () => {
       ])
     })
 
+    it("keeps a cell's time override and shift, drops invalid ones, and strips them from markdown", () => {
+      // Given
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              position: 0,
+              value: "SELECT 1",
+              timeRange: { from: "now-15m", to: "now" },
+              timeShift: "-1d",
+              showTimeRange: true,
+            },
+            {
+              id: "c2",
+              position: 1,
+              value: "SELECT 2",
+              timeRange: { from: "yesterday", to: "now" },
+              timeShift: "1d",
+            },
+            {
+              id: "c3",
+              position: 2,
+              value: "# note",
+              type: "markdown",
+              timeRange: { from: "now-15m", to: "now" },
+              timeShift: "-1d",
+              showTimeRange: true,
+            },
+          ],
+        },
+      }
+
+      // When
+      const { buffer } = sanitizeBuffer(input, [])
+      const cells = buffer.notebookViewState?.cells ?? []
+
+      // Then
+      expect(cells[0]).toMatchObject({
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      })
+      expect(cells[1].timeRange).toBeUndefined()
+      expect(cells[1].timeShift).toBeUndefined()
+      expect(cells[2].timeRange).toBeUndefined()
+      expect(cells[2].timeShift).toBeUndefined()
+      expect(cells[2].showTimeRange).toBeUndefined()
+    })
+
     it("round-trips settings.autoRefreshDefault and drops an invalid token", () => {
       const input = {
         label: "Notebook",

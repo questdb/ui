@@ -38,20 +38,40 @@ export const NOTEBOOK_TIME_PRESETS: DurationPreset[] = [
   { dateFrom: "now-30d", dateTo: "now", label: "Last 30 days" },
 ]
 
+export type TimeShiftUnit = "s" | "m" | "h" | "d" | "w" | "M" | "y"
+
+export type TimeShift = {
+  amount: number
+  unit: TimeShiftUnit
+}
+
 const utcLiteral = (iso: string): string => `'${new Date(iso).toISOString()}'`
 
-const boundExpression = (bound: string, base: string): string => {
+const shifted = (expression: string, shift: TimeShift | undefined): string =>
+  shift
+    ? `dateadd('${shift.unit}', ${shift.amount}, ${expression})`
+    : expression
+
+const boundExpression = (
+  bound: string,
+  base: string,
+  shift: TimeShift | undefined,
+): string => {
   const relative = parseRelativeToken(bound)
-  if (!relative) return utcLiteral(bound)
+  if (!relative) return shifted(utcLiteral(bound), shift)
   if (relative.amount === 0) return base
   return `dateadd('${relative.unit}', -${relative.amount}, ${base})`
 }
 
-export const timeRangeToDeclareEntries = (range: TimeRange): DeclareEntry[] => {
-  const fromBase = range.to === "now" ? "@timeTo" : "now()"
+export const timeRangeToDeclareEntries = (
+  range: TimeRange,
+  shift?: TimeShift,
+): DeclareEntry[] => {
+  const nowBase = shifted("now()", shift)
+  const fromBase = range.to === "now" ? "@timeTo" : nowBase
   return [
-    { name: "timeTo", value: boundExpression(range.to, "now()") },
-    { name: "timeFrom", value: boundExpression(range.from, fromBase) },
+    { name: "timeTo", value: boundExpression(range.to, nowBase, shift) },
+    { name: "timeFrom", value: boundExpression(range.from, fromBase, shift) },
     { name: "timeFilter", value: "interval(@timeFrom, @timeTo)" },
   ]
 }

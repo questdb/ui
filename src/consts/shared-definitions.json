@@ -427,7 +427,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Execute a SQL cell. A cell whose statements are all reads runs them in PARALLEL: one failure skips nothing, and a statement the server rejects at validation is skipped with its validation error as that statement's result. A cell containing any DDL/DML runs sequentially instead, and a failure stops the remaining statements. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`. Query-list variables use their stored values; a list the cell references that was never loaded is fetched first. If that fetch fails, the cell still runs without that variable, so QuestDB reports an undeclared variable unless the cell DECLAREs it itself; fix the variable with apply_notebook_state or apply_global_variables and rerun.",
+    "description": "Execute a SQL cell. A cell whose statements are all reads runs them in PARALLEL: one failure skips nothing, and a statement the server rejects at validation is skipped with its validation error as that statement's result. A cell containing any DDL/DML runs sequentially instead, and a failure stops the remaining statements. Returns `{ success, queryCount, results: string[] }`, where each `results` entry is `\"success\"`, `\"cancelled\"`, or `\"ERROR: <message>\"`, in source order. You do NOT see columns, rows, or values — call run_query if you need data. `success` is true only when every statement reached `\"success\"`. This is the ONLY path that executes agent-initiated DDL/DML in a cell (apply_notebook_state and add_cell never auto-run writes) — it requires the 'write' permission and the user's consent. A markdown cell is never executed: the response is `{ ran: false, skipped: true, note: <reason> }`. Query-list variables use their stored values; a list the cell references that was never loaded is fetched first. If that fetch fails, the cell still runs without that variable, so QuestDB reports an undeclared variable unless the cell DECLAREs it itself; fix the variable with apply_notebook_state or apply_global_variables and rerun. A cell's own time range or time shift replaces @timeFrom, @timeTo and @timeFilter for that run; variable lists are not refetched.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -734,6 +734,55 @@
     }
   },
   {
+    "name": "set_cell_time_range",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Set or clear a SQL cell's own time range and time shift. They replace @timeFrom, @timeTo and @timeFilter for that cell only; query-list variables keep the notebook range. The cell does not rerun. Pass null to clear a field. Markdown cells are rejected.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "time_range": {
+          "type": ["object", "null"],
+          "properties": {
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            }
+          },
+          "required": ["from", "to"],
+          "additionalProperties": false,
+          "description": "Cell time range with the same bounds as the notebook range: relative such as now-15m and now, or absolute ISO timestamps. null inherits the notebook range."
+        },
+        "time_shift": {
+          "type": ["string", "null"],
+          "description": "Moves the cell's window: a required sign (- past, + future), a whole number from 1 to 9999, and one unit of s, m, h, d, w, M, y. Example: -1d. null means no shift."
+        },
+        "show_in_header": {
+          "type": ["boolean", "null"],
+          "description": "Show the override in the cell header. null or false hides it."
+        }
+      },
+      "required": [
+        "buffer_id",
+        "cell_id",
+        "time_range",
+        "time_shift",
+        "show_in_header"
+      ]
+    }
+  },
+  {
     "name": "set_cell_view_maximized",
     "category": "free",
     "surfaces": ["ai", "mcp"],
@@ -962,10 +1011,7 @@
           "description": "Spotlight one cell id, or null to clear. Pass null to clear."
         },
         "variables": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "object",
             "properties": {
@@ -973,75 +1019,40 @@
                 "type": "string"
               },
               "kind": {
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "enum": [
-                  "expression",
-                  "text",
-                  "list",
-                  null
-                ],
+                "type": ["string", "null"],
+                "enum": ["expression", "text", "list", null],
                 "description": "null means expression."
               },
               "label": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "description": {
-                "type": [
-                  "string",
-                  "null"
-                ]
+                "type": ["string", "null"]
               },
               "value": {
-                "type": [
-                  "string",
-                  "null"
-                ],
+                "type": ["string", "null"],
                 "description": "expression: raw SQL expression. text: the text, inserted exactly as written (quote strings yourself). null for list."
               },
               "source": {
-                "type": [
-                  "object",
-                  "null"
-                ],
+                "type": ["object", "null"],
                 "properties": {
                   "type": {
                     "type": "string",
-                    "enum": [
-                      "query",
-                      "custom"
-                    ]
+                    "enum": ["query", "custom"]
                   },
                   "query": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
+                    "type": ["string", "null"],
                     "description": "query source: a single SELECT; the first column is always the value, label_column may name another column to show."
                   },
                   "label_column": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "entries": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
+                    "type": ["string", "null"],
                     "description": "custom source: comma-separated values inserted exactly as written (quote strings yourself), each optionally followed by \"as label\"."
                   },
                   "regex": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
+                    "type": ["string", "null"],
                     "description": "query source: keeps matching values; named groups (?<value>) and (?<text>) remap value and label."
                   }
                 },
@@ -1055,10 +1066,7 @@
                 "additionalProperties": false
               },
               "sort": {
-                "type": [
-                  "string",
-                  "null"
-                ],
+                "type": ["string", "null"],
                 "enum": [
                   "none",
                   "alphaAsc",
@@ -1069,50 +1077,28 @@
                 ]
               },
               "multi": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
+                "type": ["boolean", "null"]
               },
               "include_all": {
-                "type": [
-                  "boolean",
-                  "null"
-                ]
+                "type": ["boolean", "null"]
               },
               "all": {
-                "type": [
-                  "object",
-                  "null"
-                ],
+                "type": ["object", "null"],
                 "properties": {
                   "mode": {
                     "type": "string",
-                    "enum": [
-                      "list",
-                      "custom"
-                    ]
+                    "enum": ["list", "custom"]
                   },
                   "value": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   }
                 },
                 "description": "What All emits: the full option list, or a custom scalar such as '.*' for ~ / LIKE queries.",
-                "required": [
-                  "mode",
-                  "value"
-                ],
+                "required": ["mode", "value"],
                 "additionalProperties": false
               },
               "selected": {
-                "type": [
-                  "array",
-                  "string",
-                  "null"
-                ],
+                "type": ["array", "string", "null"],
                 "items": {
                   "type": "object",
                   "properties": {
@@ -1120,16 +1106,10 @@
                       "type": "string"
                     },
                     "label": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": [
-                    "value",
-                    "label"
-                  ],
+                  "required": ["value", "label"],
                   "additionalProperties": false
                 },
                 "description": "\"all\", or the selected options as {value, label}. null keeps All when include_all, else nothing selected."
@@ -1153,10 +1133,7 @@
           "description": "Ordered notebook-scoped variables referenced as @name in cells. Each is one of three kinds. `expression` (kind null; a legacy {\"name\", \"value\"} item means this): `value` is a raw SQL expression such as dateadd('d', -7, now()). `text`: a text box; `value` is inserted exactly as written, so quote strings yourself. `list`: a picker; `source` is a query (first column = value, second = label) or custom entries inserted as written; `multi`, `include_all`, `all` and `sort` shape the picker and `source.regex` filters a query source's values; `selected` is \"all\" or the chosen options; every option value is a SQL literal inserted exactly as written (a query source arrives already quoted by column type, custom entries are quoted by you), so one value is a scalar and several are a bracket list for `col IN @name`. Pass null for every field that does not apply to the kind. Names must be unique across globals and locals, ignoring case. Names have no leading '@' and must not be timeFrom, timeTo or timeFilter, which the notebook time range declares. Order matters: a variable may reference those declared before it. Everything is sent as a DECLARE block prepended to each SELECT (or merged into the cell's own DECLARE block); non-SELECT statements receive nothing. Pass null to preserve all existing notebook-local variable definitions and selections unchanged; pass [] to clear all locals. A nonempty array replaces the complete ordered local list; omitted locals are deleted. Use get_global_variables and apply_global_variables to manage shared globals."
         },
         "time_range": {
-          "type": [
-            "object",
-            "null"
-          ],
+          "type": ["object", "null"],
           "properties": {
             "from": {
               "type": "string"
@@ -1166,10 +1143,7 @@
             }
           },
           "description": "Notebook time range, declared to every cell as @timeFrom, @timeTo and @timeFilter (use `WHERE ts IN @timeFilter`). Bounds are ISO timestamps or relative tokens: \"now\", \"now-15m\", \"now-1h\", \"now-7d\". Pass null to clear the range; omit to preserve it.",
-          "required": [
-            "from",
-            "to"
-          ],
+          "required": ["from", "to"],
           "additionalProperties": false
         },
         "cells": {
@@ -1217,6 +1191,28 @@
                   }
                 ],
                 "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default."
+              },
+              "time_range": {
+                "type": ["object", "null"],
+                "properties": {
+                  "from": {
+                    "type": "string"
+                  },
+                  "to": {
+                    "type": "string"
+                  }
+                },
+                "required": ["from", "to"],
+                "additionalProperties": false,
+                "description": "Cell time range overriding the notebook range for this cell only. Omitted or null clears it (cells are a full replacement). Rejected on markdown cells."
+              },
+              "time_shift": {
+                "type": ["string", "null"],
+                "description": "Cell time shift: a required sign (- past, + future), a whole number from 1 to 9999, and one of s, m, h, d, w, M, y, e.g. -1d. Omitted or null clears it."
+              },
+              "show_time_range": {
+                "type": ["boolean", "null"],
+                "description": "Show the cell's time override in its header. Omitted or null hides it."
               },
               "is_view_maximized": {
                 "type": ["boolean", "null"],
@@ -1349,6 +1345,9 @@
               "type",
               "mode",
               "auto_refresh",
+              "time_range",
+              "time_shift",
+              "show_time_range",
               "is_view_maximized",
               "chart_config",
               "grid"

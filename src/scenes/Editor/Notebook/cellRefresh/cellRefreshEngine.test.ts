@@ -211,6 +211,7 @@ describe("CellRefreshEngine", () => {
     await flushAsync()
     // Then
     expect(captureExecution).toHaveBeenCalledTimes(1)
+    expect(captureExecution).toHaveBeenCalledWith("c1", expect.anything())
     expect(executeSingle).toHaveBeenCalledTimes(2)
     expect(validateWithGlobals).toHaveBeenCalledTimes(2)
     expect(deps.executeSingle).not.toHaveBeenCalled()
