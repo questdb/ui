@@ -1,6 +1,19 @@
+import {
+  parseTimeShift,
+  TIME_SHIFT_ERROR,
+} from "../../scenes/Editor/Notebook/variables/cellTime"
+import { prepareNotebookVariables } from "../notebooks/notebookVariableOptions"
+import { changedVariableNames } from "../../scenes/Editor/Notebook/variables/variableChanges"
+import {
+  sameTimeRange,
+  TIME_VARIABLE_NAMES,
+} from "../../scenes/Editor/Notebook/variables/timeRange"
 import type { StatusCallback } from "../ai/aiAssistant"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
-import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
+import {
+  getAgentQuest,
+  getBufferActionSeq,
+} from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import {
   applyNotebookStateTransition,
@@ -9,7 +22,12 @@ import {
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
 } from "../notebooks/notebookController"
-import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
+import type {
+  CellMode,
+  CellType,
+  NotebookVariable,
+  TimeRange,
+} from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
   denyReasonUnresolvedSql,
@@ -21,9 +39,20 @@ import { isAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
   isValidVariableName,
-  renderDeclareValidationQuery,
   validateVariableShape,
 } from "../../scenes/Editor/Notebook/declareUtils"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
+import { PROBLEM_MESSAGES } from "../../scenes/Editor/Notebook/variables/variableDrafts"
+import { variableToDeclareEntry } from "../../scenes/Editor/Notebook/variables/declareEntries"
+import {
+  isTimeVariableName,
+  isValidTimeRange,
+} from "../../scenes/Editor/Notebook/variables/timeRange"
+import {
+  describeWireVariableError,
+  wireVariableToStored,
+} from "./variablesWire"
 import type { ToolExecutionContext } from "../ai/shared"
 import {
   mapQueryChart,
@@ -50,67 +79,67 @@ const validationError = (message: string): ToolResult => ({
   is_error: true,
 })
 
-const validateApplyVariables = async (
-  variables: NotebookVariable[] | null | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
-): Promise<ToolResult | null> => {
-  if (
-    variables !== undefined &&
-    variables !== null &&
-    !Array.isArray(variables)
-  ) {
-    return validationError(
-      "variables must be an ordered array of {name,value} entries (or null to preserve).",
-    )
-  }
-  if (!Array.isArray(variables)) return null
+type VariablesValidation =
+  | { error: ToolResult }
+  | { variables: NotebookVariable[] | undefined }
 
-  const seen = new Set<string>()
-  for (const [idx, variable] of variables.entries()) {
-    if (
-      !variable ||
-      typeof variable !== "object" ||
-      typeof variable.name !== "string" ||
-      typeof variable.value !== "string"
-    ) {
-      return validationError(
-        `variables[${idx}] must be an object with string name and value fields.`,
-      )
+const validateApplyVariables = async (
+  variables: unknown,
+): Promise<VariablesValidation> => {
+  if (variables === undefined || variables === null) {
+    return { variables: undefined }
+  }
+  if (!Array.isArray(variables)) {
+    return {
+      error: validationError(
+        "variables must be an ordered array of variable objects (or null to preserve).",
+      ),
     }
+  }
+  for (const [idx, raw] of variables.entries()) {
+    const problem = describeWireVariableError(raw)
+    if (problem) {
+      return { error: validationError(`variables[${idx}] ${problem}.`) }
+    }
+  }
+  const normalized = normalizeVariables(variables.map(wireVariableToStored))
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+  const seen = new Set(globals.map((variable) => variable.name.toLowerCase()))
+  for (const [idx, variable] of normalized.entries()) {
     const { name } = variable
     if (!isValidVariableName(name)) {
-      return validationError(
-        `variables[${idx}].name "${name}" is not a valid QuestDB identifier. First char must be a letter, underscore, or non-ASCII Unicode char (U+0080..U+FFFF); remaining chars may also include digits. No leading '@'.`,
-      )
+      return {
+        error: validationError(
+          `variables[${idx}].name "${name}" is not a valid QuestDB identifier. First char must be a letter, underscore, or non-ASCII Unicode char (U+0080..U+FFFF); remaining chars may also include digits. No leading '@'.`,
+        ),
+      }
     }
-    if (seen.has(name)) {
-      return validationError(
-        `duplicate variable name "${name}". Variables are ordered, but each name may only appear once.`,
-      )
+    if (isTimeVariableName(name)) {
+      return {
+        error: validationError(
+          `variables[${idx}].name "${name}" is reserved for the notebook time range (@timeFrom, @timeTo, @timeFilter). Set time_range instead.`,
+        ),
+      }
     }
-    seen.add(name)
-  }
-  for (let idx = 0; idx < variables.length; idx += 1) {
-    const shapeError = validateVariableShape(variables[idx])
+    if (seen.has(name.toLowerCase())) {
+      return {
+        error: validationError(
+          `Variable ${name}: ${PROBLEM_MESSAGES.duplicateName}`,
+        ),
+      }
+    }
+    seen.add(name.toLowerCase())
+    const entry = variableToDeclareEntry(variable, {})
+    const shapeError = entry ? validateVariableShape(entry) : null
     if (shapeError) {
-      return validationError(
-        `variables[${idx}] (${variables[idx].name}) shape check failed (${shapeError.kind}). Each value must be a single expression with no embedded assignments, top-level commas, or DECLARE syntax. Use parentheses to group expressions if commas are needed.`,
-      )
-    }
-  }
-  if (validateSql) {
-    for (let idx = 0; idx < variables.length; idx += 1) {
-      const result = await validateSql(
-        renderDeclareValidationQuery(variables.slice(0, idx + 1)),
-      )
-      if ("error" in result) {
-        return validationError(
-          `variables[${idx}] (${variables[idx].name}) failed QuestDB validation: ${result.error}`,
-        )
+      return {
+        error: validationError(
+          `variables[${idx}] (${name}) shape check failed (${shapeError.kind}). Each value must be a single expression with no embedded assignments, top-level commas, or DECLARE syntax. Use parentheses to group expressions if commas are needed.`,
+        ),
       }
     }
   }
-  return null
+  return { variables: normalized }
 }
 
 type ResolvedRun = {
@@ -200,6 +229,7 @@ export const dispatchApplyNotebookState = async (
     auto_refresh_default,
     maximized_cell_id,
     variables,
+    time_range,
     cells,
   } =
     (input as {
@@ -207,7 +237,8 @@ export const dispatchApplyNotebookState = async (
       layout_mode?: "list" | "grid" | null
       auto_refresh_default?: boolean | string | null
       maximized_cell_id?: string | null
-      variables?: NotebookVariable[] | null
+      variables?: unknown[] | null
+      time_range?: { from?: unknown; to?: unknown } | null
       cells: Array<{
         id?: string | null
         name?: string | null
@@ -216,6 +247,9 @@ export const dispatchApplyNotebookState = async (
         type?: "sql" | "markdown" | null
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
+        time_range?: { from?: unknown; to?: unknown } | null
+        time_shift?: string | null
+        show_time_range?: boolean | null
         is_view_maximized?: boolean | null
         chart_config?: {
           x_column?: string | null
@@ -281,6 +315,38 @@ export const dispatchApplyNotebookState = async (
         is_error: true,
       }
     }
+    if (c.time_range != null && !isValidTimeRange(c.time_range)) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}].time_range must be {from, to} with valid bounds, for example {from: "now-15m", to: "now"}.`,
+        }),
+        is_error: true,
+      }
+    }
+    if (typeof c.time_shift === "string" && !parseTimeShift(c.time_shift)) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}].time_shift: ${TIME_SHIFT_ERROR}`,
+        }),
+        is_error: true,
+      }
+    }
+    if (
+      c.type === "markdown" &&
+      (c.time_range != null ||
+        c.time_shift != null ||
+        c.show_time_range != null)
+    ) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${idx}] is markdown; time_range, time_shift and show_time_range must be null.`,
+        }),
+        is_error: true,
+      }
+    }
     const hasValue = typeof c.value === "string"
     const preserves = c.preserve_value === true
     if (preserves === hasValue) {
@@ -332,8 +398,23 @@ export const dispatchApplyNotebookState = async (
     if (typeof c.id !== "string") return null
     return basics.get(c.id)?.value ?? null
   }
-  const variablesError = await validateApplyVariables(variables, validateSql)
-  if (variablesError) return variablesError
+  if (
+    time_range !== undefined &&
+    time_range !== null &&
+    !isValidTimeRange(time_range)
+  ) {
+    return validationError(
+      'time_range must be {from, to} where each bound is an ISO timestamp or a relative token such as "now-1h" and "now"; pass null to clear it.',
+    )
+  }
+  const timeRange: TimeRange | null | undefined =
+    time_range === undefined
+      ? undefined
+      : isValidTimeRange(time_range)
+        ? time_range
+        : null
+  const variablesValidation = await validateApplyVariables(variables)
+  if ("error" in variablesValidation) return variablesValidation.error
   // Shared by the draw-invariant gate (below) and the post-apply
   // auto-run loop's mode resolution.
   const existingModes = new Map<string, CellMode | undefined>()
@@ -379,8 +460,8 @@ export const dispatchApplyNotebookState = async (
       : null,
     maximizedCellId:
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
-    variables:
-      variables === undefined || variables === null ? undefined : variables,
+    variables: variablesValidation.variables,
+    timeRange,
     cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
       const cell: ApplyNotebookStateCellRequest =
         c.preserve_value === true ? { preserveValue: true } : { value: c.value }
@@ -389,6 +470,11 @@ export const dispatchApplyNotebookState = async (
       if (c.type === "sql" || c.type === "markdown") cell.type = c.type
       if (c.mode !== undefined && c.mode !== null) cell.mode = c.mode
       if (isAutoRefresh(c.auto_refresh)) cell.autoRefresh = c.auto_refresh
+      if (isValidTimeRange(c.time_range)) {
+        cell.timeRange = { from: c.time_range.from, to: c.time_range.to }
+      }
+      if (typeof c.time_shift === "string") cell.timeShift = c.time_shift
+      if (c.show_time_range === true) cell.showTimeRange = true
       if (c.is_view_maximized !== undefined && c.is_view_maximized !== null)
         cell.isViewMaximized = c.is_view_maximized
       if (c.chart_config) {
@@ -406,6 +492,41 @@ export const dispatchApplyNotebookState = async (
       return cell
     }),
   }
+  const currentSettings = await withBoundNotebookReadOnly(
+    buffer_id,
+    (view) => Promise.resolve(view.settings ?? {}),
+    signal,
+  )
+  const nextSettings = {
+    ...currentSettings,
+    ...(variablesValidation.variables !== undefined
+      ? { variables: variablesValidation.variables }
+      : {}),
+    ...(timeRange !== undefined ? { timeRange: timeRange ?? undefined } : {}),
+  }
+  const changedNames = changedVariableNames(
+    currentSettings.variables ?? [],
+    nextSettings.variables ?? [],
+  )
+  const preparedVariables = await prepareNotebookVariables(
+    {
+      quest: getAgentQuest(),
+      signal: signal ?? new AbortController().signal,
+      validateSql,
+      validateAll: true,
+      force: new Set(
+        [
+          ...changedNames,
+          ...(!sameTimeRange(currentSettings.timeRange, nextSettings.timeRange)
+            ? TIME_VARIABLE_NAMES
+            : []),
+        ].map((name) => name.toLowerCase()),
+      ),
+    },
+    buffer_id,
+    nextSettings,
+    normalizeVariables((await getNotebookGlobals())?.variables),
+  )
   if (signal?.aborted) {
     return {
       content: JSON.stringify({
@@ -425,13 +546,27 @@ export const dispatchApplyNotebookState = async (
     | { applied: { added: string[]; updated: string[]; deleted: string[] } }
     | undefined
   try {
-    committed = await withBoundNotebook(
+    const { out, variable_values } = await withBoundNotebook(
       buffer_id,
-      (ctrl) =>
-        ctrl.mutate((parts) => applyNotebookStateTransition(parts, request)),
+      async (ctrl) => {
+        const applied = await ctrl.mutate(
+          (parts) => ({
+            ...applyNotebookStateTransition(parts, request),
+            preparedVariables,
+          }),
+          signal,
+        )
+        committed = applied
+        return {
+          out: applied,
+          variable_values: [
+            ...preparedVariables.global.report,
+            ...preparedVariables.notebook.report,
+          ],
+        }
+      },
       signal,
     )
-    const out = committed
     // New-cell ids arrive in request order via `applied.added`.
     const resolved: ResolvedRun[] = []
     const postApplyBasics = await readBasics()
@@ -469,7 +604,9 @@ export const dispatchApplyNotebookState = async (
       validateSql,
       signal,
     )
-    return { content: JSON.stringify({ ...out, runs }) }
+    return {
+      content: JSON.stringify({ applied: out.applied, variable_values, runs }),
+    }
   } catch (e) {
     // Once withBoundNotebook resolved the mutation is durably committed, so an
     // abort during the post-apply read/auto-run must report the state as applied
@@ -478,7 +615,7 @@ export const dispatchApplyNotebookState = async (
     if (committed && isAbortError(e)) {
       return {
         content: JSON.stringify({
-          ...committed,
+          applied: committed.applied,
           runs: [],
           state_applied: true,
           post_apply_aborted: true,

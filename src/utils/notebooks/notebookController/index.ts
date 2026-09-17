@@ -130,4 +130,5 @@ export {
   setNotebookAutoRefreshTransition,
   updateCellTransition,
   type NotebookTransitionResult,
+  type VariableSettingsDiff,
 } from "./notebookTransitions"

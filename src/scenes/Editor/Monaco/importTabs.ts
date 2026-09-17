@@ -17,8 +17,11 @@ import type {
   NotebookVariable,
   NotebookViewState,
 } from "../../../store/notebook"
+import { normalizeVariableList } from "../Notebook/variables/normalizeVariables"
+import { isValidTimeRange } from "../Notebook/variables/timeRange"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
 import { isAutoRefresh } from "../Notebook/notebookUtils"
+import { readCellTime } from "../Notebook/variables/cellTime"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
   MAX_NOTEBOOK_CELLS,
@@ -271,6 +274,7 @@ const sanitizeNotebookCell = (
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+  Object.assign(cell, readCellTime(item, cell.type))
   if (typeof item.isViewMaximized === "boolean")
     cell.isViewMaximized = item.isViewMaximized
   if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
@@ -284,9 +288,57 @@ const sanitizeNotebookCell = (
   return cell
 }
 
+type VariableImportNotes = {
+  reusedGlobals: string[]
+  localizedGlobals: string[]
+  dropped: string[]
+}
+
+export type VariableImportReport = VariableImportNotes & { label: string }
+
+type ImportedVariables = VariableImportNotes & {
+  variables: NotebookVariable[]
+}
+
+const hasMatchingGlobal = (
+  globals: NotebookVariable[],
+  variable: NotebookVariable,
+): boolean =>
+  globals.some(
+    (g) =>
+      g.name.toLowerCase() === variable.name.toLowerCase() &&
+      g.kind === variable.kind,
+  )
+
+export const importNotebookVariables = (
+  item: Record<string, unknown>,
+  globals: NotebookVariable[],
+): ImportedVariables => {
+  const exported = normalizeVariableList(
+    Array.isArray(item.globals) ? item.globals : [],
+  )
+  const local = normalizeVariableList(
+    Array.isArray(item.variables) ? item.variables : [],
+  )
+  const reused = exported.variables.filter((v) => hasMatchingGlobal(globals, v))
+  const localized = exported.variables.filter(
+    (v) => !hasMatchingGlobal(globals, v),
+  )
+  return {
+    variables: [...localized, ...local.variables],
+    reusedGlobals: reused.map((v) => v.name),
+    localizedGlobals: localized.map((v) => v.name),
+    dropped: [...exported.dropped, ...local.dropped],
+  }
+}
+
 const sanitizeNotebookSettings = (
   item: Record<string, unknown>,
-): NotebookSettings => {
+  globals: NotebookVariable[],
+): {
+  settings: NotebookSettings
+  variables: VariableImportNotes
+} => {
   const settings: NotebookSettings = {}
   if (item.layoutMode === "list" || item.layoutMode === "grid")
     settings.layoutMode = item.layoutMode
@@ -303,21 +355,29 @@ const sanitizeNotebookSettings = (
       )
     })
   }
-  if (Array.isArray(item.variables)) {
-    settings.variables = item.variables.filter((v): v is NotebookVariable => {
-      if (typeof v !== "object" || v === null) return false
-      const o = v as Record<string, unknown>
-      return typeof o.name === "string" && typeof o.value === "string"
-    })
+  const { variables, ...report } = importNotebookVariables(item, globals)
+  if (Array.isArray(item.variables) || Array.isArray(item.globals)) {
+    settings.variables = variables
   }
+  if (isValidTimeRange(item.timeRange)) settings.timeRange = item.timeRange
   if (isAutoRefresh(item.autoRefreshDefault))
     settings.autoRefreshDefault = item.autoRefreshDefault
-  return settings
+  return { settings, variables: report }
+}
+
+const EMPTY_VARIABLE_REPORT: VariableImportNotes = {
+  reusedGlobals: [],
+  localizedGlobals: [],
+  dropped: [],
 }
 
 const sanitizeNotebookViewState = (
   item: Record<string, unknown>,
-): NotebookViewState => {
+  globals: NotebookVariable[],
+): {
+  state: NotebookViewState
+  variables: VariableImportNotes
+} => {
   const cells = (item.cells as unknown[]).map((c, i) =>
     sanitizeNotebookCell(c as Record<string, unknown>, i),
   )
@@ -327,16 +387,31 @@ const sanitizeNotebookViewState = (
     cells.some((c) => c.id === item.maximizedCellId)
   )
     state.maximizedCellId = item.maximizedCellId
-  if (typeof item.settings === "object" && item.settings !== null)
-    state.settings = sanitizeNotebookSettings(
-      item.settings as Record<string, unknown>,
-    )
-  return state
+  if (typeof item.settings !== "object" || item.settings === null) {
+    return { state, variables: EMPTY_VARIABLE_REPORT }
+  }
+  const { settings, variables } = sanitizeNotebookSettings(
+    item.settings as Record<string, unknown>,
+    globals,
+  )
+  state.settings = settings
+  return { state, variables }
 }
+
+export type SanitizedBuffer = {
+  buffer: Omit<Buffer, "id">
+  variables: VariableImportReport | null
+}
+
+const hasVariableNotes = (report: VariableImportNotes) =>
+  report.reusedGlobals.length > 0 ||
+  report.localizedGlobals.length > 0 ||
+  report.dropped.length > 0
 
 export const sanitizeBuffer = (
   item: Record<string, unknown>,
-): Omit<Buffer, "id"> => {
+  globals: NotebookVariable[],
+): SanitizedBuffer => {
   const hasMetricsViewState = item.metricsViewState !== undefined
   const hasNotebookViewState = item.notebookViewState !== undefined
 
@@ -346,10 +421,16 @@ export const sanitizeBuffer = (
     position: item.position as number,
   }
 
+  let variables: VariableImportReport | null = null
   if (hasNotebookViewState) {
-    sanitized.notebookViewState = sanitizeNotebookViewState(
+    const notebook = sanitizeNotebookViewState(
       item.notebookViewState as Record<string, unknown>,
+      globals,
     )
+    sanitized.notebookViewState = notebook.state
+    if (hasVariableNotes(notebook.variables)) {
+      variables = { label: sanitized.label, ...notebook.variables }
+    }
   } else if (hasMetricsViewState) {
     sanitized.metricsViewState = sanitizeMetricsViewState(
       item.metricsViewState as Record<string, unknown>,
@@ -365,7 +446,7 @@ export const sanitizeBuffer = (
     sanitized.archivedAt = item.archivedAt
   }
 
-  return sanitized
+  return { buffer: sanitized, variables }
 }
 
 export const validateBufferSchema = (data: unknown): ValidationResult => {

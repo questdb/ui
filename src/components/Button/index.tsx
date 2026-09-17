@@ -57,6 +57,7 @@ type BaseButtonProps = {
   onMouseLeave?: (event: MouseEvent) => void
   onDragStart?: (event: React.DragEvent<HTMLButtonElement>) => void
   onDragEnd?: (event: React.DragEvent<HTMLButtonElement>) => void
+  onKeyDown?: (event: React.KeyboardEvent<HTMLButtonElement>) => void
   onFocus?: (event: FocusEvent) => void
   onBlur?: (event: FocusEvent) => void
   size?: Size

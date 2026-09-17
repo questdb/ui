@@ -7,6 +7,7 @@ import {
   emitUserAction,
   getBufferActionSeq,
   signalUserEdit,
+  registerNotebookAgentDeps,
 } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import {
@@ -35,10 +36,12 @@ import {
   clearStatementClassCache,
   type RunCellGate,
 } from "../tools/permissions"
+import type { Client } from "../questdb/client"
 import type { ValidateQueryResult } from "../questdb/types"
 import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
+import type { VariableValuesEntry } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
 
 const cell = (
@@ -67,6 +70,7 @@ const mountLive = (
     validate?: (sql: string) => Promise<ValidateQueryResult>
     // Fires on each readView — lets a test simulate a user edit racing a read.
     onRead?: () => void
+    variableValues?: VariableValuesEntry[]
   } = {},
 ) => {
   const state: { parts: ViewParts } = {
@@ -116,6 +120,12 @@ const mountLive = (
   const controller: NotebookController = {
     bufferId,
     kind: "live",
+    syncVariableOptions: vi.fn(() =>
+      Promise.resolve(opts.variableValues ?? []),
+    ),
+    waitForVariableOptions: vi.fn(() =>
+      Promise.resolve(opts.variableValues ?? []),
+    ),
     mutate: (transition) => {
       try {
         const out = transition(state.parts)
@@ -136,7 +146,12 @@ const mountLive = (
     runCell: vi.fn(runCell),
   }
   registerController(controller)
-  return { state, runCell: controller.runCell }
+  return {
+    state,
+    runCell: controller.runCell,
+    syncVariableOptions: controller.syncVariableOptions,
+    waitForVariableOptions: controller.waitForVariableOptions,
+  }
 }
 
 const cellIds = (state: { parts: ViewParts }): string[] =>
@@ -193,6 +208,7 @@ beforeEach(async () => {
   clearStatementClassCache()
   await db.buffers.clear()
   await db.notebook_results.clear()
+  await db.notebook_globals.clear()
   // A backing Dexie row so buildSnapshot (get_notebook_state) can read meta.
   await db.buffers.put({
     id: 1,
@@ -759,6 +775,207 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.name).toBe("orig")
   })
 
+  it("set_cell_time_range sets the range, the shift and the header flag", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c")])
+
+    // When
+    await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: "-1d",
+        show_in_header: true,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(cellById(state, "c")).toMatchObject({
+      timeRange: { from: "now-15m", to: "now" },
+      timeShift: "-1d",
+      showTimeRange: true,
+    })
+  })
+
+  it("set_cell_time_range clears every field with nulls", async () => {
+    // Given
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+    ])
+
+    // When
+    await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: null,
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    const after = cellById(state, "c")
+    expect(after?.timeRange).toBeUndefined()
+    expect(after?.timeShift).toBeUndefined()
+    expect(after?.showTimeRange).toBeUndefined()
+  })
+
+  it("set_cell_time_range rejects a shift without a sign and a bad range", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c")])
+
+    // When
+    const badShift = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: null,
+        time_shift: "1d",
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const badRange = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "yesterday", to: "now" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(badShift.is_error).toBe(true)
+    expect(badShift.content).toContain("time_shift")
+    expect(badRange.is_error).toBe(true)
+    expect(badRange.content).toContain("time_range")
+    expect(cellById(state, "c")?.timeShift).toBeUndefined()
+  })
+
+  it("set_cell_time_range rejects a markdown cell", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "# note", { type: "markdown" })])
+
+    // When
+    const res = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now-15m", to: "now" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(res.is_error).toBe(true)
+    expect(res.content).toContain("markdown")
+    expect(cellById(state, "c")?.timeRange).toBeUndefined()
+  })
+
+  it("apply_notebook_state clears a cell's time fields when omitted and sets them when given", async () => {
+    // Given a cell with an override
+    const { state } = mountLive(1, [
+      cell("c", "SELECT 1", {
+        timeRange: { from: "now-15m", to: "now" },
+        timeShift: "-1d",
+        showTimeRange: true,
+      }),
+    ])
+
+    // When the agent re-applies the cell without the fields
+    await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ id: "c", preserve_value: true }] },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then they are gone
+    expect(cellById(state, "c")?.timeRange).toBeUndefined()
+    expect(cellById(state, "c")?.timeShift).toBeUndefined()
+
+    // When the agent applies them again
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "c",
+            preserve_value: true,
+            time_range: { from: "now-1h", to: "now" },
+            time_shift: "+2h",
+            show_time_range: true,
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then they are set
+    expect(cellById(state, "c")).toMatchObject({
+      timeRange: { from: "now-1h", to: "now" },
+      timeShift: "+2h",
+      showTimeRange: true,
+    })
+  })
+
+  it("apply_notebook_state rejects time fields on a markdown cell and a bad shift", async () => {
+    // Given
+    mountLive(1, [cell("c")])
+
+    // When
+    const markdown = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: null, value: "# note", type: "markdown", time_shift: "-1d" },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const badShift = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [{ id: null, value: "SELECT 1", time_shift: "1d" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(markdown.is_error).toBe(true)
+    expect(markdown.content).toContain("markdown")
+    expect(badShift.is_error).toBe(true)
+    expect(badShift.content).toContain("time_shift")
+  })
+
   it("run_query flags a transport-dropped error as unverified, a server error as not", async () => {
     const transport = makeClient({
       runQueryRaw: vi.fn(() =>
@@ -1161,8 +1378,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("apply_notebook_state applies ordered variables; null preserves, [] clears", async () => {
     const variables = [
-      { name: "x", value: "10" },
-      { name: "from_ts", value: "dateadd('d', -7, now())" },
+      { name: "x", kind: "expression", value: "10" },
+      { name: "from_ts", kind: "expression", value: "dateadd('d', -7, now())" },
     ]
     // Ordered variables are written to settings.
     const a = mountLive(1)
@@ -1182,7 +1399,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
     // null preserves the notebook's existing variables.
     const b = mountLive(1, [], {
-      settings: { variables: [{ name: "keep", value: "1" }] },
+      settings: {
+        variables: [{ name: "keep", kind: "expression", value: "1" }],
+      },
     })
     await dispatchTool(
       "apply_notebook_state",
@@ -1197,12 +1416,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       noopStatus,
     )
     expect(b.state.parts.settings.variables).toEqual([
-      { name: "keep", value: "1" },
+      { name: "keep", kind: "expression", value: "1" },
     ])
 
     // [] clears them.
     const c = mountLive(1, [], {
-      settings: { variables: [{ name: "gone", value: "1" }] },
+      settings: {
+        variables: [{ name: "gone", kind: "expression", value: "1" }],
+      },
     })
     await dispatchTool(
       "apply_notebook_state",
@@ -1219,6 +1440,39 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(c.state.parts.settings.variables).toEqual([])
   })
 
+  it.each(["global", "notebook"])(
+    "rejects a local name that conflicts with a %s variable without SQL validation",
+    async (scope) => {
+      // Given
+      const first = { name: "rate", kind: "expression", value: "5" }
+      if (scope === "global") {
+        await db.notebook_globals.put({
+          id: "globals",
+          variables: [{ ...first, kind: "expression" }],
+        })
+      }
+      const variables = [
+        ...(scope === "notebook" ? [first] : []),
+        { name: "RATE", kind: "expression", value: "2" },
+      ]
+
+      // When
+      const result = await dispatchTool(
+        "apply_notebook_state",
+        { buffer_id: 1, variables, cells: [{ value: "SELECT 1" }] },
+        makeClient(),
+        noopStatus,
+      )
+
+      // Then
+      expect(result.is_error).toBe(true)
+      expect(
+        (JSON.parse(result.content) as { message: string }).message,
+      ).toContain("Variable RATE: This variable is already defined.")
+      expect(live.state.parts.settings.variables).toBeUndefined()
+    },
+  )
+
   it("apply_notebook_state rejects invalid variable names with a VALIDATION_ERROR", async () => {
     const client = makeClient()
     const res = await dispatchTool(
@@ -1227,7 +1481,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         layout_mode: null,
         maximized_cell_id: null,
-        variables: [{ name: "bad-name", value: "1" }],
+        variables: [{ name: "bad-name", kind: "expression", value: "1" }],
         cells: [{ value: "SELECT 1" }],
       },
       client,
@@ -1238,8 +1492,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(parsed.error_code).toBe("validation")
   })
 
-  it("apply_notebook_state rejects invalid variable values via QuestDB validation", async () => {
-    for (const value of ["", "select", "(1,2,3)"]) {
+  it("apply_notebook_state commits variable errors returned by validation", async () => {
+    for (const value of ["unknown_column", "@missing", "1 / 0"]) {
       const client = makeClient()
       const validateSql = vi.fn(() =>
         Promise.resolve({
@@ -1262,10 +1516,149 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         undefined,
         validateSql,
       )
-      expect(res.is_error).toBe(true)
-      const parsed = JSON.parse(res.content) as { error_code: string }
-      expect(parsed.error_code).toBe("validation")
+      expect(res.is_error, res.content).toBeFalsy()
+      const parsed = JSON.parse(res.content) as {
+        variable_values: VariableValuesEntry[]
+      }
+      expect(parsed.variable_values.map((entry) => entry.name)).toEqual(["x"])
+      expect("error" in parsed.variable_values[0]).toBe(true)
+      expect(live.state.parts.settings.variables?.[0]).toMatchObject({ value })
     }
+  })
+
+  it.each(["2", "@b + 1", "@a + @missing"])(
+    "prepares cold All dependencies before validating %s and committing",
+    async (value) => {
+      const validateSql = vi.fn((sql: string) =>
+        Promise.resolve(
+          sql.includes("@missing") ||
+            (sql.includes("@a +") && !sql.includes("@a := 1"))
+            ? { query: sql, error: "undeclared variable", position: 0 }
+            : { query: sql, columns: [], timestamp: 0 },
+        ),
+      )
+      const queryRaw = vi.fn(() => ({
+        queryId: "options",
+        promise: Promise.resolve({
+          type: "dql",
+          columns: [{ name: "n", type: "INT" }],
+          dataset: [[1]],
+          count: 1,
+        }),
+      }))
+      registerNotebookAgentDeps({
+        getQuest: () =>
+          ({
+            validateQuery: validateSql,
+            queryRaw,
+            abort: () => undefined,
+          }) as unknown as Client,
+      })
+      const res = await dispatchTool(
+        "apply_notebook_state",
+        {
+          buffer_id: 1,
+          variables: [
+            {
+              name: "a",
+              kind: "list",
+              source: { type: "query", query: "SELECT 1 AS n" },
+              multi: false,
+              include_all: true,
+              all: { mode: "list" },
+              sort: "none",
+              selected: "all",
+            },
+            {
+              name: "b",
+              kind: "expression",
+              value: value.includes("missing") ? value : "@a + 1",
+            },
+            ...(value.includes("missing")
+              ? []
+              : [{ name: "c", kind: "expression", value }]),
+          ],
+          cells: [{ value: "SELECT 42" }],
+        },
+        makeClient(),
+        noopStatus,
+        undefined,
+        validateSql,
+      )
+      expect(queryRaw).toHaveBeenCalledTimes(1)
+      if (value.includes("missing")) {
+        expect(res.is_error).toBeFalsy()
+        expect(
+          (
+            JSON.parse(res.content) as {
+              variable_values: VariableValuesEntry[]
+            }
+          ).variable_values,
+        ).toEqual([
+          expect.objectContaining({ name: "a", count: 1 }),
+          expect.objectContaining({
+            name: "b",
+            error:
+              "@missing is not declared above this variable. Define it first, or move it up.",
+          }),
+        ])
+        expect(live.state.parts.settings.variables).toHaveLength(2)
+      } else {
+        expect(res.is_error).toBeFalsy()
+        expect(live.state.parts.settings.variables).toHaveLength(3)
+        expect(
+          validateSql.mock.calls.some(([sql]) =>
+            sql.includes(`@c := ${value}`),
+          ),
+        ).toBe(true)
+      }
+    },
+  )
+
+  it("apply_notebook_state records an error for a list query classified as a write", async () => {
+    const client = makeClient()
+    const validateSql = vi.fn((sql: string) =>
+      Promise.resolve(
+        sql.includes("INSERT")
+          ? { query: sql, queryType: "INSERT" }
+          : { query: sql, columns: [], timestamp: 0 },
+      ),
+    )
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [
+          {
+            name: "venue",
+            kind: "list",
+            source: { type: "query", query: "INSERT INTO t VALUES (1)" },
+            multi: false,
+            include_all: true,
+            all: { mode: "list" },
+            sort: "none",
+            selected: "all",
+          },
+        ],
+        cells: [{ value: "SELECT 1" }],
+      },
+      client,
+      noopStatus,
+      undefined,
+      validateSql,
+    )
+    expect(res.is_error).toBeFalsy()
+    const parsed = JSON.parse(res.content) as {
+      variable_values: VariableValuesEntry[]
+    }
+    expect(parsed.variable_values).toEqual([
+      {
+        name: "venue",
+        error: "The option query must be a SELECT, not INSERT.",
+      },
+    ])
   })
 
   it("apply_notebook_state rejects multi-assignment value injection before validateSql", async () => {
@@ -1277,7 +1670,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         buffer_id: 1,
         layout_mode: null,
         maximized_cell_id: null,
-        variables: [{ name: "x", value: "1, @evil := 999" }],
+        variables: [
+          { name: "x", kind: "expression", value: "1, @evil := 999" },
+        ],
         cells: [{ value: "SELECT 1" }],
       },
       client,
@@ -1297,7 +1692,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("apply_notebook_state validates ordered variable prefixes with QuestDB", async () => {
     const client = makeClient()
-    const validateSql = vi.fn(() =>
+    const validateSql = vi.fn((_sql: string) =>
       Promise.resolve({
         query: "SELECT 1",
         columns: [{ name: "1", type: "INT" }],
@@ -1308,11 +1703,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
+        time_range: { from: "2025-01-01", to: "2025-01-02" },
         layout_mode: null,
         maximized_cell_id: null,
         variables: [
-          { name: "base", value: "10" },
-          { name: "derived", value: "@base + 1" },
+          { name: "base", kind: "expression", value: "10" },
+          { name: "derived", kind: "expression", value: "@base + 1" },
         ],
         cells: [{ value: "SELECT @derived" }],
       },
@@ -1321,13 +1717,10 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       validateSql,
     )
-    expect(validateSql).toHaveBeenNthCalledWith(
-      1,
-      "DECLARE\n  @base := 10\nSELECT 1",
-    )
-    expect(validateSql).toHaveBeenNthCalledWith(
-      2,
-      "DECLARE\n  @base := 10,\n  @derived := @base + 1\nSELECT 1",
+    const sent = validateSql.mock.calls.map(([sql]) => sql)
+    expect(sent[0]).toBe("DECLARE\n  @base := 10\nSELECT 1")
+    expect(sent[1]).toMatch(
+      /DECLARE\n {2}@base := 10,\n {2}@derived := @base \+ 1\nSELECT 1$/,
     )
     // The apply committed: the requested cell is now present.
     expect(live.state.parts.cells).toHaveLength(1)
@@ -1348,7 +1741,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
-        variables: [{ name: "base", value: "10" }],
+        variables: [{ name: "base", kind: "expression", value: "10" }],
         cells: [{ value: "SELECT @base" }],
       },
       client,
@@ -1398,6 +1791,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const controller: NotebookController = {
       bufferId: 1,
       kind: "live",
+      syncVariableOptions: () => Promise.resolve([]),
+      waitForVariableOptions: () => Promise.resolve([]),
       mutate: (transition) => {
         try {
           const out = transition(state.parts)
@@ -2455,8 +2850,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     )
     // Flush microtasks so dispatchTool resumes past the apply and fires every
     // runCell concurrently.
-    await new Promise((r) => setTimeout(r, 0))
-    expect(order).toHaveLength(3)
+    await vi.waitFor(() => expect(order).toHaveLength(3))
     // Finish out of submission order — only possible if all three are in
     // flight simultaneously.
     finish[order[2]]()
@@ -2861,6 +3255,94 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
     )
     expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
       kind: "autoRun",
+    })
+  })
+})
+
+describe("dispatchTool — query-list variable values", () => {
+  const pairList = {
+    name: "pair",
+    kind: "list",
+    source: {
+      type: "query",
+      query: "SELECT DISTINCT symbol FROM fx_trades",
+    },
+    sort: "none",
+    multi: true,
+    includeAll: true,
+    all: { mode: "list" },
+    selected: "all",
+  }
+  const fetched: VariableValuesEntry[] = [
+    { name: "pair", count: 3, fetched_at: 1_700_000_000_000 },
+  ]
+
+  it("apply_notebook_state syncs the values of the changed lists and reports them", async () => {
+    // Given a mounted notebook that reports one fetched list
+    const nb = mountLive(1, [], { variableValues: fetched })
+
+    registerNotebookAgentDeps({
+      getQuest: () =>
+        ({
+          validateQuery: (query: string) =>
+            Promise.resolve({ query, columns: [], timestamp: -1 }),
+          queryRaw: () => ({
+            queryId: "q",
+            promise: Promise.resolve({
+              type: "dql",
+              columns: [{ name: "symbol", type: "SYMBOL" }],
+              dataset: [["A"], ["B"], ["C"]],
+              count: 3,
+            }),
+          }),
+          abort: () => undefined,
+        }) as unknown as Client,
+    })
+
+    // When the agent defines a query list
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        variables: [pairList],
+        cells: [{ value: "SELECT 1" }],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then preparation supplies the values without a second refresh after commit.
+    expect(nb.syncVariableOptions).not.toHaveBeenCalled()
+    const parsed = JSON.parse(res.content) as {
+      applied: unknown
+      variable_values: VariableValuesEntry[]
+      runs: unknown[]
+    }
+    expect(parsed.variable_values).toMatchObject([{ name: "pair", count: 3 }])
+    expect("fetched_at" in parsed.variable_values[0]).toBe(true)
+    expect(Object.keys(parsed)).toEqual(["applied", "variable_values", "runs"])
+  })
+
+  it("activate_notebook waits for the notebook's values and reports them", async () => {
+    // Given a mounted notebook whose values are still loading
+    const nb = mountLive(1, [], { variableValues: fetched })
+
+    // When the agent activates it
+    const res = await dispatchTool(
+      "activate_notebook",
+      { buffer_id: 1 },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the response carries the values that finished loading
+    expect(nb.waitForVariableOptions).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(res.content)).toEqual({
+      activated: true,
+      buffer_id: 1,
+      variable_values: fetched,
     })
   })
 })

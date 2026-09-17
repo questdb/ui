@@ -76,7 +76,7 @@ const TriggerLabel = styled.span<{ $rich?: boolean; $fontSize?: string }>`
   overflow: hidden;
   color: ${({ theme }) => theme.color.contentPrimary};
   font-size: ${({ $rich, $fontSize }) =>
-    $fontSize ?? ($rich ? "1.4rem" : "1.2rem")};
+    $fontSize ?? ($rich ? "1.4rem" : "1.3rem")};
   font-weight: ${({ $rich }) => ($rich ? 500 : 400)};
   line-height: 1.3;
   text-overflow: ellipsis;
