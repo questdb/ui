@@ -55,8 +55,13 @@ const VOLUME_PANE_SHARE = 0.2
 const VOLUME_PANE_MIN_HEIGHT = 48
 const VOLUME_PANE_GAP = 5
 const VOLUME_BAR_OPACITY = 0.7
+const VOLUME_BAR_MIN_HEIGHT = 1
 const VOLUME_AXIS_PAD = 0.1
-const VOLUME_FLOOR_PERCENTILE = 0.1
+const OUTLIER_FENCE = 3
+const QUIET_BUCKET_TOLERANCE = 0.05
+
+const quantile = (sorted: number[], q: number): number =>
+  sorted[Math.floor(q * (sorted.length - 1))]
 
 const volumeAxisBounds = (
   queries: ResolvedQuery[],
@@ -77,9 +82,19 @@ const volumeAxisBounds = (
   values.sort((a, b) => a - b)
   const max = values[values.length - 1]
   if (max <= 0) return null
-  const low = values[Math.floor(VOLUME_FLOOR_PERCENTILE * (values.length - 1))]
-  const pad = (max - low) * VOLUME_AXIS_PAD
-  return { min: Math.max(0, low - pad), max: max + pad }
+  // A bar far under the pack, such as the bucket still filling, is an outlier
+  // and is drawn as a stub. Two guards decide "far": Tukey's outer fence, 3 IQR
+  // under the lower quartile, which keeps everything on spiky data, and a 5%
+  // band under that quartile, which protects a genuine quiet bucket when the
+  // pack is so tight that a few IQR is a rounding error.
+  const q1 = quantile(values, 0.25)
+  const outlierCutoff = Math.min(
+    q1 - OUTLIER_FENCE * (quantile(values, 0.75) - q1),
+    q1 * (1 - QUIET_BUCKET_TOLERANCE),
+  )
+  const smallestKept = values.find((v) => v >= outlierCutoff) ?? values[0]
+  const pad = (max - smallestKept) * VOLUME_AXIS_PAD
+  return { min: Math.max(0, smallestKept - pad), max: max + pad }
 }
 
 const PANE_AXIS_LABEL_SPACE = 22
@@ -425,10 +440,14 @@ const CANDLE_UP = 1
 const CANDLE_DOWN = -1
 const CANDLE_FLAT = 0
 
+// A bar under the axis floor is drawn as a stub at the floor and keeps its true
+// volume in a fourth slot for the tooltip, so an outlier reads as "below the
+// scale" instead of as a missing bucket.
 const buildVolumeSeries = (
   q: ResolvedQuery,
   ctx: SeriesContext,
   yAxisIndex: number,
+  floor: number,
 ): Series | null => {
   if (!q.ohlc || q.volume == null) return null
   const idx = buildColumnIndexMap(q.columns)
@@ -458,12 +477,13 @@ const buildVolumeSeries = (
     type: "bar",
     xAxisIndex: 1,
     yAxisIndex,
+    barMinHeight: VOLUME_BAR_MIN_HEIGHT,
     itemStyle: { opacity: VOLUME_BAR_OPACITY },
-    data: q.dataset.map((row) => [
-      x(row),
-      toNumberOrNull(row[vIdx]),
-      direction(row),
-    ]),
+    data: q.dataset.map((row) => {
+      const volume = toNumberOrNull(row[vIdx])
+      const drawn = volume !== null && volume < floor ? floor : volume
+      return [x(row), drawn, direction(row), volume]
+    }),
   }
 }
 
@@ -516,7 +536,7 @@ const linkedPanesTooltip = (raw: unknown): string => {
           (volume
             ? tooltipRow(
                 volume.seriesName ?? "volume",
-                tooltipNumber(values(volume)[1]),
+                tooltipNumber(values(volume)[3]),
               )
             : ""),
       ]
@@ -811,11 +831,12 @@ export const buildEchartsOption = (
       ]
     : [leftAxis]
   const volumeAxisIndex = priceAxes.length
+  const volumeBounds = volumeAxisBounds(volumeQueries)
   const volumeAxis = {
     type: "value" as const,
     gridIndex: 1,
     position: "right" as const,
-    ...volumeAxisBounds(volumeQueries),
+    ...volumeBounds,
     splitNumber: 2,
     axisLabel: {
       ...axisLabel,
@@ -900,7 +921,9 @@ export const buildEchartsOption = (
   }
 
   const volumeSeries = volumeQueries
-    .map((q) => buildVolumeSeries(q, ctx, volumeAxisIndex))
+    .map((q) =>
+      buildVolumeSeries(q, ctx, volumeAxisIndex, volumeBounds?.min ?? 0),
+    )
     .filter((s): s is Series => s !== null)
   const volumeSeriesIndex = volumeSeries.map((_, i) => series.length + i)
   const bothAxes = { xAxisIndex: [0, 1] }

@@ -710,7 +710,88 @@ describe("buildEchartsOption — candlestick with a volume sub-pane", () => {
     // Then the band fills the pane and the partial bucket falls below the floor
     expect(axis.min).toBeGreaterThan(4_000_000_000)
     expect(axis.min).toBeLessThan(4_100_000_000)
-    expect(axis.max).toBeCloseTo(4_204_000_000)
+    expect(axis.max).toBeCloseTo(4_204_500_000)
+    // and the smallest full bucket keeps a visible height, not a hairline
+    const smallestFull = 4_100_000_000
+    expect((smallestFull - axis.min) / (axis.max - axis.min)).toBeGreaterThan(
+      0.05,
+    )
+  })
+
+  it("keeps a full bucket just under the pack and cuts only the bucket still filling", () => {
+    // Given a steady pack, one genuine low bucket 0.6% under it, one partial
+    const pack = Array.from({ length: 20 }, (_, i) => [
+      i * 1000,
+      1.14,
+      1.15,
+      1.13,
+      1.145,
+      4_110_000_000 + i * 6_000_000,
+    ])
+    const lowFullBucket = 4_085_000_000
+    const partialBucket = 3_575_000_000
+    const rows = [
+      ...pack,
+      [20_000, 1.14, 1.15, 1.13, 1.145, lowFullBucket],
+      [21_000, 1.14, 1.15, 1.13, 1.145, partialBucket],
+    ]
+    // When
+    const opt = build({ xColumn: "ts" }, [candle({ dataset: rows })])
+    const axis = records(opt.yAxis)[1] as { min: number; max: number }
+    // Then
+    expect(axis.min).toBeLessThan(lowFullBucket)
+    expect(axis.min).toBeGreaterThan(partialBucket)
+    expect((lowFullBucket - axis.min) / (axis.max - axis.min)).toBeGreaterThan(
+      0.05,
+    )
+  })
+
+  it("draws a bucket under the floor as a stub at the floor and keeps its true volume", () => {
+    // Given a steady pack and one partial bucket far below it
+    const rows = Array.from({ length: 20 }, (_, i) => [
+      i * 1000,
+      1.14,
+      1.15,
+      1.13,
+      1.145,
+      4_100_000_000 + i * 5_000_000,
+    ])
+    rows.push([20_000, 1.14, 1.15, 1.13, 1.145, 852_539_807])
+    // When
+    const opt = build({ xColumn: "ts" }, [candle({ dataset: rows })])
+    const axis = records(opt.yAxis)[1] as { min: number }
+    const bars = seriesList(opt.series).find((s) => s.type === "bar")
+    const partial = (bars?.data as (number | null)[][])[20]
+    // Then
+    expect(bars?.barMinHeight).toBe(1)
+    expect(partial[1]).toBe(axis.min)
+    expect(partial[3]).toBe(852_539_807)
+  })
+
+  it("keeps a genuine quiet bucket in a very tight pack", () => {
+    // Given a full day of 15-minute buckets whose middle half spans 1% of the
+    // level, and one bucket 2.5% under the pack
+    const rows = Array.from({ length: 95 }, (_, i) => [
+      i * 1000,
+      1.14,
+      1.15,
+      1.13,
+      1.145,
+      4_130_000_000 + (i % 10) * 4_000_000,
+    ])
+    const quietBucket = 4_045_000_000
+    rows.push([95_000, 1.14, 1.15, 1.13, 1.145, quietBucket])
+    // When
+    const opt = build({ xColumn: "ts" }, [candle({ dataset: rows })])
+    const axis = records(opt.yAxis)[1] as { min: number; max: number }
+    const bars = seriesList(opt.series).find((s) => s.type === "bar")
+    const drawn = (bars?.data as number[][])[95][1]
+    // Then it is drawn at its own height, not clamped to the floor
+    expect(drawn).toBe(quietBucket)
+    expect(axis.min).toBeLessThan(quietBucket)
+    expect((quietBucket - axis.min) / (axis.max - axis.min)).toBeGreaterThan(
+      0.05,
+    )
   })
 
   it("keeps a zero floor for spiky volume", () => {
@@ -759,9 +840,9 @@ describe("buildEchartsOption — candlestick with a volume sub-pane", () => {
     })
     expect(seriesList(opt.series)[0].id).toBe("candle-0")
     expect(bars?.data).toEqual([
-      [1000, 500, 1],
-      [2000, 700, -1],
-      [3000, 300, 0],
+      [1000, 500, 1, 500],
+      [2000, 700, -1, 700],
+      [3000, 300, 0, 300],
     ])
     expect((bars?.itemStyle as { opacity: number }).opacity).toBe(0.7)
     expect(opt.visualMap).toMatchObject({
@@ -847,7 +928,7 @@ describe("buildEchartsOption — candlestick with a volume sub-pane", () => {
         seriesName: "total_volume",
         marker: "<m/>",
         axisValueLabel: at,
-        value: [0, 4_098_126_210, -1],
+        value: [0, 4_090_000_000, -1, 4_098_126_210],
       },
     ]
     // When
