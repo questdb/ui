@@ -73,6 +73,7 @@ const defaultConfig: LocalConfig = {
   useNewGrid: true,
   useQuickVis: false,
   runWithSelectionMode: "partial",
+  capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
   aiAssistantSettings: DEFAULT_AI_ASSISTANT_SETTINGS,
   leftPanelState: {
@@ -148,6 +149,7 @@ type ContextProps = {
   useNewGrid: boolean
   useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode
+  capitalizeKeywordsOnFormat: boolean
   maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   updateLeftPanelState: (state: LeftPanelState) => void
@@ -193,6 +195,7 @@ const defaultValues: ContextProps = {
   useNewGrid: true,
   useQuickVis: false,
   runWithSelectionMode: "partial",
+  capitalizeKeywordsOnFormat: false,
   maxColumnWidth: "auto",
   leftPanelState: defaultConfig.leftPanelState,
   updateLeftPanelState: (_state: LeftPanelState) => undefined,
@@ -258,6 +261,14 @@ export const LocalStorageProvider = ({
   const [runWithSelectionMode, setRunWithSelectionMode] =
     useState<RunWithSelectionMode>(
       parseRunWithSelectionMode(getValue(StoreKey.RUN_WITH_SELECTION)),
+    )
+
+  const [capitalizeKeywordsOnFormat, setCapitalizeKeywordsOnFormat] =
+    useState<boolean>(
+      parseBoolean(
+        getValue(StoreKey.CAPITALIZE_KEYWORDS_ON_FORMAT),
+        defaultConfig.capitalizeKeywordsOnFormat,
+      ),
     )
 
   const [maxColumnWidth, setMaxColumnWidth] = useState<MaxColumnWidth>(
@@ -373,6 +384,9 @@ export const LocalStorageProvider = ({
       case StoreKey.RUN_WITH_SELECTION:
         setRunWithSelectionMode(parseRunWithSelectionMode(value))
         break
+      case StoreKey.CAPITALIZE_KEYWORDS_ON_FORMAT:
+        setCapitalizeKeywordsOnFormat(value === "true")
+        break
       case StoreKey.MAX_COLUMN_WIDTH:
         setMaxColumnWidth(parseMaxColumnWidth(value))
         break
@@ -408,6 +422,7 @@ export const LocalStorageProvider = ({
       useNewGrid,
       useQuickVis,
       runWithSelectionMode,
+      capitalizeKeywordsOnFormat,
       maxColumnWidth,
       leftPanelState,
       updateLeftPanelState,
@@ -429,6 +444,7 @@ export const LocalStorageProvider = ({
       useNewGrid,
       useQuickVis,
       runWithSelectionMode,
+      capitalizeKeywordsOnFormat,
       maxColumnWidth,
       leftPanelState,
       updateLeftPanelState,

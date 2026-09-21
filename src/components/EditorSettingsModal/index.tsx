@@ -7,6 +7,7 @@ import { Text } from "../Text"
 import { Button } from "../Button"
 import { SelectMenuControl } from "../SelectMenu"
 import { Input } from "../Input"
+import { Switch } from "../Switch"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import type { RunWithSelectionMode } from "../../providers/LocalStorageProvider/types"
 import {
@@ -144,14 +145,22 @@ const SettingRow = ({
 )
 
 const RUN_WITH_SELECTION_ID = "editor-settings-run-with-selection"
+const CAPITALIZE_KEYWORDS_ID = "editor-settings-capitalize-keywords"
 const MAX_COLUMN_WIDTH_ID = "editor-settings-max-column-width"
 const MAX_COLUMN_WIDTH_ERROR_ID = `${MAX_COLUMN_WIDTH_ID}-error`
 
 const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
-  const { runWithSelectionMode, maxColumnWidth, updateSettings } =
-    useLocalStorage()
+  const {
+    runWithSelectionMode,
+    capitalizeKeywordsOnFormat,
+    maxColumnWidth,
+    updateSettings,
+  } = useLocalStorage()
   const [runWithSelectionModeDraft, setRunWithSelectionModeDraft] =
     useState(runWithSelectionMode)
+  const [capitalizeKeywordsDraft, setCapitalizeKeywordsDraft] = useState(
+    capitalizeKeywordsOnFormat,
+  )
   const [maxColumnWidthDraft, setMaxColumnWidthDraft] = useState(
     maxColumnWidth === "auto" ? "" : String(maxColumnWidth),
   )
@@ -165,6 +174,10 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
       return
     }
     updateSettings(StoreKey.RUN_WITH_SELECTION, runWithSelectionModeDraft)
+    updateSettings(
+      StoreKey.CAPITALIZE_KEYWORDS_ON_FORMAT,
+      capitalizeKeywordsDraft,
+    )
     updateSettings(
       StoreKey.MAX_COLUMN_WIDTH,
       parseMaxColumnWidth(maxColumnWidthDraft),
@@ -199,6 +212,19 @@ const EditorSettingsForm = ({ onClose }: { onClose: () => void }) => {
               options={RUN_WITH_SELECTION_OPTIONS}
             />
           </ModeSelectField>
+        </SettingRow>
+        <SettingRow
+          label="Capitalize keywords on format"
+          description="Formatting SQL writes keywords in uppercase."
+          controlId={CAPITALIZE_KEYWORDS_ID}
+        >
+          <Switch
+            id={CAPITALIZE_KEYWORDS_ID}
+            checked={capitalizeKeywordsDraft}
+            onChange={setCapitalizeKeywordsDraft}
+            dataHook={CAPITALIZE_KEYWORDS_ID}
+            ariaDescribedBy={settingDescriptionId(CAPITALIZE_KEYWORDS_ID)}
+          />
         </SettingRow>
         <SettingRow
           label="Maximum column width (px)"

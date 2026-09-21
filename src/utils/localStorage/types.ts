@@ -49,6 +49,7 @@ export enum StoreKey {
   USE_QUICK_VIS = "feature.quickVis",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
   RUN_WITH_SELECTION = "editor.runWithSelection",
+  CAPITALIZE_KEYWORDS_ON_FORMAT = "editor.capitalizeKeywordsOnFormat",
   MAX_COLUMN_WIDTH = "grid.maxColumnWidth",
   THEME_PREFERENCE = "appearance.themePreference",
 }

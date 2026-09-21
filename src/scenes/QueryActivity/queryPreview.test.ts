@@ -1,3 +1,4 @@
+import "../../test/stubBrowserGlobals"
 import { describe, expect, it } from "vitest"
 import { buildQueryPreview, formatQuery } from "./queryPreview"
 

@@ -2491,12 +2491,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@questdb/sql-parser@npm:0.1.17":
-  version: 0.1.17
-  resolution: "@questdb/sql-parser@npm:0.1.17"
+"@questdb/sql-parser@npm:0.1.18":
+  version: 0.1.18
+  resolution: "@questdb/sql-parser@npm:0.1.18"
   dependencies:
     chevrotain: "npm:11.1.1"
-  checksum: 10/69427a04d3c5082eb37b47f76e6a6a79099ec91ea4346803ca3f221b2990050b0e35277b0cd319f4348a816ab0664817e0167d662c4719712cef02b2aba26018
+  checksum: 10/1c222b93aff23683a463f7971ecd5bd5424bade3a10e5282dea48802d656424cec62d2b30de7f21abff399a193a27ffad38b9f4127894cbe058f94e14cb1239b
   languageName: node
   linkType: hard
 
@@ -2518,7 +2518,7 @@ __metadata:
     "@monaco-editor/react": "npm:^4.7.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@popperjs/core": "npm:2.4.2"
-    "@questdb/sql-parser": "npm:0.1.17"
+    "@questdb/sql-parser": "npm:0.1.18"
     "@radix-ui/react-alert-dialog": "npm:^1.1.15"
     "@radix-ui/react-context-menu": "npm:^2.2.16"
     "@radix-ui/react-dialog": "npm:^1.1.15"
@@ -2609,7 +2609,6 @@ __metadata:
     rxjs: "npm:6.5.5"
     sass: "npm:^1.93.2"
     slim-select: "npm:1.26.0"
-    sql-formatter: "npm:^4.0.2"
     styled-components: "npm:5.3.5"
     stylelint: "npm:^13.13.1"
     stylelint-config-prettier: "npm:8.0.1"
@@ -11502,17 +11501,6 @@ __metadata:
   bin:
     specificity: ./bin/specificity
   checksum: 10/01a5850d82b479192a6346ce6dbf9584bb58bb85723c021c8b95ab2632287e398af25980b31f586eb095e82b5946ef3ef4aea7d75a5cbf563842bea2a3df02b1
-  languageName: node
-  linkType: hard
-
-"sql-formatter@npm:^4.0.2":
-  version: 4.0.2
-  resolution: "sql-formatter@npm:4.0.2"
-  dependencies:
-    argparse: "npm:^2.0.1"
-  bin:
-    sql-formatter: bin/sqlfmt.js
-  checksum: 10/4dc7a9cd55bab9e28f5058547ac4cb91d6abb22c8821ddb11169c9759441b2a81ff64107114d3866a02b186b5bf582aab0ac4ce8544c46e63ab3c4b65736ae84
   languageName: node
   linkType: hard
 

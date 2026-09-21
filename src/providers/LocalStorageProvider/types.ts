@@ -59,6 +59,7 @@ export type LocalConfig = {
   useNewGrid: boolean
   useQuickVis: boolean
   runWithSelectionMode: RunWithSelectionMode
+  capitalizeKeywordsOnFormat: boolean
   maxColumnWidth: MaxColumnWidth
   leftPanelState: LeftPanelState
   aiAssistantSettings: AiAssistantSettings
