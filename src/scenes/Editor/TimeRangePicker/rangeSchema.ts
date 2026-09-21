@@ -23,7 +23,8 @@ export const timeRangeSchema = ({
 
   const messages = {
     "string.empty": "Please enter a date or duration",
-    "string.invalidDate": "Date format or duration is invalid",
+    "string.invalidDate":
+      "Date format or duration is invalid. Examples: 2026-09-17 10:00, now-1h, now/d",
     "string.toIsBeforeFrom": "To date must be after From date",
     "string.dateInFuture": "Please set a date in the past or use `now`",
     "string.fromIsAfterTo": "From date must be before To date",
@@ -46,18 +47,18 @@ export const timeRangeSchema = ({
       .custom((value: string, helpers) => {
         if (allowEmpty && bothEmpty(helpers)) return value
         if (value === "") return helpers.error("string.empty")
-        const dateValue = durationTokenToDate(value)
+        const dateValue = durationTokenToDate(value, "from")
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
         try {
           const timeTo = new Date(
-            durationTokenToDate(siblingValues(helpers).dateTo),
+            durationTokenToDate(siblingValues(helpers).dateTo, "to"),
           ).getTime()
           if (dateValue === "Invalid date") {
             return helpers.error("string.invalidDate")
           } else if (timeValue >= timeTo) {
             return helpers.error("string.fromIsAfterTo")
-          } else if (timeValue > timeNow) {
+          } else if (timeValue > timeNow && !isDateToken(value)) {
             return helpers.error("string.dateInFuture")
           } else if (timeValue === timeNow) {
             return helpers.error("string.sameValues")
@@ -75,17 +76,17 @@ export const timeRangeSchema = ({
       .custom((value: string, helpers) => {
         if (allowEmpty && bothEmpty(helpers)) return value
         if (value === "") return helpers.error("string.empty")
-        const dateValue = durationTokenToDate(value)
+        const dateValue = durationTokenToDate(value, "to")
         const timeValue = new Date(dateValue).getTime()
         const timeNow = new Date().getTime()
         const timeFrom = new Date(
-          durationTokenToDate(siblingValues(helpers).dateFrom),
+          durationTokenToDate(siblingValues(helpers).dateFrom, "from"),
         ).getTime()
         if (dateValue === "Invalid date") {
           return helpers.error("string.invalidDate")
         } else if (timeValue <= timeFrom) {
           return helpers.error("string.toIsBeforeFrom")
-        } else if (timeValue > timeNow) {
+        } else if (timeValue > timeNow && !isDateToken(value)) {
           return helpers.error("string.dateInFuture")
         } else if (timeValue === timeNow) {
           return helpers.error("string.sameValues")

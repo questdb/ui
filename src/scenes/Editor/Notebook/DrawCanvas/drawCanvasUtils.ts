@@ -207,6 +207,7 @@ const pruneQuery = (
   }
   if (next.partitionByColumn && !names.has(next.partitionByColumn))
     delete next.partitionByColumn
+  if (next.volume && !names.has(next.volume)) delete next.volume
   return next
 }
 
@@ -246,7 +247,7 @@ export const resolveDraw = (
       ? savedX
       : (anchor?.inferred.xColumn ?? null)
   const anchorRole = anchor ? xRoleOf(anchor.r.columns, anchorX) : "other"
-  const canCombine = anchorRole === "temporal" || anchorRole === "categorical"
+  const canCombine = anchorRole !== "other"
 
   const tabs: QueryTab[] = []
   const renderQueries: ResolvedQuery[] = []
@@ -275,6 +276,7 @@ export const resolveDraw = (
       type: it.qc.type,
       yColumns: it.qc.yColumns ?? [],
       ohlc: resolveOhlc(it.qc, it.r.columns),
+      volume: it.qc.type === "candlestick" ? it.qc.volume : undefined,
       partitionByColumn: it.qc.partitionByColumn,
       axis: it.qc.axis ?? "left",
       name: it.qc.name,
@@ -297,11 +299,13 @@ export const resolveDraw = (
   return {
     chart: {
       xColumn: anchorX,
+      leftAxis: config?.leftAxis,
       rightAxis: config?.rightAxis,
     },
     renderQueries,
     effectiveConfig: {
       xColumn: anchorX,
+      leftAxis: config?.leftAxis,
       rightAxis: config?.rightAxis,
       queries: denseQueries,
     },

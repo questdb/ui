@@ -24,7 +24,8 @@ import {
   useNotebookVariablesState,
 } from "../../NotebookProvider"
 import { hasCellTime, type CellTime } from "../../variables/cellTime"
-import { NOTEBOOK_TIME_PRESETS } from "../../variables/timeRange"
+import { TIME_PRESETS } from "../../../TimeRangePicker/presets"
+import { TimePresetList } from "../../../TimeRangePicker/TimePresetList"
 import { DeclarationLines } from "../../variables/TimeRangeDeclarations"
 import {
   cellTimeFormSchema,
@@ -37,7 +38,7 @@ import {
 } from "./cellTimeForm"
 import { PresetChips } from "./PresetChips"
 
-const Content = styled(Dialog.Content).attrs({ maxwidth: "62rem" })`
+const Content = styled(Dialog.Content).attrs({ maxwidth: "82rem" })`
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
@@ -51,10 +52,33 @@ const Content = styled(Dialog.Content).attrs({ maxwidth: "62rem" })`
 
 const Body = styled.div`
   display: flex;
+  align-items: stretch;
+  min-height: 0;
+`
+
+const Fields = styled.div`
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2.4rem;
+  min-width: 0;
   padding: 2rem;
   overflow-y: auto;
+`
+
+const Presets = styled.div`
+  position: relative;
+  flex: 0 0 24rem;
+  border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
+`
+
+const PresetsViewport = styled.div`
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 2rem 1.2rem;
 `
 
 const Section = styled.section`
@@ -92,6 +116,7 @@ const Preview = styled.div`
   flex-direction: column;
   gap: 0.8rem;
   padding: 1.2rem 1.4rem;
+  overflow-x: auto;
   border: 1px solid ${({ theme }) => theme.color.borderSubtle};
   border-radius: 0.6rem;
   background: ${({ theme }) => theme.color.surfaceInset};
@@ -112,31 +137,30 @@ const FooterGroup = styled.div`
   gap: 0.8rem;
 `
 
-const RangePresetChips = () => {
+const RangePresets = () => {
   const { setValue } = useFormContext<CellTimeFormValues>()
-  const [dateFrom, dateTo] = useWatch<CellTimeFormValues>({
-    name: ["dateFrom", "dateTo"],
+  const dateFrom = useWatch<CellTimeFormValues, "dateFrom">({
+    name: "dateFrom",
   })
-  const selected =
-    NOTEBOOK_TIME_PRESETS.find(
-      (preset) => preset.dateFrom === dateFrom && preset.dateTo === dateTo,
-    )?.label ?? null
+  const dateTo = useWatch<CellTimeFormValues, "dateTo">({ name: "dateTo" })
   return (
-    <PresetChips
-      chips={NOTEBOOK_TIME_PRESETS.map(({ label }) => ({ key: label, label }))}
-      selectedKey={selected}
-      onSelect={(label) => {
-        const preset = NOTEBOOK_TIME_PRESETS.find((p) => p.label === label)
-        if (!preset) return
-        setValue("dateFrom", preset.dateFrom, { shouldDirty: true })
-        setValue("dateTo", preset.dateTo, {
-          shouldDirty: true,
-          shouldValidate: true,
-        })
-      }}
-      ariaLabel="Time range presets"
-      dataHook="cell-time-preset"
-    />
+    <Presets>
+      <PresetsViewport>
+        <TimePresetList
+          presets={TIME_PRESETS}
+          selected={{ dateFrom, dateTo }}
+          disabled={false}
+          onSelect={(preset) => {
+            setValue("dateFrom", preset.dateFrom, { shouldDirty: true })
+            setValue("dateTo", preset.dateTo, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+          }}
+          dataHook="cell-time-preset"
+        />
+      </PresetsViewport>
+    </Presets>
   )
 }
 
@@ -253,65 +277,67 @@ export const CellTimeDialog = ({ cell, onClose }: Props) => {
             validationSchema={cellTimeFormSchema}
           >
             <Body>
-              <Section>
-                <SectionHeader>
-                  <Text color="contentPrimary" size="md" weight={600}>
-                    Time range override
-                  </Text>
-                  <Text color="contentSecondary" size="sm">
-                    Override notebook time range
-                  </Text>
-                </SectionHeader>
-                <BoundFields>
-                  <DateBoundField
-                    name="dateFrom"
-                    label="From"
-                    placeholder="now-1h"
-                    {...bounds}
-                  />
-                  <DateBoundField
-                    name="dateTo"
-                    label="To"
-                    placeholder="now"
-                    {...bounds}
-                  />
-                </BoundFields>
-                <RangePresetChips />
-              </Section>
-              <Section>
-                <SectionHeader>
-                  <Text color="contentPrimary" size="md" weight={600}>
-                    Time shift
-                  </Text>
-                  <Text color="contentSecondary" size="sm">
-                    Start with - for the past or + for the future, then a number
-                    and s, m, h, d, w, M or y.
-                  </Text>
-                </SectionHeader>
-                <Form.Item name="shift">
-                  <ShiftRow>
-                    <Form.Input
-                      name="shift"
-                      placeholder="-1d"
-                      autoComplete="off"
-                      spellCheck={false}
-                      data-hook="cell-time-shift"
+              <Fields>
+                <Section>
+                  <SectionHeader>
+                    <Text color="contentPrimary" size="md" weight={600}>
+                      Time range override
+                    </Text>
+                    <Text color="contentSecondary" size="sm">
+                      Override notebook time range
+                    </Text>
+                  </SectionHeader>
+                  <BoundFields>
+                    <DateBoundField
+                      name="dateFrom"
+                      label="From"
+                      placeholder="now-1h"
+                      {...bounds}
                     />
-                    <ShiftPresetChips />
-                  </ShiftRow>
-                </Form.Item>
-              </Section>
-              <ShowInHeaderField />
-              <Preview data-hook="cell-time-preview">
-                {entries.length > 0 ? (
-                  <DeclarationLines entries={entries} />
-                ) : (
-                  <Text color="contentPrimary" size="sm">
-                    No time range. Pick a notebook time range or an override to
-                    declare @timeFrom, @timeTo and @timeFilter.
-                  </Text>
-                )}
-              </Preview>
+                    <DateBoundField
+                      name="dateTo"
+                      label="To"
+                      placeholder="now"
+                      {...bounds}
+                    />
+                  </BoundFields>
+                </Section>
+                <Section>
+                  <SectionHeader>
+                    <Text color="contentPrimary" size="md" weight={600}>
+                      Time shift
+                    </Text>
+                    <Text color="contentSecondary" size="sm">
+                      Start with - for the past or + for the future, then a
+                      number and s, m, h, d, w, M or y.
+                    </Text>
+                  </SectionHeader>
+                  <Form.Item name="shift">
+                    <ShiftRow>
+                      <Form.Input
+                        name="shift"
+                        placeholder="-1d"
+                        autoComplete="off"
+                        spellCheck={false}
+                        data-hook="cell-time-shift"
+                      />
+                      <ShiftPresetChips />
+                    </ShiftRow>
+                  </Form.Item>
+                </Section>
+                <ShowInHeaderField />
+                <Preview data-hook="cell-time-preview">
+                  {entries.length > 0 ? (
+                    <DeclarationLines entries={entries} />
+                  ) : (
+                    <Text color="contentPrimary" size="sm">
+                      No time range. Pick a notebook time range or an override
+                      to declare @timeFrom, @timeTo and @timeFilter.
+                    </Text>
+                  )}
+                </Preview>
+              </Fields>
+              <RangePresets />
             </Body>
             <Footer>
               <FooterGroup>
@@ -323,7 +349,7 @@ export const CellTimeDialog = ({ cell, onClose }: Props) => {
               <FooterGroup>
                 {hasCellTime(cell) && (
                   <Button
-                    variant="secondary"
+                    variant="dangerGhost"
                     onClick={handleClear}
                     data-hook="cell-time-clear"
                   >

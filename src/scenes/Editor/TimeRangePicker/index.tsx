@@ -15,6 +15,7 @@ import { getLocalGMTOffset, getLocalTimeZone } from "../../../utils"
 import { EditorRefreshIntervalTriggerButton } from "../ToolbarRefreshControls"
 import { DateBoundField } from "./DateBoundField"
 import { timeRangeSchema, toStoredBound } from "./rangeSchema"
+import { TimePresetList } from "./TimePresetList"
 import {
   durationToHumanReadable,
   type DateRange,
@@ -27,7 +28,7 @@ const Root = styled(Box).attrs({
   align: "flex-start",
 })`
   color: ${({ theme }) => theme.color.contentSecondary};
-  width: 50rem;
+  width: 58rem;
   padding: 1rem 1rem 0 1rem;
 `
 
@@ -40,8 +41,9 @@ const DatePickers = styled(Box).attrs({
   gap: "1rem",
   align: "flex-start",
 })`
-  width: 70%;
-  flex: 0 0 70%;
+  width: 64%;
+  flex: 0 0 64%;
+  min-width: 0;
   align-self: stretch;
   padding-right: 1rem;
   padding-left: 1rem;
@@ -51,44 +53,22 @@ const DatePickers = styled(Box).attrs({
   }
 `
 
-const Presets = styled.ul`
-  width: 30%;
-  flex: 0 0 30%;
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 1rem;
-  border-left: 1px solid ${({ theme }) => theme.color.interactionNeutral};
+const Preview = styled.div`
+  margin-top: auto;
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
 `
 
-const PresetButton = styled(Button).attrs({
-  variant: "ghost",
-  size: "sm",
-  fullWidth: true,
-})<{ $selected: boolean }>`
-  && {
-    height: 3rem;
-    padding: 0 1rem;
-    justify-content: flex-start;
-    border-radius: 0;
-    background: ${({ $selected, theme }) =>
-      $selected ? theme.color.interactionNeutral : "transparent"} !important;
-    color: ${({ $selected, theme }) =>
-      $selected
-        ? theme.color.contentPrimary
-        : theme.color.contentSecondary} !important;
-  }
-
-  &&:hover:not(:disabled),
-  &&:active:not(:disabled),
-  &&:focus-visible {
-    background: ${({ theme }) => theme.color.interactionNeutral} !important;
-    color: ${({ theme }) => theme.color.contentPrimary} !important;
-  }
-
-  &&:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.borderAccent};
-    outline-offset: -1px;
-  }
+const Presets = styled.div`
+  width: 36%;
+  flex: 0 0 36%;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 0 1rem;
+  border-left: 1px solid ${({ theme }) => theme.color.interactionNeutral};
+  max-height: 36rem;
 `
 
 const Footer = styled(Box).attrs({
@@ -301,35 +281,22 @@ export const TimeRangePicker = ({
                 </Box>
               </Box>
             </Form>
-            <Box margin="auto 0 0 0">
-              {renderPreview?.(draft.dateFrom, draft.dateTo)}
-            </Box>
+            <Preview>{renderPreview?.(draft.dateFrom, draft.dateTo)}</Preview>
           </DatePickers>
           <Presets>
-            {presets.map(
-              ({ label, dateFrom: presetFrom, dateTo: presetTo }) => (
-                <li key={label}>
-                  <PresetButton
-                    type="button"
-                    data-hook="time-range-preset"
-                    $selected={dateFrom === presetFrom && dateTo === presetTo}
-                    aria-pressed={
-                      dateFrom === presetFrom && dateTo === presetTo
-                    }
-                    disabled={progress !== null}
-                    onClick={() =>
-                      void apply({
-                        kind: "range",
-                        dateFrom: presetFrom,
-                        dateTo: presetTo,
-                      })
-                    }
-                  >
-                    {label}
-                  </PresetButton>
-                </li>
-              ),
-            )}
+            <TimePresetList
+              presets={presets}
+              selected={hasRange ? { dateFrom, dateTo } : null}
+              disabled={progress !== null}
+              onSelect={(preset) =>
+                void apply({
+                  kind: "range",
+                  dateFrom: preset.dateFrom,
+                  dateTo: preset.dateTo,
+                })
+              }
+              dataHook="time-range-preset"
+            />
           </Presets>
         </Cols>
         <Footer>
@@ -342,7 +309,7 @@ export const TimeRangePicker = ({
           <FooterActions>
             {onClear && hasRange && (
               <Button
-                variant="secondary"
+                variant="dangerGhost"
                 disabled={progress !== null}
                 onClick={handleClear}
                 data-hook="time-range-clear"

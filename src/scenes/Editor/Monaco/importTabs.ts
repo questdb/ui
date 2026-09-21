@@ -239,6 +239,8 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
       typeof q === "object" && q !== null ? (q as QueryChart) : null,
     ),
   }
+  if (typeof obj.leftAxis === "object" && obj.leftAxis !== null)
+    config.leftAxis = obj.leftAxis as ChartConfig["leftAxis"]
   if (typeof obj.rightAxis === "object" && obj.rightAxis !== null)
     config.rightAxis = obj.rightAxis as ChartConfig["rightAxis"]
   return config

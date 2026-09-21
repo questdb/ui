@@ -32,6 +32,7 @@ type ChartQueryWire = {
   type: string
   y_columns: string[]
   ohlc?: { open: string; high: string; low: string; close: string }
+  volume?: string
   partition_by_column?: string
   axis?: "left" | "right"
   enabled?: boolean
@@ -40,6 +41,7 @@ type ChartQueryWire = {
 export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
+  left_axis?: { name?: string; min?: number; max?: number }
   right_axis?: { name?: string; min?: number; max?: number }
 }
 
@@ -118,6 +120,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           type: q.type,
           y_columns: q.yColumns,
           ...(q.ohlc ? { ohlc: q.ohlc } : {}),
+          ...(q.volume ? { volume: q.volume } : {}),
           ...(q.partitionByColumn
             ? { partition_by_column: q.partitionByColumn }
             : {}),
@@ -126,6 +129,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.name != null ? { name: q.name } : {}),
         },
   ),
+  ...(cfg.leftAxis ? { left_axis: cfg.leftAxis } : {}),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
 

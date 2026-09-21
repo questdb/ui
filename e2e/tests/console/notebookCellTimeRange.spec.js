@@ -21,7 +21,7 @@ describe("Notebook cell time range", () => {
     cy.createNotebook()
     cy.getByDataHook("notebook-time-range").click()
     cy.getByDataHook("time-range-preset")
-      .contains(/^Last 1h$/)
+      .contains(/^Last 1 hour$/)
       .click()
     cy.getByDataHook("time-range-picker").should("not.exist")
     cy.intercept("GET", "**/exec*").as("exec")
@@ -29,7 +29,7 @@ describe("Notebook cell time range", () => {
     // When the user gives the cell its own range and a shift
     openCellTimeDialog()
     cy.getByDataHook("cell-time-preset")
-      .contains(/^Last 15m$/)
+      .contains(/^Last 15 minutes$/)
       .click()
     cy.getByDataHook("time-range-dateFrom").should("have.value", "now-15m")
     cy.getByDataHook("cell-time-shift").type("-1d")
@@ -41,7 +41,7 @@ describe("Notebook cell time range", () => {
     cy.getByDataHook("cell-time-dialog").should("not.exist")
 
     // Then the header shows it and the run declares the cell window, shifted once
-    cy.getByDataHook("cell-time-control").should("contain", "Last 15m, -1d")
+    cy.getByDataHook("cell-time-control").should("contain", "Last 15 minutes, -1d")
     cy.runNotebookQuery("select datediff('h', @timeFrom, now()) as hours_back")
     cy.getGridRow(0).should("contain", "24")
     cy.get("@exec.all").then((calls) => {

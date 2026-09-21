@@ -4,7 +4,7 @@ import {
   useNotebookActions,
   useNotebookVariablesState,
 } from "../NotebookProvider"
-import { NOTEBOOK_TIME_PRESETS } from "./timeRange"
+import { TIME_PRESETS } from "../../TimeRangePicker/presets"
 import { TimeRangeDeclarations } from "./TimeRangeDeclarations"
 
 export const NotebookTimeRangeControl: React.FC = () => {
@@ -16,7 +16,7 @@ export const NotebookTimeRangeControl: React.FC = () => {
     <TimeRangePicker
       dateFrom={range?.from}
       dateTo={range?.to}
-      presets={NOTEBOOK_TIME_PRESETS}
+      presets={TIME_PRESETS}
       renderPreview={(from, to) => (
         <TimeRangeDeclarations from={from} to={to} />
       )}

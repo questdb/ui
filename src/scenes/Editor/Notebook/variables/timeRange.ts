@@ -2,11 +2,14 @@ import type { DeclareEntry, TimeRange } from "../../../../store/notebook"
 import {
   durationTokenToDate,
   parseRelativeToken,
-  type DurationPreset,
+  type RangeEdge,
+  type TimeUnit,
 } from "../../TimeRangePicker/utils"
+import { browserTimeZone } from "../../../../utils/timeZone"
 
 const isBound = (value: unknown): value is string =>
-  typeof value === "string" && durationTokenToDate(value) !== "Invalid date"
+  typeof value === "string" &&
+  durationTokenToDate(value, "from") !== "Invalid date"
 
 export const isValidTimeRange = (raw: unknown): raw is TimeRange => {
   if (typeof raw !== "object" || raw === null) return false
@@ -24,20 +27,6 @@ export const sameTimeRange = (
 export const isTimeVariableName = (name: string): boolean =>
   TIME_VARIABLE_NAMES.some((n) => n.toLowerCase() === name.toLowerCase())
 
-export const NOTEBOOK_TIME_PRESETS: DurationPreset[] = [
-  { dateFrom: "now-5m", dateTo: "now", label: "Last 5m" },
-  { dateFrom: "now-15m", dateTo: "now", label: "Last 15m" },
-  { dateFrom: "now-30m", dateTo: "now", label: "Last 30m" },
-  { dateFrom: "now-1h", dateTo: "now", label: "Last 1h" },
-  { dateFrom: "now-3h", dateTo: "now", label: "Last 3h" },
-  { dateFrom: "now-6h", dateTo: "now", label: "Last 6h" },
-  { dateFrom: "now-12h", dateTo: "now", label: "Last 12h" },
-  { dateFrom: "now-24h", dateTo: "now", label: "Last 24h" },
-  { dateFrom: "now-3d", dateTo: "now", label: "Last 3 days" },
-  { dateFrom: "now-7d", dateTo: "now", label: "Last 7 days" },
-  { dateFrom: "now-30d", dateTo: "now", label: "Last 30 days" },
-]
-
 export type TimeShiftUnit = "s" | "m" | "h" | "d" | "w" | "M" | "y"
 
 export type TimeShift = {
@@ -52,15 +41,37 @@ const shifted = (expression: string, shift: TimeShift | undefined): string =>
     ? `dateadd('${shift.unit}', ${shift.amount}, ${expression})`
     : expression
 
+const TRUNC_UNIT: Record<TimeUnit, string> = {
+  s: "second",
+  m: "minute",
+  h: "hour",
+  d: "day",
+  w: "week",
+  M: "month",
+  y: "year",
+}
+
+const aligned = (expression: string, unit: TimeUnit, edge: RangeEdge) => {
+  const zone = `'${browserTimeZone()}'`
+  const start = `date_trunc('${TRUNC_UNIT[unit]}', to_timezone(${expression}, ${zone}))`
+  return edge === "from"
+    ? `to_utc(${start}, ${zone})`
+    : `dateadd('u', -1, to_utc(dateadd('${unit}', 1, ${start}), ${zone}))`
+}
+
 const boundExpression = (
   bound: string,
   base: string,
   shift: TimeShift | undefined,
+  edge: RangeEdge,
 ): string => {
   const relative = parseRelativeToken(bound)
   if (!relative) return shifted(utcLiteral(bound), shift)
-  if (relative.amount === 0) return base
-  return `dateadd('${relative.unit}', -${relative.amount}, ${base})`
+  const offset =
+    relative.amount === 0
+      ? base
+      : `dateadd('${relative.unit}', -${relative.amount}, ${base})`
+  return relative.align ? aligned(offset, relative.align, edge) : offset
 }
 
 export const timeRangeToDeclareEntries = (
@@ -70,8 +81,11 @@ export const timeRangeToDeclareEntries = (
   const nowBase = shifted("now()", shift)
   const fromBase = range.to === "now" ? "@timeTo" : nowBase
   return [
-    { name: "timeTo", value: boundExpression(range.to, nowBase, shift) },
-    { name: "timeFrom", value: boundExpression(range.from, fromBase, shift) },
+    { name: "timeTo", value: boundExpression(range.to, nowBase, shift, "to") },
+    {
+      name: "timeFrom",
+      value: boundExpression(range.from, fromBase, shift, "from"),
+    },
     { name: "timeFilter", value: "interval(@timeFrom, @timeTo)" },
   ]
 }

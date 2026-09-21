@@ -7,7 +7,7 @@ import {
   describeCellTime,
   withCellTime,
 } from "./cellTime"
-import { NOTEBOOK_TIME_PRESETS } from "./timeRange"
+import { TIME_PRESETS } from "../../TimeRangePicker/presets"
 
 const values = (entries: DeclareEntry[]) =>
   Object.fromEntries(entries.map((entry) => [entry.name, entry.value]))
@@ -186,11 +186,9 @@ describe("describeCellTime", () => {
     const cell = { timeRange: { from: "now-30m", to: "now" }, timeShift: "-1d" }
 
     // When / Then
-    expect(describeCellTime(cell, NOTEBOOK_TIME_PRESETS)).toBe("Last 30m, -1d")
-    expect(describeCellTime({ timeShift: "+1d" }, NOTEBOOK_TIME_PRESETS)).toBe(
-      "+1d",
-    )
-    expect(describeCellTime({}, NOTEBOOK_TIME_PRESETS)).toBeNull()
+    expect(describeCellTime(cell, TIME_PRESETS)).toBe("Last 30 minutes, -1d")
+    expect(describeCellTime({ timeShift: "+1d" }, TIME_PRESETS)).toBe("+1d")
+    expect(describeCellTime({}, TIME_PRESETS)).toBeNull()
   })
 
   it("writes the full time for an absolute range", () => {
@@ -200,7 +198,7 @@ describe("describeCellTime", () => {
     }
 
     // When / Then
-    expect(describeCellTime(cell, NOTEBOOK_TIME_PRESETS)).toBe(
+    expect(describeCellTime(cell, TIME_PRESETS)).toBe(
       "2025-01-01 00:00:00 - 2025-01-02 00:00:00",
     )
   })

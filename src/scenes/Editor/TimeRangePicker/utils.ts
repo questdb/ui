@@ -1,5 +1,12 @@
-import { format, formatISO, subSeconds } from "date-fns"
+import { format, formatISO } from "date-fns"
 import { isValidDate } from "../../../utils"
+import {
+  alignInZone,
+  browserTimeZone,
+  shiftUtc,
+  type RangeEdge,
+  type TimeUnit,
+} from "../../../utils/timeZone"
 
 export type DateRange = {
   dateFrom: string
@@ -12,19 +19,14 @@ export type DurationPreset = DateRange & {
 
 export const DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss"
 
-const TOKEN_RE = /^now(?:-(\d+)([smhdw]))?$/
+const TOKEN_RE = /^now(?:-(\d+)([smhdwMy]))?(?:\/([smhdwMy]))?$/
 
-const UNIT_SECONDS: Record<string, number> = {
-  s: 1,
-  m: 60,
-  h: 3600,
-  d: 86400,
-  w: 604800,
-}
+export type { RangeEdge, TimeUnit } from "../../../utils/timeZone"
 
 export type RelativeToken = {
   amount: number
-  unit: "s" | "m" | "h" | "d" | "w"
+  unit: TimeUnit
+  align?: TimeUnit
 }
 
 export const isDateToken = (token: string): boolean => TOKEN_RE.test(token)
@@ -32,16 +34,21 @@ export const isDateToken = (token: string): boolean => TOKEN_RE.test(token)
 export const parseRelativeToken = (token: string): RelativeToken | null => {
   const match = TOKEN_RE.exec(token)
   if (!match) return null
-  const [, amount, unit] = match
-  if (!amount) return { amount: 0, unit: "s" }
-  return { amount: Number(amount), unit: unit as RelativeToken["unit"] }
+  const [, amount, unit, align] = match
+  const offset: RelativeToken = amount
+    ? { amount: Number(amount), unit: unit as TimeUnit }
+    : { amount: 0, unit: "s" }
+  return align ? { ...offset, align: align as TimeUnit } : offset
 }
 
-export const durationTokenToDate = (token: string): string => {
+export const durationTokenToDate = (token: string, edge: RangeEdge): string => {
   const relative = parseRelativeToken(token)
   if (!relative) return isValidDate(token) ? token : "Invalid date"
-  const seconds = relative.amount * UNIT_SECONDS[relative.unit]
-  return formatISO(subSeconds(new Date(), seconds))
+  const shifted = shiftUtc(new Date(), -relative.amount, relative.unit)
+  const resolved = relative.align
+    ? alignInZone(shifted, relative.align, edge, browserTimeZone())
+    : shifted
+  return formatISO(resolved)
 }
 
 export const durationToHumanReadable = (

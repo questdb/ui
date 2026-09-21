@@ -24,8 +24,8 @@ export const DateBoundField = ({
 }: Props) => {
   const { setValue } = useFormContext()
 
-  const fromDate = durationTokenToDate(dateFrom)
-  const toDate = durationTokenToDate(dateTo)
+  const fromDate = durationTokenToDate(dateFrom, "from")
+  const toDate = durationTokenToDate(dateTo, "to")
 
   return (
     <Form.Item name={name} label={label}>

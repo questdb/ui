@@ -3,7 +3,6 @@ import { utcToLocal } from "../../../utils"
 import uPlot from "uplot"
 import type { Duration } from "./types"
 import {
-  DATETIME_FORMAT,
   durationTokenToDate,
   durationToHumanReadable as presetsToHumanReadable,
 } from "../TimeRangePicker/utils"
@@ -114,8 +113,8 @@ export const refreshRatesInSeconds: Record<RefreshRate, number> = {
 
 export const getAutoRefreshRate = (dateFrom: string, dateTo: string) => {
   const seconds =
-    (new Date(durationTokenToDate(dateTo)).getTime() -
-      new Date(durationTokenToDate(dateFrom)).getTime()) /
+    (new Date(durationTokenToDate(dateTo, "to")).getTime() -
+      new Date(durationTokenToDate(dateFrom, "from")).getTime()) /
     1000
   if (seconds <= 60 * 5) return RefreshRate.FIVE_SECONDS
   if (seconds <= 60 * 15) return RefreshRate.FIVE_SECONDS

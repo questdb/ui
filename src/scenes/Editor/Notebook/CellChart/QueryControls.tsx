@@ -89,6 +89,15 @@ const MiniField = styled.label`
   min-width: 0;
 `
 
+const VolumeField = styled(MiniField)`
+  grid-column: 1 / -1;
+`
+
+const Required = styled.span`
+  margin-left: 0.3rem;
+  color: ${({ theme }) => theme.color.statusDanger};
+`
+
 const IncompatibleNote = styled.div`
   display: flex;
   align-items: flex-start;
@@ -196,6 +205,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               <MiniField key={k}>
                 <Text color="contentSecondary" size="xs">
                   {label}
+                  <Required aria-hidden>*</Required>
                 </Text>
                 <SelectMenuControl
                   name={`ohlc-${k}-${idx}`}
@@ -220,6 +230,20 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
                 />
               </MiniField>
             ))}
+            <VolumeField>
+              <Text color="contentSecondary" size="xs">
+                Volume
+              </Text>
+              <SelectMenuControl
+                name={`volume-${idx}`}
+                ariaLabel="Volume column"
+                value={query.volume ?? ""}
+                onValueChange={(value) =>
+                  onUpdateQuery({ volume: value || undefined })
+                }
+                options={[{ label: "None", value: "" }, ...numericOptions]}
+              />
+            </VolumeField>
           </OhlcGrid>
           {ohlcError && (
             <IncompatibleNote>

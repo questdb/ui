@@ -373,9 +373,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
-  it("update_cell writes only the value", async () => {
+  it("update_cell writes only the value and answers with an explicit success", async () => {
     const { state } = mountLive(1, [cell("c", "SELECT 1", { name: "keep" })])
-    await dispatchTool(
+    const res = await dispatchTool(
       "update_cell",
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
       makeClient(),
@@ -383,6 +383,8 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     expect(cellById(state, "c")?.value).toBe("SELECT 2")
     expect(cellById(state, "c")?.name).toBe("keep")
+    expect(res.is_error).toBeUndefined()
+    expect(JSON.parse(res.content)).toEqual({ ok: true })
   })
 
   it("run_cell serialises the explicit per-query shape and never leaks data keys", async () => {
@@ -801,6 +803,45 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
+  it("set_cell_time_range accepts Grafana calendar-aligned bounds and rejects an unknown suffix", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c")])
+
+    // When
+    const ok = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now-1M/M", to: "now-1M/M" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const bad = await dispatchTool(
+      "set_cell_time_range",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        time_range: { from: "now/x", to: "now" },
+        time_shift: null,
+        show_in_header: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then
+    expect(ok.is_error).toBeUndefined()
+    expect(bad.is_error).toBe(true)
+    expect(cellById(state, "c")?.timeRange).toEqual({
+      from: "now-1M/M",
+      to: "now-1M/M",
+    })
+  })
+
   it("set_cell_time_range clears every field with nulls", async () => {
     // Given
     const { state } = mountLive(1, [
@@ -1103,6 +1144,106 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     })
   })
 
+  it("set_cell_chart_config stores left_axis and keeps it when a later call sends null", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When
+    await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        x_column: "ts",
+        queries: null,
+        left_axis: { name: "Price", min: 0, max: 100 },
+        right_axis: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        x_column: null,
+        queries: null,
+        left_axis: null,
+        right_axis: { name: "RSI", min: 0, max: 100 },
+      },
+      makeClient(),
+      noopStatus,
+    )
+    // Then
+    expect(cellById(state, "c")?.chartConfig).toMatchObject({
+      leftAxis: { name: "Price", min: 0, max: 100 },
+      rightAxis: { name: "RSI", min: 0, max: 100 },
+    })
+  })
+
+  it("set_cell_chart_config stores a candlestick volume column and drops it on null", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    const ohlc = { open: "o", high: "h", low: "l", close: "c" }
+    const send = (volume: string | null) =>
+      dispatchTool(
+        "set_cell_chart_config",
+        {
+          buffer_id: 1,
+          cell_id: "c",
+          x_column: "ts",
+          queries: [{ type: "candlestick", ohlc, volume }],
+          left_axis: null,
+          right_axis: null,
+        },
+        makeClient(),
+        noopStatus,
+      )
+    // When
+    await send("vol")
+    const stored = cellById(state, "c")?.chartConfig?.queries?.[0]
+    await send(null)
+    const cleared = cellById(state, "c")?.chartConfig?.queries?.[0]
+    // Then
+    expect(stored).toEqual({
+      type: "candlestick",
+      yColumns: [],
+      ohlc,
+      volume: "vol",
+    })
+    expect(cleared).toEqual({ type: "candlestick", yColumns: [], ohlc })
+  })
+
+  it("set_cell_chart_config rejects an axis whose min is not below max", async () => {
+    // Given
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When
+    const res = await dispatchTool(
+      "set_cell_chart_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        x_column: "ts",
+        queries: null,
+        left_axis: { name: null, min: 100, max: 100 },
+        right_axis: null,
+      },
+      makeClient(),
+      noopStatus,
+    )
+    // Then
+    expect(res.is_error).toBe(true)
+    const parsed = JSON.parse(res.content) as {
+      error_code: string
+      message: string
+    }
+    expect(parsed.error_code).toBe("validation")
+    expect(parsed.message).toContain(
+      "left_axis.min must be below left_axis.max",
+    )
+    expect(cellById(state, "c")?.chartConfig).toBeUndefined()
+  })
+
   it("rejects a candlestick query with no ohlc (no derive from y_columns)", async () => {
     const client = makeClient()
     const res = await dispatchTool(
@@ -1264,6 +1405,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
             is_view_maximized: true,
             chart_config: {
               x_column: "ts",
+              left_axis: { name: "Price", min: 0, max: null },
               right_axis: null,
               queries: [
                 {
@@ -1291,6 +1433,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       isViewMaximized: true,
       chartConfig: {
         xColumn: "ts",
+        leftAxis: { name: "Price", min: 0 },
         queries: [
           { type: "line", yColumns: ["price"], partitionByColumn: "symbol" },
         ],

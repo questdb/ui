@@ -397,6 +397,29 @@ describe("buildSnapshot", () => {
     }
   })
 
+  it("carries a candlestick volume column in the wire shape", async () => {
+    // Given
+    const ohlc = { open: "o", high: "h", low: "l", close: "c" }
+    const cell = sql("a", "SELECT 1", {
+      mode: "draw",
+      chartConfig: {
+        xColumn: "ts",
+        queries: [{ type: "candlestick", yColumns: [], ohlc, volume: "v" }],
+      },
+    })
+    const id = await seedNotebook({ cells: [cell] })
+    // When
+    const snap = await buildSnapshot(id)
+    // Then
+    if (snap?.status !== "ok") throw new Error("expected ok snapshot")
+    expect(snap.cells[0].chart_config?.queries[0]).toEqual({
+      type: "candlestick",
+      y_columns: [],
+      ohlc,
+      volume: "v",
+    })
+  })
+
   it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
@@ -405,6 +428,7 @@ describe("buildSnapshot", () => {
       name: "Trades",
       chartConfig: {
         xColumn: "ts",
+        leftAxis: { min: 0, max: 100 },
         queries: [{ type: "line", yColumns: ["price", "volume"] }],
       },
     })
@@ -419,6 +443,7 @@ describe("buildSnapshot", () => {
       expect(snap.cells[0].chart_config).toEqual({
         x_column: "ts",
         queries: [{ type: "line", y_columns: ["price", "volume"] }],
+        left_axis: { min: 0, max: 100 },
       })
       expect(snap.cells[0].name).toBe("Trades")
       expect(snap.cells[0].mode).toBe("draw")

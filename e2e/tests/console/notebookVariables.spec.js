@@ -414,7 +414,7 @@ describe("Notebook variables", () => {
     cy.dropTable("variable_ranges")
     cy.getByDataHook("notebook-time-range").click()
     cy.getByDataHook("time-range-preset")
-      .contains(/^Last 1h$/)
+      .contains(/^Last 1 hour$/)
       .click()
     // Then the new range commits and the variables trigger explains the error.
     cy.getByDataHook("time-range-picker").should("not.exist")
@@ -437,7 +437,7 @@ describe("Notebook variables", () => {
     cy.holdQueryResponse(rangeQuery, "presetValues").as("pendingPreset")
     cy.getByDataHook("notebook-time-range").click()
     cy.getByDataHook("time-range-preset")
-      .contains(/^Last 6h$/)
+      .contains(/^Last 6 hours$/)
       .click()
     cy.getByDataHook("time-range-status").should("contain", "Loading values")
     cy.getNotebookVariableState().then(({ settings, options }) => {

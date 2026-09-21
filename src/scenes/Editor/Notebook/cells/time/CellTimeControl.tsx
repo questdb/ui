@@ -4,7 +4,7 @@ import { ClockIcon } from "@phosphor-icons/react"
 import { ButtonBase } from "../../../../../components"
 import type { NotebookCell } from "../../../../../store/notebook"
 import { describeCellTime } from "../../variables/cellTime"
-import { NOTEBOOK_TIME_PRESETS } from "../../variables/timeRange"
+import { TIME_PRESETS } from "../../../TimeRangePicker/presets"
 
 const LinkButton = styled(ButtonBase)`
   display: inline-flex;
@@ -40,7 +40,7 @@ type Props = {
 }
 
 export const CellTimeControl = ({ cell, onClick }: Props) => {
-  const summary = describeCellTime(cell, NOTEBOOK_TIME_PRESETS)
+  const summary = describeCellTime(cell, TIME_PRESETS)
   if (!summary || !cell.showTimeRange) return null
   return (
     <LinkButton

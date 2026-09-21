@@ -962,6 +962,7 @@ describe("sanitizeBuffer", () => {
               value: "SELECT 2",
               chartConfig: {
                 xColumn: "ts",
+                leftAxis: { min: 0, max: 100 },
                 queries: [{ type: "line", yColumns: ["price"] }, "junk"],
               },
             },
@@ -972,6 +973,7 @@ describe("sanitizeBuffer", () => {
       expect(result.notebookViewState?.cells[0].chartConfig).toBeUndefined()
       expect(result.notebookViewState?.cells[1].chartConfig).toEqual({
         xColumn: "ts",
+        leftAxis: { min: 0, max: 100 },
         queries: [{ type: "line", yColumns: ["price"] }, null],
       })
     })

@@ -56,9 +56,10 @@ import {
 import type { ToolExecutionContext } from "../ai/shared"
 import {
   mapQueryChart,
-  mapRightAxis,
+  mapAxisBounds,
+  axisBoundsValidationError,
   type ToolQueryChart,
-  type ToolRightAxis,
+  type ToolAxisBounds,
 } from "./chartConfigWire"
 import {
   applyStaleNotebookResult,
@@ -254,7 +255,8 @@ export const dispatchApplyNotebookState = async (
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
-          right_axis?: ToolRightAxis | null
+          left_axis?: ToolAxisBounds | null
+          right_axis?: ToolAxisBounds | null
         } | null
         grid?: { x: number; y: number; w: number; h: number } | null
       }>
@@ -311,6 +313,21 @@ export const dispatchApplyNotebookState = async (
         content: JSON.stringify({
           error_code: "validation",
           message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+        }),
+        is_error: true,
+      }
+    }
+    const boundsError = c.chart_config
+      ? axisBoundsValidationError(c.chart_config)
+      : null
+    if (boundsError) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: boundsError.replace(
+            "VALIDATION_ERROR: ",
+            `VALIDATION_ERROR: cells[${idx}].chart_config.`,
+          ),
         }),
         is_error: true,
       }
@@ -485,7 +502,9 @@ export const dispatchApplyNotebookState = async (
             q ? mapQueryChart(q) : null,
           ),
         }
-        if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
+        if (cfg.left_axis) chartConfig.leftAxis = mapAxisBounds(cfg.left_axis)
+        if (cfg.right_axis)
+          chartConfig.rightAxis = mapAxisBounds(cfg.right_axis)
         cell.chartConfig = chartConfig
       }
       if (c.grid) cell.grid = c.grid

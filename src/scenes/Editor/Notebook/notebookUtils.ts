@@ -996,6 +996,7 @@ export const cloneNotebookViewState = (
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
   if (q.ohlc) next.ohlc = q.ohlc
+  if (q.volume) next.volume = q.volume
   if (q.partitionByColumn) next.partitionByColumn = q.partitionByColumn
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
@@ -1011,6 +1012,7 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
+  if (cfg.leftAxis) next.leftAxis = cfg.leftAxis
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
   return next
 }

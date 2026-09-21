@@ -52,9 +52,10 @@ import {
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
-  mapRightAxis,
+  mapAxisBounds,
+  axisBoundsValidationError,
   type ToolQueryChart,
-  type ToolRightAxis,
+  type ToolAxisBounds,
 } from "./chartConfigWire"
 import {
   invalidBufferIdResult,
@@ -162,7 +163,7 @@ const routeNotebookTool = async <T>(
 ): Promise<{ content: string; is_error?: boolean }> => {
   try {
     const result = await op()
-    return { content: JSON.stringify(result ?? {}) }
+    return { content: JSON.stringify(result ?? { ok: true }) }
   } catch (e) {
     if (e instanceof NotebookStateChangedError) {
       return staleNotebookResult(toolContext)
@@ -889,13 +890,14 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, queries, right_axis } =
+        const { buffer_id, cell_id, x_column, queries, left_axis, right_axis } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
             queries?: (ToolQueryChart | null)[] | null
-            right_axis?: ToolRightAxis | null
+            left_axis?: ToolAxisBounds | null
+            right_axis?: ToolAxisBounds | null
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const chartBaseline = getBufferActionSeq(buffer_id)
@@ -906,8 +908,20 @@ export const dispatchTool = async (
           patch.xColumn = x_column
         if (queries !== undefined && queries !== null)
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
+        if (left_axis !== undefined && left_axis !== null)
+          patch.leftAxis = mapAxisBounds(left_axis)
         if (right_axis !== undefined && right_axis !== null)
-          patch.rightAxis = mapRightAxis(right_axis)
+          patch.rightAxis = mapAxisBounds(right_axis)
+        const boundsError = axisBoundsValidationError({ left_axis, right_axis })
+        if (boundsError) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: boundsError,
+            }),
+            is_error: true,
+          }
+        }
         if (
           patch.queries?.some(
             (q) => q != null && q.type === "candlestick" && !q.ohlc,

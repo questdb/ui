@@ -528,7 +528,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis. Numeric-x charts are single-query (they don't combine). Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
+    "description": "Configure the chart for a draw-mode cell. The cell's `;`-separated SELECTs AUTO-COMBINE into one chart sharing the first query's x-axis; `queries` holds one config per statement (index-aligned). Queries combine when their x-axis kind matches: all-temporal merge by time, all-categorical merge by category name, all-numeric merge by value. Each query keeps its own `type` (line/area/stepLine/stepArea/bar/stackedBar/scatter/pie/candlestick); set `axis:\"right\"` (+ optional `right_axis`) for a series on a different unit/scale; `left_axis` / `right_axis` `{name,min,max}` title an axis and pin its scale (null = autoscale); `enabled:false` opts a query out (the first query is always included — it defines the x-axis). For a candlestick query, supply `ohlc:{open,high,low,close}` (required — a candlestick needs an explicit ohlc mapping). Add `volume:<column>` on that query to draw a volume sub-pane under the candles, coloured by candle direction (optional; candlestick only). When x_column is a NUMERIC column (not a timestamp/category) it renders as a continuous value axis spanning the data; a step series holds its last level for one more step. A series name used by several statements is shown as `Q<n> · name` on each; set `name` on a query to label its single series. Patch semantics: top-level `x_column`/`right_axis` null = preserve; `queries` null = preserve; `queries: []` clears overrides (back to inference); a non-null `queries` array REPLACES all per-query configs (send one entry per `;`-split statement — a non-empty array whose length differs from the statement count is rejected). pie/scatter/stackedBar only render as a chart of their own (single-query).",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -574,7 +574,7 @@
               "ohlc": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
-                "description": "Candlestick OHLC mapping. All four required when used; null otherwise.",
+                "description": "Candlestick OHLC mapping. Mandatory for a candlestick query, all four columns; null for other types.",
                 "properties": {
                   "open": {
                     "type": "string"
@@ -590,6 +590,10 @@
                   }
                 },
                 "required": ["open", "high", "low", "close"]
+              },
+              "volume": {
+                "type": ["string", "null"],
+                "description": "Volume column for a candlestick query. Draws a bar sub-pane under the candles, each bar coloured by its candle direction. Optional; null = no volume pane. Candlestick only."
               },
               "partition_by_column": {
                 "type": ["string", "null"],
@@ -613,12 +617,32 @@
               "type",
               "y_columns",
               "ohlc",
+              "volume",
               "partition_by_column",
               "axis",
               "enabled",
               "name"
             ]
           }
+        },
+        "left_axis": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "Left y-axis title and pinned scale. Null preserves.",
+          "properties": {
+            "name": {
+              "type": ["string", "null"]
+            },
+            "min": {
+              "type": ["number", "null"],
+              "description": "Pin axis min (e.g. 0). Null = autoscale."
+            },
+            "max": {
+              "type": ["number", "null"],
+              "description": "Pin axis max (e.g. 100). Null = autoscale. Must be above min."
+            }
+          },
+          "required": ["name", "min", "max"]
         },
         "right_axis": {
           "type": ["object", "null"],
@@ -634,13 +658,13 @@
             },
             "max": {
               "type": ["number", "null"],
-              "description": "Pin axis max (e.g. 100). Null = autoscale."
+              "description": "Pin axis max (e.g. 100). Null = autoscale. Must be above min."
             }
           },
           "required": ["name", "min", "max"]
         }
       },
-      "required": ["buffer_id", "cell_id", "x_column", "queries", "right_axis"]
+      "required": ["buffer_id", "cell_id", "x_column", "queries", "left_axis", "right_axis"]
     }
   },
   {
@@ -762,7 +786,7 @@
           },
           "required": ["from", "to"],
           "additionalProperties": false,
-          "description": "Cell time range with the same bounds as the notebook range: relative such as now-15m and now, or absolute ISO timestamps. null inherits the notebook range."
+          "description": "Cell time range with the same bounds as the notebook range: relative such as now-15m and now, or absolute ISO timestamps. null inherits the notebook range. Bounds use Grafana relative time: \"now\", \"now-6h\", \"now/d\" (start of today in the viewer's browser time zone), \"now-1d/d\" (yesterday), \"now/w\", \"now-1M/M\"; units s m h d w M y. A `to` bound with /unit rounds up to the end of that unit."
         },
         "time_shift": {
           "type": ["string", "null"],
@@ -1142,7 +1166,7 @@
               "type": "string"
             }
           },
-          "description": "Notebook time range, declared to every cell as @timeFrom, @timeTo and @timeFilter (use `WHERE ts IN @timeFilter`). Bounds are ISO timestamps or relative tokens: \"now\", \"now-15m\", \"now-1h\", \"now-7d\". Pass null to clear the range; omit to preserve it.",
+          "description": "Notebook time range, declared to every cell as @timeFrom, @timeTo and @timeFilter (use `WHERE ts IN @timeFilter`). Bounds are ISO timestamps or relative tokens. Pass null to clear the range; omit to preserve it. Bounds use Grafana relative time: \"now\", \"now-6h\", \"now/d\" (start of today in the viewer's browser time zone), \"now-1d/d\" (yesterday), \"now/w\", \"now-1M/M\"; units s m h d w M y. A `to` bound with /unit rounds up to the end of that unit.",
           "required": ["from", "to"],
           "additionalProperties": false
         },
@@ -1204,7 +1228,7 @@
                 },
                 "required": ["from", "to"],
                 "additionalProperties": false,
-                "description": "Cell time range overriding the notebook range for this cell only. Omitted or null clears it (cells are a full replacement). Rejected on markdown cells."
+                "description": "Cell time range overriding the notebook range for this cell only. Omitted or null clears it (cells are a full replacement). Rejected on markdown cells. Bounds use Grafana relative time: \"now\", \"now-6h\", \"now/d\" (start of today in the viewer's browser time zone), \"now-1d/d\" (yesterday), \"now/w\", \"now-1M/M\"; units s m h d w M y. A `to` bound with /unit rounds up to the end of that unit."
               },
               "time_shift": {
                 "type": ["string", "null"],
@@ -1272,6 +1296,10 @@
                           },
                           "required": ["open", "high", "low", "close"]
                         },
+                        "volume": {
+                          "type": ["string", "null"],
+                          "description": "Volume column for a candlestick query. Draws a bar sub-pane under the candles, each bar coloured by its candle direction. Optional; null = no volume pane. Candlestick only."
+                        },
                         "partition_by_column": {
                           "type": ["string", "null"]
                         },
@@ -1290,12 +1318,29 @@
                         "type",
                         "y_columns",
                         "ohlc",
+                        "volume",
                         "partition_by_column",
                         "axis",
                         "enabled",
                         "name"
                       ]
                     }
+                  },
+                  "left_axis": {
+                    "type": ["object", "null"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": ["string", "null"]
+                      },
+                      "min": {
+                        "type": ["number", "null"]
+                      },
+                      "max": {
+                        "type": ["number", "null"]
+                      }
+                    },
+                    "required": ["name", "min", "max"]
                   },
                   "right_axis": {
                     "type": ["object", "null"],
@@ -1314,7 +1359,7 @@
                     "required": ["name", "min", "max"]
                   }
                 },
-                "required": ["x_column", "queries", "right_axis"]
+                "required": ["x_column", "queries", "left_axis", "right_axis"]
               },
               "grid": {
                 "type": ["object", "null"],
