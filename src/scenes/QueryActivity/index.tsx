@@ -1,7 +1,7 @@
 import React, { useContext, useMemo, useState } from "react"
 import { useDispatch, useSelector } from "react-redux"
 import styled from "styled-components"
-import { Badge, Drawer, ErrorBanner, Text } from "../../components"
+import { Badge, Button, Drawer, ErrorBanner, Text } from "../../components"
 import { toast } from "../../components/Toast"
 import { CircleNotchSpinner } from "../Editor/Monaco/icons"
 import { QuestContext, useEditor, useLocalStorage } from "../../providers"
@@ -67,7 +67,7 @@ export const QueryActivityDrawer = () => {
     snapshot,
     finished,
     clientNowMs,
-    fetchNow,
+    refresh,
     setHeld,
     dismissFinished,
   } = useQueryActivity({
@@ -99,6 +99,9 @@ export const QueryActivityDrawer = () => {
   const summary = summarizeQueryActivity(snapshot?.rows ?? [])
   const isUnavailable = state.status === "unavailable"
   const isLoading = state.status === "loading" && snapshot === null
+  const retryHint = autoRefreshQueryActivity
+    ? "The console will retry automatically."
+    : "Auto refresh is off. Retry to load again."
 
   const handleClose = () => {
     dispatch(actions.console.closeSidebar())
@@ -114,7 +117,6 @@ export const QueryActivityDrawer = () => {
       StoreKey.AUTO_REFRESH_QUERY_ACTIVITY,
       !autoRefreshQueryActivity,
     )
-    void fetchNow()
   }
 
   const handleOpenInEditor = (row: QueryActivityRow) => {
@@ -130,7 +132,7 @@ export const QueryActivityDrawer = () => {
     try {
       await quest.cancelQuery(target.queryId)
       toast.success(`Cancel requested for query ${target.queryId}`)
-      void fetchNow()
+      refresh()
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -167,7 +169,16 @@ export const QueryActivityDrawer = () => {
           <EmptyState role="alert">
             <ErrorBanner
               title="Unable to load query activity"
-              description="The console cannot reach the server. It will retry automatically."
+              description={`The console cannot reach the server. ${retryHint}`}
+              actions={
+                <Button
+                  variant="secondary"
+                  onClick={refresh}
+                  data-hook="query-activity-retry-button"
+                >
+                  Retry
+                </Button>
+              }
               data-hook="query-activity-error"
             />
           </EmptyState>
@@ -177,7 +188,16 @@ export const QueryActivityDrawer = () => {
               <BannerWrapper role="alert">
                 <ErrorBanner
                   title="Unable to refresh query activity"
-                  description="The displayed queries are from the last successful response. The console will retry automatically."
+                  description={`The displayed queries are from the last successful response. ${retryHint}`}
+                  actions={
+                    <Button
+                      variant="secondary"
+                      onClick={refresh}
+                      data-hook="query-activity-retry-button"
+                    >
+                      Retry
+                    </Button>
+                  }
                   data-hook="query-activity-stale"
                 />
               </BannerWrapper>

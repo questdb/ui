@@ -12,6 +12,31 @@ type AdaptivePollLoopOptions = {
   onIntervalChange?: (intervalMs: number) => void
 }
 
+const BACKOFF_MULTIPLIER = 2
+
+const adaptiveInterval = (
+  samples: number[],
+  minIntervalMs: number,
+  maxIntervalMs: number,
+  multiplier: number,
+): number => {
+  const avg = samples.reduce((a, b) => a + b, 0) / samples.length
+  return Math.min(
+    maxIntervalMs,
+    Math.max(minIntervalMs, Math.round(avg * multiplier)),
+  )
+}
+
+export const backoffInterval = (
+  consecutiveFailures: number,
+  minIntervalMs: number,
+  maxIntervalMs: number,
+): number =>
+  Math.min(
+    maxIntervalMs,
+    minIntervalMs * BACKOFF_MULTIPLIER ** (consecutiveFailures - 1),
+  )
+
 export const runAdaptivePollLoop = async ({
   fetchFn,
   signal,
@@ -23,6 +48,7 @@ export const runAdaptivePollLoop = async ({
   onIntervalChange,
 }: AdaptivePollLoopOptions): Promise<void> => {
   let samples: number[] = []
+  let consecutiveFailures = 0
   let skip = skipInitialFetch
   while (!signal.aborted) {
     let nextInterval = minIntervalMs
@@ -33,20 +59,32 @@ export const runAdaptivePollLoop = async ({
     } else {
       const start = performance.now()
       let measured: number | void = undefined
+      let failed = false
       try {
         measured = await fetchFn()
       } catch {
-        // fetchFn handles its own errors; never let one kill the loop
+        failed = true
       }
       if (signal.aborted) break
-      samples = [...samples, measured ?? performance.now() - start].slice(
-        -sampleSize,
-      )
-      const avg = samples.reduce((a, b) => a + b, 0) / samples.length
-      nextInterval = Math.min(
-        maxIntervalMs,
-        Math.max(minIntervalMs, Math.round(avg * multiplier)),
-      )
+      if (failed) {
+        consecutiveFailures += 1
+        nextInterval = backoffInterval(
+          consecutiveFailures,
+          minIntervalMs,
+          maxIntervalMs,
+        )
+      } else {
+        consecutiveFailures = 0
+        samples = [...samples, measured ?? performance.now() - start].slice(
+          -sampleSize,
+        )
+        nextInterval = adaptiveInterval(
+          samples,
+          minIntervalMs,
+          maxIntervalMs,
+          multiplier,
+        )
+      }
       onIntervalChange?.(nextInterval)
     }
     const aborted = await sleep(nextInterval, signal)
@@ -55,7 +93,7 @@ export const runAdaptivePollLoop = async ({
 }
 
 type AdaptivePollOptions = {
-  fetchFn: () => Promise<void>
+  fetchFn: () => Promise<number | void>
   enabled: boolean
   key: string
   minIntervalMs: number

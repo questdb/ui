@@ -1,4 +1,4 @@
-import { formatDistance, formatDuration, intervalToDuration } from "date-fns"
+import { formatDistance, formatDuration } from "date-fns"
 import { fetchUserLocale } from "./fetchUserLocale"
 import { getLocaleFromLanguage } from "./getLocaleFromLanguage"
 
@@ -14,9 +14,19 @@ export function formatRelativeTimestamp(timestamp: string | null): string {
   })
 }
 
+const SECONDS_PER_MINUTE = 60
+const SECONDS_PER_HOUR = 3_600
+const SECONDS_PER_DAY = 86_400
+
 export function formatElapsedDuration(elapsedMs: number): string {
   const locale = getLocaleFromLanguage(fetchUserLocale())
-  const duration = intervalToDuration({ start: 0, end: Math.max(0, elapsedMs) })
+  const totalSeconds = Math.floor(Math.max(0, elapsedMs) / 1000)
+  const duration = {
+    days: Math.floor(totalSeconds / SECONDS_PER_DAY),
+    hours: Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR),
+    minutes: Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE),
+    seconds: totalSeconds % SECONDS_PER_MINUTE,
+  }
   return (
     formatDuration(duration, {
       format: ["days", "hours", "minutes", "seconds"],

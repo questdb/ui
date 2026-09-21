@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from "react"
-import { useCatalogSource, type SourceState } from "../../hooks/catalogSource"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  MANUAL_RETRY_POLICY,
+  POLLING_RETRY_POLICY,
+  useCatalogSource,
+  type SourceState,
+} from "../../hooks/catalogSource"
+import { useAdaptivePoll } from "../../hooks/useAdaptivePoll"
 import * as QuestDB from "../../utils/questdb"
 import {
   collectFinishedQueries,
@@ -12,7 +18,8 @@ import {
   type QueryActivitySnapshot,
 } from "./queryActivity"
 
-const POLL_INTERVAL_MS = 1_000
+const POLL_MIN_MS = 1_000
+const POLL_MAX_MS = 30_000
 const CLOCK_TICK_MS = 1_000
 
 type Params = {
@@ -25,7 +32,7 @@ type QueryActivitySource = {
   snapshot: QueryActivitySnapshot | null
   finished: FinishedQueries
   clientNowMs: number
-  fetchNow: () => Promise<void>
+  refresh: () => void
   setHeld: (queryId: bigint, held: boolean) => void
   dismissFinished: (queryId: bigint) => void
 }
@@ -45,9 +52,11 @@ export const useQueryActivity = ({
     sourceName: "query activity",
     enabled,
     query: QUERY_ACTIVITY_SQL,
-    pollIntervalMs: autoRefresh ? POLL_INTERVAL_MS : null,
+    pollIntervalMs: null,
+    retryPolicy: autoRefresh ? POLLING_RETRY_POLICY : MANUAL_RETRY_POLICY,
     transformResponse,
   })
+  const [pollGeneration, setPollGeneration] = useState(0)
   const [clientNowMs, setClientNowMs] = useState(() => Date.now())
   const [finished, setFinished] = useState(NO_FINISHED_QUERIES)
   const [heldIds, setHeldIds] = useState(NO_HELD_IDS)
@@ -59,6 +68,28 @@ export const useQueryActivity = ({
       : source.state.status === "unavailable"
         ? source.lastReadyData
         : null
+
+  const { fetchNow, poll } = source
+
+  const pollOnce = useCallback(async () => {
+    const outcome = await poll()
+    if (outcome === "failure") {
+      throw new Error("Query activity poll failed")
+    }
+  }, [poll])
+
+  useAdaptivePoll({
+    fetchFn: pollOnce,
+    enabled: enabled && autoRefresh,
+    key: `query-activity:${pollGeneration}`,
+    minIntervalMs: POLL_MIN_MS,
+    maxIntervalMs: POLL_MAX_MS,
+  })
+
+  const refresh = () => {
+    setPollGeneration((generation) => generation + 1)
+    void fetchNow()
+  }
 
   const setHeld = (queryId: bigint, held: boolean) => {
     const id = queryId.toString()
@@ -84,6 +115,7 @@ export const useQueryActivity = ({
   useEffect(() => {
     if (!enabled) return
 
+    setClientNowMs(Date.now())
     const intervalId = window.setInterval(() => {
       setClientNowMs(Date.now())
     }, CLOCK_TICK_MS)
@@ -115,7 +147,7 @@ export const useQueryActivity = ({
     snapshot,
     finished,
     clientNowMs,
-    fetchNow: source.fetchNow,
+    refresh,
     setHeld,
     dismissFinished,
   }

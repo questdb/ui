@@ -4,12 +4,11 @@ import * as QuestDB from "../../utils/questdb"
 import {
   createSourceMachineState,
   nextSourceState,
-  SOURCE_FAILURE_GRACE_MS,
-  SOURCE_FAILURE_THRESHOLD,
   SOURCE_TIMEOUT_MS,
   type SourceMachineState,
+  type SourceRetryPolicy,
 } from "./sourceState"
-import type { SourceState } from "./types"
+import type { SourceFetchOutcome, SourceState } from "./types"
 
 type Params<T> = {
   sourceKey: string
@@ -18,13 +17,15 @@ type Params<T> = {
   enabled: boolean
   query: string
   pollIntervalMs: number | null
+  retryPolicy: SourceRetryPolicy
   transformResponse: (response: QuestDB.QueryRawResult) => T | undefined
 }
 
 type CatalogSource<T> = {
   state: SourceState<T>
   lastReadyData: T | null
-  fetchNow: () => Promise<void>
+  fetchNow: () => Promise<SourceFetchOutcome>
+  poll: () => Promise<SourceFetchOutcome>
 }
 
 const isCancelledRequest = (error: unknown): boolean =>
@@ -40,6 +41,7 @@ export const useCatalogSource = <T>({
   enabled,
   query,
   pollIntervalMs,
+  retryPolicy,
   transformResponse,
 }: Params<T>): CatalogSource<T> => {
   const { quest } = useContext(QuestContext)
@@ -48,10 +50,16 @@ export const useCatalogSource = <T>({
   )
   const activeQueryIdRef = useRef<QuestDB.QueryId | null>(null)
   const currentKeyRef = useRef(sourceKey)
+  const retryPolicyRef = useRef(retryPolicy)
 
-  const fetchNow = useCallback(async () => {
-    if (!enabled || activeQueryIdRef.current !== null) return
+  const abortActiveRequest = useCallback(() => {
+    const activeQueryId = activeQueryIdRef.current
+    if (activeQueryId === null) return
+    activeQueryIdRef.current = null
+    quest.abort(activeQueryId)
+  }, [quest])
 
+  const runRequest = useCallback(async (): Promise<SourceFetchOutcome> => {
     const requestKey = sourceKey
     let queryId: QuestDB.QueryId | null = null
     let timeoutId: number | null = null
@@ -77,7 +85,7 @@ export const useCatalogSource = <T>({
         currentKeyRef.current !== requestKey ||
         activeQueryIdRef.current !== queryId
       ) {
-        return
+        return "skipped"
       }
 
       const data = transformResponse(response)
@@ -87,16 +95,18 @@ export const useCatalogSource = <T>({
           data === undefined
             ? { type: "failure", key: requestKey, at: Date.now() }
             : { type: "success", key: requestKey, data },
+          retryPolicyRef.current,
         ),
       )
+      return data === undefined ? "failure" : "success"
     } catch (error) {
       if (
         currentKeyRef.current !== requestKey ||
         activeQueryIdRef.current !== queryId
       ) {
-        return
+        return "skipped"
       }
-      if (isCancelledRequest(error) && !timedOut) return
+      if (isCancelledRequest(error) && !timedOut) return "skipped"
 
       setMachine((previous) =>
         nextSourceState(
@@ -104,9 +114,11 @@ export const useCatalogSource = <T>({
           timedOut
             ? { type: "timeout", key: requestKey }
             : { type: "failure", key: requestKey, at: Date.now() },
+          retryPolicyRef.current,
         ),
       )
       console.error(`Failed to fetch ${sourceName}:`, error)
+      return "failure"
     } finally {
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId)
@@ -115,56 +127,64 @@ export const useCatalogSource = <T>({
         activeQueryIdRef.current = null
       }
     }
-  }, [enabled, quest, query, sourceKey, sourceName, transformResponse])
+  }, [quest, query, sourceKey, sourceName, transformResponse])
+
+  const fetchNow = useCallback(async (): Promise<SourceFetchOutcome> => {
+    if (!enabled) return "skipped"
+    abortActiveRequest()
+    return runRequest()
+  }, [abortActiveRequest, enabled, runRequest])
+
+  const poll = useCallback(async (): Promise<SourceFetchOutcome> => {
+    if (!enabled || activeQueryIdRef.current !== null) return "skipped"
+    return runRequest()
+  }, [enabled, runRequest])
 
   useEffect(() => {
     currentKeyRef.current = sourceKey
   }, [sourceKey])
 
   useEffect(() => {
+    retryPolicyRef.current = retryPolicy
+  }, [retryPolicy])
+
+  useEffect(() => {
     setMachine((previous) => {
       if (previous.key !== sourceKey) {
         return createSourceMachineState(sourceKey)
       }
-      return nextSourceState(previous, { type: "revalidate", key: sourceKey })
+      return nextSourceState(
+        previous,
+        { type: "revalidate", key: sourceKey },
+        retryPolicyRef.current,
+      )
     })
   }, [revalidateKey, sourceKey])
 
   useEffect(() => {
-    const activeQueryId = activeQueryIdRef.current
-    if (activeQueryId !== null) {
-      quest.abort(activeQueryId)
-      activeQueryIdRef.current = null
-    }
-
+    abortActiveRequest()
     if (!enabled) return
 
     void fetchNow()
 
-    return () => {
-      const currentQueryId = activeQueryIdRef.current
-      if (currentQueryId !== null) {
-        quest.abort(currentQueryId)
-        activeQueryIdRef.current = null
-      }
-    }
-  }, [enabled, fetchNow, quest, sourceKey])
+    return abortActiveRequest
+  }, [abortActiveRequest, enabled, fetchNow, sourceKey])
 
   useEffect(() => {
     if (!enabled || pollIntervalMs === null) return
 
     const intervalId = window.setInterval(() => {
-      void fetchNow()
+      void poll()
     }, pollIntervalMs)
 
     return () => window.clearInterval(intervalId)
-  }, [enabled, fetchNow, pollIntervalMs])
+  }, [enabled, poll, pollIntervalMs])
 
   useEffect(() => {
     if (
       machine.key !== sourceKey ||
       machine.source.status === "unavailable" ||
-      machine.consecutiveFailures < SOURCE_FAILURE_THRESHOLD ||
+      machine.consecutiveFailures < retryPolicy.failureThreshold ||
       machine.firstFailureAt === null
     ) {
       return
@@ -172,15 +192,15 @@ export const useCatalogSource = <T>({
 
     const remaining = Math.max(
       0,
-      SOURCE_FAILURE_GRACE_MS - (Date.now() - machine.firstFailureAt),
+      retryPolicy.failureGraceMs - (Date.now() - machine.firstFailureAt),
     )
     const deadlineId = window.setTimeout(() => {
       setMachine((previous) =>
-        nextSourceState(previous, {
-          type: "failure-deadline",
-          key: sourceKey,
-          at: Date.now(),
-        }),
+        nextSourceState(
+          previous,
+          { type: "failure-deadline", key: sourceKey, at: Date.now() },
+          retryPolicy,
+        ),
       )
     }, remaining)
 
@@ -190,6 +210,7 @@ export const useCatalogSource = <T>({
     machine.firstFailureAt,
     machine.key,
     machine.source.status,
+    retryPolicy,
     sourceKey,
   ])
 
@@ -198,6 +219,7 @@ export const useCatalogSource = <T>({
       state: { status: "loading" },
       lastReadyData: null,
       fetchNow,
+      poll,
     }
   }
 
@@ -205,5 +227,6 @@ export const useCatalogSource = <T>({
     state: machine.source,
     lastReadyData: machine.lastReadyData,
     fetchNow,
+    poll,
   }
 }

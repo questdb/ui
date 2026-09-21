@@ -97,6 +97,14 @@ describe("formatElapsedDuration", () => {
   it("describes sub-second values", () => {
     expect(formatElapsedDuration(400)).toBe("less than a second")
   })
+
+  it.each([
+    [31, "31 days"],
+    [32, "32 days"],
+    [365, "365 days"],
+  ])("counts %i days instead of rolling into months", (days, expected) => {
+    expect(formatElapsedDuration(days * 86_400_000)).toBe(expected)
+  })
 })
 
 describe("formatCompactElapsedDuration", () => {

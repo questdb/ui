@@ -415,6 +415,137 @@ describe("Query Activity drawer", () => {
     cy.getByDataHook("query-activity-error-banner").should("be.visible")
   })
 
+  it("shows an error with a retry action when auto refresh is off", () => {
+    // Given
+    cy.loadConsoleWithAuth(false, { "auto.refresh.queryActivity": "false" })
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
+      },
+      { statusCode: 500, body: { error: "registry unavailable", position: 0 } },
+    ).as("queryActivityFailure")
+
+    // When
+    openDrawer()
+    cy.wait("@queryActivityFailure")
+
+    // Then the first failure is shown instead of a spinner
+    cy.getByDataHook("query-activity-error-banner").should("be.visible")
+    cy.getByDataHook("query-activity-loading").should("not.exist")
+
+    // When the server recovers and the user retries
+    interceptListing([SELF_ROW, CRITICAL_ROW])
+    cy.getByDataHook("query-activity-retry-button").click()
+    cy.wait("@queryActivity")
+
+    // Then one successful retry restores the list
+    cy.getByDataHook("query-activity-error-banner").should("not.exist")
+    rowIds().should("deep.equal", ["62179"])
+  })
+
+  it("fetches immediately when auto refresh is turned on", () => {
+    // Given the list was loaded with auto refresh off
+    cy.loadConsoleWithAuth(false, { "auto.refresh.queryActivity": "false" })
+    interceptListing([SELF_ROW, CRITICAL_ROW])
+    openDrawer()
+    cy.wait("@queryActivity")
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
+      },
+      { statusCode: 200, body: listingResponse([SELF_ROW]) },
+    ).as("listingAfterToggle")
+
+    // When auto refresh is turned on
+    cy.getByDataHook("query-activity-auto-refresh-button").click()
+
+    // Then a listing is requested before the first poll interval
+    cy.wait("@listingAfterToggle", { requestTimeout: 700 })
+    cy.getByDataHook("query-activity-empty").should("be.visible")
+  })
+
+  it("refreshes right after a cancel and drops the in-flight listing", () => {
+    // Given the list is loaded and a slow poll is in flight
+    interceptListing([SELF_ROW, CRITICAL_ROW])
+    interceptCancel()
+    openDrawer()
+    cy.wait("@queryActivity")
+    rowIds().should("deep.equal", ["62179"])
+    let slowRequests = 0
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
+      },
+      (req) => {
+        slowRequests += 1
+        req.reply({
+          delay: 3000,
+          statusCode: 200,
+          body: listingResponse([SELF_ROW, CRITICAL_ROW]),
+        })
+      },
+    ).as("slowListing")
+    cy.wrap(null).should(() => expect(slowRequests).to.be.greaterThan(0))
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
+      },
+      { statusCode: 200, body: listingResponse([SELF_ROW]) },
+    ).as("freshListing")
+
+    // When the query is cancelled during that poll
+    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').within(
+      () => {
+        cy.getByDataHook("query-activity-row-cancel").click({ force: true })
+      },
+    )
+    cy.getByDataHook("query-activity-cancel-confirm").click()
+    cy.wait("@cancelQuery")
+
+    // Then a fresh listing lands without waiting for the slow one
+    cy.wait("@freshListing", { timeout: 2000 })
+    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').should(
+      "have.attr",
+      "data-state",
+      "finished",
+    )
+
+    // And the slow response never revives the query
+    cy.wait(3000)
+    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').should(
+      "not.have.attr",
+      "data-state",
+      "running",
+    )
+  })
+
+  it("resumes the elapsed clock when the drawer reopens", () => {
+    // Given
+    cy.clock(Date.parse(SERVER_NOW), ["Date", "setInterval", "clearInterval"])
+    interceptListing([SELF_ROW, CRITICAL_ROW])
+    openDrawer()
+    cy.wait("@queryActivity")
+    cy.getByDataHook("query-activity-row-duration").should("contain", "1m 12s")
+
+    // When the drawer stays closed for ten seconds and reopens
+    cy.getByDataHook("query-activity-toggle-button").click()
+    cy.getByDataHook("query-activity-drawer").should("not.exist")
+    cy.tick(10000)
+    openDrawer()
+    cy.wait("@queryActivity")
+
+    // Then the elapsed time is correct before the next clock tick
+    cy.getByDataHook("query-activity-row-duration").should("contain", "1m 12s")
+  })
+
   it("closes from the sidebar button", () => {
     // Given
     interceptListing([SELF_ROW])
