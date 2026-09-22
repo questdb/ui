@@ -211,6 +211,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   )?.value
 
   const [activeBuffer, setActiveBufferState] = useState<Buffer>(fallbackBuffer)
+  const activeBufferRef = useRef(activeBuffer)
   const searchUpdateTimeoutRef = useRef<number | null>(null)
   const queryParamProcessedRef = useRef(false)
   const isNavigatingFromSearchRef = useRef(false)
@@ -239,12 +240,14 @@ export const EditorProvider: React.FC = ({ children }) => {
 
         if (currentActiveBufferId) {
           if (buffer.id === currentActiveBufferId) {
+            activeBufferRef.current = buffer
             setActiveBufferState(buffer)
             return
           }
         }
 
         await bufferStore.setActiveId(buffer.id as number)
+        activeBufferRef.current = buffer
         setActiveBufferState(buffer)
 
         if (options?.fromSearch) {
@@ -524,9 +527,11 @@ export const EditorProvider: React.FC = ({ children }) => {
       const buffer =
         buffers?.find((buffer) => buffer.id === activeBufferId) ?? buffers[0]
       const activeBuffers = buffers.filter((b) => !b.archived)
-      setActiveBufferState(
-        buffer.archived ? (activeBuffers[0] ?? fallbackBuffer) : buffer,
-      )
+      const nextBuffer = buffer.archived
+        ? (activeBuffers[0] ?? fallbackBuffer)
+        : buffer
+      activeBufferRef.current = nextBuffer
+      setActiveBufferState(nextBuffer)
       ranOnce.current = true
     }
   }, [buffers, activeBufferId])
@@ -920,9 +925,7 @@ export const EditorProvider: React.FC = ({ children }) => {
   // full width in grid mode, then takes focus with the cursor in its editor.
   // A notebook at its cell limit gets a fresh notebook whose first cell holds
   // the query.
-  const appendNotebookCell = async (value: string) => {
-    const bufferId = activeBuffer.id
-    if (bufferId === undefined) return
+  const appendNotebookCell = async (bufferId: number, value: string) => {
     try {
       const cellId = await withBoundNotebook(bufferId, (controller) =>
         controller.mutate((parts) =>
@@ -956,9 +959,12 @@ export const EditorProvider: React.FC = ({ children }) => {
           }
         },
         appendQuery: (text) => {
-          const bufferType = bufferTypeOf(activeBuffer)
+          const targetBuffer = activeBufferRef.current
+          const bufferType = bufferTypeOf(targetBuffer)
           if (bufferType === BufferType.NOTEBOOK) {
-            void appendNotebookCell(text)
+            if (targetBuffer.id !== undefined) {
+              void appendNotebookCell(targetBuffer.id, text)
+            }
             return
           }
           if (bufferType === BufferType.METRICS) {

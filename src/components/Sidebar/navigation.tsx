@@ -27,9 +27,7 @@ export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
     color: ${({ selected, theme }) =>
       selected ? theme.color.brandAccent : theme.color.contentPrimary};
     background: ${({ selected, theme }) =>
-      selected
-        ? theme.color.brandAccentActive
-        : theme.color.interactionHover};
+      selected ? theme.color.brandAccentActive : theme.color.interactionHover};
   }
 
   &&[aria-pressed="true"]:hover:not([disabled]) {
