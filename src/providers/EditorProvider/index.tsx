@@ -24,9 +24,13 @@ import {
 import { useSchemaCompletionProvider } from "../../scenes/Editor/Monaco/questdb-sql/useSchemaCompletionProvider"
 import {
   cloneNotebookViewStateWithCellIdMap,
+  generateId,
   nextCopyLabel,
   snapshotResultsMatchQueries,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { createCell } from "../../store/notebook"
+import { NotebookToolError } from "../../utils/notebooks/notebookToolError"
+import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"
 import type { ConversationId } from "../AIConversationProvider/types"
 import { normalizeSql } from "../../utils/formatSql"
 import type { Buffer, PreviewContent } from "../../store/buffers"
@@ -51,8 +55,10 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import { emitUserAction } from "../../utils/notebooks/notebookAIBridge"
 import {
+  addCellTransition,
   forgetBuffer,
   releaseArchivedBuffer,
+  withBoundNotebook,
   withBoundNotebookReadOnly,
 } from "../../utils/notebooks/notebookController"
 import { enqueueBufferTask } from "../../utils/notebooks/notebookBufferQueue"
@@ -64,6 +70,13 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 export const MAX_TABS = 100
 
 const SNAPSHOT_COPY_ERROR_TOAST_ID = "notebook-snapshot-copy-error"
+
+const CELL_START_RANGE = {
+  startLineNumber: 1,
+  startColumn: 1,
+  endLineNumber: 1,
+  endColumn: 1,
+}
 
 type IStandaloneCodeEditor = editor.IStandaloneCodeEditor
 
@@ -880,6 +893,58 @@ export const EditorProvider: React.FC = ({ children }) => {
     }
   }
 
+  // Parks an edit reveal for the cell; the notebook and its editor drain it
+  // once mounted, so the cursor lands in the cell even on a cold mount.
+  const revealCellForEditing = (bufferId: number, cellId: string) => {
+    requestCellReveal({
+      bufferId,
+      cellId,
+      range: CELL_START_RANGE,
+      notebookField: "cell",
+      cellType: "sql",
+      mode: "edit",
+    })
+    eventBus.publish(EventType.NOTEBOOK_REVEAL_CELL)
+  }
+
+  const openNotebookWithCell = async (value: string) => {
+    const cell = createCell(0, value)
+    const notebook = await addBuffer({
+      notebookViewState: { cells: [cell] },
+    })
+    if (notebook?.id === undefined) return
+    revealCellForEditing(notebook.id, cell.id)
+  }
+
+  // Mirrors the notebook's "Add cell" button: the new cell lands at the end,
+  // full width in grid mode, then takes focus with the cursor in its editor.
+  // A notebook at its cell limit gets a fresh notebook whose first cell holds
+  // the query.
+  const appendNotebookCell = async (value: string) => {
+    const bufferId = activeBuffer.id
+    if (bufferId === undefined) return
+    try {
+      const cellId = await withBoundNotebook(bufferId, (controller) =>
+        controller.mutate((parts) =>
+          addCellTransition(parts, bufferId, { id: generateId(), value }),
+        ),
+      )
+      emitUserAction({ kind: "user_added_cell", bufferId, cellId })
+      revealCellForEditing(bufferId, cellId)
+    } catch (error) {
+      if (error instanceof NotebookToolError && error.code === "cell_limit") {
+        await openNotebookWithCell(value)
+        return
+      }
+      console.error(error)
+      toast.error(
+        error instanceof Error
+          ? `Failed to add cell: ${error.message}`
+          : "Failed to add cell",
+      )
+    }
+  }
+
   return (
     <EditorContext.Provider
       value={{
@@ -891,6 +956,15 @@ export const EditorProvider: React.FC = ({ children }) => {
           }
         },
         appendQuery: (text) => {
+          const bufferType = bufferTypeOf(activeBuffer)
+          if (bufferType === BufferType.NOTEBOOK) {
+            void appendNotebookCell(text)
+            return
+          }
+          if (bufferType === BufferType.METRICS) {
+            void openNotebookWithCell(text)
+            return
+          }
           if (editorRef?.current) {
             appendQuery(editorRef.current, text)
           }

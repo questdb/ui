@@ -386,6 +386,7 @@ const SearchResultsComponent: React.FC<SearchResultsProps> = ({
       range: match.range,
       notebookField: match.notebookField,
       cellType: match.cellType,
+      mode: "highlight",
     })
     try {
       await waitForController(match.bufferId)
