@@ -13,6 +13,10 @@ const setCalendarRange = ({ from, to }) => {
   cy.getByDataHook("time-range-dateTo").clear().type(to)
   cy.getByDataHook("time-range-apply").click()
 }
+const applyCalendarRange = (range) => {
+  setCalendarRange(range)
+  cy.getByDataHook("time-range-picker").should("not.exist")
+}
 const expectRange = (state, range) => {
   expect(new Date(state.settings.timeRange.from).toISOString()).to.equal(
     `${range.from}T00:00:00.000Z`,
@@ -350,8 +354,7 @@ describe("Notebook variables", () => {
     cy.dropTableIfExists("variable_ranges")
     cy.execQuery("create table variable_ranges as (select 1 as id)")
     cy.createNotebook()
-    setCalendarRange(firstRange)
-    cy.getByDataHook("time-range-picker").should("not.exist")
+    applyCalendarRange(firstRange)
     cy.getByDataHook("notebook-variables").click()
     cy.addNotebookVariable({
       name: "rangeValue",
@@ -457,8 +460,7 @@ describe("Notebook variables", () => {
       expect(settings.timeRange).to.equal(undefined)
       expect(options).to.deep.equal([])
     })
-    setCalendarRange(firstRange)
-    cy.getByDataHook("time-range-picker").should("not.exist")
+    applyCalendarRange(firstRange)
     cy.getByDataHook("variable-errors").should("not.exist")
     cy.runNotebookQuery("select @rangeValue as restored_range")
     cy.getGridRow(0).should("contain", firstRange.from)
@@ -470,7 +472,7 @@ describe("Notebook variables", () => {
     cy.dropTableIfExists("variable_ranges")
     cy.execQuery("create table variable_ranges as (select 1 as id)")
     cy.createNotebook()
-    setCalendarRange(firstRange)
+    applyCalendarRange(firstRange)
     cy.getByDataHook("notebook-variables").click()
     cy.addNotebookVariable({
       name: "globalRange",
@@ -480,11 +482,11 @@ describe("Notebook variables", () => {
     })
     cy.applyNotebookVariables()
     cy.createNotebook()
-    setCalendarRange(firstRange)
+    applyCalendarRange(firstRange)
     cy.selectNotebook("Notebook 1")
 
     // When the first notebook changes its range before returning to the second.
-    setCalendarRange(nextRange)
+    applyCalendarRange(nextRange)
     cy.selectNotebook("Notebook 2")
     cy.getByDataHook("notebook-variables").should(
       "have.attr",
