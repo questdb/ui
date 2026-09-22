@@ -868,6 +868,15 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-search-clear").click()
       cy.getByDataHook("chat-history-search").should("have.value", "")
       cy.getByDataHook("chat-history-item").should("have.length", 3)
+
+      // When - Escape on a populated search clears it and keeps the window open
+      cy.getByDataHook("chat-history-search").type("Database{esc}")
+      cy.getByDataHook("chat-history-search").should("have.value", "")
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      // Then - Escape on an empty search closes the window
+      cy.getByDataHook("chat-history-search").type("{esc}")
+      cy.getByDataHook("ai-chat-window").should("not.exist")
     })
 
     it("should switch between chats from history", () => {
