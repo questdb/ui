@@ -1,4 +1,5 @@
 import * as QuestDB from "../../utils/questdb"
+import { normalizeQueryText } from "../Editor/Monaco/utils"
 import type { QueryActivityThresholds } from "./thresholds"
 
 export const QUERY_ACTIVITY_SQL =
@@ -137,10 +138,11 @@ type RawQueryActivityRow = {
   server_now: string
 }
 
-const normalizeSql = (sql: string) => sql.trim().replace(/;+\s*$/, "")
-
+// This hides every run of the listing statement, from any
+// user or client, not only the drawer's own poll. The statement is cheap and
+// carries no monitoring value, so losing those rows is accepted.
 const isSelfQuery = (query: string) =>
-  normalizeSql(query) === normalizeSql(QUERY_ACTIVITY_SQL)
+  normalizeQueryText(query) === normalizeQueryText(QUERY_ACTIVITY_SQL)
 
 const toRow = (raw: RawQueryActivityRow): QueryActivityRow => ({
   queryId: raw.query_id,
