@@ -9,6 +9,10 @@ import {
   pinMonacoContextMenu,
   validateQueryJIT,
 } from "../../Monaco/utils"
+import {
+  registerVariableModel,
+  type VariableSuggestion,
+} from "../../Monaco/questdb-sql/variableCompletion"
 
 const VALIDATION_DEBOUNCE_MS = 300
 const VIEW_STATE_SAVE_DEBOUNCE_MS = 300
@@ -57,6 +61,7 @@ export type UseMonacoCellEditorOptions = {
   // function that prepends global variables as DECLARE so `@symbol`
   // references resolve. Falls back to quest.validateQuery if absent.
   validate?: ValidateFn
+  getVariableSuggestions: () => VariableSuggestion[]
 }
 
 export const useMonacoCellEditor = ({
@@ -70,9 +75,12 @@ export const useMonacoCellEditor = ({
   onRunAll,
   onContentHeightChange,
   validate,
+  getVariableSuggestions,
 }: UseMonacoCellEditorOptions) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
+  const getVariableSuggestionsRef = useRef(getVariableSuggestions)
+  const variableModelCleanupRef = useRef<(() => void) | null>(null)
   const validationTimeoutRef = useRef<number | null>(null)
   const viewStateSaveTimeoutRef = useRef<number | null>(null)
   const pendingViewStateRef = useRef<editor.ICodeEditorViewState | null>(null)
@@ -191,6 +199,12 @@ export const useMonacoCellEditor = ({
       reportHeight()
 
       contextMenuCleanupRef.current = pinMonacoContextMenu(ed)
+      const model = ed.getModel()
+      if (model) {
+        variableModelCleanupRef.current = registerVariableModel(model, () =>
+          getVariableSuggestionsRef.current(),
+        )
+      }
 
       ed.onDidFocusEditorWidget(onFocus)
       ed.onDidChangeCursorPosition(() => {
@@ -243,11 +257,17 @@ export const useMonacoCellEditor = ({
   }, [])
 
   useEffect(() => {
+    getVariableSuggestionsRef.current = getVariableSuggestions
+  }, [getVariableSuggestions])
+
+  useEffect(() => {
     if (editorMounted) return
     clearPendingTimers()
     flushViewStateSave()
     contextMenuCleanupRef.current?.()
     contextMenuCleanupRef.current = null
+    variableModelCleanupRef.current?.()
+    variableModelCleanupRef.current = null
     if (editorRef.current && monacoRef.current) {
       clearModelMarkers(monacoRef.current, editorRef.current)
       clearValidationMarkers(monacoRef.current, editorRef.current, cellId)
@@ -261,6 +281,8 @@ export const useMonacoCellEditor = ({
       clearPendingTimers()
       contextMenuCleanupRef.current?.()
       contextMenuCleanupRef.current = null
+      variableModelCleanupRef.current?.()
+      variableModelCleanupRef.current = null
       if (editorRef.current && monacoRef.current) {
         clearModelMarkers(monacoRef.current, editorRef.current)
         clearValidationMarkers(monacoRef.current, editorRef.current, cellId)

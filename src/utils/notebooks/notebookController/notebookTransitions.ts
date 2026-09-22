@@ -1,3 +1,4 @@
+import type { PreparedNotebookVariables } from "../notebookVariableOptions"
 import {
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
@@ -10,6 +11,11 @@ import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { sameTimeRange } from "../../../scenes/Editor/Notebook/variables/timeRange"
+import {
+  changedVariableNames,
+  redefinedVariableNames,
+} from "../../../scenes/Editor/Notebook/variables/variableChanges"
 import {
   buildAppliedNotebookState,
   carriedRunError,
@@ -55,6 +61,12 @@ import {
 // reference when unchanged, so shells can `!==` a slice to decide whether to
 // write it.
 
+export type VariableSettingsDiff = {
+  changed: string[]
+  redefined: string[]
+  timeRangeChanged: boolean
+}
+
 export type NotebookTransitionResult<T = void> = {
   parts: ViewParts
   result: T
@@ -62,7 +74,22 @@ export type NotebookTransitionResult<T = void> = {
   cleanup?: { cellIds: string[] }
   cancelRuns?: { cellIds: string[] }
   deleteSnapshots?: { cellIds: string[] }
+  variables?: VariableSettingsDiff
+  preparedVariables?: PreparedNotebookVariables
+  persisted?: boolean
 }
+
+const variableSettingsDiff = (
+  before: ViewParts["settings"],
+  after: ViewParts["settings"],
+): VariableSettingsDiff => ({
+  changed: changedVariableNames(before.variables ?? [], after.variables ?? []),
+  redefined: redefinedVariableNames(
+    before.variables ?? [],
+    after.variables ?? [],
+  ),
+  timeRangeChanged: !sameTimeRange(before.timeRange, after.timeRange),
+})
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
   if (cells.length >= MAX_NOTEBOOK_CELLS) {
@@ -383,8 +410,10 @@ export const applyNotebookStateTransition = (
   request: ApplyNotebookStateRequest,
 ): NotebookTransitionResult<{
   applied: { added: string[]; updated: string[]; deleted: string[] }
+  variables: VariableSettingsDiff
 }> => {
   const next = buildAppliedNotebookState(parts, request)
+  const variables = variableSettingsDiff(parts.settings, next.settings)
   return {
     parts: {
       ...parts,
@@ -399,8 +428,9 @@ export const applyNotebookStateTransition = (
           ? parts.focusedCellId
           : null,
     },
-    result: { applied: next.diff },
+    result: { applied: next.diff, variables },
     cleanup: { cellIds: next.diff.deleted },
+    variables,
     ...(next.resultsCleared.length > 0
       ? { deleteSnapshots: { cellIds: next.resultsCleared } }
       : {}),

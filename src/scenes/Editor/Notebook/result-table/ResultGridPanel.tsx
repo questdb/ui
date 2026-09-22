@@ -93,6 +93,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   return (
     <>
       <ResultActionsBar
+        cellId={cellId}
         data={data}
         gridRef={gridRef}
         isFrozen={pinnedCount > 0}

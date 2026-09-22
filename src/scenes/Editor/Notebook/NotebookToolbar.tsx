@@ -14,7 +14,10 @@ import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { exportBuffers } from "../Monaco/exportTabs"
-import { useNotebookActions, useNotebookState } from "./NotebookProvider"
+import {
+  useNotebookActions,
+  useNotebookVariablesState,
+} from "./NotebookProvider"
 import type { NotebookLayoutMode } from "../../../store/notebook"
 import { BufferType, MAX_BUFFER_NAME_LENGTH } from "../../../store/buffers"
 import { useEditor } from "../../../providers/EditorProvider"
@@ -24,7 +27,8 @@ import {
   useAIStatus,
 } from "../../../providers/AIStatusProvider"
 import { emitUserAction } from "../../../utils/notebooks/notebookAIBridge"
-import { VariablesPopover } from "./globals/VariablesPopover"
+import { VariablesDialog } from "./variables/editor/VariablesDialog"
+import { NotebookTimeRangeControl } from "./variables/NotebookTimeRangeControl"
 import { NotebookRefreshControl } from "./NotebookRefreshControl"
 import { NotebookLayoutToggle } from "./NotebookViewToggle"
 import { NotebookRenameInput } from "./NotebookRenameInput"
@@ -34,7 +38,7 @@ const Toolbar = styled(Box).attrs({
   justifyContent: "space-between",
 })`
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(14rem, 1fr) max-content;
   gap: 1rem;
   width: 100%;
   max-width: 100%;
@@ -135,8 +139,8 @@ const TooltipButton: React.FC<{
 )
 
 export const NotebookToolbar: React.FC = () => {
-  const { cells, settings } = useNotebookState()
-  const { updateSettings } = useNotebookActions()
+  const { settings } = useNotebookVariablesState()
+  const { updateSettings, getCellsSnapshot } = useNotebookActions()
   const { activeBuffer, buffers, duplicateNotebook, updateBuffer } = useEditor()
   const { openNotebookChat } = useAIConversationActions()
   const { canUse, status: aiStatus } = useAIStatus()
@@ -233,7 +237,7 @@ export const NotebookToolbar: React.FC = () => {
   const handleBuildWithAI = () => {
     if (typeof activeBuffer.id !== "number") return
     void trackEvent(ConsoleEvent.NOTEBOOK_BUILD_WITH_AI, {
-      cellCount: cells.length,
+      cellCount: getCellsSnapshot().length,
     })
     void openNotebookChat(activeBuffer.id)
   }
@@ -242,7 +246,7 @@ export const NotebookToolbar: React.FC = () => {
     if (typeof activeBuffer.id !== "number" || isArchived || isDuplicating)
       return
     void trackEvent(ConsoleEvent.NOTEBOOK_DUPLICATE, {
-      cellCount: cells.length,
+      cellCount: getCellsSnapshot().length,
       layoutMode: mode,
     })
     setIsDuplicating(true)
@@ -332,7 +336,8 @@ export const NotebookToolbar: React.FC = () => {
             <DownloadSimpleIcon size={18} />
           </Button>
         </TooltipButton>
-        <VariablesPopover />
+        <VariablesDialog />
+        <NotebookTimeRangeControl />
         <NotebookRefreshControl />
         <NotebookLayoutToggle
           mode={mode}

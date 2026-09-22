@@ -11,10 +11,19 @@ import type {
   CellLayoutItem,
   NotebookCell,
   NotebookSettings,
+  NotebookVariable,
+  TimeRange,
 } from "../../store/notebook"
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "./executeAIFlow"
-import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
+import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { isQueryList } from "../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
+import {
+  loadStoredOptions,
+  notebookOptionsOwner,
+  type StoredVariableOptions,
+} from "../../store/notebookOptions"
+import { getNotebookGlobals } from "../../store/notebookGlobals"
 import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
@@ -23,6 +32,7 @@ type ChartQueryWire = {
   type: string
   y_columns: string[]
   ohlc?: { open: string; high: string; low: string; close: string }
+  volume?: string
   partition_by_column?: string
   axis?: "left" | "right"
   enabled?: boolean
@@ -31,6 +41,7 @@ type ChartQueryWire = {
 export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
+  left_axis?: { name?: string; min?: number; max?: number }
   right_axis?: { name?: string; min?: number; max?: number }
 }
 
@@ -49,6 +60,9 @@ export type NotebookContextCell = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -70,7 +84,10 @@ export type NotebookContextSnapshot =
       // Absent when the notebook has no configured default.
       auto_refresh_default?: AutoRefresh
       maximized_cell_id: string | null
-      variables?: Array<{ name: string; value: string }>
+      variables?: NotebookVariable[]
+      global_variables?: NotebookVariable[]
+      variable_values?: VariableValuesStatus[]
+      time_range?: TimeRange
       cells: NotebookContextCell[]
     }
   | {
@@ -78,6 +95,10 @@ export type NotebookContextSnapshot =
       buffer_id: number
       label?: string
     }
+
+export type VariableValuesStatus =
+  | { name: string; count: number; fetched_at: number }
+  | { name: string; fetched: false }
 
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
@@ -99,6 +120,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           type: q.type,
           y_columns: q.yColumns,
           ...(q.ohlc ? { ohlc: q.ohlc } : {}),
+          ...(q.volume ? { volume: q.volume } : {}),
           ...(q.partitionByColumn
             ? { partition_by_column: q.partitionByColumn }
             : {}),
@@ -107,6 +129,7 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
           ...(q.name != null ? { name: q.name } : {}),
         },
   ),
+  ...(cfg.leftAxis ? { left_axis: cfg.leftAxis } : {}),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
 
@@ -151,6 +174,21 @@ const refreshFields = (
   }
 }
 
+type CellTimeWire = {
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
+}
+
+const cellTimeWire = (cell: NotebookCell): CellTimeWire => {
+  if (cell.type === "markdown") return {}
+  const out: CellTimeWire = {}
+  if (cell.timeRange) out.time_range = cell.timeRange
+  if (cell.timeShift) out.time_shift = cell.timeShift
+  if (cell.showTimeRange) out.show_time_range = true
+  return out
+}
+
 const buildCell = (
   cell: NotebookCell,
   gridByCellId: Map<string, CellLayoutItem>,
@@ -171,6 +209,7 @@ const buildCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   if (typeof cell.isViewMaximized === "boolean") {
     out.is_view_maximized = cell.isViewMaximized
   }
@@ -235,7 +274,50 @@ export const buildSnapshot = async (
   if (variables.length > 0) {
     out.variables = variables
   }
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+  if (globals.length > 0) {
+    out.global_variables = globals
+  }
+  const values = variableValuesStatus(
+    variables,
+    await loadStoredOptions(notebookOptionsOwner(bufferId)),
+  )
+  if (values.length > 0) {
+    out.variable_values = values
+  }
+  if (settings.timeRange) {
+    out.time_range = settings.timeRange
+  }
   return out
+}
+
+const variableValuesStatus = (
+  variables: NotebookVariable[],
+  rows: StoredVariableOptions[],
+): VariableValuesStatus[] =>
+  variables.filter(isQueryList).map(({ name }) => {
+    const row = rows.find((r) => r.name === name)
+    return row
+      ? { name, count: row.options.length, fetched_at: row.fetchedAt }
+      : { name, fetched: false }
+  })
+
+const describeVariable = (variable: NotebookVariable): string => {
+  switch (variable.kind) {
+    case "expression":
+      return JSON.stringify(sanitizeForPromptContext(variable.value))
+    case "text":
+      return `text ${JSON.stringify(sanitizeForPromptContext(variable.value))}`
+    case "list": {
+      const selected =
+        variable.selected === "all"
+          ? "all"
+          : JSON.stringify(
+              variable.selected.map((o) => sanitizeForPromptContext(o.value)),
+            )
+      return `list ${selected}${variable.multi ? " (multi)" : ""}`
+    }
+  }
 }
 
 // YAML-ish shape — stable regardless of escape characters in cell values.
@@ -269,12 +351,35 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       snap.maximized_cell_id ? JSON.stringify(snap.maximized_cell_id) : "null"
     }`,
   )
+  if (snap.time_range) {
+    lines.push(
+      `  time_range: ${JSON.stringify(snap.time_range.from)} .. ${JSON.stringify(snap.time_range.to)}`,
+    )
+  }
+  const values = new Map(
+    (snap.variable_values ?? []).map((status) => [status.name, status]),
+  )
+  const describeWithValues = (variable: NotebookVariable): string => {
+    const status = values.get(variable.name)
+    if (!status) return describeVariable(variable)
+    const suffix =
+      "fetched" in status
+        ? "values not fetched yet"
+        : `${status.count} values fetched at ${new Date(status.fetched_at).toISOString()}`
+    return `${describeVariable(variable)} [${suffix}]`
+  }
   if (snap.variables && snap.variables.length > 0) {
     lines.push("  variables:")
-    for (const { name, value } of snap.variables) {
-      lines.push(
-        `    ${name}: ${JSON.stringify(sanitizeForPromptContext(value))}`,
-      )
+    for (const variable of snap.variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
+    }
+  }
+  if (snap.global_variables && snap.global_variables.length > 0) {
+    lines.push(
+      "  global_variables (shared by every notebook; use get_global_variables / apply_global_variables to edit):",
+    )
+    for (const variable of snap.global_variables) {
+      lines.push(`    ${variable.name}: ${describeWithValues(variable)}`)
     }
   }
   lines.push("  cells:")
@@ -293,6 +398,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     if (c.mode) lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
+    if (c.time_range)
+      lines.push(`      time_range: ${JSON.stringify(c.time_range)}`)
+    if (c.time_shift) lines.push(`      time_shift: ${c.time_shift}`)
+    if (c.show_time_range) lines.push(`      show_time_range: true`)
     if (c.is_view_maximized !== undefined)
       lines.push(`      is_view_maximized: ${c.is_view_maximized}`)
     if (c.chart_config) {
@@ -417,6 +526,9 @@ export type NotebookCellSummary = {
   position: number
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   last_run_status?: RunStatus
   // Live-only (mounted notebook); see NotebookContextCell.
   refreshing?: true
@@ -434,6 +546,9 @@ export type NotebookCellDetails = {
   type?: "sql" | "markdown"
   mode?: "run" | "draw"
   auto_refresh?: AutoRefresh
+  time_range?: TimeRange
+  time_shift?: string
+  show_time_range?: true
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
   last_run_status?: RunStatus
@@ -462,6 +577,7 @@ export const summarizeCells = (
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
     if (cell.mode) summary.mode = cell.mode
+    Object.assign(summary, cellTimeWire(cell))
     return summary
   })
 
@@ -504,6 +620,7 @@ export const serializeCell = (
   if (cell.type === "markdown") out.type = "markdown"
   if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
+  Object.assign(out, cellTimeWire(cell))
   if (typeof cell.isViewMaximized === "boolean")
     out.is_view_maximized = cell.isViewMaximized
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))

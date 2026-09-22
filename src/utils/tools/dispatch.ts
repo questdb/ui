@@ -45,12 +45,17 @@ import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
 import type { ToolExecutionContext } from "../ai/shared"
 import { formatSql } from "../formatSql"
+import {
+  dispatchApplyGlobalVariables,
+  readGlobalVariables,
+} from "./globalVariables"
 import { dispatchApplyNotebookState } from "./applyNotebookState"
 import {
   mapQueryChart,
-  mapRightAxis,
+  mapAxisBounds,
+  axisBoundsValidationError,
   type ToolQueryChart,
-  type ToolRightAxis,
+  type ToolAxisBounds,
 } from "./chartConfigWire"
 import {
   invalidBufferIdResult,
@@ -85,6 +90,11 @@ import {
   summarizeCells,
 } from "../ai/notebookSnapshot"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  parseTimeShift,
+  TIME_SHIFT_ERROR,
+} from "../../scenes/Editor/Notebook/variables/cellTime"
+import { isValidTimeRange } from "../../scenes/Editor/Notebook/variables/timeRange"
 import {
   copyNotebookSnapshots,
   deleteCellSnapshot,
@@ -153,7 +163,7 @@ const routeNotebookTool = async <T>(
 ): Promise<{ content: string; is_error?: boolean }> => {
   try {
     const result = await op()
-    return { content: JSON.stringify(result ?? {}) }
+    return { content: JSON.stringify(result ?? { ok: true }) }
   } catch (e) {
     if (e instanceof NotebookStateChangedError) {
       return staleNotebookResult(toolContext)
@@ -302,6 +312,10 @@ export const dispatchTool = async (
   }
   try {
     switch (toolName) {
+      case "get_global_variables":
+        return routeNotebookTool(readGlobalVariables)
+      case "apply_global_variables":
+        return await dispatchApplyGlobalVariables(input, validateSql, signal)
       case "suggest_query": {
         const query = (input as { query: string })?.query
         if (!query) {
@@ -481,7 +495,12 @@ export const dispatchTool = async (
               `Could not activate notebook ${buffer_id}.`,
             )
           }
-          return { activated: true, buffer_id }
+          const variable_values = await withBoundNotebook(
+            buffer_id,
+            (ctrl) => ctrl.waitForVariableOptions(),
+            signal,
+          )
+          return { activated: true, buffer_id, variable_values }
         })
       }
       case "duplicate_notebook": {
@@ -871,13 +890,14 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_chart_config": {
-        const { buffer_id, cell_id, x_column, queries, right_axis } =
+        const { buffer_id, cell_id, x_column, queries, left_axis, right_axis } =
           (input as {
             buffer_id: number
             cell_id: string
             x_column?: string | null
             queries?: (ToolQueryChart | null)[] | null
-            right_axis?: ToolRightAxis | null
+            left_axis?: ToolAxisBounds | null
+            right_axis?: ToolAxisBounds | null
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const chartBaseline = getBufferActionSeq(buffer_id)
@@ -888,8 +908,20 @@ export const dispatchTool = async (
           patch.xColumn = x_column
         if (queries !== undefined && queries !== null)
           patch.queries = queries.map((q) => (q ? mapQueryChart(q) : null))
+        if (left_axis !== undefined && left_axis !== null)
+          patch.leftAxis = mapAxisBounds(left_axis)
         if (right_axis !== undefined && right_axis !== null)
-          patch.rightAxis = mapRightAxis(right_axis)
+          patch.rightAxis = mapAxisBounds(right_axis)
+        const boundsError = axisBoundsValidationError({ left_axis, right_axis })
+        if (boundsError) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: boundsError,
+            }),
+            is_error: true,
+          }
+        }
         if (
           patch.queries?.some(
             (q) => q != null && q.type === "candlestick" && !q.ohlc,
@@ -960,6 +992,62 @@ export const dispatchTool = async (
               updateCellTransition(parts, buffer_id, cell_id, {
                 name: name ?? undefined,
               }),
+            signal,
+          ),
+        )
+      }
+      case "set_cell_time_range": {
+        const { buffer_id, cell_id, time_range, time_shift, show_in_header } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            time_range?: { from?: unknown; to?: unknown } | null
+            time_shift?: string | null
+            show_in_header?: boolean | null
+          }) || {}
+        if (time_range != null && !isValidTimeRange(time_range)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message:
+                'VALIDATION_ERROR: time_range must be {from, to} with valid bounds, for example {from: "now-15m", to: "now"}.',
+            }),
+            is_error: true,
+          }
+        }
+        if (typeof time_shift === "string" && !parseTimeShift(time_shift)) {
+          return {
+            content: JSON.stringify({
+              error_code: "validation",
+              message: `VALIDATION_ERROR: time_shift: ${TIME_SHIFT_ERROR}`,
+            }),
+            is_error: true,
+          }
+        }
+        const timeRange = isValidTimeRange(time_range)
+          ? { from: time_range.from, to: time_range.to }
+          : undefined
+        const timeShift =
+          typeof time_shift === "string" ? time_shift : undefined
+        const hasTime = timeRange !== undefined || timeShift !== undefined
+        setStatus(AIOperationStatus.UpdatingCell, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          runTransition(
+            buffer_id,
+            (parts) => {
+              const target = parts.cells.find((c) => c.id === cell_id)
+              if (target?.type === "markdown") {
+                throw new Error(
+                  "VALIDATION_ERROR: markdown cells have no time range.",
+                )
+              }
+              return updateCellTransition(parts, buffer_id, cell_id, {
+                timeRange,
+                timeShift,
+                showTimeRange:
+                  show_in_header === true && hasTime ? true : undefined,
+              })
+            },
             signal,
           ),
         )
