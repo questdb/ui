@@ -169,7 +169,7 @@ describe("global variable tools", () => {
     // Then
     expect(result.is_error).toBe(true)
     expect((JSON.parse(result.content) as { message: string }).message).toBe(
-      "Variable rate: This variable is already defined.",
+      'Variable rate: This variable is already defined in notebook "Other notebook".',
     )
     expect(await getNotebookGlobals()).toBeNull()
     expect(validate).not.toHaveBeenCalled()

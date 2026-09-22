@@ -31,7 +31,16 @@ import {
 } from "../../NotebookProvider"
 import { listOptionsState } from "../declareEntries"
 import { useGlobalVariablesState } from "../globals/GlobalVariablesProvider"
-import { globalNameConflict } from "../globals/globalNameConflict"
+import { copyGlobalsToLocals } from "../globals/copyGlobalsToLocals"
+import {
+  globalNameConflicts,
+  type GlobalNameConflict,
+} from "../globals/globalNameConflict"
+import {
+  globalReferences,
+  type GlobalReference,
+} from "../globals/globalReferences"
+import { removeLocalVariables } from "../globals/removeLocalVariables"
 import { effectiveVariables, type VariableScope } from "../scope"
 import { sameTimeRange, TIME_VARIABLE_NAMES } from "../timeRange"
 import { variablesEqual } from "../variableChanges"
@@ -57,7 +66,9 @@ import {
   draftDeclareEntries,
   type ScopedListOptions,
 } from "./draftDeclareEntries"
+import { DemoteGlobalsDialog, type DemotionChoice } from "./DemoteGlobalsDialog"
 import { FooterMessage } from "./FooterMessage"
+import { OverrideLocalsDialog } from "./OverrideLocalsDialog"
 import { VariableForm } from "./VariableForm"
 import { VariableList } from "./VariableList"
 
@@ -66,6 +77,15 @@ const ErrorIcon = styled(WarningCircleIcon)`
 `
 
 const Trigger = styled(Button).attrs({ variant: "secondary" })``
+
+type ApplyPlan = {
+  overriddenNames?: string[]
+  demotion?: DemotionChoice
+}
+
+type ScopeConfirmation =
+  | { kind: "override"; conflicts: GlobalNameConflict[] }
+  | { kind: "demote"; references: GlobalReference[]; plan: ApplyPlan }
 
 const Content = styled(Dialog.Content).attrs({ maxwidth: "104rem" })`
   display: flex;
@@ -152,6 +172,9 @@ export const VariablesDialog: React.FC = () => {
   })
   const [baselineGlobals, setBaselineGlobals] = useState<NotebookVariable[]>([])
   const [conflictDetected, setConflictDetected] = useState(false)
+  const [confirmation, setConfirmation] = useState<ScopeConfirmation | null>(
+    null,
+  )
   const committingRef = useRef(false)
   const prefetchAbortRef = useRef<AbortController | null>(null)
   const draftEditSignaledRef = useRef(false)
@@ -322,15 +345,6 @@ export const VariablesDialog: React.FC = () => {
     })
   }
 
-  const failFor = (name: string, error: string) => {
-    const draft = drafts.find((d) => d.variable.name === name)
-    if (draft) {
-      setServerErrors({ [draft.key]: error })
-      setSelectedKey(draft.key)
-    }
-    setApplyError(`@${name}: ${error}`)
-  }
-
   const stepMessage = ({ kind, name }: DraftStep) =>
     kind === "committing"
       ? "Saving variables..."
@@ -349,38 +363,79 @@ export const VariablesDialog: React.FC = () => {
       setSelectedKey(drafts[failingIndex].key)
       return
     }
+    await runApply((signal) => applyPlan(signal, {}))
+  }
+
+  const resumeApply = async (plan: ApplyPlan) => {
+    setConfirmation(null)
+    setServerErrors({})
+    setApplyError(null)
+    await runApply((signal) => applyPlan(signal, plan))
+  }
+
+  const demotedGlobals = () => {
+    const kept = new Set(globalVariables.map((v) => v.name.toLowerCase()))
+    return baselineGlobals.filter((v) => !kept.has(v.name.toLowerCase()))
+  }
+
+  const applyPlan = async (signal: AbortSignal, plan: ApplyPlan) => {
+    if (globalDirty && plan.overriddenNames === undefined) {
+      const conflicts = await globalNameConflicts(globalVariables, bufferId)
+      if (signal.aborted) return
+      if (conflicts.length > 0) {
+        setConfirmation({ kind: "override", conflicts })
+        return
+      }
+    }
+    if (globalDirty && plan.demotion === undefined) {
+      const references = await globalReferences(
+        demotedGlobals().map((v) => v.name),
+        bufferId,
+      )
+      if (signal.aborted) return
+      if (references.length > 0) {
+        setConfirmation({ kind: "demote", references, plan })
+        return
+      }
+    }
+    await commitDrafts(signal, plan)
+  }
+
+  const commitDrafts = async (signal: AbortSignal, plan: ApplyPlan) => {
+    if (plan.demotion === "copy") {
+      await copyGlobalsToLocals(demotedGlobals(), bufferId)
+    }
+    await applyVariables(
+      localVariables,
+      globalVariables,
+      baseline,
+      signal,
+      (step) => {
+        committingRef.current = step.kind === "committing"
+        setProgress(stepMessage(step))
+      },
+    )
+    if (signal.aborted) return
+    if (plan.overriddenNames && plan.overriddenNames.length > 0) {
+      await removeLocalVariables(plan.overriddenNames, bufferId)
+    }
+    setServerErrors({})
+    void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
+      variableCount: localVariables.length + globalVariables.length,
+      globalCount: globalVariables.length,
+      kinds: [...globalVariables, ...localVariables]
+        .map((v) => v.kind)
+        .join(","),
+    })
+    setOpen(false)
+  }
+
+  const runApply = async (task: (signal: AbortSignal) => Promise<void>) => {
     const controller = new AbortController()
     prefetchAbortRef.current = controller
     setProgress("Validating variables...")
     try {
-      if (globalDirty) {
-        const conflict = await globalNameConflict(globalVariables, bufferId)
-        if (controller.signal.aborted) return
-        if (conflict) {
-          failFor(conflict, PROBLEM_MESSAGES.duplicateName)
-          return
-        }
-      }
-      await applyVariables(
-        localVariables,
-        globalVariables,
-        baseline,
-        controller.signal,
-        (step) => {
-          committingRef.current = step.kind === "committing"
-          setProgress(stepMessage(step))
-        },
-      )
-      if (controller.signal.aborted) return
-      setServerErrors({})
-      void trackEvent(ConsoleEvent.NOTEBOOK_VARIABLES_APPLY, {
-        variableCount: localVariables.length + globalVariables.length,
-        globalCount: globalVariables.length,
-        kinds: [...globalVariables, ...localVariables]
-          .map((v) => v.kind)
-          .join(","),
-      })
-      setOpen(false)
+      await task(controller.signal)
     } catch (error) {
       if (
         error instanceof GlobalsChangedError ||
@@ -575,6 +630,26 @@ export const VariablesDialog: React.FC = () => {
           </Footer>
         </Content>
       </Dialog.Portal>
+      {confirmation?.kind === "override" && (
+        <OverrideLocalsDialog
+          conflicts={confirmation.conflicts}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={() =>
+            void resumeApply({
+              overriddenNames: confirmation.conflicts.map((c) => c.name),
+            })
+          }
+        />
+      )}
+      {confirmation?.kind === "demote" && (
+        <DemoteGlobalsDialog
+          references={confirmation.references}
+          onCancel={() => setConfirmation(null)}
+          onChoose={(demotion) =>
+            void resumeApply({ ...confirmation.plan, demotion })
+          }
+        />
+      )}
     </Dialog.Root>
   )
 }

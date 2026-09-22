@@ -7,7 +7,10 @@ import {
   replaceNotebookGlobals,
 } from "../../store/notebookGlobals"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/variables/normalizeVariables"
-import { globalNameConflict } from "../../scenes/Editor/Notebook/variables/globals/globalNameConflict"
+import {
+  describeGlobalNameConflict,
+  globalNameConflicts,
+} from "../../scenes/Editor/Notebook/variables/globals/globalNameConflict"
 import {
   draftProblem,
   isBlockingDraftProblem,
@@ -94,11 +97,11 @@ export const dispatchApplyGlobalVariables = async (
         `Variable ${variable.name}: ${PROBLEM_MESSAGES[problem]}`,
       )
   }
-  const conflict = await globalNameConflict(next)
+  const [conflict] = await globalNameConflicts(next)
   if (conflict) {
     return failure(
       "validation",
-      `Variable ${conflict}: ${PROBLEM_MESSAGES.duplicateName}`,
+      `Variable ${conflict.name}: ${describeGlobalNameConflict(conflict)}`,
     )
   }
   const quest = getAgentQuest()
