@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useRef } from "react"
 import styled, { useTheme } from "styled-components"
+import { withAlpha } from "../../theme"
 import * as RadixDialog from "@radix-ui/react-dialog"
 import { Dialog } from "../Dialog"
 import { Box } from "../Box"
@@ -39,8 +40,8 @@ import type {
 import { PermissionsSection } from "../../scenes/Footer/MCPBridgeStatus/PermissionsSection"
 import type { Permissions } from "../../utils/tools/permissions"
 import { ForwardRef } from "../ForwardRef"
-import { Badge, BadgeType } from "../../components/Badge"
-import { CheckboxCircle } from "../icons"
+import { Badge } from "../../components/Badge"
+import { CheckCircle } from "../icons"
 import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { CustomProviderModal } from "./CustomProviderModal"
@@ -153,14 +154,17 @@ const ProviderTab = styled(TabButton)`
     align-items: flex-start;
     width: 100%;
     background: ${({ $active, theme }) =>
-      $active ? theme.color.interactionNeutralHover : theme.color.transparent};
+      $active ? theme.color.interactionNeutral : theme.color.transparent};
   }
 
-  &&:hover:not(:disabled) {
-    background: ${({ $active, theme }) =>
-      $active
-        ? theme.color.interactionNeutralHover
-        : theme.color.controlSurfaceHover};
+  &&&&:hover:not(:disabled) {
+    background: ${({ $active, theme }) => {
+      if ($active) return theme.color.interactionNeutral
+      if (theme.mode === "light") {
+        return theme.color.surfaceBase
+      }
+      return theme.color.interactionNeutralHover
+    }};
   }
 `
 
@@ -183,17 +187,41 @@ const ProviderTabName = styled(Text)<{ $active: boolean }>`
   text-align: left;
 `
 
-const StatusDot = styled.div<{ $enabled: boolean }>`
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  background: ${({ $enabled, theme }) =>
+const StatusChip = styled.span<{ $enabled: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  border-radius: 0.2rem;
+  background: ${({ $enabled, theme }) => {
+    if (theme.mode === "light" && $enabled) {
+      return theme.color.statusSuccessSurface
+    }
+    if (theme.mode === "light") {
+      return theme.color.surfaceValue
+    }
+    return theme.color.interactionNeutral
+  }};
+  border: ${({ $enabled, theme }) =>
+    theme.mode === "light"
+      ? `1px solid ${
+          $enabled ? theme.color.statusSuccessBorder : theme.color.borderDefault
+        }`
+      : 0};
+`
+
+const StatusMark = styled.svg<{ $enabled: boolean }>`
+  width: 0.8rem;
+  height: 0.8rem;
+  flex-shrink: 0;
+  color: ${({ $enabled, theme }) =>
     $enabled ? theme.color.statusSuccess : theme.color.contentSecondary};
 `
 
 const StatusText = styled(Text)<{ $enabled: boolean }>`
   font-size: 1rem;
   font-weight: 400;
+  line-height: 1;
   color: ${({ $enabled, theme }) =>
     $enabled ? theme.color.statusSuccess : theme.color.contentSecondary};
 `
@@ -263,13 +291,10 @@ const EditButton = styled(IconButton).attrs({
 `
 
 const ValidatedBadge = styled(Badge).attrs({
-  type: BadgeType.SUCCESS,
+  variant: "success" as const,
+  shape: "chip" as const,
 })`
-  font-size: 1rem;
   margin-right: auto;
-  padding: 0.3rem 0.6rem;
-  height: 2rem;
-  border: 0;
 `
 
 const APIKeyLink = styled.a`
@@ -293,11 +318,34 @@ const ValidateRemoveButton = styled(Button).attrs({ variant: "secondary" })`
   gap: 0.8rem;
 `
 
+const ResetProviderButton = styled(Button).attrs({ variant: "ghost" })`
+  && {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  && svg {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) =>
+      withAlpha(
+        theme.color.statusDangerSurface,
+        theme.mode === "light" ? 0.1 : 0.3,
+      )};
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) svg {
+    color: ${({ theme }) => theme.color.statusDanger};
+  }
+`
+
 const ModelsPlaceholder = styled(Box).attrs({
   flexDirection: "column",
   gap: "1rem",
 })`
-  background: ${({ theme }) => theme.color.surfaceScrim};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   padding: 0.75rem;
   border-radius: 0.4rem;
   width: 100%;
@@ -972,13 +1020,34 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                               {getProviderName(provider, localSettings)}
                             </ProviderTabName>
                           </ProviderTabTitle>
-                          <Badge
-                            variant={
-                              validatedApiKeys[provider] ? "success" : "neutral"
-                            }
-                            size="sm"
-                          >
-                            <StatusDot $enabled={validatedApiKeys[provider]} />
+                          <StatusChip $enabled={!!validatedApiKeys[provider]}>
+                            <StatusMark
+                              $enabled={validatedApiKeys[provider]}
+                              viewBox="0 0 1 1"
+                              fill="currentColor"
+                              preserveAspectRatio="none"
+                              aria-hidden
+                            >
+                              <rect
+                                x="0.1"
+                                y="0.1"
+                                width="0.8"
+                                height="0.8"
+                                rx="0.15"
+                                fill="currentColor"
+                              />
+                              <rect
+                                x="0.05"
+                                y="0.05"
+                                width="0.9"
+                                height="0.9"
+                                rx="0.15"
+                                stroke="currentColor"
+                                strokeOpacity="0.32"
+                                strokeWidth="0.1"
+                                fill="none"
+                              />
+                            </StatusMark>
                             <StatusText
                               data-hook="ai-settings-provider-status"
                               $enabled={validatedApiKeys[provider]}
@@ -987,7 +1056,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                                 ? "Enabled"
                                 : "Inactive"}
                             </StatusText>
-                          </Badge>
+                          </StatusChip>
                         </ProviderTab>
                       )
                     })}
@@ -1017,7 +1086,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                           {validatedApiKeys[selectedProvider] &&
                             currentProviderApiKey && (
                               <ValidatedBadge
-                                icon={<CheckboxCircle size="13px" />}
+                                icon={<CheckCircle size={16} />}
                                 data-hook="ai-settings-validated-badge"
                               >
                                 Validated
@@ -1237,15 +1306,14 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
                     />
                   </ContentSection>
                   <ContentSection style={{ alignItems: "flex-start" }}>
-                    <Button
-                      variant="dangerGhost"
+                    <ResetProviderButton
                       prefixIcon={<TrashIcon size={16} />}
                       type="button"
                       data-hook="ai-settings-remove-provider"
                       onClick={() => handleRemoveProvider(selectedProvider)}
                     >
                       {isCustomProvider ? "Remove Provider" : "Reset Provider"}
-                    </Button>
+                    </ResetProviderButton>
                   </ContentSection>
                 </ContentPanel>
               </MainContentArea>

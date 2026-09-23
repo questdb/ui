@@ -1019,6 +1019,19 @@ describe("create materialized view from context menu", () => {
   // btc_trades is PARTITION BY DAY → derived SAMPLE BY 1h → view name btc_trades_1h.
   const generatedMatView = "btc_trades_1h"
 
+  const closeResultGrid = () => {
+    cy.getByDataHook("grid-panel-button").then(($button) => {
+      if ($button.attr("aria-pressed") === "true") {
+        cy.wrap($button).click()
+      }
+    })
+    cy.getByDataHook("grid-panel-button").should(
+      "have.attr",
+      "aria-pressed",
+      "false",
+    )
+  }
+
   before(() => {
     cy.loadConsoleWithAuth()
     cy.createTable(sourceTable)
@@ -1064,6 +1077,57 @@ describe("create materialized view from context menu", () => {
     cy.refreshSchema()
     cy.expandMatViews()
     cy.getByDataHook("schema-matview-title").should("contain", generatedMatView)
+  })
+
+  it("opens a new notebook with the matview DDL when a metrics tab is active", () => {
+    // Given
+    closeResultGrid()
+    cy.getByDataHook("schema-add-metrics-button").click()
+    cy.getByDataHook("metrics-root").should("be.visible")
+
+    cy.getEditorTabs().then(($tabs) => {
+      const tabCountBefore = $tabs.length
+
+      // When
+      cy.getByDataHook("schema-table-title").contains(sourceTable).rightclick()
+      cy.getByDataHook("table-context-menu-create-matview")
+        .should("not.be.disabled")
+        .click()
+
+      // Then
+      cy.getEditorTabs().should("have.length", tabCountBefore + 1)
+    })
+    cy.getByDataHook("notebook-toolbar").should("be.visible")
+    cy.get("[data-notebook-cell]").should("have.length", 1)
+    cy.get("[data-notebook-cell] .view-lines").should(
+      "contain.text",
+      "MATERIALIZED",
+    )
+    cy.get("[data-notebook-cell] .monaco-editor textarea").should("have.focus")
+  })
+
+  it("appends a cell with the matview DDL when a notebook tab is active", () => {
+    // Given
+    closeResultGrid()
+    cy.createNotebook()
+    cy.get("[data-notebook-cell]").should("have.length", 1)
+
+    // When
+    cy.getByDataHook("schema-table-title").contains(sourceTable).rightclick()
+    cy.getByDataHook("table-context-menu-create-matview")
+      .should("not.be.disabled")
+      .click()
+
+    // Then
+    cy.get("[data-notebook-cell]").should("have.length", 2)
+    cy.get("[data-notebook-cell]")
+      .last()
+      .find(".view-lines")
+      .should("contain.text", "MATERIALIZED")
+    cy.get("[data-notebook-cell]")
+      .last()
+      .find(".monaco-editor textarea")
+      .should("have.focus")
   })
 })
 

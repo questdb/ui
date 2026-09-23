@@ -7,6 +7,7 @@ import type { ConversationMessage } from "../../../providers/AIConversationProvi
 import { AIOperationStatus } from "../../../providers/AIStatusProvider"
 import { GaugeIcon } from "@phosphor-icons/react"
 import { color } from "../../../utils"
+import { withAlpha } from "../../../theme"
 import { AssistantMarkdown } from "./AssistantMarkdown"
 import type { OpenInEditorContent } from "./ChatMessages"
 import { buildInterleavedTimeline } from "../../../utils/ai/turnView"
@@ -23,7 +24,7 @@ const Divider = styled.div`
   height: 1px;
   background: linear-gradient(
     90deg,
-    ${color("borderAccent")} 0%,
+    ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.42)} 0%,
     ${({ theme }) => theme.color.transparent} 100%
   );
   margin-bottom: 1rem;
