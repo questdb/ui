@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
+import { Dialog } from "../Dialog"
 import styled, { css, useTheme } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Overlay } from "../Overlay"
@@ -162,7 +163,7 @@ export const NotebookOnboardingModal = () => {
   }
 
   return (
-    <RadixDialog.Root
+    <Dialog.Root
       open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen) {
@@ -227,6 +228,6 @@ export const NotebookOnboardingModal = () => {
           </RightColumn>
         </Content>
       </RadixDialog.Portal>
-    </RadixDialog.Root>
+    </Dialog.Root>
   )
 }

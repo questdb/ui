@@ -333,7 +333,7 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
   }, [props, providerId, onOpenChange])
 
   return (
-    <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <Overlay primitive={RadixDialog.Overlay} />
         <Dialog.Content maxwidth="72rem">
@@ -408,6 +408,6 @@ export const ManageModelsModal = (props: ManageModelsModalProps) => {
           </ModalContent>
         </Dialog.Content>
       </RadixDialog.Portal>
-    </RadixDialog.Root>
+    </Dialog.Root>
   )
 }

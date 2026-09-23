@@ -6,6 +6,7 @@ import React, {
   useContext,
 } from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
+import { Dialog } from "../Dialog"
 import styled, { css } from "styled-components"
 import { ArrowLeft } from "../icons"
 import { ValidationNotice } from "../ValidationNotice"
@@ -289,7 +290,7 @@ export const MultiStepModal = ({
   }
 
   return (
-    <RadixDialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <RadixDialog.Portal>
         <ForwardRef>
           <Overlay primitive={RadixDialog.Overlay} />
@@ -367,6 +368,6 @@ export const MultiStepModal = ({
           </NavigationContext.Provider>
         </StyledContent>
       </RadixDialog.Portal>
-    </RadixDialog.Root>
+    </Dialog.Root>
   )
 }

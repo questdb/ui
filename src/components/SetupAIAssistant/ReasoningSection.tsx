@@ -44,7 +44,7 @@ export const ReasoningSection: React.FC<Props> = ({
   return (
     <Field data-hook="reasoning">
       <RichTitle>Reasoning</RichTitle>
-      <SelectMenu.Root modal={false}>
+      <SelectMenu.Root>
         <SelectMenu.Trigger
           disabled={disabled}
           dataHook="reasoning-trigger"

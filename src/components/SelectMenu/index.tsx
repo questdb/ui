@@ -5,6 +5,7 @@ import styled from "styled-components"
 
 import { Button, TOOLBAR_CONTROL_HEIGHT, type ButtonProps } from "../Button"
 import { menuContainerStyles, menuItemStyles } from "../menuStyles"
+import { useIsInModalLayer } from "../ModalLayer"
 
 type TriggerButtonProps = Omit<
   ButtonProps,
@@ -290,11 +291,18 @@ type SelectMenuControlProps = {
   dataHook?: string
   labelFontSize?: string
   menuLabel?: React.ReactNode
-  modal?: boolean
   onOpenChange?: (open: boolean) => void
   ariaInvalid?: React.ButtonHTMLAttributes<HTMLButtonElement>["aria-invalid"]
   ariaDescribedBy?: string
   ariaLabel?: string | null
+}
+
+const SelectMenuRoot = (
+  props: React.ComponentProps<typeof RadixDropdownMenu.Root>,
+) => {
+  const isInModalLayer = useIsInModalLayer()
+
+  return <RadixDropdownMenu.Root modal={isInModalLayer} {...props} />
 }
 
 /**
@@ -328,7 +336,6 @@ export const SelectMenuControl = ({
   dataHook,
   labelFontSize = "1.3rem",
   menuLabel,
-  modal = false,
   onOpenChange,
   ariaInvalid,
   ariaDescribedBy,
@@ -344,7 +351,7 @@ export const SelectMenuControl = ({
           .join(": ")
 
   return (
-    <RadixDropdownMenu.Root modal={modal} onOpenChange={onOpenChange}>
+    <SelectMenuRoot onOpenChange={onOpenChange}>
       <FieldTrigger
         id={id}
         className={className}
@@ -384,16 +391,9 @@ export const SelectMenuControl = ({
           </RadixDropdownMenu.RadioGroup>
         </Content>
       </RadixDropdownMenu.Portal>
-    </RadixDropdownMenu.Root>
+    </SelectMenuRoot>
   )
 }
-
-const SelectMenuRoot = ({
-  modal = false,
-  ...props
-}: React.ComponentProps<typeof RadixDropdownMenu.Root>) => (
-  <RadixDropdownMenu.Root modal={modal} {...props} />
-)
 
 export const SelectMenu = {
   Root: SelectMenuRoot,

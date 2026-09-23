@@ -129,7 +129,7 @@ export const PermissionsSection: React.FC<Props> = ({
     return (
       <RichField data-hook="permissions">
         <RichTitle>Permissions</RichTitle>
-        <SelectMenu.Root modal={false}>
+        <SelectMenu.Root>
           {trigger}
           {content}
         </SelectMenu.Root>
@@ -140,7 +140,7 @@ export const PermissionsSection: React.FC<Props> = ({
   return (
     <Field data-hook="permissions">
       <FieldLabel>Permissions</FieldLabel>
-      <SelectMenu.Root modal={false}>
+      <SelectMenu.Root>
         {trigger}
         {content}
       </SelectMenu.Root>

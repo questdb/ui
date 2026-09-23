@@ -1130,7 +1130,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
 
   return (
     <>
-      <RadixDialog.Root
+      <Dialog.Root
         open={open && !customProviderModalOpen && manageModelsProvider === null}
         onOpenChange={onOpenChange}
       >
@@ -1490,7 +1490,7 @@ export const SettingsModal = ({ open, onOpenChange }: SettingsModalProps) => {
             </ModalContent>
           </StyledContent>
         </RadixDialog.Portal>
-      </RadixDialog.Root>
+      </Dialog.Root>
       {customProviderModalOpen && (
         <CustomProviderModal
           open={customProviderModalOpen}
