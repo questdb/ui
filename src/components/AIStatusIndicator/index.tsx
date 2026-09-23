@@ -10,7 +10,7 @@ import {
 import { color } from "../../utils"
 import { slideAnimation } from "../Animation"
 import { AISparkle } from "../AISparkle"
-import { brandLinearGradientHorizontal } from "../../theme"
+import { assistantLinearGradientHorizontal } from "../../theme"
 import { useAIConversation } from "../../providers/AIConversationProvider"
 import { Button } from "../../components/Button"
 import { AIStopButton } from "../AIStopButton"
@@ -47,8 +47,8 @@ const CaretGradient = (props: React.SVGProps<SVGSVGElement>) => {
           y2="15"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor={theme.color.contentAccent} />
-          <stop offset="1" stopColor={theme.color.brandGradientEnd} />
+          <stop stopColor={theme.color.aiPinkStart} />
+          <stop offset="1" stopColor={theme.color.aiPinkEnd} />
         </linearGradient>
       </defs>
     </svg>
@@ -123,7 +123,7 @@ const ThoughtStream = styled.div<{
   background:
     linear-gradient(${color("surfaceInset")}, ${color("surfaceInset")})
       padding-box,
-    ${({ theme }) => brandLinearGradientHorizontal(theme.color)} border-box;
+    ${({ theme }) => assistantLinearGradientHorizontal(theme.color)} border-box;
   ${({ $abort }) =>
     $abort &&
     css`
@@ -162,7 +162,7 @@ const ThoughtStreamContent = styled.div`
 const CheckIcon = styled(CheckboxCircle)`
   width: 2.4rem;
   height: 2.4rem;
-  color: ${color("statusAssistant")};
+  color: ${color("aiPinkStart")};
   flex-shrink: 0;
 `
 

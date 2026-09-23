@@ -32,7 +32,7 @@ const Items = styled.div`
   display: grid;
   width: 100%;
   overflow: auto;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const Item = styled.div<{ unread?: boolean }>`
@@ -41,7 +41,7 @@ const Item = styled.div<{ unread?: boolean }>`
   padding: 2rem;
 
   &:not(:last-child) {
-    border-bottom: 1px solid ${({ theme }) => theme.color.surfaceRaised};
+    border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   }
 `
 

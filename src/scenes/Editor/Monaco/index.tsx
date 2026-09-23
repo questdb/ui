@@ -141,7 +141,7 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
   }
 
   .monaco-scrollable-element > .scrollbar > .slider {
-    background: ${color("interactionNeutral")};
+    background: ${color("scrollbarThumb")};
   }
 
   .cursorQueryDecoration {
@@ -202,15 +202,16 @@ const Content = styled(PaneContent)<{ $hidden?: boolean }>`
       }
     }
     &.active {
-      border: 1px solid ${({ theme }) => theme.color.borderAccent};
+      border: 1px solid
+        ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.42)};
       box-shadow: none;
-      background: ${({ theme }) => theme.color.interactionAccentActive};
+      background: ${({ theme }) => withAlpha(theme.color.aiPinkStart, 0.12)};
     }
 
     &.highlight {
-      border: 1px solid ${({ theme }) => theme.color.brandGradientStart};
+      border: 1px solid ${({ theme }) => theme.color.aiPinkStart};
       background: ${({ theme }) =>
-        `linear-gradient(90deg, ${withAlpha(theme.color.brandGradientStart, theme.mode === "dark" ? 0.24 : 0.18)} 0%, ${withAlpha(theme.color.brandGradientEnd, theme.mode === "dark" ? 0.24 : 0.18)} 100%)`};
+        `linear-gradient(90deg, ${withAlpha(theme.color.aiPinkStart, theme.mode === "dark" ? 0.24 : 0.18)} 0%, ${withAlpha(theme.color.aiPinkEnd, theme.mode === "dark" ? 0.24 : 0.18)} 100%)`};
       box-shadow: none;
     }
   }

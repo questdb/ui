@@ -737,7 +737,16 @@ describe("ai provider setup flows", () => {
       // Then
       cy.getByDataHook("ai-promo-modal").should("be.visible")
 
+      // When the button is clicked again
+      cy.getByDataHook("ai-assistant-settings-button").click()
+
+      // Then the promo closes and no modal opens
+      cy.getByDataHook("ai-promo-modal").should("not.exist")
+      cy.getByDataHook("ai-settings-modal-step-one").should("not.exist")
+
       // When
+      cy.getByDataHook("ai-assistant-settings-button").click()
+      cy.getByDataHook("ai-promo-modal").should("be.visible")
       cy.getByDataHook("ai-promo-close").should("be.visible").click()
 
       // Then

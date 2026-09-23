@@ -59,9 +59,9 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
 }>`
   display: flex;
   flex-direction: column;
-  background-color: ${({ theme }) => theme.color.surfaceBase};
+  background-color: ${({ theme }) => theme.color.surfaceRaised};
   border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
-  box-shadow: -18px 0 52px ${({ theme }) => theme.color.shadowSoft};
+  box-shadow: -4px 0 16px ${({ theme }) => theme.color.shadowSoft};
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
