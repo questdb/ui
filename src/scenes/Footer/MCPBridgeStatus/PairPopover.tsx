@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useState } from "react"
 import styled from "styled-components"
+import type { DefaultTheme } from "styled-components"
 import {
   InfoIcon,
   ArrowRightIcon,
@@ -34,6 +35,9 @@ const permissionsEqual = (a: Permissions, b: Permissions): boolean =>
 const SUCCESS_AUTOCLOSE_MS = 3_000
 
 const DEFAULT_WS_URL_PREFIX = "ws://127.0.0.1:"
+
+// Centres a 16px notice icon on the title's line box instead of the row top.
+const ICON_TITLE_OFFSET = "0.2rem"
 
 const Root = styled.div`
   ${floatingSurfaceStyles}
@@ -109,31 +113,45 @@ const FullWidthInput = styled(Input)`
   font-family: ${({ theme }) => theme.fontMonospace};
 `
 
-const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
+const StatusDetail = styled.span`
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.contentSecondary};
+  word-break: break-word;
+`
+
+type NoticeTone = "info" | "danger" | "warning"
+
+const rowSurface = (theme: DefaultTheme, tone: NoticeTone): string => {
+  if (tone === "warning") return theme.color.statusWarningSurface
+  if (tone === "danger") return theme.color.statusDangerSurface
+  return theme.color.surfaceInset
+}
+
+const rowAccent = (theme: DefaultTheme, tone: NoticeTone): string => {
+  if (tone === "warning") return theme.color.statusWarning
+  if (tone === "danger") return theme.color.statusDanger
+  return theme.color.contentAccentStrong
+}
+
+const rowText = (theme: DefaultTheme, tone: NoticeTone): string =>
+  tone === "info" ? theme.color.contentSecondary : theme.color.contentPrimary
+
+// Full-bleed notice band, shared by every status message in the popover. It
+// spans the popover edge to edge, so it lives outside `Body` and its padding.
+// The icon holds the title's line box.
+const StatusRow = styled.div<{ $tone: NoticeTone }>`
   display: flex;
   align-items: flex-start;
   gap: 0.8rem;
   width: 100%;
   padding: 1.6rem;
-  background: ${({ theme, $tone }) =>
-    $tone === "danger"
-      ? `${theme.color.statusDanger}1f`
-      : $tone === "warning"
-        ? theme.color.statusWarningSurface
-        : theme.color.surfaceInset};
-  color: ${({ theme, $tone }) =>
-    $tone === "info"
-      ? theme.color.contentSecondary
-      : theme.color.contentPrimary};
+  background: ${({ theme, $tone }) => rowSurface(theme, $tone)};
+  color: ${({ theme, $tone }) => rowText(theme, $tone)};
 
   & > svg {
     flex-shrink: 0;
-    color: ${({ theme, $tone }) =>
-      $tone === "danger"
-        ? theme.color.statusDanger
-        : $tone === "warning"
-          ? theme.color.statusWarning
-          : theme.color.contentAccentStrong};
+    margin-top: ${ICON_TITLE_OFFSET};
+    color: ${({ theme, $tone }) => rowAccent(theme, $tone)};
   }
 
   strong {
@@ -143,7 +161,7 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
 `
 
 const AgentChangesRow = styled(StatusRow)`
-  background: ${({ theme }) => theme.color.statusInfoSurface};
+  background: ${({ theme }) => theme.color.statusInfoSurfaceStrong};
   color: ${({ theme }) => theme.color.contentPrimary};
 
   strong {
@@ -177,12 +195,6 @@ const StatusText = styled.div`
   gap: 0.2rem;
   min-width: 0;
   line-height: 1.4;
-`
-
-const StatusDetail = styled.span`
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  word-break: break-word;
 `
 
 const Footer = styled.div`
@@ -283,9 +295,10 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
     const isConnecting = status === "connecting" || status === "reconnecting"
 
     const showConnecting = !succeeded && isConnecting
-    const showVersionMismatch =
-      versionMismatch === "major" ||
-      (versionMismatch === "minor" && status === "connected")
+    const showValidationError = !succeeded && validationError !== null
+    const showMajorMismatch = !succeeded && versionMismatch === "major"
+    const showMinorMismatch =
+      versionMismatch === "minor" && status === "connected"
     const showWsError =
       !succeeded &&
       !isConnecting &&
@@ -443,6 +456,42 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           </Body>
         )}
 
+        {showValidationError && (
+          <StatusRow
+            $tone="danger"
+            data-hook="mcp-pair-validation-error"
+            role="alert"
+          >
+            <WarningIcon size={16} weight="duotone" />
+            <StatusText>
+              <span>{validationError}</span>
+            </StatusText>
+          </StatusRow>
+        )}
+
+        {showWsError && (
+          <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
+            <WarningIcon size={16} weight="duotone" />
+            <StatusText>
+              <strong>Could not connect to MCP server</strong>
+              <StatusDetail>
+                {lastError ??
+                  `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
+              </StatusDetail>
+            </StatusText>
+          </StatusRow>
+        )}
+
+        {showMajorMismatch && (
+          <StatusRow
+            $tone="danger"
+            data-hook="mcp-pair-version-mismatch"
+            role="alert"
+          >
+            <BridgeUpgradeNotice severity="major" />
+          </StatusRow>
+        )}
+
         {showConnecting && (
           <StatusRow
             $tone="info"
@@ -464,39 +513,13 @@ export const MCPBridgePairPopover = forwardRef<HTMLDivElement, Props>(
           </StatusRow>
         )}
 
-        {!succeeded && validationError && (
+        {showMinorMismatch && (
           <StatusRow
-            $tone="danger"
-            data-hook="mcp-pair-validation-error"
-            role="alert"
-          >
-            <WarningIcon size={16} weight="duotone" />
-            <StatusText>
-              <StatusDetail>{validationError}</StatusDetail>
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showWsError && (
-          <StatusRow $tone="danger" data-hook="mcp-pair-error" role="alert">
-            <WarningIcon size={16} weight="duotone" />
-            <StatusText>
-              <strong>Could not connect to MCP server</strong>
-              <StatusDetail>
-                {lastError ??
-                  `MCP server stopped responding after ${MAX_RECONNECT_ATTEMPTS} attempts. Try again, or ask your coding agent for a fresh deep link.`}
-              </StatusDetail>
-            </StatusText>
-          </StatusRow>
-        )}
-
-        {showVersionMismatch && versionMismatch && (
-          <StatusRow
-            $tone={versionMismatch === "major" ? "danger" : "warning"}
+            $tone="warning"
             data-hook="mcp-pair-version-mismatch"
             role="alert"
           >
-            <BridgeUpgradeNotice severity={versionMismatch} />
+            <BridgeUpgradeNotice severity="minor" />
           </StatusRow>
         )}
 

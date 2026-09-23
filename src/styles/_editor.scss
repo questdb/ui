@@ -171,7 +171,7 @@
   color: theme-color(contentPrimary);
 
   &:focus {
-    border-color: theme-color(contentAccent);
+    border-color: theme-color(borderStrong);
     box-shadow: none;
   }
 
@@ -360,9 +360,16 @@
 .monaco-menu-container .monaco-scrollable-element {
   border-radius: 0.6rem;
   box-shadow:
-    0 0.2rem 0.2rem -0.1rem theme-color(shadowSubtle),
-    0 0.4rem 0.6rem -0.2rem theme-color(shadowSubtle),
-    0 1.2rem 1.6rem -0.4rem theme-color(shadowSubtle) !important;
+    0 0.1rem 0.2rem 0 theme-color(shadowSoft),
+    0 0.4rem 0.6rem -0.2rem theme-color(shadowMedium),
+    0 1.2rem 1.6rem -0.4rem theme-color(shadowMedium) !important;
+
+  html[data-theme="light"] & {
+    box-shadow:
+      0 0.1rem 0.2rem 0 theme-color(shadowSoft),
+      0 0.4rem 0.6rem -0.2rem theme-color(shadowMedium),
+      0 0.8rem 0.8rem -0.4rem theme-color(shadowSubtle) !important;
+  }
 }
 
 .monaco-editor .find-widget.visible {

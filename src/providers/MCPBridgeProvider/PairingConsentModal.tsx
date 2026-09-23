@@ -141,14 +141,16 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   width: 100%;
   background: ${({ theme, $tone }) =>
     $tone === "danger"
-      ? `${theme.color.statusDanger}1f`
+      ? theme.color.statusDangerSurface
       : $tone === "warning"
         ? theme.color.statusWarningSurface
         : theme.color.surfaceInset};
   color: ${({ theme, $tone }) =>
-    $tone === "info"
-      ? theme.color.contentSecondary
-      : theme.color.contentPrimary};
+    $tone === "danger"
+      ? theme.color.statusDangerContrast
+      : $tone === "info"
+        ? theme.color.contentSecondary
+        : theme.color.contentPrimary};
 
   padding: 0.8rem 2.4rem;
 
@@ -164,7 +166,10 @@ const StatusRow = styled.div<{ $tone: "info" | "danger" | "warning" }>`
   }
 
   strong {
-    color: ${({ theme }) => theme.color.contentPrimary};
+    color: ${({ theme, $tone }) =>
+      $tone === "danger"
+        ? theme.color.statusDangerContrast
+        : theme.color.contentPrimary};
     font-weight: 600;
   }
 `

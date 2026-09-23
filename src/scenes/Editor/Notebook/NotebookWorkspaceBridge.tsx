@@ -168,6 +168,7 @@ export const NotebookWorkspaceBridge: React.FC = () => {
               range: FIRST_LINE_RANGE,
               notebookField: "cell",
               cellType: cell.type === "markdown" ? "markdown" : "sql",
+              mode: "highlight",
             })
             eventBus.publish(EventType.NOTEBOOK_REVEAL_CELL)
           }
