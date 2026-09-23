@@ -1,5 +1,6 @@
 import React from "react"
 import * as RadixDialog from "@radix-ui/react-dialog"
+import { Dialog } from "../Dialog"
 import styled, { css } from "styled-components"
 import { useSelector, useDispatch } from "react-redux"
 import { selectors, actions } from "../../store"
@@ -204,7 +205,7 @@ export const Drawer = ({
     )
 
   return (
-    <RadixDialog.Root
+    <Dialog.Root
       onOpenChange={onOpenChange}
       open={open}
       modal={mode === "modal"}
@@ -263,7 +264,7 @@ export const Drawer = ({
           {children}
         </DrawerContent>
       </RadixDialog.Portal>
-    </RadixDialog.Root>
+    </Dialog.Root>
   )
 }
 
