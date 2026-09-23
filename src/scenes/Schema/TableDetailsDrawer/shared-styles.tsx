@@ -11,7 +11,7 @@ export const Section = styled(Box).attrs<{
   align: "stretch",
 })<{ $squishBottom?: boolean; $squishTop?: boolean }>`
   padding: 2rem 1.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.color.surfaceRaised};
+  border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   width: 100%;
   ${({ $squishBottom }) =>
     $squishBottom &&

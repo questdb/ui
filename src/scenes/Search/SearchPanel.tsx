@@ -49,6 +49,9 @@ const Wrapper = styled(PaneWrapper)<{
 }>`
   overflow-x: auto;
   height: 100%;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
   ${({ $open }) =>
     !$open &&
     css`
@@ -60,6 +63,9 @@ const Content = styled(PaneContent)`
   display: flex;
   flex-direction: column;
   overflow: auto;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
 `
 
 const SearchInputContainer = styled.div`
@@ -96,14 +102,16 @@ const ToggleButtonsContainer = styled.div`
   gap: 0.2rem;
 `
 
-const ToggleButton = styled(SegmentedControlButton)`
+const ToggleButton = styled(SegmentedControlButton).attrs({
+  $activeTone: "neutral" as const,
+})`
   && {
     width: 2rem;
     border: 1px solid transparent;
   }
 
   &&[aria-pressed="true"] {
-    border-color: ${({ theme }) => theme.color.borderAccentStrong};
+    border-color: ${({ theme }) => theme.color.borderDefault};
   }
 `
 

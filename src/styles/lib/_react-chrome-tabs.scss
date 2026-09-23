@@ -56,7 +56,8 @@
     filter 150ms ease;
 
   &:focus-visible {
-    outline: 1px solid theme-color(contentAccent);
+    outline: 1px solid
+      color-mix(in srgb, theme-color(statusInfo) 75%, transparent);
     outline-offset: 2px;
   }
 
@@ -79,6 +80,10 @@
     border-color: transparent;
     color: theme-color(contentPrimary);
     box-shadow: none;
+  }
+
+  html[data-theme="light"] .chrome-tabs .new-tab-button-wrapper .new-tab-button:hover {
+    background: theme-color(interactionHover);
   }
 
   .chrome-tabs
@@ -178,6 +183,26 @@
   background: linear-gradient(to left, theme-color(shadowMedium), transparent);
 }
 
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow {
+  width: 6px;
+}
+
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow-left {
+  background: linear-gradient(
+    to right,
+    theme-color(shadowMedium) 0%,
+    theme-color(transparent) 65%
+  );
+}
+
+html[data-theme="light"] .chrome-tabs .chrome-tabs-overflow-shadow-right {
+  background: linear-gradient(
+    to left,
+    theme-color(shadowMedium) 0%,
+    theme-color(transparent) 65%
+  );
+}
+
 .chrome-tabs[data-overflow-left="true"] .chrome-tabs-overflow-shadow-left {
   opacity: 1;
 }
@@ -212,7 +237,7 @@
   display: none;
   position: relative;
   z-index: 1;
-  border: 1px solid theme-color(contentAccent);
+  border: 1px solid theme-color(borderStrong);
   padding: 0.2rem 0.4rem;
   line-height: 20px;
   height: 20px;
@@ -334,13 +359,13 @@
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-favicon--notebook {
-  background-color: theme-color(contentObject);
+  background-color: theme-color(statusInfo);
   -webkit-mask-image: url("/assets/icon-notebook.svg");
   mask-image: url("/assets/icon-notebook.svg");
 }
 
 .chrome-tabs .chrome-tab .chrome-tab-favicon--metrics {
-  background-color: theme-color(contentObject);
+  background-color: theme-color(statusInfo);
   -webkit-mask-image: url("/assets/icon-chart.svg");
   mask-image: url("/assets/icon-chart.svg");
 }

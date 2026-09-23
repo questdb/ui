@@ -140,7 +140,7 @@ const QueryPicker = ({ hidePicker, queries, ref }: Props) => {
       hidePicker()
       appendQuery(query.value)
     },
-    [hidePicker],
+    [appendQuery, hidePicker],
   )
 
   useEffect(() => {

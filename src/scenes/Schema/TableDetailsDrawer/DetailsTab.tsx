@@ -79,7 +79,7 @@ const SchemaRow = styled(Box).attrs({
   }
 
   &:hover {
-    background: ${({ theme }) => theme.color.surfaceRaised};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 `
 
@@ -87,6 +87,10 @@ const BaseTableLinkButton = styled(TextButton)`
   display: flex;
   align-items: center;
   gap: 0.4rem;
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.interactionHover};
+  }
 `
 
 const ColumnCopyButtonSlot = styled.span`

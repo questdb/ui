@@ -7,7 +7,7 @@ import { consumeReveal, getPendingReveal } from "../cellReveal"
 
 const FLASH_DURATION_MS = 2000
 
-// Flashes the matched text in this SQL cell's editor, drained on editor mount and on the nudge.
+// Drains a pending reveal for this SQL cell's editor on editor mount and on the nudge.
 export const useCellReveal = (
   editorRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>,
   monacoRef: React.MutableRefObject<Monaco | null>,
@@ -44,7 +44,7 @@ export const useCellReveal = (
     const ed = editorRef.current
     const monaco = monacoRef.current
     if (!ed || !monaco || !ed.getModel()) return
-    const { token, range } = request
+    const { token, range, mode } = request
     requestAnimationFrame(() => {
       const current = getPendingReveal()
       if (!current || current.token !== token) return
@@ -58,11 +58,16 @@ export const useCellReveal = (
         range.endColumn,
       )
       ed.revealRangeInCenter(target)
+      consumeReveal(token)
+      if (mode === "edit") {
+        ed.setPosition(target.getStartPosition())
+        ed.focus()
+        return
+      }
       decorationIdsRef.current = model.deltaDecorations(
         decorationIdsRef.current,
         [{ range: target, options: { className: "notebookSearchHighlight" } }],
       )
-      consumeReveal(token)
       if (clearTimerRef.current !== null) {
         window.clearTimeout(clearTimerRef.current)
       }

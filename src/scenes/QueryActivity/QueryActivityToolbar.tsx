@@ -95,7 +95,9 @@ const SortTrigger = styled(SelectMenu.Trigger)`
   width: 16rem;
 `
 
-const AutoRefreshButton = styled(PrimaryToggleButton)`
+const AutoRefreshButton = styled(PrimaryToggleButton).attrs({
+  activeTone: "info" as const,
+})`
   &&:not(:disabled) {
     width: auto;
     padding: 0 1rem;

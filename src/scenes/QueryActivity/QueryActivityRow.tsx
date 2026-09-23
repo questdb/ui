@@ -83,7 +83,7 @@ const Row = styled.div<{ $fading: boolean }>`
   }
 
   &:hover {
-    background: ${({ theme }) => theme.color.surfaceRaised};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 `
 

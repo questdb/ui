@@ -1,11 +1,16 @@
 import type { IRange } from "monaco-editor"
 
+// "highlight" flashes the range, as for a search hit. "edit" places the cursor
+// at the range start and gives the editor keyboard focus, as for an insert.
+export type CellRevealMode = "highlight" | "edit"
+
 export type CellRevealRequest = {
   bufferId: number
   cellId: string
   range: IRange
   notebookField: "cell" | "chartName"
   cellType: "sql" | "markdown"
+  mode: CellRevealMode
   token: number
 }
 

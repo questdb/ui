@@ -10,6 +10,7 @@ import {
   HEADER_GAP_PX,
   HEADER_HEIGHT,
   HEADER_NAME_FONT_SIZE_PX,
+  HEADER_NAME_FONT_WEIGHT,
   HEADER_PADDING_PX,
   HEADER_TYPE_FONT_SIZE_PX,
   ROW_HEIGHT,
@@ -141,6 +142,7 @@ const HeaderCopyButtonSpacer = styled.div`
 const HeaderName = styled.span`
   color: ${color("statusInfo")};
   font-size: ${HEADER_NAME_FONT_SIZE_PX}px;
+  font-weight: ${HEADER_NAME_FONT_WEIGHT};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

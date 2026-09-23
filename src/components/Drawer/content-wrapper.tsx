@@ -14,7 +14,7 @@ export const ContentWrapper = styled(Box).attrs({
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 
   form {
     width: 100%;
