@@ -4,11 +4,7 @@ import { FileSqlIcon, TableIcon } from "@phosphor-icons/react"
 import { Reset } from "../../../../components/icons"
 import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import {
-  IconButton,
-  PrimaryToggleButton,
-  Tooltip,
-} from "../../../../components"
+import { glassLens, IconButton, Tooltip } from "../../../../components"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
@@ -52,32 +48,15 @@ const Divider = styled.div`
   background: ${({ theme }) => theme.color.interactionNeutral};
 `
 
-// Match the schema toolbar's auto-refresh toggle dimensions and interaction.
-// The pressed state wears the same glass lens as the active segments and
-// tabs (SegmentedControl's GlassSelection), so one cue marks every active
-// control in the header. The transparent border reserves the lens's box so
-// toggling never shifts layout.
-const EditorVisibilityToggle = styled(PrimaryToggleButton)`
-  &&:not(:disabled) {
-    width: auto;
-    padding: 0 1rem;
-    height: 3rem;
-    min-height: 3rem;
-    color: ${({ theme }) => theme.color.contentSecondary};
+const EditorVisibilityToggle = styled(NotebookViewToggleSegment)`
+  && {
     border: 1px solid ${({ theme }) => theme.color.transparent};
     border-bottom-width: 2px;
-    border-radius: 0.4rem;
   }
 
-  &&[data-selected="true"],
-  &&[data-selected="true"]:hover:not(:disabled) {
-    background: ${({ theme }) => theme.color.glassSurface};
-    color: ${({ theme }) => theme.color.contentPrimary};
-    border-color: ${({ theme }) => theme.color.glassBorder};
-    border-bottom-color: ${({ theme }) => theme.color.glassEdge};
-    box-shadow: 0 3px 9px ${({ theme }) => theme.color.shadowSoft};
-    backdrop-filter: blur(6px) saturate(145%);
-    -webkit-backdrop-filter: blur(5px) saturate(150%);
+  &&[aria-pressed="true"],
+  &&[aria-pressed="true"]:hover:not(:disabled) {
+    ${glassLens}
   }
 `
 
@@ -183,12 +162,14 @@ export const CellViewToggle: React.FC<Props> = ({
       <Divider />
       <Tooltip content={resultOnly ? "Show editor" : "Hide editor"}>
         <EditorVisibilityToggle
-          aria-label="Editor"
-          aria-pressed={!resultOnly}
+          type="button"
+          $size="md"
+          $active={!resultOnly}
+          $activeTone="neutral"
           onClick={handleEditorVisibility}
-          selected={!resultOnly}
+          aria-label="Editor"
         >
-          <FileSqlIcon size={18} />
+          <FileSqlIcon />
         </EditorVisibilityToggle>
       </Tooltip>
       {view === "chart" && chartZoomed && (
