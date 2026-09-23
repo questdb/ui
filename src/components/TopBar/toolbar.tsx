@@ -299,31 +299,35 @@ const CustomIconWithTooltip = ({
 }) => {
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
 
+  // The badge already shows the name and type; the tooltip only adds value
+  // when there is a description to show.
+  if (!shownValues?.instance_description) {
+    return <>{icon}</>
+  }
+
   return (
     <PopperHover placement={placement} trigger={icon}>
-      <CustomTooltipWrapper>
+      <CustomTooltipWrapper data-hook="topbar-instance-tooltip">
         <TooltipHeader>
           <EnvIconWrapper $background={badgeColors.primary}>
             <InstanceTypeIcon
               color={badgeColors.secondary}
-              instanceType={shownValues?.instance_type}
+              instanceType={shownValues.instance_type}
               size={20}
             />
           </EnvIconWrapper>
           <TooltipIdentity>
-            {shownValues?.instance_type && (
+            {shownValues.instance_type && (
               <TooltipType>{shownValues.instance_type}</TooltipType>
             )}
             <TooltipName>
-              {shownValues?.instance_name || "Unnamed instance"}
+              {shownValues.instance_name || "Unnamed instance"}
             </TooltipName>
           </TooltipIdentity>
         </TooltipHeader>
-        {shownValues?.instance_description && (
-          <TooltipDescription>
-            {shownValues.instance_description}
-          </TooltipDescription>
-        )}
+        <TooltipDescription>
+          {shownValues.instance_description}
+        </TooltipDescription>
       </CustomTooltipWrapper>
     </PopperHover>
   )

@@ -60,8 +60,24 @@ describe("TopBar", () => {
     cy.getByDataHook("topbar-instance-name").should("contain", "Testing")
     cy.getByDataHook("topbar-instance-name").should("contain", "test-instance")
     cy.getByDataHook("topbar-instance-icon").realHover()
+    cy.getByDataHook("topbar-instance-tooltip").should("be.visible")
     cy.contains("test description of the test instance").should("be.visible")
     cy.contains("testing").should("be.visible")
+  })
+
+  it("should not show the instance tooltip when the description is empty", () => {
+    // Given
+    cy.getByDataHook("topbar-instance-badge").realHover()
+    cy.getByDataHook("topbar-instance-edit-icon").click()
+    cy.getByDataHook("topbar-instance-description-input").clear()
+    cy.getByDataHook("topbar-instance-save-button").click()
+    cy.getByDataHook("topbar-instance-save-button").should("not.exist")
+
+    // When
+    cy.getByDataHook("topbar-instance-icon").realHover()
+
+    // Then
+    cy.getByDataHook("topbar-instance-tooltip").should("not.exist")
   })
 })
 
