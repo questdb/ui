@@ -253,6 +253,17 @@ export const CellToolbar: React.FC<Props> = ({
           )}
         </CellIconButton>
       </Tooltip>
+      {isMaximized && showChartSettings && (
+        <Tooltip content="Chart settings">
+          <CellIconButton
+            label="Chart settings"
+            variant="ghost"
+            onClick={handleChartSettings}
+          >
+            <GearIcon size={20} />
+          </CellIconButton>
+        </Tooltip>
+      )}
       {!isMaximized && (
         <DropdownMenu.Root
           onOpenChange={(o) => {

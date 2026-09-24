@@ -1491,10 +1491,13 @@ export const CELL_BASE_CHROME_PX = 44
 // variant) — rendered only when the editor and a bottom slot are both visible.
 export const SPLIT_HANDLE_PX = 6
 
+// Monaco's reported content height for an empty editor (one line + padding).
+// The editor auto-grows with content up to the shared pane ceiling and scrolls
+// inside past it.
+export const MIN_EDITOR_HEIGHT = 72
+
 // Default editor height for a newly-created cell, before any content arrives.
-// Matches MIN_EDITOR_HEIGHT used by Monaco; kept here so layout math doesn't
-// need to import Cell.tsx constants.
-export const DEFAULT_TOP_HEIGHT = 72
+export const DEFAULT_TOP_HEIGHT = MIN_EDITOR_HEIGHT
 
 export const CELL_EDITOR_LINE_HEIGHT = 24
 export const CELL_EDITOR_PADDING = { top: 4, bottom: 4 }
@@ -2036,7 +2039,7 @@ export type CellGridBounds = { h: number; minH: number; maxH: number }
 //
 // In a split cell the south edge owns only the result pane, so the bounds
 // reserve the editor's current allocation rather than merely its minimum.
-// The middle handle is the only control that repartitions the two panes.
+// The split handle owns only the editor pane and grows the cell with it.
 // Legacy heights stored outside the pane floors/ceiling deliberately render
 // as-is; their first drag snaps them into the new bounds.
 export const computeCellGridBounds = (

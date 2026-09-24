@@ -32,6 +32,7 @@ import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
   MAX_PANE_HEIGHT_PX,
+  MIN_EDITOR_HEIGHT,
   clampPaneHeight,
   isDoubleView,
   isExpectingResult,
@@ -51,10 +52,7 @@ import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
-import {
-  MIN_EDITOR_HEIGHT,
-  useCellResizeOrchestration,
-} from "./useCellResizeOrchestration"
+import { useCellResizeOrchestration } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
@@ -205,10 +203,9 @@ const CellInner: React.FC<Props> = ({
     spotlightEditorRatio,
     topResize,
     bottomResize,
-    middleMaxHeight,
-    middleResizeLive,
-    middleResizeEnd,
-    resetToDefaults,
+    splitResizeLive,
+    splitResizeEnd,
+    resetSplit,
     resetBottomArea,
   } = useCellResizeOrchestration({
     cell,
@@ -583,21 +580,27 @@ const CellInner: React.FC<Props> = ({
           )}
         </EditorContainer>
       )}
-      {/* Inner-top resize handle (between editor and bottom slot). Only
-          rendered in double-view, since there's nothing below in single-
-          view. Renders in every layout mode (list / grid / spotlight). */}
+      {/* Split handle (between editor and bottom slot). Only rendered in
+          double-view, since there's nothing below in single-view. Renders in
+          every layout mode (list / grid / spotlight) and owns the editor
+          height only; spotlight moves the editor/result ratio instead. */}
       {isSplit && (
         <ResizeHandle
           background={theme.color.editorCanvas}
           targetRef={editorContainerRef}
-          onResize={middleResizeLive}
-          onResizeEnd={middleResizeEnd}
+          onResize={splitResizeLive}
+          onResizeEnd={(height) => {
+            void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, {
+              region: "mid",
+            })
+            splitResizeEnd(height)
+          }}
           onDoubleClick={() => {
             void trackEvent(ConsoleEvent.NOTEBOOK_CELL_SIZE_RESET)
-            resetToDefaults()
+            resetSplit()
           }}
           minHeight={MIN_EDITOR_HEIGHT}
-          maxHeight={middleMaxHeight}
+          maxHeight={MAX_PANE_HEIGHT_PX}
           ariaLabel="Resize editor pane"
           doubleView={doubleView}
         />

@@ -5,10 +5,8 @@ import { useCellResize } from "./useCellResize"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { trackEvent } from "../../../../modules/ConsoleEventTracker"
-import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import {
-  MAX_PANE_HEIGHT_PX,
+  MIN_EDITOR_HEIGHT,
   clampPaneHeight,
   computeCellHeights,
   hasAgentVisibleCellHeightChanged,
@@ -16,11 +14,6 @@ import {
   partitionCellHeights,
   topHeightForSql,
 } from "../notebookUtils"
-
-// `MIN_EDITOR_HEIGHT` matches Monaco's reported content height for an empty
-// editor (one line + padding). The editor auto-grows with content up to the
-// shared pane ceiling and scrolls inside past it.
-export const MIN_EDITOR_HEIGHT = 72
 
 type Options = {
   cell: NotebookCell
@@ -33,10 +26,15 @@ type Options = {
   getEditorContentHeight: () => number | null
 }
 
-// Every way a cell's editor / result split can be resized — the inner split
-// handle, the bottom-edge handle, the spotlight
-// ratio, and their double-click resets — plus the derived top/bottom heights
-// the layout renders from.
+// Every way a cell's editor / result panes can be resized — the split handle,
+// the bottom-edge handle, the spotlight ratio, and their double-click resets —
+// plus the derived top/bottom heights the layout renders from.
+//
+// The split handle owns the editor pane only. The result keeps its own height
+// and the cell grows with the editor, the same way Monaco auto-grow does. It
+// writes through the store on every step so a grid cell's box follows the drag.
+// A maximized cell fills the viewport, so there the handle moves the
+// editor/result ratio instead.
 export const useCellResizeOrchestration = ({
   cell,
   layoutMode,
@@ -108,62 +106,52 @@ export const useCellResizeOrchestration = ({
     liveBottomHeight: bottomResize.liveHeight,
     expectingResult,
   })
-  const middleMaxHeight = isMaximized
-    ? MAX_PANE_HEIGHT_PX
-    : topHeight + bottomHeight - minBottomHeightFor(cell)
 
   const spotlightEditorRatio =
     spotlightLiveRatio ??
     cell.spotlightEditorRatio ??
     topHeight / (topHeight + bottomHeight)
 
-  const middleSum = () => {
-    if (!isMaximized) return topHeight + bottomHeight
+  const spotlightRatioFor = (height: number) => {
     const editorH =
       editorContainerRef.current?.getBoundingClientRect().height ?? 0
     const bottomH = resultRef.current?.getBoundingClientRect().height ?? 0
-    return editorH + bottomH
-  }
-
-  const middleResizeLive = (height: number) => {
     const { top, bottom } = partitionCellHeights(
-      middleSum(),
+      editorH + bottomH,
       height,
       MIN_EDITOR_HEIGHT,
       minBottomHeightFor(cell),
     )
+    return top / (top + bottom)
+  }
+
+  const commitEditorHeight = (height: number) => {
+    const patch = {
+      topHeight: clampPaneHeight(MIN_EDITOR_HEIGHT, height),
+      topResized: true,
+    }
+    signalAgentVisibleHeightChange(patch)
+    updateCell(cell.id, patch)
+  }
+
+  const splitResizeLive = (height: number) => {
     if (isMaximized) {
-      setSpotlightLiveRatio(top / (top + bottom))
+      setSpotlightLiveRatio(spotlightRatioFor(height))
       return
     }
-    topResize.resizeLive(top)
-    bottomResize.resizeLive(bottom)
+    commitEditorHeight(height)
   }
 
-  const middleResizeEnd = (height: number) => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RESIZE, { region: "mid" })
-    const { top, bottom } = partitionCellHeights(
-      middleSum(),
-      height,
-      MIN_EDITOR_HEIGHT,
-      minBottomHeightFor(cell),
-    )
+  const splitResizeEnd = (height: number) => {
     if (isMaximized) {
       setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: top / (top + bottom) })
+      updateCell(cell.id, { spotlightEditorRatio: spotlightRatioFor(height) })
       return
     }
-    signalAgentVisibleHeightChange({
-      topHeight: top,
-      topResized: true,
-      bottomHeight: bottom,
-      bottomResized: true,
-    })
-    topResize.resizeEnd(top)
-    bottomResize.resizeEnd(bottom)
+    commitEditorHeight(height)
   }
 
-  const resetToDefaults = () => {
+  const resetSplit = () => {
     if (isMaximized) {
       setSpotlightLiveRatio(null)
       updateCell(cell.id, { spotlightEditorRatio: undefined })
@@ -172,10 +160,7 @@ export const useCellResizeOrchestration = ({
     signalAgentVisibleHeightChange({
       topHeight: readResetTopHeight(),
       topResized: false,
-      bottomHeight: undefined,
-      bottomResized: false,
     })
-    bottomResize.resetHeight()
     topResize.resetHeight()
   }
 
@@ -225,10 +210,9 @@ export const useCellResizeOrchestration = ({
     spotlightEditorRatio,
     topResize,
     bottomResize,
-    middleMaxHeight,
-    middleResizeLive,
-    middleResizeEnd,
-    resetToDefaults,
+    splitResizeLive,
+    splitResizeEnd,
+    resetSplit,
     resetBottomArea,
   }
 }
