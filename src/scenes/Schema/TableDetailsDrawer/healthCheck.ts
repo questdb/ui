@@ -1,6 +1,6 @@
 import { type Table, type LiveView } from "../../../utils/questdb/types"
 import type { TableKindData } from "./types"
-import { formatMicrosDuration } from "./utils"
+import { formatMicrosDuration } from "../../../utils/format"
 
 const DOCS_BASE_URL = "https://questdb.com/docs"
 const MONITORING_DOCS_URL = `${DOCS_BASE_URL}/operations/monitoring-alerting`

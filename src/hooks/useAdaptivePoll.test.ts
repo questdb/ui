@@ -52,6 +52,59 @@ describe("runAdaptivePollLoop", () => {
     controller.abort()
     await loop
   })
+
+  it("backs off exponentially while the fetch keeps rejecting", async () => {
+    // Given a fetch that always rejects
+    const controller = new AbortController()
+    const intervals: number[] = []
+    const loop = runAdaptivePollLoop({
+      fetchFn: () => Promise.reject(new Error("unavailable")),
+      signal: controller.signal,
+      minIntervalMs: 1000,
+      maxIntervalMs: 5000,
+      onIntervalChange: (interval) => intervals.push(interval),
+    })
+
+    // When four fetches fail in a row
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(2000)
+    await vi.advanceTimersByTimeAsync(4000)
+
+    // Then each wait doubles until it reaches the ceiling
+    expect(intervals).toEqual([1000, 2000, 4000, 5000])
+    controller.abort()
+    await loop
+  })
+
+  it("returns to the adaptive interval after a fetch succeeds", async () => {
+    // Given a fetch that fails twice and then succeeds
+    const controller = new AbortController()
+    const intervals: number[] = []
+    let calls = 0
+    const loop = runAdaptivePollLoop({
+      fetchFn: () => {
+        calls += 1
+        return calls <= 2
+          ? Promise.reject(new Error("unavailable"))
+          : Promise.resolve(50)
+      },
+      signal: controller.signal,
+      minIntervalMs: 1000,
+      maxIntervalMs: 5000,
+      onIntervalChange: (interval) => intervals.push(interval),
+    })
+
+    // When the third fetch succeeds
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(2000)
+
+    // Then the backoff is dropped for the latency-based interval
+    expect(intervals).toEqual([1000, 2000, 1000])
+    controller.abort()
+    await loop
+  })
 })
 
 describe("useAdaptivePoll core logic", () => {

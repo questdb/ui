@@ -74,6 +74,7 @@ export {
   Palette,
   ChartPieSlice as PieChart,
   Play,
+  Pulse,
   Question,
   ArrowClockwise as Refresh,
   ArrowCounterClockwise as Reset,

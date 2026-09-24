@@ -3,11 +3,7 @@ import type {
   MaterializedView,
   View,
 } from "../../../utils/questdb/types"
-
-export type SourceState<T> =
-  | { status: "loading" }
-  | { status: "ready"; data: T }
-  | { status: "unavailable" }
+import type { SourceState } from "../../../hooks/catalogSource"
 
 export type TableKindData =
   | { kind: "table" }

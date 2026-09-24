@@ -123,6 +123,11 @@ const TitleWrapper = styled.div`
   min-width: 0;
 `
 
+const isTextFieldWithValue = (target: EventTarget | null) =>
+  (target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement) &&
+  target.value.length > 0
+
 export const Drawer = ({
   mode = "modal",
   children,
@@ -154,6 +159,16 @@ export const Drawer = ({
   }
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
+
+  // A text field with content owns Escape: it clears itself first, and the
+  // drawer only closes on the next press.
+  const handleEscapeKeyDown = (event: KeyboardEvent) => {
+    if (isTextFieldWithValue(event.target) || !closeOnEscape || !onDismiss) {
+      event.preventDefault()
+      return
+    }
+    onDismiss()
+  }
 
   const closeButton = (
     <StyledClose
@@ -228,15 +243,12 @@ export const Drawer = ({
           mode={mode}
           width={width}
           {...(onDismiss && {
-            onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
+            onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
             onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
           })}
           {...(mode === "side" && {
             onInteractOutside: (e) => e.preventDefault(),
-            onEscapeKeyDown:
-              closeOnEscape && onDismiss
-                ? onDismiss
-                : (e) => e.preventDefault(),
+            onEscapeKeyDown: handleEscapeKeyDown,
             onPointerDownOutside: (e) => e.preventDefault(),
           })}
         >

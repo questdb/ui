@@ -28,13 +28,11 @@ import { useToggletip } from "../../../components/Tooltip/useToggletip"
 import { type LiveView, type Table } from "../../../utils/questdb/types"
 import type { BaseTableStatus, TableKindData } from "./types"
 import {
-  formatRelativeTimestamp,
-  formatMemoryPressure,
-  formatRowCount,
-  formatMicrosDuration,
   formatBytes,
-  formatTxnCount,
-} from "./utils"
+  formatMicrosDuration,
+  formatRelativeTimestamp,
+} from "../../../utils/format"
+import { formatMemoryPressure, formatRowCount, formatTxnCount } from "./utils"
 import {
   ISSUE_DOCS_URLS,
   getLiveViewIssueGuidance,
@@ -54,6 +52,11 @@ import {
   SectionTitleContainer,
   CaretIcon,
   UnavailableValue,
+  TimestampUnderline,
+  MetricsGrid,
+  MetricCard,
+  MetricLabel,
+  MetricValue,
 } from "./shared-styles"
 
 const BIGINT_ZERO = BigInt(0)
@@ -94,53 +97,6 @@ const RowCountIndicatorInner = styled.div<{ $attachedToStatus?: boolean }>`
 
 const RowCountBold = styled.span`
   font-weight: 600;
-`
-
-const TimestampUnderline = styled.span`
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 0.1rem;
-  color: ${({ theme }) => theme.color.contentSecondary};
-`
-
-const MetricsGrid = styled.div<{ $attachedToRowCount?: boolean }>`
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.2rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-  ${({ $attachedToRowCount }) =>
-    $attachedToRowCount &&
-    css`
-      border-top-left-radius: 0 !important;
-      border-top-right-radius: 0 !important;
-    `}
-`
-
-const MetricCard = styled(Box).attrs<{ $background?: string }>({
-  flexDirection: "column",
-  gap: "0.3rem",
-  align: "flex-start",
-  justifyContent: "space-between",
-})<{ $background?: string }>`
-  padding: 1rem 1.5rem;
-  background: ${({ theme }) => theme.color.surfaceValue};
-`
-
-const MetricLabel = styled(Text).attrs({
-  color: "contentSecondary",
-  size: "sm",
-})``
-
-const MetricValue = styled(Text).attrs({
-  color: "contentPrimary",
-  size: "md",
-})`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const ConfigGrid = styled.div<{ $columns: number }>`

@@ -5,7 +5,6 @@ import { selectors, actions } from "../../../store"
 import { XSquareIcon, WarningIcon } from "@phosphor-icons/react"
 import {
   Drawer,
-  Box,
   Text,
   Dialog,
   CopyButton,
@@ -45,13 +44,24 @@ import {
 import { getTrendSamplesForIssue } from "./utils"
 import { HealthStatusLabel } from "./HealthStatusLabel"
 import { useDebouncedWarnings } from "./useDebouncedWarnings"
-import { useCatalogSource } from "./useCatalogSource"
 import { SuspensionDialog } from "../SuspensionDialog"
 import { useAdaptivePoll, useAIQuickActions } from "../../../hooks"
+import {
+  MANUAL_RETRY_POLICY,
+  POLLING_RETRY_POLICY,
+  useCatalogSource,
+  type SourceState,
+} from "../../../hooks/catalogSource"
 import { MonitoringTab } from "./MonitoringTab"
 import { DetailsTab } from "./DetailsTab"
 import { ErrorBanner } from "./ErrorBanner"
-import type { BaseTableStatus, SourceState, TableKindData } from "./types"
+import type { BaseTableStatus, TableKindData } from "./types"
+import {
+  EmptyState,
+  EmptyStateHeading,
+  EmptyStateSubheading,
+  LoadingContainer,
+} from "./shared-styles"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 
@@ -60,44 +70,6 @@ const TypeBadge = styled(Badge).attrs({ variant: "neutral", size: "sm" })`
 `
 
 const BIGINT_ZERO = BigInt(0)
-
-const LoadingContainer = styled(Box).attrs({
-  align: "center",
-  justifyContent: "center",
-})`
-  padding: 4rem;
-  height: 100%;
-`
-
-const EmptyState = styled(Box).attrs({
-  flexDirection: "column",
-  align: "flex-start",
-  justifyContent: "center",
-})`
-  gap: 1.2rem;
-  padding: 1.8rem;
-  flex: 1 1 auto;
-  min-height: 0;
-  max-width: 40rem;
-  margin: 0 auto;
-`
-
-const EmptyStateHeading = styled.h2`
-  font-size: 2rem;
-  font-weight: 600;
-  text-align: left;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  margin: 0;
-`
-
-const EmptyStateSubheading = styled.p`
-  font-size: 1.4rem;
-  font-weight: 400;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  text-align: left;
-  margin: 0;
-  line-height: 1.5;
-`
 
 const MetadataErrorBannerWrapper = styled.div`
   padding: 1.5rem;
@@ -285,6 +257,7 @@ export const TableDetailsDrawer = () => {
   const { settings } = useSettings()
   const isEnterprise = settings["release.type"] === "EE"
   const [activeTab, setActiveTab] = useState<TabType>("monitoring")
+  const usesDetailsPolling = isView || activeTab === "details"
 
   const escapedTableName = QuestDB.escapeSqlLiteral(tableName)
   const sourcePrefix = `${kind}:${tableName}`
@@ -295,6 +268,7 @@ export const TableDetailsDrawer = () => {
     enabled: isOpen && hasTarget,
     query: `tables() where table_name = '${escapedTableName}';`,
     pollIntervalMs: null,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformTableResponse,
   })
   const matViewSource = useCatalogSource<MaterializedView>({
@@ -304,6 +278,7 @@ export const TableDetailsDrawer = () => {
     enabled: isOpen && hasTarget && isMatView,
     query: `materialized_views() WHERE view_name = '${escapedTableName}';`,
     pollIntervalMs: KIND_POLL_MS,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformMatViewResponse,
   })
   const viewSource = useCatalogSource<View>({
@@ -313,6 +288,7 @@ export const TableDetailsDrawer = () => {
     enabled: isOpen && hasTarget && isView,
     query: `views() WHERE view_name = '${escapedTableName}';`,
     pollIntervalMs: KIND_POLL_MS,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformViewResponse,
   })
   const liveViewSource = useCatalogSource<LiveView>({
@@ -322,6 +298,7 @@ export const TableDetailsDrawer = () => {
     enabled: isOpen && hasTarget && isLiveView,
     query: `live_views() WHERE view_name = '${escapedTableName}'`,
     pollIntervalMs: LIVE_VIEW_POLL_MS,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformLiveViewResponse,
   })
   const columnsSource = useCatalogSource<Column[]>({
@@ -330,8 +307,10 @@ export const TableDetailsDrawer = () => {
     sourceName: "columns",
     enabled: isOpen && hasTarget,
     query: `SHOW COLUMNS FROM '${escapedTableName}';`,
-    pollIntervalMs:
-      isView || activeTab === "details" ? DETAILS_TABLE_POLL_MS : null,
+    pollIntervalMs: usesDetailsPolling ? DETAILS_TABLE_POLL_MS : null,
+    retryPolicy: usesDetailsPolling
+      ? POLLING_RETRY_POLICY
+      : MANUAL_RETRY_POLICY,
     transformResponse: transformColumnsResponse,
   })
   const ddlSource = useCatalogSource<string>({
@@ -340,8 +319,10 @@ export const TableDetailsDrawer = () => {
     sourceName: "DDL",
     enabled: isOpen && hasTarget,
     query: QuestDB.buildDDLQuery(tableName, kind),
-    pollIntervalMs:
-      isView || activeTab === "details" ? DETAILS_TABLE_POLL_MS : null,
+    pollIntervalMs: usesDetailsPolling ? DETAILS_TABLE_POLL_MS : null,
+    retryPolicy: usesDetailsPolling
+      ? POLLING_RETRY_POLICY
+      : MANUAL_RETRY_POLICY,
     transformResponse: transformDDLResponse,
   })
   const currentTableResult =
@@ -373,6 +354,7 @@ export const TableDetailsDrawer = () => {
       tableData !== null,
     query: `storage_policies WHERE table_dir_name = '${escapedStorageDirectoryName}';`,
     pollIntervalMs: STORAGE_POLICY_POLL_MS,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformStoragePolicyResponse,
   })
   const matViewData =
@@ -393,6 +375,7 @@ export const TableDetailsDrawer = () => {
     enabled: isOpen && hasTarget && baseTableName !== undefined,
     query: `tables() where table_name = '${escapedBaseTableName}';`,
     pollIntervalMs: KIND_POLL_MS,
+    retryPolicy: POLLING_RETRY_POLICY,
     transformResponse: transformTableResponse,
   })
   const baseTableStatus = getBaseTableStatus(baseTableSource.state)
@@ -565,10 +548,13 @@ export const TableDetailsDrawer = () => {
     tableSource.state,
   ])
 
-  const usesDetailsPolling = isView || activeTab === "details"
+  const { poll: pollTableSource } = tableSource
+  const pollTable = useCallback(async () => {
+    await pollTableSource()
+  }, [pollTableSource])
 
   useAdaptivePoll({
-    fetchFn: tableSource.fetchNow,
+    fetchFn: pollTable,
     enabled: isOpen && hasTarget,
     key: `${sourcePrefix}-${activeTab}`,
     minIntervalMs: usesDetailsPolling

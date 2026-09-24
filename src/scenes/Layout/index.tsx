@@ -39,7 +39,9 @@ import { Help } from "./help"
 import { Warnings } from "./warning"
 import { AIChatButton } from "./AIChatButton"
 import { TableDetailsButton } from "./TableDetailsButton"
+import { QueryActivityButton } from "./QueryActivityButton"
 import { TableDetailsDrawer } from "../Schema/TableDetailsDrawer"
+import { QueryActivityDrawer } from "../QueryActivity"
 import { AIChatWindowLazy } from "../Editor/AIChatWindow/AIChatWindowLazy"
 
 import { eventBus } from "../../modules/EventBus"
@@ -126,10 +128,12 @@ const Layout = () => {
                 <Sidebar align="top">
                   <AIChatButton />
                   <TableDetailsButton />
+                  <QueryActivityButton />
                   <News />
                   <Help />
                 </Sidebar>
                 <TableDetailsDrawer />
+                <QueryActivityDrawer />
                 <AIChatWindowLazy />
               </Root>
 

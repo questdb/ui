@@ -2648,6 +2648,7 @@ const MonacoEditor = ({ hidden = false }: { hidden?: boolean }) => {
               {shareLinkConfirmation && (
                 <LiteEditor
                   value={shareLinkConfirmation.sql}
+                  scrollable
                   onOpenInEditor={handleCancelShareLinkRun}
                 />
               )}
