@@ -14,6 +14,7 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  CheckboxRow,
   Field,
   FieldGroup,
   FieldLabel,
@@ -65,15 +66,6 @@ const SqlPre = styled(HighlightedSql)`
   color: ${({ theme }) => theme.color.contentPrimary};
   font-family: ${({ theme }) => theme.fontMonospace};
   font-size: 1.1rem;
-`
-
-const CheckboxRow = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  cursor: pointer;
 `
 
 const OhlcGrid = styled.div`

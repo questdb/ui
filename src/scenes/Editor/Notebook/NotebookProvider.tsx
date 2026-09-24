@@ -21,6 +21,7 @@ import type {
   CellType,
 } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
@@ -125,6 +126,11 @@ export type NotebookActions = {
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  setCellHighlightConfig: (
+    cellId: string,
+    statementIndex: number,
+    config: HighlightConfig | null,
+  ) => void
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
@@ -155,6 +161,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
   setCellChartConfig: () => undefined,
+  setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
@@ -825,6 +832,7 @@ export const NotebookProvider: React.FC<{
     setCellMode,
     clearCellResult,
     setCellChartConfig: store.setCellChartConfig,
+    setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),

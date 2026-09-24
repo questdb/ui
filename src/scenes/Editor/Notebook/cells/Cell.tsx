@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useState, useCallback, useEffect, useRef } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
@@ -51,6 +51,10 @@ import {
   useCellResizeOrchestration,
 } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
+import {
+  CellOverlayProvider,
+  CellOverlaySlot,
+} from "../settingsDrawer/CellOverlayContext"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
@@ -145,6 +149,9 @@ const CellInner: React.FC<Props> = ({
   })
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
+  const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(
+    null,
+  )
   const headerRef = useRef<HTMLDivElement | null>(null)
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
@@ -588,17 +595,20 @@ const CellInner: React.FC<Props> = ({
                 : { height: bottomHeight }
           }
         >
-          <CellBottomContent
-            cell={cell}
-            contentMode={contentMode}
-            expectingResult={expectingResult}
-            isFocused={isFocused}
-            isRunning={isRunning}
-            onConfigChange={handleChartConfigChange}
-            onYieldFocus={() => editorRef.current?.focus()}
-          />
+          <CellOverlayProvider value={overlayElement}>
+            <CellBottomContent
+              cell={cell}
+              contentMode={contentMode}
+              expectingResult={expectingResult}
+              isFocused={isFocused}
+              isRunning={isRunning}
+              onConfigChange={handleChartConfigChange}
+              onYieldFocus={() => editorRef.current?.focus()}
+            />
+          </CellOverlayProvider>
         </BottomSlot>
       )}
+      <CellOverlaySlot ref={setOverlayElement} />
     </CellWrapper>
   )
 

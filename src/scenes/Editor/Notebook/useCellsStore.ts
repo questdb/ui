@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
+import { withHighlightConfig } from "./result-table/highlightConfig"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
 import {
   attachScriptSummary,
@@ -88,6 +90,16 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [updateCell],
   )
 
+  const setCellHighlightConfig = useCallback(
+    (cellId: string, statementIndex: number, config: HighlightConfig | null) =>
+      updateCells((prev) =>
+        prev.map((c) =>
+          c.id === cellId ? withHighlightConfig(c, statementIndex, config) : c,
+        ),
+      ),
+    [updateCells],
+  )
+
   const setCellRefresh = useCallback(
     (cellId: string, value: AutoRefresh | undefined) => {
       if (value === undefined) {
@@ -110,6 +122,7 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     updateCellResult,
     setScriptSummary,
     setCellChartConfig,
+    setCellHighlightConfig,
     setCellRefresh,
   }
 }

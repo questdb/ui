@@ -11,6 +11,7 @@ import {
 } from "../notebooks/notebookController"
 import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../components/ResultGrid/highlight/types"
 import {
   denyReasonUnresolvedSql,
   requireAllDQL,
@@ -31,6 +32,10 @@ import {
   type ToolQueryChart,
   type ToolRightAxis,
 } from "./chartConfigWire"
+import {
+  fromHighlightConfigWire,
+  type HighlightConfigWire,
+} from "./highlightConfigWire"
 import {
   applyStaleNotebookResult,
   notebookErrorHint,
@@ -217,6 +222,7 @@ export const dispatchApplyNotebookState = async (
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
         is_view_maximized?: boolean | null
+        highlight_configs?: (HighlightConfigWire | null)[] | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
@@ -372,6 +378,32 @@ export const dispatchApplyNotebookState = async (
       return { content: denied.reason, is_error: true }
     }
   }
+  const highlightConfigsByIndex: ((HighlightConfig | null)[] | undefined)[] = []
+  for (const [index, c] of cells.entries()) {
+    if (!c.highlight_configs) {
+      highlightConfigsByIndex.push(undefined)
+      continue
+    }
+    const parsed: (HighlightConfig | null)[] = []
+    for (const entry of c.highlight_configs) {
+      if (!entry) {
+        parsed.push(null)
+        continue
+      }
+      const result = fromHighlightConfigWire(entry)
+      if (!result.ok) {
+        return {
+          content: JSON.stringify({
+            error_code: "validation",
+            message: `VALIDATION_ERROR: cells[${index}].highlight_configs ${result.error}`,
+          }),
+          is_error: true,
+        }
+      }
+      parsed.push(result.config)
+    }
+    highlightConfigsByIndex.push(parsed)
+  }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
     autoRefreshDefault: isAutoRefresh(auto_refresh_default)
@@ -381,7 +413,7 @@ export const dispatchApplyNotebookState = async (
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
     variables:
       variables === undefined || variables === null ? undefined : variables,
-    cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
+    cells: cells.map<ApplyNotebookStateCellRequest>((c, index) => {
       const cell: ApplyNotebookStateCellRequest =
         c.preserve_value === true ? { preserveValue: true } : { value: c.value }
       if (c.id !== undefined && c.id !== null) cell.id = c.id
@@ -402,6 +434,8 @@ export const dispatchApplyNotebookState = async (
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
         cell.chartConfig = chartConfig
       }
+      const highlightConfigs = highlightConfigsByIndex[index]
+      if (highlightConfigs) cell.highlightConfigs = highlightConfigs
       if (c.grid) cell.grid = c.grid
       return cell
     }),

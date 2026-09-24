@@ -3088,6 +3088,17 @@ describe("cellToolbarMenuFlags", () => {
     expect(grid.showRefreshItem).toBe(false)
     expect(grid.showSplitItem).toBe(false)
     expect(grid.showChartSettings).toBe(false)
+    expect(grid.showHighlightSettings).toBe(true)
+    expect(chart.showHighlightSettings).toBe(false)
+  })
+
+  it("hides highlight rules when the compact grid is collapsed behind View SQL", () => {
+    // Given a compact grid cell showing its SQL instead of the grid
+    const collapsed = flags({ tier: "compact", view: "grid", sqlShown: true })
+    const shown = flags({ tier: "compact", view: "grid", sqlShown: false })
+    // Then the item reaches only a mounted grid
+    expect(collapsed.showHighlightSettings).toBe(false)
+    expect(shown.showHighlightSettings).toBe(true)
   })
 
   it("markdown cells expose only move/duplicate/delete", () => {
@@ -3148,7 +3159,8 @@ describe("cellToolbarMenuFlags", () => {
           f.showResetZoom ||
             f.showAutoRefreshItem ||
             f.showRefreshItem ||
-            f.showChartSettings,
+            f.showChartSettings ||
+            f.showHighlightSettings,
         )
       }
     }

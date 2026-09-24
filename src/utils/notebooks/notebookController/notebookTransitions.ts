@@ -10,6 +10,10 @@ import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
+import { withHighlightConfig } from "../../../scenes/Editor/Notebook/result-table/highlightConfig"
+import { queryKeyFor } from "../../../scenes/Editor/Notebook/queryKey"
+import { getQueriesFromText } from "../../../scenes/Editor/Monaco/utils"
 import {
   buildAppliedNotebookState,
   carriedRunError,
@@ -326,6 +330,36 @@ export const setCellModeTransition = (
     result: undefined,
     touchedCellId: cellId,
     ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
+  }
+}
+
+export const statementQueryKeys = (value: string): string[] =>
+  getQueriesFromText(value).map(queryKeyFor)
+
+export const setCellHighlightConfigTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  statementIndex: number,
+  config: HighlightConfig | null,
+): NotebookTransitionResult => {
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  const keys = statementQueryKeys(cell.value)
+  if (keys[statementIndex] === undefined) {
+    throw new NotebookToolError(
+      "validation",
+      `VALIDATION_ERROR: statement_index ${statementIndex} is out of range; the cell has ${keys.length} \`;\`-split statement${keys.length === 1 ? "" : "s"}.`,
+    )
+  }
+  return {
+    parts: {
+      ...parts,
+      cells: parts.cells.map((c) =>
+        c.id === cellId ? withHighlightConfig(c, statementIndex, config) : c,
+      ),
+    },
+    result: undefined,
+    touchedCellId: cellId,
   }
 }
 

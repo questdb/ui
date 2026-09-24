@@ -13,6 +13,8 @@ import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
+import { createResultTrendStore } from "../result-table/resultTrendStore"
+import { resolveHighlightConfig } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
@@ -45,6 +47,7 @@ export const CellBottomContent: React.FC<Props> = ({
   const cellRefresh = useCellRefresh()
   const fetchState = useCellFetchState(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
+  const trendStore = useMemo(() => createResultTrendStore(), [])
 
   // Tabs follow the editor's statement list; results attach to it by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no
@@ -79,11 +82,25 @@ export const CellBottomContent: React.FC<Props> = ({
     [resultIndexOf, reRunResultAt, cell.id],
   )
 
+  // Every settled statement feeds the baseline, not only the mounted tab.
+  useEffect(() => {
+    slots.forEach((slot, index) => {
+      if (slot.result?.type !== "dql") return
+      trendStore.capture(
+        slot.key,
+        slot.result,
+        resolveHighlightConfig(cell.highlightConfigs, index, slot.result)
+          .identityColumns,
+      )
+    })
+  }, [slots, cell.highlightConfigs, trendStore])
+
   useEffect(
     () => () => {
       viewportStore.clear()
+      trendStore.clear()
     },
-    [viewportStore],
+    [viewportStore, trendStore],
   )
 
   if (cell.mode === "draw") {
@@ -121,6 +138,8 @@ export const CellBottomContent: React.FC<Props> = ({
         onReRun={reRunStatement}
         onYieldFocus={onYieldFocus}
         viewportStore={viewportStore}
+        trendStore={trendStore}
+        highlightConfigs={cell.highlightConfigs}
       />
     ) : (
       <GridShimmer

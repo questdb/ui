@@ -122,6 +122,7 @@ export {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellHighlightConfigTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,

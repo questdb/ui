@@ -1,4 +1,5 @@
 import React, { useMemo } from "react"
+import { queryKeyFor } from "../queryKey"
 import styled from "styled-components"
 import { color } from "../../../../utils"
 import type { SingleQueryResult } from "../../../../store/notebook"
@@ -26,10 +27,7 @@ import {
 import { useFontsReady } from "../../../../components/ResultGrid/useFontsReady"
 import type { MaxColumnWidth } from "../../../../components/ResultGrid/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
-import {
-  columnLayoutQueryKey,
-  loadNotebookColumnLayout,
-} from "../notebookColumnLayoutStore"
+import { loadNotebookColumnLayout } from "../notebookColumnLayoutStore"
 import { MAX_RESERVED_ROWS } from "../notebookUtils"
 import { ShimmerBar, ShimmerSweep } from "./ShimmerBar"
 
@@ -214,7 +212,7 @@ export const displayColumnsFor = (
   const layout = loadNotebookColumnLayout(
     bufferId,
     cellId,
-    columnLayoutQueryKey(active.query),
+    queryKeyFor(active.query),
   )
   const naturalIds = active.columns.map((_, i) => columnId(i))
   const known = new Set(naturalIds)
