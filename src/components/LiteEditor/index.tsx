@@ -135,6 +135,7 @@ type BaseLiteEditorProps = {
   maxHeight?: number
   compactToolbar?: boolean
   toolbarActions?: React.ReactNode
+  scrollable?: boolean
 }
 
 type RegularEditorProps = BaseLiteEditorProps & {
@@ -308,6 +309,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
   maxHeight,
   compactToolbar = false,
   toolbarActions,
+  scrollable = false,
   ...props
 }) => {
   const appTheme = useTheme()
@@ -397,6 +399,7 @@ export const LiteEditor: React.FC<LiteEditorProps> = ({
           code={props.value}
           language={language}
           grayedOutLines={props.grayedOutLines}
+          scrollable={scrollable}
           $fontSize={fontSize}
           $lineHeight={lineHeight}
         />

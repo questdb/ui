@@ -2,24 +2,35 @@ import React, { useEffect, useState } from "react"
 import styled, { useTheme } from "styled-components"
 import { applyMonacoTheme, monacoPromise } from "../../utils/monacoInit"
 import { QuestDBLanguageName } from "../../scenes/Editor/Monaco/utils"
+import { escapeHtml, markControlCharacters } from "./utils"
 
 type Props = {
   code: string
   language?: string
   className?: string
   grayedOutLines?: [number, number] | null
+  scrollable?: boolean
 }
 
 const LINE_BREAK = "<br/>"
 const NON_BREAKING_SPACE = /\u00a0/g
 
-const Pre = styled.pre`
-  white-space: pre-wrap;
+const Pre = styled.pre<{ $scrollable: boolean }>`
+  white-space: ${({ $scrollable }) => ($scrollable ? "pre" : "pre-wrap")};
+  overflow: ${({ $scrollable }) => ($scrollable ? "auto" : "visible")};
   overflow-wrap: normal;
   word-break: normal;
 
   .grayed-out-line {
     opacity: 0.5;
+  }
+
+  .control-character {
+    color: ${({ theme }) => theme.color.statusDanger};
+    border: 1px solid ${({ theme }) => theme.color.statusDanger};
+    border-radius: 2px;
+    padding: 0 0.2rem;
+    font-size: 0.85em;
   }
 `
 
@@ -38,6 +49,7 @@ export const HighlightedSql: React.FC<Props> = ({
   language = QuestDBLanguageName,
   className,
   grayedOutLines,
+  scrollable = false,
 }) => {
   const theme = useTheme()
   const [html, setHtml] = useState<string | null>(null)
@@ -55,7 +67,11 @@ export const HighlightedSql: React.FC<Props> = ({
       })
       .then((colorized) => {
         // colorize emits non-breaking spaces, which defeats pre-wrap.
-        if (!cancelled) setHtml(colorized.replace(NON_BREAKING_SPACE, " "))
+        if (!cancelled) {
+          setHtml(
+            markControlCharacters(colorized.replace(NON_BREAKING_SPACE, " ")),
+          )
+        }
       })
     return () => {
       cancelled = true
@@ -63,12 +79,21 @@ export const HighlightedSql: React.FC<Props> = ({
   }, [code, language, theme.mode])
 
   if (html === null) {
-    return <Pre className={className}>{code}</Pre>
+    return (
+      <Pre
+        className={className}
+        $scrollable={scrollable}
+        dangerouslySetInnerHTML={{
+          __html: markControlCharacters(escapeHtml(code)),
+        }}
+      />
+    )
   }
 
   return (
     <Pre
       className={className}
+      $scrollable={scrollable}
       dangerouslySetInnerHTML={{
         __html: grayedOutLines ? grayOutLines(html, grayedOutLines) : html,
       }}

@@ -228,7 +228,11 @@ export const collectFinishedQueries = (
     if (currentIds.has(id) || next.has(id)) continue
     next.set(id, {
       row,
-      elapsedMs: getElapsedMs(row, previousSnapshot, snapshot.receivedAtMs),
+      elapsedMs: getElapsedMs(
+        row,
+        previousSnapshot,
+        previousSnapshot.receivedAtMs,
+      ),
       releasedAtMs: heldIds.has(id) ? null : nowMs,
     })
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   MANUAL_RETRY_POLICY,
   POLLING_RETRY_POLICY,
@@ -39,15 +39,57 @@ type QueryActivitySource = {
 
 const NO_HELD_IDS: ReadonlySet<string> = new Set()
 
+type TrackedSnapshot = {
+  snapshot: QueryActivitySnapshot | null
+  finished: FinishedQueries
+}
+
+const NO_TRACKED_SNAPSHOT: TrackedSnapshot = {
+  snapshot: null,
+  finished: NO_FINISHED_QUERIES,
+}
+
+const carryFinishedQueries = (
+  tracked: TrackedSnapshot,
+  snapshot: QueryActivitySnapshot | null,
+  heldIds: ReadonlySet<string>,
+  nowMs: number,
+): FinishedQueries => {
+  if (snapshot === null) return NO_FINISHED_QUERIES
+  if (tracked.snapshot === null || tracked.snapshot === snapshot) {
+    return tracked.finished
+  }
+  return collectFinishedQueries(
+    tracked.finished,
+    tracked.snapshot,
+    snapshot,
+    heldIds,
+    nowMs,
+  )
+}
+
 const transformResponse = (response: QuestDB.QueryRawResult) =>
   transformQueryActivityResponse(response, Date.now())
+
+type DrawerSession = {
+  enabled: boolean
+  generation: number
+}
 
 export const useQueryActivity = ({
   enabled,
   autoRefresh,
 }: Params): QueryActivitySource => {
+  const [session, setSession] = useState<DrawerSession>({
+    enabled,
+    generation: 0,
+  })
+  if (session.enabled !== enabled) {
+    setSession({ enabled, generation: session.generation + 1 })
+  }
+
   const source = useCatalogSource<QueryActivitySnapshot>({
-    sourceKey: "query-activity",
+    sourceKey: `query-activity:${session.generation}`,
     revalidateKey: enabled,
     sourceName: "query activity",
     enabled,
@@ -58,9 +100,8 @@ export const useQueryActivity = ({
   })
   const [pollGeneration, setPollGeneration] = useState(0)
   const [clientNowMs, setClientNowMs] = useState(() => Date.now())
-  const [finished, setFinished] = useState(NO_FINISHED_QUERIES)
+  const [tracked, setTracked] = useState(NO_TRACKED_SNAPSHOT)
   const [heldIds, setHeldIds] = useState(NO_HELD_IDS)
-  const previousSnapshotRef = useRef<QueryActivitySnapshot | null>(null)
 
   const snapshot =
     source.state.status === "ready"
@@ -68,6 +109,16 @@ export const useQueryActivity = ({
       : source.state.status === "unavailable"
         ? source.lastReadyData
         : null
+
+  const finished = expireFinishedQueries(
+    carryFinishedQueries(tracked, snapshot, heldIds, clientNowMs),
+    heldIds,
+    clientNowMs,
+    FINISHED_GRACE_MS,
+  )
+  if (snapshot !== tracked.snapshot || finished !== tracked.finished) {
+    setTracked({ snapshot, finished })
+  }
 
   const { fetchNow, poll } = source
 
@@ -104,11 +155,11 @@ export const useQueryActivity = ({
 
   const dismissFinished = (queryId: bigint) => {
     const id = queryId.toString()
-    setFinished((current) => {
-      if (!current.has(id)) return current
-      const next = new Map(current)
+    setTracked((current) => {
+      if (!current.finished.has(id)) return current
+      const next = new Map(current.finished)
       next.delete(id)
-      return next
+      return { ...current, finished: next }
     })
   }
 
@@ -122,25 +173,6 @@ export const useQueryActivity = ({
 
     return () => window.clearInterval(intervalId)
   }, [enabled])
-
-  useEffect(() => {
-    const previous = previousSnapshotRef.current
-    previousSnapshotRef.current = snapshot
-    if (snapshot === null) {
-      setFinished(NO_FINISHED_QUERIES)
-      return
-    }
-    if (previous === null || previous === snapshot) return
-    setFinished((current) =>
-      collectFinishedQueries(current, previous, snapshot, heldIds, Date.now()),
-    )
-  }, [snapshot])
-
-  useEffect(() => {
-    setFinished((current) =>
-      expireFinishedQueries(current, heldIds, clientNowMs, FINISHED_GRACE_MS),
-    )
-  }, [clientNowMs, heldIds])
 
   return {
     state: source.state,

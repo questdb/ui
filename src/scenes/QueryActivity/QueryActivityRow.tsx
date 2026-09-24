@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import styled, { css } from "styled-components"
 import {
   ClockIcon,
@@ -45,7 +45,7 @@ type Props = {
 }
 
 const FINISHED_STATUS =
-  "The query left the registry. It finished, failed, or timed out."
+  "The query left the registry. It finished, failed, or timed out. The duration is from the last poll that listed it."
 
 const PHASE_LABELS: Record<QueryPhase, string> = {
   running: "Running",
@@ -289,6 +289,8 @@ export const QueryActivityRow = ({
     </Box>
   )
   const preview = buildQueryPreview(formattedQuery)
+
+  useEffect(() => () => onHoldChange(false), [])
 
   return (
     <Row

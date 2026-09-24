@@ -349,7 +349,7 @@ describe("finished query retention", () => {
   }
   const none = new Set<string>()
 
-  it("keeps a vanished query with its duration frozen at the poll that lost it", () => {
+  it("keeps a vanished query with its duration frozen at the last poll that listed it", () => {
     // When
     const finished = collectFinishedQueries(
       new Map(),
@@ -361,7 +361,7 @@ describe("finished query retention", () => {
 
     // Then
     expect([...finished.keys()]).toEqual(["2"])
-    expect(finished.get("2")?.elapsedMs).toBe(17_000)
+    expect(finished.get("2")?.elapsedMs).toBe(15_000)
     expect(finished.get("2")?.releasedAtMs).toBe(10_000)
   })
 
