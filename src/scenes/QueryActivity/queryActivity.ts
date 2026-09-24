@@ -41,7 +41,6 @@ export type QueryActivityItem = {
 
 export type FinishedQuery = {
   row: QueryActivityRow
-  elapsedMs: number
   releasedAtMs: number | null
 }
 
@@ -61,7 +60,7 @@ const isFading = (entry: FinishedQuery | undefined, nowMs: number) =>
   entry?.releasedAtMs != null &&
   nowMs - entry.releasedAtMs >= FINISHED_GRACE_MS - FINISHED_FADE_LEAD_MS
 
-export type QueryActivitySort = "duration" | "memory" | "started" | "id"
+export type QueryActivitySort = "memory" | "started" | "id"
 
 export type QueryActivitySortDirection = "desc" | "asc"
 
@@ -74,7 +73,6 @@ export type QueryActivityOrderKey =
   `${QueryActivitySort}:${QueryActivitySortDirection}`
 
 const SORT_LABELS: Record<QueryActivitySort, string> = {
-  duration: "Duration",
   memory: "Memory used",
   started: "Start time",
   id: "Query ID",
@@ -91,8 +89,6 @@ export const toOrderKey = ({
 }: QueryActivityOrder): QueryActivityOrderKey => `${sort}:${direction}`
 
 const ORDER_LABELS: Record<QueryActivityOrderKey, string> = {
-  "duration:desc": "Longest first",
-  "duration:asc": "Shortest first",
   "memory:desc": "Most memory",
   "memory:asc": "Least memory",
   "started:desc": "Newest first",
@@ -226,15 +222,7 @@ export const collectFinishedQueries = (
   for (const row of previousSnapshot.rows) {
     const id = queryKey(row)
     if (currentIds.has(id) || next.has(id)) continue
-    next.set(id, {
-      row,
-      elapsedMs: getElapsedMs(
-        row,
-        previousSnapshot,
-        previousSnapshot.receivedAtMs,
-      ),
-      releasedAtMs: heldIds.has(id) ? null : nowMs,
-    })
+    next.set(id, { row, releasedAtMs: heldIds.has(id) ? null : nowMs })
   }
   const unchanged =
     next.size === finished.size &&
@@ -302,7 +290,6 @@ const SORT_KEYS: Record<
   QueryActivitySort,
   (item: QueryActivityItem) => number | null
 > = {
-  duration: (item) => item.elapsedMs,
   memory: (item) =>
     item.row.memoryUsed === null ? null : Number(item.row.memoryUsed),
   started: (item) => Date.parse(item.row.queryStart),
@@ -339,12 +326,10 @@ export const buildQueryActivityItems = (
   snapshot.rows
     .map((row) => {
       const finishedEntry = finished.get(queryKey(row))
-      const elapsedMs =
-        finishedEntry?.elapsedMs ?? getElapsedMs(row, snapshot, clientNowMs)
       return {
         row,
         phase: phaseOf(row, finishedEntry),
-        elapsedMs,
+        elapsedMs: getElapsedMs(row, snapshot, clientNowMs),
         severity: classifyQuery(row, thresholds),
         fading: isFading(finishedEntry, clientNowMs),
       }

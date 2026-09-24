@@ -3,9 +3,11 @@ import {
   MANUAL_RETRY_POLICY,
   POLLING_RETRY_POLICY,
   useCatalogSource,
+  type SourceFetchOutcome,
   type SourceState,
 } from "../../hooks/catalogSource"
 import { useAdaptivePoll } from "../../hooks/useAdaptivePoll"
+import { useDelayedFlag } from "../../hooks/useDelayedFlag"
 import * as QuestDB from "../../utils/questdb"
 import {
   collectFinishedQueries,
@@ -21,6 +23,11 @@ import {
 const POLL_MIN_MS = 1_000
 const POLL_MAX_MS = 30_000
 const CLOCK_TICK_MS = 1_000
+// A background poll carries no news unless it drags. The delay outlasts a
+// normal round trip, including a remote one, so the spinner marks a slow
+// refresh rather than blinking once per poll.
+const REFRESH_SPINNER_DELAY_MS = 500
+const REFRESH_SPINNER_MIN_VISIBLE_MS = 500
 
 type Params = {
   enabled: boolean
@@ -32,6 +39,7 @@ type QueryActivitySource = {
   snapshot: QueryActivitySnapshot | null
   finished: FinishedQueries
   clientNowMs: number
+  isRefreshing: boolean
   refresh: () => void
   setHeld: (queryId: bigint, held: boolean) => void
   dismissFinished: (queryId: bigint) => void
@@ -99,6 +107,12 @@ export const useQueryActivity = ({
     transformResponse,
   })
   const [pollGeneration, setPollGeneration] = useState(0)
+  const [isFetching, setIsFetching] = useState(false)
+  const isRefreshing = useDelayedFlag(
+    isFetching,
+    REFRESH_SPINNER_DELAY_MS,
+    REFRESH_SPINNER_MIN_VISIBLE_MS,
+  )
   const [clientNowMs, setClientNowMs] = useState(() => Date.now())
   const [tracked, setTracked] = useState(NO_TRACKED_SNAPSHOT)
   const [heldIds, setHeldIds] = useState(NO_HELD_IDS)
@@ -122,12 +136,24 @@ export const useQueryActivity = ({
 
   const { fetchNow, poll } = source
 
+  const trackFetch = useCallback(
+    async (fetch: () => Promise<SourceFetchOutcome>) => {
+      setIsFetching(true)
+      try {
+        return await fetch()
+      } finally {
+        setIsFetching(false)
+      }
+    },
+    [],
+  )
+
   const pollOnce = useCallback(async () => {
-    const outcome = await poll()
+    const outcome = await trackFetch(poll)
     if (outcome === "failure") {
       throw new Error("Query activity poll failed")
     }
-  }, [poll])
+  }, [poll, trackFetch])
 
   useAdaptivePoll({
     fetchFn: pollOnce,
@@ -139,7 +165,7 @@ export const useQueryActivity = ({
 
   const refresh = () => {
     setPollGeneration((generation) => generation + 1)
-    void fetchNow()
+    void trackFetch(fetchNow)
   }
 
   const setHeld = (queryId: bigint, held: boolean) => {
@@ -179,6 +205,7 @@ export const useQueryActivity = ({
     snapshot,
     finished,
     clientNowMs,
+    isRefreshing,
     refresh,
     setHeld,
     dismissFinished,

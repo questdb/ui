@@ -45,7 +45,7 @@ type Props = {
 }
 
 const FINISHED_STATUS =
-  "The query left the registry. It finished, failed, or timed out. The duration is from the last poll that listed it."
+  "The query left the registry. It finished, failed, or timed out."
 
 const PHASE_LABELS: Record<QueryPhase, string> = {
   running: "Running",
@@ -123,7 +123,7 @@ const QueryId = styled(TruncatedText)`
   white-space: nowrap;
 `
 
-const Elapsed = styled(Button).attrs({ variant: "ghost", size: "sm" })`
+const StartedAt = styled(Button).attrs({ variant: "ghost", size: "sm" })`
   && {
     height: auto;
     padding: 0.2rem 0;
@@ -138,7 +138,7 @@ const Elapsed = styled(Button).attrs({ variant: "ghost", size: "sm" })`
   white-space: nowrap;
 `
 
-const ElapsedUnderline = styled(TimestampUnderline)`
+const StartedAtUnderline = styled(TimestampUnderline)`
   color: inherit;
   font-weight: inherit;
   text-decoration-thickness: 1px;
@@ -343,23 +343,21 @@ export const QueryActivityRow = ({
         <Tooltip
           content={
             <Box gap="1rem" align="center">
-              <span style={{ whiteSpace: "nowrap" }}>
-                Started at: {startedAt}
-              </span>
+              <span style={{ whiteSpace: "nowrap" }}>{startedAt}</span>
               <CopyButton text={startedAt} iconOnly size="sm" />
             </Box>
           }
           placement="bottom"
         >
-          <Elapsed
-            data-hook="query-activity-row-duration"
-            aria-label={`Elapsed: ${formatElapsedDuration(elapsedMs)}. Show start time`}
+          <StartedAt
+            data-hook="query-activity-row-started"
+            aria-label={`Started ${formatElapsedDuration(elapsedMs)} ago. Show start time`}
           >
             <ClockIcon size={16} />
-            <ElapsedUnderline>
-              {formatCompactElapsedDuration(elapsedMs)}
-            </ElapsedUnderline>
-          </Elapsed>
+            <StartedAtUnderline>
+              Started {formatCompactElapsedDuration(elapsedMs)} ago
+            </StartedAtUnderline>
+          </StartedAt>
         </Tooltip>
       </HeadLine>
 

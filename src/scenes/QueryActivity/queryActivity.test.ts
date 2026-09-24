@@ -279,7 +279,7 @@ describe("buildQueryActivityItems", () => {
   })
   const current = snapshot([newer, untracked, older])
   const idsFor = (
-    sort: "duration" | "memory" | "started" | "id",
+    sort: "memory" | "started" | "id",
     direction: "desc" | "asc",
   ) =>
     buildQueryActivityItems(
@@ -289,14 +289,6 @@ describe("buildQueryActivityItems", () => {
       { sort, direction },
       QUERY_ACTIVITY_THRESHOLDS,
     ).map((item) => Number(item.row.queryId))
-
-  it("puts the longest running query first when duration is descending", () => {
-    expect(idsFor("duration", "desc")).toEqual([1, 3, 2])
-  })
-
-  it("puts the shortest running query first when duration is ascending", () => {
-    expect(idsFor("duration", "asc")).toEqual([2, 3, 1])
-  })
 
   it("keeps untracked memory last in both directions", () => {
     expect(idsFor("memory", "desc")).toEqual([2, 1, 3])
@@ -311,6 +303,28 @@ describe("buildQueryActivityItems", () => {
   it("orders by query id as a number in both directions", () => {
     expect(idsFor("id", "desc")).toEqual([3, 2, 1])
     expect(idsFor("id", "asc")).toEqual([1, 2, 3])
+  })
+
+  it("keeps counting from the start time after the query left the registry", () => {
+    // Given a query the last poll no longer listed
+    const gone = row({ queryId: BigInt(9) })
+    const stale = snapshot([gone])
+    const finished = new Map([
+      [gone.queryId.toString(), { row: gone, releasedAtMs: null }],
+    ])
+
+    // When 30 s of client time passed since that snapshot
+    const [item] = buildQueryActivityItems(
+      stale,
+      finished,
+      stale.receivedAtMs + 30_000,
+      { sort: "started", direction: "desc" },
+      QUERY_ACTIVITY_THRESHOLDS,
+    )
+
+    // Then the row reports time since it started, not time spent running
+    expect(item.phase).toBe("finished")
+    expect(item.elapsedMs).toBe(102_000)
   })
 })
 
@@ -349,7 +363,7 @@ describe("finished query retention", () => {
   }
   const none = new Set<string>()
 
-  it("keeps a vanished query with its duration frozen at the last poll that listed it", () => {
+  it("keeps a vanished query and starts its release clock", () => {
     // When
     const finished = collectFinishedQueries(
       new Map(),
@@ -361,7 +375,6 @@ describe("finished query retention", () => {
 
     // Then
     expect([...finished.keys()]).toEqual(["2"])
-    expect(finished.get("2")?.elapsedMs).toBe(15_000)
     expect(finished.get("2")?.releasedAtMs).toBe(10_000)
   })
 

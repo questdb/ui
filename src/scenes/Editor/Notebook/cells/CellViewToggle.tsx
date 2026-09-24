@@ -6,9 +6,8 @@ import {
   ArrowsInLineVerticalIcon,
 } from "@phosphor-icons/react"
 import { Reset } from "../../../../components/icons"
-import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import { IconButton, Tooltip } from "../../../../components"
+import { IconButton, Spinner, Tooltip } from "../../../../components"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,

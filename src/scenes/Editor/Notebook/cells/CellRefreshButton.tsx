@@ -1,7 +1,6 @@
 import React from "react"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react"
-import { SelectMenu, Tooltip } from "../../../../components"
-import { Spinner } from "./Spinner"
+import { SelectMenu, Spinner, Tooltip } from "../../../../components"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"

@@ -4,6 +4,7 @@ import styled from "styled-components"
 import { Badge, Button, Drawer, ErrorBanner, Text } from "../../components"
 import { toast } from "../../components/Toast"
 import { CircleNotchSpinner } from "../Editor/Monaco/icons"
+import { useDelayedFlag } from "../../hooks"
 import { QuestContext, useEditor, useLocalStorage } from "../../providers"
 import { actions, selectors } from "../../store"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -38,6 +39,11 @@ const BannerWrapper = styled.div`
   padding: 1.5rem;
 `
 
+// A cached listing lands in tens of milliseconds. Showing the panel at once
+// would flash it on every open.
+const LOADING_SPINNER_DELAY_MS = 200
+const LOADING_SPINNER_MIN_VISIBLE_MS = 500
+
 const getErrorMessage = (error: unknown): string =>
   typeof error === "object" &&
   error !== null &&
@@ -67,6 +73,7 @@ export const QueryActivityDrawer = () => {
     snapshot,
     finished,
     clientNowMs,
+    isRefreshing,
     refresh,
     setHeld,
     dismissFinished,
@@ -98,7 +105,12 @@ export const QueryActivityDrawer = () => {
   const isFiltered = filter.trim() !== ""
   const summary = summarizeQueryActivity(snapshot?.rows ?? [])
   const isUnavailable = state.status === "unavailable"
-  const isLoading = state.status === "loading" && snapshot === null
+  const isLoading = isOpen && state.status === "loading" && snapshot === null
+  const showLoading = useDelayedFlag(
+    isLoading,
+    LOADING_SPINNER_DELAY_MS,
+    LOADING_SPINNER_MIN_VISIBLE_MS,
+  )
   const retryHint = autoRefreshQueryActivity
     ? "The console will retry automatically."
     : "Auto refresh is off. Retry to load again."
@@ -132,9 +144,10 @@ export const QueryActivityDrawer = () => {
     try {
       await quest.cancelQuery(target.queryId)
       toast.success(`Cancel requested for query ${target.queryId}`)
-      refresh()
     } catch (error) {
       toast.error(getErrorMessage(error))
+    } finally {
+      refresh()
     }
   }
 
@@ -159,12 +172,14 @@ export const QueryActivityDrawer = () => {
     >
       <Drawer.ContentWrapper data-hook="query-activity-drawer">
         {isLoading ? (
-          <LoadingContainer data-hook="query-activity-loading">
-            <CircleNotchSpinner size={24} />
-            <Text color="contentSecondary" size="md">
-              Loading query activity...
-            </Text>
-          </LoadingContainer>
+          showLoading && (
+            <LoadingContainer data-hook="query-activity-loading">
+              <CircleNotchSpinner size={24} />
+              <Text color="contentSecondary" size="md">
+                Loading query activity...
+              </Text>
+            </LoadingContainer>
+          )
         ) : snapshot === null ? (
           <EmptyState role="alert">
             <ErrorBanner
@@ -210,6 +225,9 @@ export const QueryActivityDrawer = () => {
               onOrderChange={handleOrderChange}
               autoRefresh={autoRefreshQueryActivity}
               onAutoRefreshToggle={handleAutoRefreshToggle}
+              isRefreshing={isRefreshing}
+              lastUpdatedAtMs={snapshot.receivedAtMs}
+              nowMs={clientNowMs}
             />
             {items.length === 0 && isFiltered ? (
               <EmptyState data-hook="query-activity-no-match">

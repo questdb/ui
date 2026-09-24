@@ -176,9 +176,9 @@ describe("Query Activity drawer", () => {
     cy.get('[data-hook="query-activity-row"][data-query-id="62179"]')
       .should("have.attr", "data-severity", "warning")
       .within(() => {
-        cy.getByDataHook("query-activity-row-duration").should(
+        cy.getByDataHook("query-activity-row-started").should(
           "contain",
-          "1m 12s",
+          "Started 1m 12s ago",
         )
         cy.getByDataHook("query-activity-row-memory").should(
           "contain",
@@ -527,13 +527,16 @@ describe("Query Activity drawer", () => {
     )
   })
 
-  it("resumes the elapsed clock when the drawer reopens", () => {
+  it("keeps the start time correct when the drawer reopens", () => {
     // Given
     cy.clock(Date.parse(SERVER_NOW), ["Date", "setInterval", "clearInterval"])
     interceptListing([SELF_ROW, CRITICAL_ROW])
     openDrawer()
     cy.wait("@queryActivity")
-    cy.getByDataHook("query-activity-row-duration").should("contain", "1m 12s")
+    cy.getByDataHook("query-activity-row-started").should(
+      "contain",
+      "Started 1m 12s ago",
+    )
 
     // When the drawer stays closed for ten seconds and reopens
     cy.getByDataHook("query-activity-toggle-button").click()
@@ -542,8 +545,33 @@ describe("Query Activity drawer", () => {
     openDrawer()
     cy.wait("@queryActivity")
 
-    // Then the elapsed time is correct before the next clock tick
-    cy.getByDataHook("query-activity-row-duration").should("contain", "1m 12s")
+    // Then the start time is correct before the next clock tick
+    cy.getByDataHook("query-activity-row-started").should(
+      "contain",
+      "Started 1m 12s ago",
+    )
+  })
+
+  it("reports how stale the listing is while auto refresh is off", () => {
+    // Given the list loaded once with auto refresh off
+    cy.clock(Date.parse(SERVER_NOW), ["Date", "setInterval", "clearInterval"])
+    cy.loadConsoleWithAuth(false, { "auto.refresh.queryActivity": "false" })
+    interceptListing([SELF_ROW, CRITICAL_ROW])
+    openDrawer()
+    cy.wait("@queryActivity")
+    cy.getByDataHook("query-activity-last-updated").should(
+      "contain",
+      "Last updated <1s ago",
+    )
+
+    // When thirty seconds pass with no poll
+    cy.tick(30000)
+
+    // Then the drawer reports the age of the snapshot
+    cy.getByDataHook("query-activity-last-updated").should(
+      "contain",
+      "Last updated 30s ago",
+    )
   })
 
   it("closes from the sidebar button", () => {
