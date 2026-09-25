@@ -29,6 +29,8 @@ type EvaluateInput = {
 
 type ColumnRules = Map<number, HighlightRule[]>
 
+type OrderedHit = { order: number; hit: CellHighlight }
+
 const asNumber = (value: CellValue): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null
 
@@ -315,8 +317,8 @@ export const evaluateHighlights = ({
   const identityIndexes = identityColumnIndexes(columns, config.identityColumns)
   const canCompare = previous !== null && identityIndexes !== null
 
-  const background = new Map<number, CellHighlight>()
-  const rowBackground = new Map<number, CellHighlight>()
+  const background = new Map<number, OrderedHit>()
+  const rowBackground = new Map<number, OrderedHit>()
   const direction = new Map<number, CellDirection>()
   const priority = new Map(config.rules.map((rule, order) => [rule, order]))
   const columnCount = columns.length
@@ -340,7 +342,7 @@ export const evaluateHighlights = ({
     }
     // Rules are walked per column, so the row channel keeps the hit of the
     // rule listed first rather than the first column that matched.
-    let rowHit: { order: number; hit: CellHighlight } | undefined
+    let rowHit: OrderedHit | undefined
     for (const [index, list] of rules) {
       const value = row[index]
       const cellKey = rowIndex * columnCount + index
@@ -351,22 +353,31 @@ export const evaluateHighlights = ({
       for (const rule of list) {
         const hit = matchRule(rule, index, kinds[index], value, previousRow)
         if (!hit) continue
+        const order = priority.get(rule) ?? Number.MAX_SAFE_INTEGER
         if (ruleAppliesTo(rule) === "row") {
-          const order = priority.get(rule) ?? Number.MAX_SAFE_INTEGER
           if (!rowHit || order < rowHit.order) rowHit = { order, hit }
         } else {
-          background.set(cellKey, hit)
+          background.set(cellKey, { order, hit })
         }
         break
       }
     }
-    if (rowHit) rowBackground.set(rowIndex, rowHit.hit)
+    if (rowHit) rowBackground.set(rowIndex, rowHit)
   })
+
+  // List order decides for every cell; a row rule counts as a match for each
+  // cell of its row.
+  const winner = (row: number, col: number): CellHighlight | undefined => {
+    const cell = background.get(row * columnCount + col)
+    const rowHit = rowBackground.get(row)
+    if (cell && rowHit) return cell.order < rowHit.order ? cell.hit : rowHit.hit
+    return (cell ?? rowHit)?.hit
+  }
 
   return {
     lookup: {
-      background: (row, col) => background.get(row * columnCount + col),
-      row: (row) => rowBackground.get(row),
+      background: winner,
+      row: (row) => rowBackground.get(row)?.hit,
       direction: (row, col) => direction.get(row * columnCount + col),
       hasDirection: (col) => canCompare && directions.has(col),
     },

@@ -703,7 +703,7 @@
                   "applies_to": {
                     "type": ["string", "null"],
                     "enum": ["cell", "row", null],
-                    "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. A cell rule paints over a row rule in the same row. Not allowed on gradient rules."
+                    "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell. Not allowed on gradient rules."
                   },
                   "color": {
                     "type": ["string", "null"],
@@ -1253,7 +1253,7 @@
                           "applies_to": {
                             "type": ["string", "null"],
                             "enum": ["cell", "row", null],
-                            "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. A cell rule paints over a row rule in the same row. Not allowed on gradient rules."
+                            "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell. Not allowed on gradient rules."
                           },
                           "color": {
                             "type": ["string", "null"],

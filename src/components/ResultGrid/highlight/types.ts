@@ -33,9 +33,9 @@ export const DEFAULT_REMAINDER_COLOR: HighlightColorToken = "dataSeries3"
 
 export type HighlightDisplay = "temporary" | "always"
 
-// Where a match paints: its own cell, or every cell of the row. A cell rule
-// paints over a row rule in the same row. Gradients stay per cell: their
-// alpha is the cell's own magnitude.
+// Where a match paints: its own cell, or every cell of the row. List order
+// decides per cell, a row rule counting for each cell of its row. Gradients
+// stay per cell: their alpha is the cell's own magnitude.
 export type HighlightAppliesTo = "cell" | "row"
 
 export type RuleTarget =

@@ -463,18 +463,19 @@ describe("evaluateHighlights: rules that apply to the row", () => {
     // When one row breaches and one does not
     const lookup = evaluate(rules, [row("A", 1, 500), row("B", 1, 5)])
 
-    // Then the breaching row is colored as a whole, its cells carry no own color
+    // Then every cell of the breaching row gets the color
     expect(lookup.row(0)).toEqual({
       color: "dataSeries10",
       alpha: 1,
       display: "always",
     })
-    expect(lookup.background(0, AMOUNT)).toBeUndefined()
-    expect(lookup.background(0, SYMBOL)).toBeUndefined()
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries10")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries10")
     expect(lookup.row(1)).toBeUndefined()
+    expect(lookup.background(1, AMOUNT)).toBeUndefined()
   })
 
-  it("keeps a cell rule on top of a row rule and lets list order pick the row color", () => {
+  it("lets list order decide between a row rule and a cell rule", () => {
     // Given a row rule on amount listed after a row rule on price, and a cell rule
     const rules = [
       rule({
@@ -505,17 +506,18 @@ describe("evaluateHighlights: rules that apply to the row", () => {
     // When both row rules match the same row
     const lookup = evaluate(rules, [row("A", 20, 5)])
 
-    // Then the rule listed first colors the row and the amount cell keeps its own color
+    // Then the row rule listed first paints every cell, including amount
     expect(lookup.row(0)?.color).toBe("dataSeries3")
-    expect(lookup.background(0, PRICE)).toBeUndefined()
-    expect(lookup.background(0, AMOUNT)).toBeUndefined()
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries3")
 
-    // And with the row rule on amount moved first, amount still matches its row rule first
+    // And with the cell rule moved first, amount keeps its own color and the row fills the rest
     const reordered = evaluate(
       [rules[2], rules[0], rules[1]],
       [row("A", 20, 5)],
     )
     expect(reordered.background(0, AMOUNT)?.color).toBe("dataNegative")
+    expect(reordered.background(0, PRICE)?.color).toBe("dataSeries3")
     expect(reordered.row(0)?.color).toBe("dataSeries3")
   })
 })
