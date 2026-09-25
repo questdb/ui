@@ -8,6 +8,7 @@ import {
   ChartRenderer,
   type ChartRendererHandle,
 } from "../CellChart/ChartRenderer"
+import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { toast } from "../../../../components/Toast"
@@ -97,7 +98,10 @@ export const DrawCanvas: React.FC<Props> = ({
   isFocused,
   onConfigChange,
 }) => {
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [restoredSettings] = useState(
+    () => chartSettingsSessions.get(cell.id) !== undefined,
+  )
+  const [settingsOpen, setSettingsOpen] = useState(restoredSettings)
   const [zoomStart, setZoomStart] = useState(
     () => getChartZoom(cell.id)?.start ?? 0,
   )
@@ -105,7 +109,9 @@ export const DrawCanvas: React.FC<Props> = ({
     () => getChartZoom(cell.id)?.end ?? 100,
   )
 
-  const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
+  const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(
+    chartSettingsSessions.get(cell.id)?.configAtOpen,
+  )
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const fetchState = useCellFetchState(cell.id)
@@ -146,8 +152,22 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const openSettings = useCallback(() => {
     configAtSettingsOpenRef.current = cell.chartConfig
+    chartSettingsSessions.set(cell.id, {
+      configAtOpen: cell.chartConfig,
+      draft: null,
+    })
     setSettingsOpen(true)
-  }, [cell.chartConfig])
+  }, [cell.id, cell.chartConfig])
+
+  const closeSettings = useCallback(() => {
+    chartSettingsSessions.clear(cell.id)
+    setSettingsOpen(false)
+  }, [cell.id])
+
+  const keepSettingsDraft = useCallback(
+    (draft: ChartConfig) => chartSettingsSessions.update(cell.id, { draft }),
+    [cell.id],
+  )
 
   const option = useMemo(
     () => buildEchartsOption(resolution.chart, resolution.renderQueries),
@@ -182,12 +202,12 @@ export const DrawCanvas: React.FC<Props> = ({
   useEffect(() => {
     if (!settingsOpen) return
     if (cell.chartConfig !== configAtSettingsOpenRef.current) {
-      setSettingsOpen(false)
+      closeSettings()
       toast.info(
         "Chart settings were updated by the assistant. Reopen chart configuration to edit.",
       )
     }
-  }, [cell.chartConfig, settingsOpen])
+  }, [cell.chartConfig, settingsOpen, closeSettings])
 
   useEffect(() => {
     const forThisCell =
@@ -228,7 +248,10 @@ export const DrawCanvas: React.FC<Props> = ({
       )}
       <ChartSettingsDrawer
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        appearInPlace={restoredSettings}
+        onClose={closeSettings}
+        initialDraft={chartSettingsSessions.get(cell.id)?.draft ?? null}
+        onDraftChange={keepSettingsDraft}
         tabs={resolution.tabs}
         config={resolution.effectiveConfig}
         onSave={onConfigChange}

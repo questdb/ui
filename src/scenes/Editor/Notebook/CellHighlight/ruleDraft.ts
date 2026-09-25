@@ -253,6 +253,13 @@ export type DraftConfig = {
   rules: DraftRule[]
 }
 
+// What the drawer keeps while open: the edited config and which rule is
+// expanded. Carried across a cell remount as one unit.
+export type HighlightDraft = {
+  config: DraftConfig
+  expandedRuleId: string | null
+}
+
 export const createUnsetRule = (id: string): UnsetRule => ({
   id,
   enabled: true,

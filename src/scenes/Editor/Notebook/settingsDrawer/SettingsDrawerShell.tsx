@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
 import { Button } from "../../../../components"
+import { prefersReducedMotion } from "../../../../utils/prefersReducedMotion"
 import { CellOverlayPortal } from "./CellOverlayContext"
 
 export type SettingsPresentation = "drawer" | "panel"
@@ -13,18 +14,32 @@ const fadeIn = keyframes`
   to { opacity: 1; }
 `
 
+const fadeOut = keyframes`
+  from { opacity: 1; }
+  to { opacity: 0; }
+`
+
 const slideIn = keyframes`
   from { transform: translateX(100%); }
   to { transform: translateX(0); }
 `
 
-const Backdrop = styled.div`
+const slideOut = keyframes`
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+`
+
+const Backdrop = styled.div<{ $exiting: boolean; $still: boolean }>`
   position: absolute;
   inset: 0;
   z-index: 3;
   pointer-events: auto;
   background: ${({ theme }) => theme.color.shadowMedium};
-  animation: ${fadeIn} 0.2s ease both;
+  animation-name: ${({ $exiting, $still }) =>
+    $exiting ? fadeOut : $still ? "none" : fadeIn};
+  animation-duration: 0.2s;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
 `
 
 const DRAWER_WIDTH = "36rem"
@@ -32,6 +47,8 @@ const DRAWER_WIDTH = "36rem"
 const Panel = styled.div<{
   $presentation: SettingsPresentation
   $drawerWidth: string
+  $exiting: boolean
+  $still: boolean
 }>`
   position: ${({ $presentation }) =>
     $presentation === "drawer" ? "absolute" : "relative"};
@@ -62,8 +79,12 @@ const Panel = styled.div<{
       : "none"};
   display: flex;
   flex-direction: column;
-  animation-name: ${({ $presentation }) =>
-    $presentation === "drawer" ? slideIn : "none"};
+  animation-name: ${({ $presentation, $exiting, $still }) =>
+    $presentation !== "drawer" || $still
+      ? "none"
+      : $exiting
+        ? slideOut
+        : slideIn};
   animation-duration: ${({ $presentation }) =>
     $presentation === "drawer" ? "0.25s" : "0s"};
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
@@ -119,6 +140,9 @@ type Props = {
   onCommit: () => void
   footerStart?: React.ReactNode
   drawerWidth?: string
+  // Drawer only: true when the owner remounted mid-session (maximize,
+  // restore), so the drawer appears in place instead of sliding in again.
+  appearInPlace?: boolean
   children: React.ReactNode
 }
 
@@ -132,11 +156,22 @@ export const SettingsDrawerShell: React.FC<Props> = ({
   onCommit,
   footerStart,
   drawerWidth = DRAWER_WIDTH,
+  appearInPlace = false,
   children,
 }) => {
   const popperOpenAtPointerDownRef = useRef(false)
+  const [exiting, setExiting] = useState(false)
+  const [wasOpen, setWasOpen] = useState(open)
+  const [still, setStill] = useState(open && appearInPlace)
   const isDrawer = presentation === "drawer"
-  const visible = !isDrawer || open
+  // A closing drawer stays mounted until its slide-out ends. Reduced motion
+  // drops it at once, as before.
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    setExiting(!open && isDrawer && !prefersReducedMotion())
+    setStill(false)
+  }
+  const visible = !isDrawer || open || exiting
 
   // A dropdown in the drawer is non-modal, so the click that closes it also
   // reaches the backdrop. Radix unmounts the popper during pointerdown, so
@@ -146,8 +181,12 @@ export const SettingsDrawerShell: React.FC<Props> = ({
   }
 
   const handleBackdropClick = () => {
-    if (popperOpenAtPointerDownRef.current) return
+    if (!open || popperOpenAtPointerDownRef.current) return
     onDismiss("backdrop")
+  }
+
+  const handlePanelAnimationEnd = (e: React.AnimationEvent) => {
+    if (exiting && e.target === e.currentTarget) setExiting(false)
   }
 
   useEffect(() => {
@@ -168,6 +207,8 @@ export const SettingsDrawerShell: React.FC<Props> = ({
     <>
       {isDrawer && (
         <Backdrop
+          $exiting={exiting}
+          $still={still}
           onPointerDown={handleBackdropPointerDown}
           onClick={handleBackdropClick}
           aria-hidden
@@ -176,6 +217,9 @@ export const SettingsDrawerShell: React.FC<Props> = ({
       <Panel
         $presentation={presentation}
         $drawerWidth={drawerWidth}
+        $exiting={exiting}
+        $still={still}
+        onAnimationEnd={handlePanelAnimationEnd}
         role={isDrawer ? "dialog" : "region"}
         aria-label={title}
         data-hook={`${dataHookBase}-${presentation}`}

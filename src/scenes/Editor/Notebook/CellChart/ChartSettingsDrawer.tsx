@@ -70,6 +70,11 @@ type SettingsProps = SharedProps & {
   presentation: SettingsPresentation
   open: boolean
   onClose?: () => void
+  // Drawer only: a draft carried across a cell remount, where edits go, and
+  // whether this mount is that remount.
+  initialDraft?: ChartConfig | null
+  onDraftChange?: (draft: ChartConfig) => void
+  appearInPlace?: boolean
 }
 
 const ChartSettings: React.FC<SettingsProps> = ({
@@ -80,12 +85,15 @@ const ChartSettings: React.FC<SettingsProps> = ({
   config,
   onSave,
   telemetry,
+  initialDraft,
+  onDraftChange,
+  appearInPlace,
 }) => {
-  const [draft, setDraft] = useState<ChartConfig>(config)
+  const [draft, setDraft] = useState<ChartConfig>(initialDraft ?? config)
   const [activeIndex, setActiveIndex] = useState<number>(tabs[0]?.index ?? 0)
   const [saveAttempted, setSaveAttempted] = useState(false)
-  const drawerWasOpenRef = useRef(false)
-  const visible = presentation === "panel" || open
+  // Mounting already open means a remount mid-session: keep the draft.
+  const drawerWasOpenRef = useRef(open)
 
   const resetDraft = useCallback(() => {
     setDraft(config)
@@ -114,6 +122,10 @@ const ChartSettings: React.FC<SettingsProps> = ({
     }
   }, [config, open, presentation, resetDraft, tabs])
 
+  useEffect(() => {
+    onDraftChange?.(draft)
+  }, [draft, onDraftChange])
+
   const dismiss = useCallback(
     (method: SettingsDismissMethod) => {
       telemetry?.onCancel?.(method)
@@ -121,8 +133,6 @@ const ChartSettings: React.FC<SettingsProps> = ({
     },
     [telemetry, onClose],
   )
-
-  if (!visible) return null
 
   const anchorTab = tabs[0]
   const anchorGroups = anchorTab
@@ -181,6 +191,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     <SettingsDrawerShell
       presentation={presentation}
       open={open}
+      appearInPlace={appearInPlace}
       title="Chart settings"
       dataHookBase="chart-settings"
       onDismiss={dismiss}
@@ -296,7 +307,13 @@ const ChartSettings: React.FC<SettingsProps> = ({
 }
 
 export const ChartSettingsDrawer: React.FC<
-  SharedProps & { open: boolean; onClose: () => void }
+  SharedProps & {
+    open: boolean
+    onClose: () => void
+    initialDraft: ChartConfig | null
+    onDraftChange: (draft: ChartConfig) => void
+    appearInPlace: boolean
+  }
 > = (props) => <ChartSettings {...props} presentation="drawer" />
 
 export const ChartSettingsPanel: React.FC<SharedProps> = (props) => (

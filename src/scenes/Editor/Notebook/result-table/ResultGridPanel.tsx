@@ -16,6 +16,11 @@ import {
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
 import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
+import type { HighlightDraft } from "../CellHighlight/ruleDraft"
+import {
+  highlightSessionKey,
+  highlightSettingsSessions,
+} from "../settingsDrawer/settingsDrawerSessions"
 import { useNotebookActions } from "../NotebookProvider"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
@@ -112,7 +117,12 @@ const ResultGridPanelInner: React.FC<Props> = ({
   const { maxColumnWidth } = useLocalStorage()
   const { setCellHighlightConfig } = useNotebookActions()
   const [hasSelection, setHasSelection] = useState(false)
-  const [highlightOpen, setHighlightOpen] = useState(false)
+  const sessionKey = highlightSessionKey(cellId, statementIndex)
+  const [restoredHighlight] = useState(
+    () => highlightSettingsSessions.get(sessionKey) !== undefined,
+  )
+  const [highlightOpen, setHighlightOpen] = useState(restoredHighlight)
+  const [highlightSession, setHighlightSession] = useState(0)
   const [pinnedCount, setPinnedCount] = useState(
     columnLayout?.pinnedColumns?.length ?? 0,
   )
@@ -147,8 +157,21 @@ const ResultGridPanelInner: React.FC<Props> = ({
 
   const openHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
+    highlightSettingsSessions.set(sessionKey, { draft: null })
+    setHighlightSession((session) => session + 1)
     setHighlightOpen(true)
   }
+
+  const closeHighlight = () => {
+    highlightSettingsSessions.clear(sessionKey)
+    setHighlightOpen(false)
+  }
+
+  const keepHighlightDraft = useCallback(
+    (draft: HighlightDraft) =>
+      highlightSettingsSessions.update(sessionKey, { draft }),
+    [sessionKey],
+  )
 
   const saveHighlight = (next: typeof highlightConfig) => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
@@ -157,13 +180,13 @@ const ResultGridPanelInner: React.FC<Props> = ({
       kinds: next.rules.map((rule) => rule.kind),
     })
     setCellHighlightConfig(cellId, statementIndex, next)
-    setHighlightOpen(false)
+    closeHighlight()
   }
 
   const clearHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
     setCellHighlightConfig(cellId, statementIndex, null)
-    setHighlightOpen(false)
+    closeHighlight()
   }
 
   useEffect(() => {
@@ -183,7 +206,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
       source: "notebook",
       method,
     })
-    setHighlightOpen(false)
+    closeHighlight()
   }
 
   return (
@@ -239,16 +262,19 @@ const ResultGridPanelInner: React.FC<Props> = ({
           })
         }
       />
-      {highlightOpen && (
-        <HighlightSettingsDrawer
-          columns={data.columns}
-          config={highlightConfig}
-          stats={highlights.stats}
-          onSave={saveHighlight}
-          onClear={clearHighlight}
-          onCancel={cancelHighlight}
-        />
-      )}
+      <HighlightSettingsDrawer
+        key={highlightSession}
+        open={highlightOpen}
+        appearInPlace={restoredHighlight && highlightSession === 0}
+        initialDraft={highlightSettingsSessions.get(sessionKey)?.draft ?? null}
+        onDraftChange={keepHighlightDraft}
+        columns={data.columns}
+        config={highlightConfig}
+        stats={highlights.stats}
+        onSave={saveHighlight}
+        onClear={clearHighlight}
+        onCancel={cancelHighlight}
+      />
     </>
   )
 }

@@ -84,6 +84,7 @@ import {
   clearChartZoom,
   clearChartZooms,
 } from "./cellVirtualization/chartZoomStore"
+import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -459,6 +460,7 @@ export const NotebookProvider: React.FC<{
           void deleteCellSnapshot(bufferId, cellId)
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
+          clearSettingsDrawerSessions(cellId)
         }
       }
       // For run->draw transitions, abort the in-flight run
@@ -588,6 +590,7 @@ export const NotebookProvider: React.FC<{
     () => () => {
       resetChartEntryAnimation(bufferId)
       clearChartZooms(cellsRef.current.map((c) => c.id))
+      cellsRef.current.forEach((c) => clearSettingsDrawerSessions(c.id))
     },
     [bufferId, cellsRef],
   )

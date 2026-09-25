@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
@@ -18,6 +18,7 @@ import {
   isCompleteRule,
   moveRule,
   type DraftConfig,
+  type HighlightDraft,
   type DraftRule,
 } from "./ruleDraft"
 import {
@@ -29,6 +30,11 @@ import {
 } from "./highlightSettingsStyles"
 
 type Props = {
+  open: boolean
+  appearInPlace: boolean
+  // A draft carried across a cell remount, and where edits go.
+  initialDraft: HighlightDraft | null
+  onDraftChange: (draft: HighlightDraft) => void
   columns: ColumnDefinition[]
   config: HighlightConfig
   stats: MatchStats | null
@@ -37,8 +43,14 @@ type Props = {
   onCancel: (method: SettingsDismissMethod) => void
 }
 
-// Mounted only while open, so the draft starts from the saved config.
+// Stays mounted across open/close so the shell can play its exit. The parent
+// remounts it with a fresh key on each open, so the draft starts from the
+// saved config.
 export const HighlightSettingsDrawer: React.FC<Props> = ({
+  open,
+  appearInPlace,
+  initialDraft,
+  onDraftChange,
   columns,
   config,
   stats,
@@ -46,8 +58,12 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   onClear,
   onCancel,
 }) => {
-  const [draft, setDraft] = useState<DraftConfig>(config)
-  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<DraftConfig>(
+    initialDraft?.config ?? config,
+  )
+  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(
+    initialDraft?.expandedRuleId ?? null,
+  )
 
   const setRules = (rules: DraftRule[]) => setDraft({ ...draft, rules })
 
@@ -61,6 +77,10 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
 
+  useEffect(() => {
+    onDraftChange({ config: draft, expandedRuleId })
+  }, [draft, expandedRuleId, onDraftChange])
+
   const save = () =>
     onSave({
       identityColumns: draft.identityColumns,
@@ -70,7 +90,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   return (
     <SettingsDrawerShell
       presentation="drawer"
-      open
+      open={open}
+      appearInPlace={appearInPlace}
       title="Highlight rules"
       dataHookBase="highlight-settings"
       drawerWidth="48rem"
