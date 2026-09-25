@@ -123,8 +123,7 @@ export type ApplyNotebookStateCellRequest = {
   autoRefresh?: AutoRefresh | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
-  // Index-aligned with the cell's `;`-split statements; null = no rules.
-  highlightConfigs?: (HighlightConfig | null)[] | null
+  highlightConfig?: HighlightConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
 

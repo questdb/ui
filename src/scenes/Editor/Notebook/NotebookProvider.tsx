@@ -129,7 +129,6 @@ export type NotebookActions = {
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
   setCellHighlightConfig: (
     cellId: string,
-    statementIndex: number,
     config: HighlightConfig | null,
   ) => void
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void

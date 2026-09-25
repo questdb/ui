@@ -28,6 +28,7 @@ describe("fromHighlightConfigWire", () => {
             unit: "percent",
           },
           { kind: "value", column: "amount", op: "between", value: 1, to: 5 },
+          { kind: "value", column: "amount", op: "gte", value: 100 },
           {
             kind: "value",
             column: "symbol",
@@ -40,7 +41,16 @@ describe("fromHighlightConfigWire", () => {
             column: null,
             steps: [{ below: 10, color: "teal" }],
           },
-          { kind: "gradient", column: "amount", max: 100 },
+          {
+            kind: "value",
+            column: "amount",
+            op: "between",
+            value: 1000,
+            to: 2000,
+            fill: "gradient",
+            color: "red",
+            high_color: "green",
+          },
           {
             kind: "value",
             column: "amount",
@@ -56,7 +66,7 @@ describe("fromHighlightConfigWire", () => {
     // Then the config carries typed rules with ids and kind defaults
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    const [up, pct, between, contains, steps, gradient, wholeRow] =
+    const [up, pct, between, atLeast, contains, steps, gradient, wholeRow] =
       result.config.rules
     expect(up).toMatchObject({
       kind: "previous",
@@ -75,6 +85,10 @@ describe("fromHighlightConfigWire", () => {
       condition: { op: "between", from: 1, to: 5 },
       display: "always",
     })
+    expect(atLeast).toMatchObject({
+      kind: "value",
+      condition: { op: "gte", value: 100 },
+    })
     expect(contains).toMatchObject({
       condition: { op: "contains", text: "usdt" },
       color: "dataSeries3",
@@ -85,19 +99,23 @@ describe("fromHighlightConfigWire", () => {
       remainderColor: "dataSeries3",
     })
     expect(gradient).toMatchObject({
-      max: 100,
-      negativeColor: "dataNegative",
-      positiveColor: "dataPositive",
+      kind: "value",
+      color: "dataNegative",
+      condition: {
+        op: "between",
+        from: 1000,
+        to: 2000,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
     })
     expect(wholeRow).toMatchObject({ kind: "value", appliesTo: "row" })
-    expect(gradient).not.toHaveProperty("appliesTo")
-    expect(new Set(result.config.rules.map((r) => r.id)).size).toBe(7)
+    expect(new Set(result.config.rules.map((r) => r.id)).size).toBe(8)
   })
 
-  it("rejects missing identity, bad ops and unknown colors with the rule index", () => {
+  it("rejects a non-list identity, bad ops and unknown colors with the rule index", () => {
     // Given malformed wire configs
     const noIdentity = fromHighlightConfigWire({
-      identity_columns: [],
+      identity_columns: "symbol" as never,
       rules: [],
     })
     const badOp = fromHighlightConfigWire({
@@ -110,15 +128,23 @@ describe("fromHighlightConfigWire", () => {
         { kind: "previous", column: "v", op: "lt", color: "hotpink" as never },
       ],
     })
-    const rowGradient = fromHighlightConfigWire({
+    const negativeThreshold = fromHighlightConfigWire({
       identity_columns: ["k"],
-      rules: [{ kind: "gradient", column: "v", applies_to: "row" }],
+      rules: [
+        { kind: "previous", column: "v", op: "changedBy", threshold: -1 },
+      ],
+    })
+    const fillOnGt = fromHighlightConfigWire({
+      identity_columns: ["k"],
+      rules: [
+        { kind: "value", column: "v", op: "gt", value: 1, fill: "gradient" },
+      ],
     })
 
     // Then each fails with a pointed message
     expect(noIdentity).toEqual({
       ok: false,
-      error: "identity_columns needs at least one column",
+      error: "identity_columns must be a list of columns",
     })
     if (badOp.ok) throw new Error("expected badOp to fail")
     expect(badOp.error).toContain("rules[0]")
@@ -126,8 +152,10 @@ describe("fromHighlightConfigWire", () => {
       ok: false,
       error: "rules[0]: unknown color 'hotpink'",
     })
-    if (rowGradient.ok) throw new Error("expected rowGradient to fail")
-    expect(rowGradient.error).toContain("applies_to must be cell")
+    if (negativeThreshold.ok) throw new Error("expected negative to fail")
+    expect(negativeThreshold.error).toContain("threshold of 0 or more")
+    if (fillOnGt.ok) throw new Error("expected fillOnGt to fail")
+    expect(fillOnGt.error).toContain("apply to op between only")
   })
 })
 
@@ -161,10 +189,14 @@ describe("toHighlightConfigWire", () => {
           display: "always" as const,
         },
         {
-          kind: "gradient" as const,
+          kind: "value" as const,
           column: null,
-          negative_color: "red" as const,
-          positive_color: "green" as const,
+          op: "between" as const,
+          value: -100,
+          to: 100,
+          fill: "gradient" as const,
+          color: "red" as const,
+          high_color: "green" as const,
           display: "always" as const,
         },
         {

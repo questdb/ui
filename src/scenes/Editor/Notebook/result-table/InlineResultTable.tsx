@@ -6,7 +6,8 @@ import { ResultWrapper, SuccessMessage } from "./styles"
 import type { StatementSlotView } from "./statementSlotView"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import type { ResultTrendStore } from "./resultTrendStore"
-import type { HighlightConfigs } from "./highlightConfig"
+import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 
 type Props = {
   slots: StatementSlotView[]
@@ -22,7 +23,8 @@ type Props = {
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
   trendStore: ResultTrendStore
-  highlightConfigs: HighlightConfigs | undefined
+  highlightConfig: HighlightConfig | undefined
+  cellColumns: ColumnDefinition[]
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -39,7 +41,8 @@ export const InlineResultTable: React.FC<Props> = ({
   onYieldFocus,
   viewportStore,
   trendStore,
-  highlightConfigs,
+  highlightConfig,
+  cellColumns,
 }) => {
   if (slots.length === 0) {
     return (
@@ -74,7 +77,6 @@ export const InlineResultTable: React.FC<Props> = ({
           key={activeSlot.key}
           data={activeResult}
           statementKey={activeSlot.key}
-          statementIndex={slots.indexOf(activeSlot)}
           runToken={timestamp}
           isFocused={isFocused}
           bufferId={bufferId}
@@ -84,7 +86,8 @@ export const InlineResultTable: React.FC<Props> = ({
           onYieldFocus={onYieldFocus}
           viewportStore={viewportStore}
           trendStore={trendStore}
-          highlightConfigs={highlightConfigs}
+          highlightConfig={highlightConfig}
+          cellColumns={cellColumns}
         />
       )}
     </ResultWrapper>

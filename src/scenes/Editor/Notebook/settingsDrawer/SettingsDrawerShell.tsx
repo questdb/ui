@@ -139,6 +139,8 @@ type Props = {
   onReset: () => void
   onCommit: () => void
   footerStart?: React.ReactNode
+  // Shown next to the action buttons, e.g. a validation summary.
+  footerNote?: React.ReactNode
   drawerWidth?: string
   // Drawer only: true when the owner remounted mid-session (maximize,
   // restore), so the drawer appears in place instead of sliding in again.
@@ -155,6 +157,7 @@ export const SettingsDrawerShell: React.FC<Props> = ({
   onReset,
   onCommit,
   footerStart,
+  footerNote,
   drawerWidth = DRAWER_WIDTH,
   appearInPlace = false,
   children,
@@ -249,6 +252,7 @@ export const SettingsDrawerShell: React.FC<Props> = ({
 
         <Footer>
           {footerStart && <FooterStart>{footerStart}</FooterStart>}
+          {footerNote}
           <Button
             type="button"
             variant="secondary"

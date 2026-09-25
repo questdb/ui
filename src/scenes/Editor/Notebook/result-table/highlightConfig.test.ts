@@ -2,78 +2,65 @@ import { describe, expect, it } from "vitest"
 import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
 import type {
   NotebookCell,
-  NotebookViewState,
+  SingleQueryResult,
 } from "../../../../store/notebook"
-import { queryKeyFor } from "../queryKey"
-import {
-  indexLegacyHighlightConfigs,
-  withHighlightConfig,
-} from "./highlightConfig"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import { cellColumnsOf, withHighlightConfig } from "./highlightConfig"
 
 const config = (identity: string): HighlightConfig => ({
   identityColumns: [identity],
   rules: [],
 })
 
-const cell = (
-  value: string,
-  highlightConfigs?: NotebookCell["highlightConfigs"],
-): NotebookCell => ({ id: "c", position: 0, value, highlightConfigs })
+const cell = (highlightConfig?: HighlightConfig): NotebookCell => ({
+  id: "c",
+  position: 0,
+  value: "SELECT 1; SELECT 2",
+  highlightConfig,
+})
 
 describe("withHighlightConfig", () => {
-  it("binds a config to its statement index and keeps it when the statement text changes", () => {
-    // Given a two-statement cell with rules on the second statement
-    const saved = withHighlightConfig(
-      cell("SELECT 1; SELECT 2"),
-      1,
-      config("symbol"),
-    )
+  it("stores one config per cell and drops the field when cleared", () => {
+    // Given a cell without rules
+    const saved = withHighlightConfig(cell(), config("symbol"))
 
-    // When the second statement is edited
-    const edited = { ...saved, value: "SELECT 1; SELECT 2, 3" }
+    // When the config is cleared
+    const cleared = withHighlightConfig(saved, null)
 
-    // Then the rules still sit at index 1, padded with null for the first statement
-    expect(edited.highlightConfigs).toEqual([null, config("symbol")])
-  })
-
-  it("clears one statement and drops the field when no statement has rules", () => {
-    // Given rules on both statements
-    const both = withHighlightConfig(
-      withHighlightConfig(cell("SELECT 1; SELECT 2"), 0, config("a")),
-      1,
-      config("b"),
-    )
-
-    // When the last one is cleared, then the first
-    const lastCleared = withHighlightConfig(both, 1, null)
-    const none = withHighlightConfig(lastCleared, 0, null)
-
-    // Then the tail is trimmed and finally the field is gone
-    expect(lastCleared.highlightConfigs).toEqual([config("a")])
-    expect("highlightConfigs" in none).toBe(false)
+    // Then the config is on the cell, and later the field is gone
+    expect(saved.highlightConfig).toEqual(config("symbol"))
+    expect("highlightConfig" in cleared).toBe(false)
   })
 })
 
-describe("indexLegacyHighlightConfigs", () => {
-  it("pairs text-keyed configs with the statement of the same text and drops orphans", () => {
-    // Given a notebook saved with configs keyed by statement text
-    const value = "SELECT 1; SELECT 2"
-    const legacy = {
-      [queryKeyFor("SELECT 2")]: config("second"),
-      [queryKeyFor("SELECT gone")]: config("orphan"),
-    }
-    const state: NotebookViewState = {
-      cells: [
-        cell(value, legacy as never),
-        cell("SELECT 3", [config("already")]),
-      ],
-    }
+describe("cellColumnsOf", () => {
+  it("lists every column of every result once, first type wins, skipping non-DQL slots", () => {
+    // Given two results that share a column name with different types
+    const dql = (columns: ColumnDefinition[]): SingleQueryResult =>
+      ({
+        type: "dql",
+        query: "q",
+        columns,
+        dataset: [],
+        timestamp: -1,
+      }) as never
+    const first = dql([
+      { name: "symbol", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+    ])
+    const second = dql([
+      { name: "price", type: "STRING" },
+      { name: "volume", type: "LONG" },
+    ])
 
-    // When the view is migrated
-    const result = indexLegacyHighlightConfigs(state)
+    // When the union is built
+    const columns = cellColumnsOf([first, null, second])
 
-    // Then the config lands at index 1, the orphan is gone, and indexed cells are untouched
-    expect(result.cells[0].highlightConfigs).toEqual([null, config("second")])
-    expect(result.cells[1]).toBe(state.cells[1])
+    // Then each name appears once with the type first seen
+    expect(columns).toEqual([
+      { name: "symbol", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+      { name: "volume", type: "LONG" },
+    ])
   })
 })

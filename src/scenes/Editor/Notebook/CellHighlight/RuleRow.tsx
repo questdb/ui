@@ -9,34 +9,49 @@ import {
   CaretUpIcon,
   DotsThreeIcon,
   TrashIcon,
+  WarningCircleIcon,
 } from "@phosphor-icons/react"
 import { Checkbox, DropdownMenu, IconButton } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import {
-  canApplyToRow,
-  type HighlightAppliesTo,
-  type HighlightDisplay,
+import type {
+  BetweenFill,
+  ColumnRange,
+  HighlightAppliesTo,
+  HighlightColorToken,
+  HighlightDisplay,
+  RuleTarget,
 } from "../../../../components/ResultGrid/highlight"
 import { FieldGroup, FieldLabel } from "../CellChart/chartSettingsStyles"
 import { ColorSwatch } from "./ColorSwatch"
 import { ConditionInputs } from "./ConditionInputs"
 import { StepsEditor } from "./StepsEditor"
-import { ruleColors, ruleDescription, ruleSummary } from "./ruleSummary"
+import {
+  ruleColors,
+  ruleDescription,
+  ruleFillLabel,
+  ruleSummary,
+} from "./ruleSummary"
 import {
   ALL_NUMERIC_TARGET,
   conditionOptionOf,
-  conditionOptionsFor,
+  conditionOptions,
   createRule,
   targetFromValue,
   targetKind,
   targetToValue,
   withConditionOption,
+  withSeededRange,
   type ConditionOption,
   type DraftRule,
   type RuleMove,
 } from "./ruleDraft"
+import type { RuleErrors } from "./ruleValidation"
 import {
+  ColumnPicker,
   CompactSelect,
+  DisplayField,
+  FieldError,
+  RuleAlert,
   RuleAppearance,
   RuleCard,
   RuleColors,
@@ -57,6 +72,8 @@ import {
 type Props = {
   rule: DraftRule
   columns: ColumnDefinition[]
+  columnRange: (column: string) => ColumnRange | null
+  errors: RuleErrors | undefined
   index: number
   count: number
   expanded: boolean
@@ -80,9 +97,18 @@ const APPLIES_TO_OPTIONS: { label: string; value: HighlightAppliesTo }[] = [
   { label: "Row", value: "row" },
 ]
 
+const ALL_NUMERIC_LABEL = "All numeric columns"
+
+const FILL_OPTIONS: { label: string; value: BetweenFill["kind"] }[] = [
+  { label: "Solid", value: "solid" },
+  { label: "Gradient", value: "gradient" },
+]
+
 export const RuleRow: React.FC<Props> = ({
   rule,
   columns,
+  columnRange,
+  errors,
   index,
   count,
   expanded,
@@ -92,58 +118,83 @@ export const RuleRow: React.FC<Props> = ({
   onRemove,
 }) => {
   const kind = rule.target ? targetKind(rule.target, columns) : "other"
-  const conditionOptions = (rule.target ? conditionOptionsFor(kind) : []).map(
-    (descriptor) => ({
-      label: descriptor.label,
-      value: descriptor.value,
-      description:
-        descriptor.group === "previous"
-          ? "vs previous result"
-          : descriptor.group === "scale"
-            ? "scale"
-            : "vs value",
-    }),
-  )
+  const conditionChoices = conditionOptions().map((descriptor) => ({
+    label: descriptor.label,
+    value: descriptor.value,
+    description:
+      descriptor.group === "previous" ? "vs previous result" : "vs value",
+  }))
   const targetOptions = [
-    { label: "All numeric columns", value: ALL_NUMERIC_TARGET },
+    { label: ALL_NUMERIC_LABEL, value: ALL_NUMERIC_TARGET },
     ...columns.map((column) => ({
       label: column.name,
       value: targetToValue({ kind: "column", name: column.name }),
     })),
   ]
+  const targetLabel =
+    rule.target === null
+      ? ""
+      : rule.target.kind === "allNumeric"
+        ? ALL_NUMERIC_LABEL
+        : rule.target.name
   const isUnset = rule.kind === "unset"
   const currentOption = isUnset ? "" : conditionOptionOf(rule)
-  const optionIsValid = conditionOptions.some((o) => o.value === currentOption)
 
-  const changeTarget = (value: string) => {
-    const target = targetFromValue(value)
+  const rangeOf = (target: RuleTarget) =>
+    target.kind === "column" ? columnRange(target.name) : null
+
+  // A picked option carries a target value; a typed name is a column.
+  const changeTarget = (value: string, option: { value: string } | null) => {
+    const target: RuleTarget = option
+      ? targetFromValue(value)
+      : { kind: "column", name: value }
     if (rule.kind === "unset") {
       onChange({ ...rule, target })
       return
     }
-    const nextKind = targetKind(target, columns)
-    const stillValid = conditionOptionsFor(nextKind).some(
-      (o) => o.value === currentOption,
-    )
-    const retargeted = { ...rule, target }
-    onChange(
-      stillValid
-        ? retargeted
-        : withConditionOption(
-            retargeted,
-            conditionOptionsFor(nextKind)[0]?.value ?? "value.eq",
-          ),
-    )
+    onChange(withSeededRange({ ...rule, target }, rangeOf(target)))
   }
 
   const changeCondition = (option: string) => {
     if (rule.kind === "unset") {
       if (rule.target) {
-        onChange(createRule(rule.id, rule.target, option as ConditionOption))
+        onChange(
+          withSeededRange(
+            createRule(rule.id, rule.target, option as ConditionOption),
+            rangeOf(rule.target),
+          ),
+        )
       }
       return
     }
-    onChange(withConditionOption(rule, option as ConditionOption))
+    onChange(
+      withSeededRange(
+        withConditionOption(rule, option as ConditionOption),
+        rangeOf(rule.target),
+      ),
+    )
+  }
+
+  const betweenFill =
+    rule.kind === "value" && rule.condition.op === "between"
+      ? rule.condition.fill
+      : null
+
+  const changeFill = (kind: string) => {
+    if (rule.kind !== "value" || rule.condition.op !== "between") return
+    const fill: BetweenFill =
+      kind === "gradient"
+        ? { kind: "gradient", highColor: "dataPositive" }
+        : { kind: "solid" }
+    onChange({ ...rule, condition: { ...rule.condition, fill } })
+  }
+
+  const changeHighColor = (highColor: HighlightColorToken) => {
+    if (rule.kind !== "value" || rule.condition.op !== "between") return
+    onChange({
+      ...rule,
+      condition: { ...rule.condition, fill: { kind: "gradient", highColor } },
+    })
   }
 
   const summary = ruleSummary(rule)
@@ -181,9 +232,21 @@ export const RuleRow: React.FC<Props> = ({
                   ))}
                 </SummarySwatches>
               )}
+              {ruleFillLabel(rule) && (
+                <SectionHint>{ruleFillLabel(rule)}</SectionHint>
+              )}
             </SummaryDetails>
           </SummaryCopy>
         </RuleSummaryButton>
+        {errors && (
+          <RuleAlert
+            role="img"
+            aria-label={`Rule ${index + 1} has errors`}
+            data-hook="highlight-rule-alert"
+          >
+            <WarningCircleIcon size={16} />
+          </RuleAlert>
+        )}
         <IconButton
           label={`${expanded ? "Collapse" : "Expand"} rule ${index + 1}`}
           size="sm"
@@ -247,26 +310,43 @@ export const RuleRow: React.FC<Props> = ({
             <RuleFields>
               <RuleField>
                 <FieldLabel>Column</FieldLabel>
-                <CompactSelect
-                  name={`rule-${rule.id}-column`}
-                  ariaLabel="Column"
-                  value={rule.target ? targetToValue(rule.target) : ""}
-                  placeholder="Column"
+                <ColumnPicker
+                  variant="field"
                   options={targetOptions}
-                  onValueChange={changeTarget}
+                  value={targetLabel}
+                  placeholder="Column"
+                  searchPlaceholder="Column name"
+                  emptyLabel="No columns yet, type a name"
+                  noMatchLabel="No columns matched"
+                  allowCustom
+                  ariaLabel="Column"
+                  ariaInvalid={errors?.column !== undefined}
+                  dataHookBase="highlight-rule-column"
+                  onSelect={changeTarget}
+                  onReset={() =>
+                    onChange(
+                      rule.kind === "unset"
+                        ? { ...rule, target: null }
+                        : { ...rule, target: { kind: "column", name: "" } },
+                    )
+                  }
                 />
+                {errors?.column && <FieldError>{errors.column}</FieldError>}
               </RuleField>
               <RuleField>
                 <FieldLabel>Condition</FieldLabel>
                 <CompactSelect
                   name={`rule-${rule.id}-condition`}
                   ariaLabel="Condition"
-                  value={optionIsValid ? currentOption : ""}
+                  value={currentOption}
                   placeholder="Condition"
                   disabled={!rule.target}
-                  options={conditionOptions}
+                  options={conditionChoices}
                   onValueChange={changeCondition}
                 />
+                {errors?.condition && (
+                  <FieldError>{errors.condition}</FieldError>
+                )}
               </RuleField>
             </RuleFields>
             {rule.kind !== "unset" && (
@@ -275,65 +355,70 @@ export const RuleRow: React.FC<Props> = ({
                   <ConditionInputs
                     rule={rule}
                     numeric={kind === "numeric"}
+                    errors={errors ?? {}}
                     onChange={onChange}
                   />
                 </RuleParameters>
                 {rule.kind === "steps" && (
-                  <StepsEditor rule={rule} onChange={onChange} />
+                  <StepsEditor
+                    rule={rule}
+                    errors={errors ?? {}}
+                    onChange={onChange}
+                  />
                 )}
                 <RuleAppearance>
-                  <FieldGroupCenter $multiple={rule.kind === "gradient"}>
-                    <FieldLabel>
-                      {rule.kind === "gradient"
-                        ? "Colors"
-                        : rule.kind === "steps"
-                          ? "Otherwise"
-                          : "Color"}
-                    </FieldLabel>
-                    <RuleColors>
-                      {(rule.kind === "previous" || rule.kind === "value") && (
-                        <ColorSwatch
-                          value={rule.color}
-                          label="Rule color"
-                          onChange={(color) => onChange({ ...rule, color })}
-                        />
-                      )}
-                      {rule.kind === "gradient" && (
-                        <>
-                          <FieldGroupCenter>
-                            <ColorSwatch
-                              value={rule.negativeColor}
-                              label="Negative color"
-                              onChange={(negativeColor) =>
-                                onChange({ ...rule, negativeColor })
-                              }
-                            />
-                            <SectionHint>Negative</SectionHint>
-                          </FieldGroupCenter>
-                          <FieldGroupCenter>
-                            <ColorSwatch
-                              value={rule.positiveColor}
-                              label="Positive color"
-                              onChange={(positiveColor) =>
-                                onChange({ ...rule, positiveColor })
-                              }
-                            />
-                            <SectionHint>Positive</SectionHint>
-                          </FieldGroupCenter>
-                        </>
-                      )}
-                      {rule.kind === "steps" && (
-                        <ColorSwatch
-                          value={rule.remainderColor}
-                          label="Remainder color"
-                          onChange={(remainderColor) =>
-                            onChange({ ...rule, remainderColor })
-                          }
-                        />
-                      )}
-                    </RuleColors>
-                  </FieldGroupCenter>
-                  <RuleField>
+                  {betweenFill && (
+                    <RuleField>
+                      <FieldLabel>Fill</FieldLabel>
+                      <CompactSelect
+                        name={`rule-${rule.id}-fill`}
+                        ariaLabel="Fill"
+                        value={betweenFill.kind}
+                        options={FILL_OPTIONS}
+                        onValueChange={changeFill}
+                      />
+                    </RuleField>
+                  )}
+                  {rule.kind !== "steps" && (
+                    <FieldGroupCenter
+                      $multiple={betweenFill?.kind === "gradient"}
+                    >
+                      <FieldLabel>
+                        {betweenFill?.kind === "gradient" ? "Colors" : "Color"}
+                      </FieldLabel>
+                      <RuleColors>
+                        {betweenFill?.kind === "gradient" ? (
+                          <>
+                            <FieldGroupCenter>
+                              <ColorSwatch
+                                value={rule.color}
+                                label="Low color"
+                                onChange={(color) =>
+                                  onChange({ ...rule, color })
+                                }
+                              />
+                              <SectionHint>Low</SectionHint>
+                            </FieldGroupCenter>
+                            <FieldGroupCenter>
+                              <ColorSwatch
+                                value={betweenFill.highColor}
+                                label="High color"
+                                onChange={changeHighColor}
+                              />
+                              <SectionHint>High</SectionHint>
+                            </FieldGroupCenter>
+                          </>
+                        ) : (
+                          <ColorSwatch
+                            value={rule.color}
+                            label="Rule color"
+                            onChange={(color) => onChange({ ...rule, color })}
+                          />
+                        )}
+                      </RuleColors>
+                    </FieldGroupCenter>
+                  )}
+                  <DisplayField>
                     <FieldLabel>Display</FieldLabel>
                     <CompactSelect
                       name={`rule-${rule.id}-display`}
@@ -347,24 +432,22 @@ export const RuleRow: React.FC<Props> = ({
                         })
                       }
                     />
+                  </DisplayField>
+                  <RuleField>
+                    <FieldLabel>Applies to</FieldLabel>
+                    <CompactSelect
+                      name={`rule-${rule.id}-applies-to`}
+                      ariaLabel="Applies to"
+                      value={rule.appliesTo}
+                      options={APPLIES_TO_OPTIONS}
+                      onValueChange={(appliesTo) =>
+                        onChange({
+                          ...rule,
+                          appliesTo: appliesTo as HighlightAppliesTo,
+                        })
+                      }
+                    />
                   </RuleField>
-                  {canApplyToRow(rule) && (
-                    <RuleField>
-                      <FieldLabel>Applies to</FieldLabel>
-                      <CompactSelect
-                        name={`rule-${rule.id}-applies-to`}
-                        ariaLabel="Applies to"
-                        value={rule.appliesTo}
-                        options={APPLIES_TO_OPTIONS}
-                        onValueChange={(appliesTo) =>
-                          onChange({
-                            ...rule,
-                            appliesTo: appliesTo as HighlightAppliesTo,
-                          })
-                        }
-                      />
-                    </RuleField>
-                  )}
                 </RuleAppearance>
               </>
             )}

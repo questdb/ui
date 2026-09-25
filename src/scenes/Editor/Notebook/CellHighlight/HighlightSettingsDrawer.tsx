@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
+  type ColumnRange,
   type HighlightConfig,
   type MatchStats,
   createRuleId,
@@ -27,7 +28,13 @@ import {
   SectionHeader,
   SectionHint,
   SectionTitle,
+  ValidationSummary,
 } from "./highlightSettingsStyles"
+import {
+  validateIdentity,
+  validateRules,
+  type RuleErrors,
+} from "./ruleValidation"
 
 type Props = {
   open: boolean
@@ -36,6 +43,7 @@ type Props = {
   initialDraft: HighlightDraft | null
   onDraftChange: (draft: HighlightDraft) => void
   columns: ColumnDefinition[]
+  columnRange: (column: string) => ColumnRange | null
   config: HighlightConfig
   stats: MatchStats | null
   onSave: (config: HighlightConfig) => void
@@ -52,6 +60,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   initialDraft,
   onDraftChange,
   columns,
+  columnRange,
   config,
   stats,
   onSave,
@@ -64,6 +73,9 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   const [expandedRuleId, setExpandedRuleId] = useState<string | null>(
     initialDraft?.expandedRuleId ?? null,
   )
+  // Checked on Save only; the map stays until the next Save.
+  const [errors, setErrors] = useState<Map<string, RuleErrors>>(new Map())
+  const [identityError, setIdentityError] = useState<string | null>(null)
 
   const setRules = (rules: DraftRule[]) => setDraft({ ...draft, rules })
 
@@ -81,11 +93,17 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     onDraftChange({ config: draft, expandedRuleId })
   }, [draft, expandedRuleId, onDraftChange])
 
-  const save = () =>
+  const save = () => {
+    const next = validateRules(draft.rules, columns)
+    const identity = validateIdentity(draft)
+    setErrors(next)
+    setIdentityError(identity)
+    if (next.size > 0 || identity !== null) return
     onSave({
       identityColumns: draft.identityColumns,
       rules: draft.rules.filter(isCompleteRule),
     })
+  }
 
   return (
     <SettingsDrawerShell
@@ -103,11 +121,19 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
           Clear all
         </Button>
       }
+      footerNote={
+        (errors.size > 0 || identityError !== null) && (
+          <ValidationSummary role="alert" data-hook="highlight-validation">
+            Failed to validate the rules
+          </ValidationSummary>
+        )
+      }
     >
       <IdentitySection
         columns={columns}
         value={draft.identityColumns}
         stats={stats}
+        error={identityError}
         onChange={(identityColumns) => setDraft({ ...draft, identityColumns })}
       />
 
@@ -124,6 +150,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
               key={rule.id}
               rule={rule}
               columns={columns}
+              columnRange={columnRange}
+              errors={errors.get(rule.id)}
               index={index}
               count={draft.rules.length}
               expanded={expandedRuleId === rule.id}

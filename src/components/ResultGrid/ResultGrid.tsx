@@ -64,11 +64,7 @@ import {
   toAbsoluteIndex,
   toVisibleAbsoluteRange,
 } from "./virtualRowMapping"
-import {
-  DIRECTION_GLYPH_SIZE,
-  DIRECTION_GLYPH_WIDTH,
-  MIN_COLUMN_WIDTH,
-} from "./dimensions"
+import { DIRECTION_GLYPH_WIDTH, MIN_COLUMN_WIDTH } from "./dimensions"
 import { useContainerWidth } from "./useContainerWidth"
 import { useFontsReady } from "./useFontsReady"
 import { useScrollShadows } from "./useScrollShadows"
@@ -82,7 +78,6 @@ import {
   type HighlightLookup,
 } from "./highlight/types"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
-import { CaretDownIcon, CaretUpIcon } from "@phosphor-icons/react"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -169,6 +164,7 @@ const GridCell = React.memo(function GridCell({
       $rowActive={rowActive}
       $highlightColor={highlight?.color}
       $highlightAlpha={highlight?.alpha ?? 0}
+      $highlightBlend={highlight?.blend}
       $highlightMode={highlightMode}
       $flashParity={flashParity}
       onClick={() => onCellClick(rowIndex, colIndex)}
@@ -179,12 +175,7 @@ const GridCell = React.memo(function GridCell({
       <CellText style={{ textAlign: align }}>{displayValue}</CellText>
       {hasDirectionSlot && (
         <CellDirectionGlyph $direction={direction} aria-hidden>
-          {direction === "up" && (
-            <CaretUpIcon size={DIRECTION_GLYPH_SIZE} weight="fill" />
-          )}
-          {direction === "down" && (
-            <CaretDownIcon size={DIRECTION_GLYPH_SIZE} weight="fill" />
-          )}
+          {direction === "up" ? "▲" : direction === "down" ? "▼" : null}
         </CellDirectionGlyph>
       )}
     </Cell>

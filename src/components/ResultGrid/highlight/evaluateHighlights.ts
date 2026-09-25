@@ -6,18 +6,16 @@ import {
   identityKeyOf,
   type IdentityIndex,
 } from "./identityIndex"
-import {
-  ruleAppliesTo,
-  type CellDirection,
-  type CellHighlight,
-  type GradientRule,
-  type HighlightConfig,
-  type HighlightEvaluation,
-  type HighlightRule,
-  type MatchStats,
-  type PreviousRule,
-  type StepsRule,
-  type ValueRule,
+import type {
+  CellDirection,
+  CellHighlight,
+  HighlightConfig,
+  HighlightEvaluation,
+  HighlightRule,
+  MatchStats,
+  PreviousRule,
+  StepsRule,
+  ValueRule,
 } from "./types"
 
 type EvaluateInput = {
@@ -31,8 +29,14 @@ type ColumnRules = Map<number, HighlightRule[]>
 
 type OrderedHit = { order: number; hit: CellHighlight }
 
-const asNumber = (value: CellValue): number | null =>
-  typeof value === "number" && Number.isFinite(value) ? value : null
+// LONG columns reach the grid as decimal strings, so their 64-bit precision
+// survives JSON; for highlighting, a double is close enough.
+const asNumber = (value: CellValue): number | null => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null
+  if (typeof value !== "string" || value.trim() === "") return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
 
 const asComparable = (value: CellValue, kind: ColumnKind): number | null => {
   if (kind === "temporal") {
@@ -120,15 +124,6 @@ const directionColumns = (rules: ColumnRules): Set<number> => {
   return result
 }
 
-const columnAbsMax = (dataset: ResultGridRow[], index: number): number => {
-  let max = 0
-  for (const row of dataset) {
-    const value = asNumber(row[index])
-    if (value !== null && Math.abs(value) > max) max = Math.abs(value)
-  }
-  return max
-}
-
 const matchPrevious = (
   rule: PreviousRule,
   value: CellValue,
@@ -149,6 +144,8 @@ const matchPrevious = (
       return current < previous ? hit : undefined
     case "changedBy": {
       const delta = Math.abs(current - previous)
+      // A threshold of 0 means "any change"; an unchanged cell never matches.
+      if (delta === 0) return undefined
       if (condition.unit === "absolute") {
         return delta >= condition.threshold ? hit : undefined
       }
@@ -157,6 +154,23 @@ const matchPrevious = (
         ? hit
         : undefined
     }
+  }
+}
+
+const compare = (
+  op: "gt" | "gte" | "lt" | "lte",
+  current: number,
+  expected: number,
+): boolean => {
+  switch (op) {
+    case "gt":
+      return current > expected
+    case "gte":
+      return current >= expected
+    case "lt":
+      return current < expected
+    case "lte":
+      return current <= expected
   }
 }
 
@@ -191,20 +205,27 @@ const matchValue = (
         : undefined
     }
     case "gt":
-    case "lt": {
+    case "gte":
+    case "lt":
+    case "lte": {
       const current = asComparable(value, kind)
       const expected = asComparableInput(condition.value, kind)
       if (current === null || expected === null) return undefined
-      const matches =
-        condition.op === "gt" ? current > expected : current < expected
-      return matches ? hit : undefined
+      return compare(condition.op, current, expected) ? hit : undefined
     }
     case "between": {
       const current = asComparable(value, kind)
       const from = asComparableInput(condition.from, kind)
       const to = asComparableInput(condition.to, kind)
       if (current === null || from === null || to === null) return undefined
-      return current >= from && current <= to ? hit : undefined
+      if (condition.fill.kind === "solid") {
+        return current >= from && current <= to ? hit : undefined
+      }
+      const ratio =
+        to === from
+          ? 1
+          : Math.min(1, Math.max(0, (current - from) / (to - from)))
+      return { ...hit, blend: { color: condition.fill.highColor, ratio } }
     }
   }
 }
@@ -224,20 +245,6 @@ const matchSteps = (
   }
 }
 
-const matchGradient = (
-  rule: GradientRule,
-  max: number,
-  value: CellValue,
-): CellHighlight | undefined => {
-  const current = asNumber(value)
-  if (current === null || current === 0 || max <= 0) return undefined
-  return {
-    color: current > 0 ? rule.positiveColor : rule.negativeColor,
-    alpha: Math.min(1, Math.abs(current) / max),
-    display: rule.display,
-  }
-}
-
 const directionOf = (
   value: CellValue,
   previousValue: CellValue,
@@ -250,11 +257,10 @@ const directionOf = (
   return current > previous ? "up" : "down"
 }
 
-const createRuleMatchers = (rules: ColumnRules, dataset: ResultGridRow[]) => {
+const createRuleMatchers = (rules: ColumnRules) => {
   const sortedSteps = new Map<string, StepsRule["steps"]>()
-  const gradientMax = new Map<string, number>()
   const patterns = new Map<string, RegExp | null>()
-  for (const [index, list] of rules) {
+  for (const list of rules.values()) {
     for (const rule of list) {
       if (
         rule.kind === "value" &&
@@ -267,13 +273,6 @@ const createRuleMatchers = (rules: ColumnRules, dataset: ResultGridRow[]) => {
         sortedSteps.set(
           rule.id,
           [...rule.steps].sort((a, b) => a.below - b.below),
-        )
-      }
-      if (rule.kind === "gradient") {
-        const key = `${rule.id}:${index}`
-        gradientMax.set(
-          key,
-          rule.max === "auto" ? columnAbsMax(dataset, index) : rule.max,
         )
       }
     }
@@ -294,12 +293,6 @@ const createRuleMatchers = (rules: ColumnRules, dataset: ResultGridRow[]) => {
         return matchValue(rule, value, kind, patterns.get(rule.id) ?? null)
       case "steps":
         return matchSteps(rule, sortedSteps.get(rule.id) ?? [], value)
-      case "gradient":
-        return matchGradient(
-          rule,
-          gradientMax.get(`${rule.id}:${index}`) ?? 0,
-          value,
-        )
     }
   }
 }
@@ -313,7 +306,7 @@ export const evaluateHighlights = ({
   const kinds = columns.map(columnKindOf)
   const rules = groupRulesByColumn(config.rules, columns, kinds)
   const directions = directionColumns(rules)
-  const matchRule = createRuleMatchers(rules, dataset)
+  const matchRule = createRuleMatchers(rules)
   const identityIndexes = identityColumnIndexes(columns, config.identityColumns)
   const canCompare = previous !== null && identityIndexes !== null
 
@@ -354,7 +347,7 @@ export const evaluateHighlights = ({
         const hit = matchRule(rule, index, kinds[index], value, previousRow)
         if (!hit) continue
         const order = priority.get(rule) ?? Number.MAX_SAFE_INTEGER
-        if (ruleAppliesTo(rule) === "row") {
+        if (rule.appliesTo === "row") {
           if (!rowHit || order < rowHit.order) rowHit = { order, hit }
         } else {
           background.set(cellKey, { order, hit })

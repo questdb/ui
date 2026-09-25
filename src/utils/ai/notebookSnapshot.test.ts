@@ -352,28 +352,25 @@ describe("formatSnapshot", () => {
     expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 5 }")
   })
 
-  it("renders highlight_configs aligned with the cell's statements", async () => {
-    // Given a two-statement cell with rules on the second statement
+  it("renders the cell's highlight_config as wire JSON", async () => {
+    // Given a cell with one previous rule
     const value = "SELECT 1; SELECT symbol, price FROM trades"
     const cell = sql("a", value, {
-      highlightConfigs: [
-        null,
-        {
-          identityColumns: ["symbol"],
-          rules: [
-            {
-              id: "r1",
-              enabled: true,
-              target: { kind: "column", name: "price" },
-              display: "temporary",
-              kind: "previous",
-              appliesTo: "cell",
-              condition: { op: "gt" },
-              color: "dataPositive",
-            },
-          ],
-        },
-      ],
+      highlightConfig: {
+        identityColumns: ["symbol"],
+        rules: [
+          {
+            id: "r1",
+            enabled: true,
+            target: { kind: "column", name: "price" },
+            display: "temporary",
+            kind: "previous",
+            appliesTo: "cell",
+            condition: { op: "gt" },
+            color: "dataPositive",
+          },
+        ],
+      },
     })
     const id = await seedNotebook({ cells: [cell] })
 
@@ -381,25 +378,20 @@ describe("formatSnapshot", () => {
     const snap = await buildSnapshot(id)
     const out = formatSnapshot(snap!)
 
-    // Then the wire array has a null for the first statement and the rule for the second
-    expect(snap?.status === "ok" && snap.cells[0].highlight_configs).toEqual([
-      null,
-      {
-        identity_columns: ["symbol"],
-        rules: [
-          {
-            kind: "previous",
-            column: "price",
-            display: "temporary",
-            color: "green",
-            op: "gt",
-          },
-        ],
-      },
-    ])
-    expect(out).toContain(
-      'highlight_configs: [null,{"identity_columns":["symbol"]',
-    )
+    // Then the wire config carries the rule in hue names
+    expect(snap?.status === "ok" && snap.cells[0].highlight_config).toEqual({
+      identity_columns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          column: "price",
+          display: "temporary",
+          color: "green",
+          op: "gt",
+        },
+      ],
+    })
+    expect(out).toContain('highlight_config: {"identity_columns":["symbol"]')
   })
 
   it("renders chart_config as one-line wire JSON the model can copy back", async () => {

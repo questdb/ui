@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   createUnsetRule,
   isCompleteRule,
-  conditionOptionsFor,
+  conditionOptions,
   createRule,
   moveRule,
   targetFromValue,
@@ -15,16 +15,15 @@ describe("withConditionOption", () => {
     // Given a value rule
     const rule = createRule("r1", { kind: "column", name: "price" }, "value.gt")
 
-    // When switched to a gradient and back to a previous rule
-    const gradient = withConditionOption(rule, "gradient")
-    const previous = withConditionOption(gradient, "prev.changedBy")
+    // When switched to steps and back to a previous rule
+    const steps = withConditionOption(rule, "steps")
+    const previous = withConditionOption(steps, "prev.changedBy")
 
     // Then the identity survives and each kind gets its defaults
-    expect(gradient).toMatchObject({
+    expect(steps).toMatchObject({
       id: "r1",
-      kind: "gradient",
+      kind: "steps",
       target: { kind: "column", name: "price" },
-      max: "auto",
       display: "always",
     })
     expect(previous).toMatchObject({
@@ -35,7 +34,7 @@ describe("withConditionOption", () => {
     })
   })
 
-  it("carries applies-to row across cell-or-row kinds and drops it for a gradient", () => {
+  it("carries applies-to row across kinds and starts a fresh value rule per cell", () => {
     // Given a whole-row value rule
     const rule = createRule(
       "r2",
@@ -45,37 +44,36 @@ describe("withConditionOption", () => {
     if (rule.kind !== "value") throw new Error("Expected a value rule")
     const wholeRow = { ...rule, appliesTo: "row" as const }
 
-    // When switched to steps, then to a gradient, then back to a value rule
+    // When switched to steps, then to a between rule, then a fresh value rule is created
     const steps = withConditionOption(wholeRow, "steps")
-    const gradient = withConditionOption(steps, "gradient")
-    const value = withConditionOption(gradient, "value.lt")
+    const between = withConditionOption(steps, "value.between")
+    const fresh = createRule(
+      "r3",
+      { kind: "column", name: "amount" },
+      "value.lt",
+    )
 
-    // Then steps keep the row, the gradient has none, and the value rule starts per cell
+    // Then the row choice follows the rule through kinds, and a new rule starts per cell
     expect(steps).toMatchObject({ kind: "steps", appliesTo: "row" })
-    expect(gradient).not.toHaveProperty("appliesTo")
-    expect(value).toMatchObject({ kind: "value", appliesTo: "cell" })
+    expect(between).toMatchObject({
+      kind: "value",
+      appliesTo: "row",
+      condition: { op: "between", fill: { kind: "solid" } },
+    })
+    expect(fresh).toMatchObject({ kind: "value", appliesTo: "cell" })
   })
 })
 
-describe("conditionOptionsFor", () => {
-  it("offers only type-compatible conditions", () => {
-    // When listing options per kind
-    const numeric = conditionOptionsFor("numeric").map((o) => o.value)
-    const text = conditionOptionsFor("text").map((o) => o.value)
-    const temporal = conditionOptionsFor("temporal").map((o) => o.value)
+describe("conditionOptions", () => {
+  it("offers every condition regardless of column type", () => {
+    // When listing the options
+    const values = conditionOptions().map((o) => o.value)
 
-    // Then numeric gets everything, text gets change/equality/contains, temporal gets ordering
-    expect(numeric).toContain("gradient")
-    expect(numeric).toContain("prev.gt")
-    expect(text).toEqual([
-      "prev.changed",
-      "value.eq",
-      "value.isNull",
-      "value.contains",
-      "value.matches",
-    ])
-    expect(temporal).toContain("value.between")
-    expect(temporal).not.toContain("gradient")
+    // Then comparison, value and steps conditions are all there
+    expect(values).toContain("prev.gt")
+    expect(values).toContain("value.between")
+    expect(values).toContain("value.contains")
+    expect(values).toContain("steps")
   })
 })
 

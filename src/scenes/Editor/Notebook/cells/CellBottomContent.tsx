@@ -14,7 +14,10 @@ import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
 import { createResultTrendStore } from "../result-table/resultTrendStore"
-import { resolveHighlightConfig } from "../result-table/highlightConfig"
+import {
+  cellColumnsOf,
+  resolveHighlightConfig,
+} from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
@@ -84,16 +87,21 @@ export const CellBottomContent: React.FC<Props> = ({
 
   // Every settled statement feeds the baseline, not only the mounted tab.
   useEffect(() => {
-    slots.forEach((slot, index) => {
-      if (slot.result?.type !== "dql") return
+    for (const slot of slots) {
+      if (slot.result?.type !== "dql") continue
       trendStore.capture(
         slot.key,
         slot.result,
-        resolveHighlightConfig(cell.highlightConfigs, index, slot.result)
+        resolveHighlightConfig(cell.highlightConfig, slot.result)
           .identityColumns,
       )
-    })
-  }, [slots, cell.highlightConfigs, trendStore])
+    }
+  }, [slots, cell.highlightConfig, trendStore])
+
+  const cellColumns = useMemo(
+    () => cellColumnsOf(slots.map((slot) => slot.result)),
+    [slots],
+  )
 
   useEffect(
     () => () => {
@@ -139,7 +147,8 @@ export const CellBottomContent: React.FC<Props> = ({
         onYieldFocus={onYieldFocus}
         viewportStore={viewportStore}
         trendStore={trendStore}
-        highlightConfigs={cell.highlightConfigs}
+        highlightConfig={cell.highlightConfig}
+        cellColumns={cellColumns}
       />
     ) : (
       <GridShimmer

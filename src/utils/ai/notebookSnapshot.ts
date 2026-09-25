@@ -32,7 +32,6 @@ import {
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "../tools/highlightConfigWire"
-import { statementQueryKeys } from "../notebooks/notebookController/notebookTransitions"
 
 export type { HighlightConfigWire }
 
@@ -59,8 +58,7 @@ export type NotebookContextCell = {
   auto_refresh?: AutoRefresh
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
-  // One entry per `;`-split statement; null where a statement has no rules.
-  highlight_configs?: (HighlightConfigWire | null)[]
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
   // Live-only: present for the mounted notebook alone. Absence never means
@@ -120,19 +118,10 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
 
-// Aligned with the cell's `;`-split statements so the model can copy the
-// array straight back into apply_notebook_state.
-const highlightConfigsWire = (
+const highlightConfigWire = (
   cell: NotebookCell,
-): (HighlightConfigWire | null)[] | undefined => {
-  const configs = cell.highlightConfigs
-  if (!configs) return undefined
-  const wire = statementQueryKeys(cell.value).map((_, index) => {
-    const config = configs[index]
-    return config ? toHighlightConfigWire(config) : null
-  })
-  return wire.some((entry) => entry !== null) ? wire : undefined
-}
+): HighlightConfigWire | undefined =>
+  cell.highlightConfig ? toHighlightConfigWire(cell.highlightConfig) : undefined
 
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
@@ -202,8 +191,8 @@ const buildCell = (
   if (chartConfig && Array.isArray(chartConfig.queries)) {
     out.chart_config = toChartConfigWire(chartConfig)
   }
-  const highlightConfigs = highlightConfigsWire(cell)
-  if (highlightConfigs) out.highlight_configs = highlightConfigs
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
     if (g) {
@@ -328,10 +317,10 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
         )}`,
       )
     }
-    if (c.highlight_configs) {
+    if (c.highlight_config) {
       lines.push(
-        `      highlight_configs: ${sanitizeForPromptContext(
-          JSON.stringify(c.highlight_configs),
+        `      highlight_config: ${sanitizeForPromptContext(
+          JSON.stringify(c.highlight_config),
         )}`,
       )
     }
@@ -469,7 +458,7 @@ export type NotebookCellDetails = {
   auto_refresh?: AutoRefresh
   is_view_maximized?: boolean
   chart_config?: ChartConfigWire
-  highlight_configs?: (HighlightConfigWire | null)[]
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
   // Live-only (mounted notebook); see NotebookContextCell.
@@ -542,8 +531,8 @@ export const serializeCell = (
     out.is_view_maximized = cell.isViewMaximized
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)
-  const highlightConfigs = highlightConfigsWire(cell)
-  if (highlightConfigs) out.highlight_configs = highlightConfigs
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   return out
 }
 

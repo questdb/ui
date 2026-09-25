@@ -942,16 +942,14 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_highlight_config": {
-        const { buffer_id, cell_id, statement_index, highlight_config } =
+        const { buffer_id, cell_id, highlight_config } =
           (input as {
             buffer_id: number
             cell_id: string
-            statement_index?: number | null
             highlight_config?: HighlightConfigWire | null
           }) || {}
         setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
         const highlightBaseline = getBufferActionSeq(buffer_id)
-        const statementIndex = statement_index ?? 0
         let config = null
         if (highlight_config) {
           const parsed = fromHighlightConfigWire(highlight_config)
@@ -975,7 +973,6 @@ export const dispatchTool = async (
                   parts,
                   buffer_id,
                   cell_id,
-                  statementIndex,
                   config,
                 ),
               signal,

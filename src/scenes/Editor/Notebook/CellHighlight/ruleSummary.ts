@@ -1,7 +1,4 @@
-import {
-  ruleAppliesTo,
-  type HighlightColorToken,
-} from "../../../../components/ResultGrid/highlight"
+import type { HighlightColorToken } from "../../../../components/ResultGrid/highlight"
 import type { DraftRule } from "./ruleDraft"
 
 // Strings read like the SQL the user just wrote: single quotes.
@@ -12,9 +9,9 @@ export const ruleSummary = (rule: DraftRule): string => {
   const target =
     rule.target?.kind === "allNumeric"
       ? "All numeric columns"
-      : rule.target?.name
+      : rule.target?.name || "Choose a column"
   if (rule.kind === "unset")
-    return target ? `${target} · Choose a condition` : "New rule"
+    return rule.target ? `${target} · Choose a condition` : "New rule"
   switch (rule.kind) {
     case "previous": {
       const condition = rule.condition
@@ -35,8 +32,12 @@ export const ruleSummary = (rule: DraftRule): string => {
       switch (condition.op) {
         case "gt":
           return `${target} > ${formatValue(condition.value)}`
+        case "gte":
+          return `${target} ≥ ${formatValue(condition.value)}`
         case "lt":
           return `${target} < ${formatValue(condition.value)}`
+        case "lte":
+          return `${target} ≤ ${formatValue(condition.value)}`
         case "eq":
           return `${target} = ${formatValue(condition.value)}`
         case "between":
@@ -52,8 +53,6 @@ export const ruleSummary = (rule: DraftRule): string => {
     }
     case "steps":
       return `${target} · ${rule.steps.length} color ${rule.steps.length === 1 ? "step" : "steps"}`
-    case "gradient":
-      return `${target} · Gradient (${rule.max === "auto" ? "auto" : `max ${rule.max}`})`
   }
 }
 
@@ -62,10 +61,12 @@ export const ruleColors = (rule: DraftRule): HighlightColorToken[] => {
     case "unset":
       return []
     case "previous":
-    case "value":
       return [rule.color]
-    case "gradient":
-      return [rule.negativeColor, rule.positiveColor]
+    case "value":
+      return rule.condition.op === "between" &&
+        rule.condition.fill.kind === "gradient"
+        ? [rule.color, rule.condition.fill.highColor]
+        : [rule.color]
     case "steps":
       return [
         ...new Set([
@@ -76,9 +77,17 @@ export const ruleColors = (rule: DraftRule): HighlightColorToken[] => {
   }
 }
 
+// Shown after the swatches, where the colors are, not in the title.
+export const ruleFillLabel = (rule: DraftRule): string | null =>
+  rule.kind === "value" &&
+  rule.condition.op === "between" &&
+  rule.condition.fill.kind === "gradient"
+    ? "gradient"
+    : null
+
 export const ruleDescription = (rule: DraftRule): string => {
   if (rule.kind === "unset")
     return "Choose a column and condition to finish this rule"
   const display = rule.display === "temporary" ? "Flash" : "Permanent"
-  return ruleAppliesTo(rule) === "row" ? `${display} · Row` : display
+  return rule.appliesTo === "row" ? `${display} · Row` : display
 }

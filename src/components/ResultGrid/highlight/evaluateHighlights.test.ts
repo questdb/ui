@@ -201,6 +201,23 @@ describe("evaluateHighlights: previous result rules", () => {
     expect(byPercent.background(0, PRICE)).toBeUndefined()
     expect(byPercent.background(1, PRICE)).toBeDefined()
     expect(byPercent.background(2, PRICE)).toBeUndefined()
+
+    // And a threshold of 0 flags any change but never an unchanged cell
+    const anyChange = evaluateHighlights({
+      columns,
+      dataset: [row("A", 100, 1), row("B", 100.001, 1)],
+      config: config([
+        rule({
+          id: "any",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 0, unit: "absolute" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+    expect(anyChange.background(0, PRICE)).toBeUndefined()
+    expect(anyChange.background(1, PRICE)).toBeDefined()
   })
 
   it("keeps the direction glyph when a value rule wins the background", () => {
@@ -250,7 +267,7 @@ describe("evaluateHighlights: value rules", () => {
       rule({
         kind: "value",
         target: { kind: "column", name: "amount" },
-        condition: { op: "between", from: 10, to: 20 },
+        condition: { op: "between", from: 10, to: 20, fill: { kind: "solid" } },
         color: "dataSeries4",
       }),
     ]
@@ -266,6 +283,28 @@ describe("evaluateHighlights: value rules", () => {
     expect(lookup.background(0, AMOUNT)).toBeUndefined()
     expect(lookup.background(1, AMOUNT)).toBeDefined()
     expect(lookup.background(2, AMOUNT)).toBeDefined()
+  })
+
+  it("treats ≥ and ≤ as inclusive and > and < as strict", () => {
+    // Given one rule of each comparison on amount, all against 10
+    const at = (op: "gt" | "gte" | "lt" | "lte") =>
+      rule({
+        id: op,
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        condition: { op, value: 10 },
+        color: "dataSeries4",
+      })
+
+    // When a cell equals the bound
+    const matchesAtBound = (op: "gt" | "gte" | "lt" | "lte") =>
+      evaluate([at(op)], [row("A", 1, 10)]).background(0, AMOUNT) !== undefined
+
+    // Then only the inclusive ops match it
+    expect(matchesAtBound("gt")).toBe(false)
+    expect(matchesAtBound("gte")).toBe(true)
+    expect(matchesAtBound("lt")).toBe(false)
+    expect(matchesAtBound("lte")).toBe(true)
   })
 
   it("compares timestamps as instants", () => {
@@ -522,7 +561,85 @@ describe("evaluateHighlights: rules that apply to the row", () => {
   })
 })
 
-describe("evaluateHighlights: steps and gradient", () => {
+describe("evaluateHighlights: LONG columns as decimal strings", () => {
+  const longColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "volume", type: "LONG" },
+  ]
+  const VOLUME = 1
+  const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
+    evaluateHighlights({
+      columns: longColumns,
+      dataset,
+      config: config(rules),
+      previous: buildIdentityIndex([["A", "50000"]], [SYMBOL]),
+    }).lookup
+
+  it("reads string-encoded longs as numbers for steps, comparisons, gradient and movement", () => {
+    // Given one rule of each numeric kind on a LONG column
+    const target = { kind: "column", name: "volume" } as const
+    const steps = rule({
+      id: "steps",
+      kind: "steps",
+      target,
+      steps: [{ id: "s", below: 60000, color: "dataNegative" }],
+      remainderColor: "dataPositive",
+    })
+    const above = rule({
+      id: "above",
+      kind: "value",
+      target,
+      condition: { op: "gte", value: 60000 },
+      color: "dataSeries3",
+    })
+    const gradient = rule({
+      id: "gradient",
+      kind: "value",
+      target,
+      condition: {
+        op: "between",
+        from: 0,
+        to: 64915,
+        fill: { kind: "gradient", highColor: "dataSeries9" },
+      },
+      color: "dataNegative",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+
+    // When the values arrive as decimal strings
+    const rows: ResultGridRow[] = [
+      ["A", "50825"],
+      ["B", "64915"],
+    ]
+
+    // Then every rule kind evaluates them as numbers
+    expect(evaluate([steps], rows).background(0, VOLUME)?.color).toBe(
+      "dataNegative",
+    )
+    expect(evaluate([steps], rows).background(1, VOLUME)?.color).toBe(
+      "dataPositive",
+    )
+    expect(evaluate([above], rows).background(0, VOLUME)).toBeUndefined()
+    expect(evaluate([above], rows).background(1, VOLUME)?.color).toBe(
+      "dataSeries3",
+    )
+    expect(evaluate([gradient], rows).background(1, VOLUME)?.blend?.ratio).toBe(
+      1,
+    )
+    expect(evaluate([up], rows).background(0, VOLUME)?.color).toBe(
+      "dataPositive",
+    )
+    expect(evaluate([up], rows).direction(0, VOLUME)).toBe("up")
+  })
+})
+
+describe("evaluateHighlights: steps and gradient fill", () => {
   const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
     evaluateHighlights({
       columns,
@@ -557,51 +674,56 @@ describe("evaluateHighlights: steps and gradient", () => {
     expect(lookup.background(2, PRICE)?.color).toBe("dataSeries3")
   })
 
-  it("scales alpha per column with an automatic max", () => {
-    // Given one gradient over all numeric columns
+  it("shades a gradient fill by position in the range and clamps beyond it", () => {
+    // Given a between rule on price, 0 … 200, red at the low end, green at the high end
     const rules = [
       rule({
-        kind: "gradient",
-        target: { kind: "allNumeric" },
-        max: "auto",
-        negativeColor: "dataNegative",
-        positiveColor: "dataPositive",
+        kind: "value",
+        condition: {
+          op: "between",
+          from: 0,
+          to: 200,
+          fill: { kind: "gradient", highColor: "dataPositive" },
+        },
+        color: "dataNegative",
       }),
     ]
 
-    // When price ranges to 200 and amount to 10
+    // When values sit at the low end, in the middle, above and below the range
     const lookup = evaluate(rules, [
-      row("A", -100, 5),
-      row("A", 200, 10),
-      row("A", 0, 0),
+      row("A", 0, 1),
+      row("A", 50, 1),
+      row("A", 500, 1),
+      row("A", -10, 1),
     ])
 
-    // Then each column uses its own max and zero has no color
+    // Then the blend ratio follows the position and is clamped at the ends
     expect(lookup.background(0, PRICE)).toEqual({
       color: "dataNegative",
-      alpha: 0.5,
+      alpha: 1,
       display: "always",
+      blend: { color: "dataPositive", ratio: 0 },
     })
-    expect(lookup.background(0, AMOUNT)?.alpha).toBe(0.5)
-    expect(lookup.background(1, PRICE)?.alpha).toBe(1)
-    expect(lookup.background(2, PRICE)).toBeUndefined()
+    expect(lookup.background(1, PRICE)?.blend?.ratio).toBe(0.25)
+    expect(lookup.background(2, PRICE)?.blend?.ratio).toBe(1)
+    expect(lookup.background(3, PRICE)?.blend?.ratio).toBe(0)
   })
 
-  it("clamps values above a fixed max", () => {
-    // Given a fixed max of 10
+  it("leaves a solid between rule as a plain range match", () => {
+    // Given the same range with a solid fill
     const rules = [
       rule({
-        kind: "gradient",
-        max: 10,
-        negativeColor: "dataNegative",
-        positiveColor: "dataPositive",
+        kind: "value",
+        condition: { op: "between", from: 0, to: 200, fill: { kind: "solid" } },
+        color: "dataSeries4",
       }),
     ]
 
-    // When a value exceeds it
-    const lookup = evaluate(rules, [row("A", 25, 1)])
+    // When a value is outside the range
+    const lookup = evaluate(rules, [row("A", 500, 1), row("A", 50, 1)])
 
-    // Then alpha stays at 1
-    expect(lookup.background(0, PRICE)?.alpha).toBe(1)
+    // Then it does not match, and an inside value carries no blend
+    expect(lookup.background(0, PRICE)).toBeUndefined()
+    expect(lookup.background(1, PRICE)?.blend).toBeUndefined()
   })
 })

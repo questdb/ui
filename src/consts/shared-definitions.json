@@ -649,7 +649,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set or clear the highlight rules of a run-mode cell's result grid (trend coloring): flash cells that moved up or down since the previous refresh, color threshold breaches, band values into steps, or shade by magnitude. Replaces the whole config for the given `;`-split statement (PUT). `highlight_config: null` clears it. Typical watchlist: identity_columns [\"symbol\"], rules [{kind:\"previous\",column:\"price\",op:\"gt\",color:\"green\"},{kind:\"previous\",column:\"price\",op:\"lt\",color:\"red\"}]. Pair with set_cell_autorefresh so the grid ticks. Colors are hue names (theme-aware): red, teal, amber, lime, orange, purple, green, pink, blue, olive; red and green are the loss/gain pair.",
+    "description": "Set or clear the highlight rules of a run-mode cell's result grids (trend coloring): flash cells that moved up or down since the previous refresh, color threshold breaches, band values into steps, or shade a range. One config per cell, applied to every statement's grid by column name; a grid without the column is not affected. Replaces the whole config (PUT). `highlight_config: null` clears it. Typical watchlist: identity_columns [\"symbol\"], rules [{kind:\"previous\",column:\"price\",op:\"gt\",color:\"green\"},{kind:\"previous\",column:\"price\",op:\"lt\",color:\"red\"}]. Pair with set_cell_autorefresh so the grid ticks. Colors are hue names (theme-aware): red, teal, amber, lime, orange, purple, green, pink, blue, olive; red and green are the loss/gain pair.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -660,21 +660,17 @@
         "cell_id": {
           "type": "string"
         },
-        "statement_index": {
-          "type": ["number", "null"],
-          "description": "Index of the `;`-split statement in the cell. null = 0."
-        },
         "highlight_config": {
           "type": ["object", "null"],
           "additionalProperties": false,
-          "description": "Highlight rules for one statement's result grid. Rules evaluate top-down per cell; the first match colors the background. previous rules also show an up/down glyph.",
+          "description": "Highlight rules for the cell's result grids. Rules evaluate top-down per cell; the first match colors the background. previous rules also show an up/down glyph.",
           "properties": {
             "identity_columns": {
               "type": "array",
               "items": {
                 "type": "string"
               },
-              "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. At least one. Never the designated timestamp for latest-row queries."
+              "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. Needed only by previous rules; may be empty otherwise. A grid missing any of them gets no comparison. Never the designated timestamp for latest-row queries."
             },
             "rules": {
               "type": "array",
@@ -684,8 +680,8 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "enum": ["previous", "value", "steps", "gradient"],
-                    "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value. steps = ordered breakpoints, one color each. gradient = color intensity by magnitude."
+                    "enum": ["previous", "value", "steps"],
+                    "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
                   },
                   "column": {
                     "type": ["string", "null"],
@@ -703,7 +699,7 @@
                   "applies_to": {
                     "type": ["string", "null"],
                     "enum": ["cell", "row", null],
-                    "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell. Not allowed on gradient rules."
+                    "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell."
                   },
                   "color": {
                     "type": ["string", "null"],
@@ -720,13 +716,15 @@
                       "olive",
                       null
                     ],
-                    "description": "Cell color for previous and value rules. null = teal. Use green/red for up/down (the gain/loss pair)."
+                    "description": "Cell color for previous and value rules; for between with fill gradient, the color at the `value` end. null = teal. Use green/red for up/down (the gain/loss pair)."
                   },
                   "op": {
                     "type": ["string", "null"],
                     "enum": [
                       "gt",
+                      "gte",
                       "lt",
+                      "lte",
                       "changed",
                       "changedBy",
                       "eq",
@@ -736,11 +734,11 @@
                       "matches",
                       null
                     ],
-                    "description": "previous: gt|lt|changed|changedBy. value: gt|lt|eq|between|isNull|contains|matches. null for steps and gradient."
+                    "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
                   },
                   "value": {
                     "type": ["number", "string", "null"],
-                    "description": "value rules: the comparison value (gt/lt/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
                   },
                   "to": {
                     "type": ["number", "string", "null"],
@@ -748,7 +746,7 @@
                   },
                   "threshold": {
                     "type": ["number", "null"],
-                    "description": "previous changedBy: minimum change to match."
+                    "description": "previous changedBy: minimum change to match, inclusive (|change| >= threshold), 0 or more; 0 = any change, unchanged cells never match."
                   },
                   "unit": {
                     "type": ["string", "null"],
@@ -805,11 +803,12 @@
                     ],
                     "description": "steps: color for values at or above the last breakpoint. null = amber."
                   },
-                  "max": {
-                    "type": ["number", "null"],
-                    "description": "gradient: value that maps to full intensity. null = the column's largest absolute value."
+                  "fill": {
+                    "type": ["string", "null"],
+                    "enum": ["solid", "gradient", null],
+                    "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell."
                   },
-                  "negative_color": {
+                  "high_color": {
                     "type": ["string", "null"],
                     "enum": [
                       "red",
@@ -824,24 +823,7 @@
                       "olive",
                       null
                     ],
-                    "description": "gradient: color for negative values. null = red."
-                  },
-                  "positive_color": {
-                    "type": ["string", "null"],
-                    "enum": [
-                      "red",
-                      "teal",
-                      "amber",
-                      "lime",
-                      "orange",
-                      "purple",
-                      "green",
-                      "pink",
-                      "blue",
-                      "olive",
-                      null
-                    ],
-                    "description": "gradient: color for positive values. null = green."
+                    "description": "value between with fill gradient: the color at the `to` end. null = green."
                   }
                 },
                 "required": [
@@ -859,9 +841,8 @@
                   "text",
                   "steps",
                   "remainder_color",
-                  "max",
-                  "negative_color",
-                  "positive_color"
+                  "fill",
+                  "high_color"
                 ]
               }
             }
@@ -869,12 +850,7 @@
           "required": ["identity_columns", "rules"]
         }
       },
-      "required": [
-        "buffer_id",
-        "cell_id",
-        "statement_index",
-        "highlight_config"
-      ]
+      "required": ["buffer_id", "cell_id", "highlight_config"]
     }
   },
   {
@@ -1191,6 +1167,195 @@
                 },
                 "required": ["x_column", "queries", "right_axis"]
               },
+              "highlight_config": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "description": "Highlight rules for the cell's result grids, applied to every statement's grid by column name. Omitting clears the cell's rules (full PUT) — copy the current `highlight_config` from <notebook_context> to keep them.",
+                "properties": {
+                  "identity_columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. Needed only by previous rules; may be empty otherwise. A grid missing any of them gets no comparison. Never the designated timestamp for latest-row queries."
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["previous", "value", "steps"],
+                          "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
+                        },
+                        "column": {
+                          "type": ["string", "null"],
+                          "description": "Result column the rule targets. null = every numeric column."
+                        },
+                        "enabled": {
+                          "type": ["boolean", "null"],
+                          "description": "false keeps the rule but skips it. null = enabled."
+                        },
+                        "display": {
+                          "type": ["string", "null"],
+                          "enum": ["temporary", "always", null],
+                          "description": "UI labels: Flash = temporary (briefly highlight matching cells, then fade out); Permanent = always (keep matching cells highlighted until the next result). Use these UI labels when describing the display mode to the user, but send temporary or always in this field. null = temporary for previous rules, always otherwise."
+                        },
+                        "applies_to": {
+                          "type": ["string", "null"],
+                          "enum": ["cell", "row", null],
+                          "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell."
+                        },
+                        "color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "Cell color for previous and value rules; for between with fill gradient, the color at the `value` end. null = teal. Use green/red for up/down (the gain/loss pair)."
+                        },
+                        "op": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "changed",
+                            "changedBy",
+                            "eq",
+                            "between",
+                            "isNull",
+                            "contains",
+                            "matches",
+                            null
+                          ],
+                          "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
+                        },
+                        "value": {
+                          "type": ["number", "string", "null"],
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
+                        },
+                        "to": {
+                          "type": ["number", "string", "null"],
+                          "description": "value between: the upper bound, inclusive."
+                        },
+                        "threshold": {
+                          "type": ["number", "null"],
+                          "description": "previous changedBy: minimum change to match, inclusive (|change| >= threshold), 0 or more; 0 = any change, unchanged cells never match."
+                        },
+                        "unit": {
+                          "type": ["string", "null"],
+                          "enum": ["absolute", "percent", null],
+                          "description": "previous changedBy: threshold unit. null = absolute."
+                        },
+                        "text": {
+                          "type": ["string", "null"],
+                          "description": "value contains: case-insensitive substring. value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
+                        },
+                        "steps": {
+                          "type": ["array", "null"],
+                          "description": "steps: breakpoints, matched as value < below in ascending order.",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "below": {
+                                "type": "number"
+                              },
+                              "color": {
+                                "type": "string",
+                                "enum": [
+                                  "red",
+                                  "teal",
+                                  "amber",
+                                  "lime",
+                                  "orange",
+                                  "purple",
+                                  "green",
+                                  "pink",
+                                  "blue",
+                                  "olive"
+                                ]
+                              }
+                            },
+                            "required": ["below", "color"]
+                          }
+                        },
+                        "remainder_color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "steps: color for values at or above the last breakpoint. null = amber."
+                        },
+                        "fill": {
+                          "type": ["string", "null"],
+                          "enum": ["solid", "gradient", null],
+                          "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell."
+                        },
+                        "high_color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "value between with fill gradient: the color at the `to` end. null = green."
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "column",
+                        "enabled",
+                        "display",
+                        "applies_to",
+                        "color",
+                        "op",
+                        "value",
+                        "to",
+                        "threshold",
+                        "unit",
+                        "text",
+                        "steps",
+                        "remainder_color",
+                        "fill",
+                        "high_color"
+                      ]
+                    }
+                  }
+                },
+                "required": ["identity_columns", "rules"]
+              },
               "grid": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
@@ -1210,214 +1375,6 @@
                   }
                 },
                 "required": ["x", "y", "w", "h"]
-              },
-              "highlight_configs": {
-                "type": ["array", "null"],
-                "description": "Highlight rules per `;`-split statement, index-aligned (one entry per statement, null = none). Omitting clears the cell's rules (full PUT) — copy the current `highlight_configs` from <notebook_context> to keep them.",
-                "items": {
-                  "type": ["object", "null"],
-                  "additionalProperties": false,
-                  "description": "Highlight rules for one statement's result grid. Rules evaluate top-down per cell; the first match colors the background. previous rules also show an up/down glyph.",
-                  "properties": {
-                    "identity_columns": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. At least one. Never the designated timestamp for latest-row queries."
-                    },
-                    "rules": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": ["previous", "value", "steps", "gradient"],
-                            "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value. steps = ordered breakpoints, one color each. gradient = color intensity by magnitude."
-                          },
-                          "column": {
-                            "type": ["string", "null"],
-                            "description": "Result column the rule targets. null = every numeric column."
-                          },
-                          "enabled": {
-                            "type": ["boolean", "null"],
-                            "description": "false keeps the rule but skips it. null = enabled."
-                          },
-                          "display": {
-                            "type": ["string", "null"],
-                            "enum": ["temporary", "always", null],
-                            "description": "UI labels: Flash = temporary (briefly highlight matching cells, then fade out); Permanent = always (keep matching cells highlighted until the next result). Use these UI labels when describing the display mode to the user, but send temporary or always in this field. null = temporary for previous rules, always otherwise."
-                          },
-                          "applies_to": {
-                            "type": ["string", "null"],
-                            "enum": ["cell", "row", null],
-                            "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell. Not allowed on gradient rules."
-                          },
-                          "color": {
-                            "type": ["string", "null"],
-                            "enum": [
-                              "red",
-                              "teal",
-                              "amber",
-                              "lime",
-                              "orange",
-                              "purple",
-                              "green",
-                              "pink",
-                              "blue",
-                              "olive",
-                              null
-                            ],
-                            "description": "Cell color for previous and value rules. null = teal. Use green/red for up/down (the gain/loss pair)."
-                          },
-                          "op": {
-                            "type": ["string", "null"],
-                            "enum": [
-                              "gt",
-                              "lt",
-                              "changed",
-                              "changedBy",
-                              "eq",
-                              "between",
-                              "isNull",
-                              "contains",
-                              "matches",
-                              null
-                            ],
-                            "description": "previous: gt|lt|changed|changedBy. value: gt|lt|eq|between|isNull|contains|matches. null for steps and gradient."
-                          },
-                          "value": {
-                            "type": ["number", "string", "null"],
-                            "description": "value rules: the comparison value (gt/lt/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
-                          },
-                          "to": {
-                            "type": ["number", "string", "null"],
-                            "description": "value between: the upper bound, inclusive."
-                          },
-                          "threshold": {
-                            "type": ["number", "null"],
-                            "description": "previous changedBy: minimum change to match."
-                          },
-                          "unit": {
-                            "type": ["string", "null"],
-                            "enum": ["absolute", "percent", null],
-                            "description": "previous changedBy: threshold unit. null = absolute."
-                          },
-                          "text": {
-                            "type": ["string", "null"],
-                            "description": "value contains: case-insensitive substring. value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
-                          },
-                          "steps": {
-                            "type": ["array", "null"],
-                            "description": "steps: breakpoints, matched as value < below in ascending order.",
-                            "items": {
-                              "type": "object",
-                              "additionalProperties": false,
-                              "properties": {
-                                "below": {
-                                  "type": "number"
-                                },
-                                "color": {
-                                  "type": "string",
-                                  "enum": [
-                                    "red",
-                                    "teal",
-                                    "amber",
-                                    "lime",
-                                    "orange",
-                                    "purple",
-                                    "green",
-                                    "pink",
-                                    "blue",
-                                    "olive"
-                                  ]
-                                }
-                              },
-                              "required": ["below", "color"]
-                            }
-                          },
-                          "remainder_color": {
-                            "type": ["string", "null"],
-                            "enum": [
-                              "red",
-                              "teal",
-                              "amber",
-                              "lime",
-                              "orange",
-                              "purple",
-                              "green",
-                              "pink",
-                              "blue",
-                              "olive",
-                              null
-                            ],
-                            "description": "steps: color for values at or above the last breakpoint. null = amber."
-                          },
-                          "max": {
-                            "type": ["number", "null"],
-                            "description": "gradient: value that maps to full intensity. null = the column's largest absolute value."
-                          },
-                          "negative_color": {
-                            "type": ["string", "null"],
-                            "enum": [
-                              "red",
-                              "teal",
-                              "amber",
-                              "lime",
-                              "orange",
-                              "purple",
-                              "green",
-                              "pink",
-                              "blue",
-                              "olive",
-                              null
-                            ],
-                            "description": "gradient: color for negative values. null = red."
-                          },
-                          "positive_color": {
-                            "type": ["string", "null"],
-                            "enum": [
-                              "red",
-                              "teal",
-                              "amber",
-                              "lime",
-                              "orange",
-                              "purple",
-                              "green",
-                              "pink",
-                              "blue",
-                              "olive",
-                              null
-                            ],
-                            "description": "gradient: color for positive values. null = green."
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "column",
-                          "enabled",
-                          "display",
-                          "applies_to",
-                          "color",
-                          "op",
-                          "value",
-                          "to",
-                          "threshold",
-                          "unit",
-                          "text",
-                          "steps",
-                          "remainder_color",
-                          "max",
-                          "negative_color",
-                          "positive_color"
-                        ]
-                      }
-                    }
-                  },
-                  "required": ["identity_columns", "rules"]
-                }
               }
             },
             "required": [
@@ -1431,7 +1388,7 @@
               "is_view_maximized",
               "chart_config",
               "grid",
-              "highlight_configs"
+              "highlight_config"
             ]
           }
         }

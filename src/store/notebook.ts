@@ -53,9 +53,9 @@ export type NotebookCell = {
   spotlightEditorRatio?: number
   mode?: CellMode
   chartConfig?: ChartConfig
-  // Keyed by the statement's query key, one config per statement in the cell.
-  // Aligned with the cell's `;`-split statements, like chartConfig.queries.
-  highlightConfigs?: (HighlightConfig | null)[]
+  // One set of rules for every result grid of the cell, by column name; an
+  // edit to the SQL never touches it.
+  highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
   isViewMaximized?: boolean
   lastRunStatus?: RunStatus
@@ -173,7 +173,7 @@ export const dropLegacyChartConfigs = (
   return { ...state, cells }
 }
 
-const RULE_KINDS = new Set(["previous", "value", "steps", "gradient"])
+const RULE_KINDS = new Set(["previous", "value", "steps"])
 
 const isHighlightConfig = (value: unknown): value is HighlightConfig => {
   if (typeof value !== "object" || value === null) return false
@@ -191,75 +191,21 @@ const isHighlightConfig = (value: unknown): value is HighlightConfig => {
   )
 }
 
-const isHighlightConfigs = (
+export const sanitizeHighlightConfig = (
   value: unknown,
-): value is (HighlightConfig | null)[] =>
-  Array.isArray(value) &&
-  value.every((entry) => entry === null || isHighlightConfig(entry))
+): HighlightConfig | undefined => (isHighlightConfig(value) ? value : undefined)
 
-const trimTrailingNulls = <T>(entries: (T | null)[]): (T | null)[] => {
-  let end = entries.length
-  while (end > 0 && entries[end - 1] === null) end--
-  return entries.slice(0, end)
-}
-
-export const sanitizeHighlightConfigs = (
-  value: unknown,
-): (HighlightConfig | null)[] | undefined => {
-  if (!Array.isArray(value)) return undefined
-  const kept = trimTrailingNulls(
-    value.map((entry) => (isHighlightConfig(entry) ? entry : null)),
-  )
-  return kept.length > 0 ? kept : undefined
-}
-
-// Rules saved before appliesTo existed carry no value and paint their cell.
-const hasRuleWithoutAppliesTo = (config: HighlightConfig | null): boolean =>
-  config !== null &&
-  config.rules.some(
-    (rule) => rule.kind !== "gradient" && rule.appliesTo === undefined,
-  )
-
-const withCellAppliesTo = (config: HighlightConfig): HighlightConfig => ({
-  ...config,
-  rules: config.rules.map((rule) =>
-    rule.kind !== "gradient" && rule.appliesTo === undefined
-      ? { ...rule, appliesTo: "cell" }
-      : rule,
-  ),
-})
-
-export const defaultHighlightRuleAppliesTo = (
-  state: NotebookViewState,
-): NotebookViewState => {
-  const needsAppliesTo = (cell: NotebookCell) =>
-    (cell.highlightConfigs ?? []).some(hasRuleWithoutAppliesTo)
-  if (!state.cells.some(needsAppliesTo)) return state
-  const cells = state.cells.map((cell) =>
-    needsAppliesTo(cell)
-      ? {
-          ...cell,
-          highlightConfigs: (cell.highlightConfigs ?? []).map((config) =>
-            config === null ? null : withCellAppliesTo(config),
-          ),
-        }
-      : cell,
-  )
-  return { ...state, cells }
-}
-
-const hasMalformedHighlightConfigs = (cell: NotebookCell): boolean =>
-  cell.highlightConfigs != null && !isHighlightConfigs(cell.highlightConfigs)
+const hasMalformedHighlightConfig = (cell: NotebookCell): boolean =>
+  cell.highlightConfig != null && !isHighlightConfig(cell.highlightConfig)
 
 export const dropMalformedHighlightConfigs = (
   state: NotebookViewState,
 ): NotebookViewState => {
-  if (!state.cells.some(hasMalformedHighlightConfigs)) return state
+  if (!state.cells.some(hasMalformedHighlightConfig)) return state
   const cells = state.cells.map((cell) => {
-    if (!hasMalformedHighlightConfigs(cell)) return cell
-    const kept = sanitizeHighlightConfigs(cell.highlightConfigs)
-    const { highlightConfigs: _dropped, ...rest } = cell
-    return kept ? { ...rest, highlightConfigs: kept } : rest
+    if (!hasMalformedHighlightConfig(cell)) return cell
+    const { highlightConfig: _dropped, ...rest } = cell
+    return rest
   })
   return { ...state, cells }
 }

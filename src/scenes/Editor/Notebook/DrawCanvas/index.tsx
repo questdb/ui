@@ -214,15 +214,16 @@ export const DrawCanvas: React.FC<Props> = ({
       (run: () => void) => (payload?: { cellId?: string }) => {
         if (payload?.cellId === cell.id) run()
       }
-    const open = forThisCell(openSettings)
+    // The gear toggles: a second click closes instead of reopening.
+    const toggle = forThisCell(settingsOpen ? closeSettings : openSettings)
     const reset = forThisCell(handleResetZoom)
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, open)
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, toggle)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
     return () => {
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, open)
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, toggle)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
     }
-  }, [cell.id, openSettings, handleResetZoom])
+  }, [cell.id, settingsOpen, openSettings, closeSettings, handleResetZoom])
 
   return (
     <Wrapper>

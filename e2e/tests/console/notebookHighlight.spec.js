@@ -15,12 +15,17 @@ const pickOption = (rule, label, option) => {
   cy.contains("[role^='menuitem']", option).click()
 }
 
+const pickColumn = (rule, column) => {
+  cy.wrap(rule).find("button[aria-label='Column']").click()
+  cy.contains("[role='option']", new RegExp(`^${column}$`)).click()
+}
+
 const addRule = (column, condition) => {
   cy.contains("button", "+ Add rule").click()
   cy.getByDataHook("highlight-rule")
     .last()
     .then(($rule) => {
-      pickOption($rule, "Column", column)
+      pickColumn($rule, column)
       pickOption($rule, "Condition", condition)
     })
 }

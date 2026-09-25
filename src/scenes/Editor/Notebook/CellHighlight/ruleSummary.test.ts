@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { createRule, createUnsetRule } from "./ruleDraft"
-import { ruleColors, ruleDescription, ruleSummary } from "./ruleSummary"
+import {
+  ruleColors,
+  ruleDescription,
+  ruleFillLabel,
+  ruleSummary,
+} from "./ruleSummary"
 
 describe("rule summaries", () => {
   it("distinguishes percentage and absolute thresholds and their inclusive boundary", () => {
@@ -36,11 +41,17 @@ describe("rule summaries", () => {
     if (range.kind !== "value" || text.kind !== "value")
       throw new Error("Expected value rules")
     expect(
-      ruleSummary({ ...range, condition: { op: "between", from: -5, to: 10 } }),
+      ruleSummary({
+        ...range,
+        condition: { op: "between", from: -5, to: 10, fill: { kind: "solid" } },
+      }),
     ).toBe("price between -5 and 10")
     expect(
       ruleSummary({ ...text, condition: { op: "contains", text: "USD" } }),
     ).toBe("symbol contains 'USD'")
+    expect(
+      ruleSummary({ ...range, condition: { op: "gte", value: 100 } }),
+    ).toBe("price ≥ 100")
     expect(ruleDescription(text)).toBe("Permanent")
     expect(ruleDescription({ ...text, enabled: false })).toBe("Permanent")
     expect(ruleDescription({ ...text, appliesTo: "row" })).toBe(
@@ -54,22 +65,34 @@ describe("rule summaries", () => {
       { kind: "column", name: "price" },
       "steps",
     )
-    const gradient = createRule(
+    const between = createRule(
       "gradient",
       { kind: "column", name: "price" },
-      "gradient",
+      "value.between",
     )
-    if (steps.kind !== "steps" || gradient.kind !== "gradient")
-      throw new Error("Expected scale rules")
+    if (
+      steps.kind !== "steps" ||
+      between.kind !== "value" ||
+      between.condition.op !== "between"
+    )
+      throw new Error("Expected steps and between rules")
+    const gradient = {
+      ...between,
+      condition: {
+        ...between.condition,
+        from: 1000,
+        to: 2000,
+        fill: { kind: "gradient" as const, highColor: "dataPositive" as const },
+      },
+    }
     expect(ruleColors(steps)).toEqual([
       steps.steps[0].color,
       steps.remainderColor,
     ])
-    expect(ruleColors(gradient)).toEqual([
-      gradient.negativeColor,
-      gradient.positiveColor,
-    ])
-    expect(ruleSummary(gradient)).toBe("price · Gradient (auto)")
+    expect(ruleColors(gradient)).toEqual([between.color, "dataPositive"])
+    expect(ruleSummary(gradient)).toBe("price between 1000 and 2000")
+    expect(ruleFillLabel(gradient)).toBe("gradient")
+    expect(ruleFillLabel(between)).toBeNull()
     expect(ruleSummary(createUnsetRule("draft"))).toBe("New rule")
     expect(
       ruleSummary({

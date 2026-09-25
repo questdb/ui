@@ -3,7 +3,7 @@ import {
   BUTTON_HEIGHTS,
   ButtonBase,
   Input,
-  MultiSelect,
+  SearchableSelect,
   SelectMenuControl,
 } from "../../../../components"
 import type { HighlightColorToken } from "../../../../components/ResultGrid/highlight"
@@ -173,8 +173,15 @@ export const RuleAppearance = styled.div`
   border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
 
   > ${RuleField} {
-    width: 12rem;
+    width: 10rem;
     max-width: 100%;
+  }
+`
+
+// "Permanent" needs the extra width; the other selects hold shorter words.
+export const DisplayField = styled(RuleField)`
+  && {
+    width: 11.5rem;
   }
 `
 
@@ -196,12 +203,11 @@ export const CompactSelect = styled(SelectMenuControl).attrs({
   }
 `
 
-export const CompactMultiSelect = styled(MultiSelect)`
+export const ColumnPicker = styled(SearchableSelect)`
   && {
     height: ${CONTROL_HEIGHT};
     min-height: ${CONTROL_HEIGHT};
-    padding: 0 0.8rem;
-    font-size: ${CONTROL_FONT_SIZE};
+    border-radius: 0.4rem;
   }
 `
 
@@ -263,8 +269,31 @@ export const StepRemainder = styled.span`
   color: ${({ theme }) => theme.color.contentSecondary};
 `
 
+// Keeps the otherwise-row swatch under the step swatches, which sit next to
+// a remove button.
+export const StepActionSlot = styled.span`
+  flex: 0 0 ${BUTTON_HEIGHTS.sm};
+`
+
 export const AddRow = styled.div`
   display: flex;
   gap: 0.6rem;
   margin-top: 0.8rem;
+`
+
+export const FieldError = styled.span`
+  font-size: 1.1rem;
+  color: ${({ theme }) => theme.color.statusDanger};
+`
+
+export const RuleAlert = styled.span`
+  display: inline-flex;
+  align-items: center;
+  color: ${({ theme }) => theme.color.statusDanger};
+`
+
+export const ValidationSummary = styled.span`
+  align-self: center;
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.color.statusDanger};
 `

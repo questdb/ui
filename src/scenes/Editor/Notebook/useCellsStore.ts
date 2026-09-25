@@ -91,11 +91,9 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   )
 
   const setCellHighlightConfig = useCallback(
-    (cellId: string, statementIndex: number, config: HighlightConfig | null) =>
+    (cellId: string, config: HighlightConfig | null) =>
       updateCells((prev) =>
-        prev.map((c) =>
-          c.id === cellId ? withHighlightConfig(c, statementIndex, config) : c,
-        ),
+        prev.map((c) => (c.id === cellId ? withHighlightConfig(c, config) : c)),
       ),
     [updateCells],
   )

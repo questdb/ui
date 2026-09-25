@@ -3,7 +3,6 @@ import { EventType } from "../../modules/EventBus/types"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
-  defaultHighlightRuleAppliesTo,
   dropLegacyChartConfigs,
   dropMalformedHighlightConfigs,
   exceedsCellLineLimit,
@@ -17,7 +16,6 @@ import type {
 } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
-import { indexLegacyHighlightConfigs } from "../../scenes/Editor/Notebook/result-table/highlightConfig"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
 // and the cell guards shared by the Dexie controller and the headless run
@@ -30,12 +28,8 @@ type NotebookBufferMeta =
   | { kind: "not_a_notebook" }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  defaultHighlightRuleAppliesTo(
-    dropMalformedHighlightConfigs(
-      indexLegacyHighlightConfigs(
-        dropLegacyChartConfigs(migrateLegacyCellNames(view)),
-      ),
-    ),
+  dropMalformedHighlightConfigs(
+    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
   )
 
 export const readNotebookBufferMeta = async (

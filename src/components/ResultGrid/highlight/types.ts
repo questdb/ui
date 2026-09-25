@@ -34,8 +34,7 @@ export const DEFAULT_REMAINDER_COLOR: HighlightColorToken = "dataSeries3"
 export type HighlightDisplay = "temporary" | "always"
 
 // Where a match paints: its own cell, or every cell of the row. List order
-// decides per cell, a row rule counting for each cell of its row. Gradients
-// stay per cell: their alpha is the cell's own magnitude.
+// decides per cell, a row rule counting for each cell of its row.
 export type HighlightAppliesTo = "cell" | "row"
 
 export type RuleTarget =
@@ -48,9 +47,20 @@ export type PreviousCondition =
   | { op: "gt" | "lt" | "changed" }
   | { op: "changedBy"; threshold: number; unit: ChangeUnit }
 
+// A between range is either matched (solid) or used as a scale: the rule
+// color at `from`, `highColor` at `to`, mixed in between, clamped beyond.
+export type BetweenFill =
+  | { kind: "solid" }
+  | { kind: "gradient"; highColor: HighlightColorToken }
+
 export type ValueCondition =
-  | { op: "gt" | "lt" | "eq"; value: number | string }
-  | { op: "between"; from: number | string; to: number | string }
+  | { op: "gt" | "gte" | "lt" | "lte" | "eq"; value: number | string }
+  | {
+      op: "between"
+      from: number | string
+      to: number | string
+      fill: BetweenFill
+    }
   | { op: "isNull" }
   | { op: "contains"; text: string }
   | { op: "matches"; pattern: string }
@@ -66,55 +76,41 @@ type RuleBase = {
   enabled: boolean
   target: RuleTarget
   display: HighlightDisplay
+  appliesTo: HighlightAppliesTo
 }
 
 export type PreviousRule = RuleBase & {
   kind: "previous"
-  appliesTo: HighlightAppliesTo
   condition: PreviousCondition
   color: HighlightColorToken
 }
 
 export type ValueRule = RuleBase & {
   kind: "value"
-  appliesTo: HighlightAppliesTo
   condition: ValueCondition
   color: HighlightColorToken
 }
 
 export type StepsRule = RuleBase & {
   kind: "steps"
-  appliesTo: HighlightAppliesTo
   steps: HighlightStep[]
   remainderColor: HighlightColorToken
 }
 
-export type GradientRule = RuleBase & {
-  kind: "gradient"
-  max: number | "auto"
-  negativeColor: HighlightColorToken
-  positiveColor: HighlightColorToken
-}
-
-export type HighlightRule = PreviousRule | ValueRule | StepsRule | GradientRule
-
-export type CellOrRowRule = Exclude<HighlightRule, GradientRule>
-
-export const canApplyToRow = (rule: HighlightRule): rule is CellOrRowRule =>
-  rule.kind !== "gradient"
-
-export const ruleAppliesTo = (rule: HighlightRule): HighlightAppliesTo =>
-  canApplyToRow(rule) ? rule.appliesTo : "cell"
+export type HighlightRule = PreviousRule | ValueRule | StepsRule
 
 export type HighlightConfig = {
   identityColumns: string[]
   rules: HighlightRule[]
 }
 
+// `blend` mixes `color` toward another hue by `ratio` (0 = color, 1 = the
+// other hue); only a gradient fill sets it.
 export type CellHighlight = {
   color: HighlightColorToken
   alpha: number
   display: HighlightDisplay
+  blend?: { color: HighlightColorToken; ratio: number }
 }
 
 export type CellDirection = "up" | "down"

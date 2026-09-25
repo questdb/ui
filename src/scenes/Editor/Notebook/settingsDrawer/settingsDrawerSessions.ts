@@ -17,10 +17,7 @@ export const chartSettingsSessions =
 export const highlightSettingsSessions =
   createSettingsDrawerSessionStore<HighlightSettingsSession>()
 
-export const highlightSessionKey = (cellId: string, statementIndex: number) =>
-  `${cellId}:${statementIndex}`
-
 export const clearSettingsDrawerSessions = (cellId: string) => {
   chartSettingsSessions.clear(cellId)
-  highlightSettingsSessions.clearWhere((key) => key.startsWith(`${cellId}:`))
+  highlightSettingsSessions.clear(cellId)
 }

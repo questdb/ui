@@ -4,8 +4,10 @@ import { FieldLabel } from "../CellChart/chartSettingsStyles"
 import {
   CompactInput,
   CompactSelect,
+  FieldError,
   RuleField,
 } from "./highlightSettingsStyles"
+import type { RuleErrors } from "./ruleValidation"
 
 const CHANGE_UNIT_OPTIONS = [
   { label: "Absolute (abs)", value: "absolute" },
@@ -15,12 +17,24 @@ const CHANGE_UNIT_OPTIONS = [
 const parseInput = (raw: string, numeric: boolean): number | string =>
   numeric && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : raw
 
+// Uncontrolled so the field can be emptied while typing; the draft keeps its
+// last value until a new magnitude (0 or more) is typed.
+const parseThreshold = (raw: string): number | null => {
+  if (raw.trim() === "") return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
 export const ConditionInputs: React.FC<{
   rule: HighlightRule
   numeric: boolean
+  errors: RuleErrors
   onChange: (rule: HighlightRule) => void
-}> = ({ rule, numeric, onChange }) => {
+}> = ({ rule, numeric, errors, onChange }) => {
   const inputType = numeric ? "number" : "text"
+  const variantFor = (field: string) => (errors[field] ? "error" : undefined)
+  const errorFor = (field: string) =>
+    errors[field] ? <FieldError>{errors[field]}</FieldError> : null
   switch (rule.kind) {
     case "previous": {
       const condition = rule.condition
@@ -32,18 +46,18 @@ export const ConditionInputs: React.FC<{
             <CompactInput
               type="number"
               step="any"
+              min="0"
+              variant={variantFor("threshold")}
               aria-label="Change threshold"
-              value={condition.threshold}
-              onChange={(e) =>
-                onChange({
-                  ...rule,
-                  condition: {
-                    ...condition,
-                    threshold: Number(e.target.value),
-                  },
-                })
-              }
+              defaultValue={condition.threshold}
+              onChange={(e) => {
+                const threshold = parseThreshold(e.target.value)
+                if (threshold !== null) {
+                  onChange({ ...rule, condition: { ...condition, threshold } })
+                }
+              }}
             />
+            {errorFor("threshold")}
           </RuleField>
           <RuleField>
             <FieldLabel>Unit</FieldLabel>
@@ -77,6 +91,7 @@ export const ConditionInputs: React.FC<{
               <FieldLabel>Regular expression</FieldLabel>
               <CompactInput
                 type="text"
+                variant={variantFor("pattern")}
                 aria-label="Regular expression"
                 placeholder="^EUR or /eur/i"
                 value={condition.pattern}
@@ -87,6 +102,7 @@ export const ConditionInputs: React.FC<{
                   })
                 }
               />
+              {errorFor("pattern")}
             </RuleField>
           )
         case "contains":
@@ -95,6 +111,7 @@ export const ConditionInputs: React.FC<{
               <FieldLabel>Text to find</FieldLabel>
               <CompactInput
                 type="text"
+                variant={variantFor("text")}
                 aria-label="Text to find"
                 placeholder="EUR"
                 value={condition.text}
@@ -105,6 +122,7 @@ export const ConditionInputs: React.FC<{
                   })
                 }
               />
+              {errorFor("text")}
             </RuleField>
           )
         case "between":
@@ -115,6 +133,7 @@ export const ConditionInputs: React.FC<{
                 <CompactInput
                   type={inputType}
                   step="any"
+                  variant={variantFor("from")}
                   aria-label="From"
                   placeholder="from"
                   value={condition.from}
@@ -128,12 +147,14 @@ export const ConditionInputs: React.FC<{
                     })
                   }
                 />
+                {errorFor("from")}
               </RuleField>
               <RuleField>
                 <FieldLabel>To</FieldLabel>
                 <CompactInput
                   type={inputType}
                   step="any"
+                  variant={variantFor("to")}
                   aria-label="To"
                   placeholder="to"
                   value={condition.to}
@@ -147,6 +168,7 @@ export const ConditionInputs: React.FC<{
                     })
                   }
                 />
+                {errorFor("to")}
               </RuleField>
             </>
           )
@@ -157,6 +179,7 @@ export const ConditionInputs: React.FC<{
               <CompactInput
                 type={inputType}
                 step="any"
+                variant={variantFor("value")}
                 aria-label="Value"
                 placeholder={numeric ? "100" : "EURUSD"}
                 value={condition.value}
@@ -170,30 +193,12 @@ export const ConditionInputs: React.FC<{
                   })
                 }
               />
+              {errorFor("value")}
             </RuleField>
           )
       }
     }
     case "steps":
       return null
-    case "gradient":
-      return (
-        <RuleField>
-          <FieldLabel>Gradient max</FieldLabel>
-          <CompactInput
-            type="number"
-            step="any"
-            aria-label="Gradient max"
-            placeholder="max: auto"
-            value={rule.max === "auto" ? "" : rule.max}
-            onChange={(e) =>
-              onChange({
-                ...rule,
-                max: e.target.value === "" ? "auto" : Number(e.target.value),
-              })
-            }
-          />
-        </RuleField>
-      )
   }
 }

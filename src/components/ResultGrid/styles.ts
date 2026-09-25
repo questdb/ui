@@ -1,11 +1,12 @@
 import styled, { css, keyframes, type DefaultTheme } from "styled-components"
 import { color } from "../../utils"
-import type { HighlightColorToken } from "./highlight/types"
+import type { CellHighlight, HighlightColorToken } from "./highlight/types"
 import { CopyButton } from "../CopyButton"
 import {
   CELL_BORDER_PX,
   CELL_FONT_SIZE_PX,
   CELL_PADDING_PX,
+  DIRECTION_GLYPH_SIZE,
   DIRECTION_GLYPH_WIDTH,
   HEADER_BORDER_PX,
   HEADER_GAP_PX,
@@ -16,6 +17,8 @@ import {
   HEADER_TYPE_FONT_SIZE_PX,
   ROW_HEIGHT,
 } from "./dimensions"
+
+type HighlightBlend = NonNullable<CellHighlight["blend"]>
 
 export { HEADER_HEIGHT, ROW_HEIGHT }
 
@@ -229,13 +232,23 @@ const flashAnim = [
   `,
 ]
 
+const highlightHue = (
+  theme: DefaultTheme,
+  token: HighlightColorToken,
+  blend: HighlightBlend | undefined,
+) =>
+  blend
+    ? `color-mix(in oklch, ${theme.color[token]} ${Math.round((1 - blend.ratio) * 100)}%, ${theme.color[blend.color]})`
+    : theme.color[token]
+
 const highlightColor = (
   theme: DefaultTheme,
   token: HighlightColorToken,
   alpha: number,
   opacity: number,
+  blend: HighlightBlend | undefined,
 ) =>
-  `color-mix(in srgb, ${theme.color[token]} ${Math.round(alpha * opacity)}%, transparent)`
+  `color-mix(in srgb, ${highlightHue(theme, token, blend)} ${Math.round(alpha * opacity)}%, transparent)`
 
 export const Cell = styled.div<{
   $isNull: boolean
@@ -246,6 +259,7 @@ export const Cell = styled.div<{
   $rowActive?: boolean
   $highlightColor: HighlightColorToken | undefined
   $highlightAlpha: number
+  $highlightBlend: HighlightBlend | undefined
   $highlightMode: "temporary" | "always" | undefined
   $flashParity: 0 | 1
 }>`
@@ -278,23 +292,32 @@ export const Cell = styled.div<{
         : color("gridRow")};
     `}
 
-  ${({ $highlightColor, $highlightAlpha, $highlightMode, $frozen, theme }) =>
+  ${({
+    $highlightColor,
+    $highlightAlpha,
+    $highlightBlend,
+    $highlightMode,
+    $frozen,
+    theme,
+  }) =>
     $highlightColor !== undefined &&
     $highlightMode === "always" &&
     css`
       background: ${$frozen
-        ? `linear-gradient(${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY)}, ${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY)}), ${theme.color.gridRow}`
+        ? `linear-gradient(${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY, $highlightBlend)}, ${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY, $highlightBlend)}), ${theme.color.gridRow}`
         : highlightColor(
             theme,
             $highlightColor,
             $highlightAlpha,
             HIGHLIGHT_STATIC_OPACITY,
+            $highlightBlend,
           )};
     `}
 
   ${({
     $highlightColor,
     $highlightAlpha,
+    $highlightBlend,
     $highlightMode,
     $flashParity,
     theme,
@@ -307,6 +330,7 @@ export const Cell = styled.div<{
         $highlightColor,
         $highlightAlpha,
         HIGHLIGHT_FLASH_OPACITY,
+        $highlightBlend,
       )};
       animation: ${flashAnim[$flashParity]} 1s ease-out;
     `}
@@ -353,6 +377,8 @@ export const CellDirectionGlyph = styled.span<{
   justify-content: flex-end;
   align-items: center;
   width: ${DIRECTION_GLYPH_WIDTH}px;
+  font-size: ${DIRECTION_GLYPH_SIZE}px;
+  line-height: 1;
   color: ${({ $direction }) =>
     $direction === "up" ? color("dataPositive") : color("dataNegative")};
 `

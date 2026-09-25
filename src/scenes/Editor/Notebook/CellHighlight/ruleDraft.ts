@@ -6,7 +6,7 @@ import {
   DEFAULT_RULE_COLOR,
   defaultDisplayFor,
   type ColumnKind,
-  ruleAppliesTo,
+  type ColumnRange,
   type HighlightColorToken,
   type HighlightRule,
   type PreviousRule,
@@ -19,57 +19,51 @@ export type ConditionOption =
   | "prev.changed"
   | "prev.changedBy"
   | "value.gt"
+  | "value.gte"
   | "value.lt"
+  | "value.lte"
   | "value.eq"
   | "value.between"
   | "value.isNull"
   | "value.contains"
   | "value.matches"
   | "steps"
-  | "gradient"
 
-export type ConditionGroup = "previous" | "value" | "scale"
+export type ConditionGroup = "previous" | "value"
 
 type ConditionDescriptor = {
   value: ConditionOption
   label: string
   group: ConditionGroup
-  kinds: ColumnKind[]
 }
 
-const NUMERIC: ColumnKind[] = ["numeric"]
-const ORDERED: ColumnKind[] = ["numeric", "temporal"]
-const ANY: ColumnKind[] = ["numeric", "temporal", "text", "boolean", "other"]
-
 export const conditionDescriptors: ConditionDescriptor[] = [
-  { value: "prev.gt", label: "> previous", group: "previous", kinds: NUMERIC },
-  { value: "prev.lt", label: "< previous", group: "previous", kinds: NUMERIC },
-  { value: "prev.changed", label: "changed", group: "previous", kinds: ANY },
+  { value: "prev.gt", label: "> previous", group: "previous" },
+  { value: "prev.lt", label: "< previous", group: "previous" },
+  { value: "prev.changed", label: "changed", group: "previous" },
   {
     value: "prev.changedBy",
-    label: "changed by more than",
+    label: "changed by at least",
     group: "previous",
-    kinds: NUMERIC,
   },
-  { value: "value.gt", label: "> value", group: "value", kinds: ORDERED },
-  { value: "value.lt", label: "< value", group: "value", kinds: ORDERED },
-  { value: "value.eq", label: "= value", group: "value", kinds: ANY },
-  { value: "value.between", label: "between", group: "value", kinds: ORDERED },
-  { value: "value.isNull", label: "is null", group: "value", kinds: ANY },
+  { value: "value.gt", label: "> value", group: "value" },
+  { value: "value.gte", label: "≥ value", group: "value" },
+  { value: "value.lt", label: "< value", group: "value" },
+  { value: "value.lte", label: "≤ value", group: "value" },
+  { value: "value.eq", label: "= value", group: "value" },
+  { value: "value.between", label: "between", group: "value" },
+  { value: "value.isNull", label: "is null", group: "value" },
   {
     value: "value.contains",
     label: "contains",
     group: "value",
-    kinds: ["text"],
   },
   {
     value: "value.matches",
     label: "matches regex",
     group: "value",
-    kinds: ["text"],
   },
-  { value: "steps", label: "steps", group: "value", kinds: NUMERIC },
-  { value: "gradient", label: "gradient", group: "scale", kinds: NUMERIC },
+  { value: "steps", label: "steps", group: "value" },
 ]
 
 export const ALL_NUMERIC_TARGET = "all:numeric"
@@ -92,8 +86,10 @@ export const targetKind = (
   return column ? columnKindOf(column) : "other"
 }
 
-export const conditionOptionsFor = (kind: ColumnKind): ConditionDescriptor[] =>
-  conditionDescriptors.filter((descriptor) => descriptor.kinds.includes(kind))
+// Every condition is offered for every column: a rule that cannot apply to a
+// grid's column type is a no-op there, decided at evaluation.
+export const conditionOptions = (): ConditionDescriptor[] =>
+  conditionDescriptors
 
 export const conditionOptionOf = (rule: HighlightRule): ConditionOption => {
   switch (rule.kind) {
@@ -103,8 +99,6 @@ export const conditionOptionOf = (rule: HighlightRule): ConditionOption => {
       return `value.${rule.condition.op}`
     case "steps":
       return "steps"
-    case "gradient":
-      return "gradient"
   }
 }
 
@@ -144,7 +138,7 @@ export const withConditionOption = (
     id: rule.id,
     enabled: rule.enabled,
     target: rule.target,
-    appliesTo: ruleAppliesTo(rule),
+    appliesTo: rule.appliesTo,
   }
   const carriedColor =
     rule.kind === "previous" || rule.kind === "value"
@@ -172,9 +166,16 @@ export const withConditionOption = (
         color: carriedColor,
       }
     case "value.gt":
+    case "value.gte":
     case "value.lt":
+    case "value.lte":
     case "value.eq": {
-      const op = option.slice("value.".length) as "gt" | "lt" | "eq"
+      const op = option.slice("value.".length) as
+        | "gt"
+        | "gte"
+        | "lt"
+        | "lte"
+        | "eq"
       return {
         ...base,
         kind: "value",
@@ -188,7 +189,7 @@ export const withConditionOption = (
         ...base,
         kind: "value",
         display: defaultDisplayFor("value"),
-        condition: { op: "between", from: 0, to: 0 },
+        condition: { op: "between", from: 0, to: 0, fill: { kind: "solid" } },
         color: carriedColor,
       }
     case "value.isNull":
@@ -223,19 +224,21 @@ export const withConditionOption = (
         steps: [{ id: createRuleId(), below: 0, color: DEFAULT_RULE_COLOR }],
         remainderColor: DEFAULT_REMAINDER_COLOR,
       }
-    case "gradient": {
-      const { appliesTo: _cellOnly, ...cellOnly } = base
-      return {
-        ...cellOnly,
-        kind: "gradient",
-        display: defaultDisplayFor("gradient"),
-        max: "auto",
-        negativeColor: "dataNegative",
-        positiveColor: "dataPositive",
-      }
-    }
   }
 }
+
+// A between range starts at the column's current span, so a scale begins at
+// the data instead of at 0…0.
+export const withSeededRange = (
+  rule: HighlightRule,
+  range: ColumnRange | null,
+): HighlightRule =>
+  range && rule.kind === "value" && rule.condition.op === "between"
+    ? {
+        ...rule,
+        condition: { ...rule.condition, from: range.from, to: range.to },
+      }
+    : rule
 
 // A freshly added row: nothing chosen yet. It stays in the draft until a
 // column and a condition are picked, and is dropped on save otherwise.

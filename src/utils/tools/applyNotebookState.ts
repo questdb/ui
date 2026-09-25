@@ -222,7 +222,7 @@ export const dispatchApplyNotebookState = async (
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
         is_view_maximized?: boolean | null
-        highlight_configs?: (HighlightConfigWire | null)[] | null
+        highlight_config?: HighlightConfigWire | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
@@ -378,31 +378,23 @@ export const dispatchApplyNotebookState = async (
       return { content: denied.reason, is_error: true }
     }
   }
-  const highlightConfigsByIndex: ((HighlightConfig | null)[] | undefined)[] = []
+  const highlightConfigs: (HighlightConfig | undefined)[] = []
   for (const [index, c] of cells.entries()) {
-    if (!c.highlight_configs) {
-      highlightConfigsByIndex.push(undefined)
+    if (!c.highlight_config) {
+      highlightConfigs.push(undefined)
       continue
     }
-    const parsed: (HighlightConfig | null)[] = []
-    for (const entry of c.highlight_configs) {
-      if (!entry) {
-        parsed.push(null)
-        continue
+    const result = fromHighlightConfigWire(c.highlight_config)
+    if (!result.ok) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${index}].highlight_config ${result.error}`,
+        }),
+        is_error: true,
       }
-      const result = fromHighlightConfigWire(entry)
-      if (!result.ok) {
-        return {
-          content: JSON.stringify({
-            error_code: "validation",
-            message: `VALIDATION_ERROR: cells[${index}].highlight_configs ${result.error}`,
-          }),
-          is_error: true,
-        }
-      }
-      parsed.push(result.config)
     }
-    highlightConfigsByIndex.push(parsed)
+    highlightConfigs.push(result.config)
   }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
@@ -434,8 +426,8 @@ export const dispatchApplyNotebookState = async (
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
         cell.chartConfig = chartConfig
       }
-      const highlightConfigs = highlightConfigsByIndex[index]
-      if (highlightConfigs) cell.highlightConfigs = highlightConfigs
+      const highlightConfig = highlightConfigs[index]
+      if (highlightConfig) cell.highlightConfig = highlightConfig
       if (c.grid) cell.grid = c.grid
       return cell
     }),

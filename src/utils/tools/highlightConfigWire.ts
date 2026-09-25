@@ -3,8 +3,8 @@ import {
   DEFAULT_RULE_COLOR,
   highlightHues,
   hueOfToken,
-  ruleAppliesTo,
   tokenOfHue,
+  type BetweenFill,
   type ChangeUnit,
   type HighlightColorToken,
   type HighlightConfig,
@@ -20,11 +20,13 @@ import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
 // Snake-case shape the agent tools speak for grid highlight rules, and its
 // mapping to the internal HighlightConfig. One flat rule object carries every
 // kind; the fields a kind does not use stay null.
-export type HighlightRuleKind = "previous" | "value" | "steps" | "gradient"
+export type HighlightRuleKind = "previous" | "value" | "steps"
 export type PreviousOpWire = "gt" | "lt" | "changed" | "changedBy"
 export type ValueOpWire =
   | "gt"
+  | "gte"
   | "lt"
+  | "lte"
   | "eq"
   | "between"
   | "isNull"
@@ -48,9 +50,8 @@ export type HighlightRuleWire = {
   text?: string | null
   steps?: HighlightStepWire[] | null
   remainder_color?: HighlightHue | null
-  max?: number | null
-  negative_color?: HighlightHue | null
-  positive_color?: HighlightHue | null
+  fill?: "solid" | "gradient" | null
+  high_color?: HighlightHue | null
 }
 
 export type HighlightConfigWire = {
@@ -69,7 +70,9 @@ type MappedRule =
 const PREVIOUS_OPS = new Set<string>(["gt", "lt", "changed", "changedBy"])
 const VALUE_OPS = new Set<string>([
   "gt",
+  "gte",
   "lt",
+  "lte",
   "eq",
   "between",
   "isNull",
@@ -116,12 +119,6 @@ const mapRule = (
   ) {
     return fail(index, "applies_to must be cell|row")
   }
-  if (rule.applies_to === "row" && rule.kind === "gradient") {
-    return fail(
-      index,
-      "gradient rules shade their own cell, applies_to must be cell",
-    )
-  }
   const appliesTo: HighlightAppliesTo = rule.applies_to ?? "cell"
   if (rule.color != null && !isHue(rule.color)) {
     return fail(index, `unknown color '${String(rule.color)}'`)
@@ -134,8 +131,8 @@ const mapRule = (
         return fail(index, "previous rules need op gt|lt|changed|changedBy")
       }
       if (op === "changedBy") {
-        if (typeof rule.threshold !== "number") {
-          return fail(index, "changedBy needs a numeric threshold")
+        if (typeof rule.threshold !== "number" || rule.threshold < 0) {
+          return fail(index, "changedBy needs a threshold of 0 or more")
         }
         return {
           ok: true,
@@ -170,7 +167,7 @@ const mapRule = (
       if (!VALUE_OPS.has(op)) {
         return fail(
           index,
-          "value rules need op gt|lt|eq|between|isNull|contains",
+          "value rules need op gt|gte|lt|lte|eq|between|isNull|contains|matches",
         )
       }
       const common = {
@@ -207,19 +204,42 @@ const mapRule = (
       if (!isScalar(rule.value)) return fail(index, `${op} needs a value`)
       if (op === "between") {
         if (!isScalar(rule.to)) return fail(index, "between needs value and to")
+        if (
+          rule.fill != null &&
+          rule.fill !== "solid" &&
+          rule.fill !== "gradient"
+        ) {
+          return fail(index, "fill must be solid|gradient")
+        }
+        if (rule.high_color != null && !isHue(rule.high_color)) {
+          return fail(index, "unknown high_color")
+        }
+        const fill: BetweenFill =
+          rule.fill === "gradient"
+            ? {
+                kind: "gradient",
+                highColor: colorOf(rule.high_color, "dataPositive"),
+              }
+            : { kind: "solid" }
         return {
           ok: true,
           rule: {
             ...common,
-            condition: { op: "between", from: rule.value, to: rule.to },
+            condition: { op: "between", from: rule.value, to: rule.to, fill },
           },
         }
+      }
+      if (rule.fill != null || rule.high_color != null) {
+        return fail(index, "fill and high_color apply to op between only")
       }
       return {
         ok: true,
         rule: {
           ...common,
-          condition: { op: op as "gt" | "lt" | "eq", value: rule.value },
+          condition: {
+            op: op as "gt" | "gte" | "lt" | "lte" | "eq",
+            value: rule.value,
+          },
         },
       }
     }
@@ -256,27 +276,11 @@ const mapRule = (
         },
       }
     }
-    case "gradient": {
-      if (rule.negative_color != null && !isHue(rule.negative_color)) {
-        return fail(index, "unknown negative_color")
-      }
-      if (rule.positive_color != null && !isHue(rule.positive_color)) {
-        return fail(index, "unknown positive_color")
-      }
-      return {
-        ok: true,
-        rule: {
-          ...base,
-          kind: "gradient",
-          display,
-          max: typeof rule.max === "number" ? rule.max : "auto",
-          negativeColor: colorOf(rule.negative_color, "dataNegative"),
-          positiveColor: colorOf(rule.positive_color, "dataPositive"),
-        },
-      }
-    }
     default:
-      return fail(index, "kind must be previous|value|steps|gradient")
+      return fail(
+        index,
+        "kind must be previous|value|steps (a scale is value between with fill gradient)",
+      )
   }
 }
 
@@ -286,10 +290,9 @@ export const fromHighlightConfigWire = (
 ): HighlightWireResult => {
   if (
     !Array.isArray(wire.identity_columns) ||
-    wire.identity_columns.length === 0 ||
     wire.identity_columns.some((name) => typeof name !== "string")
   ) {
-    return { ok: false, error: "identity_columns needs at least one column" }
+    return { ok: false, error: "identity_columns must be a list of columns" }
   }
   if (!Array.isArray(wire.rules)) {
     return { ok: false, error: "rules must be an array" }
@@ -316,7 +319,7 @@ export const toHighlightConfigWire = (
       column: columnOf(rule.target),
       ...(rule.enabled ? {} : { enabled: false }),
       display: rule.display,
-      ...(ruleAppliesTo(rule) === "row" ? { applies_to: "row" as const } : {}),
+      ...(rule.appliesTo === "row" ? { applies_to: "row" as const } : {}),
     }
     switch (rule.kind) {
       case "previous":
@@ -335,7 +338,16 @@ export const toHighlightConfigWire = (
           color: hueOfToken(rule.color),
           op: condition.op,
           ...(condition.op === "between"
-            ? { value: condition.from, to: condition.to }
+            ? {
+                value: condition.from,
+                to: condition.to,
+                ...(condition.fill.kind === "gradient"
+                  ? {
+                      fill: "gradient" as const,
+                      high_color: hueOfToken(condition.fill.highColor),
+                    }
+                  : {}),
+              }
             : condition.op === "contains"
               ? { text: condition.text }
               : condition.op === "matches"
@@ -353,13 +365,6 @@ export const toHighlightConfigWire = (
             color: hueOfToken(color),
           })),
           remainder_color: hueOfToken(rule.remainderColor),
-        }
-      case "gradient":
-        return {
-          ...shared,
-          ...(rule.max === "auto" ? {} : { max: rule.max }),
-          negative_color: hueOfToken(rule.negativeColor),
-          positive_color: hueOfToken(rule.positiveColor),
         }
     }
   }),

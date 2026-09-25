@@ -17,23 +17,20 @@ import {
 import { ResultActionsBar } from "./ResultActionsBar"
 import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
-import {
-  highlightSessionKey,
-  highlightSettingsSessions,
-} from "../settingsDrawer/settingsDrawerSessions"
+import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useNotebookActions } from "../NotebookProvider"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { FLASH_DURATION_MS, type ResultTrendStore } from "./resultTrendStore"
+import { resolveHighlightConfig } from "./highlightConfig"
 import {
-  resolveHighlightConfig,
-  type HighlightConfigs,
-} from "./highlightConfig"
-import {
+  columnRangeOf,
   evaluateHighlights,
+  type HighlightConfig,
   type HighlightLookup,
 } from "../../../../components/ResultGrid/highlight"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 
 type Props = {
@@ -42,7 +39,6 @@ type Props = {
   // column layout stays keyed by query text alone — duplicate statements
   // share identical columns.
   statementKey: string
-  statementIndex: number
   runToken: number
   isFocused: boolean
   bufferId: number
@@ -52,7 +48,9 @@ type Props = {
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
   trendStore: ResultTrendStore
-  highlightConfigs: HighlightConfigs | undefined
+  highlightConfig: HighlightConfig | undefined
+  // Every column any result of the cell has, for the rule pickers.
+  cellColumns: ColumnDefinition[]
 }
 
 // A remount after the flash window must not replay old flashes; the direction
@@ -94,7 +92,6 @@ const useInitialGridState = ({
 const ResultGridPanelInner: React.FC<Props> = ({
   data,
   statementKey,
-  statementIndex,
   runToken,
   isFocused,
   bufferId,
@@ -104,7 +101,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
   onYieldFocus,
   viewportStore,
   trendStore,
-  highlightConfigs,
+  highlightConfig: savedHighlightConfig,
+  cellColumns,
 }) => {
   const { queryKey, columnLayout, viewport } = useInitialGridState({
     bufferId,
@@ -117,9 +115,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
   const { maxColumnWidth } = useLocalStorage()
   const { setCellHighlightConfig } = useNotebookActions()
   const [hasSelection, setHasSelection] = useState(false)
-  const sessionKey = highlightSessionKey(cellId, statementIndex)
   const [restoredHighlight] = useState(
-    () => highlightSettingsSessions.get(sessionKey) !== undefined,
+    () => highlightSettingsSessions.get(cellId) !== undefined,
   )
   const [highlightOpen, setHighlightOpen] = useState(restoredHighlight)
   const [highlightSession, setHighlightSession] = useState(0)
@@ -137,13 +134,17 @@ const ResultGridPanelInner: React.FC<Props> = ({
     [viewportStore, statementKey, runToken],
   )
   const highlightConfig = useMemo(
-    () => resolveHighlightConfig(highlightConfigs, statementIndex, data),
-    [highlightConfigs, statementIndex, data],
+    () => resolveHighlightConfig(savedHighlightConfig, data),
+    [savedHighlightConfig, data],
   )
   const trend = useMemo(
     () =>
       trendStore.capture(statementKey, data, highlightConfig.identityColumns),
     [trendStore, statementKey, data, highlightConfig],
+  )
+  const columnRange = useMemo(
+    () => columnRangeOf(data.columns, data.dataset),
+    [data],
   )
   const highlights = useMemo(() => {
     const { lookup, stats } = evaluateHighlights({
@@ -157,20 +158,20 @@ const ResultGridPanelInner: React.FC<Props> = ({
 
   const openHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
-    highlightSettingsSessions.set(sessionKey, { draft: null })
+    highlightSettingsSessions.set(cellId, { draft: null })
     setHighlightSession((session) => session + 1)
     setHighlightOpen(true)
   }
 
   const closeHighlight = () => {
-    highlightSettingsSessions.clear(sessionKey)
+    highlightSettingsSessions.clear(cellId)
     setHighlightOpen(false)
   }
 
   const keepHighlightDraft = useCallback(
     (draft: HighlightDraft) =>
-      highlightSettingsSessions.update(sessionKey, { draft }),
-    [sessionKey],
+      highlightSettingsSessions.update(cellId, { draft }),
+    [cellId],
   )
 
   const saveHighlight = (next: typeof highlightConfig) => {
@@ -179,27 +180,15 @@ const ResultGridPanelInner: React.FC<Props> = ({
       ruleCount: next.rules.length,
       kinds: next.rules.map((rule) => rule.kind),
     })
-    setCellHighlightConfig(cellId, statementIndex, next)
+    setCellHighlightConfig(cellId, next)
     closeHighlight()
   }
 
   const clearHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
-    setCellHighlightConfig(cellId, statementIndex, null)
+    setCellHighlightConfig(cellId, null)
     closeHighlight()
   }
-
-  useEffect(() => {
-    const open = (payload?: { cellId?: string }) => {
-      if (payload?.cellId === cellId) openHighlight()
-    }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, open)
-    return () =>
-      eventBus.unsubscribe(
-        EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
-        open,
-      )
-  }, [cellId])
 
   const cancelHighlight = (method: string) => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
@@ -208,6 +197,22 @@ const ResultGridPanelInner: React.FC<Props> = ({
     })
     closeHighlight()
   }
+
+  // The spotlight gear and the kebab entry send the same event; while the
+  // drawer is open it acts as a toggle instead of remounting the draft.
+  useEffect(() => {
+    const toggle = (payload?: { cellId?: string }) => {
+      if (payload?.cellId !== cellId) return
+      if (highlightOpen) cancelHighlight("button")
+      else openHighlight()
+    }
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, toggle)
+    return () =>
+      eventBus.unsubscribe(
+        EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
+        toggle,
+      )
+  })
 
   return (
     <>
@@ -266,9 +271,10 @@ const ResultGridPanelInner: React.FC<Props> = ({
         key={highlightSession}
         open={highlightOpen}
         appearInPlace={restoredHighlight && highlightSession === 0}
-        initialDraft={highlightSettingsSessions.get(sessionKey)?.draft ?? null}
+        initialDraft={highlightSettingsSessions.get(cellId)?.draft ?? null}
         onDraftChange={keepHighlightDraft}
-        columns={data.columns}
+        columns={cellColumns}
+        columnRange={columnRange}
         config={highlightConfig}
         stats={highlights.stats}
         onSave={saveHighlight}

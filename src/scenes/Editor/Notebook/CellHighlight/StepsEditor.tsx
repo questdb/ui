@@ -10,19 +10,32 @@ import {
 import { ColorSwatch } from "./ColorSwatch"
 import { FieldGroup, FieldLabel } from "../CellChart/chartSettingsStyles"
 import {
+  AddRow,
   CompactInput,
+  FieldError,
+  StepActionSlot,
   StepLabel,
   StepLine,
   StepRemainder,
 } from "./highlightSettingsStyles"
+import { stepErrorKey, type RuleErrors } from "./ruleValidation"
 
 type Props = {
   rule: StepsRule
+  errors: RuleErrors
   onChange: (rule: StepsRule) => void
 }
 
 // Steps stay in edit order; the engine sorts by bound when it evaluates.
-export const StepsEditor: React.FC<Props> = ({ rule, onChange }) => {
+// The field is uncontrolled so it can be emptied while typing; the draft
+// keeps its last finite value until a new one is typed.
+const parseBound = (raw: string): number | null => {
+  if (raw.trim() === "") return null
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
   const steps = rule.steps
   const highestBound = steps.reduce(
     (max, step) => Math.max(max, step.below),
@@ -57,18 +70,20 @@ export const StepsEditor: React.FC<Props> = ({ rule, onChange }) => {
 
   return (
     <FieldGroup>
-      <FieldLabel>Color steps · first upper bound that matches</FieldLabel>
+      <FieldLabel>Color bands</FieldLabel>
       {steps.map((step, index) => (
         <StepLine key={step.id}>
           <StepLabel>&lt;</StepLabel>
           <CompactInput
             type="number"
             step="any"
+            variant={errors[stepErrorKey(step.id)] ? "error" : undefined}
             aria-label={`Step ${index + 1} upper bound`}
-            value={step.below}
-            onChange={(e) =>
-              updateStep(step.id, { below: Number(e.target.value) })
-            }
+            defaultValue={step.below}
+            onChange={(e) => {
+              const below = parseBound(e.target.value)
+              if (below !== null) updateStep(step.id, { below })
+            }}
           />
           <ColorSwatch
             value={step.color}
@@ -82,19 +97,29 @@ export const StepsEditor: React.FC<Props> = ({ rule, onChange }) => {
           >
             <XIcon size={14} />
           </IconButton>
+          {errors[stepErrorKey(step.id)] && (
+            <FieldError>{errors[stepErrorKey(step.id)]}</FieldError>
+          )}
         </StepLine>
       ))}
+      {errors.steps && <FieldError>{errors.steps}</FieldError>}
       <StepLine>
         <StepLabel>&ge;</StepLabel>
         <StepRemainder>
-          {steps.length
-            ? `${highestBound} and above use the otherwise color`
-            : "Everything uses the otherwise color"}
+          {steps.length ? `${highestBound} and above` : "All values"}
         </StepRemainder>
+        <ColorSwatch
+          value={rule.remainderColor}
+          label="Otherwise color"
+          onChange={(remainderColor) => onChange({ ...rule, remainderColor })}
+        />
+        <StepActionSlot aria-hidden />
+      </StepLine>
+      <AddRow>
         <Button type="button" variant="ghost" size="sm" onClick={addStep}>
           + Add step
         </Button>
-      </StepLine>
+      </AddRow>
     </FieldGroup>
   )
 }

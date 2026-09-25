@@ -701,7 +701,7 @@ type ApplyCellRequest = {
   autoRefresh?: AutoRefresh | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
-  highlightConfigs?: (HighlightConfig | null)[] | null
+  highlightConfig?: HighlightConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
 
@@ -999,23 +999,6 @@ const normalizeQueryChart = (q: QueryChart): QueryChart => {
   return next
 }
 
-// PUT semantics like chartConfig: an omitted array clears the rules.
-const highlightConfigsForStatements = (
-  configs: (HighlightConfig | null)[] | null | undefined,
-  value: string,
-  index: number,
-): (HighlightConfig | null)[] | undefined => {
-  if (!configs) return undefined
-  const statementCount = getQueriesFromText(value).length
-  if (configs.length !== statementCount) {
-    throw new ApplyNotebookStateError(
-      `Cell at index ${index} has ${configs.length} highlight_configs entries but ${statementCount} \`;\`-split statement${statementCount === 1 ? "" : "s"}. Send one entry per statement (null for none).`,
-      "cells",
-    )
-  }
-  return configs.some((config) => config !== null) ? configs : undefined
-}
-
 const normalizeChartConfig = (
   cfg: ChartConfig | null | undefined,
 ): ChartConfig | undefined => {
@@ -1100,11 +1083,8 @@ export const buildAppliedCells = (
     }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
-    const highlightConfigs = highlightConfigsForStatements(
-      req.highlightConfigs,
-      value,
-      index,
-    )
+    // PUT semantics like chartConfig: an omitted config clears the rules.
+    const highlightConfig = req.highlightConfig ?? undefined
 
     // Cell kind and mode are sticky: omission preserves the existing cell.
     // Converting a markdown cell to SQL by omission would silently turn prose
@@ -1221,9 +1201,8 @@ export const buildAppliedCells = (
       else delete next.mode
       if (chartConfig !== undefined) next.chartConfig = chartConfig
       else delete next.chartConfig
-      if (highlightConfigs !== undefined)
-        next.highlightConfigs = highlightConfigs
-      else delete next.highlightConfigs
+      if (highlightConfig !== undefined) next.highlightConfig = highlightConfig
+      else delete next.highlightConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
       if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
@@ -1234,7 +1213,7 @@ export const buildAppliedCells = (
         next.result = null
         delete next.mode
         delete next.chartConfig
-        delete next.highlightConfigs
+        delete next.highlightConfig
         delete next.autoRefresh
         delete next.isViewMaximized
         delete next.bottomHeight
@@ -1271,8 +1250,7 @@ export const buildAppliedCells = (
     created.topHeight = topHeightForSql(value)
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
-    if (highlightConfigs !== undefined)
-      created.highlightConfigs = highlightConfigs
+    if (highlightConfig !== undefined) created.highlightConfig = highlightConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
     // Draw cells are double-view from creation (chart visible immediately),
