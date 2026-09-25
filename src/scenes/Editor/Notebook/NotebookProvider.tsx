@@ -324,8 +324,8 @@ export const NotebookProvider: React.FC<{
         canRelease: (cellId) =>
           (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
           !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
-        seedRefreshErrors: (cellId, errors) =>
-          cellRefreshEngineRef.current?.seedRefreshErrors(cellId, errors),
+        seedRefreshState: (cellId, seed) =>
+          cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
       }),
     [],
   )

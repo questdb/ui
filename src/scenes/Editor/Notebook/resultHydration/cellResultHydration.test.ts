@@ -4,7 +4,10 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
+import type {
+  NotebookResultSnapshot,
+  SnapshotRefreshState,
+} from "../../../../store/notebookResults"
 import { CellVirtualizationEngine } from "../cellVirtualization/cellVirtualizationEngine"
 import { statementKeysFor } from "../notebookUtils"
 import { CellResultHydrationEngine } from "./cellResultHydration"
@@ -51,9 +54,7 @@ describe("CellResultHydrationEngine", () => {
   let rewrites: NotebookResultSnapshot[]
   let pendingRewrites: Array<(saved: boolean) => void>
   let deletedSnapshots: string[]
-  let seededErrors: Array<
-    [string, Array<{ statementKey: string; message: string }>]
-  >
+  let seededRefreshState: Array<[string, SnapshotRefreshState]>
 
   const ranCell = (id: string): NotebookCell => ({
     id,
@@ -88,7 +89,7 @@ describe("CellResultHydrationEngine", () => {
     rewrites = []
     pendingRewrites = []
     deletedSnapshots = []
-    seededErrors = []
+    seededRefreshState = []
     engine = new CellResultHydrationEngine({
       loadSnapshot: (cellId) =>
         new Promise((resolve, reject) => {
@@ -111,8 +112,8 @@ describe("CellResultHydrationEngine", () => {
         snapshots.delete(cellId)
         return Promise.resolve()
       },
-      seedRefreshErrors: (cellId, errors) => {
-        seededErrors.push([cellId, errors])
+      seedRefreshState: (cellId, seed) => {
+        seededRefreshState.push([cellId, seed])
       },
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
@@ -326,6 +327,71 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites).toHaveLength(1)
     expect(rewrites[0].refreshErrors).toEqual([
       { statementKey: statementKeysFor(["select 1"])[0], message: "boom" },
+    ])
+  })
+
+  it("re-keys a base-format snapshot to head keys and rewrites it once, keeping the frame and script", async () => {
+    // Given a snapshot saved by base: trimmed-text keys for a failed refresh
+    // on the first statement and the active tab on the second
+    const first = "select  1"
+    const second = "select  2"
+    const [headFirst, headSecond] = statementKeysFor([first, second])
+    const legacyKeyOf = (trimmedSql: string) => `${trimmedSql}\u00010`
+    const script = { successCount: 2, failedCount: 0, durationMs: 5 }
+    seedCell({ ...ranCell("c1"), value: `${first}; ${second}` })
+    snapshots.set("c1", {
+      ...snapshot("c1", [dqlResult(first), dqlResult(second)], { script }),
+      activeStatementKey: legacyKeyOf(second),
+      refreshErrors: [{ statementKey: legacyKeyOf(first), message: "boom" }],
+    })
+
+    // When it hydrates on head
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the error and the active tab survive under head keys
+    expect(seededRefreshState).toEqual([
+      ["c1", { refreshErrors: [{ statementKey: headFirst, message: "boom" }] }],
+    ])
+    expect(applied[0][1]).toMatchObject({
+      activeStatementKey: headSecond,
+      activeResultIndex: 1,
+      script,
+    })
+
+    // And the disk copy now holds head keys with its frame and script intact
+    expect(rewrites).toHaveLength(1)
+    expect(rewrites[0]).toMatchObject({
+      activeStatementKey: headSecond,
+      refreshErrors: [{ statementKey: headFirst, message: "boom" }],
+      script,
+    })
+    expect(rewrites[0].results).toEqual([dqlResult(first), dqlResult(second)])
+  })
+
+  it("seeds surviving statements' fetch times into the engine and drops the rest from the rewrite", async () => {
+    // Given persisted fetch times for a surviving and a removed statement
+    const key1 = statementKeysFor(["select 1"])[0]
+    seedCell({ ...ranCell("c1"), value: "select 1" })
+    snapshots.set("c1", {
+      ...snapshot("c1", [dqlResult("select 1"), dqlResult("select 2")]),
+      slotFetchedAt: [
+        { statementKey: key1, fetchedAt: 1000 },
+        { statementKey: statementKeysFor(["select 2"])[0], fetchedAt: 2000 },
+      ],
+    })
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then only the surviving statement's fetch time reaches the engine and
+    // the rewritten snapshot
+    expect(seededRefreshState).toEqual([
+      ["c1", { slotFetchedAt: [{ statementKey: key1, fetchedAt: 1000 }] }],
+    ])
+    expect(rewrites[0].slotFetchedAt).toEqual([
+      { statementKey: key1, fetchedAt: 1000 },
     ])
   })
 
@@ -856,7 +922,7 @@ describe("virtualization band → hydration engine wiring", () => {
         }),
       rewriteSnapshot: () => Promise.resolve(true),
       deleteSnapshot: () => Promise.resolve(),
-      seedRefreshErrors: () => undefined,
+      seedRefreshState: () => undefined,
       getCell: (cellId) => cells.get(cellId),
       applyResult: (cellId, result) => {
         applied.push([cellId, result])

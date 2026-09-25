@@ -36,6 +36,7 @@ import {
   DEFAULT_CHART_BOTTOM_HEIGHT,
   duplicateCellAt,
   generateDefaultLayout,
+  gridBoxRowsChange,
   hasAgentVisibleCellHeightChanged,
   insertCell,
   isDoubleView,
@@ -2525,6 +2526,47 @@ describe("markdown cell grid lattice", () => {
   })
 })
 
+describe("gridBoxRowsChange", () => {
+  const runCell: NotebookCell = {
+    id: "x",
+    position: 0,
+    value: "",
+    topHeight: 72,
+  }
+  const dragTo = (height: number) => ({ topHeight: height, topResized: true })
+
+  it("never asks the store to follow a drag in list layout", () => {
+    // Given a list cell dragged far past its current height
+    // When each pointer move is checked
+    // Then the drag stays local until drop
+    expect(gridBoxRowsChange(runCell, dragTo(400), "list", false)).toBe(false)
+  })
+
+  it("asks the store to follow a grid drag once per row the box gains", () => {
+    // Given a grid cell dragged 60 px taller, one pixel per pointer move
+    const start = runCell.topHeight!
+    const end = start + 60
+    let cell = runCell
+    let storeWrites = 0
+
+    // When each pointer move is checked against the last committed cell
+    for (let height = start + 1; height <= end; height++) {
+      if (gridBoxRowsChange(cell, dragTo(height), "grid", false)) {
+        storeWrites++
+        cell = { ...cell, ...dragTo(height) }
+      }
+    }
+
+    // Then the store is written only at row boundaries, not per pixel
+    const rowsGained =
+      computeAgentCellGridH({ ...runCell, topHeight: end }) -
+      computeAgentCellGridH(runCell)
+    expect(rowsGained).toBeGreaterThan(0)
+    expect(storeWrites).toBe(rowsGained)
+    expect(storeWrites).toBeLessThan(end - start)
+  })
+})
+
 describe("hasAgentVisibleCellHeightChanged", () => {
   const runCell: NotebookCell = {
     id: "x",
@@ -2533,69 +2575,59 @@ describe("hasAgentVisibleCellHeightChanged", () => {
     topHeight: 72,
   }
 
-  it("ignores exact pixel changes within the same agent height breakpoint", () => {
-    // Given a grid cell whose next pixel height maps to its current h
-    const currentH = computeAgentCellGridH(runCell)
-    const nextH = computeAgentCellGridH({ ...runCell, topHeight: 73 })
-
-    // When the resize is checked against the agent-visible state
-    const changed = hasAgentVisibleCellHeightChanged(
-      runCell,
-      { topHeight: 73, topResized: true },
-      "grid",
-    )
-
-    // Then the pixel-only change does not stale the agent
-    expect(nextH).toBe(currentH)
-    expect(changed).toBe(false)
-  })
-
-  it("reports a grid resize that crosses an agent height breakpoint", () => {
-    // Given a grid cell whose next pixel height maps to a different h
-    const currentH = computeAgentCellGridH(runCell)
-    const nextH = computeAgentCellGridH({ ...runCell, topHeight: 100 })
-
-    // When the resize is checked against the agent-visible state
-    const changed = hasAgentVisibleCellHeightChanged(
-      runCell,
-      { topHeight: 100, topResized: true },
-      "grid",
-    )
-
-    // Then the agent is told to re-read the new breakpoint
-    expect(nextH).not.toBe(currentH)
-    expect(changed).toBe(true)
-  })
-
-  it("ignores list resize values because they are absent from agent state", () => {
-    // Given a list cell with a large pixel height change
+  it("reports a pinned editor height the agent would read differently, in list layout too", () => {
+    // Given a list cell whose editor is dragged from 72 to 300 px
     const patch = { topHeight: 300, topResized: true }
 
-    // When the resize is checked against the agent-visible state
-    const changed = hasAgentVisibleCellHeightChanged(runCell, patch, "list")
-
-    // Then the invisible height does not stale the agent
-    expect(changed).toBe(false)
+    // When the resize is checked against the agent-visible dimensions
+    // Then the new editor_height stales the agent
+    expect(hasAgentVisibleCellHeightChanged(runCell, patch)).toBe(true)
   })
 
-  it("ignores split changes that preserve the agent-visible total height", () => {
-    // Given a double-view grid cell whose editor and result heights trade space
+  it("reports a pinned result height change", () => {
+    // Given a cell with a result whose pane is dragged taller
     const splitCell: NotebookCell = {
       ...runCell,
-      topHeight: 200,
       bottomHeight: 300,
+      bottomResized: true,
       result: { results: [], activeResultIndex: 0, timestamp: 0 },
     }
 
-    // When the split moves without changing the total cell height
-    const changed = hasAgentVisibleCellHeightChanged(
-      splitCell,
-      { topHeight: 250, bottomHeight: 250 },
-      "grid",
-    )
+    // When the resize is checked
+    // Then the new result_height stales the agent
+    expect(
+      hasAgentVisibleCellHeightChanged(splitCell, {
+        bottomHeight: 400,
+        bottomResized: true,
+      }),
+    ).toBe(true)
+  })
 
-    // Then the agent-visible h remains unchanged
-    expect(changed).toBe(false)
+  it("ignores a drag that ends where it started", () => {
+    // Given the cell a split drag started from, pinned at 200 px
+    const startCell: NotebookCell = {
+      ...runCell,
+      topHeight: 200,
+      topResized: true,
+    }
+
+    // When the drop height equals the start height
+    // Then the round trip is not an edit
+    expect(
+      hasAgentVisibleCellHeightChanged(startCell, {
+        topHeight: 200,
+        topResized: true,
+      }),
+    ).toBe(false)
+  })
+
+  it("ignores a content-height update on an unpinned editor", () => {
+    // Given an auto-sized editor whose content grows
+    // When Monaco reports a new content height without pinning
+    // Then the agent still reads "auto" and is not staled
+    expect(hasAgentVisibleCellHeightChanged(runCell, { topHeight: 140 })).toBe(
+      false,
+    )
   })
 })
 
@@ -3256,6 +3288,22 @@ describe("snapshotResultsMatchQueries", () => {
     // When compared
     // Then there is nothing to present
     expect(snapshotResultsMatchQueries([], [])).toBe(false)
+  })
+
+  it("rejects a literal-only edit after a backslash literal", () => {
+    // Given a snapshot for a statement with a `'\\'` literal, which QuestDB
+    // reads as one character but the formatter reads as an escaped quote
+    const results = [
+      dql("SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice  smith'"),
+    ]
+
+    // When the whitespace inside a later string literal is edited
+    // Then the statements differ in value and the snapshot is stale
+    expect(
+      snapshotResultsMatchQueries(results, [
+        "SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice smith'",
+      ]),
+    ).toBe(false)
   })
 })
 

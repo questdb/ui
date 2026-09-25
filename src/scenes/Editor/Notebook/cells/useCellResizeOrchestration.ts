@@ -9,6 +9,7 @@ import {
   MIN_EDITOR_HEIGHT,
   clampPaneHeight,
   computeCellHeights,
+  gridBoxRowsChange,
   hasAgentVisibleCellHeightChanged,
   minBottomHeightFor,
   partitionCellHeights,
@@ -31,10 +32,11 @@ type Options = {
 // plus the derived top/bottom heights the layout renders from.
 //
 // The split handle owns the editor pane only. The result keeps its own height
-// and the cell grows with the editor, the same way Monaco auto-grow does. It
-// writes through the store on every step so a grid cell's box follows the drag.
-// A maximized cell fills the viewport, so there the handle moves the
-// editor/result ratio instead.
+// and the cell grows with the editor, the same way Monaco auto-grow does. The
+// drag is local state; the store is written on drop, and in grid layout also
+// whenever the box needs another row, so it follows the drag without a
+// notebook-wide render per pointer move. A maximized cell fills the viewport,
+// so there the handle moves the editor/result ratio instead.
 export const useCellResizeOrchestration = ({
   cell,
   layoutMode,
@@ -51,6 +53,11 @@ export const useCellResizeOrchestration = ({
   const [spotlightLiveRatio, setSpotlightLiveRatio] = useState<number | null>(
     null,
   )
+  // A drag that crosses grid rows writes the store mid-drag, so the split
+  // handle remembers the cell it started from and signals once, on drop,
+  // against that cell: a drag that returns to its start is not an edit.
+  const [splitDragStartCell, setSplitDragStartCell] =
+    useState<NotebookCell | null>(null)
 
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
@@ -60,20 +67,23 @@ export const useCellResizeOrchestration = ({
   }, [cell.value, getEditorContentHeight])
 
   const signalAgentVisibleHeightChange = useCallback(
-    (patch: Partial<NotebookCell>) => {
-      if (hasAgentVisibleCellHeightChanged(cell, patch, layoutMode)) {
+    (patch: Partial<NotebookCell>, from: NotebookCell = cell) => {
+      if (hasAgentVisibleCellHeightChanged(from, patch)) {
         signalUserEdit(bufferIdForEvents)
       }
     },
-    [bufferIdForEvents, cell, layoutMode],
+    [bufferIdForEvents, cell],
   )
 
   const topResize = useCellResize(
     MIN_EDITOR_HEIGHT,
     useCallback(
-      (height: number) =>
-        updateCell(cell.id, { topHeight: height, topResized: true }),
-      [cell.id, updateCell],
+      (height: number) => {
+        const patch = { topHeight: height, topResized: true }
+        signalAgentVisibleHeightChange(patch)
+        updateCell(cell.id, patch)
+      },
+      [cell.id, signalAgentVisibleHeightChange, updateCell],
     ),
     // Write Monaco's CURRENT content height directly on reset, rather
     // than setting `topHeight: undefined` and waiting for the next
@@ -90,9 +100,12 @@ export const useCellResizeOrchestration = ({
   const bottomResize = useCellResize(
     minBottomHeightFor(cell),
     useCallback(
-      (height: number) =>
-        updateCell(cell.id, { bottomHeight: height, bottomResized: true }),
-      [cell.id, updateCell],
+      (height: number) => {
+        const patch = { bottomHeight: height, bottomResized: true }
+        signalAgentVisibleHeightChange(patch)
+        updateCell(cell.id, patch)
+      },
+      [cell.id, signalAgentVisibleHeightChange, updateCell],
     ),
     useCallback(
       () =>
@@ -125,21 +138,22 @@ export const useCellResizeOrchestration = ({
     return top / (top + bottom)
   }
 
-  const commitEditorHeight = (height: number) => {
-    const patch = {
-      topHeight: clampPaneHeight(MIN_EDITOR_HEIGHT, height),
-      topResized: true,
-    }
-    signalAgentVisibleHeightChange(patch)
-    updateCell(cell.id, patch)
-  }
+  const editorHeightPatch = (height: number) => ({
+    topHeight: clampPaneHeight(MIN_EDITOR_HEIGHT, height),
+    topResized: true,
+  })
 
   const splitResizeLive = (height: number) => {
     if (isMaximized) {
       setSpotlightLiveRatio(spotlightRatioFor(height))
       return
     }
-    commitEditorHeight(height)
+    if (splitDragStartCell === null) setSplitDragStartCell(cell)
+    topResize.resizeLive(height)
+    const patch = editorHeightPatch(height)
+    if (gridBoxRowsChange(cell, patch, layoutMode, expectingResult)) {
+      updateCell(cell.id, patch)
+    }
   }
 
   const splitResizeEnd = (height: number) => {
@@ -148,7 +162,12 @@ export const useCellResizeOrchestration = ({
       updateCell(cell.id, { spotlightEditorRatio: spotlightRatioFor(height) })
       return
     }
-    commitEditorHeight(height)
+    setSplitDragStartCell(null)
+    signalAgentVisibleHeightChange(
+      editorHeightPatch(height),
+      splitDragStartCell ?? cell,
+    )
+    topResize.resizeEnd(height)
   }
 
   const resetSplit = () => {

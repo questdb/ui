@@ -44,7 +44,10 @@ import {
   type CellResultStatus,
 } from "../resultHydration/cellResultHydration"
 import type { CellRefreshView as CellRefreshAgentView } from "../../../../utils/notebooks/notebookController/notebookController"
-import { deleteCellSnapshot } from "../../../../store/notebookResults"
+import {
+  deleteCellSnapshot,
+  type SnapshotRefreshState,
+} from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import { PerKeyListeners } from "../perKeyListeners"
 
@@ -172,6 +175,41 @@ const keyedStatements = (queries: string[]) => {
 const isChartableResult = (result: SingleQueryResult): boolean =>
   result.type === "dql" && !result.truncated && result.dataset.length > 0
 
+// An edit-triggered settle keeps every unchanged statement's chartable rows
+// and executes only the statements without any. Poll ticks and manual
+// refreshes exist for freshness, so they execute every statement.
+const chartableResultsByKey = (
+  frame: CellResult,
+): Map<StatementKey, SingleQueryResult> => {
+  const byKey = new Map<StatementKey, SingleQueryResult>()
+  const keys = statementKeysFor(frame.results.map((r) => r.query))
+  frame.results.forEach((result, index) => {
+    if (isChartableResult(result)) byKey.set(keys[index], result)
+  })
+  return byKey
+}
+
+// A slot's fetch time is the round that produced its rows: an executed slot
+// stamps now, a carried slot keeps its stamp (or the frame time it was loaded
+// with), and a failed slot has no rows to date.
+const chartSlotFetchedAt = (
+  entry: Entry,
+  out: QueryExecResult[],
+  carriedResults: Array<SingleQueryResult | undefined>,
+  previousFrameTimestamp: number | undefined,
+): Map<StatementKey, number> => {
+  const now = Date.now()
+  const slotFetchedAt = new Map<StatementKey, number>()
+  out.forEach((result, index) => {
+    if (result.type === "error") return
+    const key = entry.slotKeys[index]
+    const carriedAt =
+      entry.state.slotFetchedAt.get(key) ?? previousFrameTimestamp
+    slotFetchedAt.set(key, carriedResults[index] ? (carriedAt ?? now) : now)
+  })
+  return slotFetchedAt
+}
+
 // Keys of the frame a round last wrote, so per-slot lookups never re-key the
 // whole cell. A frame the round did not write (released or replaced under it)
 // is keyed on sight.
@@ -297,10 +335,7 @@ export class CellRefreshEngine {
   private limitRequest: RequestLimiter
   private initialFetchJitterMs: number
   private batchUpdates: (fn: () => void) => void
-  private pendingErrorSeeds = new Map<
-    string,
-    Array<{ statementKey: string; message: string }>
-  >()
+  private pendingRefreshSeeds = new Map<string, SnapshotRefreshState>()
   // Runs in flight per cell, from noteRunStarted to noteRunFinished. A count,
   // not a flag: a superseded run's finish must not reopen the gate while its
   // replacement still runs. Keyed outside the entries so a run on a cell whose
@@ -361,7 +396,7 @@ export class CellRefreshEngine {
       this.removeEntry(cellId, "teardown")
     }
     this.visibilityByCell.clear()
-    this.pendingErrorSeeds.clear()
+    this.pendingRefreshSeeds.clear()
     this.pendingRunCounts.clear()
     this.lastSyncedEntryCells = null
   }
@@ -413,8 +448,8 @@ export class CellRefreshEngine {
     for (const cellId of [...this.visibilityByCell.keys()]) {
       if (!cellIds.has(cellId)) this.visibilityByCell.delete(cellId)
     }
-    for (const cellId of [...this.pendingErrorSeeds.keys()]) {
-      if (!cellIds.has(cellId)) this.pendingErrorSeeds.delete(cellId)
+    for (const cellId of [...this.pendingRefreshSeeds.keys()]) {
+      if (!cellIds.has(cellId)) this.pendingRefreshSeeds.delete(cellId)
     }
     for (const cellId of [...this.pendingRunCounts.keys()]) {
       if (!cellIds.has(cellId)) this.pendingRunCounts.delete(cellId)
@@ -588,18 +623,16 @@ export class CellRefreshEngine {
     return this.listeners.subscribe(cellId, listener)
   }
 
-  // Persisted refresh errors re-enter the channel on hydration, so a reload
-  // never hides a failed refresh. Seeds may arrive before the entry exists.
-  seedRefreshErrors(
-    cellId: string,
-    errors: Array<{ statementKey: string; message: string }>,
-  ) {
+  // Persisted refresh errors and fetch times re-enter the channel on
+  // hydration, so a reload never hides a failed refresh or restamps old rows
+  // with the save time. Seeds may arrive before the entry exists.
+  seedRefreshState(cellId: string, seed: SnapshotRefreshState) {
     const entry = this.entries.get(cellId)
     if (!entry) {
-      this.pendingErrorSeeds.set(cellId, errors)
+      this.pendingRefreshSeeds.set(cellId, seed)
       return
     }
-    this.applyErrorSeed(entry, errors)
+    this.applyRefreshSeed(entry, seed)
   }
 
   // A completed run replaces the frame wholesale — every refresh failure it
@@ -673,20 +706,22 @@ export class CellRefreshEngine {
     return (this.pendingRunCounts.get(cellId) ?? 0) > 0
   }
 
-  private applyErrorSeed(
-    entry: Entry,
-    errors: Array<{ statementKey: string; message: string }>,
-  ) {
-    if (errors.length === 0) return
+  private applyRefreshSeed(entry: Entry, seed: SnapshotRefreshState) {
     const slotKeys = new Set(entry.slotKeys)
     const slotErrors = new Map(entry.state.slotErrors)
-    let changed = false
-    for (const { statementKey, message } of errors) {
+    const slotFetchedAt = new Map(entry.state.slotFetchedAt)
+    const patch: Partial<CellFetchState> = {}
+    for (const { statementKey, message } of seed.refreshErrors ?? []) {
       if (!slotKeys.has(statementKey)) continue
       slotErrors.set(statementKey, message)
-      changed = true
+      patch.slotErrors = slotErrors
     }
-    if (changed) this.setState(entry, { slotErrors })
+    for (const { statementKey, fetchedAt } of seed.slotFetchedAt ?? []) {
+      if (!slotKeys.has(statementKey)) continue
+      slotFetchedAt.set(statementKey, fetchedAt)
+      patch.slotFetchedAt = slotFetchedAt
+    }
+    if (Object.keys(patch).length > 0) this.setState(entry, patch)
   }
 
   private createEntry(cell: NotebookCell, kind: CellEntryKind) {
@@ -723,10 +758,10 @@ export class CellRefreshEngine {
       snapshotTimer: null,
     }
     this.entries.set(cell.id, entry)
-    const seed = this.pendingErrorSeeds.get(cell.id)
+    const seed = this.pendingRefreshSeeds.get(cell.id)
     if (seed) {
-      this.pendingErrorSeeds.delete(cell.id)
-      this.applyErrorSeed(entry, seed)
+      this.pendingRefreshSeeds.delete(cell.id)
+      this.applyRefreshSeed(entry, seed)
     }
     if (kind === "grid") this.ensureClassified(entry)
     if (entry.visible) this.ensureData(entry)
@@ -1178,11 +1213,14 @@ export class CellRefreshEngine {
         return
       }
       this.setState(entry, { classifyBlock: null, classifiedKey: queriesKey })
-      const carried =
+      const previousFrame =
         reason === "settle"
-          ? this.chartableResultsByKey(entry)
-          : new Map<StatementKey, SingleQueryResult>()
-      const slotKeys = entry.slotKeys
+          ? this.getDeps().getCellResult(entry.cellId)
+          : undefined
+      const carried = previousFrame
+        ? chartableResultsByKey(previousFrame)
+        : new Map<StatementKey, SingleQueryResult>()
+      const carriedResults = entry.slotKeys.map((key) => carried.get(key))
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
         queries.map((q, index) => {
@@ -1191,7 +1229,7 @@ export class CellRefreshEngine {
             return Promise.resolve(
               errorExecResult(q, stmt.error ?? "Invalid statement"),
             )
-          const previous = carried.get(slotKeys[index])
+          const previous = carriedResults[index]
           if (previous) return Promise.resolve(toExecResult(previous))
           return this.limitRequest(
             () => deps.executeSingle(q, ac.signal, NOTEBOOK_ROW_CAP),
@@ -1206,11 +1244,17 @@ export class CellRefreshEngine {
       // and an unchanged frame must still be re-written in that case.
       const currentSqlHash = sqlHash(entry.sql)
       const current = this.getDeps().getCellResult(entry.cellId)
+      const slotFetchedAt = chartSlotFetchedAt(
+        entry,
+        out,
+        carriedResults,
+        previousFrame?.timestamp,
+      )
       if (
         current != null &&
         resultsEquivalent(current.results.map(toExecResult), out)
       ) {
-        this.setState(entry, { settledKey: queriesKey })
+        this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
         this.deriveChartSlotErrors(entry)
         if (successResults(out).length === 0) {
           this.clearSnapshot(entry)
@@ -1234,7 +1278,7 @@ export class CellRefreshEngine {
         activeResultIndex: 0,
         timestamp: Date.now(),
       })
-      this.setState(entry, { settledKey: queriesKey })
+      this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
       this.deriveChartSlotErrors(entry)
       if (successResults(out).length > 0) {
         this.queueSnapshot(entry, written, fetchDurationMs)
@@ -1385,22 +1429,6 @@ export class CellRefreshEngine {
       entry.lastFetchedAt = Date.now()
       this.setState(entry, { fetching: false, slotFetching: new Set() })
     }
-  }
-
-  // An edit-triggered settle keeps every unchanged statement's chartable rows
-  // and executes only the statements without any. Poll ticks and manual
-  // refreshes exist for freshness, so they execute every statement.
-  private chartableResultsByKey(
-    entry: Entry,
-  ): Map<StatementKey, SingleQueryResult> {
-    const byKey = new Map<StatementKey, SingleQueryResult>()
-    const current = this.getDeps().getCellResult(entry.cellId)
-    if (!current) return byKey
-    const keys = statementKeysFor(current.results.map((r) => r.query))
-    current.results.forEach((result, index) => {
-      if (isChartableResult(result)) byKey.set(keys[index], result)
-    })
-    return byKey
   }
 
   private currentSlotResult(
@@ -1649,6 +1677,13 @@ export class CellRefreshEngine {
             message,
           }))
         : undefined
+    const slotFetchedAt =
+      entry.state.slotFetchedAt.size > 0
+        ? [...entry.state.slotFetchedAt].map(([statementKey, fetchedAt]) => ({
+            statementKey,
+            fetchedAt,
+          }))
+        : undefined
     return persistCellSnapshot({
       bufferId: this.bufferId,
       cellId: entry.cellId,
@@ -1660,6 +1695,7 @@ export class CellRefreshEngine {
         : {}),
       ...(script ? { script } : {}),
       ...(refreshErrors ? { refreshErrors } : {}),
+      ...(slotFetchedAt ? { slotFetchedAt } : {}),
     }).then((saved) => {
       if (!saved) return
       entry.persistedResults.set(results, persistedSqlHash)

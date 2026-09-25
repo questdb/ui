@@ -1123,6 +1123,63 @@ describe("CellRefreshEngine", () => {
     expect(state?.settledKey).toBe(state?.queriesKey)
   })
 
+  it("stamps only the executed statement on an edit; the carried one keeps its fetch time", async () => {
+    // Given a settled two-statement draw cell fetched at T0
+    const keyOf = (sql: string) => statementKeysFor([sql])[0]
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    const fetchedAt = engine
+      .getState("c1")
+      ?.slotFetchedAt.get(keyOf("select 1"))
+    expect(fetchedAt).toBeGreaterThan(0)
+    vi.mocked(persistCellSnapshot).mockClear()
+
+    // When one statement changes an hour later
+    const hour = 60 * 60 * 1000
+    await vi.advanceTimersByTimeAsync(hour)
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the carried rows keep T0 while the edited statement stamps T1,
+    // and the snapshot carries both so a reload agrees
+    const stamps = engine.getState("c1")?.slotFetchedAt
+    expect(stamps?.get(keyOf("select 1"))).toBe(fetchedAt)
+    expect(stamps?.get(keyOf("select 3"))).toBeGreaterThanOrEqual(
+      fetchedAt! + hour,
+    )
+    expect(stamps?.has(keyOf("select 2"))).toBe(false)
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    expect(
+      vi.mocked(persistCellSnapshot).mock.calls[0][0].slotFetchedAt,
+    ).toEqual([
+      { statementKey: keyOf("select 1"), fetchedAt },
+      {
+        statementKey: keyOf("select 3"),
+        fetchedAt: stamps?.get(keyOf("select 3")),
+      },
+    ])
+  })
+
+  it("advances every fetch time on a poll tick even when the rows did not change", async () => {
+    // Given a polling draw cell whose rows never change
+    const key = statementKeysFor(["select 1"])[0]
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    const firstFetchedAt = engine.getState("c1")?.slotFetchedAt.get(key)
+    expect(firstFetchedAt).toBeGreaterThan(0)
+
+    // When the next tick re-fetches identical rows
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushAsync()
+
+    // Then the frame is untouched but the slot's fetch time moves forward
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    expect(engine.getState("c1")?.slotFetchedAt.get(key)).toBeGreaterThan(
+      firstFetchedAt!,
+    )
+  })
+
   it("never executes a query that fails validation, and blocks it once it resolves to a write", async () => {
     // Given a polling draw cell whose INSERT fails validation because its
     // target table does not exist yet (reachable via edit-in-draw or the
@@ -2929,10 +2986,12 @@ describe("CellRefreshEngine", () => {
     it("seeds persisted refresh errors for surviving statements only", async () => {
       // Given errors seeded before the entry exists — one for a statement the
       // cell no longer contains
-      engine.seedRefreshErrors("g1", [
-        { statementKey: keyOf("select 1"), message: "old failure" },
-        { statementKey: keyOf("select gone"), message: "dropped" },
-      ])
+      engine.seedRefreshState("g1", {
+        refreshErrors: [
+          { statementKey: keyOf("select 1"), message: "old failure" },
+          { statementKey: keyOf("select gone"), message: "dropped" },
+        ],
+      })
 
       // When the cell syncs into the engine
       const cell = gridCell("g1", "select 1", ["select 1"], false)
@@ -2945,6 +3004,26 @@ describe("CellRefreshEngine", () => {
       expect(state?.slotErrors.size).toBe(1)
     })
 
+    it("seeds persisted fetch times for surviving statements only", async () => {
+      // Given fetch times seeded before the entry exists — one for a
+      // statement the cell no longer contains
+      engine.seedRefreshState("g1", {
+        slotFetchedAt: [
+          { statementKey: keyOf("select 1"), fetchedAt: 1000 },
+          { statementKey: keyOf("select gone"), fetchedAt: 2000 },
+        ],
+      })
+
+      // When the cell syncs into the engine
+      syncOnScreen([gridCell("g1", "select 1", ["select 1"], false)])
+      await flushAsync()
+
+      // Then only the surviving statement's fetch time re-enters the channel
+      const state = engine.getState("g1")
+      expect(state?.slotFetchedAt.get(keyOf("select 1"))).toBe(1000)
+      expect(state?.slotFetchedAt.size).toBe(1)
+    })
+
     it("reshapes the frame on an SQL edit and drops the edited statement's error", async () => {
       // Given a grid with refresh errors on both statements
       const cell = gridCell(
@@ -2955,10 +3034,12 @@ describe("CellRefreshEngine", () => {
       )
       syncOnScreen([cell])
       await flushAsync()
-      engine.seedRefreshErrors("g1", [
-        { statementKey: keyOf("select 1"), message: "e1" },
-        { statementKey: keyOf("select 2"), message: "e2" },
-      ])
+      engine.seedRefreshState("g1", {
+        refreshErrors: [
+          { statementKey: keyOf("select 1"), message: "e1" },
+          { statementKey: keyOf("select 2"), message: "e2" },
+        ],
+      })
 
       // When the second statement is edited and the debounce expires
       engine.sync([{ ...cell, value: "select 1; select 3" }])

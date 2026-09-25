@@ -3,10 +3,18 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
+import type {
+  NotebookResultSnapshot,
+  SnapshotRefreshState,
+} from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
-import { reconcileResultsForSlotKeys, statementKeysFor } from "../notebookUtils"
+import {
+  reconcileKeyedResults,
+  resultStatementKeys,
+  statementKeysFor,
+} from "../notebookUtils"
+import { rekeyLegacyStatementKeys } from "./legacyStatementKeys"
 
 // Legacy records hold the raw cell text — comments included — as the
 // statement's query. Parsing it back to the statement lets those results
@@ -42,10 +50,7 @@ export type CellResultHydrationDeps = {
   applyResult: (cellId: string, result: CellResult) => void
   releaseResult: (cellId: string) => void
   canRelease: (cellId: string) => boolean
-  seedRefreshErrors: (
-    cellId: string,
-    errors: Array<{ statementKey: string; message: string }>,
-  ) => void
+  seedRefreshState: (cellId: string, seed: SnapshotRefreshState) => void
 }
 
 export const hasRunMarker = (cell: NotebookCell): boolean =>
@@ -229,11 +234,15 @@ export class CellResultHydrationEngine {
   ) {
     const statements = getQueriesFromText(cell.value)
     const slotKeys = statementKeysFor(statements)
-    const reconciled = reconcileResultsForSlotKeys(statements, slotKeys, {
-      results: snapshot.results.map(normalizeSnapshotResultQuery),
+    const results = snapshot.results.map(normalizeSnapshotResultQuery)
+    const resultKeys = resultStatementKeys(results)
+    const rekeyed = rekeyLegacyStatementKeys(results, resultKeys, snapshot)
+    const keyed = rekeyed ?? snapshot
+    const reconciled = reconcileKeyedResults(slotKeys, resultKeys, {
+      results,
       activeResultIndex: snapshot.activeResultIndex ?? 0,
-      ...(snapshot.activeStatementKey !== undefined
-        ? { activeStatementKey: snapshot.activeStatementKey }
+      ...(keyed.activeStatementKey !== undefined
+        ? { activeStatementKey: keyed.activeStatementKey }
         : {}),
       timestamp: snapshot.savedAt,
     })
@@ -251,21 +260,29 @@ export class CellResultHydrationEngine {
         return result !== snapshot.results[index]
       })
     const slotKeySet = new Set(slotKeys)
-    const refreshErrors = snapshot.refreshErrors?.filter((error) =>
+    const refreshErrors = keyed.refreshErrors?.filter((error) =>
       slotKeySet.has(error.statementKey),
     )
-    if (frameChanged) {
+    const slotFetchedAt = keyed.slotFetchedAt?.filter((stamp) =>
+      slotKeySet.has(stamp.statementKey),
+    )
+    const refreshState: SnapshotRefreshState = {
+      ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
+      ...(slotFetchedAt && slotFetchedAt.length > 0 ? { slotFetchedAt } : {}),
+    }
+    // A re-keyed snapshot rewrites too, so the disk copy holds head keys and
+    // the next reload translates nothing.
+    if (frameChanged || rekeyed !== null) {
       const rewritten: NotebookResultSnapshot = {
         ...snapshot,
         results: reconciled.results,
         activeResultIndex: reconciled.activeResultIndex,
         activeStatementKey: reconciled.activeStatementKey,
-        ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
       }
-      delete rewritten.script
-      if (!refreshErrors || refreshErrors.length === 0) {
-        delete rewritten.refreshErrors
-      }
+      if (frameChanged) delete rewritten.script
+      delete rewritten.refreshErrors
+      delete rewritten.slotFetchedAt
+      Object.assign(rewritten, refreshState)
       void this.deps
         .rewriteSnapshot(rewritten)
         .then((saved) => {
@@ -282,10 +299,11 @@ export class CellResultHydrationEngine {
       timestamp: snapshot.savedAt,
       ...(snapshot.script && !frameChanged ? { script: snapshot.script } : {}),
     })
-    // Persisted refresh failures re-enter the engine channel, so a reload
-    // restores the red badge and last_refresh_error alongside the old rows.
-    if (refreshErrors && refreshErrors.length > 0) {
-      this.deps.seedRefreshErrors(cellId, refreshErrors)
+    // Persisted refresh failures and fetch times re-enter the engine channel,
+    // so a reload restores the red badge, last_refresh_error and each tab's
+    // true fetch time alongside the old rows.
+    if (Object.keys(refreshState).length > 0) {
+      this.deps.seedRefreshState(cellId, refreshState)
     }
     this.setStatus(cellId, "loaded")
   }

@@ -253,24 +253,24 @@ const MarkdownCellInner: React.FC<Props> = ({
     const next = snapMarkdownTopHeight(
       el ? Math.round(el.getBoundingClientRect().height) : 0,
     )
-    if (
-      hasAgentVisibleCellHeightChanged(
-        cell,
-        { topHeight: next, topResized: false },
-        layoutMode,
-      )
-    ) {
+    const patch = { topHeight: next, topResized: false }
+    if (hasAgentVisibleCellHeightChanged(cell, patch)) {
       signalUserEdit(bufferIdForEvents)
     }
-    updateCell(cell.id, { topHeight: next, topResized: false })
-  }, [bufferIdForEvents, cell, layoutMode, updateCell])
+    updateCell(cell.id, patch)
+  }, [bufferIdForEvents, cell, updateCell])
 
   const heightResize = useCellResize(
     MIN_MARKDOWN_HEIGHT_PX,
     useCallback(
-      (height: number) =>
-        updateCell(cell.id, { topHeight: height, topResized: true }),
-      [cell.id, updateCell],
+      (height: number) => {
+        const patch = { topHeight: height, topResized: true }
+        if (hasAgentVisibleCellHeightChanged(cell, patch)) {
+          signalUserEdit(bufferIdForEvents)
+        }
+        updateCell(cell.id, patch)
+      },
+      [bufferIdForEvents, cell, updateCell],
     ),
     resetToContentHeight,
   )

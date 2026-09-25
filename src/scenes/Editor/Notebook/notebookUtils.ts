@@ -818,9 +818,15 @@ export const nextCopyLabel = (label: string): string => {
 // the formatter canonicalizes whitespace/newlines and keyword casing, but does
 // not fold string literals or quoted/unquoted identifiers. Invalid, mid-typing
 // SQL falls back to the editor's trim/trailing-semicolon normalization.
+// The formatter's MySQL dialect reads `\'` as an escaped quote; QuestDB does
+// not, so a backslash anywhere makes the formatter misread later literals.
+const FORMATTER_UNSAFE_CHAR = "\\"
+
 export const normalizeStatementIdentity = (query: string): string => {
   const normalized = normalizeQueryText(query)
-  if (!normalized) return normalized
+  if (!normalized || normalized.includes(FORMATTER_UNSAFE_CHAR)) {
+    return normalized
+  }
   try {
     return formatSql(normalized, { uppercase: true })
   } catch {
@@ -886,13 +892,18 @@ export type ReconciledCellResult = {
   activeResultIndex: number
 }
 
-export const reconcileResultsForSlotKeys = (
-  statements: string[],
+export const resultStatementKeys = (
+  results: SingleQueryResult[],
+): StatementKey[] => statementKeysFor(results.map((r) => r.query))
+
+// Callers that already hold the previous frame's keys pass them in, so the
+// formatter runs once per result on a hydration.
+export const reconcileKeyedResults = (
   slotKeys: StatementKey[],
+  resultKeys: StatementKey[],
   previous: CellResult,
 ): ReconciledCellResult | null => {
-  if (statements.length === 0 || previous.results.length === 0) return null
-  const resultKeys = statementKeysFor(previous.results.map((r) => r.query))
+  if (slotKeys.length === 0 || previous.results.length === 0) return null
   const oldIndexByKey = new Map<StatementKey, number>()
   resultKeys.forEach((key, index) => oldIndexByKey.set(key, index))
   const survivors: SingleQueryResult[] = []
@@ -927,6 +938,19 @@ export const reconcileResultsForSlotKeys = (
     activeResultIndex: Math.max(0, survivorKeys.indexOf(activeStatementKey)),
   }
 }
+
+export const reconcileResultsForSlotKeys = (
+  statements: string[],
+  slotKeys: StatementKey[],
+  previous: CellResult,
+): ReconciledCellResult | null =>
+  statements.length === 0
+    ? null
+    : reconcileKeyedResults(
+        slotKeys,
+        resultStatementKeys(previous.results),
+        previous,
+      )
 
 export const reconcileResultsForStatements = (
   statements: string[],
@@ -2111,13 +2135,40 @@ export const computeAgentCellGridH = (
     expectingResult,
   )
 
+// The agent reads pinned pane heights in both layouts (grid rows are derived
+// from them), so a resize is agent-visible when either height it would read
+// changes between the two cells.
 export const hasAgentVisibleCellHeightChanged = (
   cell: NotebookCell,
   patch: Partial<NotebookCell>,
+): boolean => {
+  const before = agentCellPaneDimensions(cell)
+  const after = agentCellPaneDimensions({ ...cell, ...patch })
+  return (
+    before.editorHeight !== after.editorHeight ||
+    before.resultHeight !== after.resultHeight
+  )
+}
+
+// A pane drag is local state until drop. Only a grid box that needs another
+// row makes the store follow mid-drag; a store write renders the whole
+// notebook, so it is never paid per pointer move.
+export const gridBoxRowsChange = (
+  cell: NotebookCell,
+  patch: Partial<NotebookCell>,
   layoutMode: "list" | "grid",
-): boolean =>
-  layoutMode === "grid" &&
-  computeAgentCellGridH(cell) !== computeAgentCellGridH({ ...cell, ...patch })
+  expectingResult: boolean,
+): boolean => {
+  if (layoutMode !== "grid") return false
+  const rowsOf = (candidate: NotebookCell) =>
+    computeCellGridH(
+      candidate,
+      NOTEBOOK_GRID_ROW_HEIGHT,
+      NOTEBOOK_GRID_MARGIN_Y,
+      expectingResult,
+    )
+  return rowsOf(cell) !== rowsOf({ ...cell, ...patch })
+}
 
 export const partitionCellHeights = (
   sum: number,
