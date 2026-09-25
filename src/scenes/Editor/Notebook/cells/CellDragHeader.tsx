@@ -3,7 +3,7 @@ import styled from "styled-components"
 import { CellToolbar } from "./CellToolbar"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import type { CellToolbarTier } from "../notebookUtils"
+import type { CellPaneLayout, CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { editorCardHeaderStyles } from "../../sharedStyles"
 
@@ -55,13 +55,14 @@ type Props = {
   layoutMode: "list" | "grid"
   autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
-  isRunning?: boolean
+  isCellBusy?: boolean
   left?: React.ReactNode
   right?: React.ReactNode
   // SQL cells pass this so the toolbar can adapt to the header's width; markdown
   // cells omit it (no width-driven tiering).
   headerRef?: RefObject<HTMLDivElement>
   toolbarTier?: CellToolbarTier
+  paneLayout?: CellPaneLayout
   chartZoomed?: boolean
 }
 
@@ -73,11 +74,12 @@ export const CellDragHeader: React.FC<Props> = ({
   layoutMode,
   autoRefreshDefault,
   isMaximized,
-  isRunning = false,
+  isCellBusy = false,
   left,
   right,
   headerRef,
   toolbarTier,
+  paneLayout,
   chartZoomed,
 }) => (
   <HeaderBar
@@ -108,9 +110,10 @@ export const CellDragHeader: React.FC<Props> = ({
         layoutMode={layoutMode}
         autoRefreshDefault={autoRefreshDefault}
         isMaximized={isMaximized}
-        isRunning={isRunning}
+        isCellBusy={isCellBusy}
         inline
         toolbarTier={toolbarTier}
+        paneLayout={paneLayout}
         chartZoomed={chartZoomed}
       />
     </RightSide>

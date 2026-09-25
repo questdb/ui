@@ -82,20 +82,22 @@ export const useNotebookPersistence = ({
     [scheduleFlush],
   )
 
+  // Settles once the document write lands, so a caller can order durable
+  // follow-ups (snapshot cleanup, an agent's success) behind it.
   const persistImmediately = useCallback(
-    (cells: NotebookCell[], exact = false) => {
-      if (preview || disposedRef.current) return
+    (cells: NotebookCell[], exact = false): Promise<void> => {
+      if (preview || disposedRef.current) return Promise.resolve()
       const effective = exact ? cells : (pendingCellsRef.current ?? cells)
       if (persistTimeoutRef.current) {
         window.clearTimeout(persistTimeoutRef.current)
         persistTimeoutRef.current = null
       }
       pendingCellsRef.current = null
-      void enqueueBufferTask(bufferId, () =>
+      return enqueueBufferTask(bufferId, () =>
         updateBuffer(bufferId, {
           notebookViewState: buildPayload(effective),
         }),
-      )
+      ).then(() => undefined)
     },
     [bufferId, updateBuffer, buildPayload, preview],
   )

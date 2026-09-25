@@ -3,6 +3,8 @@ import { ChartLineIcon, WarningIcon } from "@phosphor-icons/react"
 import styled from "styled-components"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { Button } from "../../../components/Button"
+import { IconButton } from "../../../components/IconButton"
+import { Reset } from "../../../components/icons"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { normalizeQueryText } from "../../Editor/Monaco/utils"
@@ -26,6 +28,7 @@ type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
 type Props = {
   result: ResultChartData | null
   visible: boolean
+  onResetZoomFocus?: () => void
 }
 
 type SavedConfig = {
@@ -57,6 +60,13 @@ const ChartArea = styled.div`
   position: relative;
   flex: 1;
   min-height: 0;
+`
+
+const ChartActions = styled.div`
+  position: absolute;
+  z-index: 1;
+  top: 0.8rem;
+  right: 0.8rem;
 `
 
 const TruncationNotice = styled.div`
@@ -134,7 +144,11 @@ const resultChartTelemetry: ChartSettingsTelemetry = {
   },
 }
 
-export const ResultChart: React.FC<Props> = ({ result, visible }) => {
+export const ResultChart: React.FC<Props> = ({
+  result,
+  visible,
+  onResetZoomFocus,
+}) => {
   const chartQuery = useChartQuery({ seed: result, enabled: visible })
   const [savedConfig, setSavedConfig] = useState<SavedConfig | null>(null)
   const [zoomStart, setZoomStart] = useState(0)
@@ -187,6 +201,13 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
     setZoomStart(start)
     setZoomEnd(end)
   }, [])
+
+  const handleResetZoom = useCallback(() => {
+    chartRendererRef.current?.resetZoom()
+    onResetZoomFocus?.()
+  }, [onResetZoomFocus])
+
+  const isZoomed = zoomStart > 0 || zoomEnd < 100
 
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {
@@ -272,6 +293,20 @@ export const ResultChart: React.FC<Props> = ({ result, visible }) => {
           </TruncationNotice>
         )}
         <ChartArea>
+          {isZoomed && (
+            <ChartActions>
+              <IconButton
+                label="Reset zoom"
+                tooltip="Reset zoom"
+                variant="secondary"
+                size="sm"
+                dataHook="result-chart-reset-zoom"
+                onClick={handleResetZoom}
+              >
+                <Reset size={16} />
+              </IconButton>
+            </ChartActions>
+          )}
           <ChartRenderer
             ref={chartRendererRef}
             option={option}

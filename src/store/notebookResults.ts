@@ -17,6 +17,11 @@ export type SnapshotRefreshError = {
   message: string
 }
 
+export type SnapshotSlotFetchedAt = {
+  statementKey: string
+  fetchedAt: number
+}
+
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
@@ -25,8 +30,16 @@ export type NotebookResultSnapshot = {
   activeResultIndex?: number
   activeStatementKey?: string
   refreshErrors?: SnapshotRefreshError[]
+  slotFetchedAt?: SnapshotSlotFetchedAt[]
   script?: CellResult["script"]
 }
+
+// The per-statement refresh state a snapshot carries back into the refresh
+// engine on hydration.
+export type SnapshotRefreshState = Pick<
+  NotebookResultSnapshot,
+  "refreshErrors" | "slotFetchedAt"
+>
 
 export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 

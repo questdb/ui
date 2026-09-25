@@ -29,6 +29,7 @@ const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   slotErrors: new Map(),
   cancelledSlots: new Set(),
   slotFetchedAt: new Map(),
+  fetchCancelled: false,
   ...over,
 })
 

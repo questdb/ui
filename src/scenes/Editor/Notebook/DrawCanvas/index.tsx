@@ -10,6 +10,7 @@ import {
 } from "../CellChart/ChartRenderer"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
+import { Button } from "../../../../components/Button"
 import { toast } from "../../../../components/Toast"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
@@ -72,6 +73,11 @@ const EmptyState = styled.div`
   justify-content: center;
   color: ${({ theme }) => theme.color.contentSecondary};
   font-size: ${({ theme }) => theme.fontSize.sm};
+`
+
+const CancelledState = styled(EmptyState)`
+  flex-direction: column;
+  gap: 1rem;
 `
 
 // Announces loading/empty transitions. Stays mounted with only its text
@@ -149,6 +155,11 @@ export const DrawCanvas: React.FC<Props> = ({
     setSettingsOpen(true)
   }, [cell.chartConfig])
 
+  const handleRetry = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+    eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
+  }
+
   const option = useMemo(
     () => buildEchartsOption(resolution.chart, resolution.renderQueries),
     [resolution],
@@ -164,6 +175,7 @@ export const DrawCanvas: React.FC<Props> = ({
     chartResult,
     resultStatus === "loading",
   )
+  const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
@@ -207,16 +219,34 @@ export const DrawCanvas: React.FC<Props> = ({
   return (
     <Wrapper>
       <VisuallyHiddenStatus role="status">
-        {loading ? "Loading chart data" : empty ? emptyMessage : ""}
+        {loading
+          ? "Loading chart data"
+          : cancelled
+            ? "Chart loading was cancelled"
+            : empty
+              ? emptyMessage
+              : ""}
       </VisuallyHiddenStatus>
       {loading ? (
         <EmptyState aria-hidden="true">
           <CircleNotchSpinner size={24} />
         </EmptyState>
+      ) : cancelled ? (
+        <CancelledState data-hook="draw-canvas-cancelled">
+          <span aria-hidden="true">Chart loading was cancelled.</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleRetry}
+            dataHook="draw-canvas-retry"
+          >
+            Retry
+          </Button>
+        </CancelledState>
       ) : empty ? (
         <EmptyState aria-hidden="true">{emptyMessage}</EmptyState>
       ) : (
-        <Canvas>
+        <Canvas data-hook="draw-canvas">
           <ChartRenderer
             ref={chartRendererRef}
             option={option}

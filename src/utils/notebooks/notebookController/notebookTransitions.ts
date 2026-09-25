@@ -2,6 +2,7 @@ import {
   MAX_NOTEBOOK_CELLS,
   type AutoRefresh,
   type CellMode,
+  type CellPaneView,
   type CellType,
   type NotebookCell,
 } from "../../../store/notebook"
@@ -11,26 +12,35 @@ import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
+  agentCellDimensionsPatch,
   buildAppliedNotebookState,
   carriedRunError,
   carriedRunStatus,
-  cellHeightPatchForRows,
+  cellGridBoundsError,
+  cellHasRunOutcome,
   cellModeChangePatch,
+  discardCellResult,
   clearCellAutoRefresh,
+  computeAgentCellGridH,
   duplicateCellAt,
   insertCell,
   isExpectingResult,
   mergeCellChartConfig,
   nextGridSeedPosition,
   reconcileCellResultForValue,
-  NOTEBOOK_GRID_MARGIN_Y,
-  NOTEBOOK_GRID_ROW_HEIGHT,
+  agentCellPresentation,
+  type AgentCellPresentation,
   removeCell,
   swapCellDown,
   swapCellUp,
   topHeightForSql,
   upsertCellLayout,
+  validateAgentCellDimensions,
   type CellGridPosition,
+  type AgentCellDimensions,
+  type CellResultStatus,
+  type CellResultStatusReader,
+  type RunCancelReason,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 
 // The single home for every notebook mutation's behavior. Each transition is a
@@ -41,9 +51,9 @@ import {
 //
 // Side effects are returned as data, never performed here:
 //   - `cleanup.cellIds`    — snapshots/layouts each shell drops after its commit.
-//   - `cancelRuns.cellIds` — cells whose in-flight run the mounted shell aborts
-//                            (the run would keep writing cell.result after the
-//                            chart engine takes ownership).
+//   - `cancelRuns`          — cells whose in-flight run either shell aborts
+//                            because the transition invalidated its eventual
+//                            result, and the reason the run reports for it.
 //   - `deleteSnapshots.cellIds` — cells that survive the transition but whose
 //                            persisted result no longer matches their SQL;
 //                            each shell deletes the snapshot so hydration
@@ -60,7 +70,7 @@ export type NotebookTransitionResult<T = void> = {
   result: T
   touchedCellId?: string
   cleanup?: { cellIds: string[] }
-  cancelRuns?: { cellIds: string[] }
+  cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }
 }
 
@@ -279,31 +289,131 @@ export const setCellLayoutTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  pos: CellGridPosition,
-): NotebookTransitionResult => {
+  pos: Omit<CellGridPosition, "h"> & { resultStatus?: CellResultStatus },
+): NotebookTransitionResult<
+  AgentCellPresentation & { grid: { x: number; y: number; w: number } }
+> => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
-  // Pin an intentionally-resized h into the cell (see cellHeightPatchForRows).
-  const heightPatch = cellHeightPatchForRows(
-    cell,
-    pos.h,
-    NOTEBOOK_GRID_ROW_HEIGHT,
-    NOTEBOOK_GRID_MARGIN_Y,
-    isExpectingResult(cell, "unrequested"),
+  const gridError = cellGridBoundsError(pos)
+  if (gridError) throw new NotebookToolError("validation", gridError)
+  const layoutPos: CellGridPosition = {
+    x: pos.x,
+    y: pos.y,
+    w: pos.w,
+    h: computeAgentCellGridH(
+      cell,
+      isExpectingResult(cell, pos.resultStatus ?? "unrequested"),
+    ),
+  }
+  return {
+    parts: {
+      ...parts,
+      settings: {
+        ...parts.settings,
+        layout: upsertCellLayout(parts.settings.layout, cellId, layoutPos),
+      },
+    },
+    result: {
+      grid: { x: pos.x, y: pos.y, w: pos.w },
+      ...agentCellPresentation(cell, pos.resultStatus),
+    },
+    touchedCellId: cellId,
+  }
+}
+
+export const setCellDimensionsTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  requested: AgentCellDimensions,
+): NotebookTransitionResult<
+  AgentCellPresentation & { result_discarded?: true }
+> => {
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  const validation = validateAgentCellDimensions(cell, requested)
+  if (!validation.ok) {
+    const { issue } = validation
+    if (issue.reason === "invalid_view") {
+      throw new NotebookToolError(
+        "validation",
+        "view must be editor, result, or editor_result.",
+      )
+    }
+    if (issue.reason === "invalid_type") {
+      throw new NotebookToolError(
+        "validation",
+        `${issue.field} must be a number, auto, or null.`,
+      )
+    }
+    if (issue.reason === "below_minimum") {
+      throw new NotebookToolError(
+        "validation",
+        issue.field === "editor_height"
+          ? `editor_height must be at least ${issue.limit}px.`
+          : `result_height must be at least ${issue.limit}px for this cell.`,
+      )
+    }
+    throw new NotebookToolError(
+      "validation",
+      `Pane heights must be at most ${issue.limit}px.`,
+    )
+  }
+  const { dimensions } = validation
+
+  const wantsEditorOnly = dimensions.view === "editor"
+  const discarding = wantsEditorOnly && cellHasRunOutcome(cell)
+  const patch = agentCellDimensionsPatch(cell, dimensions)
+  const nextCell = {
+    ...(wantsEditorOnly ? discardCellResult(cell) : cell),
+    ...patch,
+  }
+  const replacesCell =
+    discarding ||
+    Object.keys(patch).length > 0 ||
+    (wantsEditorOnly && (cell as { mode?: unknown }).mode !== undefined)
+  const layout = parts.settings.layout?.map((item) =>
+    item.i === cellId
+      ? {
+          ...item,
+          h: computeAgentCellGridH(
+            nextCell,
+            discarding
+              ? false
+              : isExpectingResult(
+                  cell,
+                  dimensions.resultStatus ?? "unrequested",
+                ),
+          ),
+        }
+      : item,
   )
   return {
     parts: {
       ...parts,
-      cells:
-        Object.keys(heightPatch).length > 0
-          ? patchCellIn(parts.cells, cellId, heightPatch)
-          : parts.cells,
-      settings: {
-        ...parts.settings,
-        layout: upsertCellLayout(parts.settings.layout, cellId, pos),
-      },
+      cells: replacesCell
+        ? parts.cells.map((c) => (c.id === cellId ? nextCell : c))
+        : parts.cells,
+      settings:
+        layout === parts.settings.layout
+          ? parts.settings
+          : { ...parts.settings, layout },
     },
-    result: undefined,
+    result: {
+      ...agentCellPresentation(nextCell, dimensions.resultStatus),
+      ...(discarding ? { result_discarded: true as const } : {}),
+    },
     touchedCellId: cellId,
+    // A headless run has no persisted `running` placeholder, and a live run
+    // may still be behind its validation barrier. Emit the cancellation intent
+    // for every SQL-cell editor-only request; shells treat it idempotently when
+    // no run exists.
+    ...(wantsEditorOnly
+      ? { cancelRuns: { cellIds: [cellId], reason: "result_cleared" as const } }
+      : {}),
+    // Snapshot rows live outside the buffer document, so a marker-less cell
+    // cannot prove that none exist. Deletion is idempotent and view:"editor"
+    // is the explicit discard gesture.
+    ...(wantsEditorOnly ? { deleteSnapshots: { cellIds: [cellId] } } : {}),
   }
 }
 
@@ -314,18 +424,29 @@ export const setCellModeTransition = (
   mode: CellMode,
 ): NotebookTransitionResult => {
   const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown") {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells have no run or draw mode.",
+    )
+  }
   const entersDraw = mode === "draw" && cell.mode !== "draw"
+  const nextCell: NotebookCell = {
+    ...cell,
+    ...cellModeChangePatch(cell, mode),
+  }
+  if (mode === "draw") nextCell.mode = "draw"
+  else delete nextCell.mode
   return {
     parts: {
       ...parts,
-      cells: patchCellIn(parts.cells, cellId, {
-        mode,
-        ...cellModeChangePatch(cell, mode),
-      }),
+      cells: parts.cells.map((c) => (c.id === cellId ? nextCell : c)),
     },
     result: undefined,
     touchedCellId: cellId,
-    ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
+    ...(entersDraw
+      ? { cancelRuns: { cellIds: [cellId], reason: "mode_changed" as const } }
+      : {}),
   }
 }
 
@@ -348,17 +469,25 @@ export const setCellChartConfigTransition = (
   }
 }
 
-export const setCellViewMaximizedTransition = (
+export const setCellPaneViewTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  value: boolean,
+  paneView: CellPaneView,
 ): NotebookTransitionResult => {
-  requireCellIn(parts.cells, cellId, bufferId)
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown") {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells have no pane view.",
+    )
+  }
   return {
     parts: {
       ...parts,
-      cells: patchCellIn(parts.cells, cellId, { isViewMaximized: value }),
+      cells: patchCellIn(parts.cells, cellId, {
+        paneView,
+      }),
     },
     result: undefined,
     touchedCellId: cellId,
@@ -381,10 +510,29 @@ export const setCellMaximizedTransition = (
 export const applyNotebookStateTransition = (
   parts: ViewParts,
   request: ApplyNotebookStateRequest,
+  resultStatusOf?: CellResultStatusReader,
 ): NotebookTransitionResult<{
   applied: { added: string[]; updated: string[]; deleted: string[] }
 }> => {
-  const next = buildAppliedNotebookState(parts, request)
+  const next = buildAppliedNotebookState(parts, request, resultStatusOf)
+  const existingSqlCellIds = new Set(
+    parts.cells
+      .filter((cell) => cell.type !== "markdown")
+      .map((cell) => cell.id),
+  )
+  const invalidatedResultIds = new Set(next.resultsCleared)
+  for (const cell of request.cells) {
+    if (
+      cell.view === "editor" &&
+      typeof cell.id === "string" &&
+      existingSqlCellIds.has(cell.id)
+    ) {
+      // Passive runs do not install a persisted `running` result, and snapshot
+      // rows live outside this document. An editor-only request must therefore
+      // invalidate both even when there is no visible outcome to clear.
+      invalidatedResultIds.add(cell.id)
+    }
+  }
   return {
     parts: {
       ...parts,
@@ -401,8 +549,16 @@ export const applyNotebookStateTransition = (
     },
     result: { applied: next.diff },
     cleanup: { cellIds: next.diff.deleted },
-    ...(next.resultsCleared.length > 0
-      ? { deleteSnapshots: { cellIds: next.resultsCleared } }
+    ...(invalidatedResultIds.size > 0
+      ? {
+          cancelRuns: {
+            cellIds: [...invalidatedResultIds],
+            reason: "result_cleared" as const,
+          },
+        }
+      : {}),
+    ...(invalidatedResultIds.size > 0
+      ? { deleteSnapshots: { cellIds: [...invalidatedResultIds] } }
       : {}),
   }
 }

@@ -4,8 +4,17 @@ import { dispatchTool } from "./dispatch"
 import { executeTool } from "../ai/shared"
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
 import type { Table } from "../questdb/types"
+import type { Permissions } from "./permissions"
 
 const UNSAFE_ROW_COUNT = BigInt("9007199254740993")
+
+const ALL_GRANTED: Permissions = {
+  grantSchemaAccess: true,
+  read: true,
+  write: true,
+}
+const dqlValidator = () =>
+  Promise.resolve({ query: "", columns: [], timestamp: 0 })
 
 const tableWithBigIntCounters = (): Table =>
   ({
@@ -31,6 +40,8 @@ const toolSurfaces = [
         { table_name: "trades" },
         client,
         ignoreStatus,
+        ALL_GRANTED,
+        dqlValidator,
       ),
   },
   {
