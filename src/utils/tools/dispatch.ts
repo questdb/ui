@@ -53,6 +53,10 @@ import {
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
+  fromHighlightConfigWire,
+  type HighlightConfigWire,
+} from "./highlightConfigWire"
+import {
   invalidBufferIdResult,
   notebookErrorHint,
   notFetchedNotebookResult,
@@ -69,6 +73,7 @@ import {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellHighlightConfigTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
@@ -932,6 +937,46 @@ export const dispatchTool = async (
                 setCellChartConfigTransition(parts, buffer_id, cell_id, patch),
               signal,
               chartBaseline,
+            ),
+          toolContext,
+        )
+      }
+      case "set_cell_highlight_config": {
+        const { buffer_id, cell_id, highlight_config } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            highlight_config?: HighlightConfigWire | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        const highlightBaseline = getBufferActionSeq(buffer_id)
+        let config = null
+        if (highlight_config) {
+          const parsed = fromHighlightConfigWire(highlight_config)
+          if (!parsed.ok) {
+            return {
+              content: JSON.stringify({
+                error_code: "validation",
+                message: `VALIDATION_ERROR: highlight_config ${parsed.error}`,
+              }),
+              is_error: true,
+            }
+          }
+          config = parsed.config
+        }
+        return routeNotebookTool(
+          () =>
+            runTransition(
+              buffer_id,
+              (parts) =>
+                setCellHighlightConfigTransition(
+                  parts,
+                  buffer_id,
+                  cell_id,
+                  config,
+                ),
+              signal,
+              highlightBaseline,
             ),
           toolContext,
         )

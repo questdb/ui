@@ -27,6 +27,7 @@ export enum EventType {
   NOTEBOOK_REVEAL_CELL = "notebook.cell.reveal",
   NOTEBOOK_CELL_REFRESH_CHART = "notebook.cell.refresh.chart",
   NOTEBOOK_CELL_OPEN_CHART_SETTINGS = "notebook.cell.open.chart.settings",
+  NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS = "notebook.cell.open.highlight.settings",
   NOTEBOOK_CELL_RESET_ZOOM = "notebook.cell.reset.zoom",
   NOTEBOOK_CELL_RUN = "notebook.cell.run",
   NOTEBOOK_CELL_DRAW = "notebook.cell.draw",

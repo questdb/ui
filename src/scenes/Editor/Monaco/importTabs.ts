@@ -25,6 +25,7 @@ import {
   MAX_CELL_LINES,
   MAX_CELL_NAME_LENGTH,
   exceedsCellLineLimit,
+  sanitizeHighlightConfig,
 } from "../../../store/notebook"
 import {
   DEFAULT_METRIC_COLOR_TOKEN,
@@ -270,6 +271,8 @@ const sanitizeNotebookCell = (
   if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
   const chartConfig = sanitizeChartConfig(item.chartConfig)
   if (chartConfig) cell.chartConfig = chartConfig
+  const highlightConfig = sanitizeHighlightConfig(item.highlightConfig)
+  if (highlightConfig) cell.highlightConfig = highlightConfig
   if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
   if (typeof item.isViewMaximized === "boolean")
     cell.isViewMaximized = item.isViewMaximized

@@ -2,6 +2,7 @@ import type { editor } from "monaco-editor"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
 
 // Virtualization + lazy hydration bound render and memory cost; the cap guards
 // notebook data size and the wrapper DOM / grid-layout work that still scales
@@ -52,6 +53,9 @@ export type NotebookCell = {
   spotlightEditorRatio?: number
   mode?: CellMode
   chartConfig?: ChartConfig
+  // One set of rules for every result grid of the cell, by column name; an
+  // edit to the SQL never touches it.
+  highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
   isViewMaximized?: boolean
   lastRunStatus?: RunStatus
@@ -165,6 +169,43 @@ export const dropLegacyChartConfigs = (
     const next = { ...cell }
     delete next.chartConfig
     return next
+  })
+  return { ...state, cells }
+}
+
+const RULE_KINDS = new Set(["previous", "value", "steps"])
+
+const isHighlightConfig = (value: unknown): value is HighlightConfig => {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as Partial<HighlightConfig>
+  return (
+    Array.isArray(candidate.identityColumns) &&
+    candidate.identityColumns.every((name) => typeof name === "string") &&
+    Array.isArray(candidate.rules) &&
+    candidate.rules.every(
+      (rule) =>
+        typeof rule === "object" &&
+        rule !== null &&
+        RULE_KINDS.has((rule as { kind?: string }).kind ?? ""),
+    )
+  )
+}
+
+export const sanitizeHighlightConfig = (
+  value: unknown,
+): HighlightConfig | undefined => (isHighlightConfig(value) ? value : undefined)
+
+const hasMalformedHighlightConfig = (cell: NotebookCell): boolean =>
+  cell.highlightConfig != null && !isHighlightConfig(cell.highlightConfig)
+
+export const dropMalformedHighlightConfigs = (
+  state: NotebookViewState,
+): NotebookViewState => {
+  if (!state.cells.some(hasMalformedHighlightConfig)) return state
+  const cells = state.cells.map((cell) => {
+    if (!hasMalformedHighlightConfig(cell)) return cell
+    const { highlightConfig: _dropped, ...rest } = cell
+    return rest
   })
   return { ...state, cells }
 }

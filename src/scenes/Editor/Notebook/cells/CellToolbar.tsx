@@ -141,6 +141,7 @@ export const CellToolbar: React.FC<Props> = ({
     showAutoRefreshItem,
     showRefreshItem,
     showChartSettings,
+    showHighlightSettings,
     showMoveUp,
     showMoveDown,
     showDuplicate,
@@ -234,6 +235,11 @@ export const CellToolbar: React.FC<Props> = ({
     })
     eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
   }
+  const handleHighlightSettings = () => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+      cellId,
+    })
+  }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
     if (value === cell.autoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
@@ -285,6 +291,19 @@ export const CellToolbar: React.FC<Props> = ({
       $inline={inline}
       $forceVisible={menuOpen}
     >
+      {isMaximized && (isChartView || isGridView) && (
+        <Tooltip content={isChartView ? "Chart settings" : "Highlight rules"}>
+          <CellIconButton
+            label={isChartView ? "Chart settings" : "Highlight rules"}
+            variant="ghost"
+            onClick={
+              isChartView ? handleChartSettings : handleHighlightSettings
+            }
+          >
+            <GearIcon size={20} />
+          </CellIconButton>
+        </Tooltip>
+      )}
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
         <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
@@ -406,6 +425,14 @@ export const CellToolbar: React.FC<Props> = ({
                   icon={<GearIcon size={16} />}
                 >
                   Chart settings
+                </DropdownMenu.Item>
+              )}
+              {showHighlightSettings && (
+                <DropdownMenu.Item
+                  onSelect={handleHighlightSettings}
+                  icon={<GearIcon size={16} />}
+                >
+                  Highlight rules
                 </DropdownMenu.Item>
               )}
 

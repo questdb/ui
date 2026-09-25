@@ -5,6 +5,9 @@ import { TabBar } from "./TabBar"
 import { ResultWrapper, SuccessMessage } from "./styles"
 import type { StatementSlotView } from "./statementSlotView"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
+import type { ResultTrendStore } from "./resultTrendStore"
+import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 
 type Props = {
   slots: StatementSlotView[]
@@ -19,6 +22,9 @@ type Props = {
   onReRun: (statementKey: string) => void
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
+  trendStore: ResultTrendStore
+  highlightConfig: HighlightConfig | undefined
+  cellColumns: ColumnDefinition[]
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -34,6 +40,9 @@ export const InlineResultTable: React.FC<Props> = ({
   onReRun,
   onYieldFocus,
   viewportStore,
+  trendStore,
+  highlightConfig,
+  cellColumns,
 }) => {
   if (slots.length === 0) {
     return (
@@ -76,6 +85,9 @@ export const InlineResultTable: React.FC<Props> = ({
           onReRun={onReRun}
           onYieldFocus={onYieldFocus}
           viewportStore={viewportStore}
+          trendStore={trendStore}
+          highlightConfig={highlightConfig}
+          cellColumns={cellColumns}
         />
       )}
     </ResultWrapper>

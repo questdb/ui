@@ -25,6 +25,10 @@ export enum ConsoleEvent {
   GRID_COLUMN_COPY = "grid.column_copy",
   GRID_CELL_COPY = "grid.cell_copy",
   GRID_SCROLL = "grid.scroll",
+  GRID_HIGHLIGHT_OPEN = "grid.highlight_open",
+  GRID_HIGHLIGHT_SAVE = "grid.highlight_save",
+  GRID_HIGHLIGHT_CANCEL = "grid.highlight_cancel",
+  GRID_HIGHLIGHT_CLEAR = "grid.highlight_clear",
 
   IMPORT_FILE_UPLOAD = "import.file_upload",
   IMPORT_ADD_SCHEMA = "import.add_schema",
@@ -165,6 +169,7 @@ export enum ConsoleEvent {
   MCP_SET_CELL_LAYOUT = "mcp.set_cell_layout",
   MCP_SET_CELL_MODE = "mcp.set_cell_mode",
   MCP_SET_CELL_CHART_CONFIG = "mcp.set_cell_chart_config",
+  MCP_SET_CELL_HIGHLIGHT_CONFIG = "mcp.set_cell_highlight_config",
   MCP_SET_CELL_AUTOREFRESH = "mcp.set_cell_autorefresh",
   MCP_SET_NOTEBOOK_AUTOREFRESH = "mcp.set_notebook_autorefresh",
   MCP_SET_CELL_NAME = "mcp.set_cell_name",

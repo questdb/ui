@@ -10,6 +10,8 @@ import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
+import { withHighlightConfig } from "../../../scenes/Editor/Notebook/result-table/highlightConfig"
 import {
   buildAppliedNotebookState,
   carriedRunError,
@@ -326,6 +328,25 @@ export const setCellModeTransition = (
     result: undefined,
     touchedCellId: cellId,
     ...(entersDraw ? { cancelRuns: { cellIds: [cellId] } } : {}),
+  }
+}
+
+export const setCellHighlightConfigTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  config: HighlightConfig | null,
+): NotebookTransitionResult => {
+  requireCellIn(parts.cells, cellId, bufferId)
+  return {
+    parts: {
+      ...parts,
+      cells: parts.cells.map((c) =>
+        c.id === cellId ? withHighlightConfig(c, config) : c,
+      ),
+    },
+    result: undefined,
+    touchedCellId: cellId,
   }
 }
 

@@ -11,6 +11,7 @@ import {
 } from "../notebooks/notebookController"
 import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../components/ResultGrid/highlight/types"
 import {
   denyReasonUnresolvedSql,
   requireAllDQL,
@@ -31,6 +32,10 @@ import {
   type ToolQueryChart,
   type ToolRightAxis,
 } from "./chartConfigWire"
+import {
+  fromHighlightConfigWire,
+  type HighlightConfigWire,
+} from "./highlightConfigWire"
 import {
   applyStaleNotebookResult,
   notebookErrorHint,
@@ -217,6 +222,7 @@ export const dispatchApplyNotebookState = async (
         mode?: CellMode | null
         auto_refresh?: boolean | string | null
         is_view_maximized?: boolean | null
+        highlight_config?: HighlightConfigWire | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
@@ -372,6 +378,24 @@ export const dispatchApplyNotebookState = async (
       return { content: denied.reason, is_error: true }
     }
   }
+  const highlightConfigs: (HighlightConfig | undefined)[] = []
+  for (const [index, c] of cells.entries()) {
+    if (!c.highlight_config) {
+      highlightConfigs.push(undefined)
+      continue
+    }
+    const result = fromHighlightConfigWire(c.highlight_config)
+    if (!result.ok) {
+      return {
+        content: JSON.stringify({
+          error_code: "validation",
+          message: `VALIDATION_ERROR: cells[${index}].highlight_config ${result.error}`,
+        }),
+        is_error: true,
+      }
+    }
+    highlightConfigs.push(result.config)
+  }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
     autoRefreshDefault: isAutoRefresh(auto_refresh_default)
@@ -381,7 +405,7 @@ export const dispatchApplyNotebookState = async (
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
     variables:
       variables === undefined || variables === null ? undefined : variables,
-    cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
+    cells: cells.map<ApplyNotebookStateCellRequest>((c, index) => {
       const cell: ApplyNotebookStateCellRequest =
         c.preserve_value === true ? { preserveValue: true } : { value: c.value }
       if (c.id !== undefined && c.id !== null) cell.id = c.id
@@ -402,6 +426,8 @@ export const dispatchApplyNotebookState = async (
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
         cell.chartConfig = chartConfig
       }
+      const highlightConfig = highlightConfigs[index]
+      if (highlightConfig) cell.highlightConfig = highlightConfig
       if (c.grid) cell.grid = c.grid
       return cell
     }),

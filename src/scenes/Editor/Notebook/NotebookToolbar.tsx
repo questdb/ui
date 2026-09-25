@@ -93,7 +93,7 @@ const Name = styled.span`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
+  line-height: 1.5;
   padding-top: 0.1rem;
 `
 

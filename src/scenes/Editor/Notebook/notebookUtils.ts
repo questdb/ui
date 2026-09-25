@@ -25,6 +25,8 @@ import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
+import { sqlHash } from "../../../utils/sqlHash"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
 import {
@@ -144,6 +146,7 @@ export type CellToolbarMenuFlags = {
   showAutoRefreshItem: boolean
   showRefreshItem: boolean
   showChartSettings: boolean
+  showHighlightSettings: boolean
   showMoveUp: boolean
   showMoveDown: boolean
   showDuplicate: boolean
@@ -188,6 +191,7 @@ export const cellToolbarMenuFlags = (params: {
   // expanded tier renders for grids as well as charts.
   const hasToolbarInterval = hasToolbarRefresh
   const chartCollapsed = isCompact && isChartView && sqlShown
+  const gridCollapsed = isCompact && isGridView && sqlShown
 
   const showViewSql = isCompact && !isNoneView && !isMarkdown && !sqlShown
   const showViewTable =
@@ -203,6 +207,7 @@ export const cellToolbarMenuFlags = (params: {
   const showAutoRefreshItem = !hasToolbarInterval && !isNoneView
   const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
   const showChartSettings = isChartView && !chartCollapsed
+  const showHighlightSettings = isGridView && !gridCollapsed
   const showMoveUp = !isGridMode && cellIndex > 0
   const showMoveDown = !isGridMode && cellIndex < totalCells - 1
   const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
@@ -217,6 +222,7 @@ export const cellToolbarMenuFlags = (params: {
     showAutoRefreshItem,
     showRefreshItem,
     showChartSettings,
+    showHighlightSettings,
     showMoveUp,
     showMoveDown,
     showDuplicate,
@@ -227,7 +233,8 @@ export const cellToolbarMenuFlags = (params: {
       showResetZoom ||
       showAutoRefreshItem ||
       showRefreshItem ||
-      showChartSettings,
+      showChartSettings ||
+      showHighlightSettings,
   }
 }
 
@@ -284,13 +291,7 @@ export const capResultBytes = (
 
 // Cheap stable hash of a cell's SQL — a restored snapshot is only reused while
 // the cell's current SQL still matches what was saved.
-export const sqlHash = (value: string): string => {
-  let h = 5381
-  for (let i = 0; i < value.length; i++) {
-    h = ((h << 5) + h) ^ value.charCodeAt(i)
-  }
-  return (h >>> 0).toString(36)
-}
+export { sqlHash }
 
 const UNVERIFIABLE_ERROR_MARKERS = [
   "Cancelled by user",
@@ -700,6 +701,7 @@ type ApplyCellRequest = {
   autoRefresh?: AutoRefresh | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
+  highlightConfig?: HighlightConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
 
@@ -1081,6 +1083,8 @@ export const buildAppliedCells = (
     }
 
     const chartConfig = normalizeChartConfig(req.chartConfig)
+    // PUT semantics like chartConfig: an omitted config clears the rules.
+    const highlightConfig = req.highlightConfig ?? undefined
 
     // Cell kind and mode are sticky: omission preserves the existing cell.
     // Converting a markdown cell to SQL by omission would silently turn prose
@@ -1197,6 +1201,8 @@ export const buildAppliedCells = (
       else delete next.mode
       if (chartConfig !== undefined) next.chartConfig = chartConfig
       else delete next.chartConfig
+      if (highlightConfig !== undefined) next.highlightConfig = highlightConfig
+      else delete next.highlightConfig
       if (autoRefresh !== undefined) next.autoRefresh = autoRefresh
       else delete next.autoRefresh
       if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
@@ -1207,6 +1213,7 @@ export const buildAppliedCells = (
         next.result = null
         delete next.mode
         delete next.chartConfig
+        delete next.highlightConfig
         delete next.autoRefresh
         delete next.isViewMaximized
         delete next.bottomHeight
@@ -1243,6 +1250,7 @@ export const buildAppliedCells = (
     created.topHeight = topHeightForSql(value)
     if (resolvedMode !== undefined) created.mode = resolvedMode
     if (chartConfig !== undefined) created.chartConfig = chartConfig
+    if (highlightConfig !== undefined) created.highlightConfig = highlightConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
     // Draw cells are double-view from creation (chart visible immediately),

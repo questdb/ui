@@ -4,6 +4,7 @@ import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
+  dropMalformedHighlightConfigs,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
   migrateLegacyCellNames,
@@ -27,7 +28,9 @@ type NotebookBufferMeta =
   | { kind: "not_a_notebook" }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  dropLegacyChartConfigs(migrateLegacyCellNames(view))
+  dropMalformedHighlightConfigs(
+    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
+  )
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

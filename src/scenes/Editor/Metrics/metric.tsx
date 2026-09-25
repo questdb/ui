@@ -41,8 +41,8 @@ import {
   type TableOption,
 } from "../../../components"
 
-import { ColorPalette } from "./color-palette"
-import { toMetricColorToken } from "./metricColors"
+import { ColorPalette } from "../../../components/ColorPalette"
+import { metricColorTokens, toMetricColorToken } from "./metricColors"
 import { eventBus } from "../../../modules/EventBus"
 import { EventType } from "../../../modules/EventBus/types"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -272,6 +272,8 @@ export const Metric = ({
                   align="center"
                 >
                   <ColorPalette
+                    tokens={metricColorTokens}
+                    labelPrefix="Series color"
                     onSelect={(color) => {
                       onColorChange(metric, color)
                       setColorPickerOpen(false)

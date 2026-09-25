@@ -21,6 +21,7 @@ import type {
   CellType,
 } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
@@ -83,6 +84,7 @@ import {
   clearChartZoom,
   clearChartZooms,
 } from "./cellVirtualization/chartZoomStore"
+import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -125,6 +127,10 @@ export type NotebookActions = {
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  setCellHighlightConfig: (
+    cellId: string,
+    config: HighlightConfig | null,
+  ) => void
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
@@ -155,6 +161,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
   setCellChartConfig: () => undefined,
+  setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
@@ -452,6 +459,7 @@ export const NotebookProvider: React.FC<{
           void deleteCellSnapshot(bufferId, cellId)
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
+          clearSettingsDrawerSessions(cellId)
         }
       }
       // For run->draw transitions, abort the in-flight run
@@ -581,6 +589,7 @@ export const NotebookProvider: React.FC<{
     () => () => {
       resetChartEntryAnimation(bufferId)
       clearChartZooms(cellsRef.current.map((c) => c.id))
+      cellsRef.current.forEach((c) => clearSettingsDrawerSessions(c.id))
     },
     [bufferId, cellsRef],
   )
@@ -825,6 +834,7 @@ export const NotebookProvider: React.FC<{
     setCellMode,
     clearCellResult,
     setCellChartConfig: store.setCellChartConfig,
+    setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),

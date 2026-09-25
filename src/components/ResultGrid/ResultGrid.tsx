@@ -40,6 +40,7 @@ import {
 import { useGridKeyboardNav } from "./useGridKeyboardNav"
 import {
   Cell,
+  CellDirectionGlyph,
   CellText,
   ColResizer,
   GridContainer,
@@ -63,13 +64,20 @@ import {
   toAbsoluteIndex,
   toVisibleAbsoluteRange,
 } from "./virtualRowMapping"
-import { MIN_COLUMN_WIDTH } from "./dimensions"
+import { DIRECTION_GLYPH_WIDTH, MIN_COLUMN_WIDTH } from "./dimensions"
 import { useContainerWidth } from "./useContainerWidth"
 import { useFontsReady } from "./useFontsReady"
 import { useScrollShadows } from "./useScrollShadows"
 import { useColumnSizing } from "./useColumnSizing"
 import { useFreezeDrag } from "./useFreezeDrag"
 import { useCellHoverTooltip } from "./useCellHoverTooltip"
+import {
+  EMPTY_HIGHLIGHT_LOOKUP,
+  type CellDirection,
+  type CellHighlight,
+  type HighlightLookup,
+} from "./highlight/types"
+import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 
 declare module "@tanstack/react-table" {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -94,6 +102,10 @@ type GridCellProps = {
   isDesignatedTimestamp: boolean
   frozen?: boolean
   rowActive: boolean
+  highlight: CellHighlight | undefined
+  direction: CellDirection | undefined
+  hasDirectionSlot: boolean
+  flashParity: 0 | 1
   onCellClick: (row: number, col: number) => void
 }
 
@@ -111,6 +123,10 @@ const GridCell = React.memo(function GridCell({
   isDesignatedTimestamp,
   frozen,
   rowActive,
+  highlight,
+  direction,
+  hasDirectionSlot,
+  flashParity,
   onCellClick,
 }: GridCellProps) {
   const colType = col?.type ?? ""
@@ -118,6 +134,12 @@ const GridCell = React.memo(function GridCell({
   const displayValue = loaded
     ? toSingleLineDisplay(formatCellValue(rawValue, col, colWidth))
     : ""
+  const highlightMode =
+    highlight === undefined
+      ? undefined
+      : highlight.display === "temporary" && !prefersReducedMotion()
+        ? "temporary"
+        : "always"
   return (
     <Cell
       id={`cell-${rowIndex}-${colIndex}`}
@@ -125,6 +147,9 @@ const GridCell = React.memo(function GridCell({
       data-pulse={isPulsing ? "true" : undefined}
       data-frozen={frozen ? "true" : undefined}
       data-timestamp={isDesignatedTimestamp ? "true" : undefined}
+      data-highlight={highlightMode}
+      data-highlight-color={highlight?.color}
+      data-direction={direction}
       style={{
         position: frozen ? "sticky" : "absolute",
         left,
@@ -137,12 +162,22 @@ const GridCell = React.memo(function GridCell({
       $isPulsing={isPulsing}
       $frozen={frozen}
       $rowActive={rowActive}
+      $highlightColor={highlight?.color}
+      $highlightAlpha={highlight?.alpha ?? 0}
+      $highlightBlend={highlight?.blend}
+      $highlightMode={highlightMode}
+      $flashParity={flashParity}
       onClick={() => onCellClick(rowIndex, colIndex)}
       role="gridcell"
       aria-colindex={colIndex + 1}
       aria-selected={isActive}
     >
       <CellText style={{ textAlign: align }}>{displayValue}</CellText>
+      {hasDirectionSlot && (
+        <CellDirectionGlyph $direction={direction} aria-hidden>
+          {direction === "up" ? "▲" : direction === "down" ? "▼" : null}
+        </CellDirectionGlyph>
+      )}
     </Cell>
   )
 })
@@ -151,6 +186,9 @@ type Props = {
   dataSource: ResultGridDataSource
   maxColumnWidth: MaxColumnWidth
   runToken?: number // changes per run to reset focus/selection on the grid
+  cellHighlights?: HighlightLookup
+  // Flips on every highlighted result so a repeated flash restarts.
+  flashParity?: 0 | 1
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
   onColumnSizingCommit?: (sizing: Record<string, number>) => void
@@ -216,6 +254,8 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       dataSource,
       maxColumnWidth,
       runToken,
+      cellHighlights = EMPTY_HIGHLIGHT_LOOKUP,
+      flashParity = 0,
       isFocused = true,
       initialColumnSizing,
       onColumnSizingCommit,
@@ -291,11 +331,13 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
         id: columnId(i),
         accessorFn: (row: ResultGridRow) => row[i],
         header: col.name,
-        size: widths[i],
+        size:
+          widths[i] +
+          (cellHighlights.hasDirection(i) ? DIRECTION_GLYPH_WIDTH : 0),
         minSize: MIN_COLUMN_WIDTH,
         meta: { col },
       }))
-    }, [columns, clampedWidths, cappedWidths])
+    }, [columns, clampedWidths, cappedWidths, cellHighlights])
 
     const [columnOrder, setColumnOrder] = useState<string[]>([])
     const [columnPinning, setColumnPinning] = useState<ColumnPinningState>({
@@ -832,6 +874,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
               const virtualIndex = virtualRow.index
               const absoluteIndex = toAbsoluteIndex(virtualIndex, rowCount)
               const rowData = getRow(absoluteIndex)
+              const rowHighlight = cellHighlights.row(absoluteIndex)
               const renderBodyCell = (
                 header: (typeof headers)[number],
                 colIdx: number,
@@ -845,6 +888,16 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     colIndex={colIdx}
                     rawValue={rowData ? (rowData[dataIndex] ?? null) : null}
                     loaded={rowData != null}
+                    highlight={
+                      cellHighlights.background(absoluteIndex, dataIndex) ??
+                      rowHighlight
+                    }
+                    direction={cellHighlights.direction(
+                      absoluteIndex,
+                      dataIndex,
+                    )}
+                    hasDirectionSlot={cellHighlights.hasDirection(dataIndex)}
+                    flashParity={flashParity}
                     col={header.column.columnDef.meta?.col}
                     colWidth={header.getSize()}
                     left={pos.left}
@@ -862,6 +915,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                 <Row
                   key={virtualIndex}
                   data-hook="grid-row"
+                  data-highlight-row={rowHighlight ? "true" : undefined}
                   $active={focusedCell?.row === virtualIndex}
                   style={{
                     position: "absolute",

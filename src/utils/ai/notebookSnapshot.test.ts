@@ -352,6 +352,48 @@ describe("formatSnapshot", () => {
     expect(out).toContain("grid: { x: 0, y: 0, w: 12, h: 5 }")
   })
 
+  it("renders the cell's highlight_config as wire JSON", async () => {
+    // Given a cell with one previous rule
+    const value = "SELECT 1; SELECT symbol, price FROM trades"
+    const cell = sql("a", value, {
+      highlightConfig: {
+        identityColumns: ["symbol"],
+        rules: [
+          {
+            id: "r1",
+            enabled: true,
+            target: { kind: "column", name: "price" },
+            display: "temporary",
+            kind: "previous",
+            appliesTo: "cell",
+            condition: { op: "gt" },
+            color: "dataPositive",
+          },
+        ],
+      },
+    })
+    const id = await seedNotebook({ cells: [cell] })
+
+    // When the snapshot is built and formatted
+    const snap = await buildSnapshot(id)
+    const out = formatSnapshot(snap!)
+
+    // Then the wire config carries the rule in hue names
+    expect(snap?.status === "ok" && snap.cells[0].highlight_config).toEqual({
+      identity_columns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          column: "price",
+          display: "temporary",
+          color: "green",
+          op: "gt",
+        },
+      ],
+    })
+    expect(out).toContain('highlight_config: {"identity_columns":["symbol"]')
+  })
+
   it("renders chart_config as one-line wire JSON the model can copy back", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",

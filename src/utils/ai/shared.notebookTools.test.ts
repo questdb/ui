@@ -725,6 +725,188 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")
   })
 
+  it("set_cell_highlight_config stores one config for the cell", async () => {
+    // Given a run cell with two statements
+    const { state } = mountLive(1, [cell("c", "SELECT 1; SELECT 2")])
+
+    // When the cell gets an up/down pair
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["symbol"],
+          rules: [
+            { kind: "previous", column: "price", op: "gt", color: "green" },
+            { kind: "previous", column: "price", op: "lt", color: "red" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the cell carries the rules, typed and with ids
+    expect(result.is_error).toBeFalsy()
+    const config = cellById(state, "c")?.highlightConfig
+    expect(config).toMatchObject({
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          condition: { op: "gt" },
+          color: "dataPositive",
+          display: "temporary",
+        },
+        { kind: "previous", condition: { op: "lt" }, color: "dataNegative" },
+      ],
+    })
+    expect(config?.rules[0].id).toBeTruthy()
+  })
+
+  it("set_cell_highlight_config clears with null and accepts an empty identity", async () => {
+    // Given a cell with a value rule and no identity
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [{ kind: "value", column: "v", op: "gt", value: 10 }],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+    expect(cellById(state, "c")?.highlightConfig).toBeDefined()
+
+    // When cleared with null, then the field is gone
+    await dispatchTool(
+      "set_cell_highlight_config",
+      { buffer_id: 1, cell_id: "c", highlight_config: null },
+      makeClient(),
+      noopStatus,
+    )
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("set_cell_highlight_config rejects an invalid rule without touching the cell", async () => {
+    // Given a cell and a rule with a bad color
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+
+    // When dispatched
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["k"],
+          rules: [
+            { kind: "previous", column: "v", op: "gt", color: "hotpink" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then it is a validation error and the cell has no rules
+    expect(result.is_error).toBe(true)
+    expect(JSON.parse(result.content)).toMatchObject({
+      error_code: "validation",
+    })
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state sets highlight_config and clears when omitted", async () => {
+    // Given a notebook with one cell
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When an apply sends a gradient-filled between rule
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1; SELECT 2",
+            highlight_config: {
+              identity_columns: ["k"],
+              rules: [
+                {
+                  kind: "value",
+                  column: null,
+                  op: "between",
+                  value: 0,
+                  to: 100,
+                  fill: "gradient",
+                },
+              ],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the cell holds the rule
+    expect(cellById(state, "a")?.highlightConfig?.rules[0]).toMatchObject({
+      kind: "value",
+      target: { kind: "allNumeric" },
+      condition: {
+        op: "between",
+        from: 0,
+        to: 100,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+    })
+
+    // When the next apply omits highlight_config, then the rules are cleared
+    await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ id: "a", preserve_value: true }] },
+      makeClient(),
+      noopStatus,
+    )
+    expect(cellById(state, "a")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state rejects an invalid highlight_config and leaves the cell untouched", async () => {
+    // Given a one-statement cell
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When a rule with an unknown op is sent
+    const result = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1",
+            highlight_config: {
+              identity_columns: ["k"],
+              rules: [{ kind: "value", column: "v", op: "changed" }],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the apply fails and the cell is untouched
+    expect(result.is_error).toBe(true)
+    expect(result.content).toContain("highlight_config")
+    expect(cellById(state, "a")?.highlightConfig).toBeUndefined()
+  })
+
   it("set_cell_name sets the cell name", async () => {
     const { state } = mountLive(1, [cell("c")])
     await dispatchTool(

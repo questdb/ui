@@ -7,6 +7,7 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
 import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -122,6 +123,7 @@ export type ApplyNotebookStateCellRequest = {
   autoRefresh?: AutoRefresh | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
+  highlightConfig?: HighlightConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
 }
 

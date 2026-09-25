@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   dropLegacyChartConfigs,
+  dropMalformedHighlightConfigs,
   migrateCellName,
   migrateLegacyCellNames,
   type NotebookCell,
@@ -66,5 +67,44 @@ describe("migrateLegacyCellNames composed with dropLegacyChartConfigs", () => {
     // Then the title survives as the cell name and the orphan config is dropped
     expect(result.cells[0].name).toBe("BTC price")
     expect(result.cells[0].chartConfig).toBeUndefined()
+  })
+})
+
+describe("dropMalformedHighlightConfigs", () => {
+  const cell = (highlightConfig: unknown): NotebookCell =>
+    ({
+      id: "c1",
+      position: 0,
+      value: "select 1",
+      highlightConfig,
+    }) as NotebookCell
+
+  it("keeps a well-formed config and drops a malformed one", () => {
+    // Given a valid config and one with an unknown rule kind
+    const ok = { identityColumns: [], rules: [{ kind: "value" }] }
+    const state: NotebookViewState = {
+      cells: [
+        cell(ok),
+        cell({ identityColumns: ["symbol"], rules: [{ kind: "nope" }] }),
+      ],
+    }
+
+    // When sanitized
+    const result = dropMalformedHighlightConfigs(state)
+
+    // Then the valid one stays and the malformed one is removed
+    expect(result.cells[0].highlightConfig).toEqual(ok)
+    expect("highlightConfig" in result.cells[1]).toBe(false)
+  })
+
+  it("keeps clean state untouched", () => {
+    // Given a cell with no config
+    const clean: NotebookViewState = { cells: [cell(undefined)] }
+
+    // When sanitized
+    const result = dropMalformedHighlightConfigs(clean)
+
+    // Then the state is the same reference
+    expect(result).toBe(clean)
   })
 })
