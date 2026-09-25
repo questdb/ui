@@ -71,6 +71,7 @@ import {
   swapCellDown,
   swapCellUp,
   upsertCellLayout,
+  MAX_FORMATTED_IDENTITY_LENGTH,
 } from "./notebookUtils"
 import type {
   CellResult,
@@ -3292,7 +3293,7 @@ describe("snapshotResultsMatchQueries", () => {
 
   it("rejects a literal-only edit after a backslash literal", () => {
     // Given a snapshot for a statement with a `'\\'` literal, which QuestDB
-    // reads as one character but the formatter reads as an escaped quote
+    // reads as one character, not as an escaped quote
     const results = [
       dql("SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice  smith'"),
     ]
@@ -3304,6 +3305,58 @@ describe("snapshotResultsMatchQueries", () => {
         "SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice smith'",
       ]),
     ).toBe(false)
+  })
+
+  it("rejects an alias case change, which QuestDB keeps in the column name", () => {
+    // Given a snapshot for a statement whose alias is a lowercase keyword name
+    const results = [dql("select 1 as rank")]
+
+    // When only the alias case changes
+    // Then the column name differs and the snapshot is stale
+    expect(snapshotResultsMatchQueries(results, ["select 1 as Rank"])).toBe(
+      false,
+    )
+  })
+
+  it("rejects a spacing change inside a number literal", () => {
+    // Given a snapshot for `1. e5`, which QuestDB reads as 1.0 aliased e5
+    const results = [dql("select 1. e5")]
+
+    // When the space goes away, which makes the literal 100000
+    // Then the value differs and the snapshot is stale
+    expect(snapshotResultsMatchQueries(results, ["select 1.e5"])).toBe(false)
+  })
+
+  it("matches across keyword casing", () => {
+    // Given a snapshot for a lowercase statement
+    const results = [dql("select a from t where b > 1")]
+
+    // When only the keyword casing changes
+    // Then the snapshot still represents the cell
+    expect(
+      snapshotResultsMatchQueries(results, ["SELECT a FROM t WHERE b > 1"]),
+    ).toBe(true)
+  })
+
+  it("ignores whitespace edits only up to the formatted-identity size limit", () => {
+    // Given two IN-list statements, one well under the limit and one over it
+    const inList = (length: number) => {
+      let sql = "select * from t where s in ("
+      for (let i = 0; sql.length < length; i++) sql += `'S${i}', `
+      return sql.slice(0, -2) + ")"
+    }
+    const under = inList(MAX_FORMATTED_IDENTITY_LENGTH / 2)
+    const over = inList(MAX_FORMATTED_IDENTITY_LENGTH + 64)
+    const respaced = (sql: string) => sql.replace(/, /g, ",  ")
+
+    // When each one gets a whitespace-only edit
+    // Then the small statement keeps its result and the large one is stale
+    expect(snapshotResultsMatchQueries([dql(under)], [respaced(under)])).toBe(
+      true,
+    )
+    expect(snapshotResultsMatchQueries([dql(over)], [respaced(over)])).toBe(
+      false,
+    )
   })
 })
 

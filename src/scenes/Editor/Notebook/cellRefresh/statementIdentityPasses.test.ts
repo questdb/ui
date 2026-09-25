@@ -8,14 +8,13 @@ import type {
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
 
 let formatterCalls = 0
-vi.mock("../../../../utils/formatSql", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../../../../utils/formatSql")>()
+vi.mock("@questdb/sql-parser", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@questdb/sql-parser")>()
   return {
     ...actual,
-    formatSql: (...args: Parameters<typeof actual.formatSql>) => {
+    format: (...args: Parameters<typeof actual.format>) => {
       formatterCalls++
-      return actual.formatSql(...args)
+      return actual.format(...args)
     },
   }
 })

@@ -28,7 +28,7 @@ import {
 import { deriveRunStatusFromResults } from "../../../utils/ai/runStatus"
 import type { RunStatus } from "../../../utils/ai/runStatus"
 import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptContext"
-import { formatSql } from "../../../utils/formatSql"
+import { format } from "@questdb/sql-parser"
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 export type { CellResultStatus } from "./resultHydration/cellResultHydration"
@@ -815,20 +815,22 @@ export const nextCopyLabel = (label: string): string => {
 }
 
 // Result identity ignores presentation-only edits while preserving SQL values:
-// the formatter canonicalizes whitespace/newlines and keyword casing, but does
-// not fold string literals or quoted/unquoted identifiers. Invalid, mid-typing
-// SQL falls back to the editor's trim/trailing-semicolon normalization.
-// The formatter's MySQL dialect reads `\'` as an escaped quote; QuestDB does
-// not, so a backslash anywhere makes the formatter misread later literals.
-const FORMATTER_UNSAFE_CHAR = "\\"
+// the QuestDB formatter canonicalizes whitespace/newlines and keyword casing,
+// but keeps literals, identifiers and aliases as written. SQL it cannot read
+// comes back unchanged, so mid-typing statements keep their trimmed text.
+// `capitalize` is pinned here: identity must not follow the editor's
+// keyword-casing setting, or every stored result key would change with it.
+// Formatting costs about 1 ms per KB and runs several times per edit, so
+// statements above the limit keep their trimmed text as identity.
+export const MAX_FORMATTED_IDENTITY_LENGTH = 8 * 1024
 
 export const normalizeStatementIdentity = (query: string): string => {
   const normalized = normalizeQueryText(query)
-  if (!normalized || normalized.includes(FORMATTER_UNSAFE_CHAR)) {
+  if (!normalized || normalized.length > MAX_FORMATTED_IDENTITY_LENGTH) {
     return normalized
   }
   try {
-    return formatSql(normalized, { uppercase: true })
+    return format(normalized, { capitalize: true })
   } catch {
     return normalized
   }
