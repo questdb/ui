@@ -11,7 +11,10 @@ import {
   type SelectionRunResolution,
 } from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
-import { emitUserAction } from "../../../../utils/notebooks/notebookAIBridge"
+import {
+  emitUserAction,
+  signalUserEdit,
+} from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
@@ -76,6 +79,7 @@ export const useCellRunActions = ({
     // A draw from an empty cell is its first run: the gate's validation is
     // the phase the Stop button can end.
     firstRunRef.current = cell.result == null
+    signalUserEdit(bufferIdForEvents)
     const gate = await validateForDraw(cell.id)
     if (!gate.granted) {
       if (gate.reason !== undefined) {
@@ -208,6 +212,9 @@ export const useCellRunActions = ({
         { intent: request.kind },
       )
       if (plan.kind === "noop") return
+      // A run in flight is user activity the agent has not seen: bumping the
+      // seq now makes a stale-read apply fail instead of cancelling the run.
+      signalUserEdit(bufferIdForEvents)
       if (plan.kind === "chart") {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
         firstRunRef.current = false
@@ -223,7 +230,14 @@ export const useCellRunActions = ({
       }
       handleRunSingle(request.source)
     },
-    [cell.id, cell.mode, cell.result, handleRunAll, handleRunSingle],
+    [
+      cell.id,
+      cell.mode,
+      cell.result,
+      bufferIdForEvents,
+      handleRunAll,
+      handleRunSingle,
+    ],
   )
   const runAll = useCallback(() => runResolved({ kind: "all" }), [runResolved])
   const runSingleFromEditor = useCallback(
@@ -249,6 +263,7 @@ export const useCellRunActions = ({
       state.classifiedKey === state.queriesKey &&
       state.classifyBlock === null
     if (engineRefreshable) {
+      signalUserEdit(bufferIdForEvents)
       void cellRefresh.refresh(cell.id).then(() => {
         const settled = cellRefresh.getState(cell.id)
         emitRanEvent(
@@ -260,7 +275,15 @@ export const useCellRunActions = ({
       return
     }
     runResolved({ kind: "all" })
-  }, [cell.id, cell.mode, cell.result, cellRefresh, emitRanEvent, runResolved])
+  }, [
+    cell.id,
+    cell.mode,
+    cell.result,
+    bufferIdForEvents,
+    cellRefresh,
+    emitRanEvent,
+    runResolved,
+  ])
 
   useEffect(() => {
     if (!isRunning) firstRunRef.current = false
