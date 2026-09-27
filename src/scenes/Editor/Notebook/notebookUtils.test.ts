@@ -1853,6 +1853,28 @@ describe("computeResultBottomHeight", () => {
     expect(heightForResult(make(50))).toBe(424)
   })
 
+  it("sizes a frame written under other casing by the tabs it renders", () => {
+    // Given a single-run result recorded before the statement was reformatted
+    const result = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "select 2",
+          columns: [{ name: "2", type: "INT" }],
+          dataset: [[2]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+    // When the cell now holds two statements, the ran one in a new casing
+    // Then the tab bar is reserved, as the keyed frame renders two tabs
+    expect(computeResultBottomHeight(result, "select 1;\nSELECT 2")).toBe(
+      computeResultBottomHeight(result, "select 1;\nselect 2"),
+    )
+  })
+
   it("one executed DQL in a multi-statement cell adds tabs but tight-fits its rows", () => {
     // The result array is compact (only SELECT 2 ran), but the rendered frame
     // has two tabs: SELECT 1 is "Not run" and SELECT 2 owns the result.
@@ -4221,20 +4243,27 @@ describe("reconcileResultsForStatements — content carryover", () => {
 
     // The render path must attach both results immediately, even before the
     // refresh engine's debounced reconciliation runs.
-    const frame = deriveStatementFrame(edited, previous)
+    const frame = deriveStatementFrame(
+      edited,
+      previous,
+      statementKeysFor(edited),
+    )
     expect(frame?.slots.map((slot) => slot.result?.query)).toEqual([
       "select 1",
       "select 2",
     ])
 
     // Reconciliation uses exactly the same identities and keeps the active
-    // statement stable without needing a cache-priming render.
+    // statement stable without needing a cache-priming render. Survivors take
+    // the text of the statement they now belong to.
     const reconciled = reconcileResultsForStatements(edited, previous)
-    expect(reconciled?.results).toEqual(results)
+    expect(reconciled?.results).toEqual(
+      results.map((r, index) => ({ ...r, query: edited[index] })),
+    )
     expect(reconciled?.activeStatementKey).toBe(previous.activeStatementKey)
   })
 
-  it("keeps results for unchanged statements across whitespace and semicolon edits", () => {
+  it("keeps results for unchanged statements across whitespace and semicolon edits, under the statements' text", () => {
     // Given a two-statement frame
     const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
     // When the statements only gain whitespace and semicolons
@@ -4242,10 +4271,10 @@ describe("reconcileResultsForStatements — content carryover", () => {
       ["  SELECT 1;", "SELECT 2  "],
       previous,
     )
-    // Then both results survive in statement order
+    // Then both results survive in statement order, carrying the new text
     expect(reconciled?.results.map((r) => r.query)).toEqual([
-      "SELECT 1",
-      "SELECT 2",
+      "  SELECT 1;",
+      "SELECT 2  ",
     ])
   })
 
@@ -4259,7 +4288,35 @@ describe("reconcileResultsForStatements — content carryover", () => {
       previous,
     )
 
-    expect(reconciled?.results).toEqual(previous.results)
+    expect(reconciled?.results).toEqual([
+      {
+        ...previous.results[0],
+        query: "SELECT  *\nFROM trades WHERE sym='A';",
+      },
+    ])
+  })
+
+  it("keeps the script summary on a presentation-only edit and drops it when a slot is lost", () => {
+    // Given a settled two-statement frame with a script summary
+    const script = { successCount: 2, failedCount: 0, durationMs: 12 }
+    const settled = resultOf([dqlResult("select 1"), dqlResult("select 2")], {
+      script,
+    })
+
+    // When only keyword casing changes, the counts still describe the frame
+    const reformatted = reconcileCellResultForValue(
+      settled,
+      "SELECT 1;\nSELECT 2",
+    )
+    expect(reformatted?.script).toEqual(script)
+    expect(reformatted?.results.map((r) => r.query)).toEqual([
+      "SELECT 1",
+      "SELECT 2",
+    ])
+
+    // When a statement is edited away, the counts no longer do
+    const shrunk = reconcileCellResultForValue(settled, "select 1")
+    expect(shrunk?.script).toBeUndefined()
   })
 
   it("does not fold case inside SQL string values", () => {
@@ -4418,6 +4475,7 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 1", "SELECT 2", "SELECT 3"],
       result,
+      statementKeysFor(["SELECT 1", "SELECT 2", "SELECT 3"]),
     )
     // Then slots follow editor order and the unmatched slot is empty
     expect(frame?.slots.map((s) => s.result?.query ?? null)).toEqual([
@@ -4436,6 +4494,7 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 1", "SELECT 99", "SELECT 2"],
       result,
+      statementKeysFor(["SELECT 1", "SELECT 99", "SELECT 2"]),
     )
     // Then the active slot index follows the statement, not the result index
     expect(frame?.activeSlotIndex).toBe(2)
@@ -4450,6 +4509,7 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 0", "SELECT 1", "SELECT 2"],
       result,
+      statementKeysFor(["SELECT 0", "SELECT 1", "SELECT 2"]),
     )
     // Then the active slot follows the statement content
     expect(frame?.activeSlotIndex).toBe(2)
@@ -4462,7 +4522,11 @@ describe("deriveStatementFrame — display slots", () => {
       dqlResult("SELECT 1", 20),
     ])
     // When the frame is derived
-    const frame = deriveStatementFrame(["SELECT 1", "SELECT 1"], result)
+    const frame = deriveStatementFrame(
+      ["SELECT 1", "SELECT 1"],
+      result,
+      statementKeysFor(["SELECT 1", "SELECT 1"]),
+    )
     // Then each slot keeps its own occurrence's result
     expect(frame?.slots.map((s) => s.result)).toMatchObject([
       { count: 10 },
@@ -4475,9 +4539,17 @@ describe("deriveStatementFrame — display slots", () => {
     const result = resultOf([dqlResult("SELECT 1")])
     // When the frame is derived
     // Then there is no frame
-    expect(deriveStatementFrame(["SELECT 1"], null)).toBeNull()
-    expect(deriveStatementFrame([], result)).toBeNull()
-    expect(deriveStatementFrame(["SELECT 2"], result)).toBeNull()
+    expect(
+      deriveStatementFrame(["SELECT 1"], null, statementKeysFor(["SELECT 1"])),
+    ).toBeNull()
+    expect(deriveStatementFrame([], result, [])).toBeNull()
+    expect(
+      deriveStatementFrame(
+        ["SELECT 2"],
+        result,
+        statementKeysFor(["SELECT 2"]),
+      ),
+    ).toBeNull()
   })
 })
 

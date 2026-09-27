@@ -246,6 +246,26 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites[0].script).toBeUndefined()
   })
 
+  it("rewrites a snapshot whose statement was reformatted, keeping its rows and script", async () => {
+    // Given a snapshot saved under the statement's old casing
+    const script = { successCount: 1, failedCount: 0, durationMs: 5 }
+    seedCell({ ...ranCell("c1"), value: "SELECT 1" })
+    snapshots.set("c1", snapshot("c1", [dqlResult("select 1")], { script }))
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the rows hydrate under the current text with their summary, and
+    // the disk copy follows so raw-text readers never see the old text again
+    expect(applied).toHaveLength(1)
+    expect(applied[0][1].results).toEqual([dqlResult("SELECT 1")])
+    expect(applied[0][1].script).toEqual(script)
+    expect(rewrites).toHaveLength(1)
+    expect(rewrites[0].results).toEqual([dqlResult("SELECT 1")])
+    expect(rewrites[0].script).toEqual(script)
+  })
+
   it("keeps a reconciled frame in memory until its rewrite confirms", async () => {
     // Given a hydrated cell whose snapshot needed reconciliation
     seedCell({ ...ranCell("c1"), value: "select 1" })

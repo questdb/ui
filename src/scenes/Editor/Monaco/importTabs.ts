@@ -20,6 +20,7 @@ import type {
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
 import {
   clampPaneHeight,
+  foldLegacyMaximizedHeights,
   isAutoRefresh,
   minBottomHeightFor,
   minTopHeightFor,
@@ -275,18 +276,20 @@ const sanitizeNotebookCell = (
   if (item.type === "markdown") cell.type = "markdown"
   // Markdown cells carry no run/draw sub-state — gating it here keeps a
   // hand-crafted import from producing a cell apply_notebook_state rejects.
+  const inferredMaximized =
+    item.type !== "markdown" &&
+    !isCellPaneView(item.paneView) &&
+    item.isViewMaximized === true
   if (item.type !== "markdown") {
     if (item.mode === "draw") cell.mode = "draw"
     const chartConfig = sanitizeChartConfig(item.chartConfig)
     if (chartConfig) cell.chartConfig = chartConfig
     if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
-    if (isCellPaneView(item.paneView)) {
-      cell.paneView = item.paneView
-    } else if (item.isViewMaximized === true) {
-      cell.paneView = "result"
-    } else {
-      cell.paneView = "editor_result"
-    }
+    cell.paneView = isCellPaneView(item.paneView)
+      ? item.paneView
+      : inferredMaximized
+        ? "result"
+        : "editor_result"
   }
   // Clamp to the same pane floors and ceiling every UI writer enforces, so a
   // hand-authored file can't pin an invisible editor or an overlapping pane.
@@ -305,7 +308,7 @@ const sanitizeNotebookCell = (
     cell.bottomResized = item.bottomResized
   if (typeof item.spotlightEditorRatio === "number")
     cell.spotlightEditorRatio = item.spotlightEditorRatio
-  return cell
+  return inferredMaximized ? foldLegacyMaximizedHeights(cell) : cell
 }
 
 const sanitizeNotebookSettings = (

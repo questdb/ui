@@ -238,7 +238,7 @@ export class CellResultHydrationEngine {
     const resultKeys = resultStatementKeys(results)
     const rekeyed = rekeyLegacyStatementKeys(results, resultKeys, snapshot)
     const keyed = rekeyed ?? snapshot
-    const reconciled = reconcileKeyedResults(slotKeys, resultKeys, {
+    const reconciled = reconcileKeyedResults(statements, slotKeys, resultKeys, {
       results,
       activeResultIndex: snapshot.activeResultIndex ?? 0,
       ...(keyed.activeStatementKey !== undefined
@@ -279,7 +279,7 @@ export class CellResultHydrationEngine {
         activeResultIndex: reconciled.activeResultIndex,
         activeStatementKey: reconciled.activeStatementKey,
       }
-      if (frameChanged) delete rewritten.script
+      if (!reconciled.allResultsKept) delete rewritten.script
       delete rewritten.refreshErrors
       delete rewritten.slotFetchedAt
       Object.assign(rewritten, refreshState)
@@ -297,7 +297,9 @@ export class CellResultHydrationEngine {
       activeResultIndex: reconciled.activeResultIndex,
       activeStatementKey: reconciled.activeStatementKey,
       timestamp: snapshot.savedAt,
-      ...(snapshot.script && !frameChanged ? { script: snapshot.script } : {}),
+      ...(snapshot.script && reconciled.allResultsKept
+        ? { script: snapshot.script }
+        : {}),
     })
     // Persisted refresh failures and fetch times re-enter the engine channel,
     // so a reload restores the red badge, last_refresh_error and each tab's

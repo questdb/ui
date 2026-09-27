@@ -25,6 +25,7 @@ import {
   normalizeStatementIdentity,
   reconcileCellResultForStatements,
   resolveAutoRefresh,
+  resultKeysByText,
   singleResultFromExec,
   sqlHash,
   statementIdentityOfKey,
@@ -33,6 +34,7 @@ import {
   type StatementKey,
 } from "../notebookUtils"
 import {
+  alignResultsToQueries,
   type ChartResult,
   resultsEquivalent,
   successResults,
@@ -69,6 +71,9 @@ export type CellClassifyBlock =
 
 export type CellFetchState = {
   queries: string[]
+  // Keys of `queries`, derived once per SQL change so no round, render or
+  // edit re-keys the statement list.
+  slotKeys: StatementKey[]
   queriesKey: string
   fetching: boolean
   settledKey: string | null
@@ -126,21 +131,27 @@ const normalizedQueriesKey = (queriesKey: string): string =>
     .map(normalizeStatementIdentity)
     .join(QUERIES_KEY_SEPARATOR)
 
+const initialFetchState = (
+  queries: string[],
+  slotKeys: StatementKey[],
+): CellFetchState => ({
+  queries,
+  slotKeys,
+  queriesKey: joinQueriesKey(queries),
+  fetching: false,
+  settledKey: null,
+  classifyBlock: null,
+  classifiedKey: null,
+  slotFetching: new Set(),
+  slotErrors: new Map(),
+  cancelledSlots: new Set(),
+  slotFetchedAt: new Map(),
+  fetchCancelled: false,
+})
+
 export const pendingCellFetchState = (sql: string): CellFetchState => {
   const queries = getQueriesFromText(sql)
-  return {
-    queries,
-    queriesKey: joinQueriesKey(queries),
-    fetching: false,
-    settledKey: null,
-    classifyBlock: null,
-    classifiedKey: null,
-    slotFetching: new Set(),
-    slotErrors: new Map(),
-    cancelledSlots: new Set(),
-    slotFetchedAt: new Map(),
-    fetchCancelled: false,
-  }
+  return initialFetchState(queries, statementKeysFor(queries))
 }
 
 export const deriveChartLoading = (
@@ -202,7 +213,7 @@ const chartSlotFetchedAt = (
   const slotFetchedAt = new Map<StatementKey, number>()
   out.forEach((result, index) => {
     if (result.type === "error") return
-    const key = entry.slotKeys[index]
+    const key = entry.state.slotKeys[index]
     const carriedAt =
       entry.state.slotFetchedAt.get(key) ?? previousFrameTimestamp
     slotFetchedAt.set(key, carriedResults[index] ? (carriedAt ?? now) : now)
@@ -210,16 +221,26 @@ const chartSlotFetchedAt = (
   return slotFetchedAt
 }
 
-// Keys of the frame a round last wrote, so per-slot lookups never re-key the
-// whole cell. A frame the round did not write (released or replaced under it)
-// is keyed on sight.
+// Keys of a frame, from the statements that wrote it, so per-slot lookups
+// never re-key the whole cell. A frame that leads those statements by text
+// takes their keys; any other frame (released or replaced under a round, a
+// selection run) is keyed on sight.
 class FrameKeys {
   private frame: SingleQueryResult[] | null = null
   private keys: StatementKey[] = []
 
+  constructor(
+    private readonly queries: string[],
+    private readonly slotKeys: StatementKey[],
+  ) {}
+
   of(results: SingleQueryResult[]): StatementKey[] {
     if (results !== this.frame) {
-      this.remember(results, statementKeysFor(results.map((r) => r.query)))
+      this.remember(
+        results,
+        resultKeysByText(this.queries, this.slotKeys, results) ??
+          statementKeysFor(results.map((r) => r.query)),
+      )
     }
     return this.keys
   }
@@ -294,9 +315,7 @@ type Entry = {
   kind: CellEntryKind
   cellId: string
   sql: string
-  // Statement keys and identities of `state.queries`, derived once per SQL
-  // change so no round or edit re-keys the statement list.
-  slotKeys: StatementKey[]
+  // Identities of `state.queries`, derived with its keys once per SQL change.
   identitiesKey: string
   autoRefresh: AutoRefresh
   visible: boolean
@@ -707,7 +726,7 @@ export class CellRefreshEngine {
   }
 
   private applyRefreshSeed(entry: Entry, seed: SnapshotRefreshState) {
-    const slotKeys = new Set(entry.slotKeys)
+    const slotKeys = new Set(entry.state.slotKeys)
     const slotErrors = new Map(entry.state.slotErrors)
     const slotFetchedAt = new Map(entry.state.slotFetchedAt)
     const patch: Partial<CellFetchState> = {}
@@ -725,12 +744,14 @@ export class CellRefreshEngine {
   }
 
   private createEntry(cell: NotebookCell, kind: CellEntryKind) {
-    const state = pendingCellFetchState(cell.value)
+    const queries = getQueriesFromText(cell.value)
+    const { slotKeys, identitiesKey } = keyedStatements(queries)
+    const state = initialFetchState(queries, slotKeys)
     const entry: Entry = {
       kind,
       cellId: cell.id,
       sql: cell.value,
-      ...keyedStatements(state.queries),
+      identitiesKey,
       autoRefresh: resolveAutoRefresh(
         cell.autoRefresh,
         this.autoRefreshDefault,
@@ -840,7 +861,6 @@ export class CellRefreshEngine {
     const queriesKey = joinQueriesKey(queries)
     const { slotKeys, identitiesKey } = keyedStatements(queries)
     const sameQueries = this.settledIdentitiesKey(entry) === identitiesKey
-    entry.slotKeys = slotKeys
     entry.identitiesKey = identitiesKey
     // Refresh errors follow statement content: an edited statement's error
     // clears, an unchanged sibling's survives the edit.
@@ -853,6 +873,7 @@ export class CellRefreshEngine {
     )
     this.setState(entry, {
       queries,
+      slotKeys,
       queriesKey,
       fetching: false,
       slotFetching: new Set(),
@@ -874,18 +895,25 @@ export class CellRefreshEngine {
     return normalizedQueriesKey(settledKey)
   }
 
+  // One render for the whole pass: the statement list and the frame it
+  // reconciles into land together, so no consumer sees them disagree. The
+  // frame was written for the statements the entry held until now, so its
+  // keys come from them before the new list replaces them.
   private applySql(entry: Entry, sql: string) {
-    this.applySqlState(entry, sql)
-    if (entry.kind === "grid") this.reconcileGridResult(entry)
-    if (entry.visible) this.ensureData(entry)
-    else entry.ensureAttempted = false
+    this.batchUpdates(() => {
+      const frameKeys = new FrameKeys(entry.state.queries, entry.state.slotKeys)
+      this.applySqlState(entry, sql)
+      if (entry.kind === "grid") this.reconcileGridResult(entry, frameKeys)
+      if (entry.visible) this.ensureData(entry)
+      else entry.ensureAttempted = false
+    })
   }
 
   // Editor typing reshapes the visible frame after the debounce: unchanged
   // statements keep their results, edited ones drop, zero survivors collapse
   // the cell. Agent paths reconcile in their transitions; this pass is
   // idempotent on top of them.
-  private reconcileGridResult(entry: Entry) {
+  private reconcileGridResult(entry: Entry, frameKeys: FrameKeys) {
     const deps = this.getDeps()
     const current = deps.getCellResult(entry.cellId)
     if (current == null) {
@@ -900,7 +928,8 @@ export class CellRefreshEngine {
     const reconciled = reconcileCellResultForStatements(
       current,
       entry.state.queries,
-      entry.slotKeys,
+      entry.state.slotKeys,
+      frameKeys.of(current.results),
     )
     if (reconciled === null) {
       // The debounce fires on transient mid-typing text, so a zero-survivor
@@ -916,7 +945,18 @@ export class CellRefreshEngine {
       reconciled.results.length === current.results.length &&
       reconciled.results.every((r, index) => r === current.results[index]) &&
       reconciled.activeStatementKey === current.activeStatementKey
-    if (!unchanged) deps.setCellResult(entry.cellId, reconciled)
+    if (unchanged) return
+    deps.setCellResult(entry.cellId, reconciled)
+    // A frame that kept every row under new text is re-persisted so the disk
+    // copy matches and hydration can release it again. A frame that lost a
+    // slot keeps the disk copy, so an undo can revive its rows.
+    if (reconciled.results.length === current.results.length) {
+      this.queueSnapshot(
+        entry,
+        reconciled.results,
+        current.script?.durationMs ?? 0,
+      )
+    }
   }
 
   // Settle from the data already in cell.result — the just-run grid, the
@@ -948,14 +988,27 @@ export class CellRefreshEngine {
       this.ensureGridData(entry)
       return
     }
-    const chartResult = toChartResult(
-      this.getDeps().getCellResult(entry.cellId),
-      queries,
-    )
+    const current = this.getDeps().getCellResult(entry.cellId)
+    const chartResult = toChartResult(current, queries)
     if (
       chartResult.kind === "settled" &&
       (chartResult.results.length > 0 || settledKey === queriesKey)
     ) {
+      // A frame accepted under new text is re-persisted so the disk copy
+      // matches and hydration can release it again.
+      if (current) {
+        const aligned = alignResultsToQueries(current, queries)
+        if (aligned !== current) {
+          this.getDeps().setCellResult(entry.cellId, aligned)
+          if (chartResult.results.length > 0) {
+            this.queueSnapshot(
+              entry,
+              aligned.results,
+              current.script?.durationMs ?? 0,
+            )
+          }
+        }
+      }
       this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
       entry.lastFetchedAt = Math.max(entry.lastFetchedAt, chartResult.timestamp)
@@ -1220,7 +1273,7 @@ export class CellRefreshEngine {
       const carried = previousFrame
         ? chartableResultsByKey(previousFrame)
         : new Map<StatementKey, SingleQueryResult>()
-      const carriedResults = entry.slotKeys.map((key) => carried.get(key))
+      const carriedResults = entry.state.slotKeys.map((key) => carried.get(key))
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
         queries.map((q, index) => {
@@ -1254,6 +1307,8 @@ export class CellRefreshEngine {
         current != null &&
         resultsEquivalent(current.results.map(toExecResult), out)
       ) {
+        const kept = alignResultsToQueries(current, queries)
+        if (kept !== current) this.getDeps().setCellResult(entry.cellId, kept)
         this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
         this.deriveChartSlotErrors(entry)
         if (successResults(out).length === 0) {
@@ -1261,18 +1316,21 @@ export class CellRefreshEngine {
           return
         }
         const persisted =
-          entry.persistedResults.get(current.results) === currentSqlHash
+          entry.persistedResults.get(kept.results) === currentSqlHash
         if (!persisted) {
-          this.queueSnapshot(entry, current.results, fetchDurationMs)
+          this.queueSnapshot(entry, kept.results, fetchDurationMs)
         }
         return
       }
       // Write EVERY statement (not just chartable ones) so a switch to the grid
       // shows the same tabs a real run would — including errors and empty
-      // results — instead of dropping them or leaving stale rows behind. The
+      // results — instead of dropping them or leaving stale rows behind. Each
+      // slot takes its statement's current text, carried rows included. The
       // result lands before settledKey flips: React 17 renders the two updates
       // separately, and a settled state without data would flash "No data".
-      const written = out.map((r) => singleResultFromExec(r, r.query))
+      const written = out.map((r, index) =>
+        singleResultFromExec(r, queries[index]),
+      )
       this.getDeps().setCellResult(entry.cellId, {
         results: written,
         activeResultIndex: 0,
@@ -1329,8 +1387,8 @@ export class CellRefreshEngine {
         this.updatePoll(entry)
         return
       }
-      const slotKeys = entry.slotKeys
-      const frameKeys = new FrameKeys()
+      const slotKeys = entry.state.slotKeys
+      const frameKeys = new FrameKeys(queries, slotKeys)
       const invalidSlots: Array<{ key: StatementKey; message: string }> = []
       const launchSlots: Array<{ key: StatementKey; index: number }> = []
       slotKeys.forEach((key, index) => {
@@ -1560,10 +1618,10 @@ export class CellRefreshEngine {
   private deriveChartSlotErrors(entry: Entry) {
     const current = this.getDeps().getCellResult(entry.cellId)
     const slotErrors = new Map<StatementKey, string>()
-    if (current && current.results.length === entry.slotKeys.length) {
+    if (current && current.results.length === entry.state.slotKeys.length) {
       current.results.forEach((result, index) => {
         if (result.type === "error")
-          slotErrors.set(entry.slotKeys[index], result.error)
+          slotErrors.set(entry.state.slotKeys[index], result.error)
       })
     }
     const previous = entry.state.slotErrors

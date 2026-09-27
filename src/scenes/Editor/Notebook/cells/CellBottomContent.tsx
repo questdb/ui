@@ -72,11 +72,16 @@ export const CellBottomContent: React.FC<Props> = ({
         : (debouncedQueries ?? getQueriesFromText(cell.value)),
     [cell.mode, debouncedQueries, cell.value],
   )
+  const engineSlotKeys = fetchState?.slotKeys
+  const slotKeys = useMemo(
+    () => engineSlotKeys ?? statementKeysFor(statements),
+    [engineSlotKeys, statements],
+  )
   const frame = useMemo(
     () =>
-      deriveStatementFrame(statements, cell.result) ??
+      deriveStatementFrame(statements, cell.result, slotKeys) ??
       derivePositionalFrame(cell.result),
-    [statements, cell.result],
+    [statements, cell.result, slotKeys],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),
@@ -84,13 +89,15 @@ export const CellBottomContent: React.FC<Props> = ({
   )
 
   const resultIndexOf = useCallback(
-    (statementKey: string): number =>
-      cell.result
-        ? statementKeysFor(cell.result.results.map((r) => r.query)).indexOf(
-            statementKey,
-          )
-        : -1,
-    [cell.result],
+    (statementKey: string): number => {
+      const slotResult = frame?.slots.find(
+        (slot) => slot.key === statementKey,
+      )?.result
+      return slotResult && cell.result
+        ? cell.result.results.indexOf(slotResult)
+        : -1
+    },
+    [frame, cell.result],
   )
   const reRunStatement = useCallback(
     (statementKey: string) => {

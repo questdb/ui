@@ -807,6 +807,41 @@ describe("sanitizeBuffer", () => {
       expect(cells?.every((cell) => !("isViewMaximized" in cell))).toBe(true)
     })
 
+    it("folds a legacy maximized cell's editor height into its result pane", () => {
+      // Given an export from main with a maximized chart and a split grid
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "SELECT 1",
+              mode: "draw",
+              topHeight: 152,
+              bottomHeight: 350,
+              isViewMaximized: true,
+            },
+            {
+              id: "grid",
+              value: "SELECT 2",
+              topHeight: 152,
+              bottomHeight: 350,
+              paneView: "result",
+            },
+          ],
+        },
+      }
+
+      // When it is imported
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then only the legacy cell keeps its former size; a head export with a
+      // stored pane view passes through untouched
+      expect(cells?.map((cell) => cell.bottomHeight)).toEqual([502, 350])
+    })
+
     it("strips run/draw sub-state from markdown cells", () => {
       // Given a hand-crafted import smuggling SQL sub-state onto markdown
       const input = {

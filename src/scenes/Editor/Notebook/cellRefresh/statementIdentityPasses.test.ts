@@ -21,9 +21,12 @@ vi.mock("@questdb/sql-parser", async (importOriginal) => {
 
 import { CellRefreshEngine, type CellRefreshDeps } from "./cellRefreshEngine"
 import {
+  computeResultBottomHeight,
   deriveStatementFrame,
   reconcileCellResultForValue,
+  statementKeysFor,
 } from "../notebookUtils"
+import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 
 // The formatter is the only expensive step of statement identity. Every event
 // below must key each statement list at most once and each result frame at
@@ -108,7 +111,7 @@ describe("statement identity passes per event", () => {
     vi.useRealTimers()
   })
 
-  it("keys a grid cell once per refresh round and twice per edit", async () => {
+  it("keys a grid cell never per refresh round and once per edit", async () => {
     // Given an on-screen grid cell with a settled frame
     const gridCell = (value: string): NotebookCell =>
       ({
@@ -125,8 +128,8 @@ describe("statement identity passes per event", () => {
     // When the cell is refreshed by hand with unchanged text
     const refreshCalls = await countFormatterCalls(() => engine.refresh("c1"))
 
-    // Then only the frame is keyed: the statement list came with the entry
-    expect(refreshCalls).toBeLessThanOrEqual(N)
+    // Then nothing is keyed: the frame was written for these statements
+    expect(refreshCalls).toBe(0)
 
     // When one statement is edited and the debounce fires
     const editCalls = await countFormatterCalls(async () => {
@@ -134,8 +137,9 @@ describe("statement identity passes per event", () => {
       await vi.advanceTimersByTimeAsync(301)
     })
 
-    // Then the new list and the old frame are keyed once each
-    expect(editCalls).toBeLessThanOrEqual(2 * N)
+    // Then only the new list is keyed: the old frame was written for the
+    // statements the entry held until the edit
+    expect(editCalls).toBe(N)
   })
 
   it("keys a chart cell at most four times per edit", async () => {
@@ -167,22 +171,81 @@ describe("statement identity passes per event", () => {
 
     // Then the list, the stale check, and the carry map are each keyed once
     expect(editCalls).toBeLessThanOrEqual(4 * N + 2)
+
+    // When it is refreshed by hand with unchanged text
+    const refreshCalls = await countFormatterCalls(() => engine.refresh("c2"))
+
+    // Then nothing is keyed: the frame was written for these statements
+    expect(refreshCalls).toBe(0)
   })
 
-  it("keys statements and results once each in the pure helpers", async () => {
+  it("keeps a frame a run wrote inside the edit debounce, whatever the duplicates' casing", async () => {
+    // Given a settled grid cell holding three case-variant duplicates
+    const before = ["select 1", "SELECT 1", "select 1"]
+    const after = ["select 1", "select 1"]
+    const gridCell = (value: string): NotebookCell =>
+      ({
+        id: "c1",
+        position: 0,
+        value,
+        result: cellResults.get("c1"),
+      }) as NotebookCell
+    cellResults.set("c1", frameOf(before))
+    engine.setVisible("c1", true)
+    engine.sync([gridCell(sqlOf(before))])
+    await flush()
+
+    // When the middle statement is deleted and a run lands before the
+    // debounce adopts the new text
+    cellResults.set("c1", frameOf(after))
+    engine.sync([gridCell(sqlOf(after))])
+    await vi.advanceTimersByTimeAsync(301)
+
+    // Then both results survive under the two remaining statements: the old
+    // list never keys a frame it did not write
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual(after)
+  })
+
+  it("keys nothing on the render paths for a frame written for the current statements", async () => {
+    // Given the engine's keys for the statements and a frame they claim by text
+    const slotKeys = statementKeysFor(statements)
+    const frame = frameOf(statements)
+
+    // When the tab frame, the chart match and the default height derive from it
+    const calls = await countFormatterCalls(() => {
+      deriveStatementFrame(statements, frame, slotKeys)
+      toChartResult(frame, statements)
+      computeResultBottomHeight(frame, sqlOf(statements))
+    })
+
+    // Then the formatter never runs
+    expect(calls).toBe(0)
+  })
+
+  it("keys only the frame when other text wrote it", async () => {
+    // Given the engine's keys and a frame written in another casing
+    const slotKeys = statementKeysFor(statements)
+    const frame = frameOf(statements.map((s) => s.toUpperCase()))
+
+    // When the tab frame derives from it
+    const calls = await countFormatterCalls(() => {
+      deriveStatementFrame(statements, frame, slotKeys)
+    })
+
+    // Then the frame is keyed once and the statement list not at all
+    expect(calls).toBe(N)
+  })
+
+  it("keys statements and results once each in the edit reconcile", async () => {
     // Given a frame that matches its statements
     const frame = frameOf(statements)
 
-    // When the tab frame and the edit reconcile derive from it
-    const frameCalls = await countFormatterCalls(() => {
-      deriveStatementFrame(statements, frame)
-    })
+    // When the edit reconcile derives from it
     const reconcileCalls = await countFormatterCalls(() => {
       reconcileCellResultForValue(frame, sqlOf(statements))
     })
 
-    // Then each keys the statement list once and the frame once
-    expect(frameCalls).toBe(2 * N)
+    // Then it keys the statement list once and the frame once
     expect(reconcileCalls).toBe(2 * N)
   })
 })

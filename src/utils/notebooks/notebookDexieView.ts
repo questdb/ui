@@ -15,7 +15,10 @@ import type {
 } from "../../store/notebook"
 import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
-import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  buildPersistPayload,
+  foldLegacyMaximizedHeights,
+} from "../../scenes/Editor/Notebook/notebookUtils"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
 // and the cell guards shared by the Dexie controller and the headless run
@@ -52,14 +55,17 @@ const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
     for (const field of MARKDOWN_FOREIGN_FIELDS) delete next[field]
     return next as NotebookCell
   }
-  const paneView = isCellPaneView(raw.paneView)
-    ? raw.paneView
-    : raw.isViewMaximized === true
-      ? "result"
-      : "editor_result"
-  const next = { ...raw, paneView } as NotebookCell & Record<string, unknown>
+  const storedView = isCellPaneView(raw.paneView) ? raw.paneView : undefined
+  const inferredMaximized =
+    storedView === undefined && raw.isViewMaximized === true
+  const next = {
+    ...raw,
+    paneView: storedView ?? (inferredMaximized ? "result" : "editor_result"),
+  } as NotebookCell & Record<string, unknown>
   delete next.isViewMaximized
-  return next as NotebookCell
+  return inferredMaximized
+    ? foldLegacyMaximizedHeights(next as NotebookCell)
+    : (next as NotebookCell)
 }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) => {

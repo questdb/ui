@@ -836,16 +836,19 @@ export const normalizeStatementIdentity = (query: string): string => {
   }
 }
 
+// Every frame is written with the statement text it ran as, so at rest both
+// sides are byte-equal and the formatter never runs.
+export const sameStatementIdentity = (a: string, b: string): boolean =>
+  a === b || normalizeStatementIdentity(a) === normalizeStatementIdentity(b)
+
 export const snapshotResultsMatchQueries = (
   results: SingleQueryResult[],
   queries: string[],
 ): boolean =>
   results.length > 0 &&
   results.length === queries.length &&
-  results.every(
-    (result, index) =>
-      normalizeStatementIdentity(result.query) ===
-      normalizeStatementIdentity(queries[index]),
+  results.every((result, index) =>
+    sameStatementIdentity(result.query, queries[index]),
   )
 
 // Statement identity across edits: normalized text plus occurrence order for
@@ -892,6 +895,9 @@ export type ReconciledCellResult = {
   results: SingleQueryResult[]
   activeStatementKey: StatementKey
   activeResultIndex: number
+  // Every previous result survived in its original order, so a script
+  // summary still describes the frame.
+  allResultsKept: boolean
 }
 
 export const resultStatementKeys = (
@@ -899,8 +905,12 @@ export const resultStatementKeys = (
 ): StatementKey[] => statementKeysFor(results.map((r) => r.query))
 
 // Callers that already hold the previous frame's keys pass them in, so the
-// formatter runs once per result on a hydration.
+// formatter runs once per result on a hydration. A survivor takes the text of
+// the statement it now belongs to: a presentation-only edit keeps the rows,
+// and everything that reads `result.query` as raw text (chart resolution,
+// snapshots, the tab frame) sees the SQL as the editor holds it.
 export const reconcileKeyedResults = (
+  statements: string[],
   slotKeys: StatementKey[],
   resultKeys: StatementKey[],
   previous: CellResult,
@@ -910,19 +920,24 @@ export const reconcileKeyedResults = (
   resultKeys.forEach((key, index) => oldIndexByKey.set(key, index))
   const survivors: SingleQueryResult[] = []
   const survivorKeys: StatementKey[] = []
+  const sourceIndices: number[] = []
   const newKeyByOldIndex = new Map<number, StatementKey>()
-  for (const key of slotKeys) {
+  slotKeys.forEach((key, slotIndex) => {
     const oldIndex = oldIndexByKey.get(key)
-    if (oldIndex === undefined) continue
+    if (oldIndex === undefined) return
     const candidate = previous.results[oldIndex]
     // A placeholder is not a carryable result: carrying one would resurrect a
     // ghost "Running" slot no execution backs (e.g. from a snapshot a crash
     // left behind). The slot regenerates as "Not run" at display time.
-    if (candidate.type === "running" || candidate.type === "queued") continue
-    survivors.push(candidate)
+    if (candidate.type === "running" || candidate.type === "queued") return
+    const sql = statements[slotIndex]
+    survivors.push(
+      candidate.query === sql ? candidate : { ...candidate, query: sql },
+    )
     survivorKeys.push(key)
+    sourceIndices.push(oldIndex)
     newKeyByOldIndex.set(oldIndex, key)
-  }
+  })
   if (survivors.length === 0) return null
   const carriedActiveKey =
     previous.activeStatementKey !== undefined &&
@@ -938,6 +953,9 @@ export const reconcileKeyedResults = (
     results: survivors,
     activeStatementKey,
     activeResultIndex: Math.max(0, survivorKeys.indexOf(activeStatementKey)),
+    allResultsKept:
+      sourceIndices.length === previous.results.length &&
+      sourceIndices.every((oldIndex, index) => oldIndex === index),
   }
 }
 
@@ -949,6 +967,7 @@ export const reconcileResultsForSlotKeys = (
   statements.length === 0
     ? null
     : reconcileKeyedResults(
+        statements,
         slotKeys,
         resultStatementKeys(previous.results),
         previous,
@@ -982,28 +1001,31 @@ export const snapshotResultsHaveMatchingStatement = (
 // that loses slots also loses its script summary — the counts no longer
 // describe what is on screen. Zero survivors collapse the frame to null.
 export const reconcileCellResultForStatements = (
-  result: CellResult | null | undefined,
+  result: CellResult,
   statements: string[],
   slotKeys: StatementKey[],
+  resultKeys: StatementKey[],
 ): CellResult | null => {
-  if (result == null) return null
   // A pending frame is run-owned: the run writes results into it by position,
   // so reshaping it here would land rows under the wrong statement. The frame
   // stays pending until the run's last slot settles, and every completion step
   // after that runs synchronously — deferring the reconcile is always safe.
   if (hasPendingResult(result)) return result
-  const reconciled = reconcileResultsForSlotKeys(statements, slotKeys, result)
+  if (statements.length === 0) return null
+  const reconciled = reconcileKeyedResults(
+    statements,
+    slotKeys,
+    resultKeys,
+    result,
+  )
   if (!reconciled) return null
-  const frameUnchanged =
-    reconciled.results.length === result.results.length &&
-    reconciled.results.every((r, index) => r === result.results[index])
   const next: CellResult = {
     ...result,
     results: reconciled.results,
     activeResultIndex: reconciled.activeResultIndex,
     activeStatementKey: reconciled.activeStatementKey,
   }
-  if (!frameUnchanged) delete next.script
+  if (!reconciled.allResultsKept) delete next.script
   return next
 }
 
@@ -1011,11 +1033,13 @@ export const reconcileCellResultForValue = (
   result: CellResult | null | undefined,
   value: string,
 ): CellResult | null => {
+  if (result == null) return null
   const statements = getQueriesFromText(value)
   return reconcileCellResultForStatements(
     result,
     statements,
     statementKeysFor(statements),
+    resultStatementKeys(result.results),
   )
 }
 
@@ -1030,32 +1054,91 @@ export type StatementFrame = {
   activeSlotIndex: number
 }
 
+type SlotResults = Array<SingleQueryResult | null>
+
+// Display and sizing claim results by raw text in slot order, skipping a
+// statement no result text matches (one added, one edited away). Every run
+// and settle writes results with the text they ran as, so at rest this is
+// one string compare per statement and the formatter never runs. The slot a
+// result lands in only decides where its rows show until the next reconcile,
+// so a skipped case-variant duplicate costs nothing here. A result no
+// statement text claims (mid-typing, a selection run) sends the frame to the
+// keys.
+const slotResultsByText = (
+  statements: string[],
+  results: SingleQueryResult[],
+): SlotResults | null => {
+  const slots: SlotResults = statements.map(() => null)
+  let slot = 0
+  for (const result of results) {
+    while (slot < statements.length && statements[slot] !== result.query) {
+      slot++
+    }
+    if (slot === statements.length) return null
+    slots[slot] = result
+    slot++
+  }
+  return slots
+}
+
+// Keys must be exact: a run that lands inside the edit debounce writes text
+// the entry has not adopted yet, and reading past a statement to claim a
+// later one could number a case-variant duplicate wrong. A frame takes the
+// statements' keys only when it leads them in order; any other shape goes to
+// the formatter.
+export const resultKeysByText = (
+  statements: string[],
+  slotKeys: StatementKey[],
+  results: SingleQueryResult[],
+): StatementKey[] | null =>
+  results.length <= statements.length &&
+  results.every((result, index) => result.query === statements[index])
+    ? slotKeys.slice(0, results.length)
+    : null
+
+const slotResultsByKey = (
+  slotKeys: StatementKey[],
+  results: SingleQueryResult[],
+): SlotResults => {
+  const resultByKey = new Map<StatementKey, SingleQueryResult>()
+  resultStatementKeys(results).forEach((key, index) => {
+    resultByKey.set(key, results[index])
+  })
+  return slotKeys.map((key) => resultByKey.get(key) ?? null)
+}
+
+const activeSlotIndexOf = (
+  slotKeys: StatementKey[],
+  slotResults: SlotResults,
+  result: CellResult,
+): number => {
+  if (result.activeStatementKey !== undefined) {
+    return Math.max(0, slotKeys.indexOf(result.activeStatementKey))
+  }
+  const active =
+    result.results[clampIndex(result.activeResultIndex, result.results.length)]
+  return Math.max(0, slotResults.indexOf(active))
+}
+
 export const deriveStatementFrame = (
   statements: string[],
   result: CellResult | null | undefined,
+  slotKeys: StatementKey[],
 ): StatementFrame | null => {
   if (!result || statements.length === 0 || result.results.length === 0) {
     return null
   }
-  const slotKeys = statementKeysFor(statements)
-  const resultKeys = statementKeysFor(result.results.map((r) => r.query))
-  const resultByKey = new Map<StatementKey, SingleQueryResult>()
-  resultKeys.forEach((key, index) => {
-    resultByKey.set(key, result.results[index])
-  })
-  const slots = slotKeys.map((key, index) => ({
-    key,
-    sql: statements[index],
-    result: resultByKey.get(key) ?? null,
-  }))
-  if (slots.every((slot) => slot.result === null)) return null
-  const activeKey =
-    result.activeStatementKey ??
-    resultKeys[clampIndex(result.activeResultIndex, resultKeys.length)]
-  const activeSlotIndex = slotKeys.indexOf(activeKey)
+  const slotResults =
+    slotResultsByText(statements, result.results) ??
+    slotResultsByKey(slotKeys, result.results)
+  if (slotResults.every((slot) => slot === null)) return null
   return {
-    slots,
-    activeSlotIndex: activeSlotIndex === -1 ? 0 : activeSlotIndex,
+    slots: statements.map((sql, index) => ({
+      key: slotKeys[index],
+      sql,
+      result: slotResults[index],
+    })),
+    activeSlotIndex: activeSlotIndexOf(slotKeys, slotResults, result),
   }
 }
 
@@ -1087,8 +1170,9 @@ export const resolveActiveStatementSql = (
   value: string,
   result: CellResult | null | undefined,
 ): string | undefined => {
+  const statements = getQueriesFromText(value)
   const frame =
-    deriveStatementFrame(getQueriesFromText(value), result) ??
+    deriveStatementFrame(statements, result, statementKeysFor(statements)) ??
     derivePositionalFrame(result)
   return frame?.slots[frame.activeSlotIndex]?.sql
 }
@@ -1562,6 +1646,26 @@ export const clampPaneHeight = (minimum: number, px: number): number =>
 export const minBottomHeightFor = (cell: NotebookCell): number =>
   cell.mode === "draw" ? MIN_CHART_HEIGHT_PX : MIN_BOTTOM_HEIGHT_PX
 
+// Main showed a maximized cell's result pane at editor + result height; head
+// keeps the panes apart. Runs once, when a read infers the pane view from the
+// legacy flag: the hidden editor's height folds into the result pane so the
+// cell keeps the size it had. The next persist drops the flag, and later
+// reads pass the stored pane view through untouched.
+export const foldLegacyMaximizedHeights = (
+  cell: NotebookCell,
+): NotebookCell => {
+  if (cell.bottomHeight === undefined) return cell
+  const topHeight = cell.topHeight ?? defaultTopHeightFor(cell)
+  return {
+    ...cell,
+    bottomHeight: clampPaneHeight(
+      minBottomHeightFor(cell),
+      topHeight + cell.bottomHeight,
+    ),
+    ...(cell.topResized ? { bottomResized: true } : {}),
+  }
+}
+
 export type AgentHeightValue = number | "auto" | null
 
 // Reads a cell's live snapshot-load status; the passive (unmounted) route has
@@ -1781,18 +1885,23 @@ export const computeResultBottomHeight = (
   value: string,
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
+  // Sizing follows the same slots the tab bar renders: text first, keys for a
+  // frame written under other text. A frame no statement claims (a selection
+  // run) sizes by its own results.
   const statements = getQueriesFromText(value)
-  const frame =
-    deriveStatementFrame(statements, result) ?? derivePositionalFrame(result)
-  if (!frame) return NOTIFICATION_PX
-  const slots = frame.slots
-  const hasMultipleTabs = slots.length > 1
+  const claimedSlots =
+    slotResultsByText(statements, result.results) ??
+    slotResultsByKey(statementKeysFor(statements), result.results)
+  const slotResults = claimedSlots.some((slot) => slot !== null)
+    ? claimedSlots
+    : result.results
+  const hasMultipleTabs = slotResults.length > 1
   const hasMultipleResults = result.results.length > 1
   const tabBar = hasMultipleTabs ? TAB_BAR_PX : 0
 
   if (hasMultipleResults) {
-    const hasGrid = slots.some(
-      (slot) => slot.result && isDqlWithColumns(slot.result),
+    const hasGrid = slotResults.some(
+      (slot) => slot !== null && isDqlWithColumns(slot),
     )
     if (!hasGrid) {
       return tabBar + NOTIFICATION_PX
@@ -1808,8 +1917,8 @@ export const computeResultBottomHeight = (
 
   // Single executed result: tight-fit up to 10 rows. The tab bar is still
   // included when the editor contributes additional "Not run" slots.
-  const only = frame.slots[frame.activeSlotIndex]?.result ?? result.results[0]
-  if (!only || !isDqlWithColumns(only)) {
+  const only = result.results[0]
+  if (!isDqlWithColumns(only)) {
     return tabBar + NOTIFICATION_PX
   }
   const rows = Math.min(MAX_RESERVED_ROWS, dqlRowCount(only))

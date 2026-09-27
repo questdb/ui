@@ -1,7 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { hasPendingResult, normalizeStatementIdentity } from "../notebookUtils"
+import { hasPendingResult, sameStatementIdentity } from "../notebookUtils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,
@@ -72,9 +72,24 @@ export const resultMatchesQueries = (
   result.results.every(
     (r, i) =>
       !(r.type === "dql" && r.truncated) &&
-      normalizeStatementIdentity(r.query) ===
-        normalizeStatementIdentity(queries[i]),
+      sameStatementIdentity(r.query, queries[i]),
   )
+
+// A frame accepted for the current queries by identity takes their text, so
+// raw-text readers (resolveDraw, snapshots) see the SQL the editor holds.
+// Callers have matched the frame first, so the mapping is positional.
+export const alignResultsToQueries = (
+  result: CellResult,
+  queries: string[],
+): CellResult => {
+  if (result.results.every((r, i) => r.query === queries[i])) return result
+  return {
+    ...result,
+    results: result.results.map((r, i) =>
+      r.query === queries[i] ? r : { ...r, query: queries[i] },
+    ),
+  }
+}
 
 export type ChartResult =
   | { kind: "missing" }
@@ -114,13 +129,7 @@ export const resultsEquivalent = (
     // (whitespace, newlines, keyword casing) do not make a new result, but
     // different SQL must always replace the prior frame even when it happens
     // to return identical rows.
-    if (
-      x.query !== y.query &&
-      normalizeStatementIdentity(x.query) !==
-        normalizeStatementIdentity(y.query)
-    ) {
-      return false
-    }
+    if (!sameStatementIdentity(x.query, y.query)) return false
     if (x.type !== y.type) return false
     if (x.count !== y.count) return false
     if (x.error !== y.error) return false

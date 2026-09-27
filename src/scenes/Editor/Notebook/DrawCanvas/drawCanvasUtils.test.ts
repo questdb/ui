@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+  alignResultsToQueries,
   resolveDraw,
   resultMatchesQueries,
   resultsEquivalent,
@@ -282,6 +283,67 @@ describe("resultMatchesQueries", () => {
     // Then there is nothing to transfer
     expect(resultMatchesQueries(null, ["select a"])).toBe(false)
     expect(resultMatchesQueries(undefined, ["select a"])).toBe(false)
+  })
+})
+
+describe("alignResultsToQueries", () => {
+  it("returns the same frame when every slot already carries its statement's text", () => {
+    // Given a frame written for these statements
+    const result = cellResult(["select 1", "select 2"])
+    // When it is aligned to them
+    // Then nothing is copied
+    expect(alignResultsToQueries(result, ["select 1", "select 2"])).toBe(result)
+  })
+
+  it("gives a reformatted statement's slot the new text and keeps the others", () => {
+    // Given a frame accepted for a reformatted first statement
+    const result = cellResult(["select 1", "select 2"])
+    // When it is aligned
+    const aligned = alignResultsToQueries(result, ["SELECT 1", "select 2"])
+    // Then only the changed slot is a new object, under the statement's text
+    expect(aligned.results.map((r) => r.query)).toEqual([
+      "SELECT 1",
+      "select 2",
+    ])
+    expect(aligned.results[1]).toBe(result.results[1])
+  })
+
+  it("lets the chart resolver find the saved config after a formatting edit", () => {
+    // Given a bar config saved for the first query and a frame with old text
+    const rows = [[1, 2]]
+    const columns: ColumnDefinition[] = [
+      { name: "ts", type: "TIMESTAMP" },
+      { name: "qty", type: "DOUBLE" },
+    ]
+    const result: CellResult = {
+      results: [
+        {
+          type: "dql",
+          query: "select ts, qty from t",
+          columns,
+          dataset: rows,
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+    const config = {
+      xColumn: "ts",
+      queries: [
+        { type: "bar" as const, yColumns: ["qty"], axis: "right" as const },
+      ],
+    }
+    const statements = ["SELECT ts, qty\nFROM t"]
+    // When the frame is aligned to the reformatted statement and resolved
+    const aligned = alignResultsToQueries(result, statements)
+    const { renderQueries } = resolveDraw(
+      statements,
+      aligned.results.map(toExecResult),
+      config,
+    )
+    // Then the saved bar config applies instead of the inferred one
+    expect(renderQueries[0]).toMatchObject({ index: 0, type: "bar" })
   })
 })
 

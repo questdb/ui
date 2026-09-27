@@ -1093,11 +1093,44 @@ describe("CellRefreshEngine", () => {
     await vi.advanceTimersByTimeAsync(301)
     await flushAsync()
 
-    // Then the displayed frame survives without a refetch
+    // Then the rows survive without a refetch, under the statement's new text
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
-    expect(cellResults.get("c1")).toBe(frame)
+    const kept = cellResults.get("c1")
+    expect(kept?.timestamp).toBe(frame?.timestamp)
+    expect(kept?.results[0]).toEqual({
+      ...frame?.results[0],
+      query: "SELECT  1\nAS x",
+    })
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
+
+    // And the retexted frame is persisted as the array in memory, so the disk
+    // copy matches and hydration can release the cell again
+    const persistedFrames = deps.onSnapshotPersisted.mock.calls.map(
+      ([, results]) => results,
+    )
+    expect(persistedFrames[persistedFrames.length - 1]).toBe(kept?.results)
+  })
+
+  it("gives carried rows the statements' current text on a partial settle", async () => {
+    // Given a settled two-statement draw cell with auto-refresh off
+    syncOnScreen([drawCell("c1", "select 1 as x;\nselect 2 as y", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+    // When the first statement is reformatted and the second edited
+    engine.sync([drawCell("c1", "SELECT 1\n  AS x;\nselect 3 as y", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then only the edited statement executes, and every slot carries the
+    // text the editor holds — raw-text readers like the chart resolver agree
+    expect(
+      deps.executeSingle.mock.calls.slice(2).map((call) => call[0]),
+    ).toEqual(["select 3 as y"])
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual(
+      engine.getState("c1")?.queries,
+    )
   })
 
   it("executes only the edited statement when auto-refresh is off", async () => {
@@ -1482,6 +1515,7 @@ describe("CellRefreshEngine", () => {
     // Given a settled key that matches while a fetch is in flight
     const state = {
       queries: ["select 1"],
+      slotKeys: statementKeysFor(["select 1"]),
       queriesKey: "select 1",
       fetching: true,
       settledKey: "select 1",
@@ -2362,6 +2396,31 @@ describe("CellRefreshEngine", () => {
           (r) => r.type === "dql" && r.columns.length === 2,
         ),
       ).toBe(true)
+    })
+
+    it("re-persists a frame a casing edit kept, so hydration can release it", async () => {
+      // Given a settled single-statement grid with auto-refresh off
+      const cell = gridCell("g1", "select 1", ["select 1"], undefined)
+      syncOnScreen([cell])
+      await flushAsync()
+      deps.onSnapshotPersisted.mockClear()
+
+      // When the statement only changes casing and the debounce fires
+      engine.sync([
+        { ...cell, value: "SELECT 1", result: cellResults.get("g1") },
+      ])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+
+      // Then nothing executes, the frame carries the new text, and the array
+      // in memory is the one on disk
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+      const kept = cellResults.get("g1")
+      expect(kept?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+      expect(deps.onSnapshotPersisted).toHaveBeenLastCalledWith(
+        "g1",
+        kept?.results,
+      )
     })
 
     it("keeps the frame timestamp across slot settles — sibling tabs never lose their viewport token", async () => {

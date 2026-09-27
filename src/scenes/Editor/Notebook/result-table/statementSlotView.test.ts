@@ -20,6 +20,7 @@ const result = (queries: string[]): CellResult => ({
 
 const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   queries: [],
+  slotKeys: [],
   queriesKey: "",
   fetching: false,
   settledKey: null,
@@ -39,7 +40,11 @@ describe("buildStatementSlotViews", () => {
     // first failed its last round
     const statements = ["select 1", "select 2"]
     const [key1, key2] = statementKeysFor(statements)
-    const frame = deriveStatementFrame(statements, result(statements))!
+    const frame = deriveStatementFrame(
+      statements,
+      result(statements),
+      statementKeysFor(statements),
+    )!
     const state = fetchState({
       slotFetching: new Set([key2]),
       slotErrors: new Map([[key1, "boom"]]),
@@ -63,7 +68,11 @@ describe("buildStatementSlotViews", () => {
   it("marks a statement with no result as not run, with no refresh state", () => {
     // Given a frame whose second statement was added since the last run
     const statements = ["select 1", "select 2"]
-    const frame = deriveStatementFrame(statements, result(["select 1"]))!
+    const frame = deriveStatementFrame(
+      statements,
+      result(["select 1"]),
+      statementKeysFor(statements),
+    )!
 
     // When the slot views are built with no engine state at all
     const slots = buildStatementSlotViews(frame, undefined)
@@ -79,7 +88,11 @@ describe("buildStatementSlotViews", () => {
     // Given two identical statements, only the second refreshing
     const statements = ["select 1", "select 1"]
     const [first, second] = statementKeysFor(statements)
-    const frame = deriveStatementFrame(statements, result(statements))!
+    const frame = deriveStatementFrame(
+      statements,
+      result(statements),
+      statementKeysFor(statements),
+    )!
     const slots = buildStatementSlotViews(
       frame,
       fetchState({ slotFetching: new Set([second]) }),

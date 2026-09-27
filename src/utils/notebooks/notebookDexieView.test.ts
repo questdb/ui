@@ -25,6 +25,91 @@ describe("migratePersistedNotebookView preferred view", () => {
     expect(cell).not.toHaveProperty("isViewMaximized")
   })
 
+  it("folds a maximized cell's editor height into its result pane, once", () => {
+    // Given a draw cell main showed maximized at editor + result height
+    const view = {
+      cells: [
+        {
+          id: "chart",
+          position: 0,
+          value: "SELECT 1",
+          mode: "draw",
+          topHeight: 152,
+          bottomHeight: 350,
+          topResized: true,
+          isViewMaximized: true,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read after the upgrade
+    const migrated = migratePersistedNotebookView(view).cells[0]
+
+    // Then the result pane keeps the size the cell had, pinned as resized
+    expect(migrated).toMatchObject({
+      paneView: "result",
+      topHeight: 152,
+      bottomHeight: 502,
+      bottomResized: true,
+    })
+
+    // When the migrated row is read again (the flag is gone after a persist)
+    const reread = migratePersistedNotebookView({
+      cells: [migrated],
+    } as unknown as NotebookViewState).cells[0]
+
+    // Then nothing folds twice
+    expect(reread).toEqual(migrated)
+  })
+
+  it("folds the default editor height when a maximized cell stored none", () => {
+    // Given a maximized run cell whose editor kept its default height
+    const view = {
+      cells: [
+        {
+          id: "grid",
+          position: 0,
+          value: "SELECT 1",
+          bottomHeight: 350,
+          isViewMaximized: true,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read after the upgrade
+    const cell = migratePersistedNotebookView(view).cells[0]
+
+    // Then the result pane keeps the size main showed: default editor + result
+    expect(cell).toMatchObject({ paneView: "result", bottomHeight: 350 + 72 })
+    expect(cell).not.toHaveProperty("topHeight")
+  })
+
+  it("keeps the stored heights of a cell that was not maximized", () => {
+    // Given a split cell with stored heights
+    const view = {
+      cells: [
+        {
+          id: "grid",
+          position: 0,
+          value: "SELECT 1",
+          topHeight: 152,
+          bottomHeight: 350,
+          isViewMaximized: false,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read
+    const cell = migratePersistedNotebookView(view).cells[0]
+
+    // Then both panes keep their size
+    expect(cell).toMatchObject({
+      paneView: "editor_result",
+      topHeight: 152,
+      bottomHeight: 350,
+    })
+  })
+
   it("removes pane preference state from markdown", () => {
     const view = {
       cells: [
