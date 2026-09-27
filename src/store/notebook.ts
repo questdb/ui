@@ -3,6 +3,7 @@ import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
 import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
+import { isHighlightConfig } from "../components/ResultGrid/highlight/isHighlightConfig"
 
 // Virtualization + lazy hydration bound render and memory cost; the cap guards
 // notebook data size and the wrapper DOM / grid-layout work that still scales
@@ -171,24 +172,6 @@ export const dropLegacyChartConfigs = (
     return next
   })
   return { ...state, cells }
-}
-
-const RULE_KINDS = new Set(["previous", "value", "steps"])
-
-const isHighlightConfig = (value: unknown): value is HighlightConfig => {
-  if (typeof value !== "object" || value === null) return false
-  const candidate = value as Partial<HighlightConfig>
-  return (
-    Array.isArray(candidate.identityColumns) &&
-    candidate.identityColumns.every((name) => typeof name === "string") &&
-    Array.isArray(candidate.rules) &&
-    candidate.rules.every(
-      (rule) =>
-        typeof rule === "object" &&
-        rule !== null &&
-        RULE_KINDS.has((rule as { kind?: string }).kind ?? ""),
-    )
-  )
 }
 
 export const sanitizeHighlightConfig = (

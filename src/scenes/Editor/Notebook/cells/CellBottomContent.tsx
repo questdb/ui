@@ -13,11 +13,7 @@ import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
-import { createResultTrendStore } from "../result-table/resultTrendStore"
-import {
-  cellColumnsOf,
-  resolveHighlightConfig,
-} from "../result-table/highlightConfig"
+import { cellColumnsOf } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
@@ -50,7 +46,6 @@ export const CellBottomContent: React.FC<Props> = ({
   const cellRefresh = useCellRefresh()
   const fetchState = useCellFetchState(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
-  const trendStore = useMemo(() => createResultTrendStore(), [])
 
   // Tabs follow the editor's statement list; results attach to it by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no
@@ -85,19 +80,6 @@ export const CellBottomContent: React.FC<Props> = ({
     [resultIndexOf, reRunResultAt, cell.id],
   )
 
-  // Every settled statement feeds the baseline, not only the mounted tab.
-  useEffect(() => {
-    for (const slot of slots) {
-      if (slot.result?.type !== "dql") continue
-      trendStore.capture(
-        slot.key,
-        slot.result,
-        resolveHighlightConfig(cell.highlightConfig, slot.result)
-          .identityColumns,
-      )
-    }
-  }, [slots, cell.highlightConfig, trendStore])
-
   const cellColumns = useMemo(
     () => cellColumnsOf(slots.map((slot) => slot.result)),
     [slots],
@@ -106,9 +88,8 @@ export const CellBottomContent: React.FC<Props> = ({
   useEffect(
     () => () => {
       viewportStore.clear()
-      trendStore.clear()
     },
-    [viewportStore, trendStore],
+    [viewportStore],
   )
 
   if (cell.mode === "draw") {
@@ -146,7 +127,6 @@ export const CellBottomContent: React.FC<Props> = ({
         onReRun={reRunStatement}
         onYieldFocus={onYieldFocus}
         viewportStore={viewportStore}
-        trendStore={trendStore}
         highlightConfig={cell.highlightConfig}
         cellColumns={cellColumns}
       />

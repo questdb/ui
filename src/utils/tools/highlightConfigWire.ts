@@ -16,6 +16,7 @@ import {
   type RuleTarget,
 } from "../../components/ResultGrid/highlight/types"
 import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
+import { validateRuleFields } from "../../components/ResultGrid/highlight/validateRule"
 
 // Snake-case shape the agent tools speak for grid highlight rules, and its
 // mapping to the internal HighlightConfig. One flat rule object carries every
@@ -131,8 +132,8 @@ const mapRule = (
         return fail(index, "previous rules need op gt|lt|changed|changedBy")
       }
       if (op === "changedBy") {
-        if (typeof rule.threshold !== "number" || rule.threshold < 0) {
-          return fail(index, "changedBy needs a threshold of 0 or more")
+        if (typeof rule.threshold !== "number") {
+          return fail(index, "changedBy needs a threshold")
         }
         return {
           ok: true,
@@ -145,7 +146,7 @@ const mapRule = (
             condition: {
               op: "changedBy",
               threshold: rule.threshold,
-              unit: rule.unit ?? "absolute",
+              unit: rule.unit ?? "percent",
             },
           },
         }
@@ -190,7 +191,7 @@ const mapRule = (
         }
       }
       if (op === "matches") {
-        if (typeof rule.text !== "string" || rule.text.length === 0) {
+        if (typeof rule.text !== "string") {
           return fail(index, "matches needs a regular expression in text")
         }
         return {
@@ -201,9 +202,13 @@ const mapRule = (
           },
         }
       }
-      if (!isScalar(rule.value)) return fail(index, `${op} needs a value`)
       if (op === "between") {
-        if (!isScalar(rule.to)) return fail(index, "between needs value and to")
+        if (rule.value != null && !isScalar(rule.value)) {
+          return fail(index, "between value must be a number, string or null")
+        }
+        if (rule.to != null && !isScalar(rule.to)) {
+          return fail(index, "between to must be a number, string or null")
+        }
         if (
           rule.fill != null &&
           rule.fill !== "solid" &&
@@ -225,10 +230,16 @@ const mapRule = (
           ok: true,
           rule: {
             ...common,
-            condition: { op: "between", from: rule.value, to: rule.to, fill },
+            condition: {
+              op: "between",
+              from: rule.value ?? null,
+              to: rule.to ?? null,
+              fill,
+            },
           },
         }
       }
+      if (!isScalar(rule.value)) return fail(index, `${op} needs a value`)
       if (rule.fill != null || rule.high_color != null) {
         return fail(index, "fill and high_color apply to op between only")
       }
@@ -244,8 +255,8 @@ const mapRule = (
       }
     }
     case "steps": {
-      if (!Array.isArray(rule.steps) || rule.steps.length === 0) {
-        return fail(index, "steps needs a non-empty steps list")
+      if (!Array.isArray(rule.steps)) {
+        return fail(index, "steps needs a steps list")
       }
       const steps: HighlightStep[] = []
       for (const step of rule.steps) {
@@ -301,6 +312,13 @@ export const fromHighlightConfigWire = (
   for (const [index, rule] of wire.rules.entries()) {
     const mapped = mapRule(rule, index, createId)
     if (!mapped.ok) return { ok: false, error: mapped.error }
+    const [firstError] = Object.entries(
+      validateRuleFields(mapped.rule, "unknown"),
+    )
+    if (firstError) {
+      const [field, message] = firstError
+      return { ok: false, error: `rules[${index}].${field}: ${message}` }
+    }
     rules.push(mapped.rule)
   }
   return { ok: true, config: { identityColumns: wire.identity_columns, rules } }

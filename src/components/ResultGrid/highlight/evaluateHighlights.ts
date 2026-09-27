@@ -1,12 +1,15 @@
 import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { CellValue, ResultGridRow } from "../types"
 import { columnKindOf, type ColumnKind } from "./columnKind"
+import { columnRangeAt, type ColumnRange } from "./columnRange"
+import { asComparable, asNumber } from "./comparable"
 import {
   identityColumnIndexes,
   identityKeyOf,
   type IdentityIndex,
 } from "./identityIndex"
 import type {
+  BetweenBound,
   CellDirection,
   CellHighlight,
   HighlightConfig,
@@ -28,24 +31,6 @@ type EvaluateInput = {
 type ColumnRules = Map<number, HighlightRule[]>
 
 type OrderedHit = { order: number; hit: CellHighlight }
-
-// LONG columns reach the grid as decimal strings, so their 64-bit precision
-// survives JSON; for highlighting, a double is close enough.
-const asNumber = (value: CellValue): number | null => {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (typeof value !== "string" || value.trim() === "") return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-const asComparable = (value: CellValue, kind: ColumnKind): number | null => {
-  if (kind === "temporal") {
-    if (typeof value !== "string") return null
-    const parsed = Date.parse(value)
-    return Number.isNaN(parsed) ? null : parsed
-  }
-  return asNumber(value)
-}
 
 // SQL habits carry over: a typed 'EURUSD' or "EURUSD" means EURUSD.
 const asText = (value: number | string): string => {
@@ -80,6 +65,14 @@ const asComparableInput = (
   const parsed = typeof value === "number" ? value : Number(asText(value))
   return Number.isFinite(parsed) ? parsed : null
 }
+
+const asBound = (
+  bound: BetweenBound,
+  end: keyof ColumnRange,
+  kind: ColumnKind,
+  range: ColumnRange | null,
+): number | null =>
+  bound === null ? (range?.[end] ?? null) : asComparableInput(bound, kind)
 
 const resolveTargets = (
   rule: HighlightRule,
@@ -128,14 +121,15 @@ const matchPrevious = (
   rule: PreviousRule,
   value: CellValue,
   previousValue: CellValue,
+  kind: ColumnKind,
 ): CellHighlight | undefined => {
   const hit = { color: rule.color, alpha: 1, display: rule.display }
   const condition = rule.condition
   if (condition.op === "changed") {
     return value !== previousValue ? hit : undefined
   }
-  const current = asNumber(value)
-  const previous = asNumber(previousValue)
+  const current = asComparable(value, kind)
+  const previous = asComparable(previousValue, kind)
   if (current === null || previous === null) return undefined
   switch (condition.op) {
     case "gt":
@@ -179,6 +173,7 @@ const matchValue = (
   value: CellValue,
   kind: ColumnKind,
   pattern: RegExp | null,
+  range: ColumnRange | null,
 ): CellHighlight | undefined => {
   const hit = { color: rule.color, alpha: 1, display: rule.display }
   const condition = rule.condition
@@ -200,7 +195,8 @@ const matchValue = (
         const expected = asComparableInput(condition.value, kind)
         return current !== null && current === expected ? hit : undefined
       }
-      return value !== null && String(value) === asText(condition.value)
+      return value !== null &&
+        String(value).toLowerCase() === asText(condition.value).toLowerCase()
         ? hit
         : undefined
     }
@@ -215,8 +211,8 @@ const matchValue = (
     }
     case "between": {
       const current = asComparable(value, kind)
-      const from = asComparableInput(condition.from, kind)
-      const to = asComparableInput(condition.to, kind)
+      const from = asBound(condition.from, "from", kind, range)
+      const to = asBound(condition.to, "to", kind, range)
       if (current === null || from === null || to === null) return undefined
       if (condition.fill.kind === "solid") {
         return current >= from && current <= to ? hit : undefined
@@ -245,21 +241,37 @@ const matchSteps = (
   }
 }
 
+const hasAutoBound = (rule: ValueRule): boolean =>
+  rule.condition.op === "between" &&
+  (rule.condition.from === null || rule.condition.to === null)
+
 const directionOf = (
   value: CellValue,
   previousValue: CellValue,
+  kind: ColumnKind,
 ): CellDirection | undefined => {
-  const current = asNumber(value)
-  const previous = asNumber(previousValue)
+  const current = asComparable(value, kind)
+  const previous = asComparable(previousValue, kind)
   if (current === null || previous === null || current === previous) {
     return undefined
   }
   return current > previous ? "up" : "down"
 }
 
-const createRuleMatchers = (rules: ColumnRules) => {
+const createRuleMatchers = (
+  rules: ColumnRules,
+  columns: ColumnDefinition[],
+  dataset: ResultGridRow[],
+) => {
   const sortedSteps = new Map<string, StepsRule["steps"]>()
   const patterns = new Map<string, RegExp | null>()
+  const ranges = new Map<number, ColumnRange | null>()
+  const rangeAt = (index: number): ColumnRange | null => {
+    if (!ranges.has(index)) {
+      ranges.set(index, columnRangeAt(columns, dataset, index))
+    }
+    return ranges.get(index) ?? null
+  }
   for (const list of rules.values()) {
     for (const rule of list) {
       if (
@@ -287,10 +299,16 @@ const createRuleMatchers = (rules: ColumnRules) => {
     switch (rule.kind) {
       case "previous":
         return previousRow
-          ? matchPrevious(rule, value, previousRow[index])
+          ? matchPrevious(rule, value, previousRow[index], kind)
           : undefined
       case "value":
-        return matchValue(rule, value, kind, patterns.get(rule.id) ?? null)
+        return matchValue(
+          rule,
+          value,
+          kind,
+          patterns.get(rule.id) ?? null,
+          hasAutoBound(rule) ? rangeAt(index) : null,
+        )
       case "steps":
         return matchSteps(rule, sortedSteps.get(rule.id) ?? [], value)
     }
@@ -306,7 +324,7 @@ export const evaluateHighlights = ({
   const kinds = columns.map(columnKindOf)
   const rules = groupRulesByColumn(config.rules, columns, kinds)
   const directions = directionColumns(rules)
-  const matchRule = createRuleMatchers(rules)
+  const matchRule = createRuleMatchers(rules, columns, dataset)
   const identityIndexes = identityColumnIndexes(columns, config.identityColumns)
   const canCompare = previous !== null && identityIndexes !== null
 
@@ -334,25 +352,33 @@ export const evaluateHighlights = ({
       }
     }
     // Rules are walked per column, so the row channel keeps the hit of the
-    // rule listed first rather than the first column that matched.
+    // rule listed first rather than the first column that matched. A cell
+    // hit settles its own cell, but the column keeps looking for a row rule
+    // so the rest of the row still gets painted.
     let rowHit: OrderedHit | undefined
     for (const [index, list] of rules) {
       const value = row[index]
       const cellKey = rowIndex * columnCount + index
       if (previousRow && directions.has(index)) {
-        const cellDirection = directionOf(value, previousRow[index])
+        const cellDirection = directionOf(
+          value,
+          previousRow[index],
+          kinds[index],
+        )
         if (cellDirection) direction.set(cellKey, cellDirection)
       }
+      let cellHit: OrderedHit | undefined
       for (const rule of list) {
+        if (cellHit && rule.appliesTo !== "row") continue
         const hit = matchRule(rule, index, kinds[index], value, previousRow)
         if (!hit) continue
         const order = priority.get(rule) ?? Number.MAX_SAFE_INTEGER
         if (rule.appliesTo === "row") {
           if (!rowHit || order < rowHit.order) rowHit = { order, hit }
-        } else {
-          background.set(cellKey, { order, hit })
+          break
         }
-        break
+        cellHit = { order, hit }
+        background.set(cellKey, cellHit)
       }
     }
     if (rowHit) rowBackground.set(rowIndex, rowHit)

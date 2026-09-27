@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
@@ -67,31 +67,36 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   onClear,
   onCancel,
 }) => {
-  const [draft, setDraft] = useState<DraftConfig>(
-    initialDraft?.config ?? config,
-  )
-  const [expandedRuleId, setExpandedRuleId] = useState<string | null>(
-    initialDraft?.expandedRuleId ?? null,
-  )
+  const [{ config: draft, expandedRuleId }, setDraftState] =
+    useState<HighlightDraft>(initialDraft ?? { config, expandedRuleId: null })
   // Checked on Save only; the map stays until the next Save.
   const [errors, setErrors] = useState<Map<string, RuleErrors>>(new Map())
   const [identityError, setIdentityError] = useState<string | null>(null)
 
-  const setRules = (rules: DraftRule[]) => setDraft({ ...draft, rules })
+  // Every edit lands in the session store as well, so a cell remount
+  // mid-session restores it.
+  const updateDraft = (patch: Partial<HighlightDraft>) => {
+    const next = { config: draft, expandedRuleId, ...patch }
+    setDraftState(next)
+    onDraftChange(next)
+  }
+
+  const setDraft = (next: DraftConfig) => updateDraft({ config: next })
+
+  const setExpandedRuleId = (id: string | null) =>
+    updateDraft({ expandedRuleId: id })
+
+  const setRules = (rules: DraftRule[], expanded = expandedRuleId) =>
+    updateDraft({ config: { ...draft, rules }, expandedRuleId: expanded })
 
   const addRule = () => {
     const rule = createUnsetRule(createRuleId())
-    setRules([...draft.rules, rule])
-    setExpandedRuleId(rule.id)
+    setRules([...draft.rules, rule], rule.id)
   }
 
   const updateRule = (next: DraftRule) => {
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
-
-  useEffect(() => {
-    onDraftChange({ config: draft, expandedRuleId })
-  }, [draft, expandedRuleId, onDraftChange])
 
   const save = () => {
     const next = validateRules(draft.rules, columns)
@@ -160,10 +165,12 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
               }
               onChange={updateRule}
               onMove={(move) => setRules(moveRule(draft.rules, index, move))}
-              onRemove={() => {
-                setRules(draft.rules.filter((r) => r.id !== rule.id))
-                if (expandedRuleId === rule.id) setExpandedRuleId(null)
-              }}
+              onRemove={() =>
+                setRules(
+                  draft.rules.filter((r) => r.id !== rule.id),
+                  expandedRuleId === rule.id ? null : expandedRuleId,
+                )
+              }
             />
           ))}
         </RuleList>

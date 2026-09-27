@@ -1,5 +1,9 @@
 import React from "react"
-import type { HighlightRule } from "../../../../components/ResultGrid/highlight"
+import type {
+  BetweenBound,
+  ColumnRange,
+  HighlightRule,
+} from "../../../../components/ResultGrid/highlight"
 import { FieldLabel } from "../CellChart/chartSettingsStyles"
 import {
   CompactInput,
@@ -17,6 +21,22 @@ const CHANGE_UNIT_OPTIONS = [
 const parseInput = (raw: string, numeric: boolean): number | string =>
   numeric && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : raw
 
+// An empty between bound is automatic and follows the column's current
+// minimum or maximum.
+const parseBound = (raw: string, numeric: boolean): BetweenBound =>
+  raw === "" ? null : parseInput(raw, numeric)
+
+const compact = (value: number) => String(Number(value.toPrecision(6)))
+
+const autoPlaceholder = (
+  end: keyof ColumnRange,
+  numeric: boolean,
+  range: ColumnRange | null,
+) =>
+  numeric && range
+    ? `auto · ${compact(range[end])}`
+    : `auto (${end === "from" ? "min" : "max"})`
+
 // Uncontrolled so the field can be emptied while typing; the draft keeps its
 // last value until a new magnitude (0 or more) is typed.
 const parseThreshold = (raw: string): number | null => {
@@ -28,9 +48,10 @@ const parseThreshold = (raw: string): number | null => {
 export const ConditionInputs: React.FC<{
   rule: HighlightRule
   numeric: boolean
+  range: ColumnRange | null
   errors: RuleErrors
   onChange: (rule: HighlightRule) => void
-}> = ({ rule, numeric, errors, onChange }) => {
+}> = ({ rule, numeric, range, errors, onChange }) => {
   const inputType = numeric ? "number" : "text"
   const variantFor = (field: string) => (errors[field] ? "error" : undefined)
   const errorFor = (field: string) =>
@@ -135,14 +156,14 @@ export const ConditionInputs: React.FC<{
                   step="any"
                   variant={variantFor("from")}
                   aria-label="From"
-                  placeholder="from"
-                  value={condition.from}
+                  placeholder={autoPlaceholder("from", numeric, range)}
+                  value={condition.from ?? ""}
                   onChange={(e) =>
                     onChange({
                       ...rule,
                       condition: {
                         ...condition,
-                        from: parseInput(e.target.value, numeric),
+                        from: parseBound(e.target.value, numeric),
                       },
                     })
                   }
@@ -156,14 +177,14 @@ export const ConditionInputs: React.FC<{
                   step="any"
                   variant={variantFor("to")}
                   aria-label="To"
-                  placeholder="to"
-                  value={condition.to}
+                  placeholder={autoPlaceholder("to", numeric, range)}
+                  value={condition.to ?? ""}
                   onChange={(e) =>
                     onChange({
                       ...rule,
                       condition: {
                         ...condition,
-                        to: parseInput(e.target.value, numeric),
+                        to: parseBound(e.target.value, numeric),
                       },
                     })
                   }

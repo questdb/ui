@@ -40,7 +40,6 @@ import {
   targetKind,
   targetToValue,
   withConditionOption,
-  withSeededRange,
   type ConditionOption,
   type DraftRule,
   type RuleMove,
@@ -148,31 +147,17 @@ export const RuleRow: React.FC<Props> = ({
     const target: RuleTarget = option
       ? targetFromValue(value)
       : { kind: "column", name: value }
-    if (rule.kind === "unset") {
-      onChange({ ...rule, target })
-      return
-    }
-    onChange(withSeededRange({ ...rule, target }, rangeOf(target)))
+    onChange({ ...rule, target })
   }
 
   const changeCondition = (option: string) => {
     if (rule.kind === "unset") {
       if (rule.target) {
-        onChange(
-          withSeededRange(
-            createRule(rule.id, rule.target, option as ConditionOption),
-            rangeOf(rule.target),
-          ),
-        )
+        onChange(createRule(rule.id, rule.target, option as ConditionOption))
       }
       return
     }
-    onChange(
-      withSeededRange(
-        withConditionOption(rule, option as ConditionOption),
-        rangeOf(rule.target),
-      ),
-    )
+    onChange(withConditionOption(rule, option as ConditionOption))
   }
 
   const betweenFill =
@@ -355,6 +340,7 @@ export const RuleRow: React.FC<Props> = ({
                   <ConditionInputs
                     rule={rule}
                     numeric={kind === "numeric"}
+                    range={rangeOf(rule.target)}
                     errors={errors ?? {}}
                     onChange={onChange}
                   />

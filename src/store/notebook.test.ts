@@ -81,7 +81,21 @@ describe("dropMalformedHighlightConfigs", () => {
 
   it("keeps a well-formed config and drops a malformed one", () => {
     // Given a valid config and one with an unknown rule kind
-    const ok = { identityColumns: [], rules: [{ kind: "value" }] }
+    const ok = {
+      identityColumns: [],
+      rules: [
+        {
+          id: "r1",
+          kind: "value",
+          enabled: true,
+          target: { kind: "column", name: "price" },
+          display: "always",
+          appliesTo: "cell",
+          condition: { op: "gt", value: 100 },
+          color: "dataSeries2",
+        },
+      ],
+    }
     const state: NotebookViewState = {
       cells: [
         cell(ok),

@@ -24,8 +24,8 @@ describe("createResultTrendStore", () => {
     const second = result([["BTC", 2]])
 
     // When both are captured
-    const firstEntry = store.capture("s1", first, ["symbol"])
-    const secondEntry = store.capture("s1", second, ["symbol"])
+    const firstEntry = store.capture("c1", "s1", first, ["symbol"])
+    const secondEntry = store.capture("c1", "s1", second, ["symbol"])
 
     // Then the second compares against the first
     expect(firstEntry.previous).toBeNull()
@@ -38,10 +38,10 @@ describe("createResultTrendStore", () => {
     // Given a captured result
     const store = createResultTrendStore(() => 100)
     const data = result([["BTC", 1]])
-    const entry = store.capture("s1", data, ["symbol"])
+    const entry = store.capture("c1", "s1", data, ["symbol"])
 
     // When captured again unchanged
-    const again = store.capture("s1", data, ["symbol"])
+    const again = store.capture("c1", "s1", data, ["symbol"])
 
     // Then nothing advances
     expect(again).toBe(entry)
@@ -50,12 +50,12 @@ describe("createResultTrendStore", () => {
   it("drops the baseline when the identity columns change", () => {
     // Given two results captured under one identity
     const store = createResultTrendStore(() => 100)
-    store.capture("s1", result([["BTC", 1]]), ["symbol"])
+    store.capture("c1", "s1", result([["BTC", 1]]), ["symbol"])
     const second = result([["BTC", 2]])
-    store.capture("s1", second, ["symbol"])
+    store.capture("c1", "s1", second, ["symbol"])
 
     // When the identity changes for the same result
-    const entry = store.capture("s1", second, ["price"])
+    const entry = store.capture("c1", "s1", second, ["price"])
 
     // Then there is no previous index and the revision is unchanged
     expect(entry.previous).toBeNull()
@@ -65,7 +65,7 @@ describe("createResultTrendStore", () => {
   it("drops the baseline when the column set changes", () => {
     // Given a result, then one with a different column set
     const store = createResultTrendStore(() => 100)
-    store.capture("s1", result([["BTC", 1]]), ["symbol"])
+    store.capture("c1", "s1", result([["BTC", 1]]), ["symbol"])
     const widened = result(
       [["BTC", 1, 2]],
       [
@@ -76,7 +76,7 @@ describe("createResultTrendStore", () => {
     )
 
     // When captured
-    const entry = store.capture("s1", widened, ["symbol"])
+    const entry = store.capture("c1", "s1", widened, ["symbol"])
 
     // Then the comparison starts over
     expect(entry.previous).toBeNull()
@@ -87,13 +87,33 @@ describe("createResultTrendStore", () => {
     let time = 100
     const store = createResultTrendStore(() => time)
     const data = result([["BTC", 1]])
-    store.capture("s1", data, ["symbol"])
+    store.capture("c1", "s1", data, ["symbol"])
 
     // When time passes and the identity changes without a new result
     time = 500
-    const entry = store.capture("s1", data, ["price"])
+    const entry = store.capture("c1", "s1", data, ["price"])
 
     // Then the capture time stays at the first result
     expect(entry.capturedAt).toBe(100)
+  })
+})
+
+describe("createResultTrendStore: cell scope", () => {
+  it("keeps cells apart and clears only the asked cell", () => {
+    // Given the same statement key captured for two cells
+    const store = createResultTrendStore(() => 100)
+    const data = result([["BTC", 1]])
+    store.capture("c1", "s1", data, ["symbol"])
+    store.capture("c2", "s1", data, ["symbol"])
+
+    // When one cell is cleared and both capture a new result
+    store.clearCell("c1")
+    const next = result([["BTC", 2]])
+    const cleared = store.capture("c1", "s1", next, ["symbol"])
+    const kept = store.capture("c2", "s1", next, ["symbol"])
+
+    // Then only the kept cell still has a baseline
+    expect(cleared.previous).toBeNull()
+    expect(kept.previous?.rows.get("BTC")).toEqual(["BTC", 1])
   })
 })

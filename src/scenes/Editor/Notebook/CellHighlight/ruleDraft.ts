@@ -6,7 +6,6 @@ import {
   DEFAULT_RULE_COLOR,
   defaultDisplayFor,
   type ColumnKind,
-  type ColumnRange,
   type HighlightColorToken,
   type HighlightRule,
   type PreviousRule,
@@ -189,7 +188,12 @@ export const withConditionOption = (
         ...base,
         kind: "value",
         display: defaultDisplayFor("value"),
-        condition: { op: "between", from: 0, to: 0, fill: { kind: "solid" } },
+        condition: {
+          op: "between",
+          from: null,
+          to: null,
+          fill: { kind: "solid" },
+        },
         color: carriedColor,
       }
     case "value.isNull":
@@ -226,19 +230,6 @@ export const withConditionOption = (
       }
   }
 }
-
-// A between range starts at the column's current span, so a scale begins at
-// the data instead of at 0…0.
-export const withSeededRange = (
-  rule: HighlightRule,
-  range: ColumnRange | null,
-): HighlightRule =>
-  range && rule.kind === "value" && rule.condition.op === "between"
-    ? {
-        ...rule,
-        condition: { ...rule.condition, from: range.from, to: range.to },
-      }
-    : rule
 
 // A freshly added row: nothing chosen yet. It stays in the draft until a
 // column and a condition are picked, and is dropped on save otherwise.

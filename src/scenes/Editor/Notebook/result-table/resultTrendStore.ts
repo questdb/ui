@@ -16,16 +16,24 @@ export type TrendEntry = {
   capturedAt: number
 }
 
-// Keyed per statement. Fed every time a statement's result settles, from the
-// cell, so a statement whose tab is not mounted still advances its baseline.
+// One per notebook, keyed per cell and statement. Fed once, when the cells
+// state changes, so every statement advances its baseline whether or not its
+// tab is mounted, and a cell remount keeps it. The grid only reads.
 export type ResultTrendStore = {
+  get: (cellId: string, statementKey: string) => TrendEntry | undefined
   capture: (
+    cellId: string,
     statementKey: string,
     result: DqlQueryResult,
     identityColumns: string[],
   ) => TrendEntry
-  clear: () => void
+  clearCell: (cellId: string) => void
 }
+
+const KEY_SEPARATOR = "\u0000"
+
+const entryKey = (cellId: string, statementKey: string) =>
+  `${cellId}${KEY_SEPARATOR}${statementKey}`
 
 const sameStrings = (a: string[], b: string[]) =>
   a.length === b.length && a.every((value, index) => value === b[index])
@@ -54,8 +62,13 @@ export const createResultTrendStore = (
   >()
 
   return {
-    capture(statementKey, result, identityColumns) {
-      const existing = entries.get(statementKey)
+    get(cellId, statementKey) {
+      return entries.get(entryKey(cellId, statementKey))
+    },
+
+    capture(cellId, statementKey, result, identityColumns) {
+      const key = entryKey(cellId, statementKey)
+      const existing = entries.get(key)
       const sameIdentity =
         existing !== undefined &&
         sameStrings(existing.identityColumns, identityColumns)
@@ -80,12 +93,15 @@ export const createResultTrendStore = (
           : existing.revision,
         capturedAt: isNewResult ? now() : existing.capturedAt,
       }
-      entries.set(statementKey, entry)
+      entries.set(key, entry)
       return entry
     },
 
-    clear() {
-      entries.clear()
+    clearCell(cellId) {
+      const prefix = entryKey(cellId, "")
+      for (const key of [...entries.keys()]) {
+        if (key.startsWith(prefix)) entries.delete(key)
+      }
     },
   }
 }

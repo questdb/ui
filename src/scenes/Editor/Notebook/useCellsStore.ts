@@ -13,9 +13,16 @@ import type { AutoRefresh } from "../../../store/notebook"
 type Options = {
   initialCells: NotebookCell[]
   persistCells: (cells: NotebookCell[]) => void
+  // Runs synchronously on every write, hydration included, before React
+  // renders the new cells.
+  onCellsChange: (prev: NotebookCell[], next: NotebookCell[]) => void
 }
 
-export const useCellsStore = ({ initialCells, persistCells }: Options) => {
+export const useCellsStore = ({
+  initialCells,
+  persistCells,
+  onCellsChange,
+}: Options) => {
   const [cells, setCells] = useState<NotebookCell[]>(initialCells)
 
   const cellsRef = useRef(cells)
@@ -26,12 +33,14 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   // cells and clobbering the first.
   const updateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
-      const next = updater(cellsRef.current)
+      const prev = cellsRef.current
+      const next = updater(prev)
       cellsRef.current = next
+      onCellsChange(prev, next)
       persistCells(next)
       setCells(next)
     },
-    [persistCells],
+    [persistCells, onCellsChange],
   )
 
   // Hydration-only setter: restoring persisted result snapshots must NOT
@@ -42,11 +51,13 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   // identity ([] deps) so the hydration effect runs once per mount.
   const hydrateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
-      const next = updater(cellsRef.current)
+      const prev = cellsRef.current
+      const next = updater(prev)
       cellsRef.current = next
+      onCellsChange(prev, next)
       setCells(next)
     },
-    [],
+    [onCellsChange],
   )
 
   const updateCell = useCallback(

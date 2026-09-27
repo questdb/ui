@@ -46,6 +46,7 @@ describe("rule summaries", () => {
         condition: { op: "between", from: -5, to: 10, fill: { kind: "solid" } },
       }),
     ).toBe("price between -5 and 10")
+    expect(ruleSummary(range)).toBe("price between auto and auto")
     expect(
       ruleSummary({ ...text, condition: { op: "contains", text: "USD" } }),
     ).toBe("symbol contains 'USD'")

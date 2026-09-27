@@ -85,6 +85,9 @@ import {
   clearChartZooms,
 } from "./cellVirtualization/chartZoomStore"
 import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
+import { createResultTrendStore } from "./result-table/resultTrendStore"
+import { captureResultTrends } from "./result-table/resultTrendCapture"
+import { ResultTrendProvider } from "./result-table/ResultTrendContext"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -274,9 +277,18 @@ export const NotebookProvider: React.FC<{
       },
     })
 
+  // Baselines for "previous result" highlight rules live with the notebook,
+  // so a cell remount (maximize, restore) keeps them.
+  const resultTrendStore = useMemo(() => createResultTrendStore(), [])
+  const captureTrends = useCallback(
+    (prev: NotebookCell[], next: NotebookCell[]) =>
+      captureResultTrends(resultTrendStore, prev, next),
+    [resultTrendStore],
+  )
   const store = useCellsStore({
     initialCells: initialState.cells,
     persistCells,
+    onCellsChange: captureTrends,
   })
 
   const { hydrateCells, cellsRef } = store
@@ -897,7 +909,9 @@ export const NotebookProvider: React.FC<{
           <CellRefreshProvider value={cellRefreshEngine}>
             <CellVirtualizationProvider value={cellVirtualizationEngine}>
               <CellResultHydrationProvider value={resultHydration}>
-                {children}
+                <ResultTrendProvider value={resultTrendStore}>
+                  {children}
+                </ResultTrendProvider>
               </CellResultHydrationProvider>
             </CellVirtualizationProvider>
           </CellRefreshProvider>

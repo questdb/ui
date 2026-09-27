@@ -135,6 +135,28 @@ describe("validateRule", () => {
     expect(validateRule(between(5, 10, true), columns)).toEqual({})
   })
 
+  it("accepts automatic between bounds without ordering them", () => {
+    // Given a gradient with both bounds automatic and a solid rule with one
+    const rule = valueRule("value.between")
+    if (rule.kind !== "value" || rule.condition.op !== "between")
+      throw new Error("expected between")
+    const auto = {
+      ...rule,
+      condition: {
+        ...rule.condition,
+        fill: { kind: "gradient" as const, highColor: "dataPositive" as const },
+      },
+    }
+    const openTop = {
+      ...rule,
+      condition: { ...rule.condition, from: 10, to: null },
+    }
+
+    // Then nothing is flagged
+    expect(validateRule(auto, columns)).toEqual({})
+    expect(validateRule(openTop, columns)).toEqual({})
+  })
+
   it("requires text for contains and a compiling pattern for matches", () => {
     // Given contains and matches rules on symbol
     const contains = valueRule("value.contains", symbol)

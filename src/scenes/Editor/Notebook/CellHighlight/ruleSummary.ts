@@ -1,9 +1,15 @@
-import type { HighlightColorToken } from "../../../../components/ResultGrid/highlight"
+import type {
+  BetweenBound,
+  HighlightColorToken,
+} from "../../../../components/ResultGrid/highlight"
 import type { DraftRule } from "./ruleDraft"
 
 // Strings read like the SQL the user just wrote: single quotes.
 const formatValue = (value: string | number) =>
   typeof value === "string" ? `'${value}'` : String(value)
+
+const formatBound = (bound: BetweenBound) =>
+  bound === null ? "auto" : formatValue(bound)
 
 export const ruleSummary = (rule: DraftRule): string => {
   const target =
@@ -41,7 +47,7 @@ export const ruleSummary = (rule: DraftRule): string => {
         case "eq":
           return `${target} = ${formatValue(condition.value)}`
         case "between":
-          return `${target} between ${formatValue(condition.from)} and ${formatValue(condition.to)}`
+          return `${target} between ${formatBound(condition.from)} and ${formatBound(condition.to)}`
         case "isNull":
           return `${target} is null`
         case "contains":

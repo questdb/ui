@@ -22,7 +22,8 @@ import { useNotebookActions } from "../NotebookProvider"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
-import { FLASH_DURATION_MS, type ResultTrendStore } from "./resultTrendStore"
+import { FLASH_DURATION_MS } from "./resultTrendStore"
+import { useResultTrendStore } from "./ResultTrendContext"
 import { resolveHighlightConfig } from "./highlightConfig"
 import {
   columnRangeOf,
@@ -47,7 +48,6 @@ type Props = {
   onReRun: (statementKey: string) => void
   onYieldFocus: () => void
   viewportStore: ResultGridViewportStore
-  trendStore: ResultTrendStore
   highlightConfig: HighlightConfig | undefined
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
@@ -100,7 +100,6 @@ const ResultGridPanelInner: React.FC<Props> = ({
   onReRun,
   onYieldFocus,
   viewportStore,
-  trendStore,
   highlightConfig: savedHighlightConfig,
   cellColumns,
 }) => {
@@ -114,6 +113,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   })
   const { maxColumnWidth } = useLocalStorage()
   const { setCellHighlightConfig } = useNotebookActions()
+  const trendStore = useResultTrendStore()
   const [hasSelection, setHasSelection] = useState(false)
   const [restoredHighlight] = useState(
     () => highlightSettingsSessions.get(cellId) !== undefined,
@@ -137,11 +137,11 @@ const ResultGridPanelInner: React.FC<Props> = ({
     () => resolveHighlightConfig(savedHighlightConfig, data),
     [savedHighlightConfig, data],
   )
-  const trend = useMemo(
-    () =>
-      trendStore.capture(statementKey, data, highlightConfig.identityColumns),
-    [trendStore, statementKey, data, highlightConfig],
-  )
+  // Captured when the cells state changed, before this render.
+  const trend = trendStore.get(cellId, statementKey)
+  const previous = trend?.result === data ? trend.previous : null
+  const capturedAt = trend?.capturedAt ?? 0
+  const revision = trend?.revision ?? 0
   const columnRange = useMemo(
     () => columnRangeOf(data.columns, data.dataset),
     [data],
@@ -151,22 +151,22 @@ const ResultGridPanelInner: React.FC<Props> = ({
       columns: data.columns,
       dataset: data.dataset,
       config: highlightConfig,
-      previous: trend.previous,
+      previous,
     })
-    return { lookup: withoutExpiredFlashes(lookup, trend.capturedAt), stats }
-  }, [data, highlightConfig, trend])
+    return { lookup: withoutExpiredFlashes(lookup, capturedAt), stats }
+  }, [data, highlightConfig, previous, capturedAt])
 
-  const openHighlight = () => {
+  const openHighlight = useCallback(() => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
     highlightSettingsSessions.set(cellId, { draft: null })
     setHighlightSession((session) => session + 1)
     setHighlightOpen(true)
-  }
+  }, [cellId])
 
-  const closeHighlight = () => {
+  const closeHighlight = useCallback(() => {
     highlightSettingsSessions.clear(cellId)
     setHighlightOpen(false)
-  }
+  }, [cellId])
 
   const keepHighlightDraft = useCallback(
     (draft: HighlightDraft) =>
@@ -190,13 +190,16 @@ const ResultGridPanelInner: React.FC<Props> = ({
     closeHighlight()
   }
 
-  const cancelHighlight = (method: string) => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
-      source: "notebook",
-      method,
-    })
-    closeHighlight()
-  }
+  const cancelHighlight = useCallback(
+    (method: string) => {
+      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
+        source: "notebook",
+        method,
+      })
+      closeHighlight()
+    },
+    [closeHighlight],
+  )
 
   // The spotlight gear and the kebab entry send the same event; while the
   // drawer is open it acts as a toggle instead of remounting the draft.
@@ -212,7 +215,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
         toggle,
       )
-  })
+  }, [cellId, highlightOpen, openHighlight, cancelHighlight])
 
   return (
     <>
@@ -230,7 +233,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         maxColumnWidth={maxColumnWidth}
         runToken={runToken}
         cellHighlights={highlights.lookup}
-        flashParity={trend.revision % 2 === 0 ? 0 : 1}
+        flashParity={revision % 2 === 0 ? 0 : 1}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}
         initialColumnOrder={columnLayout?.columnOrder}

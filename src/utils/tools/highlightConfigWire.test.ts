@@ -153,9 +153,83 @@ describe("fromHighlightConfigWire", () => {
       error: "rules[0]: unknown color 'hotpink'",
     })
     if (negativeThreshold.ok) throw new Error("expected negative to fail")
-    expect(negativeThreshold.error).toContain("threshold of 0 or more")
+    expect(negativeThreshold.error).toBe(
+      "rules[0].threshold: Should be non-negative",
+    )
     if (fillOnGt.ok) throw new Error("expected fillOnGt to fail")
     expect(fillOnGt.error).toContain("apply to op between only")
+  })
+
+  it("orders between bounds like the drawer and defaults changedBy to percent", () => {
+    // Given a flat gradient, a reversed solid range, and a changedBy without a unit
+    const between = (value: number, to: number, fill?: "gradient") =>
+      fromHighlightConfigWire({
+        identity_columns: [],
+        rules: [{ kind: "value", column: "v", op: "between", value, to, fill }],
+      })
+    const noUnit = fromHighlightConfigWire({
+      identity_columns: ["k"],
+      rules: [{ kind: "previous", column: "v", op: "changedBy", threshold: 1 }],
+    })
+
+    // Then the flat gradient and the reversed range fail, and the unit is percent
+    expect(between(10, 10, "gradient")).toMatchObject({
+      ok: false,
+      error: "rules[0].to: Should be above From",
+    })
+    expect(between(10, 5)).toMatchObject({
+      ok: false,
+      error: "rules[0].to: Should be at least From",
+    })
+    expect(between(10, 10).ok).toBe(true)
+    expect(noUnit).toMatchObject({
+      ok: true,
+      config: { rules: [{ condition: { unit: "percent" } }] },
+    })
+  })
+})
+
+describe("fromHighlightConfigWire: automatic between bounds", () => {
+  it("maps a null value or to onto an automatic bound and writes it back as null", () => {
+    // Given a self-scaling gradient and a range open at the top
+    const wire = {
+      identity_columns: [],
+      rules: [
+        {
+          kind: "value" as const,
+          column: "price",
+          op: "between" as const,
+          value: null,
+          to: null,
+          fill: "gradient" as const,
+          color: "red" as const,
+          high_color: "green" as const,
+          display: "always" as const,
+        },
+        {
+          kind: "value" as const,
+          column: "price",
+          op: "between" as const,
+          value: 10,
+          to: null,
+          color: "teal" as const,
+          display: "always" as const,
+        },
+      ],
+    }
+
+    // When parsed
+    const parsed = fromHighlightConfigWire(wire, nextId)
+    if (!parsed.ok) throw new Error(parsed.error)
+
+    // Then both bounds are automatic on the first rule and only `to` on the second
+    expect(parsed.config.rules[0]).toMatchObject({
+      condition: { op: "between", from: null, to: null },
+    })
+    expect(parsed.config.rules[1]).toMatchObject({
+      condition: { op: "between", from: 10, to: null },
+    })
+    expect(toHighlightConfigWire(parsed.config)).toEqual(wire)
   })
 })
 

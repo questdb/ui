@@ -53,14 +53,13 @@ export type BetweenFill =
   | { kind: "solid" }
   | { kind: "gradient"; highColor: HighlightColorToken }
 
+// A null bound is automatic: the column's current minimum for `from`, its
+// current maximum for `to`, read from the result at evaluation time.
+export type BetweenBound = number | string | null
+
 export type ValueCondition =
   | { op: "gt" | "gte" | "lt" | "lte" | "eq"; value: number | string }
-  | {
-      op: "between"
-      from: number | string
-      to: number | string
-      fill: BetweenFill
-    }
+  | { op: "between"; from: BetweenBound; to: BetweenBound; fill: BetweenFill }
   | { op: "isNull" }
   | { op: "contains"; text: string }
   | { op: "matches"; pattern: string }

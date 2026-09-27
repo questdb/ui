@@ -734,15 +734,15 @@
                       "matches",
                       null
                     ],
-                    "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
+                    "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
                   },
                   "value": {
                     "type": ["number", "string", "null"],
-                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings. For between, null = auto: the column's current minimum, recomputed on every result."
                   },
                   "to": {
                     "type": ["number", "string", "null"],
-                    "description": "value between: the upper bound, inclusive."
+                    "description": "value between: the upper bound, inclusive. null = auto: the column's current maximum, recomputed on every result."
                   },
                   "threshold": {
                     "type": ["number", "null"],
@@ -751,11 +751,11 @@
                   "unit": {
                     "type": ["string", "null"],
                     "enum": ["absolute", "percent", null],
-                    "description": "previous changedBy: threshold unit. null = absolute."
+                    "description": "previous changedBy: threshold unit. null = percent."
                   },
                   "text": {
                     "type": ["string", "null"],
-                    "description": "value contains: case-insensitive substring. value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
+                    "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
                   },
                   "steps": {
                     "type": ["array", "null"],
@@ -806,7 +806,7 @@
                   "fill": {
                     "type": ["string", "null"],
                     "enum": ["solid", "gradient", null],
-                    "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell."
+                    "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell. With value and to both null the scale always spans the column's current min and max."
                   },
                   "high_color": {
                     "type": ["string", "null"],
@@ -1241,15 +1241,15 @@
                             "matches",
                             null
                           ],
-                          "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
+                          "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
                         },
                         "value": {
                           "type": ["number", "string", "null"],
-                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings."
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings. For between, null = auto: the column's current minimum, recomputed on every result."
                         },
                         "to": {
                           "type": ["number", "string", "null"],
-                          "description": "value between: the upper bound, inclusive."
+                          "description": "value between: the upper bound, inclusive. null = auto: the column's current maximum, recomputed on every result."
                         },
                         "threshold": {
                           "type": ["number", "null"],
@@ -1258,11 +1258,11 @@
                         "unit": {
                           "type": ["string", "null"],
                           "enum": ["absolute", "percent", null],
-                          "description": "previous changedBy: threshold unit. null = absolute."
+                          "description": "previous changedBy: threshold unit. null = percent."
                         },
                         "text": {
                           "type": ["string", "null"],
-                          "description": "value contains: case-insensitive substring. value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
+                          "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
                         },
                         "steps": {
                           "type": ["array", "null"],
@@ -1313,7 +1313,7 @@
                         "fill": {
                           "type": ["string", "null"],
                           "enum": ["solid", "gradient", null],
-                          "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell."
+                          "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell. With value and to both null the scale always spans the column's current min and max."
                         },
                         "high_color": {
                           "type": ["string", "null"],

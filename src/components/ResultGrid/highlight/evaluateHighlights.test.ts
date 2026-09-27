@@ -220,6 +220,41 @@ describe("evaluateHighlights: previous result rules", () => {
     expect(anyChange.background(1, PRICE)).toBeDefined()
   })
 
+  it("compares timestamps with the previous result as instants", () => {
+    // Given up and down rules on ts
+    const later = rule({
+      id: "later",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const earlier = rule({
+      id: "earlier",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "lt" },
+      color: "dataNegative",
+    })
+
+    // When a row's timestamp moves forward and another's moves back
+    const { lookup } = evaluateHighlights({
+      columns,
+      dataset: [
+        row("A", 1, 1, "2026-09-24T10:00:05.000000Z"),
+        row("B", 1, 1, "2026-09-24T09:59:00.000000Z"),
+      ],
+      config: config([later, earlier]),
+      previous: previousOf([row("A", 1, 1), row("B", 1, 1)]),
+    })
+
+    // Then the glyph and color follow the instant, not the text
+    expect(lookup.background(0, TS)?.color).toBe("dataPositive")
+    expect(lookup.direction(0, TS)).toBe("up")
+    expect(lookup.background(1, TS)?.color).toBe("dataNegative")
+    expect(lookup.direction(1, TS)).toBe("down")
+  })
+
   it("keeps the direction glyph when a value rule wins the background", () => {
     // Given a breach rule listed before the movement rule
     const previous = previousOf([row("BTC", 200, 1)])
@@ -366,7 +401,7 @@ describe("evaluateHighlights: value rules", () => {
         id: "eq",
         kind: "value",
         target: { kind: "column", name: "symbol" },
-        condition: { op: "eq", value: " 'BTC-USDT' " },
+        condition: { op: "eq", value: " 'btc-usdt' " },
         color: "dataSeries2",
       }),
       rule({
@@ -384,7 +419,7 @@ describe("evaluateHighlights: value rules", () => {
       row("ETH-BTC", 1, 1),
     ])
 
-    // Then both rows match without the quotes
+    // Then both rows match without the quotes, ignoring case
     expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries2")
     expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries3")
   })
@@ -559,6 +594,62 @@ describe("evaluateHighlights: rules that apply to the row", () => {
     expect(reordered.background(0, PRICE)?.color).toBe("dataSeries3")
     expect(reordered.row(0)?.color).toBe("dataSeries3")
   })
+
+  it("still paints the row when the row rule follows a matching cell rule on the same column", () => {
+    // Given a cell rule and then a row rule, both on price and both matching
+    const rules = [
+      rule({
+        id: "price-cell",
+        kind: "value",
+        appliesTo: "cell",
+        condition: { op: "lt", value: 10 },
+        color: "dataNegative",
+      }),
+      rule({
+        id: "price-row",
+        kind: "value",
+        appliesTo: "row",
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries3",
+      }),
+    ]
+
+    // When a row matches both
+    const lookup = evaluate(rules, [row("A", 5, 1)])
+
+    // Then price keeps the cell color and the other cells take the row color
+    expect(lookup.background(0, PRICE)?.color).toBe("dataNegative")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(lookup.row(0)?.color).toBe("dataSeries3")
+  })
+
+  it("lets a row rule listed first beat a later cell rule on the same column", () => {
+    // Given a row rule and then a cell rule, both on price and both matching
+    const rules = [
+      rule({
+        id: "price-row",
+        kind: "value",
+        appliesTo: "row",
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries3",
+      }),
+      rule({
+        id: "price-cell",
+        kind: "value",
+        appliesTo: "cell",
+        condition: { op: "lt", value: 10 },
+        color: "dataNegative",
+      }),
+    ]
+
+    // When a row matches both
+    const lookup = evaluate(rules, [row("A", 5, 1)])
+
+    // Then the row color covers price as well
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries3")
+  })
 })
 
 describe("evaluateHighlights: LONG columns as decimal strings", () => {
@@ -707,6 +798,40 @@ describe("evaluateHighlights: steps and gradient fill", () => {
     expect(lookup.background(1, PRICE)?.blend?.ratio).toBe(0.25)
     expect(lookup.background(2, PRICE)?.blend?.ratio).toBe(1)
     expect(lookup.background(3, PRICE)?.blend?.ratio).toBe(0)
+  })
+
+  it("reads automatic between bounds from the column's current min and max", () => {
+    // Given a gradient with both bounds automatic and a solid rule open at the top
+    const heatmap = rule({
+      id: "heatmap",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: null,
+        to: null,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+    const fromTen = rule({
+      id: "from-ten",
+      kind: "value",
+      condition: { op: "between", from: 10, to: null, fill: { kind: "solid" } },
+      color: "dataSeries3",
+    })
+
+    // When the result spans 5 to 25, then 100 to 300
+    const first = evaluate([heatmap], [row("A", 5, 1), row("B", 25, 1)])
+    const second = evaluate([heatmap], [row("A", 100, 1), row("B", 300, 1)])
+    const solid = evaluate([fromTen], [row("A", 5, 1), row("B", 500, 1)])
+
+    // Then the scale follows each result, and the open bound reaches the max
+    expect(first.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(first.background(1, PRICE)?.blend?.ratio).toBe(1)
+    expect(second.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(second.background(1, PRICE)?.blend?.ratio).toBe(1)
+    expect(solid.background(0, PRICE)).toBeUndefined()
+    expect(solid.background(1, PRICE)?.color).toBe("dataSeries3")
   })
 
   it("leaves a solid between rule as a plain range match", () => {

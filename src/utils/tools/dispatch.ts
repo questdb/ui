@@ -948,7 +948,7 @@ export const dispatchTool = async (
             cell_id: string
             highlight_config?: HighlightConfigWire | null
           }) || {}
-        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
+        setStatus(AIOperationStatus.ConfiguringHighlight, { cellId: cell_id })
         const highlightBaseline = getBufferActionSeq(buffer_id)
         let config = null
         if (highlight_config) {

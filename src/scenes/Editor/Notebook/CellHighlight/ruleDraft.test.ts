@@ -58,7 +58,12 @@ describe("withConditionOption", () => {
     expect(between).toMatchObject({
       kind: "value",
       appliesTo: "row",
-      condition: { op: "between", fill: { kind: "solid" } },
+      condition: {
+        op: "between",
+        from: null,
+        to: null,
+        fill: { kind: "solid" },
+      },
     })
     expect(fresh).toMatchObject({ kind: "value", appliesTo: "cell" })
   })
