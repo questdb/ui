@@ -19,7 +19,12 @@ import {
 } from "./cellRefreshEngine"
 import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
-import { statementKeysFor } from "../notebookUtils"
+import {
+  deriveStatementFrame,
+  singleResultFromExec,
+  statementKeysFor,
+} from "../notebookUtils"
+import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 
 vi.mock("../persistCellSnapshot", () => ({
@@ -630,6 +635,38 @@ describe("CellRefreshEngine", () => {
       expect(deps.setCellResult).not.toHaveBeenCalled()
     })
 
+    it.each([
+      [
+        "the cell scrolls out and back",
+        () => {
+          engine.setVisible("c1", false)
+          engine.setVisible("c1", true)
+        },
+      ],
+      [
+        "the browser tab is hidden and shown",
+        () => {
+          setDocumentHidden(true)
+          setDocumentHidden(false)
+        },
+      ],
+    ])("keeps a stopped fetch stopped when %s", async (_trigger, reveal) => {
+      // Given a stopped first fetch on a draw cell with auto-refresh off
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the cell is revealed again
+      reveal()
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // Then the stopped query is not sent again and the canvas stays cancelled
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+      expect(engine.getState("c1")?.fetching).toBe(false)
+    })
+
     it("a retry clears the cancelled marker and fetches again", async () => {
       // Given a stopped first fetch
       const resolveFetch = deferFetch()
@@ -1192,6 +1229,43 @@ describe("CellRefreshEngine", () => {
         fetchedAt: stamps?.get(keyOf("select 3")),
       },
     ])
+  })
+
+  it("shows each tab's own fetch time after a chart edit switches to the table view", async () => {
+    // Given a settled two-statement draw cell fetched at T0
+    const fetchedAt = Date.now()
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+
+    // When one statement changes an hour later
+    const hour = 60 * 60 * 1000
+    await vi.advanceTimersByTimeAsync(hour)
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // And the cell switches to the table view
+    deps.isDrawCell.mockReturnValue(false)
+    engine.sync([
+      {
+        ...drawCell("c1", "select 1;\nselect 3", false),
+        mode: undefined,
+        result: cellResults.get("c1"),
+      },
+    ])
+    await flushAsync()
+
+    // Then the carried tab shows T0 and the edited tab shows its own fetch
+    const state = engine.getState("c1")!
+    const frame = deriveStatementFrame(
+      state.queries,
+      cellResults.get("c1"),
+      state.slotKeys,
+    )!
+    const [carried, edited] = buildStatementSlotViews(frame, state)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    expect(carried.fetchedAt).toBe(fetchedAt)
+    expect(edited.fetchedAt).toBeGreaterThanOrEqual(fetchedAt + hour)
   })
 
   it("advances every fetch time on a poll tick even when the rows did not change", async () => {
@@ -2421,6 +2495,50 @@ describe("CellRefreshEngine", () => {
         "g1",
         kept?.results,
       )
+    })
+
+    it("keeps the run's fetch time on a frame an edit re-persists, so a reload shows when the rows were fetched", async () => {
+      // Given a grid cell whose rows a run fetched an hour ago
+      const ranAt = Date.now()
+      const ran: CellResult = {
+        results: [singleResultFromExec(dqlResult("select 1"), "select 1")],
+        activeResultIndex: 0,
+        timestamp: ranAt,
+      }
+      cellResults.set("g1", ran)
+      const cell: NotebookCell = {
+        id: "g1",
+        position: 0,
+        value: "select 1",
+        result: ran,
+      }
+      syncOnScreen([cell])
+      engine.noteCellRan("g1")
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+      vi.mocked(persistCellSnapshot).mockClear()
+
+      // When a trailing-whitespace edit keeps the rows and re-persists them
+      engine.sync([
+        { ...cell, value: "select 1  ", result: cellResults.get("g1") },
+      ])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+
+      // Then the reloaded frame shows the run's fetch time, not the save time
+      const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+      const frame = deriveStatementFrame(
+        ["select 1"],
+        {
+          results: snapshot.results,
+          activeResultIndex: 0,
+          timestamp: snapshot.savedAt,
+        },
+        statementKeysFor(["select 1"]),
+      )!
+      const [slot] = buildStatementSlotViews(frame, undefined)
+      expect(snapshot.savedAt).toBeGreaterThan(ranAt)
+      expect(slot.fetchedAt).toBe(ranAt)
     })
 
     it("keeps the frame timestamp across slot settles — sibling tabs never lose their viewport token", async () => {

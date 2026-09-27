@@ -219,11 +219,12 @@ export const singleResultFromExec = (
         timestamp: exec.timestamp,
         timings: exec.timings,
         ...(exec.notice !== undefined ? { notice: exec.notice } : {}),
+        fetchedAt: Date.now(),
       }
     case "error":
       return { type: "error", query, error: exec.error ?? "Unknown error" }
     default:
-      return { type: exec.type, query }
+      return { type: exec.type, query, fetchedAt: Date.now() }
   }
 }
 

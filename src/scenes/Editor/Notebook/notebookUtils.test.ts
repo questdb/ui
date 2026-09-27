@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ApplyNotebookStateError,
   agentCellDimensionsPatch,
@@ -159,6 +159,17 @@ describe("summarizeCellResults — notice results", () => {
 })
 
 describe("singleResultFromExec", () => {
+  const FETCHED_AT = 1_700_000_000_000
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(FETCHED_AT)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("maps dql exec to DqlQueryResult preserving columns/dataset/count/timings", () => {
     const exec: QueryExecResult = {
       type: "dql",
@@ -181,6 +192,7 @@ describe("singleResultFromExec", () => {
       dataset: exec.dataset,
       count: 1,
       timings: exec.timings,
+      fetchedAt: FETCHED_AT,
     })
   })
 
@@ -226,6 +238,7 @@ describe("singleResultFromExec", () => {
     expect(singleResultFromExec(exec, "CREATE TABLE t (x INT)")).toEqual({
       type: "ddl",
       query: "CREATE TABLE t (x INT)",
+      fetchedAt: FETCHED_AT,
     })
   })
 
@@ -240,6 +253,7 @@ describe("singleResultFromExec", () => {
     expect(singleResultFromExec(exec, "INSERT INTO t VALUES (1)")).toEqual({
       type: "dml",
       query: "INSERT INTO t VALUES (1)",
+      fetchedAt: FETCHED_AT,
     })
   })
 })

@@ -668,7 +668,7 @@ export class CellRefreshEngine {
     entry.lastPersistedErrorsSig = NO_ERRORS_SIG
     // The refresh stamps describe rounds the run just superseded: leaving
     // them would show the old refresh time under the run's rows. Cleared, the
-    // status line falls back to the frame's own run timestamp.
+    // status line falls back to each result's own fetch time.
     if (
       entry.state.slotErrors.size === 0 &&
       entry.state.slotFetchedAt.size === 0
@@ -1027,7 +1027,7 @@ export class CellRefreshEngine {
       this.updatePoll(entry)
       return
     }
-    if (entry.visible && !this.documentHidden)
+    if (entry.visible && !this.documentHidden && !entry.state.fetchCancelled)
       void this.fetchOnce(entry, "settle")
     this.updatePoll(entry)
   }
@@ -1325,12 +1325,16 @@ export class CellRefreshEngine {
       // Write EVERY statement (not just chartable ones) so a switch to the grid
       // shows the same tabs a real run would — including errors and empty
       // results — instead of dropping them or leaving stale rows behind. Each
-      // slot takes its statement's current text, carried rows included. The
-      // result lands before settledKey flips: React 17 renders the two updates
-      // separately, and a settled state without data would flash "No data".
-      const written = out.map((r, index) =>
-        singleResultFromExec(r, queries[index]),
-      )
+      // slot takes its statement's current text, carried rows included, and a
+      // carried slot keeps the fetch time of its rows. The result lands before
+      // settledKey flips: React 17 renders the two updates separately, and a
+      // settled state without data would flash "No data".
+      const written = out.map((r, index) => {
+        const carried = carriedResults[index]
+        return carried
+          ? { ...carried, query: queries[index] }
+          : singleResultFromExec(r, queries[index])
+      })
       this.getDeps().setCellResult(entry.cellId, {
         results: written,
         activeResultIndex: 0,

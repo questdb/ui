@@ -86,11 +86,14 @@ export type DqlQueryResult = {
   timestamp?: number
   timings?: Timings
   notice?: string
+  // Absent on results persisted before results carried their fetch time.
+  fetchedAt?: number
 }
 
 export type DdlDmlQueryResult = {
   type: "ddl" | "dml"
   query: string
+  fetchedAt?: number
 }
 
 export type ErrorQueryResult = {
