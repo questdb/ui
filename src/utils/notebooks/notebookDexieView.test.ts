@@ -84,6 +84,51 @@ describe("migratePersistedNotebookView preferred view", () => {
     expect(cell).not.toHaveProperty("topHeight")
   })
 
+  it("folds the default chart height when a maximized chart stored no result height", () => {
+    // Given a chart an agent made on main from an existing cell: maximized,
+    // with an editor height and no result height
+    const view = {
+      cells: [
+        {
+          id: "chart",
+          position: 0,
+          value: "SELECT 1",
+          mode: "draw",
+          topHeight: 120,
+          isViewMaximized: true,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read after the upgrade
+    const cell = migratePersistedNotebookView(view).cells[0]
+
+    // Then the chart keeps the size main showed: editor + default chart height
+    expect(cell).toMatchObject({ paneView: "result", bottomHeight: 120 + 350 })
+  })
+
+  it("keeps auto sizing for a maximized grid that stored no result height", () => {
+    // Given a maximized run cell whose result pane sized itself to its rows
+    const view = {
+      cells: [
+        {
+          id: "grid",
+          position: 0,
+          value: "SELECT 1",
+          topHeight: 120,
+          isViewMaximized: true,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read after the upgrade
+    const cell = migratePersistedNotebookView(view).cells[0]
+
+    // Then no result height is pinned; the rows still decide the pane size
+    expect(cell).toMatchObject({ paneView: "result", topHeight: 120 })
+    expect(cell).not.toHaveProperty("bottomHeight")
+  })
+
   it("keeps the stored heights of a cell that was not maximized", () => {
     // Given a split cell with stored heights
     const view = {

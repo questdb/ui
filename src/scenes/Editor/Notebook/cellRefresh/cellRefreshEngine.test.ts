@@ -20,6 +20,7 @@ import {
 import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
 import {
+  cancelledResult,
   deriveStatementFrame,
   singleResultFromExec,
   statementKeysFor,
@@ -691,6 +692,48 @@ describe("CellRefreshEngine", () => {
       expect(state.settledKey).toBe(state.queriesKey)
     })
 
+    it.each([
+      [
+        "the cell scrolls out and back",
+        () => {
+          engine.setVisible("c1", false)
+          engine.setVisible("c1", true)
+        },
+      ],
+      [
+        "the browser tab is hidden and shown",
+        () => {
+          setDocumentHidden(true)
+          setDocumentHidden(false)
+        },
+      ],
+    ])(
+      "keeps a stopped fetch stopped on a polling cell when %s, until the next tick",
+      async (_trigger, reveal) => {
+        // Given a stopped first fetch on a draw cell that polls every minute
+        deferFetch()
+        syncOnScreen([drawCell("c1", "select 1", "1m")])
+        await flushAsync()
+        engine.cancelChartFetch("c1")
+
+        // When the cell is revealed again a few seconds later
+        await vi.advanceTimersByTimeAsync(5_000)
+        reveal()
+        await vi.advanceTimersByTimeAsync(30_000)
+
+        // Then the stopped query is not sent before the interval elapses
+        expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+        expect(engine.getState("c1")?.fetching).toBe(false)
+
+        // And the next tick fetches again
+        await vi.advanceTimersByTimeAsync(30_000)
+        expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+        expect(engine.getState("c1")?.fetching).toBe(true)
+      },
+    )
+
     it("the next auto-refresh tick fetches again after a stop", async () => {
       // Given a polling draw cell whose first fetch was stopped
       deferFetch()
@@ -1266,6 +1309,44 @@ describe("CellRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(3)
     expect(carried.fetchedAt).toBe(fetchedAt)
     expect(edited.fetchedAt).toBeGreaterThanOrEqual(fetchedAt + hour)
+  })
+
+  it("keeps the snapshot when a carried statement fails validation and the edited one fails to run", async () => {
+    // Given a settled two-statement draw cell whose first statement reads table t
+    syncOnScreen([drawCell("c1", "select 1 from t;\nselect 2", false)])
+    await flushAsync()
+    await vi.advanceTimersByTimeAsync(60_000)
+    vi.mocked(persistCellSnapshot).mockClear()
+    const deletesBefore = vi.mocked(deleteCellSnapshot).mock.calls.length
+
+    // And, after a reload, table t is gone
+    clearStatementClassCache()
+    deps.validateWithGlobals.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes("from t")
+          ? {
+              query: sql,
+              position: 14,
+              error: "table does not exist [table=t]",
+            }
+          : dqlValidation,
+      ),
+    )
+    deps.executeSingle.mockImplementation((sql: string) =>
+      Promise.resolve({ ...dqlResult(sql), type: "error", error: "boom" }),
+    )
+
+    // When the user edits the second statement to one that fails
+    engine.sync([drawCell("c1", "select 1 from t;\nselect boom", false)])
+    await vi.advanceTimersByTimeAsync(15_000)
+    await flushAsync()
+
+    // Then the screen keeps the carried rows, and the disk copy keeps them too
+    const frame = cellResults.get("c1")!
+    expect(frame.results.map((r) => r.type)).toEqual(["dql", "error"])
+    expect(vi.mocked(deleteCellSnapshot).mock.calls.length).toBe(deletesBefore)
+    const snapshot = vi.mocked(persistCellSnapshot).mock.calls.at(-1)?.[0]
+    expect(snapshot?.results.map((r) => r.type)).toEqual(["dql", "error"])
   })
 
   it("advances every fetch time on a poll tick even when the rows did not change", async () => {
@@ -2497,11 +2578,19 @@ describe("CellRefreshEngine", () => {
       )
     })
 
-    it("keeps the run's fetch time on a frame an edit re-persists, so a reload shows when the rows were fetched", async () => {
-      // Given a grid cell whose rows a run fetched an hour ago
+    it("keeps the run's fetch time on every tab of a frame an edit re-persists, so a reload shows when the run settled", async () => {
+      // Given a grid cell whose run an hour ago fetched rows, failed, and cancelled the rest
       const ranAt = Date.now()
+      const statements = ["select 1", "select boom", "select 2"]
       const ran: CellResult = {
-        results: [singleResultFromExec(dqlResult("select 1"), "select 1")],
+        results: [
+          singleResultFromExec(dqlResult("select 1"), "select 1"),
+          singleResultFromExec(
+            { ...dqlResult("select boom"), type: "error", error: "boom" },
+            "select boom",
+          ),
+          cancelledResult("select 2", "priorFailure"),
+        ],
         activeResultIndex: 0,
         timestamp: ranAt,
       }
@@ -2509,7 +2598,7 @@ describe("CellRefreshEngine", () => {
       const cell: NotebookCell = {
         id: "g1",
         position: 0,
-        value: "select 1",
+        value: statements.join(";\n"),
         result: ran,
       }
       syncOnScreen([cell])
@@ -2518,27 +2607,32 @@ describe("CellRefreshEngine", () => {
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
       vi.mocked(persistCellSnapshot).mockClear()
 
-      // When a trailing-whitespace edit keeps the rows and re-persists them
+      // When a trailing-whitespace edit keeps every tab and re-persists them
       engine.sync([
-        { ...cell, value: "select 1  ", result: cellResults.get("g1") },
+        { ...cell, value: `${cell.value}  `, result: cellResults.get("g1") },
       ])
       await vi.advanceTimersByTimeAsync(301)
       await flushAsync()
 
-      // Then the reloaded frame shows the run's fetch time, not the save time
+      // Then every reloaded tab shows the run time, not the save time
       const snapshot = vi.mocked(persistCellSnapshot).mock.calls[0][0]
       const frame = deriveStatementFrame(
-        ["select 1"],
+        statements,
         {
           results: snapshot.results,
           activeResultIndex: 0,
           timestamp: snapshot.savedAt,
         },
-        statementKeysFor(["select 1"]),
+        statementKeysFor(statements),
       )!
-      const [slot] = buildStatementSlotViews(frame, undefined)
+      const slots = buildStatementSlotViews(frame, undefined)
       expect(snapshot.savedAt).toBeGreaterThan(ranAt)
-      expect(slot.fetchedAt).toBe(ranAt)
+      expect(slots.map((slot) => slot.result?.type)).toEqual([
+        "dql",
+        "error",
+        "cancelled",
+      ])
+      expect(slots.map((slot) => slot.fetchedAt)).toEqual([ranAt, ranAt, ranAt])
     })
 
     it("keeps the frame timestamp across slot settles — sibling tabs never lose their viewport token", async () => {

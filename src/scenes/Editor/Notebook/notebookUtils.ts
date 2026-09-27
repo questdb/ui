@@ -3,6 +3,8 @@ import type {
   AgentCellView,
   AutoRefresh,
   AutoRefreshInterval,
+  CancelledQueryResult,
+  CancelReason,
   CellLayoutItem,
   CellMode,
   CellPaneView,
@@ -222,11 +224,26 @@ export const singleResultFromExec = (
         fetchedAt: Date.now(),
       }
     case "error":
-      return { type: "error", query, error: exec.error ?? "Unknown error" }
+      return {
+        type: "error",
+        query,
+        error: exec.error ?? "Unknown error",
+        fetchedAt: Date.now(),
+      }
     default:
       return { type: exec.type, query, fetchedAt: Date.now() }
   }
 }
+
+export const cancelledResult = (
+  query: string,
+  reason: CancelReason,
+): CancelledQueryResult => ({
+  type: "cancelled",
+  query,
+  reason,
+  fetchedAt: Date.now(),
+})
 
 // Notebook-scoped result caps. Rows are bounded at the fetch; the byte cap
 // bounds wide results so a persisted snapshot stays small. Deliberately NOT the
@@ -1651,17 +1668,22 @@ export const minBottomHeightFor = (cell: NotebookCell): number =>
 // keeps the panes apart. Runs once, when a read infers the pane view from the
 // legacy flag: the hidden editor's height folds into the result pane so the
 // cell keeps the size it had. The next persist drops the flag, and later
-// reads pass the stored pane view through untouched.
+// reads pass the stored pane view through untouched. A chart with no stored
+// result height folds its default; a grid's default depends on the result,
+// which a read does not hold, so it keeps auto sizing.
 export const foldLegacyMaximizedHeights = (
   cell: NotebookCell,
 ): NotebookCell => {
-  if (cell.bottomHeight === undefined) return cell
+  const bottomHeight =
+    cell.bottomHeight ??
+    (cell.mode === "draw" ? DEFAULT_CHART_BOTTOM_HEIGHT : undefined)
+  if (bottomHeight === undefined) return cell
   const topHeight = cell.topHeight ?? defaultTopHeightFor(cell)
   return {
     ...cell,
     bottomHeight: clampPaneHeight(
       minBottomHeightFor(cell),
-      topHeight + cell.bottomHeight,
+      topHeight + bottomHeight,
     ),
     ...(cell.topResized ? { bottomResized: true } : {}),
   }

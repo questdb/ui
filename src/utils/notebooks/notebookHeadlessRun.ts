@@ -30,6 +30,7 @@ import {
   type RunCancelReason,
   CELL_CHANGED_BEFORE_RUN_NOTE,
   CELL_CHANGED_MID_RUN_NOTE,
+  cancelledResult,
   CELL_DELETED_MID_RUN_NOTE,
   MOUNTED_MID_RUN_NOTE,
   NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
@@ -250,11 +251,7 @@ const executeCellQueries = async (args: {
       // cancelled would push the agent into re-running a committed write.
       if (aborted) {
         for (let j = i; j < queries.length; j++) {
-          results[j] = {
-            type: "cancelled",
-            query: queries[j],
-            reason: "user",
-          }
+          results[j] = cancelledResult(queries[j], "user")
         }
         break
       }
@@ -272,11 +269,7 @@ const executeCellQueries = async (args: {
       if (exec.type === "error") {
         failedCount++
         for (let j = i + 1; j < queries.length; j++) {
-          results[j] = {
-            type: "cancelled",
-            query: queries[j],
-            reason: "priorFailure",
-          }
+          results[j] = cancelledResult(queries[j], "priorFailure")
         }
         break
       }
@@ -348,7 +341,7 @@ const executeCellQueriesParallel = async (args: {
           return
         }
         if (aborted) {
-          results[index] = { type: "cancelled", query, reason: "user" }
+          results[index] = cancelledResult(query, "user")
           return
         }
         let exec: QueryExecResult
@@ -365,7 +358,7 @@ const executeCellQueriesParallel = async (args: {
             runAbort.signal,
           )
         } catch {
-          results[index] = { type: "cancelled", query, reason: "user" }
+          results[index] = cancelledResult(query, "user")
           return
         }
         results[index] = singleResultFromExec(exec, query)

@@ -100,6 +100,7 @@ export type ErrorQueryResult = {
   type: "error"
   query: string
   error: string
+  fetchedAt?: number
 }
 
 export type TransientQueryResult = {
@@ -113,6 +114,7 @@ export type CancelledQueryResult = {
   type: "cancelled"
   query: string
   reason?: CancelReason
+  fetchedAt?: number
 }
 
 export type SingleQueryResult =

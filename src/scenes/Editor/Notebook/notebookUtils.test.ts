@@ -209,6 +209,7 @@ describe("singleResultFromExec", () => {
       type: "error",
       query: "SELECT boom",
       error: "syntax error",
+      fetchedAt: FETCHED_AT,
     })
   })
 
@@ -224,6 +225,7 @@ describe("singleResultFromExec", () => {
       type: "error",
       query: "SELECT ?",
       error: "Unknown error",
+      fetchedAt: FETCHED_AT,
     })
   })
 

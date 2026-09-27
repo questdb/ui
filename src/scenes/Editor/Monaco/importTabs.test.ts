@@ -830,6 +830,13 @@ describe("sanitizeBuffer", () => {
               bottomHeight: 350,
               paneView: "result",
             },
+            {
+              id: "agent-chart",
+              value: "SELECT 3",
+              mode: "draw",
+              topHeight: 152,
+              isViewMaximized: true,
+            },
           ],
         },
       }
@@ -837,9 +844,10 @@ describe("sanitizeBuffer", () => {
       // When it is imported
       const cells = sanitizeBuffer(input).notebookViewState?.cells
 
-      // Then only the legacy cell keeps its former size; a head export with a
-      // stored pane view passes through untouched
-      expect(cells?.map((cell) => cell.bottomHeight)).toEqual([502, 350])
+      // Then only the legacy cells keep their former size — a chart with no
+      // stored result height folds its default; a head export with a stored
+      // pane view passes through untouched
+      expect(cells?.map((cell) => cell.bottomHeight)).toEqual([502, 350, 502])
     })
 
     it("strips run/draw sub-state from markdown cells", () => {

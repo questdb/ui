@@ -22,6 +22,7 @@ import {
 import { statementRequestLimiter } from "../../../utils/questdb/requestLimiter"
 import {
   buildInitialScriptResults,
+  cancelledResult,
   type CellRunOutcome,
   hasPendingResult,
   NOTEBOOK_ROW_CAP,
@@ -102,12 +103,6 @@ const clearRunningCell = (
     return next
   })
 }
-
-const cancelledByUser = (query: string): SingleQueryResult => ({
-  type: "cancelled",
-  query,
-  reason: "user",
-})
 
 const cancelledExecResult = (query: string): QueryExecResult => ({
   type: "error",
@@ -284,7 +279,7 @@ export const useCellExecution = ({
       const runSucceeded = () => failedCount === 0 && cancelledCount === 0
       const cancelFrom = (index: number) => {
         for (let j = index; j < queries.length; j++) {
-          const cancelled = cancelledByUser(queries[j])
+          const cancelled = cancelledResult(queries[j], "user")
           finalResults[j] = cancelled
           updateCellResult(cellId, j, cancelled)
         }
@@ -338,11 +333,7 @@ export const useCellExecution = ({
               cancelFrom(i + 1)
             } else {
               for (let j = i + 1; j < queries.length; j++) {
-                const skipped: SingleQueryResult = {
-                  type: "cancelled",
-                  query: queries[j],
-                  reason: "priorFailure",
-                }
+                const skipped = cancelledResult(queries[j], "priorFailure")
                 finalResults[j] = skipped
                 updateCellResult(cellId, j, skipped)
               }
@@ -517,7 +508,7 @@ export const useCellExecution = ({
       const runSucceeded = () => failedCount === 0 && cancelledCount === 0
       const cancelStatement = (index: number, sql: string) => {
         cancelledCount++
-        const cancelled = cancelledByUser(sql)
+        const cancelled = cancelledResult(sql, "user")
         finalResults[index] = cancelled
         if (isCurrentRun()) updateCellResult(cellId, index, cancelled)
       }
@@ -806,7 +797,7 @@ export const useCellExecution = ({
           results: [
             launch.launched
               ? singleResultFromExec(launch.exec, recordedQuery)
-              : cancelledByUser(recordedQuery),
+              : cancelledResult(recordedQuery, "user"),
           ],
           activeResultIndex: 0,
           timestamp: Date.now(),

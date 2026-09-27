@@ -493,11 +493,14 @@ export class CellRefreshEngine {
   // and one DDL/DML statement still blocks the cell.
   // Stops a chart's in-flight round. The marker lets a chart with no data
   // settle on a cancelled state instead of spinning; the next round clears it.
+  // The stop counts as the round's end, so a poll restarted by a reveal waits
+  // a full interval instead of re-sending the stopped query at once.
   cancelChartFetch(cellId: string) {
     const entry = this.entries.get(cellId)
     if (!entry || entry.kind !== "chart" || !entry.inFlight) return
     this.abortRound(entry)
     entry.manualRefreshInFlight = false
+    entry.lastFetchedAt = Date.now()
     this.setState(entry, { fetchCancelled: true })
   }
 
@@ -1019,8 +1022,9 @@ export class CellRefreshEngine {
     if (this.shouldPoll(entry)) {
       // No usable data at this point — a poll still sleeping on a pre-release
       // lastFetchedAt must not defer the refetch, so restart the loop with an
-      // immediate first tick.
-      entry.lastFetchedAt = 0
+      // immediate first tick. A stopped fetch keeps its stop time: the
+      // restarted loop then defers to the next tick.
+      if (!entry.state.fetchCancelled) entry.lastFetchedAt = 0
       entry.poll?.abort()
       entry.poll = null
       entry.pollKey = null
@@ -1342,7 +1346,8 @@ export class CellRefreshEngine {
       })
       this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
       this.deriveChartSlotErrors(entry)
-      if (successResults(out).length > 0) {
+      // The disk copy follows the frame on screen, carried rows included.
+      if (written.some(isChartableResult)) {
         this.queueSnapshot(entry, written, fetchDurationMs)
       } else {
         this.clearSnapshot(entry)
