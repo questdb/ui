@@ -5,7 +5,7 @@ import { statementKeysForIdentities, type StatementKey } from "../notebookUtils"
 
 export type SnapshotStatementKeys = Pick<
   NotebookResultSnapshot,
-  "activeStatementKey" | "refreshErrors" | "slotFetchedAt"
+  "activeStatementKey" | "refreshErrors"
 >
 
 // Snapshots saved before formatter-based identity keyed statements by their
@@ -40,14 +40,6 @@ export const rekeyLegacyStatementKeys = (
           refreshErrors: keys.refreshErrors.map((error) => ({
             ...error,
             statementKey: rekey(error.statementKey),
-          })),
-        }
-      : {}),
-    ...(keys.slotFetchedAt
-      ? {
-          slotFetchedAt: keys.slotFetchedAt.map((stamp) => ({
-            ...stamp,
-            statementKey: rekey(stamp.statementKey),
           })),
         }
       : {}),

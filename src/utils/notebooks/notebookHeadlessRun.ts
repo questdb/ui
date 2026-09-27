@@ -29,9 +29,10 @@ import {
   type RunCancellation,
   type RunCancelReason,
   CELL_CHANGED_BEFORE_RUN_NOTE,
-  CELL_CHANGED_MID_RUN_NOTE,
   cancelledResult,
+  CELL_CHANGED_MID_RUN_NOTE,
   CELL_DELETED_MID_RUN_NOTE,
+  errorResult,
   MOUNTED_MID_RUN_NOTE,
   NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
   NOTEBOOK_DELETED_MID_RUN_NOTE,
@@ -333,11 +334,7 @@ const executeCellQueriesParallel = async (args: {
         const stmt = classified[index]
         if (stmt?.klass === "ERROR") {
           failedCount++
-          results[index] = {
-            type: "error",
-            query,
-            error: stmt.error ?? "Invalid statement",
-          }
+          results[index] = errorResult(query, stmt.error ?? "Invalid statement")
           return
         }
         if (aborted) {

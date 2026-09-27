@@ -21,6 +21,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   autoRefreshIntervalMs,
+  frameFetchedAt,
   NOTEBOOK_ROW_CAP,
   normalizeStatementIdentity,
   reconcileCellResultForStatements,
@@ -89,10 +90,12 @@ export type CellFetchState = {
   slotFetching: ReadonlySet<StatementKey>
   slotErrors: ReadonlyMap<StatementKey, string>
   cancelledSlots: ReadonlySet<StatementKey>
-  // Wall-clock of each slot's last successful settle. Freshness is per tab:
-  // after a partial round the succeeded slots are newer than their siblings.
-  // Memory-only — a reload falls back to the frame's saved time.
-  slotFetchedAt: ReadonlyMap<StatementKey, number>
+  // Session overlay: when a poll last returned identical rows for a slot. The
+  // durable time is the result's own fetchedAt, stamped when its rows were
+  // written; the status line shows the later of the two. Never persisted,
+  // seeded or carried — a reload or a new entry shows the rows' fetch time
+  // until the next tick.
+  slotVerifiedAt: ReadonlyMap<StatementKey, number>
   // The user stopped the in-flight round. Until the next round starts, a
   // chart with no data settles on a cancelled state instead of loading.
   fetchCancelled: boolean
@@ -145,7 +148,7 @@ const initialFetchState = (
   slotFetching: new Set(),
   slotErrors: new Map(),
   cancelledSlots: new Set(),
-  slotFetchedAt: new Map(),
+  slotVerifiedAt: new Map(),
   fetchCancelled: false,
 })
 
@@ -200,25 +203,21 @@ const chartableResultsByKey = (
   return byKey
 }
 
-// A slot's fetch time is the round that produced its rows: an executed slot
-// stamps now, a carried slot keeps its stamp (or the frame time it was loaded
-// with), and a failed slot has no rows to date.
-const chartSlotFetchedAt = (
+// An executed slot whose rows came back unchanged keeps the result it has and
+// records the verifying poll in the overlay. Carried and failed slots were not
+// verified by this round.
+const verifiedSlots = (
   entry: Entry,
   out: QueryExecResult[],
   carriedResults: Array<SingleQueryResult | undefined>,
-  previousFrameTimestamp: number | undefined,
 ): Map<StatementKey, number> => {
   const now = Date.now()
-  const slotFetchedAt = new Map<StatementKey, number>()
+  const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
   out.forEach((result, index) => {
-    if (result.type === "error") return
-    const key = entry.state.slotKeys[index]
-    const carriedAt =
-      entry.state.slotFetchedAt.get(key) ?? previousFrameTimestamp
-    slotFetchedAt.set(key, carriedResults[index] ? (carriedAt ?? now) : now)
+    if (result.type === "error" || carriedResults[index]) return
+    slotVerifiedAt.set(entry.state.slotKeys[index], now)
   })
-  return slotFetchedAt
+  return slotVerifiedAt
 }
 
 // Keys of a frame, from the statements that wrote it, so per-slot lookups
@@ -327,6 +326,9 @@ type Entry = {
   snapshotRetained: boolean
   ensureAttempted: boolean
   lastFetchedAt: number
+  // The interval the adaptive loop last settled on. A restarted loop waits
+  // out the rest of it before its first tick.
+  pollIntervalMs: number
   state: CellFetchState
   sqlDebounce: ReturnType<typeof setTimeout> | null
   pendingSql: string | null
@@ -669,17 +671,16 @@ export class CellRefreshEngine {
     // The run's own record replaced the disk copy, and it carries no
     // refreshErrors.
     entry.lastPersistedErrorsSig = NO_ERRORS_SIG
-    // The refresh stamps describe rounds the run just superseded: leaving
-    // them would show the old refresh time under the run's rows. Cleared, the
-    // status line falls back to each result's own fetch time.
+    // The overlay describes rounds the run just superseded; the run's rows
+    // carry their own fetch time.
     if (
       entry.state.slotErrors.size === 0 &&
-      entry.state.slotFetchedAt.size === 0
+      entry.state.slotVerifiedAt.size === 0
     )
       return
     this.setState(entry, {
       slotErrors: new Map(),
-      slotFetchedAt: new Map(),
+      slotVerifiedAt: new Map(),
     })
   }
 
@@ -697,7 +698,7 @@ export class CellRefreshEngine {
     // refreshErrors.
     entry.lastPersistedErrorsSig = NO_ERRORS_SIG
     this.clearSlotError(entry, statementKey)
-    this.clearSlotFetchStamp(entry, statementKey)
+    this.clearSlotVerified(entry, statementKey)
     if (entry.state.slotErrors.size > 0) this.persistGridFrame(entry, true)
   }
 
@@ -731,17 +732,11 @@ export class CellRefreshEngine {
   private applyRefreshSeed(entry: Entry, seed: SnapshotRefreshState) {
     const slotKeys = new Set(entry.state.slotKeys)
     const slotErrors = new Map(entry.state.slotErrors)
-    const slotFetchedAt = new Map(entry.state.slotFetchedAt)
     const patch: Partial<CellFetchState> = {}
     for (const { statementKey, message } of seed.refreshErrors ?? []) {
       if (!slotKeys.has(statementKey)) continue
       slotErrors.set(statementKey, message)
       patch.slotErrors = slotErrors
-    }
-    for (const { statementKey, fetchedAt } of seed.slotFetchedAt ?? []) {
-      if (!slotKeys.has(statementKey)) continue
-      slotFetchedAt.set(statementKey, fetchedAt)
-      patch.slotFetchedAt = slotFetchedAt
     }
     if (Object.keys(patch).length > 0) this.setState(entry, patch)
   }
@@ -766,6 +761,7 @@ export class CellRefreshEngine {
       snapshotRetained: false,
       ensureAttempted: false,
       lastFetchedAt: 0,
+      pollIntervalMs: REFRESH_MIN_MS,
       sqlDebounce: null,
       pendingSql: null,
       inFlight: null,
@@ -871,8 +867,8 @@ export class CellRefreshEngine {
     const slotErrors = new Map(
       [...entry.state.slotErrors].filter(([key]) => slotKeySet.has(key)),
     )
-    const slotFetchedAt = new Map(
-      [...entry.state.slotFetchedAt].filter(([key]) => slotKeySet.has(key)),
+    const slotVerifiedAt = new Map(
+      [...entry.state.slotVerifiedAt].filter(([key]) => slotKeySet.has(key)),
     )
     this.setState(entry, {
       queries,
@@ -883,7 +879,7 @@ export class CellRefreshEngine {
       cancelledSlots: new Set(),
       fetchCancelled: false,
       slotErrors,
-      slotFetchedAt,
+      slotVerifiedAt,
       ...(sameQueries ? { settledKey: queriesKey } : {}),
     })
     if (entry.kind === "grid") this.ensureClassified(entry)
@@ -1014,7 +1010,10 @@ export class CellRefreshEngine {
       }
       this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
-      entry.lastFetchedAt = Math.max(entry.lastFetchedAt, chartResult.timestamp)
+      entry.lastFetchedAt = Math.max(
+        entry.lastFetchedAt,
+        frameFetchedAt(current?.results ?? []),
+      )
       this.updatePoll(entry)
       return
     }
@@ -1040,9 +1039,11 @@ export class CellRefreshEngine {
     const result = this.getDeps().getCellResult(entry.cellId)
     if (result != null) {
       this.setState(entry, { settledKey: entry.state.queriesKey })
-      // The frame timestamp never advances on grid ticks (it is the viewport
-      // token) — a reveal must not regress the freshness finishRound stamped.
-      entry.lastFetchedAt = Math.max(entry.lastFetchedAt, result.timestamp)
+      // A reveal must not regress the freshness finishRound stamped.
+      entry.lastFetchedAt = Math.max(
+        entry.lastFetchedAt,
+        frameFetchedAt(result.results),
+      )
       this.updatePoll(entry)
       return
     }
@@ -1127,14 +1128,22 @@ export class CellRefreshEngine {
       if (aborted) return
     }
     const fixed = autoRefreshIntervalMs(entry.autoRefresh)
-    const skipInitialFetch =
-      Date.now() - entry.lastFetchedAt < (fixed ?? REFRESH_MIN_MS)
+    // A restarted loop resumes the schedule the last round set: its first
+    // tick lands when it was due, never at once because the cell was revealed.
+    const untilDue =
+      entry.lastFetchedAt + (fixed ?? entry.pollIntervalMs) - Date.now()
+    if (untilDue > 0) {
+      const aborted = await sleep(untilDue, abort.signal)
+      if (aborted) return
+    }
     await runAdaptivePollLoop({
       fetchFn: () => this.fetchOnce(entry, "poll"),
       signal: abort.signal,
       minIntervalMs: fixed ?? REFRESH_MIN_MS,
       maxIntervalMs: fixed ?? REFRESH_MAX_MS,
-      skipInitialFetch,
+      onIntervalChange: (intervalMs) => {
+        entry.pollIntervalMs = intervalMs
+      },
     })
   }
 
@@ -1301,19 +1310,16 @@ export class CellRefreshEngine {
       // and an unchanged frame must still be re-written in that case.
       const currentSqlHash = sqlHash(entry.sql)
       const current = this.getDeps().getCellResult(entry.cellId)
-      const slotFetchedAt = chartSlotFetchedAt(
-        entry,
-        out,
-        carriedResults,
-        previousFrame?.timestamp,
-      )
       if (
         current != null &&
         resultsEquivalent(current.results.map(toExecResult), out)
       ) {
         const kept = alignResultsToQueries(current, queries)
         if (kept !== current) this.getDeps().setCellResult(entry.cellId, kept)
-        this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
+        this.setState(entry, {
+          settledKey: queriesKey,
+          slotVerifiedAt: verifiedSlots(entry, out, carriedResults),
+        })
         this.deriveChartSlotErrors(entry)
         if (successResults(out).length === 0) {
           this.clearSnapshot(entry)
@@ -1344,7 +1350,7 @@ export class CellRefreshEngine {
         activeResultIndex: 0,
         timestamp: Date.now(),
       })
-      this.setState(entry, { settledKey: queriesKey, slotFetchedAt })
+      this.setState(entry, { settledKey: queriesKey })
       this.deriveChartSlotErrors(entry)
       // The disk copy follows the frame on screen, carried rows included.
       if (written.some(isChartableResult)) {
@@ -1446,10 +1452,10 @@ export class CellRefreshEngine {
               if (exec.type === "error") {
                 this.setSlotError(entry, key, exec.error ?? "Query failed")
               } else {
-                // The fetch time always advances — the status line shows the
-                // poll that just verified the rows. The frame is rewritten only
-                // when the rows changed, so an identical poll costs no renders
-                // and no snapshot churn.
+                // Changed rows are written with their fetch time. Identical
+                // rows keep the frame — a rewrite would churn renders and
+                // snapshots — and the overlay records the verifying poll so
+                // the status line stays current.
                 const previous = this.currentSlotResult(
                   entry.cellId,
                   key,
@@ -1545,7 +1551,7 @@ export class CellRefreshEngine {
       ]
     // The frame timestamp is the grid's viewport token for every tab:
     // bumping it per slot settle would reset scroll and focus. A settled
-    // slot's freshness advances through slotFetchedAt instead.
+    // slot's freshness advances through slotVerifiedAt instead.
     deps.setCellResult(entry.cellId, {
       ...current,
       results: nextResults,
@@ -1589,21 +1595,21 @@ export class CellRefreshEngine {
     this.setState(entry, { slotErrors })
   }
 
-  private clearSlotFetchStamp(entry: Entry, key: StatementKey) {
-    if (!entry.state.slotFetchedAt.has(key)) return
-    const slotFetchedAt = new Map(entry.state.slotFetchedAt)
-    slotFetchedAt.delete(key)
-    this.setState(entry, { slotFetchedAt })
+  private clearSlotVerified(entry: Entry, key: StatementKey) {
+    if (!entry.state.slotVerifiedAt.has(key)) return
+    const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
+    slotVerifiedAt.delete(key)
+    this.setState(entry, { slotVerifiedAt })
   }
 
-  // A settle is one patch — stamp, error clear and fetching flip land in a
-  // single notify, so a round of S slots costs S renders, not 3S.
+  // A settle is one patch — overlay stamp, error clear and fetching flip land
+  // in a single notify, so a round of S slots costs S renders, not 3S.
   private settleSlotSuccess(entry: Entry, key: StatementKey) {
-    const slotFetchedAt = new Map(entry.state.slotFetchedAt)
-    slotFetchedAt.set(key, Date.now())
+    const slotVerifiedAt = new Map(entry.state.slotVerifiedAt)
+    slotVerifiedAt.set(key, Date.now())
     const slotFetching = new Set(entry.state.slotFetching)
     slotFetching.delete(key)
-    const patch: Partial<CellFetchState> = { slotFetchedAt, slotFetching }
+    const patch: Partial<CellFetchState> = { slotVerifiedAt, slotFetching }
     if (entry.state.slotErrors.has(key)) {
       const slotErrors = new Map(entry.state.slotErrors)
       slotErrors.delete(key)
@@ -1744,13 +1750,6 @@ export class CellRefreshEngine {
             message,
           }))
         : undefined
-    const slotFetchedAt =
-      entry.state.slotFetchedAt.size > 0
-        ? [...entry.state.slotFetchedAt].map(([statementKey, fetchedAt]) => ({
-            statementKey,
-            fetchedAt,
-          }))
-        : undefined
     return persistCellSnapshot({
       bufferId: this.bufferId,
       cellId: entry.cellId,
@@ -1762,7 +1761,6 @@ export class CellRefreshEngine {
         : {}),
       ...(script ? { script } : {}),
       ...(refreshErrors ? { refreshErrors } : {}),
-      ...(slotFetchedAt ? { slotFetchedAt } : {}),
     }).then((saved) => {
       if (!saved) return
       entry.persistedResults.set(results, persistedSqlHash)

@@ -2,6 +2,7 @@ import type {
   CellResult,
   NotebookCell,
   SingleQueryResult,
+  TransientQueryResult,
 } from "../../../../store/notebook"
 import type {
   NotebookResultSnapshot,
@@ -31,6 +32,35 @@ const normalizeSnapshotResultQuery = (
 }
 import { scheduleIdle } from "../notebookScheduling"
 import { PerKeyListeners } from "../perKeyListeners"
+
+// Results saved before they carried their fetch time take it once here: the
+// snapshot's legacy per-slot stamp, or else its save time as read. The
+// rewrite below persists it, so no later write can re-date these rows.
+const foldLegacyFetchedAt = (
+  results: SingleQueryResult[],
+  keys: string[],
+  snapshot: NotebookResultSnapshot,
+): SingleQueryResult[] => {
+  const stamps = new Map(
+    (snapshot.slotFetchedAt ?? []).map((stamp) => [
+      stamp.statementKey,
+      stamp.fetchedAt,
+    ]),
+  )
+  return results.map((result, index) => {
+    if (!isSettledResult(result) || result.fetchedAt !== undefined)
+      return result
+    return {
+      ...result,
+      fetchedAt: stamps.get(keys[index]) ?? snapshot.savedAt,
+    }
+  })
+}
+
+const isSettledResult = (
+  result: SingleQueryResult,
+): result is Exclude<SingleQueryResult, TransientQueryResult> =>
+  result.type !== "running" && result.type !== "queued"
 
 export type CellResultStatus =
   | "unrequested"
@@ -234,8 +264,9 @@ export class CellResultHydrationEngine {
   ) {
     const statements = getQueriesFromText(cell.value)
     const slotKeys = statementKeysFor(statements)
-    const results = snapshot.results.map(normalizeSnapshotResultQuery)
-    const resultKeys = resultStatementKeys(results)
+    const loaded = snapshot.results.map(normalizeSnapshotResultQuery)
+    const resultKeys = resultStatementKeys(loaded)
+    const results = foldLegacyFetchedAt(loaded, resultKeys, snapshot)
     const rekeyed = rekeyLegacyStatementKeys(results, resultKeys, snapshot)
     const keyed = rekeyed ?? snapshot
     const reconciled = reconcileKeyedResults(statements, slotKeys, resultKeys, {
@@ -263,15 +294,12 @@ export class CellResultHydrationEngine {
     const refreshErrors = keyed.refreshErrors?.filter((error) =>
       slotKeySet.has(error.statementKey),
     )
-    const slotFetchedAt = keyed.slotFetchedAt?.filter((stamp) =>
-      slotKeySet.has(stamp.statementKey),
-    )
     const refreshState: SnapshotRefreshState = {
       ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
-      ...(slotFetchedAt && slotFetchedAt.length > 0 ? { slotFetchedAt } : {}),
     }
-    // A re-keyed snapshot rewrites too, so the disk copy holds head keys and
-    // the next reload translates nothing.
+    // A re-keyed or time-folded snapshot rewrites too, so the disk copy holds
+    // head keys and every result's fetch time, and the next reload translates
+    // and folds nothing.
     if (frameChanged || rekeyed !== null) {
       const rewritten: NotebookResultSnapshot = {
         ...snapshot,
@@ -301,9 +329,8 @@ export class CellResultHydrationEngine {
         ? { script: snapshot.script }
         : {}),
     })
-    // Persisted refresh failures and fetch times re-enter the engine channel,
-    // so a reload restores the red badge, last_refresh_error and each tab's
-    // true fetch time alongside the old rows.
+    // Persisted refresh failures re-enter the engine channel, so a reload
+    // restores the red badge and last_refresh_error alongside the old rows.
     if (Object.keys(refreshState).length > 0) {
       this.deps.seedRefreshState(cellId, refreshState)
     }

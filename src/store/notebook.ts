@@ -86,7 +86,8 @@ export type DqlQueryResult = {
   timestamp?: number
   timings?: Timings
   notice?: string
-  // Absent on results persisted before results carried their fetch time.
+  // When the rows were fetched. Every constructor stamps it; hydration folds
+  // it once into results persisted before it existed.
   fetchedAt?: number
 }
 
@@ -129,6 +130,9 @@ export type CellResult = {
   activeResultIndex: number
   activeStatementKey?: string
   error?: string
+  // The run token: it changes when a run replaces the frame, and the grid
+  // keys its viewport on it. It is not a time — each result carries its own
+  // fetchedAt — and after a reload it is the snapshot's save time.
   timestamp: number
   script?: {
     successCount: number

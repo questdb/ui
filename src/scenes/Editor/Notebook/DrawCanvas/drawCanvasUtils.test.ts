@@ -469,13 +469,12 @@ describe("toChartResult", () => {
     expect(toChartResult(running, ["select 1"])).toEqual({ kind: "pending" })
   })
 
-  it("settles a matching result with its chartable rows and timestamp", () => {
+  it("settles a matching result with its chartable rows", () => {
     const settled = toChartResult(settledResult("select 1"), ["select 1"])
     expect(settled.kind).toBe("settled")
     if (settled.kind === "settled") {
       expect(settled.results).toHaveLength(1)
       expect(settled.hadError).toBe(false)
-      expect(settled.timestamp).toBe(42)
     }
   })
 

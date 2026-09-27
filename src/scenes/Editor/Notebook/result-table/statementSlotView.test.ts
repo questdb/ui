@@ -29,7 +29,7 @@ const fetchState = (over: Partial<CellFetchState> = {}): CellFetchState => ({
   slotFetching: new Set(),
   slotErrors: new Map(),
   cancelledSlots: new Set(),
-  slotFetchedAt: new Map(),
+  slotVerifiedAt: new Map(),
   fetchCancelled: false,
   ...over,
 })
@@ -48,7 +48,7 @@ describe("buildStatementSlotViews", () => {
     const state = fetchState({
       slotFetching: new Set([key2]),
       slotErrors: new Map([[key1, "boom"]]),
-      slotFetchedAt: new Map([[key1, 1234]]),
+      slotVerifiedAt: new Map([[key1, 1234]]),
     })
 
     // When the slot views are built
@@ -63,6 +63,37 @@ describe("buildStatementSlotViews", () => {
     })
     expect(slots[1]).toMatchObject({ key: key2, refreshing: true })
     expect(slots[1].refreshError).toBeUndefined()
+  })
+
+  it("shows the later of the rows' fetch time and the poll that verified them", () => {
+    // Given a frame whose rows were fetched at T1, one slot verified unchanged
+    // later and the other before its rows were written
+    const statements = ["select 1", "select 2"]
+    const [key1, key2] = statementKeysFor(statements)
+    const frame = deriveStatementFrame(
+      statements,
+      {
+        results: statements.map((query) => ({
+          ...dql(query),
+          fetchedAt: 2000,
+        })),
+        activeResultIndex: 0,
+        timestamp: 0,
+      },
+      statementKeysFor(statements),
+    )!
+    const state = fetchState({
+      slotVerifiedAt: new Map([
+        [key1, 3000],
+        [key2, 1500],
+      ]),
+    })
+
+    // When the slot views are built
+    const slots = buildStatementSlotViews(frame, state)
+
+    // Then the status line never shows a time older than the rows
+    expect(slots.map((slot) => slot.fetchedAt)).toEqual([3000, 2000])
   })
 
   it("marks a statement with no result as not run, with no refresh state", () => {

@@ -22,6 +22,10 @@ export type SnapshotSlotFetchedAt = {
   fetchedAt: number
 }
 
+// `savedAt` is the write time and the table's ordering index; it is never a
+// fetch time. Each result carries its own `fetchedAt`. `slotFetchedAt` is a
+// legacy field: read once at hydration to fold into results saved without
+// `fetchedAt`, never written.
 export type NotebookResultSnapshot = {
   bufferId: number
   cellId: string
@@ -36,10 +40,7 @@ export type NotebookResultSnapshot = {
 
 // The per-statement refresh state a snapshot carries back into the refresh
 // engine on hydration.
-export type SnapshotRefreshState = Pick<
-  NotebookResultSnapshot,
-  "refreshErrors" | "slotFetchedAt"
->
+export type SnapshotRefreshState = Pick<NotebookResultSnapshot, "refreshErrors">
 
 export const MAX_PERSISTED_PASSIVE_NOTEBOOKS = 10
 

@@ -24,7 +24,6 @@ describe("rekeyLegacyStatementKeys", () => {
     const keys = {
       activeStatementKey: legacyKeyOf(second),
       refreshErrors: [{ statementKey: legacyKeyOf(first), message: "boom" }],
-      slotFetchedAt: [{ statementKey: legacyKeyOf(second), fetchedAt: 7 }],
     }
 
     // When it is re-keyed against its saved results
@@ -39,7 +38,6 @@ describe("rekeyLegacyStatementKeys", () => {
     expect(rekeyed).toEqual({
       activeStatementKey: headSecond,
       refreshErrors: [{ statementKey: headFirst, message: "boom" }],
-      slotFetchedAt: [{ statementKey: headSecond, fetchedAt: 7 }],
     })
   })
 

@@ -99,7 +99,6 @@ export type ChartResult =
       kind: "settled"
       results: QueryExecResult[]
       hadError: boolean
-      timestamp: number
     }
 
 export const toChartResult = (
@@ -113,7 +112,6 @@ export const toChartResult = (
     kind: "settled",
     results: successResults(result.results.map(toExecResult)),
     hadError: result.results.some((r) => r.type === "error"),
-    timestamp: result.timestamp,
   }
 }
 

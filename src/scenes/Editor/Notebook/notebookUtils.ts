@@ -10,6 +10,7 @@ import type {
   CellPaneView,
   CellResult,
   CellType,
+  ErrorQueryResult,
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
@@ -224,16 +225,21 @@ export const singleResultFromExec = (
         fetchedAt: Date.now(),
       }
     case "error":
-      return {
-        type: "error",
-        query,
-        error: exec.error ?? "Unknown error",
-        fetchedAt: Date.now(),
-      }
+      return errorResult(query, exec.error ?? "Unknown error")
     default:
       return { type: exec.type, query, fetchedAt: Date.now() }
   }
 }
+
+export const errorResult = (
+  query: string,
+  error: string,
+): ErrorQueryResult => ({
+  type: "error",
+  query,
+  error,
+  fetchedAt: Date.now(),
+})
 
 export const cancelledResult = (
   query: string,
@@ -244,6 +250,17 @@ export const cancelledResult = (
   reason,
   fetchedAt: Date.now(),
 })
+
+// The newest fetch time among a frame's results: the freshness a poll
+// schedule starts from after a reveal or a reload.
+export const frameFetchedAt = (results: SingleQueryResult[]): number =>
+  results.reduce(
+    (latest, result) =>
+      "fetchedAt" in result && result.fetchedAt !== undefined
+        ? Math.max(latest, result.fetchedAt)
+        : latest,
+    0,
+  )
 
 // Notebook-scoped result caps. Rows are bounded at the fetch; the byte cap
 // bounds wide results so a persisted snapshot stays small. Deliberately NOT the

@@ -24,6 +24,7 @@ import {
   buildInitialScriptResults,
   cancelledResult,
   type CellRunOutcome,
+  errorResult,
   hasPendingResult,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
@@ -518,11 +519,10 @@ export const useCellExecution = ({
             const stmt = classified[index]
             if (stmt?.klass === "ERROR") {
               failedCount++
-              const invalid: SingleQueryResult = {
-                type: "error",
-                query: sql,
-                error: stmt.error ?? "Invalid statement",
-              }
+              const invalid = errorResult(
+                sql,
+                stmt.error ?? "Invalid statement",
+              )
               finalResults[index] = invalid
               if (isCurrentRun()) updateCellResult(cellId, index, invalid)
               return
@@ -979,11 +979,11 @@ export const useCellExecution = ({
       const target = cellsRef.current.find((c) => c.id === cellId)?.result
         ?.results[index]
       if (target?.type === "running") {
-        updateCellResult(cellId, index, {
-          type: "error",
-          query: target.query,
-          error: "Cancelled by user",
-        })
+        updateCellResult(
+          cellId,
+          index,
+          errorResult(target.query, "Cancelled by user"),
+        )
       }
     },
     [cellsRef, updateCellResult],

@@ -11,12 +11,16 @@ export type StatementSlotView = {
   result: SingleQueryResult | null
   refreshing: boolean
   refreshError?: string
-  // When the slot's rows were fetched — the status line's time.
+  // The status line's time: when the slot's rows were fetched, or the later
+  // poll that verified them unchanged.
   fetchedAt?: number
 }
 
 const resultFetchedAt = (result: SingleQueryResult | null) =>
   result !== null && "fetchedAt" in result ? result.fetchedAt : undefined
+
+const latest = (a: number | undefined, b: number | undefined) =>
+  a === undefined ? b : b === undefined ? a : Math.max(a, b)
 
 export const buildStatementSlotViews = (
   frame: StatementFrame,
@@ -24,8 +28,10 @@ export const buildStatementSlotViews = (
 ): StatementSlotView[] =>
   frame.slots.map((slot) => {
     const refreshError = fetchState?.slotErrors.get(slot.key)
-    const fetchedAt =
-      fetchState?.slotFetchedAt.get(slot.key) ?? resultFetchedAt(slot.result)
+    const fetchedAt = latest(
+      resultFetchedAt(slot.result),
+      fetchState?.slotVerifiedAt.get(slot.key),
+    )
     return {
       key: slot.key,
       sql: slot.sql,

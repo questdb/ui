@@ -23,6 +23,16 @@ const dqlResult = (query: string): SingleQueryResult => ({
   columns: [{ name: "x", type: "INT" }],
   dataset: [[1]],
   count: 1,
+  fetchedAt: 500,
+})
+
+// A result persisted before results carried their fetch time.
+const legacyDqlResult = (query: string): SingleQueryResult => ({
+  type: "dql",
+  query,
+  columns: [{ name: "x", type: "INT" }],
+  dataset: [[1]],
+  count: 1,
 })
 
 const snapshot = (
@@ -389,30 +399,45 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites[0].results).toEqual([dqlResult(first), dqlResult(second)])
   })
 
-  it("seeds surviving statements' fetch times into the engine and drops the rest from the rewrite", async () => {
-    // Given persisted fetch times for a surviving and a removed statement
+  it("folds a legacy snapshot's fetch time into each result once and drops the legacy stamps from the rewrite", async () => {
+    // Given a snapshot saved before results carried their fetch time: one
+    // statement has a legacy per-slot stamp, the other only the save time
     const key1 = statementKeysFor(["select 1"])[0]
-    seedCell({ ...ranCell("c1"), value: "select 1" })
+    seedCell({ ...ranCell("c1"), value: "select 1; select 2" })
     snapshots.set("c1", {
-      ...snapshot("c1", [dqlResult("select 1"), dqlResult("select 2")]),
-      slotFetchedAt: [
-        { statementKey: key1, fetchedAt: 1000 },
-        { statementKey: statementKeysFor(["select 2"])[0], fetchedAt: 2000 },
-      ],
+      ...snapshot("c1", [
+        legacyDqlResult("select 1"),
+        legacyDqlResult("select 2"),
+      ]),
+      slotFetchedAt: [{ statementKey: key1, fetchedAt: 700 }],
     })
 
     // When it hydrates
     engine.request("c1")
     await resolveLoad("c1")
 
-    // Then only the surviving statement's fetch time reaches the engine and
-    // the rewritten snapshot
-    expect(seededRefreshState).toEqual([
-      ["c1", { slotFetchedAt: [{ statementKey: key1, fetchedAt: 1000 }] }],
-    ])
-    expect(rewrites[0].slotFetchedAt).toEqual([
-      { statementKey: key1, fetchedAt: 1000 },
-    ])
+    // Then every result carries a fetch time — the stamp, else the save time —
+    // the rewrite persists it without the legacy field, and nothing is seeded
+    const fetchedAt = (result: SingleQueryResult) =>
+      "fetchedAt" in result ? result.fetchedAt : undefined
+    expect(applied[0][1].results.map(fetchedAt)).toEqual([700, 1000])
+    expect(rewrites[0].results.map(fetchedAt)).toEqual([700, 1000])
+    expect(rewrites[0]).not.toHaveProperty("slotFetchedAt")
+    expect(seededRefreshState).toEqual([])
+  })
+
+  it("leaves a snapshot whose results already carry their fetch time untouched", async () => {
+    // Given a snapshot saved by head
+    seedCell(ranCell("c1"))
+    snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
+
+    // When it hydrates
+    engine.request("c1")
+    await resolveLoad("c1")
+
+    // Then the result keeps its time and nothing is rewritten
+    expect(applied[0][1].results[0]).toMatchObject({ fetchedAt: 500 })
+    expect(rewrites).toEqual([])
   })
 
   it("never clobbers a live result that lands while the snapshot load is in flight", async () => {

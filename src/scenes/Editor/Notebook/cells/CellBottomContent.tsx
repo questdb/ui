@@ -130,7 +130,7 @@ export const CellBottomContent: React.FC<Props> = ({
       <InlineResultTable
         slots={slots}
         activeSlotIndex={frame.activeSlotIndex}
-        timestamp={cell.result.timestamp}
+        runToken={cell.result.timestamp}
         isFocused={isFocused}
         onTabChange={(statementKey) =>
           setActiveStatement(cell.id, statementKey)
