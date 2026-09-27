@@ -15,7 +15,7 @@ const boundKindOf = (
   rule: DraftRule,
   columns: ColumnDefinition[],
 ): BoundKind => {
-  if (rule.kind === "unset") return "unknown"
+  if (rule.kind === "unset" || rule.kind === "newRow") return "unknown"
   const kind = targetKind(rule.target, columns)
   return kind === "numeric" || kind === "temporal" ? kind : "unknown"
 }
@@ -30,7 +30,11 @@ export const validateRule = (
       : { column: "Choose a column" }
   }
   const errors = validateRuleFields(rule, boundKindOf(rule, columns))
-  if (rule.target.kind === "column" && !rule.target.name.trim()) {
+  if (
+    rule.kind !== "newRow" &&
+    rule.target.kind === "column" &&
+    !rule.target.name.trim()
+  ) {
     return { column: "Choose a column", ...errors }
   }
   return errors
@@ -51,6 +55,6 @@ export const validateRules = (
 // Identity is needed only by rules that compare with the previous result.
 export const validateIdentity = (draft: DraftConfig): string | null =>
   draft.identityColumns.length === 0 &&
-  draft.rules.some((rule) => rule.kind === "previous")
+  draft.rules.some((rule) => rule.kind === "previous" || rule.kind === "newRow")
     ? "Needed for comparison rules"
     : null

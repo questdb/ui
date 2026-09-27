@@ -73,30 +73,41 @@ export type HighlightStep = {
 type RuleBase = {
   id: string
   enabled: boolean
-  target: RuleTarget
   display: HighlightDisplay
+}
+
+type TargetedRuleBase = RuleBase & {
+  target: RuleTarget
   appliesTo: HighlightAppliesTo
 }
 
-export type PreviousRule = RuleBase & {
+// A row whose identity key was not in the previous result. It has no cell to
+// point at, so it always paints the row and needs identity columns.
+export type NewRowRule = RuleBase & {
+  kind: "newRow"
+  color: HighlightColorToken
+}
+
+export type PreviousRule = TargetedRuleBase & {
   kind: "previous"
   condition: PreviousCondition
   color: HighlightColorToken
 }
 
-export type ValueRule = RuleBase & {
+export type ValueRule = TargetedRuleBase & {
   kind: "value"
   condition: ValueCondition
   color: HighlightColorToken
 }
 
-export type StepsRule = RuleBase & {
+export type StepsRule = TargetedRuleBase & {
   kind: "steps"
   steps: HighlightStep[]
   remainderColor: HighlightColorToken
 }
 
-export type HighlightRule = PreviousRule | ValueRule | StepsRule
+export type TargetedRule = PreviousRule | ValueRule | StepsRule
+export type HighlightRule = TargetedRule | NewRowRule
 
 export type HighlightConfig = {
   identityColumns: string[]
@@ -142,4 +153,5 @@ export const EMPTY_HIGHLIGHT_LOOKUP: HighlightLookup = {
 
 export const defaultDisplayFor = (
   kind: HighlightRule["kind"],
-): HighlightDisplay => (kind === "previous" ? "temporary" : "always")
+): HighlightDisplay =>
+  kind === "previous" || kind === "newRow" ? "temporary" : "always"

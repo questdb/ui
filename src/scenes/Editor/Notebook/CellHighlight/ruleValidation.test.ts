@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import type { RuleTarget } from "../../../../components/ResultGrid/highlight"
 import { createRule, createUnsetRule, type DraftRule } from "./ruleDraft"
 import {
   stepErrorKey,
@@ -19,8 +20,12 @@ const symbol = { kind: "column", name: "symbol" } as const
 
 const valueRule = (
   option: Parameters<typeof createRule>[2],
-  target: DraftRule["target"] = price,
-) => createRule("r", target!, option)
+  target: RuleTarget = price,
+) => {
+  const rule = createRule("r", target, option)
+  if (rule.kind === "newRow") throw new Error("expected a targeted rule")
+  return rule
+}
 
 describe("validateRule", () => {
   it("requires a column after resetting a configured rule's target", () => {

@@ -72,14 +72,18 @@ const isStep = (value: unknown) =>
 const isRuleBase = (value: Record) =>
   typeof value.id === "string" &&
   typeof value.enabled === "boolean" &&
-  isTarget(value.target) &&
   typeof value.display === "string" &&
-  DISPLAYS.has(value.display) &&
+  DISPLAYS.has(value.display)
+
+const isTargeted = (value: Record) =>
+  isTarget(value.target) &&
   typeof value.appliesTo === "string" &&
   APPLIES_TO.has(value.appliesTo)
 
 export const isHighlightRule = (value: unknown): value is HighlightRule => {
   if (!isRecord(value) || !isRuleBase(value)) return false
+  if (value.kind === "newRow") return isColor(value.color)
+  if (!isTargeted(value)) return false
   switch (value.kind) {
     case "previous":
       return isColor(value.color) && isPreviousCondition(value.condition)

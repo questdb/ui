@@ -27,6 +27,13 @@ describe("rule summaries", () => {
     expect(ruleDescription(absolute)).toBe("Flash")
   })
 
+  it("names a new-row rule without a column", () => {
+    const fresh = createRule("fresh", null, "newRow")
+    expect(fresh).toMatchObject({ kind: "newRow", display: "temporary" })
+    expect(ruleSummary(fresh)).toBe("New row")
+    expect(ruleDescription(fresh)).toBe("Flash · Row")
+  })
+
   it("keeps range bounds and text predicates visible when collapsed", () => {
     const range = createRule(
       "range",

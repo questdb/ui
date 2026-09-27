@@ -16,8 +16,10 @@ import type {
   HighlightEvaluation,
   HighlightRule,
   MatchStats,
+  NewRowRule,
   PreviousRule,
   StepsRule,
+  TargetedRule,
   ValueRule,
 } from "./types"
 
@@ -28,7 +30,7 @@ type EvaluateInput = {
   previous: IdentityIndex | null
 }
 
-type ColumnRules = Map<number, HighlightRule[]>
+type ColumnRules = Map<number, TargetedRule[]>
 
 type OrderedHit = { order: number; hit: CellHighlight }
 
@@ -75,7 +77,7 @@ const asBound = (
   bound === null ? (range?.[end] ?? null) : asComparableInput(bound, kind)
 
 const resolveTargets = (
-  rule: HighlightRule,
+  rule: TargetedRule,
   columns: ColumnDefinition[],
   kinds: ColumnKind[],
 ): number[] => {
@@ -94,7 +96,7 @@ const groupRulesByColumn = (
 ): ColumnRules => {
   const grouped: ColumnRules = new Map()
   for (const rule of rules) {
-    if (!rule.enabled) continue
+    if (!rule.enabled || rule.kind === "newRow") continue
     for (const index of resolveTargets(rule, columns, kinds)) {
       const list = grouped.get(index) ?? []
       list.push(rule)
@@ -290,7 +292,7 @@ const createRuleMatchers = (
     }
   }
   return (
-    rule: HighlightRule,
+    rule: TargetedRule,
     index: number,
     kind: ColumnKind,
     value: CellValue,
@@ -332,6 +334,11 @@ export const evaluateHighlights = ({
   const rowBackground = new Map<number, OrderedHit>()
   const direction = new Map<number, CellDirection>()
   const priority = new Map(config.rules.map((rule, order) => [rule, order]))
+  // The first enabled new-row rule wins for the row channel; list order
+  // still decides against cell rules.
+  const newRowRule = config.rules.find(
+    (rule): rule is NewRowRule => rule.enabled && rule.kind === "newRow",
+  )
   const columnCount = columns.length
   const stats: MatchStats | null = canCompare
     ? { total: dataset.length, matched: 0, added: 0, ambiguous: 0 }
@@ -340,6 +347,7 @@ export const evaluateHighlights = ({
 
   dataset.forEach((row, rowIndex) => {
     let previousRow: ResultGridRow | undefined
+    let added = false
     if (canCompare && stats) {
       const key = identityKeyOf(row, identityIndexes)
       if (seenKeys.has(key)) {
@@ -347,8 +355,9 @@ export const evaluateHighlights = ({
       } else {
         seenKeys.add(key)
         previousRow = previous.rows.get(key)
+        added = previousRow === undefined && !previous.ambiguous.has(key)
         if (previousRow) stats.matched++
-        else if (!previous.ambiguous.has(key)) stats.added++
+        else if (added) stats.added++
       }
     }
     // Rules are walked per column, so the row channel keeps the hit of the
@@ -356,6 +365,12 @@ export const evaluateHighlights = ({
     // hit settles its own cell, but the column keeps looking for a row rule
     // so the rest of the row still gets painted.
     let rowHit: OrderedHit | undefined
+    if (added && newRowRule) {
+      rowHit = {
+        order: priority.get(newRowRule) ?? Number.MAX_SAFE_INTEGER,
+        hit: { color: newRowRule.color, alpha: 1, display: newRowRule.display },
+      }
+    }
     for (const [index, list] of rules) {
       const value = row[index]
       const cellKey = rowIndex * columnCount + index

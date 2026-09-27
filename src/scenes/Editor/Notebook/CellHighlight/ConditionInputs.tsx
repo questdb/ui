@@ -220,6 +220,7 @@ export const ConditionInputs: React.FC<{
       }
     }
     case "steps":
+    case "newRow":
       return null
   }
 }

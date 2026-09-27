@@ -1,6 +1,7 @@
 import type {
   BetweenBound,
   HighlightColorToken,
+  RuleTarget,
 } from "../../../../components/ResultGrid/highlight"
 import type { DraftRule } from "./ruleDraft"
 
@@ -11,13 +12,19 @@ const formatValue = (value: string | number) =>
 const formatBound = (bound: BetweenBound) =>
   bound === null ? "auto" : formatValue(bound)
 
+const targetLabel = (target: RuleTarget) =>
+  target.kind === "allNumeric"
+    ? "All numeric columns"
+    : target.name || "Choose a column"
+
 export const ruleSummary = (rule: DraftRule): string => {
-  const target =
-    rule.target?.kind === "allNumeric"
-      ? "All numeric columns"
-      : rule.target?.name || "Choose a column"
-  if (rule.kind === "unset")
-    return rule.target ? `${target} · Choose a condition` : "New rule"
+  if (rule.kind === "newRow") return "New row"
+  if (rule.kind === "unset") {
+    return rule.target
+      ? `${targetLabel(rule.target)} · Choose a condition`
+      : "New rule"
+  }
+  const target = targetLabel(rule.target)
   switch (rule.kind) {
     case "previous": {
       const condition = rule.condition
@@ -66,6 +73,7 @@ export const ruleColors = (rule: DraftRule): HighlightColorToken[] => {
   switch (rule.kind) {
     case "unset":
       return []
+    case "newRow":
     case "previous":
       return [rule.color]
     case "value":
@@ -95,5 +103,6 @@ export const ruleDescription = (rule: DraftRule): string => {
   if (rule.kind === "unset")
     return "Choose a column and condition to finish this rule"
   const display = rule.display === "temporary" ? "Flash" : "Permanent"
-  return rule.appliesTo === "row" ? `${display} · Row` : display
+  const row = rule.kind === "newRow" || rule.appliesTo === "row"
+  return row ? `${display} · Row` : display
 }

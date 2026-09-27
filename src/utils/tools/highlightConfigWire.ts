@@ -21,7 +21,7 @@ import { validateRuleFields } from "../../components/ResultGrid/highlight/valida
 // Snake-case shape the agent tools speak for grid highlight rules, and its
 // mapping to the internal HighlightConfig. One flat rule object carries every
 // kind; the fields a kind does not use stay null.
-export type HighlightRuleKind = "previous" | "value" | "steps"
+export type HighlightRuleKind = "previous" | "value" | "steps" | "newRow"
 export type PreviousOpWire = "gt" | "lt" | "changed" | "changedBy"
 export type ValueOpWire =
   | "gt"
@@ -112,7 +112,10 @@ const mapRule = (
     target: targetOf(rule.column),
   }
   const display: HighlightDisplay =
-    rule.display ?? (rule.kind === "previous" ? "temporary" : "always")
+    rule.display ??
+    (rule.kind === "previous" || rule.kind === "newRow"
+      ? "temporary"
+      : "always")
   if (
     rule.applies_to != null &&
     rule.applies_to !== "cell" &&
@@ -126,6 +129,17 @@ const mapRule = (
   }
   const color = colorOf(rule.color, DEFAULT_RULE_COLOR)
   switch (rule.kind) {
+    case "newRow":
+      return {
+        ok: true,
+        rule: {
+          id: base.id,
+          enabled: base.enabled,
+          kind: "newRow",
+          display,
+          color,
+        },
+      }
     case "previous": {
       const op = rule.op ?? ""
       if (!PREVIOUS_OPS.has(op)) {
@@ -290,7 +304,7 @@ const mapRule = (
     default:
       return fail(
         index,
-        "kind must be previous|value|steps (a scale is value between with fill gradient)",
+        "kind must be previous|value|steps|newRow (a scale is value between with fill gradient)",
       )
   }
 }
@@ -332,6 +346,15 @@ export const toHighlightConfigWire = (
 ): HighlightConfigWire => ({
   identity_columns: config.identityColumns,
   rules: config.rules.map((rule): HighlightRuleWire => {
+    if (rule.kind === "newRow") {
+      return {
+        kind: "newRow",
+        column: null,
+        ...(rule.enabled ? {} : { enabled: false }),
+        display: rule.display,
+        color: hueOfToken(rule.color),
+      }
+    }
     const shared: HighlightRuleWire = {
       kind: rule.kind,
       column: columnOf(rule.target),

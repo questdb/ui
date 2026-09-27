@@ -16,6 +16,7 @@ export type ConditionOption =
   | "prev.gt"
   | "prev.lt"
   | "prev.changed"
+  | "newRow"
   | "prev.changedBy"
   | "value.gt"
   | "value.gte"
@@ -40,6 +41,7 @@ export const conditionDescriptors: ConditionDescriptor[] = [
   { value: "prev.gt", label: "> previous", group: "previous" },
   { value: "prev.lt", label: "< previous", group: "previous" },
   { value: "prev.changed", label: "changed", group: "previous" },
+  { value: "newRow", label: "new row", group: "previous" },
   {
     value: "prev.changedBy",
     label: "changed by at least",
@@ -98,19 +100,23 @@ export const conditionOptionOf = (rule: HighlightRule): ConditionOption => {
       return `value.${rule.condition.op}`
     case "steps":
       return "steps"
+    case "newRow":
+      return "newRow"
   }
 }
 
+// A rule can start from a condition alone; a missing column is flagged on
+// Save, and a new-row rule never needs one.
 export const createRule = (
   id: string,
-  target: RuleTarget,
+  target: RuleTarget | null,
   option: ConditionOption,
 ): HighlightRule =>
   withConditionOption(
     {
       id,
       enabled: true,
-      target,
+      target: target ?? { kind: "column", name: "" },
       display: "always",
       kind: "value",
       appliesTo: "cell",
@@ -136,14 +142,22 @@ export const withConditionOption = (
   const base = {
     id: rule.id,
     enabled: rule.enabled,
-    target: rule.target,
-    appliesTo: rule.appliesTo,
+    target:
+      rule.kind === "newRow"
+        ? { kind: "column" as const, name: "" }
+        : rule.target,
+    appliesTo: rule.kind === "newRow" ? "cell" : rule.appliesTo,
   }
-  const carriedColor =
-    rule.kind === "previous" || rule.kind === "value"
-      ? rule.color
-      : DEFAULT_RULE_COLOR
+  const carriedColor = rule.kind === "steps" ? DEFAULT_RULE_COLOR : rule.color
   switch (option) {
+    case "newRow":
+      return {
+        id: rule.id,
+        enabled: rule.enabled,
+        kind: "newRow",
+        display: defaultDisplayFor("newRow"),
+        color: carriedColor,
+      }
     case "prev.gt":
     case "prev.lt":
     case "prev.changed": {
@@ -263,6 +277,9 @@ export const createUnsetRule = (id: string): UnsetRule => ({
 
 export const isCompleteRule = (rule: DraftRule): rule is HighlightRule =>
   rule.kind !== "unset"
+
+export const ruleTargetOf = (rule: DraftRule): RuleTarget | null =>
+  rule.kind === "newRow" ? null : rule.target
 
 export type RuleMove = -1 | 1 | "top" | "bottom"
 

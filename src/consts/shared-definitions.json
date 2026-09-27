@@ -680,12 +680,12 @@
                 "properties": {
                   "kind": {
                     "type": "string",
-                    "enum": ["previous", "value", "steps"],
-                    "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
+                    "enum": ["previous", "value", "steps", "newRow"],
+                    "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
                   },
                   "column": {
                     "type": ["string", "null"],
-                    "description": "Result column the rule targets. null = every numeric column."
+                    "description": "Result column the rule targets. null = every numeric column (ignored by newRow)."
                   },
                   "enabled": {
                     "type": ["boolean", "null"],
@@ -734,7 +734,7 @@
                       "matches",
                       null
                     ],
-                    "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
+                    "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow."
                   },
                   "value": {
                     "type": ["number", "string", "null"],
@@ -1187,12 +1187,12 @@
                       "properties": {
                         "kind": {
                           "type": "string",
-                          "enum": ["previous", "value", "steps"],
-                          "description": "previous = compare with the same row in the previous result (needs identity_columns). value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
+                          "enum": ["previous", "value", "steps", "newRow"],
+                          "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
                         },
                         "column": {
                           "type": ["string", "null"],
-                          "description": "Result column the rule targets. null = every numeric column."
+                          "description": "Result column the rule targets. null = every numeric column (ignored by newRow)."
                         },
                         "enabled": {
                           "type": ["boolean", "null"],
@@ -1241,7 +1241,7 @@
                             "matches",
                             null
                           ],
-                          "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps."
+                          "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow."
                         },
                         "value": {
                           "type": ["number", "string", "null"],

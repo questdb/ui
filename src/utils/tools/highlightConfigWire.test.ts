@@ -189,6 +189,37 @@ describe("fromHighlightConfigWire", () => {
   })
 })
 
+describe("fromHighlightConfigWire: new rows", () => {
+  it("maps a newRow rule without a column and writes it back", () => {
+    // Given a new-row rule
+    const wire = {
+      identity_columns: ["symbol"],
+      rules: [
+        {
+          kind: "newRow" as const,
+          column: null,
+          color: "blue" as const,
+          display: "temporary" as const,
+        },
+      ],
+    }
+
+    // When parsed and serialized back
+    const parsed = fromHighlightConfigWire(wire, () => "fresh")
+    if (!parsed.ok) throw new Error(parsed.error)
+
+    // Then the rule carries only color and display, and the wire round-trips
+    expect(parsed.config.rules[0]).toEqual({
+      id: "fresh",
+      kind: "newRow",
+      enabled: true,
+      display: "temporary",
+      color: "dataSeries9",
+    })
+    expect(toHighlightConfigWire(parsed.config)).toEqual(wire)
+  })
+})
+
 describe("fromHighlightConfigWire: automatic between bounds", () => {
   it("maps a null value or to onto an automatic bound and writes it back as null", () => {
     // Given a self-scaling gradient and a range open at the top

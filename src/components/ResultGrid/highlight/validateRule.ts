@@ -58,6 +58,8 @@ export const validateRuleFields = (
 ): RuleErrors => {
   const errors: RuleErrors = {}
   switch (rule.kind) {
+    case "newRow":
+      break
     case "previous": {
       const condition = rule.condition
       if (condition.op !== "changedBy") break

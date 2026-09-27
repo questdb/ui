@@ -220,6 +220,40 @@ describe("evaluateHighlights: previous result rules", () => {
     expect(anyChange.background(1, PRICE)).toBeDefined()
   })
 
+  it("paints a row whose identity was not in the previous result", () => {
+    // Given a new-row rule
+    const fresh: HighlightRule = {
+      id: "fresh",
+      kind: "newRow",
+      enabled: true,
+      display: "always",
+      color: "dataSeries9",
+    }
+
+    // When B is new, A was there, and C shares a key with another row
+    const { lookup, stats } = evaluateHighlights({
+      columns,
+      dataset: [row("A", 1, 1), row("B", 1, 1), row("C", 1, 1), row("C", 2, 2)],
+      config: config([fresh]),
+      previous: previousOf([row("A", 1, 1)]),
+    })
+
+    // Then only B's row is painted, and the first run paints nothing
+    expect(lookup.row(0)).toBeUndefined()
+    expect(lookup.row(1)?.color).toBe("dataSeries9")
+    expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries9")
+    expect(lookup.row(2)?.color).toBe("dataSeries9")
+    expect(lookup.row(3)).toBeUndefined()
+    expect(stats).toEqual({ total: 4, matched: 1, added: 2, ambiguous: 1 })
+    const firstRun = evaluateHighlights({
+      columns,
+      dataset: [row("B", 1, 1)],
+      config: config([fresh]),
+      previous: null,
+    })
+    expect(firstRun.lookup.row(0)).toBeUndefined()
+  })
+
   it("compares timestamps with the previous result as instants", () => {
     // Given up and down rules on ts
     const later = rule({

@@ -36,6 +36,7 @@ import {
   conditionOptionOf,
   conditionOptions,
   createRule,
+  ruleTargetOf,
   targetFromValue,
   targetKind,
   targetToValue,
@@ -116,7 +117,8 @@ export const RuleRow: React.FC<Props> = ({
   onMove,
   onRemove,
 }) => {
-  const kind = rule.target ? targetKind(rule.target, columns) : "other"
+  const target = ruleTargetOf(rule)
+  const kind = target ? targetKind(target, columns) : "other"
   const conditionChoices = conditionOptions().map((descriptor) => ({
     label: descriptor.label,
     value: descriptor.value,
@@ -131,12 +133,13 @@ export const RuleRow: React.FC<Props> = ({
     })),
   ]
   const targetLabel =
-    rule.target === null
+    target === null
       ? ""
-      : rule.target.kind === "allNumeric"
+      : target.kind === "allNumeric"
         ? ALL_NUMERIC_LABEL
-        : rule.target.name
+        : target.name
   const isUnset = rule.kind === "unset"
+  const isNewRow = rule.kind === "newRow"
   const currentOption = isUnset ? "" : conditionOptionOf(rule)
 
   const rangeOf = (target: RuleTarget) =>
@@ -144,17 +147,16 @@ export const RuleRow: React.FC<Props> = ({
 
   // A picked option carries a target value; a typed name is a column.
   const changeTarget = (value: string, option: { value: string } | null) => {
-    const target: RuleTarget = option
+    if (rule.kind === "newRow") return
+    const next: RuleTarget = option
       ? targetFromValue(value)
       : { kind: "column", name: value }
-    onChange({ ...rule, target })
+    onChange({ ...rule, target: next })
   }
 
   const changeCondition = (option: string) => {
     if (rule.kind === "unset") {
-      if (rule.target) {
-        onChange(createRule(rule.id, rule.target, option as ConditionOption))
-      }
+      onChange(createRule(rule.id, rule.target, option as ConditionOption))
       return
     }
     onChange(withConditionOption(rule, option as ConditionOption))
@@ -293,31 +295,33 @@ export const RuleRow: React.FC<Props> = ({
         {expanded && (
           <RuleEditor>
             <RuleFields>
-              <RuleField>
-                <FieldLabel>Column</FieldLabel>
-                <ColumnPicker
-                  variant="field"
-                  options={targetOptions}
-                  value={targetLabel}
-                  placeholder="Column"
-                  searchPlaceholder="Column name"
-                  emptyLabel="No columns yet, type a name"
-                  noMatchLabel="No columns matched"
-                  allowCustom
-                  ariaLabel="Column"
-                  ariaInvalid={errors?.column !== undefined}
-                  dataHookBase="highlight-rule-column"
-                  onSelect={changeTarget}
-                  onReset={() =>
-                    onChange(
-                      rule.kind === "unset"
-                        ? { ...rule, target: null }
-                        : { ...rule, target: { kind: "column", name: "" } },
-                    )
-                  }
-                />
-                {errors?.column && <FieldError>{errors.column}</FieldError>}
-              </RuleField>
+              {!isNewRow && (
+                <RuleField>
+                  <FieldLabel>Column</FieldLabel>
+                  <ColumnPicker
+                    variant="field"
+                    options={targetOptions}
+                    value={targetLabel}
+                    placeholder="Column"
+                    searchPlaceholder="Column name"
+                    emptyLabel="No columns yet, type a name"
+                    noMatchLabel="No columns matched"
+                    allowCustom
+                    ariaLabel="Column"
+                    ariaInvalid={errors?.column !== undefined}
+                    dataHookBase="highlight-rule-column"
+                    onSelect={changeTarget}
+                    onReset={() =>
+                      onChange(
+                        rule.kind === "unset"
+                          ? { ...rule, target: null }
+                          : { ...rule, target: { kind: "column", name: "" } },
+                      )
+                    }
+                  />
+                  {errors?.column && <FieldError>{errors.column}</FieldError>}
+                </RuleField>
+              )}
               <RuleField>
                 <FieldLabel>Condition</FieldLabel>
                 <CompactSelect
@@ -325,7 +329,6 @@ export const RuleRow: React.FC<Props> = ({
                   ariaLabel="Condition"
                   value={currentOption}
                   placeholder="Condition"
-                  disabled={!rule.target}
                   options={conditionChoices}
                   onValueChange={changeCondition}
                 />
@@ -340,7 +343,7 @@ export const RuleRow: React.FC<Props> = ({
                   <ConditionInputs
                     rule={rule}
                     numeric={kind === "numeric"}
-                    range={rangeOf(rule.target)}
+                    range={target ? rangeOf(target) : null}
                     errors={errors ?? {}}
                     onChange={onChange}
                   />
@@ -419,21 +422,23 @@ export const RuleRow: React.FC<Props> = ({
                       }
                     />
                   </DisplayField>
-                  <RuleField>
-                    <FieldLabel>Applies to</FieldLabel>
-                    <CompactSelect
-                      name={`rule-${rule.id}-applies-to`}
-                      ariaLabel="Applies to"
-                      value={rule.appliesTo}
-                      options={APPLIES_TO_OPTIONS}
-                      onValueChange={(appliesTo) =>
-                        onChange({
-                          ...rule,
-                          appliesTo: appliesTo as HighlightAppliesTo,
-                        })
-                      }
-                    />
-                  </RuleField>
+                  {rule.kind !== "newRow" && (
+                    <RuleField>
+                      <FieldLabel>Applies to</FieldLabel>
+                      <CompactSelect
+                        name={`rule-${rule.id}-applies-to`}
+                        ariaLabel="Applies to"
+                        value={rule.appliesTo}
+                        options={APPLIES_TO_OPTIONS}
+                        onValueChange={(appliesTo) =>
+                          onChange({
+                            ...rule,
+                            appliesTo: appliesTo as HighlightAppliesTo,
+                          })
+                        }
+                      />
+                    </RuleField>
+                  )}
                 </RuleAppearance>
               </>
             )}
