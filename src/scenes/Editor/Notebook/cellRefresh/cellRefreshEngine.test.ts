@@ -633,10 +633,7 @@ describe("CellRefreshEngine", () => {
       const state = engine.getState("c1")!
       expect(state.fetching).toBe(false)
       expect(state.fetchCancelled).toBe(true)
-      expect(deriveChartLoading(state, { kind: "missing" }, false)).toEqual({
-        loading: false,
-        refreshing: false,
-      })
+      expect(deriveChartLoading(state, { kind: "missing" }, false)).toBe(false)
 
       // And the aborted response never lands
       resolveFetch()
@@ -843,8 +840,8 @@ describe("CellRefreshEngine", () => {
       const afterLoad = deriveChartLoading(state, { kind: "missing" }, false)
 
       // Then hydration wins until the snapshot settles
-      expect(whileLoading.loading).toBe(true)
-      expect(afterLoad.loading).toBe(false)
+      expect(whileLoading).toBe(true)
+      expect(afterLoad).toBe(false)
     })
   })
 
@@ -1872,10 +1869,10 @@ describe("CellRefreshEngine", () => {
     )
 
     // Then the recovery fetch after a failed restore shows the spinner
-    expect(overMissing.loading).toBe(true)
+    expect(overMissing).toBe(true)
 
     // And a genuinely empty settled frame keeps "No data" without flicker
-    expect(overEmpty.loading).toBe(false)
+    expect(overEmpty).toBe(false)
   })
 
   it("refetches on reveal when the settled frame was replaced by a truncated one", async () => {
@@ -1965,11 +1962,11 @@ describe("CellRefreshEngine", () => {
   it("exposes loading state for the cell toolbar via its subscription", async () => {
     // Given a subscriber deriving loading from the engine's state and the
     // cell's result, as the toolbar's useChartLoading does
-    const states: Array<{ loading: boolean; refreshing: boolean }> = []
+    const states: boolean[] = []
     const listener = () => {
       const state = engine.getState("c1")
       if (!state) {
-        states.push({ loading: false, refreshing: false })
+        states.push(false)
         return
       }
       states.push(
@@ -1988,11 +1985,8 @@ describe("CellRefreshEngine", () => {
     unsubscribe()
 
     // Then it reports loading during the fetch and idle after it settles
-    expect(states[0]).toEqual({ loading: true, refreshing: false })
-    expect(states[states.length - 1]).toEqual({
-      loading: false,
-      refreshing: false,
-    })
+    expect(states[0]).toBe(true)
+    expect(states[states.length - 1]).toBe(false)
   })
 
   it("defers fetching until the observer reports the cell visible", async () => {
@@ -2909,6 +2903,32 @@ describe("CellRefreshEngine", () => {
       expect(
         engine.getState("g1")?.slotVerifiedAt.get(keyOf("select 1")) ?? 0,
       ).toBeGreaterThan(verifiedAfterSwap ?? 0)
+    })
+
+    it("notifies an identical tick only for the progress its subscribers show", async () => {
+      // Given a polling grid past its first tick
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      const notified: Array<[boolean, number]> = []
+      const unsubscribe = engine.subscribe("g1", () => {
+        const state = engine.getState("g1")
+        notified.push([state?.fetching ?? false, state?.slotFetching.size ?? 0])
+      })
+
+      // When the next tick returns the same rows
+      await vi.advanceTimersByTimeAsync(1000)
+      unsubscribe()
+
+      // Then only the round start, the slot launch, the slot settle and the
+      // round end notify: re-stating the settled key or an empty slot set does
+      // not, since every notify re-renders the cell's subscribers
+      expect(notified).toEqual([
+        [true, 0],
+        [true, 1],
+        [true, 0],
+        [false, 0],
+      ])
     })
 
     it("commits again when a tick returns changed rows", async () => {

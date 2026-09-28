@@ -10,11 +10,7 @@ import { isAgentCellView, isCellPaneView } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
-import {
-  slotResultsByKey,
-  slotResultsByText,
-  statementKeysFor,
-} from "./statementIdentity"
+import { slotResultsByText } from "./statementIdentity"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -25,7 +21,7 @@ import {
   runHistoryPatch,
 } from "./runHistory"
 
-// Cells are in one of two view states:
+// Cells are in one of three view states:
 //
 //   - Editor visible, no result: topHeight + chrome.
 //   - Editor visible with result: topHeight + bottomHeight + split chrome.
@@ -91,9 +87,9 @@ export const clampPaneHeight = (minimum: number, px: number): number =>
 export const minBottomHeightFor = (cell: NotebookCell): number =>
   cell.mode === "draw" ? MIN_CHART_HEIGHT_PX : MIN_BOTTOM_HEIGHT_PX
 
-// Main showed a maximized cell's result pane at editor + result height; head
-// keeps the panes apart. Runs once, when a read infers the pane view from the
-// legacy flag: the hidden editor's height folds into the result pane so the
+// Before pane views, a maximized cell showed its result pane at editor +
+// result height. Runs once, when a read infers the pane view from the legacy
+// flag: the hidden editor's height folds into the result pane so the
 // cell keeps the size it had. The next persist drops the flag, and later
 // reads pass the stored pane view through untouched. A chart with no stored
 // result height folds its default; a grid's default depends on the result,
@@ -105,7 +101,7 @@ export const foldLegacyMaximizedHeights = (
     cell.bottomHeight ??
     (cell.mode === "draw" ? DEFAULT_CHART_BOTTOM_HEIGHT : undefined)
   if (bottomHeight === undefined) return cell
-  const topHeight = cell.topHeight ?? defaultTopHeightFor(cell)
+  const topHeight = cell.topHeight ?? minTopHeightFor(cell)
   return {
     ...cell,
     bottomHeight: clampPaneHeight(
@@ -138,7 +134,7 @@ const applicableCellDimensions = (
     ? { ...dimensions, resultHeight: null, view: null }
     : dimensions
 
-export type AgentCellDimensionsValidationIssue =
+type AgentCellDimensionsValidationIssue =
   | { reason: "invalid_view" }
   | {
       field: "editor_height" | "result_height"
@@ -151,7 +147,7 @@ export type AgentCellDimensionsValidationIssue =
       limit: number
     }
 
-export type AgentCellDimensionsValidation =
+type AgentCellDimensionsValidation =
   | { ok: true; dimensions: AgentCellDimensions }
   | { ok: false; issue: AgentCellDimensionsValidationIssue }
 
@@ -335,14 +331,15 @@ export const computeResultBottomHeight = (
   value: string,
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
-  // Sizing follows the same slots the tab bar renders: text first, keys for a
-  // frame written under other text. A frame no statement claims (a selection
-  // run) sizes by its own results.
-  const statements = getQueriesFromText(value)
-  const claimedSlots =
-    slotResultsByText(statements, result.results) ??
-    slotResultsByKey(statementKeysFor(statements), result.results)
-  const slotResults = claimedSlots.some((slot) => slot !== null)
+  // Sizing claims slots by text only. The tab bar also claims by key, but it
+  // has the engine's keys for free; here the formatter would run on every
+  // keystroke. A frame under other text (an edit the engine has not adopted
+  // yet, a selection run) sizes by its own results.
+  const claimedSlots = slotResultsByText(
+    getQueriesFromText(value),
+    result.results,
+  )
+  const slotResults = claimedSlots?.some((slot) => slot !== null)
     ? claimedSlots
     : result.results
   const hasMultipleTabs = slotResults.length > 1
@@ -462,25 +459,20 @@ export const resolveCellPaneLayout = (
 
 // bottomHeight seeding when a cell flips between run and draw. A user-resized
 // bottom slot is never overridden.
-export const modeChangeBottomHeightPatch = (
-  cell: NotebookCell | undefined,
+export const cellModeChangePatch = (
+  cell: NotebookCell,
   mode: CellMode,
 ): Partial<NotebookCell> => {
-  if (cell?.bottomResized) return {}
+  if (cell.bottomResized) return {}
   return {
     bottomHeight:
       mode === "draw"
         ? DEFAULT_CHART_BOTTOM_HEIGHT
-        : cell?.result
+        : cell.result
           ? computeResultBottomHeight(cell.result, cell.value)
           : undefined,
   }
 }
-
-export const cellModeChangePatch = (
-  cell: NotebookCell | undefined,
-  mode: CellMode,
-): Partial<NotebookCell> => modeChangeBottomHeightPatch(cell, mode)
 
 export const mergeCellChartConfig = (
   cell: NotebookCell,
@@ -513,8 +505,7 @@ export const patchCellRunResult = (
 // carries base chrome only.
 const cellChromePx = (
   cell: NotebookCell,
-  expectingResult: boolean = false,
-  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
+  paneLayout: CellPaneLayout,
 ): number => {
   if (cell.type === "markdown") return CELL_BASE_CHROME_PX
   return paneLayout === "split"
@@ -523,9 +514,6 @@ const cellChromePx = (
 }
 
 export const minTopHeightFor = (cell: NotebookCell): number =>
-  cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
-
-const defaultTopHeightFor = (cell: NotebookCell): number =>
   cell.type === "markdown" ? MIN_MARKDOWN_HEIGHT_PX : DEFAULT_TOP_HEIGHT
 
 export const agentCellPaneDimensions = (
@@ -571,7 +559,7 @@ export const computeCellHeights = (
   } = {},
 ): { topHeight: number; bottomHeight: number } => {
   const topHeight =
-    opts.liveTopHeight ?? cell.topHeight ?? defaultTopHeightFor(cell)
+    opts.liveTopHeight ?? cell.topHeight ?? minTopHeightFor(cell)
   const resolvedBottomHeight = isDoubleView(cell)
     ? (opts.liveBottomHeight ??
       cell.bottomHeight ??
@@ -606,7 +594,7 @@ export const cellGridBoundsError = (pos: {
     ? `x + w must be at most ${NOTEBOOK_GRID_COLS}.`
     : undefined
 
-export type CellGridBounds = { h: number; minH: number; maxH: number }
+type CellGridBounds = { h: number; minH: number; maxH: number }
 
 // Derives react-grid-layout `h` and its resize bounds from the visible pane
 // heights plus chrome — one computation, so the three numbers can never
@@ -632,12 +620,12 @@ export const computeCellGridBounds = (
   rowHeight: number,
   marginY: number = 0,
   expectingResult: boolean = false,
-  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
 ): CellGridBounds => {
+  const paneLayout = resolveCellPaneLayout(cell, expectingResult)
   const { topHeight, bottomHeight } = computeCellHeights(cell, {
     expectingResult,
   })
-  const chrome = cellChromePx(cell, expectingResult, paneLayout)
+  const chrome = cellChromePx(cell, paneLayout)
   const rows = (px: number): number =>
     Math.max(1, Math.ceil((px + marginY) / (rowHeight + marginY)))
   const visibleTopHeight = paneLayout === "result" ? 0 : topHeight
@@ -668,9 +656,7 @@ export const computeCellGridH = (
   rowHeight: number,
   marginY: number = 0,
   expectingResult: boolean = false,
-  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
-): number =>
-  computeCellGridBounds(cell, rowHeight, marginY, expectingResult, paneLayout).h
+): number => computeCellGridBounds(cell, rowHeight, marginY, expectingResult).h
 
 export const snapMarkdownTopHeight = (px: number): number => {
   const step = NOTEBOOK_GRID_ROW_HEIGHT + NOTEBOOK_GRID_MARGIN_Y
@@ -756,18 +742,13 @@ export const paneHeightsFromGridRows = (
   rowHeight: number,
   marginY: number,
   expectingResult: boolean = false,
-  paneLayout: CellPaneLayout = resolveCellPaneLayout(cell, expectingResult),
 ): Partial<NotebookCell> => {
-  if (
-    rows ===
-    computeCellGridH(cell, rowHeight, marginY, expectingResult, paneLayout)
-  ) {
+  if (rows === computeCellGridH(cell, rowHeight, marginY, expectingResult)) {
     return {}
   }
+  const paneLayout = resolveCellPaneLayout(cell, expectingResult)
   const targetContentPx =
-    rows * rowHeight +
-    (rows - 1) * marginY -
-    cellChromePx(cell, expectingResult, paneLayout)
+    rows * rowHeight + (rows - 1) * marginY - cellChromePx(cell, paneLayout)
   if (paneLayout === "editor") {
     return {
       topHeight: clampPaneHeight(minTopHeightFor(cell), targetContentPx),

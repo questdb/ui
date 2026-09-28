@@ -95,9 +95,12 @@ const DRAG_THRESHOLD_PX = 3
 const KEYBOARD_STEP_PX = 10
 const KEYBOARD_LARGE_STEP_PX = 50
 const RESIZE_KEYS = new Set(["ArrowUp", "ArrowDown", "Home", "End"])
+const SHRINK_KEYS = new Set(["ArrowUp", "Home"])
 
-export const isResizeKey = (key: string): boolean => RESIZE_KEYS.has(key)
+const isResizeKey = (key: string): boolean => RESIZE_KEYS.has(key)
 
+// A pane can render outside its bounds (a one-line markdown body below the
+// floor), so the clamp never turns a shrink key into a grow or the reverse.
 export const resizeHeightForKey = (
   key: string,
   currentHeight: number,
@@ -123,7 +126,10 @@ export const resizeHeightForKey = (
     default:
       return null
   }
-  return Math.min(maxHeight, Math.max(minHeight, next))
+  const clamped = Math.min(maxHeight, Math.max(minHeight, next))
+  return SHRINK_KEYS.has(key)
+    ? Math.min(currentHeight, clamped)
+    : Math.max(currentHeight, clamped)
 }
 
 export const ResizeHandle: React.FC<Props> = ({
@@ -274,8 +280,8 @@ export const ResizeHandle: React.FC<Props> = ({
       role="separator"
       aria-orientation="horizontal"
       aria-label={ariaLabel}
-      aria-valuemin={Math.round(minHeight)}
-      aria-valuemax={Math.round(maxHeight)}
+      aria-valuemin={Math.round(Math.min(minHeight, targetHeight ?? minHeight))}
+      aria-valuemax={Math.round(Math.max(maxHeight, targetHeight ?? maxHeight))}
       aria-valuenow={targetHeight}
       title="Drag or use arrow keys to resize. Double-click or press Enter to reset."
       tabIndex={0}

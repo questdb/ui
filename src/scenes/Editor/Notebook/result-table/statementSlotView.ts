@@ -2,6 +2,11 @@ import type { SingleQueryResult } from "../../../../store/notebook"
 import type { CellFetchState } from "../cellRefresh/cellRefreshEngine"
 import type { StatementFrame } from "../statementIdentity"
 
+export type SlotRefreshChannel = Pick<
+  CellFetchState,
+  "slotFetching" | "slotErrors" | "slotVerifiedAt"
+>
+
 // One tab's view model. Tabs follow the editor's statement list, not the
 // compact result array: a statement with no result yet renders the neutral
 // "Not run" state, and refresh state attaches by content, never by index.
@@ -24,7 +29,7 @@ const latest = (a: number | undefined, b: number | undefined) =>
 
 export const buildStatementSlotViews = (
   frame: StatementFrame,
-  fetchState: CellFetchState | undefined,
+  fetchState: SlotRefreshChannel | undefined,
 ): StatementSlotView[] =>
   frame.slots.map((slot) => {
     const refreshError = fetchState?.slotErrors.get(slot.key)

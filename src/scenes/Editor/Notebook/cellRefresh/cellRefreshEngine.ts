@@ -165,11 +165,11 @@ export const deriveChartLoading = (
   state: CellFetchState,
   chartResult: ChartResult,
   resultLoading: boolean,
-): { loading: boolean; refreshing: boolean } => {
+): boolean => {
   const hasData =
     chartResult.kind === "settled" && chartResult.results.length > 0
   const cancelled = state.fetchCancelled && !resultLoading
-  const loading =
+  return (
     state.queries.length > 0 &&
     state.classifyBlock === null &&
     !hasData &&
@@ -177,7 +177,7 @@ export const deriveChartLoading = (
     (state.settledKey !== state.queriesKey ||
       resultLoading ||
       (state.fetching && chartResult.kind !== "settled"))
-  return { loading, refreshing: state.fetching && !loading }
+  )
 }
 
 type FetchReason = "settle" | "poll" | "manual"
@@ -313,6 +313,37 @@ const slotErrorsSignature = (
   )
 
 const NO_ERRORS_SIG = slotErrorsSignature(new Map())
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" &&
+  value !== null &&
+  Object.getPrototypeOf(value) === Object.prototype
+
+const sameStateValue = (a: unknown, b: unknown): boolean => {
+  if (Object.is(a, b)) return true
+  if (a instanceof Set && b instanceof Set) {
+    return a.size === b.size && [...a].every((value) => b.has(value))
+  }
+  if (a instanceof Map && b instanceof Map) {
+    return (
+      a.size === b.size &&
+      [...a].every(([key, value]) => b.has(key) && Object.is(b.get(key), value))
+    )
+  }
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return (
+      a.length === b.length && a.every((value, i) => Object.is(value, b[i]))
+    )
+  }
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keys = Object.keys(a)
+    return (
+      keys.length === Object.keys(b).length &&
+      keys.every((key) => Object.is(a[key], b[key]))
+    )
+  }
+  return false
+}
 
 type Entry = {
   kind: CellEntryKind
@@ -907,8 +938,8 @@ export class CellRefreshEngine {
   }
 
   // Keying runs the formatter over every statement, so an entry is keyed on
-  // first use instead of on creation: the off-screen cells of a notebook that
-  // just opened never pay for it. Unkeyed state never leaves the engine.
+  // its first read instead of on creation: a notebook open pays only for the
+  // entries something reads. Unkeyed state never leaves the engine.
   private keyEntry(entry: Entry): string {
     const { slotKeys, identitiesKey } = keyedStatements(entry.state.queries)
     entry.identitiesKey = identitiesKey
@@ -1842,8 +1873,19 @@ export class CellRefreshEngine {
     }
   }
 
+  // Every notify re-renders the cell's subscribers, so a patch that restates
+  // the state (a round re-setting its settled key, an empty set replacing an
+  // empty set) keeps the current values and notifies no one.
   private setState(entry: Entry, patch: Partial<CellFetchState>) {
-    entry.state = { ...entry.state, ...patch }
+    const changes = Object.entries(patch).filter(
+      ([field, value]) =>
+        !sameStateValue(entry.state[field as keyof CellFetchState], value),
+    )
+    if (changes.length === 0) return
+    entry.state = {
+      ...entry.state,
+      ...(Object.fromEntries(changes) as Partial<CellFetchState>),
+    }
     this.notify(entry.cellId)
   }
 

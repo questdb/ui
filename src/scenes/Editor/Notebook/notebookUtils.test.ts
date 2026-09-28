@@ -60,6 +60,7 @@ import {
   MAX_NOTEBOOK_CELLS,
 } from "../../../store/notebook"
 import type { QueryExecResult } from "../../../hooks/useQueryExecution"
+import type { CellResultStatusReader } from "./cellSizing"
 import { getCellRunStatus } from "../../../utils/ai/runStatus"
 
 const cell = (
@@ -1858,6 +1859,8 @@ describe("lastRunError carry chain", () => {
   })
 })
 
+const unrequested: CellResultStatusReader = () => "unrequested"
+
 describe("buildAppliedLayout", () => {
   it("derives h from the live snapshot-load status when a reader is provided", () => {
     // Given a run-marked cell whose result lives only on disk
@@ -1874,7 +1877,13 @@ describe("buildAppliedLayout", () => {
       defaults,
       () => "missing",
     )
-    const reserved = buildAppliedLayout(request, pending, [], defaults)
+    const reserved = buildAppliedLayout(
+      request,
+      pending,
+      [],
+      defaults,
+      unrequested,
+    )
     // Then the missing cell collapses to its editor while the default
     // ("unrequested") reserves the result area — statuses drive h
     expect(collapsed[0].h).toBeLessThan(reserved[0].h)
@@ -1899,6 +1908,7 @@ describe("buildAppliedLayout", () => {
       cells,
       [],
       { gridCols: 12, rowHeight: 50 },
+      unrequested,
     )
     // Then the explicit grid is kept and the other cell derives its height
     expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 3 })
@@ -1917,6 +1927,7 @@ describe("buildAppliedLayout", () => {
       cells,
       [{ i: "a", x: 3, y: 4, w: 8, h: 5 }],
       { gridCols: 12, rowHeight: 50 },
+      unrequested,
     )
     // Then the placement stays and the height is re-derived
     expect(layout).toEqual([{ i: "a", x: 3, y: 4, w: 8, h: 3 }])
@@ -1948,6 +1959,7 @@ describe("buildAppliedLayout", () => {
       cells,
       [],
       { gridCols: 12, rowHeight: 50 },
+      unrequested,
     )
     // Then the draw cell is taller and stacks below
     // run: 72 + 40 = 112 → 3 rows
@@ -2680,9 +2692,13 @@ describe("buildAppliedNotebookState", () => {
     // Given one existing cell
     const current = state([cell("a", "SELECT 1")])
     // When the request keeps "a" and adds a new cell
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ id: "a", preserveValue: true }, { value: "SELECT 2" }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ id: "a", preserveValue: true }, { value: "SELECT 2" }],
+      },
+      unrequested,
+    )
     // Then both cells exist and the diff names them
     expect(next.cells).toHaveLength(2)
     expect(next.diff.updated).toEqual(["a"])
@@ -2698,17 +2714,25 @@ describe("buildAppliedNotebookState", () => {
       maximizedCellId: null,
     }
     // When apply sets a new default
-    const set = buildAppliedNotebookState(current, {
-      autoRefreshDefault: "5s",
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const set = buildAppliedNotebookState(
+      current,
+      {
+        autoRefreshDefault: "5s",
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then the new default is stored
     expect(set.settings.autoRefreshDefault).toBe("5s")
     // When apply passes null
-    const preserved = buildAppliedNotebookState(current, {
-      autoRefreshDefault: null,
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const preserved = buildAppliedNotebookState(
+      current,
+      {
+        autoRefreshDefault: null,
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then the stored default survives
     expect(preserved.settings.autoRefreshDefault).toBe("30s")
   })
@@ -2734,9 +2758,13 @@ describe("buildAppliedNotebookState", () => {
     // Given a notebook with no auto-refresh default
     const current = state([cell("a", "SELECT 1")])
     // When apply converts one cell to a chart and adds another, both without auto_refresh
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ ...chartRequestCell, id: "a" }, chartRequestCell],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ ...chartRequestCell, id: "a" }, chartRequestCell],
+      },
+      unrequested,
+    )
     // Then neither chart stores a key — both inherit the notebook default
     expect("autoRefresh" in next.cells[0]).toBe(false)
     expect("autoRefresh" in next.cells[1]).toBe(false)
@@ -2746,9 +2774,13 @@ describe("buildAppliedNotebookState", () => {
     // Given a chart set to Auto
     const current = state([{ ...chart("a"), autoRefresh: true as const }])
     // When an agent echoes the value
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ ...chartRequestCell, id: "a", autoRefresh: true }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ ...chartRequestCell, id: "a", autoRefresh: true }],
+      },
+      unrequested,
+    )
     // Then the chart keeps polling
     expect(next.cells[0].autoRefresh).toBe(true)
   })
@@ -2757,9 +2789,13 @@ describe("buildAppliedNotebookState", () => {
     // Given a chart pinned to a fixed interval
     const current = state([{ ...chart("a"), autoRefresh: "5s" as const }])
     // When an agent applies the cell without auto_refresh
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ ...chartRequestCell, id: "a" }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ ...chartRequestCell, id: "a" }],
+      },
+      unrequested,
+    )
     // Then the override clears — PUT semantics, no re-stamp
     expect("autoRefresh" in next.cells[0]).toBe(false)
   })
@@ -2768,10 +2804,14 @@ describe("buildAppliedNotebookState", () => {
     // Given a list-mode notebook
     const current = state([cell("a", "SELECT 1")])
     // When the request switches to grid
-    const next = buildAppliedNotebookState(current, {
-      layoutMode: "grid",
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        layoutMode: "grid",
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then grid mode is set with one layout entry per cell
     expect(next.settings.layoutMode).toBe("grid")
     expect(next.settings.layout).toHaveLength(1)
@@ -2782,9 +2822,13 @@ describe("buildAppliedNotebookState", () => {
     // Given a list-mode notebook
     const current = state([cell("a", "SELECT 1")])
     // When the request touches only cells
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ id: "a", value: "SELECT 2" }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ id: "a", value: "SELECT 2" }],
+      },
+      unrequested,
+    )
     // Then the settings object is the same reference
     expect(next.settings).toBe(current.settings)
   })
@@ -2792,17 +2836,25 @@ describe("buildAppliedNotebookState", () => {
   it("maximizedCellId: explicit id is kept only when the cell exists", () => {
     const current = state([cell("a", "SELECT 1")])
     // When the request maximizes an existing cell
-    const kept = buildAppliedNotebookState(current, {
-      maximizedCellId: "a",
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const kept = buildAppliedNotebookState(
+      current,
+      {
+        maximizedCellId: "a",
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then it is kept
     expect(kept.maximizedCellId).toBe("a")
     // When the request maximizes a cell that does not exist
-    const dropped = buildAppliedNotebookState(current, {
-      maximizedCellId: "ghost",
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const dropped = buildAppliedNotebookState(
+      current,
+      {
+        maximizedCellId: "ghost",
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then it falls back to null
     expect(dropped.maximizedCellId).toBeNull()
   })
@@ -2815,9 +2867,13 @@ describe("buildAppliedNotebookState", () => {
       maximizedCellId: "b",
     }
     // When the request omits maximizedCellId but deletes "b"
-    const next = buildAppliedNotebookState(current, {
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const next = buildAppliedNotebookState(
+      current,
+      {
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then the stale maximize is cleared
     expect(next.maximizedCellId).toBeNull()
   })
@@ -2831,19 +2887,27 @@ describe("buildAppliedNotebookState", () => {
     const request = { cells: [{ id: "a", preserveValue: true as const }] }
     // When variables are omitted → untouched
     expect(
-      buildAppliedNotebookState(current, request).settings.variables,
+      buildAppliedNotebookState(current, request, unrequested).settings
+        .variables,
     ).toEqual([{ name: "x", value: "1" }])
     // When variables are null → cleared
     expect(
-      buildAppliedNotebookState(current, { ...request, variables: null })
-        .settings.variables,
+      buildAppliedNotebookState(
+        current,
+        { ...request, variables: null },
+        unrequested,
+      ).settings.variables,
     ).toEqual([])
     // When variables are provided → replaced
     expect(
-      buildAppliedNotebookState(current, {
-        ...request,
-        variables: [{ name: "y", value: "2" }],
-      }).settings.variables,
+      buildAppliedNotebookState(
+        current,
+        {
+          ...request,
+          variables: [{ name: "y", value: "2" }],
+        },
+        unrequested,
+      ).settings.variables,
     ).toEqual([{ name: "y", value: "2" }])
   })
 })
@@ -2964,12 +3028,10 @@ describe("pane height ceiling", () => {
     // the save path clamps any overshoot back to the 2400px pane ceiling.
     // result-only: 2400 + 44 chrome = 2444px → 83 rows
     expect(
-      computeCellGridBounds(withResult, 10, 20, false, "result").maxH,
+      computeCellGridBounds({ ...withResult, paneView: "result" }, 10, 20).maxH,
     ).toBe(83)
     // split keeps the 100px editor: 100 + 2400 + 50 = 2550px → 86 rows
-    expect(computeCellGridBounds(withResult, 10, 20, false, "split").maxH).toBe(
-      86,
-    )
+    expect(computeCellGridBounds(withResult, 10, 20).maxH).toBe(86)
   })
 
   it("rejects agent heights above the ceiling in apply", () => {

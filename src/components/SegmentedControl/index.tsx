@@ -51,8 +51,7 @@ const SegmentedControlRoot = styled.div`
 
   /* The liquid track clips content at its rounded edge, so the standard
      outside button outline is not visible here. Draw the keyboard ring inside
-     every direct action instead, including auxiliary actions such as
-     maximize/reset that live beside the segments. */
+     each segment instead. */
   && > button:focus-visible,
   && > button[aria-pressed="true"]:focus-visible {
     outline: none;

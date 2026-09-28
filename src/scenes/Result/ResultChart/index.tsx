@@ -190,6 +190,7 @@ export const ResultChart: React.FC<Props> = ({
   const shownRowCount = chartResult?.dataset.length ?? 0
   const totalRowCount = chartResult?.count ?? 0
   const isTruncated = totalRowCount > shownRowCount
+  const isZoomed = zoomStart > 0 || zoomEnd < 100
 
   useEffect(() => {
     setZoomStart(0)
@@ -202,15 +203,10 @@ export const ResultChart: React.FC<Props> = ({
     setZoomEnd(end)
   }, [])
 
-  const handleResetZoom = useCallback(
-    (e: React.MouseEvent) => {
-      chartRendererRef.current?.resetZoom()
-      if (e.detail === 0) onResetZoomFocus()
-    },
-    [onResetZoomFocus],
-  )
-
-  const isZoomed = zoomStart > 0 || zoomEnd < 100
+  const handleResetZoom = (e: React.MouseEvent) => {
+    chartRendererRef.current?.resetZoom()
+    if (e.detail === 0) onResetZoomFocus()
+  }
 
   let emptyMessage = "Run a query to draw a chart."
   if (chartResult && chartResult.dataset.length === 0) {

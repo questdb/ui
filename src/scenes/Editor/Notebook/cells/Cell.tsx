@@ -45,7 +45,6 @@ import {
   useCellVirtualizationEngine,
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
-import { useCellFetching } from "../cellRefresh/CellRefreshContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
@@ -150,10 +149,9 @@ const CellInner: React.FC<Props> = ({
   const headerRef = useRef<HTMLDivElement | null>(null)
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
-  const { loading: chartLoading, refreshing: chartRefreshing } =
+  const { loading: chartLoading, stopVisible: chartStopVisible } =
     useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
-  const chartFetching = useCellFetching(cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()
   const resultStatus = useCellResultStatus(cell.id)
@@ -165,17 +163,6 @@ const CellInner: React.FC<Props> = ({
   )
 
   const validateWithGlobals = useValidateWithGlobals()
-
-  const focusCellToolbar = useCallback(() => {
-    headerRef.current
-      ?.querySelector<HTMLButtonElement>('[data-hook="cell-toolbar"] button')
-      ?.focus()
-  }, [])
-
-  const handleChartConfigChange = (config: ChartConfig) => {
-    signalUserEdit(bufferIdForEvents)
-    setCellChartConfig(cell.id, config)
-  }
 
   // A run cell that had a persisted result (lastRunStatus is set, known
   // synchronously from the view state) reserves its result area from the FIRST
@@ -201,6 +188,7 @@ const CellInner: React.FC<Props> = ({
     topHeight,
     bottomHeight,
     spotlightEditorRatio,
+    splitMaxHeight,
     topResize,
     bottomResize,
     splitResizeLive,
@@ -211,6 +199,7 @@ const CellInner: React.FC<Props> = ({
     cell,
     layoutMode,
     isMaximized,
+    isSplit,
     showBottomSlot,
     expectingResult,
     editorContainerRef,
@@ -302,9 +291,7 @@ const CellInner: React.FC<Props> = ({
 
   // Stop exists for the first run or the first chart fetch only: a refresh
   // keeps its rows or frame on screen and never locks the cell.
-  const showStopButton = isDrawMode
-    ? chartLoading && chartFetching
-    : isGridLoading
+  const showStopButton = isDrawMode ? chartStopVisible : isGridLoading
 
   const isExternalSyncRef = useRef(false)
 
@@ -330,6 +317,17 @@ const CellInner: React.FC<Props> = ({
       }
     }
   }, [])
+
+  const focusCellToolbar = () => {
+    headerRef.current
+      ?.querySelector<HTMLButtonElement>('[data-hook="cell-toolbar"] button')
+      ?.focus()
+  }
+
+  const handleChartConfigChange = (config: ChartConfig) => {
+    signalUserEdit(bufferIdForEvents)
+    setCellChartConfig(cell.id, config)
+  }
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {
@@ -494,7 +492,6 @@ const CellInner: React.FC<Props> = ({
                 isRunning={isRunning}
                 isGridLoading={isGridLoading}
                 isChartLoading={chartLoading}
-                isChartRefreshing={chartRefreshing}
                 isCellBusy={isCellBusy}
                 chartZoomed={chartZoomed}
                 onResetZoomFocus={focusCellToolbar}
@@ -600,7 +597,7 @@ const CellInner: React.FC<Props> = ({
             resetSplit()
           }}
           minHeight={MIN_EDITOR_HEIGHT}
-          maxHeight={MAX_PANE_HEIGHT_PX}
+          maxHeight={splitMaxHeight}
           ariaLabel="Resize editor pane"
           doubleView={doubleView}
         />

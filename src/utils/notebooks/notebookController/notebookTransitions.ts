@@ -528,7 +528,7 @@ export type AppliedNotebookState = {
 export const applyNotebookStateTransition = (
   parts: ViewParts,
   request: ApplyNotebookStateRequest,
-  resultStatusOf?: CellResultStatusReader,
+  resultStatusOf: CellResultStatusReader,
 ): NotebookTransitionResult<AppliedNotebookState> => {
   const next = buildAppliedNotebookState(parts, request, resultStatusOf)
   const appliedWith = (snapshotsCleared: string[]): AppliedNotebookState => ({

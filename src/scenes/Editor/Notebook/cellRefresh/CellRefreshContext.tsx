@@ -52,41 +52,50 @@ export const useCellRefreshEngine = (options: {
   return engine
 }
 
-export const useCellFetchState = (
-  cellId: string,
-): CellFetchState | undefined => {
-  const engine = useContext(CellRefreshContext)
-  const [state, setState] = useState<CellFetchState | undefined>(() =>
-    engine?.getState(cellId),
+export const shallowEqual = <T extends Record<string, unknown>>(
+  a: T | undefined,
+  b: T | undefined,
+): boolean => {
+  if (a === b) return true
+  if (!a || !b) return false
+  const keys = Object.keys(a)
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.is(a[key], b[key]))
   )
-
-  useEffect(() => {
-    if (!engine) return
-    const listener = () => setState(engine.getState(cellId))
-
-    // Catch up on anything published between render and subscription.
-    setState(engine.getState(cellId))
-
-    return engine.subscribe(cellId, listener)
-  }, [engine, cellId])
-
-  return state
 }
 
-export const useCellFetching = (cellId: string): boolean => {
+export const selectFetching = (state: CellFetchState | undefined): boolean =>
+  state?.fetching ?? false
+
+export const selectWriteBlocked = (
+  state: CellFetchState | undefined,
+): boolean => state?.classifyBlock?.kind === "write"
+
+// A cell re-renders only when the part of the fetch state it selects changes.
+// `select` and `isEqual` must be stable (module-level), or every render
+// resubscribes.
+export const useCellFetchSelector = <T,>(
+  cellId: string,
+  select: (state: CellFetchState | undefined) => T,
+  isEqual: (a: T, b: T) => boolean = Object.is,
+): T => {
   const engine = useContext(CellRefreshContext)
-  const [fetching, setFetching] = useState<boolean>(
-    () => engine?.getState(cellId)?.fetching ?? false,
+  const [selected, setSelected] = useState<T>(() =>
+    select(engine?.getState(cellId)),
   )
 
   useEffect(() => {
-    if (!engine) return
-    const apply = () => setFetching(engine.getState(cellId)?.fetching ?? false)
+    const apply = () => {
+      const next = select(engine?.getState(cellId))
+      setSelected((prev) => (isEqual(prev, next) ? prev : next))
+    }
 
+    // Catch up on anything published between render and subscription.
     apply()
 
-    return engine.subscribe(cellId, apply)
-  }, [engine, cellId])
+    return engine?.subscribe(cellId, apply)
+  }, [engine, cellId, select, isEqual])
 
-  return fetching
+  return selected
 }

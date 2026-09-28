@@ -93,11 +93,6 @@ export const CellViewToggle: React.FC<Props> = ({
     method: "toggle",
   })
 
-  // Clicking the active segment toggles it off, wiping the result back to the
-  // empty "none" state. Switching between grid and chart re-renders the same
-  // cell.result instead of re-querying: NOTEBOOK_CELL_DRAW enters draw, where
-  // the chart settles on cell.result; switching to the table just flips the
-  // mode back, where the grid shows the chart's last frame.
   // A busy segment is locked with aria-disabled, not disabled: a native
   // disabled control drops keyboard focus to the document body.
   const handleChart = (e: React.MouseEvent) => {

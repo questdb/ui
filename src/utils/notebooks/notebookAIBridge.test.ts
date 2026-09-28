@@ -51,6 +51,9 @@ import {
   type NotebookCell,
   type NotebookViewState,
 } from "../../store/notebook"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
+
+const unrequested: CellResultStatusReader = () => "unrequested"
 
 const emptyState: NotebookViewState = { cells: [] }
 
@@ -532,10 +535,14 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
     const controller = createNotebookController(1, { current: live })
     // Stale echo: cell "a" is dropped while the request still spotlights it.
     await controller.mutate((p) =>
-      applyNotebookStateTransition(p, {
-        cells: [{ id: "b", value: "SELECT 2" }],
-        maximizedCellId: "a",
-      }),
+      applyNotebookStateTransition(
+        p,
+        {
+          cells: [{ id: "b", value: "SELECT 2" }],
+          maximizedCellId: "a",
+        },
+        unrequested,
+      ),
     )
     expect(applied.parts?.maximizedCellId).toBe(null)
   })
@@ -544,13 +551,17 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
     const { live, applied } = makeLiveActions([cellA, cellB])
     const controller = createNotebookController(1, { current: live })
     await controller.mutate((p) =>
-      applyNotebookStateTransition(p, {
-        cells: [
-          { id: "a", value: "SELECT 1" },
-          { id: "b", value: "SELECT 2" },
-        ],
-        maximizedCellId: "b",
-      }),
+      applyNotebookStateTransition(
+        p,
+        {
+          cells: [
+            { id: "a", value: "SELECT 1" },
+            { id: "b", value: "SELECT 2" },
+          ],
+          maximizedCellId: "b",
+        },
+        unrequested,
+      ),
     )
     expect(applied.parts?.maximizedCellId).toBe("b")
   })
@@ -559,9 +570,13 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
     const { live, applied } = makeLiveActions([cellA, cellB], "a")
     const controller = createNotebookController(1, { current: live })
     await controller.mutate((p) =>
-      applyNotebookStateTransition(p, {
-        cells: [{ id: "b", value: "SELECT 2" }],
-      }),
+      applyNotebookStateTransition(
+        p,
+        {
+          cells: [{ id: "b", value: "SELECT 2" }],
+        },
+        unrequested,
+      ),
     )
     expect(applied.parts?.maximizedCellId).toBe(null)
   })
@@ -588,9 +603,13 @@ describe("createNotebookController — applyNotebookState cleared results", () =
 
     // When an apply rewrites its only statement
     const out = await controller.mutate((p) =>
-      applyNotebookStateTransition(p, {
-        cells: [{ id: "a", value: "SELECT 2" }],
-      }),
+      applyNotebookStateTransition(
+        p,
+        {
+          cells: [{ id: "a", value: "SELECT 2" }],
+        },
+        unrequested,
+      ),
     )
 
     // Then the cell is reported as cleared

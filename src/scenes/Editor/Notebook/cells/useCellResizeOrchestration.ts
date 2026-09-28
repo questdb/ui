@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellResize } from "./useCellResize"
@@ -6,6 +6,7 @@ import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import {
+  MAX_PANE_HEIGHT_PX,
   MIN_EDITOR_HEIGHT,
   clampPaneHeight,
   computeCellHeights,
@@ -20,6 +21,7 @@ type Options = {
   cell: NotebookCell
   layoutMode: "list" | "grid"
   isMaximized: boolean
+  isSplit: boolean
   showBottomSlot: boolean
   expectingResult: boolean
   editorContainerRef: React.RefObject<HTMLDivElement | null>
@@ -41,6 +43,7 @@ export const useCellResizeOrchestration = ({
   cell,
   layoutMode,
   isMaximized,
+  isSplit,
   showBottomSlot,
   expectingResult,
   editorContainerRef,
@@ -58,6 +61,7 @@ export const useCellResizeOrchestration = ({
   // against that cell: a drag that returns to its start is not an edit.
   const [splitDragStartCell, setSplitDragStartCell] =
     useState<NotebookCell | null>(null)
+  const [spotlightSpan, setSpotlightSpan] = useState<number | null>(null)
 
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
@@ -132,6 +136,13 @@ export const useCellResizeOrchestration = ({
     cell.spotlightEditorRatio ??
     topHeight / (topHeight + bottomHeight)
 
+  // A maximized cell fills the viewport, so its editor stops where the result
+  // pane reaches its floor.
+  const splitMaxHeight =
+    isMaximized && spotlightSpan !== null
+      ? Math.max(MIN_EDITOR_HEIGHT, spotlightSpan - minBottomHeightFor(cell))
+      : MAX_PANE_HEIGHT_PX
+
   const spotlightRatioFor = (height: number) => {
     const editorH =
       editorContainerRef.current?.getBoundingClientRect().height ?? 0
@@ -177,12 +188,12 @@ export const useCellResizeOrchestration = ({
     topResize.resizeEnd(height)
   }
 
-  const resetSplit = () => {
-    if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
-      return
-    }
+  const resetSpotlightRatio = () => {
+    setSpotlightLiveRatio(null)
+    updateCell(cell.id, { spotlightEditorRatio: undefined })
+  }
+
+  const resetEditorHeight = () => {
     signalAgentVisibleHeightChange({
       topHeight: readResetTopHeight(),
       topResized: false,
@@ -190,50 +201,65 @@ export const useCellResizeOrchestration = ({
     topResize.resetHeight()
   }
 
-  const resetBottomArea = useCallback(() => {
+  const resetSplit = isMaximized ? resetSpotlightRatio : resetEditorHeight
+
+  const resetBottomArea = () => {
     if (isMaximized) {
-      setSpotlightLiveRatio(null)
-      updateCell(cell.id, { spotlightEditorRatio: undefined })
+      resetSpotlightRatio()
       return
     }
-    if (showBottomSlot) {
-      signalAgentVisibleHeightChange({
-        bottomHeight: undefined,
-        bottomResized: false,
-      })
-      bottomResize.resetHeight()
-    } else {
-      signalAgentVisibleHeightChange({
-        topHeight: readResetTopHeight(),
-        topResized: false,
-      })
-      topResize.resetHeight()
+    if (!showBottomSlot) {
+      resetEditorHeight()
+      return
     }
-  }, [
-    isMaximized,
-    showBottomSlot,
-    bottomResize,
-    topResize,
-    cell.id,
-    readResetTopHeight,
-    signalAgentVisibleHeightChange,
-    updateCell,
-  ])
+    signalAgentVisibleHeightChange({
+      bottomHeight: undefined,
+      bottomResized: false,
+    })
+    bottomResize.resetHeight()
+  }
+  // The grid edge handle publishes its reset; the subscription lives for the
+  // cell and reads the handler of the current render.
+  const resetBottomAreaRef = useRef(resetBottomArea)
+
+  useEffect(() => {
+    const editor = editorContainerRef.current
+    const result = resultRef.current
+    if (!isMaximized || !isSplit || !editor || !result) return
+    const observer = new ResizeObserver(() =>
+      setSpotlightSpan(
+        Math.round(
+          editor.getBoundingClientRect().height +
+            result.getBoundingClientRect().height,
+        ),
+      ),
+    )
+    observer.observe(editor)
+    observer.observe(result)
+    return () => {
+      observer.disconnect()
+      setSpotlightSpan(null)
+    }
+  }, [isMaximized, isSplit, editorContainerRef, resultRef])
+
+  useEffect(() => {
+    resetBottomAreaRef.current = resetBottomArea
+  }, [resetBottomArea])
 
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
-      if (payload?.cellId !== cell.id) return
-      resetBottomArea()
+      if (payload?.cellId === cell.id) resetBottomAreaRef.current()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
     return () =>
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
-  }, [cell.id, resetBottomArea])
+  }, [cell.id])
 
   return {
     topHeight,
     bottomHeight,
     spotlightEditorRatio,
+    splitMaxHeight,
     topResize,
     bottomResize,
     splitResizeLive,

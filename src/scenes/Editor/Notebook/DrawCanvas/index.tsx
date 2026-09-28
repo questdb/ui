@@ -15,12 +15,15 @@ import { toast } from "../../../../components/Toast"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import {
-  deriveChartLoading,
+  shallowEqual,
+  useCellFetchSelector,
+} from "../cellRefresh/CellRefreshContext"
+import {
   pendingCellFetchState,
+  type CellFetchState,
 } from "../cellRefresh/cellRefreshEngine"
-import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
+import { useChartLoading } from "../cells/useChartLoading"
 import {
   getChartZoom,
   setChartZoom,
@@ -33,6 +36,24 @@ import { useNotebookBufferId } from "../NotebookProvider"
 import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
+
+type DrawState = Pick<
+  CellFetchState,
+  "queries" | "queriesKey" | "settledKey" | "classifyBlock" | "fetchCancelled"
+>
+
+// Leaves out `fetching`: the canvas reads it only through `loading`, so a
+// refresh of a drawn chart does not re-render it.
+const selectDrawState = (
+  state: CellFetchState | undefined,
+): DrawState | undefined =>
+  state && {
+    queries: state.queries,
+    queriesKey: state.queriesKey,
+    settledKey: state.settledKey,
+    classifyBlock: state.classifyBlock,
+    fetchCancelled: state.fetchCancelled,
+  }
 
 const notebookChartSettingsTelemetry: ChartSettingsTelemetry = {
   onCancel: (method) => {
@@ -99,6 +120,10 @@ export const DrawCanvas: React.FC<Props> = ({
   onConfigChange,
   onRetryUnmountWhileFocused,
 }) => {
+  const bufferId = useNotebookBufferId()
+  const drawState = useCellFetchSelector(cell.id, selectDrawState, shallowEqual)
+  const { loading } = useChartLoading(cell)
+
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [zoomStart, setZoomStart] = useState(
     () => getChartZoom(cell.id)?.start ?? 0,
@@ -110,12 +135,9 @@ export const DrawCanvas: React.FC<Props> = ({
   const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
-  const bufferId = useNotebookBufferId()
-  const fetchState = useCellFetchState(cell.id)
-  const resultStatus = useCellResultStatus(cell.id)
-  const state = useMemo(
-    () => fetchState ?? pendingCellFetchState(cell.value),
-    [fetchState, cell.value],
+  const state: DrawState = useMemo(
+    () => drawState ?? pendingCellFetchState(cell.value),
+    [drawState, cell.value],
   )
   const { queries, queriesKey, settledKey, classifyBlock } = state
   const chartResult = useMemo(
@@ -169,13 +191,6 @@ export const DrawCanvas: React.FC<Props> = ({
   const empty =
     classifyBlock !== null || queries.length === 0 || results.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
-  // Initial load (snapshot hydration or first fetch) with nothing to show yet:
-  // a spinner replaces the chart area until data lands.
-  const { loading } = deriveChartLoading(
-    state,
-    chartResult,
-    resultStatus === "loading",
-  )
   const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {

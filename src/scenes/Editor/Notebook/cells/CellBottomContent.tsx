@@ -4,13 +4,18 @@ import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
-  useCellFetchState,
+  shallowEqual,
+  useCellFetchSelector,
   useCellRefresh,
 } from "../cellRefresh/CellRefreshContext"
+import type { CellFetchState } from "../cellRefresh/cellRefreshEngine"
 import { DrawCanvas } from "../DrawCanvas"
 import { PaneEmptyState } from "../PaneEmptyState"
 import { InlineResultTable } from "../result-table"
-import { buildStatementSlotViews } from "../result-table/statementSlotView"
+import {
+  buildStatementSlotViews,
+  type SlotRefreshChannel,
+} from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
@@ -21,6 +26,23 @@ import {
   deriveStatementFrame,
   statementKeysFor,
 } from "../statementIdentity"
+
+type SlotChannel = SlotRefreshChannel &
+  Pick<CellFetchState, "queries" | "slotKeys">
+
+const selectSlotChannel = (
+  state: CellFetchState | undefined,
+): SlotChannel | undefined =>
+  state && {
+    queries: state.queries,
+    slotKeys: state.slotKeys,
+    slotFetching: state.slotFetching,
+    slotErrors: state.slotErrors,
+    slotVerifiedAt: state.slotVerifiedAt,
+  }
+
+// A chart draws its own frame, so a draw cell selects nothing here.
+const selectNoSlotChannel = (): SlotChannel | undefined => undefined
 
 type Props = {
   cell: NotebookCell
@@ -47,7 +69,11 @@ export const CellBottomContent: React.FC<Props> = ({
     useNotebookActions()
   const bufferId = useNotebookBufferId()
   const cellRefresh = useCellRefresh()
-  const fetchState = useCellFetchState(cell.id)
+  const fetchState = useCellFetchSelector(
+    cell.id,
+    cell.mode === "draw" ? selectNoSlotChannel : selectSlotChannel,
+    shallowEqual,
+  )
   const resultStatus = useCellResultStatus(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
 

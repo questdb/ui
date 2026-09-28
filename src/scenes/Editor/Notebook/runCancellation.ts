@@ -61,10 +61,15 @@ const RUN_CANCEL_REASONS: ReadonlySet<string> = new Set<RunCancelReason>([
   "superseded",
 ])
 
+export const runCancelReasonOf = (
+  reason: unknown,
+): RunCancelReason | undefined =>
+  typeof reason === "string" && RUN_CANCEL_REASONS.has(reason)
+    ? (reason as RunCancelReason)
+    : undefined
+
 export const runCancellationOf = (signal: AbortSignal): RunCancellation =>
-  typeof signal.reason === "string" && RUN_CANCEL_REASONS.has(signal.reason)
-    ? (signal.reason as RunCancelReason)
-    : "cancelled"
+  runCancelReasonOf(signal.reason) ?? "cancelled"
 
 const describeRunCancellation = (reason: RunCancellation): string => {
   switch (reason) {

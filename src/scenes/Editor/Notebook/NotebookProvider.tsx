@@ -54,7 +54,7 @@ import {
   discardCellResult,
   releaseCellResultPatch,
 } from "./cellSizing"
-import { type RunCancelReason } from "./runCancellation"
+import { runCancelReasonOf, type RunCancelReason } from "./runCancellation"
 import {
   snapshotResultsMatchQueries,
   statementKeysFor,
@@ -719,7 +719,7 @@ export const NotebookProvider: React.FC<{
         }
         const request = () =>
           questExecution.requestExecution({
-            abort: () => cancelCell(cellId),
+            abort: (reason) => cancelCell(cellId, runCancelReasonOf(reason)),
             bufferId,
             execute,
             onDismiss: () => resolve({ ok: false, superseded: false }),
@@ -729,7 +729,7 @@ export const NotebookProvider: React.FC<{
 
         if (signal) {
           questExecution.dismissPending(scopeKey)
-          questExecution.abortActiveByScope(scopeKey)
+          questExecution.abortActiveByScope(scopeKey, "superseded")
           request()
           return
         }

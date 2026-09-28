@@ -40,6 +40,7 @@ import {
   enqueueBufferTask,
 } from "./notebookBufferQueue"
 import { __resetAgentActivityForTests, onAgentEdit } from "./agentActivity"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
 import type { AgentEdit } from "./agentActivity"
 import { NotebookToolError } from "./notebookToolError"
 import { commitView, partsOf } from "./notebookDexieView"
@@ -161,8 +162,10 @@ const withOps = (ctrl: NotebookController) => ({
   setCellMaximized: (cellId: string | null) =>
     ctrl.mutate((p) => setCellMaximizedTransition(p, BUFFER_ID, cellId)),
   applyNotebookState: (request: ApplyNotebookStateRequest) =>
-    ctrl.mutate((p) => applyNotebookStateTransition(p, request)),
+    ctrl.mutate((p) => applyNotebookStateTransition(p, request, unrequested)),
 })
+
+const unrequested: CellResultStatusReader = () => "unrequested"
 
 const makeController = (
   overrides: Partial<DexieControllerDeps> = {},

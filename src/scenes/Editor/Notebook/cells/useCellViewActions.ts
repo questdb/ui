@@ -37,15 +37,11 @@ export const useCellViewActions = ({
       return
     }
 
-    // Preserve the existing observable order on both surfaces: the compact
-    // menu signalled first, while the segmented toggle tracked first.
-    if (method === "menu") signalUserEdit(bufferId)
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
       to: view === "grid" ? "none" : "grid",
       method,
     })
-    if (method === "toggle") signalUserEdit(bufferId)
-
+    signalUserEdit(bufferId)
     if (view === "grid") clearCellResult(cellId)
     else setCellMode(cellId, "run")
   }

@@ -18,7 +18,7 @@ import {
   isExpectingResult,
   releaseCellResultPatch,
   MIN_MARKDOWN_HEIGHT_PX,
-  modeChangeBottomHeightPatch,
+  cellModeChangePatch,
   partitionCellHeights,
   topHeightForSql,
   patchCellRunResult,
@@ -217,28 +217,6 @@ describe("computeResultBottomHeight", () => {
     expect(heightForResult(make(10))).toBe(424)
     // 50 rows: cap at 10 → still 424
     expect(heightForResult(make(50))).toBe(424)
-  })
-
-  it("sizes a frame written under other casing by the tabs it renders", () => {
-    // Given a single-run result recorded before the statement was reformatted
-    const result = {
-      results: [
-        {
-          type: "dql" as const,
-          query: "select 2",
-          columns: [{ name: "2", type: "INT" }],
-          dataset: [[2]],
-          count: 1,
-        },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    }
-    // When the cell now holds two statements, the ran one in a new casing
-    // Then the tab bar is reserved, as the keyed frame renders two tabs
-    expect(computeResultBottomHeight(result, "select 1;\nSELECT 2")).toBe(
-      computeResultBottomHeight(result, "select 1;\nselect 2"),
-    )
   })
 
   it("one executed DQL in a multi-statement cell adds tabs but tight-fits its rows", () => {
@@ -670,11 +648,11 @@ describe("computeCellGridH", () => {
     // When the grid height is computed per pane layout
     // Then each layout counts only its visible panes
     // Editor: 200 + 44 chrome = 244px → 9 rows (250px rendered).
-    expect(computeCellGridH(cell, 10, 20, false, "editor")).toBe(9)
+    expect(computeCellGridH({ ...cell, result: undefined }, 10, 20)).toBe(9)
     // Result: 300 + 44 chrome = 344px → 13 rows (370px rendered).
-    expect(computeCellGridH(cell, 10, 20, false, "result")).toBe(13)
+    expect(computeCellGridH({ ...cell, paneView: "result" }, 10, 20)).toBe(13)
     // Wide split retains both panes and the 6px divider: 550px → 19 rows.
-    expect(computeCellGridH(cell, 10, 20, false, "split")).toBe(19)
+    expect(computeCellGridH(cell, 10, 20)).toBe(19)
   })
 })
 
@@ -855,8 +833,12 @@ describe("computeCellGridBounds", () => {
 
     // When the grid bounds are computed per single-pane layout
     // Then each minimum covers only its visible pane
-    expect(computeCellGridBounds(cell, 10, 20, false, "editor").minH).toBe(5)
-    expect(computeCellGridBounds(cell, 10, 20, false, "result").minH).toBe(6)
+    expect(
+      computeCellGridBounds({ ...cell, result: undefined }, 10, 20).minH,
+    ).toBe(5)
+    expect(
+      computeCellGridBounds({ ...cell, paneView: "result" }, 10, 20).minH,
+    ).toBe(6)
   })
 
   it("keeps minH ≤ h ≤ maxH for every in-bounds cell state", () => {
@@ -1147,11 +1129,15 @@ describe("paneHeightsFromGridRows", () => {
 
     // When each single-pane layout is resized
     // Then only the visible pane changes
-    expect(paneHeightsFromGridRows(c, 10, 10, 20, false, "editor")).toEqual({
+    expect(
+      paneHeightsFromGridRows({ ...c, result: undefined }, 10, 10, 20),
+    ).toEqual({
       topHeight: 236,
       topResized: true,
     })
-    expect(paneHeightsFromGridRows(c, 15, 10, 20, false, "result")).toEqual({
+    expect(
+      paneHeightsFromGridRows({ ...c, paneView: "result" }, 15, 10, 20),
+    ).toEqual({
       bottomHeight: 386,
       bottomResized: true,
     })
@@ -1311,19 +1297,19 @@ describe("releaseCellResultPatch", () => {
 // status, so the agent still reads WHY the last run failed after the rows are
 // gone — and a fixed or rewritten cell must not resurrect a stale error.
 
-describe("modeChangeBottomHeightPatch", () => {
+describe("cellModeChangePatch", () => {
   it("never overrides a user-resized bottom slot", () => {
     // Given a cell whose bottom slot the user resized
     const resized = { ...cell("a"), bottomResized: true }
     // When the mode flips either way
     // Then no patch is produced
-    expect(modeChangeBottomHeightPatch(resized, "draw")).toEqual({})
-    expect(modeChangeBottomHeightPatch(resized, "run")).toEqual({})
+    expect(cellModeChangePatch(resized, "draw")).toEqual({})
+    expect(cellModeChangePatch(resized, "run")).toEqual({})
   })
 
   it("draw mode → chart default height", () => {
     // When a cell flips to draw
-    const patch = modeChangeBottomHeightPatch(cell("a"), "draw")
+    const patch = cellModeChangePatch(cell("a"), "draw")
     // Then the chart default bottom height is seeded
     expect(patch).toEqual({ bottomHeight: DEFAULT_CHART_BOTTOM_HEIGHT })
   })
@@ -1336,14 +1322,14 @@ describe("modeChangeBottomHeightPatch", () => {
       timestamp: 0,
     })
     // When the cell flips back to run
-    const patch = modeChangeBottomHeightPatch(withResult, "run")
+    const patch = cellModeChangePatch(withResult, "run")
     // Then the bottom slot matches the result's computed height
     expect(patch).toEqual({ bottomHeight: 44 })
   })
 
   it("run mode without a result → clears bottomHeight (single view)", () => {
     // When a result-less cell flips back to run
-    const patch = modeChangeBottomHeightPatch(cell("a"), "run")
+    const patch = cellModeChangePatch(cell("a"), "run")
     // Then bottomHeight is explicitly cleared
     expect(patch).toEqual({ bottomHeight: undefined })
   })

@@ -15,7 +15,6 @@ type Props = {
   isRunning: boolean
   isGridLoading: boolean
   isChartLoading: boolean
-  isChartRefreshing: boolean
   isCellBusy: boolean
   chartZoomed: boolean
   onResetZoomFocus: () => void
@@ -30,7 +29,6 @@ export const CellWideActions: React.FC<Props> = ({
   isRunning,
   isGridLoading,
   isChartLoading,
-  isChartRefreshing,
   isCellBusy,
   chartZoomed,
   onResetZoomFocus,
@@ -44,11 +42,9 @@ export const CellWideActions: React.FC<Props> = ({
         view={view}
         cellAutoRefresh={cellAutoRefresh}
         autoRefreshDefault={autoRefreshDefault}
-        // A grid's first run spins the Run segment instead — only a true refresh
-        // (re-running an existing grid) spins the refresh button.
-        isRefreshing={
-          view === "chart" ? isChartRefreshing : isRunning && !isGridLoading
-        }
+        // A grid's first run spins the Run segment instead — only a true
+        // re-run of an existing grid spins the refresh button.
+        isRerunning={view === "grid" && isRunning && !isGridLoading}
       />
     )}
     <CellViewToggle

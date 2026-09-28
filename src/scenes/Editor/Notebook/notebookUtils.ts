@@ -1092,19 +1092,19 @@ export const buildAppliedLayout = (
   nextCells: NotebookCell[],
   prevLayout: CellLayoutItem[] | undefined,
   defaults: { gridCols: number; rowHeight: number; marginY?: number },
-  resultStatusOf: CellResultStatusReader = () => "unrequested",
+  resultStatusOf: CellResultStatusReader,
 ): CellLayoutItem[] => {
   const prevById = new Map((prevLayout ?? []).map((l) => [l.i, l]))
   let nextY = 0
   return nextCells.map((cell, i) => {
     const req = request.cells[i]
+    const h = computeCellGridH(
+      cell,
+      defaults.rowHeight,
+      defaults.marginY,
+      isExpectingResult(cell, resultStatusOf(cell.id)),
+    )
     if (req?.grid) {
-      const h = computeCellGridH(
-        cell,
-        defaults.rowHeight,
-        defaults.marginY,
-        isExpectingResult(cell, resultStatusOf(cell.id)),
-      )
       const item = {
         i: cell.id,
         x: req.grid.x,
@@ -1117,29 +1117,17 @@ export const buildAppliedLayout = (
     }
     const existing = prevById.get(cell.id)
     if (existing) {
-      const h = computeCellGridH(
-        cell,
-        defaults.rowHeight,
-        defaults.marginY,
-        isExpectingResult(cell, resultStatusOf(cell.id)),
-      )
       nextY = Math.max(nextY, existing.y + h)
       return existing.h === h ? existing : { ...existing, h }
     }
-    const cellH = computeCellGridH(
-      cell,
-      defaults.rowHeight,
-      defaults.marginY,
-      isExpectingResult(cell, resultStatusOf(cell.id)),
-    )
     const item: CellLayoutItem = {
       i: cell.id,
       x: 0,
       y: nextY,
       w: defaults.gridCols,
-      h: cellH,
+      h,
     }
-    nextY += cellH
+    nextY += h
     return item
   })
 }
@@ -1153,7 +1141,7 @@ export type NotebookDocumentState = {
 export const buildAppliedNotebookState = (
   current: NotebookDocumentState,
   request: ApplyRequest,
-  resultStatusOf: CellResultStatusReader = () => "unrequested",
+  resultStatusOf: CellResultStatusReader,
 ): NotebookDocumentState & { diff: AppliedDiff; resultsCleared: string[] } => {
   const { nextCells, diff, resultsCleared } = buildAppliedCells(
     current.cells,

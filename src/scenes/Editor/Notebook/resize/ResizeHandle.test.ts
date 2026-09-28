@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isResizeKey, resizeHeightForKey } from "./ResizeHandle"
+import { resizeHeightForKey } from "./ResizeHandle"
 
 describe("resizeHeightForKey", () => {
   it("resizes by arrow-key steps and clamps to separator bounds", () => {
@@ -37,19 +37,22 @@ describe("resizeHeightForKey", () => {
     expect(end).toBe(200)
     expect(unrelated).toBeNull()
   })
-})
 
-describe("isResizeKey", () => {
-  it("names the keys whose release ends a keyboard resize", () => {
-    // Given the keys a held resize can involve
-    // When each is checked
-    // Then only the height keys count, not the modifier held with them
-    expect(["ArrowUp", "ArrowDown", "Home", "End"].map(isResizeKey)).toEqual([
-      true,
-      true,
-      true,
-      true,
-    ])
-    expect(isResizeKey("Shift")).toBe(false)
+  it("never grows a pane on a shrink key or shrinks it on a grow key", () => {
+    // Given a separator bounded between 56 and 2400
+    const min = 56
+    const max = 2400
+
+    // When the pane renders below the floor or above the ceiling
+    const upBelowFloor = resizeHeightForKey("ArrowUp", 37, min, max)
+    const homeBelowFloor = resizeHeightForKey("Home", 37, min, max)
+    const downAboveCeiling = resizeHeightForKey("ArrowDown", 2500, min, max)
+    const endAboveCeiling = resizeHeightForKey("End", 2500, min, max)
+
+    // Then the height stays where it is instead of jumping to the bound
+    expect(upBelowFloor).toBe(37)
+    expect(homeBelowFloor).toBe(37)
+    expect(downAboveCeiling).toBe(2500)
+    expect(endAboveCeiling).toBe(2500)
   })
 })
