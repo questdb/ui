@@ -27,7 +27,6 @@ import {
   isExpectingResult,
   mergeCellChartConfig,
   nextGridSeedPosition,
-  reconcileCellResultForValue,
   agentCellPresentation,
   type AgentCellPresentation,
   removeCell,
@@ -40,8 +39,9 @@ import {
   type AgentCellDimensions,
   type CellResultStatus,
   type CellResultStatusReader,
-  type RunCancelReason,
 } from "../../../scenes/Editor/Notebook/notebookUtils"
+import { type RunCancelReason } from "../../../scenes/Editor/Notebook/runCancellation"
+import { reconcileCellResultForValue } from "../../../scenes/Editor/Notebook/statementIdentity"
 
 // The single home for every notebook mutation's behavior. Each transition is a
 // pure function `(parts, ...) → { parts, result, ... }` that validates its op

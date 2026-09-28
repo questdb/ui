@@ -149,11 +149,6 @@ const CellInner: React.FC<Props> = ({
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLDivElement | null>(null)
-  const focusCellToolbar = useCallback(() => {
-    headerRef.current
-      ?.querySelector<HTMLButtonElement>(".cell-toolbar button")
-      ?.focus()
-  }, [])
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
   const { loading: chartLoading, refreshing: chartRefreshing } =
@@ -171,6 +166,12 @@ const CellInner: React.FC<Props> = ({
   )
 
   const validateWithGlobals = useValidateWithGlobals()
+
+  const focusCellToolbar = useCallback(() => {
+    headerRef.current
+      ?.querySelector<HTMLButtonElement>('[data-hook="cell-toolbar"] button')
+      ?.focus()
+  }, [])
 
   const handleChartConfigChange = (config: ChartConfig) => {
     signalUserEdit(bufferIdForEvents)

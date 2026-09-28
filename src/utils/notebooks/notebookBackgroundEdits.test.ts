@@ -127,7 +127,10 @@ describe("dispatch — create/duplicate/activate", () => {
     }) as unknown as Parameters<typeof dispatchTool>[2]
 
   it("create_notebook tells the agent it was built in the background", async () => {
+    // Given a client that creates notebooks
     const client = makeClient()
+
+    // When the agent creates a notebook
     const res = await dispatchTool(
       "create_notebook",
       { label: "n" },
@@ -136,13 +139,17 @@ describe("dispatch — create/duplicate/activate", () => {
       ALL_GRANTED,
       dqlValidator,
     )
-    // The exact wording is pinned once in shared.notebookTools.test.ts.
+
+    // Then the response carries a hint (the exact wording is pinned once in shared.notebookTools.test.ts)
     const parsed = JSON.parse(res.content) as { hint?: string }
     expect(typeof parsed.hint).toBe("string")
   })
 
   it("duplicate_notebook tells the agent it was built in the background", async () => {
+    // Given a client that duplicates notebooks
     const client = makeClient()
+
+    // When the agent duplicates a notebook
     const res = await dispatchTool(
       "duplicate_notebook",
       { buffer_id: 1 },
@@ -151,7 +158,8 @@ describe("dispatch — create/duplicate/activate", () => {
       ALL_GRANTED,
       dqlValidator,
     )
-    // The exact wording is pinned once in shared.notebookTools.test.ts.
+
+    // Then the response carries a hint (the exact wording is pinned once in shared.notebookTools.test.ts)
     const parsed = JSON.parse(res.content) as { hint?: string }
     expect(typeof parsed.hint).toBe("string")
   })

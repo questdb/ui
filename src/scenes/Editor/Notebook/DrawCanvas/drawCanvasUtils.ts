@@ -1,7 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { hasPendingResult, sameStatementIdentity } from "../notebookUtils"
+import { hasPendingResult, sameStatementIdentity } from "../statementIdentity"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,

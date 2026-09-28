@@ -43,8 +43,11 @@ describe("dropSnapshotsAfterPersist", () => {
 
 describe("persistFailure", () => {
   it("maps a failed write to the persist_failed tool error with its cause", () => {
-    // When a write failure is mapped for the agent
-    const error = persistFailure(new Error("QuotaExceededError"))
+    // Given a storage write that failed on quota
+    const cause = new Error("QuotaExceededError")
+
+    // When the failure is mapped for the agent
+    const error = persistFailure(cause)
 
     // Then the agent gets the typed code and the cause
     expect(error).toBeInstanceOf(NotebookToolError)

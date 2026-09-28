@@ -41,6 +41,7 @@ const partsOf = (
 
 describe("setCellDimensionsTransition", () => {
   it("shows the editor by expanding the derived footprint and preserving both panes", () => {
+    // Given a result-only draw cell placed in a grid at its result-only height
     const chart = cell("a", "SELECT 1", {
       mode: "draw",
       topHeight: 72,
@@ -54,11 +55,13 @@ describe("setCellDimensionsTransition", () => {
       },
     })
 
+    // When an agent asks for the split view
     const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
       view: "editor_result",
       resultStatus: "missing",
     })
 
+    // Then both pane heights survive, the grid row grows and the view is reported
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 72,
       bottomHeight: 350,
@@ -69,6 +72,7 @@ describe("setCellDimensionsTransition", () => {
   })
 
   it("supports null preserve, auto reset, and a fixed result height", () => {
+    // Given a draw cell with a user-resized editor and an auto result height
     const chart = cell("a", "SELECT 1", {
       mode: "draw",
       topHeight: 200,
@@ -78,12 +82,14 @@ describe("setCellDimensionsTransition", () => {
       paneView: "result",
     })
 
+    // When an agent resets the editor, pins the result and preserves the view
     const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
       editorHeight: "auto",
       resultHeight: 300,
       view: null,
     })
 
+    // Then the editor snaps to its floor, the result is pinned and the view stays
     expect(out.parts.cells[0]).toMatchObject({
       topHeight: 72,
       topResized: false,
@@ -152,12 +158,16 @@ describe("setCellDimensionsTransition", () => {
   })
 
   it("view editor deletes any marker-less snapshot idempotently", () => {
+    // Given a run cell that never ran
     const parts = partsOf([cell("a", "SELECT 1")])
+
+    // When an agent asks for the editor-only view
     const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
       view: "editor",
       resultStatus: "missing",
     })
 
+    // Then the cells are untouched while the run and snapshot cleanup are still requested
     expect(out.parts.cells).toBe(parts.cells)
     expect(out.result).toEqual({ view: "editor", mode: null })
     expect(out.cancelRuns).toEqual({
@@ -168,36 +178,55 @@ describe("setCellDimensionsTransition", () => {
   })
 
   it("rejects a view outside the wire enum", () => {
-    expect(() =>
-      setCellDimensionsTransition(partsOf([cell("a")]), BUFFER_ID, "a", {
+    // Given a plain cell
+    const parts = partsOf([cell("a")])
+
+    // When an agent sends a forged view value
+    const apply = () =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
         view: "<forged>" as never,
-      }),
-    ).toThrow(/view must be editor, result, or editor_result/)
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/view must be editor, result, or editor_result/)
   })
 
   it("rejects heights above the ceiling", () => {
+    // Given a draw cell
     const chart = cell("a", "SELECT 1", { mode: "draw" })
-    expect(() =>
+
+    // When an agent asks for a result height above the ceiling
+    const apply = () =>
       setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
         resultHeight: 2401,
-      }),
-    ).toThrow(/at most 2400px/)
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/at most 2400px/)
   })
 
   it("rejects chart result heights below the visual minimum", () => {
+    // Given a draw cell
     const chart = cell("a", "SELECT 1", { mode: "draw" })
-    expect(() =>
+
+    // When an agent asks for a result height below the chart minimum
+    const apply = () =>
       setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
         resultHeight: 100,
-      }),
-    ).toThrow(/at least 296px/)
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/at least 296px/)
   })
 
   it("uses the mounted missing-result state for the grid height", () => {
+    // Given a cell that ran before, placed at a split-view height in the grid
     const pending = cell("a", "SELECT 1", {
       lastRunStatus: "success",
       paneView: "editor_result",
     })
+
+    // When the transition runs with the mounted status saying the result is missing
     const out = setCellDimensionsTransition(
       partsOf([pending], {
         settings: {
@@ -210,6 +239,7 @@ describe("setCellDimensionsTransition", () => {
       { resultStatus: "missing" },
     )
 
+    // Then the cell reports editor and the grid row shrinks to the editor alone
     expect(out.result).toEqual({ view: "editor", mode: null })
     expect(out.parts.settings.layout?.[0].h).toBe(5)
   })
@@ -221,6 +251,8 @@ describe("setCellDimensionsTransition", () => {
       lastRunStatus: "success",
       paneView: "editor_result",
     })
+
+    // When the transition runs while the snapshot is still unrequested
     const out = setCellDimensionsTransition(
       partsOf([pending], {
         settings: {
@@ -232,15 +264,19 @@ describe("setCellDimensionsTransition", () => {
       "a",
       { resultStatus: "unrequested" },
     )
+
     // Then the grid box keeps the reserved-result footprint
     expect(out.parts.settings.layout?.[0].h).toBe(19)
   })
 
   it("persists the pane preference but reports editor while result is missing", () => {
+    // Given a cell that ran before whose result is missing
     const pending = cell("a", "SELECT 1", {
       lastRunStatus: "success",
       paneView: "editor_result",
     })
+
+    // When an agent asks for the result-only view
     const out = setCellDimensionsTransition(
       partsOf([pending]),
       BUFFER_ID,
@@ -248,6 +284,7 @@ describe("setCellDimensionsTransition", () => {
       { view: "result", resultStatus: "missing" },
     )
 
+    // Then the preference is stored while the reported view stays editor
     expect(out.parts.cells[0].paneView).toBe("result")
     expect(out.result).toEqual({ view: "editor", mode: null })
   })
@@ -260,18 +297,23 @@ describe("setCellLayoutTransition", () => {
   })
 
   it("returns the stored view after a position change", () => {
-    const out = setCellLayoutTransition(
-      partsOf([chart], {
-        settings: {
-          layoutMode: "grid",
-          layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
-        },
-      }),
-      BUFFER_ID,
-      "a",
-      { x: 0, y: 0, w: 4, resultStatus: "missing" },
-    )
+    // Given a split-view draw cell placed in the grid
+    const parts = partsOf([chart], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
+      },
+    })
 
+    // When an agent narrows the cell
+    const out = setCellLayoutTransition(parts, BUFFER_ID, "a", {
+      x: 0,
+      y: 0,
+      w: 4,
+      resultStatus: "missing",
+    })
+
+    // Then the new placement comes back with the stored view and mode
     expect(out.result).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor_result",
@@ -280,14 +322,15 @@ describe("setCellLayoutTransition", () => {
   })
 
   it("rejects placement that extends beyond the grid", () => {
-    expect(() =>
-      setCellLayoutTransition(
-        partsOf([chart], { settings: { layoutMode: "grid" } }),
-        BUFFER_ID,
-        "a",
-        { x: 11, y: 0, w: 2 },
-      ),
-    ).toThrow(NotebookToolError)
+    // Given a grid-mode notebook
+    const parts = partsOf([chart], { settings: { layoutMode: "grid" } })
+
+    // When an agent places the cell past the last column
+    const apply = () =>
+      setCellLayoutTransition(parts, BUFFER_ID, "a", { x: 11, y: 0, w: 2 })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(NotebookToolError)
   })
 })
 
@@ -355,11 +398,15 @@ describe("applyNotebookStateTransition", () => {
   })
 
   it("cancels a result-less cell run when apply requests editor-only", () => {
-    // Headless execution does not put a running placeholder in persisted state.
-    const out = applyNotebookStateTransition(partsOf([cell("a", "SELECT 1")]), {
+    // Given a run cell with no persisted result, since headless execution keeps no running placeholder
+    const parts = partsOf([cell("a", "SELECT 1")])
+
+    // When an apply requests the editor-only view
+    const out = applyNotebookStateTransition(parts, {
       cells: [{ id: "a", preserveValue: true, view: "editor" }],
     })
 
+    // Then the run is cancelled and the snapshot is flagged for deletion
     expect(out.cancelRuns?.cellIds).toEqual(["a"])
     expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
   })
@@ -528,11 +575,13 @@ describe("applyNotebookStateTransition", () => {
   })
 
   it("does no freshness checking: it takes (parts, request, resultStatusOf), no read-seq", () => {
-    // Freshness is gated once at the dispatch layer, never inside a transition;
-    // a seq parameter here would let staleness leak into the pure layer. The
-    // third parameter is a per-cell status READER supplied by the controller,
-    // not a freshness token.
-    expect(applyNotebookStateTransition).toHaveLength(3)
+    // Given freshness is gated once at the dispatch layer, never inside a transition,
+    // so a seq parameter here would let staleness leak into the pure layer
+    // When the transition's parameter count is read
+    const parameterCount = applyNotebookStateTransition.length
+
+    // Then the third parameter is a per-cell status reader from the controller, not a freshness token
+    expect(parameterCount).toBe(3)
   })
 
   it("does no freshness checking: re-applying its own output never staleness-throws", () => {

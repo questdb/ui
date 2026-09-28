@@ -19,14 +19,16 @@ import {
 } from "./cellRefreshEngine"
 import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
-import {
-  cancelledResult,
-  deriveStatementFrame,
-  singleResultFromExec,
-  statementKeysFor,
-} from "../notebookUtils"
+import { singleResultFromExec } from "../notebookUtils"
+import { cancelledResult } from "../runCancellation"
+import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
 import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
+import {
+  clearChartZoom,
+  getChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
@@ -81,6 +83,8 @@ const drawCell = (
 })
 
 const dqlValidation = { query: "q", columns: [], timestamp: 0 }
+
+const keyOf = (sql: string) => statementKeysFor([sql])[0]
 
 // Backs getCellResult with whatever setCellResult last wrote — the engine
 // dedups against the CURRENT cell result, so a fake returning undefined would
@@ -812,13 +816,13 @@ describe("CellRefreshEngine", () => {
         fetchCancelled: true,
       }
 
+      // When the loading flag derives while the load is in flight and after it
+      const whileLoading = deriveChartLoading(state, { kind: "missing" }, true)
+      const afterLoad = deriveChartLoading(state, { kind: "missing" }, false)
+
       // Then hydration wins until the snapshot settles
-      expect(deriveChartLoading(state, { kind: "missing" }, true).loading).toBe(
-        true,
-      )
-      expect(
-        deriveChartLoading(state, { kind: "missing" }, false).loading,
-      ).toBe(false)
+      expect(whileLoading.loading).toBe(true)
+      expect(afterLoad.loading).toBe(false)
     })
   })
 
@@ -985,6 +989,72 @@ describe("CellRefreshEngine", () => {
       harness.settleLoad("c1", dqlCellResult("select 1"))
       await flushAsync()
       expect(deps.executeSingle).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("chart slot errors", () => {
+    const errorResult = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: "boom",
+    })
+
+    it("keys a failed statement's fetch error to its own slot and reports it to the agent", async () => {
+      // Given a two-statement chart whose second statement fails
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql === "select bad" ? errorResult(sql) : dqlResult(sql),
+        ),
+      )
+
+      // When the fetch round settles
+      syncOnScreen([drawCell("c1", "select 1; select bad", false)])
+      await flushAsync()
+
+      // Then only the failing statement's slot carries the error
+      const state = engine.getState("c1")
+      expect(state?.slotErrors.get(keyOf("select bad"))).toBe("boom")
+      expect(state?.slotErrors.size).toBe(1)
+
+      // And the agent view reports it as the last refresh error
+      expect(engine.readRefreshState().get("c1")?.lastRefreshError).toBe("boom")
+    })
+
+    it("restores a loaded frame's error onto its own statement's slot", async () => {
+      // Given a snapshot load in flight for a two-statement chart
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1; select bad", false)])
+      await flushAsync()
+
+      // When the load settles with a frame whose second statement errored
+      harness.settleLoad("c1", {
+        results: [
+          dqlCellResult("select 1", 1).results[0],
+          {
+            type: "error",
+            query: "select bad",
+            error: "old boom",
+            fetchedAt: 1,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 1,
+      })
+      await flushAsync()
+
+      // Then the chart settles on the frame without fetching
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // And the error lands on the failing statement's slot and the agent view
+      const state = engine.getState("c1")
+      expect(state?.slotErrors.get(keyOf("select bad"))).toBe("old boom")
+      expect(state?.slotErrors.size).toBe(1)
+      expect(engine.readRefreshState().get("c1")?.lastRefreshError).toBe(
+        "old boom",
+      )
     })
   })
 
@@ -1180,6 +1250,60 @@ describe("CellRefreshEngine", () => {
     expect(toChartResult(cellResults.get("c1"), ["select 2"]).kind).toBe(
       "stale",
     )
+  })
+
+  describe("chart zoom on SQL edits", () => {
+    let resets: unknown[]
+    const recordReset = (payload?: unknown) => resets.push(payload)
+
+    const zoomedDrawCell = async () => {
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      setChartZoom("c1", 20, 60)
+    }
+
+    const editSql = async (value: string) => {
+      engine.sync([drawCell("c1", value, false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+    }
+
+    beforeEach(() => {
+      resets = []
+      eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
+    })
+
+    afterEach(() => {
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
+      clearChartZoom("c1")
+    })
+
+    it.each([
+      ["a statement is modified", "select 2"],
+      ["a statement is added", "select 1; select 2"],
+    ])("resets the zoom when %s", async (_change, value) => {
+      // Given a drawn chart zoomed to a sub-window
+      await zoomedDrawCell()
+
+      // When the edit changes the chart's statements
+      await editSql(value)
+
+      // Then the stored window clears and the mounted chart is told to reset
+      expect(getChartZoom("c1")).toBeUndefined()
+      expect(resets).toEqual([{ cellId: "c1" }])
+    })
+
+    it("keeps the zoom when an edit only reformats the statements", async () => {
+      // Given a drawn chart zoomed to a sub-window
+      await zoomedDrawCell()
+
+      // When the edit only changes whitespace and casing
+      await editSql("SELECT  1;\n")
+
+      // Then the window survives
+      expect(getChartZoom("c1")).toEqual({ start: 20, end: 60 })
+      expect(resets).toEqual([])
+    })
   })
 
   it("keeps the frame and skips refetching on a formatting-only SQL change", async () => {
@@ -1717,19 +1841,19 @@ describe("CellRefreshEngine", () => {
       fetchCancelled: false,
     }
 
-    // Then the recovery fetch after a failed restore shows the spinner
-    expect(deriveChartLoading(state, { kind: "missing" }, false).loading).toBe(
-      true,
+    // When the loading flag derives over a missing frame and over an empty one
+    const overMissing = deriveChartLoading(state, { kind: "missing" }, false)
+    const overEmpty = deriveChartLoading(
+      state,
+      { kind: "settled", results: [], hadError: false },
+      false,
     )
 
+    // Then the recovery fetch after a failed restore shows the spinner
+    expect(overMissing.loading).toBe(true)
+
     // And a genuinely empty settled frame keeps "No data" without flicker
-    expect(
-      deriveChartLoading(
-        state,
-        { kind: "settled", results: [], hadError: false },
-        false,
-      ).loading,
-    ).toBe(false)
+    expect(overEmpty.loading).toBe(false)
   })
 
   it("refetches on reveal when the settled frame was replaced by a truncated one", async () => {
@@ -2588,8 +2712,6 @@ describe("CellRefreshEngine", () => {
         Promise.resolve(map[sql.trim()] ?? dqlValidation),
       )
     }
-
-    const keyOf = (sql: string) => statementKeysFor([sql])[0]
 
     it("ticks a refreshable grid and swaps each slot's rows in place", async () => {
       // Given a two-statement run cell with a visible grid on a 1s interval

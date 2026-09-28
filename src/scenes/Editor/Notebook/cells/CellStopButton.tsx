@@ -55,8 +55,8 @@ export const CellStopButton: React.FC<Props> = ({
       tooltip="Stop"
       variant="dangerGhost"
       onClick={handleClick}
-      onFocus={() => {
-        focusedRef.current = true
+      onFocus={(e) => {
+        focusedRef.current = e.currentTarget.matches(":focus-visible")
       }}
       onBlur={() => {
         focusedRef.current = false

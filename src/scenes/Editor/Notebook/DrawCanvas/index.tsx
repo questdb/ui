@@ -28,6 +28,8 @@ import {
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
+import { useNotebookBufferId } from "../NotebookProvider"
 
 const NO_RESULTS: QueryExecResult[] = []
 
@@ -116,6 +118,7 @@ export const DrawCanvas: React.FC<Props> = ({
   const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(undefined)
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
+  const bufferId = useNotebookBufferId()
   const fetchState = useCellFetchState(cell.id)
   const resultStatus = useCellResultStatus(cell.id)
   const state = useMemo(
@@ -160,7 +163,8 @@ export const DrawCanvas: React.FC<Props> = ({
   // The refresh replaces the cancelled state, and Retry with it; a focused
   // Retry hands its focus on first, like the Stop button does on unmount.
   const handleRetry = (e: React.MouseEvent) => {
-    if (document.activeElement === e.currentTarget) onRetryUnmountWhileFocused()
+    if (e.currentTarget.matches(":focus-visible")) onRetryUnmountWhileFocused()
+    signalUserEdit(bufferId)
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }

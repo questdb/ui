@@ -28,7 +28,7 @@ type ResultChartData = Extract<QueryRawResult, { type: Type.DQL }>
 type Props = {
   result: ResultChartData | null
   visible: boolean
-  onResetZoomFocus?: () => void
+  onResetZoomFocus: () => void
 }
 
 type SavedConfig = {
@@ -202,10 +202,13 @@ export const ResultChart: React.FC<Props> = ({
     setZoomEnd(end)
   }, [])
 
-  const handleResetZoom = useCallback(() => {
-    chartRendererRef.current?.resetZoom()
-    onResetZoomFocus?.()
-  }, [onResetZoomFocus])
+  const handleResetZoom = useCallback(
+    (e: React.MouseEvent) => {
+      chartRendererRef.current?.resetZoom()
+      if (e.detail === 0) onResetZoomFocus()
+    },
+    [onResetZoomFocus],
+  )
 
   const isZoomed = zoomStart > 0 || zoomEnd < 100
 

@@ -27,11 +27,12 @@ import {
   type NotebookController,
   type NotebookControllerActions,
 } from "./notebookController"
+import { summarizeCellResults } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
-  summarizeCellResults,
+  cancelledBeforeRunNote,
   CELL_DELETED_MID_RUN_NOTE,
   SUPERSEDED_RUN_NOTE,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+} from "../../scenes/Editor/Notebook/runCancellation"
 import { __resetNotebookBufferQueuesForTests } from "./notebookBufferQueue"
 import {
   __resetNotebookDexieControllerForTests,
@@ -517,9 +518,12 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
         readResultStatus: (id) => (id === "a" ? "loaded" : "unrequested"),
       },
     })
+    // When the controller is asked for a known and an unknown cell
+    const known = controller.readResultStatus?.("a")
+    const unknown = controller.readResultStatus?.("zzz")
     // Then the controller delegates mount-independently
-    expect(controller.readResultStatus?.("a")).toBe("loaded")
-    expect(controller.readResultStatus?.("zzz")).toBe("unrequested")
+    expect(known).toBe("loaded")
+    expect(unknown).toBe("unrequested")
   })
 
   it("clears a provided maximized id that does not survive the apply", async () => {
@@ -678,12 +682,42 @@ describe("createNotebookController — live runCell supersession", () => {
     const controller = createNotebookController(1, {
       current: liveActions(snapshot, runCell),
     })
+
+    // When the run resolves
     const summary = await controller.runCell(cellId)
 
     // Then the agent learns the cell is gone, with nothing to trust as a result
     expect(summary.cancelled).toBe("cell_deleted")
     expect(summary.note).toBe(CELL_DELETED_MID_RUN_NOTE)
     expect(summary.unverified).toBe(true)
+    expect(summary.results).toEqual([])
+  })
+
+  it("reports a run the user stopped during validation as not started", async () => {
+    // Given the user pressed Stop while the mounted runner was still validating,
+    // so it reports a cancelled run that never launched.
+    const unchanged = dmlResult(1)
+    const snapshot = () => [cellWith(unchanged)]
+    const runCell = () =>
+      Promise.resolve({
+        ok: false,
+        superseded: false,
+        notStarted: true,
+        cancelled: "cancelled" as const,
+      })
+    const controller = createNotebookController(1, {
+      current: liveActions(snapshot, runCell),
+    })
+
+    // When the run resolves
+    const summary = await controller.runCell(cellId)
+
+    // Then the agent is told nothing executed and that a re-run is safe,
+    // not handed a bare failure
+    expect(summary.success).toBe(false)
+    expect(summary.cancelled).toBe("cancelled")
+    expect(summary.note).toBe(cancelledBeforeRunNote("cancelled"))
+    expect(summary.unverified).toBeUndefined()
     expect(summary.results).toEqual([])
   })
 

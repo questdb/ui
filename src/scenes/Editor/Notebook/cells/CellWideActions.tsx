@@ -18,7 +18,7 @@ type Props = {
   isChartRefreshing: boolean
   isCellBusy: boolean
   chartZoomed: boolean
-  onResetZoomFocus?: () => void
+  onResetZoomFocus: () => void
 }
 
 export const CellWideActions: React.FC<Props> = ({

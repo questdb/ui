@@ -22,19 +22,20 @@ import {
 import { statementRequestLimiter } from "../../../utils/questdb/requestLimiter"
 import {
   buildInitialScriptResults,
-  cancelledResult,
   type CellRunOutcome,
   errorResult,
-  hasPendingResult,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
+  runHistoryPatch,
+  singleResultFromExec,
+} from "./notebookUtils"
+import {
+  cancelledResult,
   runCancellationOf,
   type RunCancellation,
   type RunCancelReason,
-  runHistoryPatch,
-  singleResultFromExec,
-  statementKeysFor,
-} from "./notebookUtils"
+} from "./runCancellation"
+import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 

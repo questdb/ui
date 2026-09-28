@@ -20,12 +20,12 @@ vi.mock("@questdb/sql-parser", async (importOriginal) => {
 })
 
 import { CellRefreshEngine, type CellRefreshDeps } from "./cellRefreshEngine"
+import { computeResultBottomHeight } from "../notebookUtils"
 import {
-  computeResultBottomHeight,
   deriveStatementFrame,
   reconcileCellResultForValue,
   statementKeysFor,
-} from "../notebookUtils"
+} from "../statementIdentity"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 
 // The formatter is the only expensive step of statement identity. Every event

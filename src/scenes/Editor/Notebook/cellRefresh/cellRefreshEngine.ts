@@ -23,17 +23,19 @@ import {
   autoRefreshIntervalMs,
   frameFetchedAt,
   NOTEBOOK_ROW_CAP,
-  normalizeStatementIdentity,
-  reconcileCellResultForStatements,
   resolveAutoRefresh,
-  resultKeysByText,
   singleResultFromExec,
   sqlHash,
+} from "../notebookUtils"
+import {
+  normalizeStatementIdentity,
+  reconcileCellResultForStatements,
+  resultKeysByText,
   statementIdentityOfKey,
   statementKeysFor,
   statementKeysForIdentities,
   type StatementKey,
-} from "../notebookUtils"
+} from "../statementIdentity"
 import {
   alignResultsToQueries,
   type ChartResult,
@@ -53,6 +55,7 @@ import {
 } from "../../../../store/notebookResults"
 import { persistCellSnapshot } from "../persistCellSnapshot"
 import { PerKeyListeners } from "../perKeyListeners"
+import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 
 const REFRESH_MIN_MS = 2000
 const REFRESH_MAX_MS = 60000
@@ -862,6 +865,9 @@ export class CellRefreshEngine {
     const queriesKey = joinQueriesKey(queries)
     const { slotKeys, identitiesKey } = keyedStatements(queries)
     const sameQueries = this.settledIdentitiesKey(entry) === identitiesKey
+    if (entry.kind === "chart" && identitiesKey !== entry.identitiesKey) {
+      resetChartZoom(entry.cellId)
+    }
     entry.identitiesKey = identitiesKey
     // Refresh errors follow statement content: an edited statement's error
     // clears, an unchanged sibling's survives the edit.

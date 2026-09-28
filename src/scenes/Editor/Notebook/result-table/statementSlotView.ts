@@ -1,6 +1,6 @@
 import type { SingleQueryResult } from "../../../../store/notebook"
 import type { CellFetchState } from "../cellRefresh/cellRefreshEngine"
-import type { StatementFrame } from "../notebookUtils"
+import type { StatementFrame } from "../statementIdentity"
 
 // One tab's view model. Tabs follow the editor's statement list, not the
 // compact result array: a statement with no result yet renders the neutral

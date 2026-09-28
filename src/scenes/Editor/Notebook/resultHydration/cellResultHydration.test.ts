@@ -9,7 +9,7 @@ import type {
   SnapshotRefreshState,
 } from "../../../../store/notebookResults"
 import { CellVirtualizationEngine } from "../cellVirtualization/cellVirtualizationEngine"
-import { statementKeysFor } from "../notebookUtils"
+import { statementKeysFor } from "../statementIdentity"
 import { CellResultHydrationEngine } from "./cellResultHydration"
 
 vi.mock("../notebookScheduling", () => ({

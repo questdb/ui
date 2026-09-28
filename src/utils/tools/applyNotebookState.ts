@@ -1,5 +1,5 @@
 import type { StatusCallback } from "../ai/aiAssistant"
-import type { RunCancellation } from "../../scenes/Editor/Notebook/notebookUtils"
+import type { RunCancellation } from "../../scenes/Editor/Notebook/runCancellation"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
@@ -283,16 +283,11 @@ export const dispatchApplyNotebookState = async (
   }
   for (const [idx, c] of cells.entries()) {
     if (hasExplicitModeForEditor(c.mode, c.view)) {
-      return {
-        content: JSON.stringify({
-          error_code: "validation",
-          message:
-            `VALIDATION_ERROR: cells[${idx}].view "editor" cannot be combined with ` +
-            `an explicit mode. Editor view clears the stored result and hides the result pane. ` +
-            `Set mode to null to request an editor-only view.`,
-        }),
-        is_error: true,
-      }
+      return validationError(
+        `cells[${idx}].view "editor" cannot be combined with an explicit mode. ` +
+          `Editor view clears the stored result and hides the result pane. ` +
+          `Set mode to null to request an editor-only view.`,
+      )
     }
     if (
       c.auto_refresh !== undefined &&

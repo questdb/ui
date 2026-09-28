@@ -139,7 +139,7 @@ export const ResizeHandle: React.FC<Props> = ({
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
-  const endDragRef = useRef<(() => void) | null>(null)
+  const finishDragRef = useRef<(() => void) | null>(null)
   // The document listeners live for the whole drag; they read the callbacks
   // through refs so every move sees the current render, not the mousedown one.
   const onResizeRef = useRef(onResize)
@@ -169,24 +169,20 @@ export const ResizeHandle: React.FC<Props> = ({
         onResizeRef.current(newHeight)
       }
 
-      const endDrag = () => {
+      const finishDrag = () => {
         document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", handleMouseUp)
+        document.removeEventListener("mouseup", finishDrag)
         document.body.style.cursor = ""
         document.body.style.userSelect = ""
-        endDragRef.current = null
-      }
-
-      const handleMouseUp = () => {
-        endDrag()
+        finishDragRef.current = null
         if (dragged) onResizeEndRef.current(lastHeightRef.current)
       }
 
       document.body.style.cursor = "ns-resize"
       document.body.style.userSelect = "none"
       document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-      endDragRef.current = endDrag
+      document.addEventListener("mouseup", finishDrag)
+      finishDragRef.current = finishDrag
     },
     [targetRef, clampHeight],
   )
@@ -229,7 +225,10 @@ export const ResizeHandle: React.FC<Props> = ({
     return () => observer.disconnect()
   }, [targetRef])
 
-  useEffect(() => () => endDragRef.current?.(), [])
+  // A new target is another pane: the drag commits the old one where it is
+  // and stops. React 17 runs every cleanup before any effect, so the callback
+  // ref still holds the old pane's onResizeEnd here.
+  useEffect(() => () => finishDragRef.current?.(), [targetRef])
 
   return (
     <Handle

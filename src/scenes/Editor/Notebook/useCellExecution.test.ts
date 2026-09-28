@@ -8,14 +8,17 @@ import { abortCellRunsOnUnmount, launchStatement } from "./useCellExecution"
 
 describe("abortCellRunsOnUnmount", () => {
   it("aborts validation and request phases before clearing their registries", () => {
+    // Given a cell with a validation barrier, an in-flight request and a generation
     const validation = new AbortController()
     const request = new AbortController()
     const barriers = new Map([["cell", new Set([validation])]])
     const requests = new Map([["cell", [request]]])
     const generations = new Map([["cell", 4]])
 
+    // When the hook tears down
     abortCellRunsOnUnmount(barriers, requests, generations)
 
+    // Then both phases are aborted, the registries are empty and the generation advanced
     expect(validation.signal.aborted).toBe(true)
     expect(request.signal.aborted).toBe(true)
     expect(barriers.size).toBe(0)
@@ -24,12 +27,15 @@ describe("abortCellRunsOnUnmount", () => {
   })
 
   it("supersedes a validation-only cell so it cannot launch after teardown", () => {
+    // Given a cell that is still validating and has no generation yet
     const validation = new AbortController()
     const barriers = new Map([["validating", new Set([validation])]])
     const generations = new Map<string, number>()
 
+    // When the hook tears down
     abortCellRunsOnUnmount(barriers, new Map(), generations)
 
+    // Then the validation aborts and the cell gains a newer generation
     expect(validation.signal.aborted).toBe(true)
     expect(generations.get("validating")).toBe(1)
   })

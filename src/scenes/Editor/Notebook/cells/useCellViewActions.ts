@@ -1,11 +1,10 @@
-import { useCallback } from "react"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
-import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
+import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
 import type { CellPaneLayout, CellView } from "../notebookUtils"
 
 type CellViewActionMethod = "menu" | "toggle"
@@ -29,7 +28,7 @@ export const useCellViewActions = ({
   const bufferId = useNotebookBufferId()
   const resultOnly = paneLayout === "result"
 
-  const viewTable = useCallback(() => {
+  const viewTable = () => {
     if (isCellBusy) return
     if (view === "none") {
       signalUserEdit(bufferId)
@@ -48,9 +47,9 @@ export const useCellViewActions = ({
 
     if (view === "grid") clearCellResult(cellId)
     else setCellMode(cellId, "run")
-  }, [bufferId, cellId, clearCellResult, isCellBusy, method, setCellMode, view])
+  }
 
-  const viewChart = useCallback(() => {
+  const viewChart = () => {
     if (isCellBusy) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
       to: view === "chart" ? "none" : "chart",
@@ -58,21 +57,18 @@ export const useCellViewActions = ({
     })
     signalUserEdit(bufferId)
     eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
-  }, [bufferId, cellId, isCellBusy, method, view])
+  }
 
-  const toggleEditor = useCallback(() => {
+  const toggleEditor = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
       editorShown: resultOnly,
       view,
     })
     signalUserEdit(bufferId)
     setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
-  }, [bufferId, cellId, resultOnly, setCellPaneView, view])
+  }
 
-  const resetZoom = useCallback(() => {
-    clearChartZoom(cellId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
-  }, [cellId])
+  const resetZoom = () => resetChartZoom(cellId)
 
   return { viewTable, viewChart, toggleEditor, resetZoom }
 }

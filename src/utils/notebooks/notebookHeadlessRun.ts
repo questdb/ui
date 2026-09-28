@@ -23,19 +23,10 @@ import {
 import { statementRequestLimiter } from "../questdb/requestLimiter"
 import {
   buildInitialScriptResults,
-  cancelledBeforeLaunchSummary,
-  midRunCancellationNote,
-  runCancellationOf,
-  type RunCancellation,
-  type RunCancelReason,
   CELL_CHANGED_BEFORE_RUN_NOTE,
-  cancelledResult,
   CELL_CHANGED_MID_RUN_NOTE,
-  CELL_DELETED_MID_RUN_NOTE,
   errorResult,
   MOUNTED_MID_RUN_NOTE,
-  NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
-  NOTEBOOK_DELETED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
   patchCellRunResult,
   RESULT_NOT_SAVED_RUN_NOTE,
@@ -44,6 +35,17 @@ import {
   summarizeCellResults,
   USER_CHANGED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  cancelledBeforeLaunchSummary,
+  midRunCancellationNote,
+  runCancellationOf,
+  type RunCancellation,
+  type RunCancelReason,
+  cancelledResult,
+  CELL_DELETED_MID_RUN_NOTE,
+  NOTEBOOK_ARCHIVED_MID_RUN_NOTE,
+  NOTEBOOK_DELETED_MID_RUN_NOTE,
+} from "../../scenes/Editor/Notebook/runCancellation"
 import { persistCellSnapshot } from "../../scenes/Editor/Notebook/persistCellSnapshot"
 import { pruneToRecentNotebooks } from "../../store/notebookResults"
 import {

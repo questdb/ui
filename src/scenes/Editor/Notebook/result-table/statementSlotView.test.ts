@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { buildStatementSlotViews } from "./statementSlotView"
-import { deriveStatementFrame, statementKeysFor } from "../notebookUtils"
+import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
 import type { CellFetchState } from "../cellRefresh/cellRefreshEngine"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 
@@ -124,6 +124,8 @@ describe("buildStatementSlotViews", () => {
       result(statements),
       statementKeysFor(statements),
     )!
+
+    // When the slot views are built
     const slots = buildStatementSlotViews(
       frame,
       fetchState({ slotFetching: new Set([second]) }),

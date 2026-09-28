@@ -30,7 +30,7 @@ type Props = {
   onZoomChange?: (start: number, end: number) => void
   isFocused?: boolean
   animateEntry?: boolean
-  zoomWindow: { start: number; end: number }
+  zoomWindow: ZoomWindow
 }
 
 // Structural fingerprint — we remount on changes here so stale series from
@@ -76,6 +76,13 @@ type DataZoomEvent = {
   batch?: Array<{ start?: number; end?: number }>
 }
 
+type ZoomWindow = { start: number; end: number }
+
+const isZoomed = ({ start, end }: ZoomWindow): boolean => start > 0 || end < 100
+
+const zoomControlsHidden = (density: ChartZoomDensity): boolean =>
+  !density.slider && !density.wheel
+
 export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
   function ChartRenderer(
     {
@@ -94,15 +101,14 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       () => createQuestdbTheme(theme.color),
       [theme.color],
     )
-    const reactEchartsRef = useRef<ReactECharts | null>(null)
-    const wrapperRef = useRef<HTMLDivElement | null>(null)
-    const zoomWindowRef = useRef(zoomWindow)
     const [zoomDensity, setZoomDensity] = useState<ChartZoomDensity | null>(
       null,
     )
+    const reactEchartsRef = useRef<ReactECharts | null>(null)
+    const wrapperRef = useRef<HTMLDivElement | null>(null)
+    const zoomWindowRef = useRef(zoomWindow)
     const measuredWidthRef = useRef(0)
     const optionRef = useRef(option)
-    optionRef.current = option
     // Decided once per mount: a chart mounting into an already-settled
     // notebook (scroll remount) skips the entry animation.
     const animateEntryRef = useRef(
@@ -110,6 +116,12 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     )
     const firstInstanceDoneRef = useRef(false)
     const onZoomChangeRef = useRef(onZoomChange)
+
+    // The density measurement reads the option from a layout effect, so the
+    // ref syncs in one too, ahead of it.
+    useLayoutEffect(() => {
+      optionRef.current = option
+    }, [option])
 
     useEffect(() => {
       zoomWindowRef.current = zoomWindow
@@ -175,20 +187,15 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       }
     }, [measureDensity])
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        resetZoom: () => {
-          const instance = reactEchartsRef.current?.getEchartsInstance()
-          instance?.dispatchAction({
-            type: "dataZoom",
-            start: 0,
-            end: 100,
-          })
-        },
-      }),
-      [],
-    )
+    const resetZoom = useCallback(() => {
+      reactEchartsRef.current?.getEchartsInstance()?.dispatchAction({
+        type: "dataZoom",
+        start: 0,
+        end: 100,
+      })
+    }, [])
+
+    useImperativeHandle(ref, () => ({ resetZoom }), [resetZoom])
 
     const handleChartReady = useCallback<
       NonNullable<React.ComponentProps<typeof ReactECharts>["onChartReady"]>
@@ -196,17 +203,25 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       (instance) => {
         firstInstanceDoneRef.current = true
         const zoom = zoomWindowRef.current
-        if (zoom.start > 0 || zoom.end < 100) {
+        if (isZoomed(zoom)) {
           const mounted = instance.getOption() as { dataZoom?: unknown[] }
-          if (Array.isArray(mounted.dataZoom) && mounted.dataZoom.length > 0) {
+          const density = chartZoomDensity(
+            optionRef.current,
+            measuredWidthRef.current,
+          )
+          const restorable =
+            Array.isArray(mounted.dataZoom) &&
+            mounted.dataZoom.length > 0 &&
+            !zoomControlsHidden(density)
+          if (restorable) {
             instance.dispatchAction({
               type: "dataZoom",
               start: zoom.start,
               end: zoom.end,
             })
           } else {
-            // The remounted option dropped its dataZoom, so the saved window
-            // cannot be restored: report the zoom as gone, or the owner's
+            // The remounted chart has no dataZoom, or no control that could
+            // move the window back: report the zoom as gone, or the owner's
             // Reset button keeps pointing at a zoom that no longer exists.
             onZoomChangeRef.current?.(0, 100)
           }
@@ -236,6 +251,17 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
           : chartZoomDensity(option, measuredWidthRef.current),
       [option, zoomDensity],
     )
+
+    // Without a slider or a wheel nothing can move the window back, so a
+    // window that outlives its controls resets and the owner hears it go.
+    useEffect(() => {
+      if (effectiveDensity === null || !zoomControlsHidden(effectiveDensity)) {
+        return
+      }
+      if (!isZoomed(zoomWindowRef.current)) return
+      resetZoom()
+      onZoomChangeRef.current?.(0, 100)
+    }, [effectiveDensity, resetZoom])
 
     const optionToDraw = useMemo(
       () =>

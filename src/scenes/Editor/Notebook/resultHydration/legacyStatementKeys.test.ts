@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { DqlQueryResult } from "../../../../store/notebook"
-import { resultStatementKeys, statementKeysFor } from "../notebookUtils"
+import { resultStatementKeys, statementKeysFor } from "../statementIdentity"
 import { rekeyLegacyStatementKeys } from "./legacyStatementKeys"
 
 // Base persisted results without their fetch time.

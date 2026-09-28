@@ -10,7 +10,8 @@ import {
   resolveSelectionRun,
   type SelectionRunResolution,
 } from "../../Monaco/utils"
-import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
+import { resolveRunAction } from "../notebookUtils"
+import { resolveActiveStatementSql } from "../statementIdentity"
 import {
   emitUserAction,
   signalUserEdit,
@@ -223,7 +224,9 @@ export const useCellRunActions = ({
         })
         return
       }
-      firstRunRef.current = cell.result == null
+      // A gesture during a run never starts a first run: the running frame
+      // already replaced the empty result, and the run in flight keeps Stop.
+      if (!isRunning) firstRunRef.current = cell.result == null
       if (request.kind === "all") {
         void handleRunAll()
         return
@@ -234,6 +237,7 @@ export const useCellRunActions = ({
       cell.id,
       cell.mode,
       cell.result,
+      isRunning,
       bufferIdForEvents,
       handleRunAll,
       handleRunSingle,

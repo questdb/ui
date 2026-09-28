@@ -237,6 +237,7 @@ export const CellToolbar: React.FC<Props> = ({
   return (
     <ToolbarWrapper
       className="cell-toolbar"
+      data-hook="cell-toolbar"
       $inline={inline}
       $forceVisible={menuOpen}
     >

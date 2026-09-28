@@ -9,27 +9,14 @@ import type {
   SnapshotRefreshState,
 } from "../../../../store/notebookResults"
 import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
-import { getQueriesFromText, normalizeQueryText } from "../../Monaco/utils"
+import { getQueriesFromText } from "../../Monaco/utils"
 import {
+  normalizeSnapshotResultQuery,
   reconcileKeyedResults,
   resultStatementKeys,
   statementKeysFor,
-} from "../notebookUtils"
+} from "../statementIdentity"
 import { rekeyLegacyStatementKeys } from "./legacyStatementKeys"
-
-// Legacy records hold the raw cell text — comments included — as the
-// statement's query. Parsing it back to the statement lets those results
-// survive key matching; the changed frame then rewrites to disk.
-const normalizeSnapshotResultQuery = (
-  result: SingleQueryResult,
-): SingleQueryResult => {
-  const parsed = getQueriesFromText(result.query)
-  if (parsed.length !== 1) return result
-  if (normalizeQueryText(parsed[0]) === normalizeQueryText(result.query)) {
-    return result
-  }
-  return { ...result, query: parsed[0] }
-}
 import { scheduleIdle } from "../notebookScheduling"
 import { PerKeyListeners } from "../perKeyListeners"
 

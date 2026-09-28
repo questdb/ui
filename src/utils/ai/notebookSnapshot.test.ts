@@ -158,6 +158,7 @@ describe("buildSnapshot", () => {
   })
 
   it("reports editor when the mounted cell's saved result is known missing", async () => {
+    // Given a mounted cell that ran before but whose saved result is known missing
     const released = sql("a", "SELECT 1", {
       mode: undefined,
       lastRunStatus: "success",
@@ -168,8 +169,10 @@ describe("buildSnapshot", () => {
       makeController(id, [released], {}, null, () => "missing"),
     )
 
+    // When the snapshot is built
     const snap = await buildSnapshot(id)
 
+    // Then the cell reports editor with no mode while keeping its run history
     expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
       view: "editor",
       mode: null,
@@ -178,6 +181,7 @@ describe("buildSnapshot", () => {
   })
 
   it("uses passive snapshot keys to distinguish restorable and missing results", async () => {
+    // Given an unmounted cell that ran before and has no snapshot row yet
     const released = sql("a", "SELECT 1", {
       mode: undefined,
       lastRunStatus: "success",
@@ -185,11 +189,15 @@ describe("buildSnapshot", () => {
     })
     const id = await seedNotebook({ cells: [released] })
 
+    // When the snapshot is built without a stored result
     const missing = await buildSnapshot(id)
+
+    // Then the cell reports editor
     expect(missing?.status === "ok" ? missing.cells[0].view : undefined).toBe(
       "editor",
     )
 
+    // When a snapshot row is saved and the snapshot is rebuilt
     await saveCellSnapshot({
       bufferId: id,
       cellId: "a",
@@ -197,6 +205,8 @@ describe("buildSnapshot", () => {
       savedAt: 1,
     })
     const restorable = await buildSnapshot(id)
+
+    // Then the cell reports its stored view and run mode
     expect(
       restorable?.status === "ok"
         ? [restorable.cells[0].view, restorable.cells[0].mode]
@@ -245,10 +255,15 @@ describe("buildSnapshot", () => {
   })
 
   it("preserves SQL comparison operators in structured snapshot previews", async () => {
+    // Given a cell whose SQL contains comparison operators and an ampersand
     const value =
       "SELECT * FROM fx_trades WHERE price < 1 AND quantity > 2 AND symbol <> 'A&B'"
     const id = await seedNotebook({ cells: [sql("a", value)] })
+
+    // When the snapshot is built
     const snap = await buildSnapshot(id)
+
+    // Then the preview keeps the SQL verbatim
     expect(snap?.status).toBe("ok")
     if (snap?.status === "ok") {
       expect(snap.cells[0].preview).toBe(value)
@@ -287,6 +302,7 @@ describe("buildSnapshot", () => {
   })
 
   it("includes grid positions only when layout_mode is 'grid'", async () => {
+    // Given the same cells and layout stored once in list mode and once in grid mode
     const cells = [sql("a"), sql("b")]
     const layout = [
       { i: "a", x: 0, y: 0, w: 6, h: 4 },
@@ -300,8 +316,12 @@ describe("buildSnapshot", () => {
       cells,
       settings: { layoutMode: "grid", layout },
     })
+
+    // When both snapshots are built
     const listSnap = await buildSnapshot(listId)
     const gridSnap = await buildSnapshot(gridId)
+
+    // Then only the grid snapshot carries placement
     if (listSnap?.status === "ok" && gridSnap?.status === "ok") {
       expect(listSnap.cells[0].grid).toBeUndefined()
       // Agent layout exposes placement/width only; height is controlled through
@@ -349,12 +369,14 @@ describe("buildSnapshot", () => {
   })
 
   it("reports editor from get_cell serialization when the result is missing", () => {
+    // Given a cell that ran before whose result is known missing
     const released = sql("a", "SELECT 1", {
       mode: undefined,
       lastRunStatus: "success",
       paneView: "editor_result",
     })
 
+    // When the cell is serialized for get_cell
     const details = serializeCell(
       [released],
       "a",
@@ -364,6 +386,7 @@ describe("buildSnapshot", () => {
       "missing",
     )
 
+    // Then it reports editor with no mode while keeping its run history
     expect(details).toMatchObject({
       view: "editor",
       mode: null,
@@ -372,6 +395,7 @@ describe("buildSnapshot", () => {
   })
 
   it("reports the stored view for an inactive notebook", async () => {
+    // Given an unmounted draw cell with a split pane view
     const id = await seedNotebook({
       cells: [
         sql("a", "SELECT 1", {
@@ -381,7 +405,10 @@ describe("buildSnapshot", () => {
       ],
     })
 
+    // When the snapshot is built
     const snap = await buildSnapshot(id)
+
+    // Then the stored view and mode are reported
     expect(snap?.status === "ok" ? snap.cells[0] : undefined).toMatchObject({
       view: "editor_result",
       mode: "draw",
@@ -389,6 +416,7 @@ describe("buildSnapshot", () => {
   })
 
   it("round-trips a pinned result height while passive result data is unloaded", async () => {
+    // Given an unmounted cell with a pinned result height and no loaded result
     const id = await seedNotebook({
       cells: [
         sql("a", "SELECT 1", {
@@ -399,7 +427,10 @@ describe("buildSnapshot", () => {
       ],
     })
 
+    // When the snapshot is built
     const snap = await buildSnapshot(id)
+
+    // Then the pinned height is reported
     expect(
       snap?.status === "ok" ? snap.cells[0].result_height : undefined,
     ).toBe(400)
@@ -461,6 +492,7 @@ describe("buildSnapshot", () => {
   })
 
   it("surfaces the full chart config in wire shape (for PUT round-trip) without leaking series data", async () => {
+    // Given a named draw cell with a chart config and a 5s auto-refresh override
     const cell = sql("a", "SELECT 1", {
       mode: "draw",
       autoRefresh: "5s",
@@ -476,7 +508,11 @@ describe("buildSnapshot", () => {
       cells: [cell],
       settings: { autoRefreshDefault: true },
     })
+
+    // When the snapshot is built
     const snap = await buildSnapshot(id)
+
+    // Then the cell carries its config, name, mode and override in wire shape
     if (snap?.status === "ok") {
       // Snake-case wire shape the model can copy straight back into apply_notebook_state.
       expect(snap.cells[0].chart_config).toEqual({
@@ -512,28 +548,42 @@ describe("summarizeCells", () => {
   })
 
   it("derives run mode only while a table snapshot still exists", () => {
+    // Given a cell that ran before with no explicit mode
     const released = sql("a", "SELECT 1", {
       lastRunStatus: "success",
       paneView: "result",
     })
 
-    expect(summarizeCells([released], undefined, () => "missing")[0].mode).toBe(
-      null,
-    )
-    expect(
-      summarizeCells([released], undefined, () => "unrequested")[0].mode,
-    ).toBe("run")
+    // When it is summarized with a missing snapshot and with an unrequested one
+    const missingMode = summarizeCells(
+      [released],
+      undefined,
+      () => "missing",
+    )[0].mode
+    const unrequestedMode = summarizeCells(
+      [released],
+      undefined,
+      () => "unrequested",
+    )[0].mode
+
+    // Then run mode is derived only while the snapshot may still exist
+    expect(missingMode).toBe(null)
+    expect(unrequestedMode).toBe("run")
   })
 })
 
 describe("formatSnapshot", () => {
   it("guards comparison operators only in the pseudo-XML prompt context", async () => {
+    // Given a snapshot whose structured preview keeps the raw comparison operators
     const value = "SELECT 1 WHERE price < 2 AND quantity > 0"
     const id = await seedNotebook({ cells: [sql("a", value)] })
     const snap = (await buildSnapshot(id))!
-
     expect(snap.status === "ok" && snap.cells[0].preview).toBe(value)
+
+    // When the snapshot is formatted for the prompt
     const out = formatSnapshot(snap)
+
+    // Then the operators are replaced with guarded glyphs
     expect(out).toContain("price ‹ 2 AND quantity › 0")
     expect(out).not.toContain("price < 2")
   })
@@ -558,6 +608,7 @@ describe("formatSnapshot", () => {
   })
 
   it("serialises ok snapshots with cells and grid positions", async () => {
+    // Given a grid-mode notebook with one placed cell
     const id = await seedNotebook({
       cells: [sql("a", "SELECT 1")],
       settings: {
@@ -566,7 +617,11 @@ describe("formatSnapshot", () => {
       },
     })
     const snap = (await buildSnapshot(id))!
+
+    // When the snapshot is formatted for the prompt
     const out = formatSnapshot(snap)
+
+    // Then the block lists the notebook, the cell and its grid placement
     expect(out).toContain(`buffer_id: ${id}`)
     expect(out).toContain("layout_mode: grid")
     expect(out).toContain("- id: a")

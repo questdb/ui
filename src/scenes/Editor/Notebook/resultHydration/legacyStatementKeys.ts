@@ -4,7 +4,10 @@ import {
 } from "../../../../store/notebook"
 import type { NotebookResultSnapshot } from "../../../../store/notebookResults"
 import { normalizeQueryText } from "../../Monaco/utils"
-import { statementKeysForIdentities, type StatementKey } from "../notebookUtils"
+import {
+  statementKeysForIdentities,
+  type StatementKey,
+} from "../statementIdentity"
 
 export type SnapshotStatementKeys = Pick<
   NotebookResultSnapshot,

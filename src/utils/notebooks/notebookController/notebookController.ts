@@ -15,15 +15,17 @@ import type {
 } from "../../../scenes/Editor/Notebook/notebookUtils"
 import {
   type CellRunOutcome,
+  CELL_CHANGED_BEFORE_RUN_NOTE,
+  CELL_CHANGED_MID_RUN_NOTE,
+  summarizeCellResults,
+} from "../../../scenes/Editor/Notebook/notebookUtils"
+import {
   cancelledBeforeLaunchSummary,
   midRunCancellationNote,
   type RunCancellation,
-  CELL_CHANGED_BEFORE_RUN_NOTE,
-  CELL_CHANGED_MID_RUN_NOTE,
   RESULT_CLEARED_MID_RUN_NOTE,
-  snapshotResultsHaveMatchingStatement,
-  summarizeCellResults,
-} from "../../../scenes/Editor/Notebook/notebookUtils"
+} from "../../../scenes/Editor/Notebook/runCancellation"
+import { snapshotResultsHaveMatchingStatement } from "../../../scenes/Editor/Notebook/statementIdentity"
 import { removeNotebookCellLayouts } from "../../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { clearChartZoom } from "../../../scenes/Editor/Notebook/cellVirtualization/chartZoomStore"
 import {

@@ -20,7 +20,7 @@ import {
   derivePositionalFrame,
   deriveStatementFrame,
   statementKeysFor,
-} from "../notebookUtils"
+} from "../statementIdentity"
 
 // Mirrors DrawCanvas's EmptyState: a failed snapshot read keeps the reserved
 // pane and says so, instead of an endless shimmer or a silent collapse.

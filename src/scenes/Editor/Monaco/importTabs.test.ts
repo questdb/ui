@@ -776,6 +776,7 @@ describe("sanitizeBuffer", () => {
 
   describe("notebookViewState sanitization", () => {
     it("imports one preferred view and maps main's legacy boolean", () => {
+      // Given cells with a preferred view, main's legacy boolean, and a markdown cell
       const input = {
         label: "Notebook",
         value: "",
@@ -796,7 +797,10 @@ describe("sanitizeBuffer", () => {
         },
       }
 
+      // When the buffer is sanitized
       const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then each cell carries one preferred view and the legacy boolean is gone
       expect(cells?.map((cell) => cell.paneView)).toEqual([
         "result",
         "editor_result",
@@ -908,6 +912,7 @@ describe("sanitizeBuffer", () => {
     })
 
     it("normalizes legacy SQL run mode to the implicit default", () => {
+      // Given a legacy export that stores mode "run" explicitly
       const input = {
         label: "Notebook",
         value: "",
@@ -920,7 +925,10 @@ describe("sanitizeBuffer", () => {
         },
       }
 
+      // When the buffer is sanitized
       const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then run mode is dropped and draw mode is preserved
       expect(cells?.[0].mode).toBeUndefined()
       expect(cells?.[1].mode).toBe("draw")
     })

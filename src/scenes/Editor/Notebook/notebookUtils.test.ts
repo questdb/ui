@@ -47,19 +47,10 @@ import {
   MIN_MARKDOWN_HEIGHT_PX,
   modeChangeBottomHeightPatch,
   nextCopyLabel,
-  snapshotResultsMatchQueries,
   nextGridSeedPosition,
   partitionCellHeights,
   topHeightForSql,
   patchCellRunResult,
-  reconcileCellResultForValue,
-  reconcileResultsForStatements,
-  derivePositionalFrame,
-  deriveStatementFrame,
-  resolveActiveStatementSql,
-  statementIdentityOfKey,
-  statementKeysFor,
-  statementKeysForIdentities,
   removeCell,
   resolveRunCompletion,
   setResultAt,
@@ -71,8 +62,8 @@ import {
   swapCellDown,
   swapCellUp,
   upsertCellLayout,
-  MAX_FORMATTED_IDENTITY_LENGTH,
 } from "./notebookUtils"
+import { statementKeysFor } from "./statementIdentity"
 import type {
   CellResult,
   NotebookCell,
@@ -171,6 +162,7 @@ describe("singleResultFromExec", () => {
   })
 
   it("maps dql exec to DqlQueryResult preserving columns/dataset/count/timings", () => {
+    // Given a dql exec with columns, rows, a count and timings
     const exec: QueryExecResult = {
       type: "dql",
       query: "SELECT 1",
@@ -185,6 +177,8 @@ describe("singleResultFromExec", () => {
         count: 1,
       },
     }
+    // When mapped to a cell result
+    // Then the data fields carry over with the fetch time
     expect(singleResultFromExec(exec, "SELECT 1")).toEqual({
       type: "dql",
       query: "SELECT 1",
@@ -197,6 +191,7 @@ describe("singleResultFromExec", () => {
   })
 
   it("maps error exec to ErrorQueryResult with error message", () => {
+    // Given an error exec with a message
     const exec: QueryExecResult = {
       type: "error",
       query: "SELECT boom",
@@ -205,6 +200,8 @@ describe("singleResultFromExec", () => {
       count: 0,
       error: "syntax error",
     }
+    // When mapped to a cell result
+    // Then the error result keeps the message
     expect(singleResultFromExec(exec, "SELECT boom")).toEqual({
       type: "error",
       query: "SELECT boom",
@@ -214,6 +211,7 @@ describe("singleResultFromExec", () => {
   })
 
   it("falls back to 'Unknown error' when error exec has no message", () => {
+    // Given an error exec without a message
     const exec: QueryExecResult = {
       type: "error",
       query: "SELECT ?",
@@ -221,6 +219,8 @@ describe("singleResultFromExec", () => {
       dataset: [],
       count: 0,
     }
+    // When mapped to a cell result
+    // Then the error text falls back to Unknown error
     expect(singleResultFromExec(exec, "SELECT ?")).toEqual({
       type: "error",
       query: "SELECT ?",
@@ -230,6 +230,7 @@ describe("singleResultFromExec", () => {
   })
 
   it("maps ddl exec to DdlDmlQueryResult without data fields", () => {
+    // Given a ddl exec
     const exec: QueryExecResult = {
       type: "ddl",
       query: "CREATE TABLE t (x INT)",
@@ -237,6 +238,8 @@ describe("singleResultFromExec", () => {
       dataset: [],
       count: 0,
     }
+    // When mapped to a cell result
+    // Then only the type, the query and the fetch time remain
     expect(singleResultFromExec(exec, "CREATE TABLE t (x INT)")).toEqual({
       type: "ddl",
       query: "CREATE TABLE t (x INT)",
@@ -245,6 +248,7 @@ describe("singleResultFromExec", () => {
   })
 
   it("maps dml exec to DdlDmlQueryResult", () => {
+    // Given a dml exec
     const exec: QueryExecResult = {
       type: "dml",
       query: "INSERT INTO t VALUES (1)",
@@ -252,6 +256,8 @@ describe("singleResultFromExec", () => {
       dataset: [],
       count: 0,
     }
+    // When mapped to a cell result
+    // Then only the type, the query and the fetch time remain
     expect(singleResultFromExec(exec, "INSERT INTO t VALUES (1)")).toEqual({
       type: "dml",
       query: "INSERT INTO t VALUES (1)",
@@ -356,14 +362,17 @@ describe("stripCellResults", () => {
   })
 
   it("normalizes legacy stored run mode away while preserving draw mode", () => {
+    // Given a cell with a legacy stored run mode and a draw cell
     const legacyRun = {
       ...cell("run", "SELECT 1"),
       mode: "run",
     } as unknown as NotebookCell
     const draw = { ...cell("draw", "SELECT 2"), mode: "draw" as const }
 
+    // When the cells are stripped for persistence
     const [persistedRun, persistedDraw] = stripCellResults([legacyRun, draw])
 
+    // Then the run mode key is gone and the draw mode stays
     expect("mode" in persistedRun).toBe(false)
     expect(persistedDraw.mode).toBe("draw")
   })
@@ -409,6 +418,7 @@ describe("stripCellResults", () => {
 
 describe("buildPersistPayload", () => {
   it("packs cells, focusedCellId, maximizedCellId and settings; results are stripped", () => {
+    // Given a cell with an in-flight result
     const cells: NotebookCell[] = [
       cell("a", "SELECT 1", {
         results: [{ type: "running", query: "SELECT 1" }],
@@ -416,9 +426,11 @@ describe("buildPersistPayload", () => {
         timestamp: 0,
       }),
     ]
+    // When the persist payload is built
     const payload = buildPersistPayload(cells, "a", null, {
       layoutMode: "list",
     })
+    // Then it packs the ids and the settings and collapses the result to a run status
     expect(payload).toEqual({
       cells: [
         {
@@ -973,6 +985,7 @@ describe("buildAppliedCells", () => {
     // A run cell carries its outcome only in the live `result` during a
     // session; dropping it on a value change must collapse to lastRunStatus so
     // agents still see that the cell ran.
+    // Given a run cell holding a dml result
     const prev: NotebookCell[] = [
       {
         id: "a",
@@ -985,9 +998,11 @@ describe("buildAppliedCells", () => {
         },
       },
     ]
+    // When the apply changes its value
     const { nextCells } = buildAppliedCells(prev, {
       cells: [{ id: "a", value: "INSERT INTO t VALUES (2)" }],
     })
+    // Then the result drops and the run outcome survives as lastRunStatus
     expect(nextCells[0].result).toBeNull()
     expect(nextCells[0].lastRunStatus).toBe("success")
   })
@@ -1279,6 +1294,9 @@ describe("buildAppliedCells", () => {
   })
 
   it("rejects grid placement that extends beyond the notebook columns", () => {
+    // Given a cell placed at column 11 with a width of 2
+    // When applied
+    // Then the placement is rejected
     expect(() =>
       buildAppliedCells([], {
         cells: [{ value: "SELECT 1", grid: { x: 11, y: 0, w: 2 } }],
@@ -1429,6 +1447,8 @@ describe("buildAppliedCells", () => {
   })
 
   it("defaults a new draw cell to result and stores no autoRefresh key", () => {
+    // Given a new draw cell request with no view and no autoRefresh
+    // When applied to an empty notebook
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1441,12 +1461,15 @@ describe("buildAppliedCells", () => {
         },
       ],
     })
+    // Then the cell inherits the notebook default and shows the result
     // No stored key: the cell inherits the notebook default.
     expect("autoRefresh" in nextCells[0]).toBe(false)
     expect(nextCells[0].paneView).toBe("result")
   })
 
   it("applies semantic pane dimensions and view to a new draw cell", () => {
+    // Given a new draw cell request with pane heights and a view
+    // When applied to an empty notebook
     const { nextCells } = buildAppliedCells([], {
       cells: [
         {
@@ -1463,6 +1486,7 @@ describe("buildAppliedCells", () => {
       ],
     })
 
+    // Then the heights are pinned and the view is stored
     expect(nextCells[0]).toMatchObject({
       topHeight: 120,
       topResized: true,
@@ -1473,6 +1497,7 @@ describe("buildAppliedCells", () => {
   })
 
   it("treats null semantic dimensions as preserve for an existing cell", () => {
+    // Given an existing draw cell with pinned heights and a view
     const existing: NotebookCell = {
       id: "a",
       position: 0,
@@ -1488,6 +1513,7 @@ describe("buildAppliedCells", () => {
         queries: [{ type: "line", yColumns: ["v"] }],
       },
     }
+    // When the apply sends null for every dimension and the view
     const { nextCells } = buildAppliedCells([existing], {
       cells: [
         {
@@ -1502,6 +1528,7 @@ describe("buildAppliedCells", () => {
       ],
     })
 
+    // Then the stored heights and the view stay
     expect(nextCells[0]).toMatchObject({
       topHeight: 120,
       topResized: true,
@@ -1512,6 +1539,7 @@ describe("buildAppliedCells", () => {
   })
 
   it("treats editor view as authoritative over a preserved draw mode", () => {
+    // Given an existing draw cell with a result and a chart config
     const existing: NotebookCell = {
       id: "a",
       position: 0,
@@ -1525,6 +1553,7 @@ describe("buildAppliedCells", () => {
       },
     }
 
+    // When the apply requests the editor view with a null mode
     const { nextCells, resultsCleared } = buildAppliedCells([existing], {
       cells: [
         {
@@ -1537,6 +1566,7 @@ describe("buildAppliedCells", () => {
       ],
     })
 
+    // Then the mode, the result and the chart config are cleared and the cell is reported
     expect("mode" in nextCells[0]).toBe(false)
     expect(nextCells[0].result).toBeUndefined()
     expect(nextCells[0].chartConfig).toBeUndefined()
@@ -1546,6 +1576,9 @@ describe("buildAppliedCells", () => {
   it.each(["run", "draw"] as const)(
     "rejects explicit mode %s with editor view",
     (mode) => {
+      // Given a new cell request with an explicit mode and the editor view
+      // When applied
+      // Then the request is rejected
       expect(() =>
         buildAppliedCells([], {
           cells: [{ value: "SELECT 1", mode, view: "editor" }],
@@ -1574,6 +1607,7 @@ describe("buildAppliedCells", () => {
   })
 
   it("re-estimates the editor height for a value change with editor_height auto", () => {
+    // Given a cell with a pinned editor height
     const existing: NotebookCell = {
       id: "a",
       position: 0,
@@ -1581,10 +1615,12 @@ describe("buildAppliedCells", () => {
       topHeight: 700,
       topResized: true,
     }
+    // When the apply changes the value and asks for an auto editor height
     const { nextCells } = buildAppliedCells([existing], {
       cells: [{ id: "a", value: "SELECT 2", editorHeight: "auto" }],
     })
 
+    // Then the pin is released and the height follows the new SQL
     expect(nextCells[0].topResized).toBe(false)
     expect(nextCells[0].topHeight).toBe(topHeightForSql("SELECT 2"))
   })
@@ -1608,6 +1644,9 @@ describe("buildAppliedCells", () => {
   })
 
   it("still rejects an explicit mode on a markdown cell", () => {
+    // Given a markdown cell request with a mode
+    // When applied
+    // Then the request is rejected
     expect(() =>
       buildAppliedCells([], {
         cells: [{ value: "# title", type: "markdown", mode: "run" }],
@@ -1744,6 +1783,9 @@ describe("isDoubleView", () => {
     expect(isDoubleView({ id: "x", position: 0, value: "" })).toBe(false)
   })
   it("returns true for draw cell, whether chart-expanded or not", () => {
+    // Given a draw cell, with and without an expanded chart
+    // When the double view is checked
+    // Then both are double-view
     expect(
       isDoubleView({ id: "x", position: 0, value: "", mode: "draw" }),
     ).toBe(true)
@@ -2045,6 +2087,9 @@ describe("computeCellHeights", () => {
     })
   })
   it("double-view (empty result) floors the notification bottom to the pane minimum", () => {
+    // Given a run cell with an empty result
+    // When the heights are computed
+    // Then the bottom is floored to the pane minimum
     // The tight content height is 44 (notification bar only); the visible
     // pane never renders below MIN_BOTTOM_HEIGHT_PX.
     expect(
@@ -2082,6 +2127,9 @@ describe("computeCellHeights", () => {
 
 describe("agentCellPaneDimensions", () => {
   it("reports a stored result pin even when a run result is not loaded", () => {
+    // Given a cell with a pinned result height and a run status but no loaded result
+    // When the agent dimensions are read
+    // Then the result pin is reported
     expect(
       agentCellPaneDimensions({
         id: "x",
@@ -2095,6 +2143,9 @@ describe("agentCellPaneDimensions", () => {
   })
 
   it("reports auto for unpinned panes and normalizes legacy pins", () => {
+    // Given an unpinned cell and a cell pinned below the minimums
+    // When the agent dimensions are read
+    // Then the unpinned panes read auto and the legacy pins clamp to the minimums
     expect(
       agentCellPaneDimensions({ id: "x", position: 0, value: "SELECT 1" }),
     ).toEqual({ editorHeight: "auto", resultHeight: "auto" })
@@ -2139,6 +2190,9 @@ describe("computeCellGridH", () => {
     expect(computeCellGridH({ id: "x", position: 0, value: "" }, 50)).toBe(3)
   })
   it("double-view (run with empty result): notification bottom floored to the pane minimum", () => {
+    // Given a run cell with an empty result
+    // When the grid height is computed at a 50px row
+    // Then the bottom is floored to the pane minimum
     // result.results = [] (empty after run) → tight bottom is 44, floored to
     // MIN_BOTTOM_HEIGHT_PX (100) so render, bounds and save agree.
     // 72 + 50 + 100 = 222 → ceil(222/50) = 5
@@ -2235,6 +2289,9 @@ describe("computeCellGridH", () => {
     ).toBe(9)
   })
   it("expectingResult is ignored once a result is present (double-view wins)", () => {
+    // Given a run cell with an empty result
+    // When the grid height is computed with expectingResult set
+    // Then the present result decides the height
     // Same as the "double-view (run with empty result)" case: bottom = 100.
     expect(
       computeCellGridH(
@@ -2269,6 +2326,9 @@ describe("computeCellGridH", () => {
     ).toBe(9)
   })
   it("editor-hidden cells reserve only the result pane", () => {
+    // Given a result-only cell with a remembered editor height
+    // When the grid height is computed
+    // Then only the result pane and the chrome count
     // The editor's 72px allocation is remembered but removed from the visible
     // footprint: 104px result + 44px chrome snaps to 6 rows.
     expect(
@@ -2289,6 +2349,7 @@ describe("computeCellGridH", () => {
   })
 
   it("derives height from exactly the visible pane", () => {
+    // Given a cell with distinct editor and result heights
     const cell: NotebookCell = {
       id: "x",
       position: 0,
@@ -2298,6 +2359,8 @@ describe("computeCellGridH", () => {
       result: { results: [], activeResultIndex: 0, timestamp: 0 },
     }
 
+    // When the grid height is computed per pane layout
+    // Then each layout counts only its visible panes
     // Editor: 200 + 44 chrome = 244px → 9 rows (250px rendered).
     expect(computeCellGridH(cell, 10, 20, false, "editor")).toBe(9)
     // Result: 300 + 44 chrome = 344px → 13 rows (370px rendered).
@@ -2317,11 +2380,17 @@ describe("resolveCellPaneLayout", () => {
   })
 
   it("shows only the editor when no result exists", () => {
+    // Given a cell without a result
     const cell: NotebookCell = { id: "x", position: 0, value: "" }
+    // When the layout is resolved
+    // Then only the editor shows
     expect(resolveCellPaneLayout(cell, false)).toBe("editor")
   })
 
   it("uses the authoritative preference once a result exists", () => {
+    // Given cells with a result, with and without a stored pane view
+    // When the layout is resolved
+    // Then the stored preference decides the layout
     expect(resolveCellPaneLayout(withResult(), false)).toBe("split")
     expect(
       resolveCellPaneLayout(withResult({ paneView: "result" }), false),
@@ -2340,6 +2409,9 @@ describe("agentCellPresentation", () => {
   })
 
   it("reports the stored pane view once a run outcome exists", () => {
+    // Given a chart cell with different stored pane views
+    // When the agent presentation is read
+    // Then the stored view is reported and an unset view reads as editor_result
     expect(agentCellPresentation(chart())).toEqual({
       view: "editor_result",
       mode: "draw",
@@ -2355,6 +2427,9 @@ describe("agentCellPresentation", () => {
   })
 
   it("reports editor while the cell has nothing to show", () => {
+    // Given a run cell with no result and varying run history
+    // When the agent presentation is read
+    // Then it reads editor until a run outcome exists
     expect(agentCellPresentation(chart({ mode: undefined }))).toEqual({
       view: "editor",
       mode: null,
@@ -2370,12 +2445,15 @@ describe("agentCellPresentation", () => {
   })
 
   it("reports editor when a run-marked result is known missing", () => {
+    // Given a run cell whose stored view is result and whose run succeeded
     const releasedRun = chart({
       mode: undefined,
       lastRunStatus: "success",
       paneView: "result",
     })
 
+    // When the presentation is read with each result status
+    // Then a missing run result collapses to editor while a chart keeps its view
     expect(agentCellPresentation(releasedRun, "unrequested")).toEqual({
       view: "result",
       mode: "run",
@@ -2391,6 +2469,9 @@ describe("agentCellPresentation", () => {
   })
 
   it("reports a null view for a markdown cell", () => {
+    // Given a markdown cell
+    // When the agent presentation is read
+    // Then it has no view and no mode
     expect(
       agentCellPresentation(chart({ mode: undefined, type: "markdown" })),
     ).toEqual({ view: null, mode: null })
@@ -2401,6 +2482,7 @@ describe("computeCellGridBounds", () => {
   const result = { results: [], activeResultIndex: 0, timestamp: 0 }
 
   it("reserves the split editor's current height plus the result minimum", () => {
+    // Given a split cell with a 400px editor and a result
     const cell: NotebookCell = {
       id: "x",
       position: 0,
@@ -2410,12 +2492,15 @@ describe("computeCellGridBounds", () => {
       result,
     }
 
+    // When the grid bounds are computed
+    // Then the minimum reserves the editor height plus the result minimum
     // 400px editor + 100px result minimum + 50px split chrome = 550px,
     // which is exactly 19 rows at rowHeight=10 and marginY=20.
     expect(computeCellGridBounds(cell, 10, 20).minH).toBe(19)
   })
 
   it("does not reserve the remembered editor height when it is hidden", () => {
+    // Given a result-only cell with a remembered editor height
     const cell: NotebookCell = {
       id: "x",
       position: 0,
@@ -2426,11 +2511,14 @@ describe("computeCellGridBounds", () => {
       result,
     }
 
+    // When the grid bounds are computed
+    // Then the minimum covers only the result pane
     // 100px result minimum + 44px base chrome requires 6 rows.
     expect(computeCellGridBounds(cell, 10, 20).minH).toBe(6)
   })
 
   it("uses the chart-specific result minimum", () => {
+    // Given a split draw cell
     const cell: NotebookCell = {
       id: "x",
       position: 0,
@@ -2440,11 +2528,14 @@ describe("computeCellGridBounds", () => {
       bottomHeight: 350,
     }
 
+    // When the grid bounds are computed
+    // Then the minimum uses the chart floor
     // 400px editor + 296px chart minimum + 50px split chrome requires 26 rows.
     expect(computeCellGridBounds(cell, 10, 20).minH).toBe(26)
   })
 
   it("uses only the visible pane minimum for editor-only and result-only layouts", () => {
+    // Given a cell with a result
     const cell: NotebookCell = {
       id: "x",
       position: 0,
@@ -2454,6 +2545,8 @@ describe("computeCellGridBounds", () => {
       result,
     }
 
+    // When the grid bounds are computed per single-pane layout
+    // Then each minimum covers only its visible pane
     expect(computeCellGridBounds(cell, 10, 20, false, "editor").minH).toBe(5)
     expect(computeCellGridBounds(cell, 10, 20, false, "result").minH).toBe(6)
   })
@@ -2709,12 +2802,15 @@ describe("paneHeightsFromGridRows", () => {
   })
 
   it("split double-view: never consumes editor height below the result floor", () => {
+    // Given a split cell with a 400px editor and a 300px result
     const c = withResult({ topHeight: 400, bottomHeight: 300 })
 
+    // When the cell is resized to the split minimum
     // The split minimum is 400px editor + 100px result + 50px chrome,
     // or 19 rows. Resizing to that floor changes only the result pane.
     const patch = paneHeightsFromGridRows(c, 19, 10, 20)
 
+    // Then only the result pane shrinks
     expect(patch).toEqual({ bottomHeight: 100, bottomResized: true })
     expect(patch).not.toHaveProperty("topHeight")
     expect(patch).not.toHaveProperty("topResized")
@@ -2738,8 +2834,11 @@ describe("paneHeightsFromGridRows", () => {
   })
 
   it("editor-only and result-only cells resize only their visible pane", () => {
+    // Given a cell with both pane heights
     const c = withResult({ topHeight: 200, bottomHeight: 300 })
 
+    // When each single-pane layout is resized
+    // Then only the visible pane changes
     expect(paneHeightsFromGridRows(c, 10, 10, 20, false, "editor")).toEqual({
       topHeight: 236,
       topResized: true,
@@ -3033,10 +3132,12 @@ describe("buildAppliedLayout", () => {
   })
 
   it("uses request.grid when provided, otherwise derives h from topHeight + bottomHeight", () => {
+    // Given two cells, one with an explicit grid placement
     const cells: NotebookCell[] = [
       { id: "a", position: 0, value: "" },
       { id: "b", position: 1, value: "" },
     ]
+    // When the layout is built
     const layout = buildAppliedLayout(
       {
         cells: [
@@ -3048,6 +3149,7 @@ describe("buildAppliedLayout", () => {
       [],
       { gridCols: 12, rowHeight: 50 },
     )
+    // Then the explicit grid is kept and the other cell derives its height
     expect(layout[0]).toEqual({ i: "a", x: 0, y: 0, w: 6, h: 3 })
     // Run-mode cell, no result yet → single-view → only topHeight (72) + chrome (40)
     // = 112 px → ceil(112 / 50) = 3 rows. Both cells derive h and the second
@@ -3056,13 +3158,16 @@ describe("buildAppliedLayout", () => {
   })
 
   it("keeps prevLayout placement and re-derives h when request omits grid", () => {
+    // Given a cell with a previous placement
     const cells: NotebookCell[] = [{ id: "a", position: 0, value: "" }]
+    // When the layout is built without a grid
     const layout = buildAppliedLayout(
       { cells: [{ id: "a", value: "" }] },
       cells,
       [{ i: "a", x: 3, y: 4, w: 8, h: 5 }],
       { gridCols: 12, rowHeight: 50 },
     )
+    // Then the placement stays and the height is re-derived
     expect(layout).toEqual([{ i: "a", x: 3, y: 4, w: 8, h: 3 }])
   })
 
@@ -3070,6 +3175,7 @@ describe("buildAppliedLayout", () => {
     // buildAppliedCells seeds bottomHeight = DEFAULT_CHART_BOTTOM_HEIGHT for
     // draw cells, so they're double-view from creation. Run cells stay
     // single-view (no result) and only count topHeight + chrome.
+    // Given a run cell and a draw cell without results
     const cells: NotebookCell[] = [
       { id: "run-cell", position: 0, value: "", mode: undefined },
       {
@@ -3080,6 +3186,7 @@ describe("buildAppliedLayout", () => {
         bottomHeight: 350,
       },
     ]
+    // When the layout is built
     const layout = buildAppliedLayout(
       {
         cells: [
@@ -3091,6 +3198,7 @@ describe("buildAppliedLayout", () => {
       [],
       { gridCols: 12, rowHeight: 50 },
     )
+    // Then the draw cell is taller and stacks below
     // run: 72 + 40 = 112 → 3 rows
     expect(layout[0].h).toBe(3)
     // draw: 72 + 350 + 40 = 462 → 10 rows
@@ -3185,7 +3293,10 @@ describe("cloneNotebookViewState", () => {
   })
 
   it("strips results but preserves structural fields and run history", () => {
+    // Given a notebook with a run cell and a draw cell holding results
+    // When the view state is cloned
     const out = cloneNotebookViewState(source(), seqIds())
+    // Then the results are stripped and the structure and run history stay
     expect(out.cells[1].result).toBeUndefined()
     // cloned cells keep recorded run history so auto-run never re-fires their
     // writes; a draw cell's frame is refresh-produced and never seeds history
@@ -3278,122 +3389,6 @@ describe("nextCopyLabel", () => {
   it("does not treat unrelated parentheses as a copy suffix", () => {
     expect(nextCopyLabel("my (draft) notebook")).toBe(
       "my (draft) notebook (copy)",
-    )
-  })
-})
-
-describe("snapshotResultsMatchQueries", () => {
-  const dql = (query: string): SingleQueryResult => ({
-    type: "dql",
-    query,
-    columns: [],
-    dataset: [],
-    count: 0,
-  })
-
-  it("matches when results line up 1-1 with the queries, ignoring whitespace and trailing semicolons", () => {
-    // Given a snapshot whose result queries match the cell's statements modulo formatting
-    const results = [dql("SELECT 1"), dql("SELECT 2")]
-
-    // When compared to the cell's current queries
-    // Then it faithfully represents the cell
-    expect(
-      snapshotResultsMatchQueries(results, ["  SELECT 1 ;", "SELECT 2"]),
-    ).toBe(true)
-  })
-
-  it("rejects a snapshot whose result count differs from the query count", () => {
-    // Given a snapshot with fewer results than the cell now has queries
-    const results = [dql("SELECT 1")]
-
-    // When compared to a two-statement cell
-    // Then it must not be carried into the duplicate
-    expect(snapshotResultsMatchQueries(results, ["SELECT 1", "SELECT 2"])).toBe(
-      false,
-    )
-  })
-
-  it("rejects a snapshot whose query text has since diverged", () => {
-    // Given a snapshot taken before the cell's SQL was edited
-    const results = [dql("SELECT 1")]
-
-    // When compared to the edited query
-    // Then the stale rows are skipped
-    expect(snapshotResultsMatchQueries(results, ["SELECT 2"])).toBe(false)
-  })
-
-  it("rejects an empty snapshot", () => {
-    // Given a cell with no queries and a snapshot with no results
-    // When compared
-    // Then there is nothing to present
-    expect(snapshotResultsMatchQueries([], [])).toBe(false)
-  })
-
-  it("rejects a literal-only edit after a backslash literal", () => {
-    // Given a snapshot for a statement with a `'\\'` literal, which QuestDB
-    // reads as one character, not as an escaped quote
-    const results = [
-      dql("SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice  smith'"),
-    ]
-
-    // When the whitespace inside a later string literal is edited
-    // Then the statements differ in value and the snapshot is stale
-    expect(
-      snapshotResultsMatchQueries(results, [
-        "SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice smith'",
-      ]),
-    ).toBe(false)
-  })
-
-  it("rejects an alias case change, which QuestDB keeps in the column name", () => {
-    // Given a snapshot for a statement whose alias is a lowercase keyword name
-    const results = [dql("select 1 as rank")]
-
-    // When only the alias case changes
-    // Then the column name differs and the snapshot is stale
-    expect(snapshotResultsMatchQueries(results, ["select 1 as Rank"])).toBe(
-      false,
-    )
-  })
-
-  it("rejects a spacing change inside a number literal", () => {
-    // Given a snapshot for `1. e5`, which QuestDB reads as 1.0 aliased e5
-    const results = [dql("select 1. e5")]
-
-    // When the space goes away, which makes the literal 100000
-    // Then the value differs and the snapshot is stale
-    expect(snapshotResultsMatchQueries(results, ["select 1.e5"])).toBe(false)
-  })
-
-  it("matches across keyword casing", () => {
-    // Given a snapshot for a lowercase statement
-    const results = [dql("select a from t where b > 1")]
-
-    // When only the keyword casing changes
-    // Then the snapshot still represents the cell
-    expect(
-      snapshotResultsMatchQueries(results, ["SELECT a FROM t WHERE b > 1"]),
-    ).toBe(true)
-  })
-
-  it("ignores whitespace edits only up to the formatted-identity size limit", () => {
-    // Given two IN-list statements, one well under the limit and one over it
-    const inList = (length: number) => {
-      let sql = "select * from t where s in ("
-      for (let i = 0; sql.length < length; i++) sql += `'S${i}', `
-      return sql.slice(0, -2) + ")"
-    }
-    const under = inList(MAX_FORMATTED_IDENTITY_LENGTH / 2)
-    const over = inList(MAX_FORMATTED_IDENTITY_LENGTH + 64)
-    const respaced = (sql: string) => sql.replace(/, /g, ",  ")
-
-    // When each one gets a whitespace-only edit
-    // Then the small statement keeps its result and the large one is stale
-    expect(snapshotResultsMatchQueries([dql(under)], [respaced(under)])).toBe(
-      true,
-    )
-    expect(snapshotResultsMatchQueries([dql(over)], [respaced(over)])).toBe(
-      false,
     )
   })
 })
@@ -3514,6 +3509,7 @@ describe("auto-refresh inheritance helpers", () => {
       { ...cell("c", "SELECT 3"), mode: undefined, autoRefresh: false },
       cell("d", "SELECT 4"),
     ]
+    // When the stored overrides are counted
     // Then every stored key counts — the count matches what a reset would clear
     expect(countAutoRefreshOverrides(cells)).toBe(3)
   })
@@ -3542,6 +3538,7 @@ describe("auto-refresh inheritance helpers", () => {
       },
       { ...cell("c", "SELECT 3"), mode: undefined, autoRefresh: "1s" },
     ]
+    // When the active overrides are counted
     // Then only the cells with a visible view count toward the displayed total
     expect(countActiveAutoRefreshOverrides(cells)).toBe(2)
     // And a notebook with only editor-only keys shows no override at all
@@ -3594,10 +3591,16 @@ describe("resolveCellView", () => {
     expect(resolveCellView({ mode: "draw", result })).toBe("chart")
   })
   it("is grid for a run cell that has a result", () => {
+    // Given a run cell with a result
+    // When the view is resolved
+    // Then it is the grid
     expect(resolveCellView({ mode: undefined, result })).toBe("grid")
     expect(resolveCellView({ result })).toBe("grid")
   })
   it("is none for a run cell with no result", () => {
+    // Given a run cell without a result
+    // When the view is resolved
+    // Then there is no view
     expect(resolveCellView({ mode: undefined })).toBe("none")
     expect(resolveCellView({})).toBe("none")
   })
@@ -3709,6 +3712,7 @@ describe("cellToolbarMenuFlags", () => {
 
   it("compact grid view carries all three checkable view controls plus refresh", () => {
     // Given a narrow cell currently showing the table
+    // When the menu flags are computed
     const f = flags({ tier: "compact", view: "grid" })
     // Then the menu mirrors the wide header: both segments and the editor
     // toggle, as checkable items
@@ -3721,6 +3725,7 @@ describe("cellToolbarMenuFlags", () => {
 
   it("compact cells offer the editor toggle whenever a result is on screen", () => {
     // Given a compact chart in split or result-only view
+    // When the menu flags are computed
     // Then Show editor is in the menu, as the wide header's inline toggle
     expect(flags({ tier: "compact", view: "chart" }).showEditorToggleItem).toBe(
       true,
@@ -3780,6 +3785,7 @@ describe("cellToolbarMenuFlags", () => {
 
   it("standard chart keeps interval/refresh/settings in the menu (only the view toggle is inline)", () => {
     // Given a standard-tier chart whose inline control is just the view toggle
+    // When the menu flags are computed
     const f = flags({ tier: "standard", view: "chart" })
     // Then the menu carries the chart actions the inline toggle does not
     expect(f.showAutoRefreshItem).toBe(true)
@@ -3790,6 +3796,7 @@ describe("cellToolbarMenuFlags", () => {
 
   it("expanded tier never duplicates the inline refresh / interval / split controls", () => {
     // Given the expanded toolbar, which shows refresh + interval + split inline
+    // When the menu flags are computed for a chart and a grid
     const chart = flags({ tier: "expanded", view: "chart" })
     const grid = flags({ tier: "expanded", view: "grid" })
     // Then the menu drops all of them, keeping only chart settings (chart only)
@@ -3804,6 +3811,7 @@ describe("cellToolbarMenuFlags", () => {
 
   it("markdown cells expose only move/duplicate/delete", () => {
     // Given a markdown cell (no run/draw views)
+    // When the menu flags are computed
     const f = flags({ tier: "compact", view: "none", isMarkdown: true })
     // Then no view/chart items appear
     expect(f.showViewTable).toBe(false)
@@ -3839,6 +3847,7 @@ describe("cellToolbarMenuFlags", () => {
     const views = ["none", "grid", "chart"] as const
     for (const tier of tiers) {
       for (const view of views) {
+        // When the menu flags are computed for each
         const f = flags({ tier, view, chartZoomed: true })
         // Then the expanded tier (which shows refresh/interval/split inline)
         // never repeats them in the menu
@@ -4231,421 +4240,6 @@ describe("topHeight stamping", () => {
   })
 })
 
-const dqlResult = (query: string, count = 1): SingleQueryResult => ({
-  type: "dql",
-  query,
-  columns: [{ name: "x", type: "INT" }],
-  dataset: [[count]],
-  count,
-})
-
-const resultOf = (
-  results: SingleQueryResult[],
-  extra: Partial<CellResult> = {},
-): CellResult => ({
-  results,
-  activeResultIndex: 0,
-  timestamp: 0,
-  ...extra,
-})
-
-describe("reconcileResultsForStatements — content carryover", () => {
-  it("uses one canonical key space before reconciliation", () => {
-    const results = [dqlResult("select 1"), dqlResult("select 2")]
-    const previous = resultOf(results, {
-      activeStatementKey: statementKeysFor(["select 1"])[0],
-    })
-    const edited = ["select 1", "SELECT\n  2"]
-
-    // The render path must attach both results immediately, even before the
-    // refresh engine's debounced reconciliation runs.
-    const frame = deriveStatementFrame(
-      edited,
-      previous,
-      statementKeysFor(edited),
-    )
-    expect(frame?.slots.map((slot) => slot.result?.query)).toEqual([
-      "select 1",
-      "select 2",
-    ])
-
-    // Reconciliation uses exactly the same identities and keeps the active
-    // statement stable without needing a cache-priming render. Survivors take
-    // the text of the statement they now belong to.
-    const reconciled = reconcileResultsForStatements(edited, previous)
-    expect(reconciled?.results).toEqual(
-      results.map((r, index) => ({ ...r, query: edited[index] })),
-    )
-    expect(reconciled?.activeStatementKey).toBe(previous.activeStatementKey)
-  })
-
-  it("keeps results for unchanged statements across whitespace and semicolon edits, under the statements' text", () => {
-    // Given a two-statement frame
-    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
-    // When the statements only gain whitespace and semicolons
-    const reconciled = reconcileResultsForStatements(
-      ["  SELECT 1;", "SELECT 2  "],
-      previous,
-    )
-    // Then both results survive in statement order, carrying the new text
-    expect(reconciled?.results.map((r) => r.query)).toEqual([
-      "  SELECT 1;",
-      "SELECT 2  ",
-    ])
-  })
-
-  it("keeps results across internal whitespace, newlines, and keyword casing", () => {
-    const previous = resultOf([
-      dqlResult("select * from trades where sym = 'A'"),
-    ])
-
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT  *\nFROM trades WHERE sym='A';"],
-      previous,
-    )
-
-    expect(reconciled?.results).toEqual([
-      {
-        ...previous.results[0],
-        query: "SELECT  *\nFROM trades WHERE sym='A';",
-      },
-    ])
-  })
-
-  it("keeps the script summary on a presentation-only edit and drops it when a slot is lost", () => {
-    // Given a settled two-statement frame with a script summary
-    const script = { successCount: 2, failedCount: 0, durationMs: 12 }
-    const settled = resultOf([dqlResult("select 1"), dqlResult("select 2")], {
-      script,
-    })
-
-    // When only keyword casing changes, the counts still describe the frame
-    const reformatted = reconcileCellResultForValue(
-      settled,
-      "SELECT 1;\nSELECT 2",
-    )
-    expect(reformatted?.script).toEqual(script)
-    expect(reformatted?.results.map((r) => r.query)).toEqual([
-      "SELECT 1",
-      "SELECT 2",
-    ])
-
-    // When a statement is edited away, the counts no longer do
-    const shrunk = reconcileCellResultForValue(settled, "select 1")
-    expect(shrunk?.script).toBeUndefined()
-  })
-
-  it("does not fold case inside SQL string values", () => {
-    const previous = resultOf([dqlResult("select 'A'")])
-
-    expect(reconcileResultsForStatements(["SELECT 'a'"], previous)).toBeNull()
-  })
-
-  it("drops an edited statement's result and keeps its siblings", () => {
-    // Given results for two statements
-    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
-    // When the second statement is edited
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT 1", "SELECT 999"],
-      previous,
-    )
-    // Then only the untouched statement keeps its result
-    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
-  })
-
-  it("matches duplicate statements by occurrence order", () => {
-    // Given two identical statements with distinct results
-    const previous = resultOf([
-      dqlResult("SELECT 1", 10),
-      dqlResult("SELECT 1", 20),
-    ])
-    // When one duplicate is removed
-    const reconciled = reconcileResultsForStatements(["SELECT 1"], previous)
-    // Then the first occurrence's result survives
-    expect(reconciled?.results).toHaveLength(1)
-    expect(reconciled?.results[0]).toMatchObject({ count: 10 })
-  })
-
-  it("returns null when no result survives (the cell collapses)", () => {
-    // Given a frame whose only statement is rewritten
-    const previous = resultOf([dqlResult("SELECT 1")])
-    // When reconciled against entirely new SQL
-    // Then there is no frame
-    expect(reconcileResultsForStatements(["SELECT 2"], previous)).toBeNull()
-    expect(reconcileResultsForStatements([], previous)).toBeNull()
-  })
-
-  it("preserves the active statement by content across a reorder", () => {
-    // Given the second statement is active
-    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 1,
-      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
-    })
-    // When the statements are reordered
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT 2", "SELECT 1"],
-      previous,
-    )
-    // Then the active key still points at the same statement
-    expect(reconciled?.activeStatementKey).toBe(
-      statementKeysFor(["SELECT 2"])[0],
-    )
-  })
-
-  it("falls back to the nearest surviving statement when the active one is removed", () => {
-    // Given three results with the middle one active
-    const previous = resultOf(
-      [dqlResult("SELECT 1"), dqlResult("SELECT 2"), dqlResult("SELECT 3")],
-      { activeResultIndex: 1 },
-    )
-    // When the active statement is removed
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT 1", "SELECT 3"],
-      previous,
-    )
-    // Then the previous neighbor becomes active
-    expect(reconciled?.activeStatementKey).toBe(
-      statementKeysFor(["SELECT 1"])[0],
-    )
-  })
-
-  it("anchors on activeResultIndex for records without an active key", () => {
-    // Given a legacy record with only a positional active index
-    const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 1,
-    })
-    // When the statement list is unchanged
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT 1", "SELECT 2"],
-      previous,
-    )
-    // Then the active key resolves to the indexed statement
-    expect(reconciled?.activeStatementKey).toBe(
-      statementKeysFor(["SELECT 2"])[0],
-    )
-  })
-
-  it("never carries a running or queued placeholder as a result", () => {
-    // Given a frame a crash left behind: one settled result, one placeholder
-    const previous = resultOf([
-      dqlResult("SELECT 1"),
-      { type: "running", query: "SELECT 2" },
-    ])
-    // When reconciled against the unchanged statements
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT 1", "SELECT 2"],
-      previous,
-    )
-    // Then only the settled result survives — the placeholder slot
-    // regenerates as "Not run" at display time, never as a ghost spinner
-    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
-  })
-
-  it("returns null for a frame holding only placeholders", () => {
-    // Given a snapshot that captured a run mid-flight
-    const previous = resultOf([
-      { type: "running", query: "SELECT 1" },
-      { type: "queued", query: "SELECT 2" },
-    ])
-    // When reconciled
-    // Then no result survives and the frame collapses
-    expect(
-      reconcileResultsForStatements(["SELECT 1", "SELECT 2"], previous),
-    ).toBeNull()
-  })
-})
-
-describe("reconcileCellResultForValue — run ownership", () => {
-  it("returns a pending frame untouched — the run owns it", () => {
-    // Given a run in flight: one statement settled, one still running
-    const pending = resultOf([
-      dqlResult("SELECT 1"),
-      { type: "running", query: "SELECT 2" },
-    ])
-
-    // When the SQL is edited mid-run
-    const reconciled = reconcileCellResultForValue(pending, "SELECT 1")
-
-    // Then the frame comes back as the SAME object: the run's positional
-    // writes stay aligned, and the carryover applies after the run settles
-    expect(reconciled).toBe(pending)
-  })
-
-  it("reconciles a settled frame by content", () => {
-    // Given a settled two-statement frame
-    const settled = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
-
-    // When the second statement is edited away
-    const reconciled = reconcileCellResultForValue(settled, "SELECT 1")
-
-    // Then only the surviving statement keeps its result
-    expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
-  })
-})
-
-describe("deriveStatementFrame — display slots", () => {
-  it("gives every statement a slot and marks resultless slots as not run", () => {
-    // Given a compact result missing the middle statement
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 3")])
-    // When the frame is derived for three statements
-    const frame = deriveStatementFrame(
-      ["SELECT 1", "SELECT 2", "SELECT 3"],
-      result,
-      statementKeysFor(["SELECT 1", "SELECT 2", "SELECT 3"]),
-    )
-    // Then slots follow editor order and the unmatched slot is empty
-    expect(frame?.slots.map((s) => s.result?.query ?? null)).toEqual([
-      "SELECT 1",
-      null,
-      "SELECT 3",
-    ])
-  })
-
-  it("resolves the active slot from the active statement key", () => {
-    // Given the frame's active key points at the last statement
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeStatementKey: statementKeysFor(["SELECT 2"])[0],
-    })
-    // When the frame is derived with a placeholder in between
-    const frame = deriveStatementFrame(
-      ["SELECT 1", "SELECT 99", "SELECT 2"],
-      result,
-      statementKeysFor(["SELECT 1", "SELECT 99", "SELECT 2"]),
-    )
-    // Then the active slot index follows the statement, not the result index
-    expect(frame?.activeSlotIndex).toBe(2)
-  })
-
-  it("maps a legacy active index through the result's own statement", () => {
-    // Given a legacy record whose second result is active
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 1,
-    })
-    // When a new statement is inserted before it
-    const frame = deriveStatementFrame(
-      ["SELECT 0", "SELECT 1", "SELECT 2"],
-      result,
-      statementKeysFor(["SELECT 0", "SELECT 1", "SELECT 2"]),
-    )
-    // Then the active slot follows the statement content
-    expect(frame?.activeSlotIndex).toBe(2)
-  })
-
-  it("distinguishes duplicate statements by occurrence", () => {
-    // Given two identical statements with distinct results
-    const result = resultOf([
-      dqlResult("SELECT 1", 10),
-      dqlResult("SELECT 1", 20),
-    ])
-    // When the frame is derived
-    const frame = deriveStatementFrame(
-      ["SELECT 1", "SELECT 1"],
-      result,
-      statementKeysFor(["SELECT 1", "SELECT 1"]),
-    )
-    // Then each slot keeps its own occurrence's result
-    expect(frame?.slots.map((s) => s.result)).toMatchObject([
-      { count: 10 },
-      { count: 20 },
-    ])
-  })
-
-  it("returns null without a result or without a single surviving slot", () => {
-    // Given no result, or a result that matches no statement
-    const result = resultOf([dqlResult("SELECT 1")])
-    // When the frame is derived
-    // Then there is no frame
-    expect(
-      deriveStatementFrame(["SELECT 1"], null, statementKeysFor(["SELECT 1"])),
-    ).toBeNull()
-    expect(deriveStatementFrame([], result, [])).toBeNull()
-    expect(
-      deriveStatementFrame(
-        ["SELECT 2"],
-        result,
-        statementKeysFor(["SELECT 2"]),
-      ),
-    ).toBeNull()
-  })
-})
-
-describe("derivePositionalFrame — orphan results (selection runs)", () => {
-  it("builds tabs from the results themselves when no statement claims them", () => {
-    // Given a selection-fragment result no editor statement matches
-    const result = resultOf([dqlResult("SELECT 1")])
-    // When the positional frame is derived
-    const frame = derivePositionalFrame(result)
-    // Then the fragment gets its own visible slot with its rows attached
-    expect(frame?.slots).toHaveLength(1)
-    expect(frame?.slots[0].sql).toBe("SELECT 1")
-    expect(frame?.slots[0].result).toBe(result.results[0])
-  })
-
-  it("keeps the active tab and clamps an out-of-range index", () => {
-    // Given a two-result frame viewed on its second tab
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 1,
-    })
-    // Then the active slot follows the index, clamped when out of range
-    expect(derivePositionalFrame(result)?.activeSlotIndex).toBe(1)
-    expect(
-      derivePositionalFrame({ ...result, activeResultIndex: 9 })
-        ?.activeSlotIndex,
-    ).toBe(1)
-  })
-
-  it("returns null without a result or with an empty one", () => {
-    expect(derivePositionalFrame(null)).toBeNull()
-    expect(derivePositionalFrame(resultOf([]))).toBeNull()
-  })
-})
-
-describe("resolveActiveStatementSql — the single-run target", () => {
-  it("resolves a selected 'Not run' tab to its own SQL, not the stale result index", () => {
-    // Given a two-result frame whose active tab is an appended, never-run
-    // statement — activeResultIndex still points at the first result
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 0,
-      activeStatementKey: statementKeysFor([
-        "SELECT 1",
-        "SELECT 2",
-        "SELECT 3",
-      ])[2],
-    })
-    // When the single-run target is resolved with the editor unavailable
-    const sql = resolveActiveStatementSql(
-      "SELECT 1; SELECT 2; SELECT 3",
-      result,
-    )
-    // Then the selected statement runs — never the stale index's query
-    expect(sql).toBe("SELECT 3")
-  })
-
-  it("falls back to the result index for a legacy snapshot without a key", () => {
-    // Given an old record that only carries the active index
-    const result = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")], {
-      activeResultIndex: 1,
-    })
-    // Then the index's own statement resolves
-    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
-      "SELECT 2",
-    )
-  })
-
-  it("resolves a selection-fragment frame positionally", () => {
-    // Given a fragment result no editor statement claims
-    const result = resultOf([dqlResult("SELECT 99")])
-    // Then the fragment's own query resolves
-    expect(resolveActiveStatementSql("SELECT 1; SELECT 2", result)).toBe(
-      "SELECT 99",
-    )
-  })
-
-  it("returns undefined without a result, so the caller can fall back", () => {
-    expect(resolveActiveStatementSql("SELECT 1", null)).toBeUndefined()
-  })
-})
-
 describe("pane height ceiling", () => {
   const withResult: NotebookCell = {
     id: "x",
@@ -4657,14 +4251,23 @@ describe("pane height ceiling", () => {
   }
 
   it("caps the editor estimate for a huge pasted query", () => {
+    // Given a query with 100,000 lines
+    // When the editor height is estimated
+    // Then it stops at the pane ceiling
     expect(topHeightForSql(Array(100_000).fill("x").join("\n"))).toBe(2400)
   })
 
   it("caps the markdown auto-height snap", () => {
+    // Given a markdown height far above the ceiling
+    // When it snaps
+    // Then it stops at the pane ceiling
     expect(snapMarkdownTopHeight(9_999)).toBe(2400)
   })
 
   it("caps a south-edge drag that asks for more rows than the ceiling", () => {
+    // Given a result-only cell
+    // When a drag asks for 500 rows
+    // Then the result pane stops at the ceiling
     expect(
       paneHeightsFromGridRows(
         { ...withResult, paneView: "result" },
@@ -4676,6 +4279,9 @@ describe("pane height ceiling", () => {
   })
 
   it("limits grid rows to the pane the south edge owns at the ceiling", () => {
+    // Given a cell with a 100px editor and a result
+    // When the grid bounds are computed for the result-only and split layouts
+    // Then maxH covers the ceiling of the pane the edge owns
     // Rounded UP like h, so maxH can never land below the rendered height;
     // the save path clamps any overshoot back to the 2400px pane ceiling.
     // result-only: 2400 + 44 chrome = 2444px → 83 rows
@@ -4689,6 +4295,9 @@ describe("pane height ceiling", () => {
   })
 
   it("rejects agent heights above the ceiling in apply", () => {
+    // Given cell requests with an editor or a result height above the ceiling
+    // When applied
+    // Then each request is rejected
     expect(() =>
       buildAppliedCells([], {
         cells: [{ value: "SELECT 1", editorHeight: 2401 }],
@@ -4699,21 +4308,6 @@ describe("pane height ceiling", () => {
         cells: [{ value: "SELECT 1", resultHeight: 2401 }],
       }),
     ).toThrow(/maximum is 2400px/)
-  })
-})
-
-describe("statementKeysForIdentities", () => {
-  it("rebuilds a frame's keys from the identities of the keys it was written under", () => {
-    // Given statements with a duplicate and presentation-only differences
-    const statements = ["select 1", "SELECT  1", "select 2"]
-    const keys = statementKeysFor(statements)
-
-    // When the keys are rebuilt from their identities alone
-    const rebuilt = statementKeysForIdentities(keys.map(statementIdentityOfKey))
-
-    // Then they equal the keys built from the text, duplicates included
-    expect(rebuilt).toEqual(keys)
-    expect(keys[0]).not.toBe(keys[1])
   })
 })
 

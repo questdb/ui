@@ -69,7 +69,7 @@ type Props = {
   isCellBusy: boolean
   chartZoomed: boolean
   showLabels: boolean
-  onResetZoomFocus?: () => void
+  onResetZoomFocus: () => void
 }
 
 export const CellViewToggle: React.FC<Props> = ({
@@ -101,22 +101,22 @@ export const CellViewToggle: React.FC<Props> = ({
   // disabled control drops keyboard focus to the document body.
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isCellBusy) return
     viewChart()
   }
   const handleTable = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (isCellBusy) return
     viewTable()
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
     toggleEditor()
   }
+  // Focus moves on only after a keyboard activation: a mouse click that
+  // landed focus on the toolbar would open its first tooltip.
   const handleResetZoom = (e: React.MouseEvent) => {
     e.stopPropagation()
     resetZoom()
-    onResetZoomFocus?.()
+    if (e.detail === 0) onResetZoomFocus()
   }
 
   return (

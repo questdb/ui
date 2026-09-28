@@ -227,10 +227,12 @@ beforeEach(async () => {
 
 describe("dispatchTool — notebook tools (happy path)", () => {
   it("get_notebook_state preserves comparison operators in previews", async () => {
+    // Given a cell whose SQL contains comparison operators
     const value =
       "SELECT * FROM fx_trades WHERE price < 1 AND quantity > 2 AND symbol <> 'A&B'"
     live = mountLive(1, [cell("c", value)])
 
+    // When the agent reads the notebook state
     const res = await dispatchTool(
       "get_notebook_state",
       { buffer_id: 1 },
@@ -240,6 +242,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       dqlValidator,
     )
 
+    // Then the preview keeps the operators verbatim
     expect(res.is_error).toBeUndefined()
     const parsed = JSON.parse(res.content) as {
       cells: Array<{ preview: string }>
@@ -248,7 +251,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("create_notebook forwards label and returns the new buffer id", async () => {
+    // Given a workspace client
     const client = makeClient()
+    // When the agent creates a labelled notebook
     const res = await dispatchTool(
       "create_notebook",
       { label: "My notebook" },
@@ -257,6 +262,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the label is forwarded and the new buffer is described
     expect(client.createNotebook).toHaveBeenCalledWith("My notebook", undefined)
     expect(res.is_error).toBeUndefined()
     const parsed = JSON.parse(res.content) as {
@@ -271,7 +277,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("add_cell without run appends the cell and returns its id", async () => {
+    // Given an empty live notebook
     const { state } = mountLive(1)
+    // When the agent adds a cell without running it
     const res = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "SELECT 1" },
@@ -280,6 +288,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell is appended and its id returned
     const parsed = JSON.parse(res.content) as { cellId: string }
     expect(typeof parsed.cellId).toBe("string")
     expect(cellById(state, parsed.cellId)?.value).toBe("SELECT 1")
@@ -380,6 +389,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("duplicate_cell drops a copied snapshot when refresh changes the live source", async () => {
+    // Given a source cell whose flush-time refresh changes its run status
     await saveCellSnapshot({
       bufferId: 1,
       cellId: "source",
@@ -411,6 +421,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       },
     )
 
+    // When the agent duplicates the cell
     const response = await dispatchTool(
       "duplicate_cell",
       { buffer_id: 1, cell_id: "source" },
@@ -421,6 +432,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     )
     const { cellId } = JSON.parse(response.content) as { cellId: string }
 
+    // Then the copy carries the refreshed status and no stale snapshot
     expect(cellById(state, cellId)).toMatchObject({
       lastRunStatus: "error",
       lastRunError: "new",
@@ -429,6 +441,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("add_cell with run:true chains runCell and reports per-query status", async () => {
+    // Given a runner that reports mixed per-query outcomes
     const { runCell } = mountLive(1, [], {
       runCell: () =>
         Promise.resolve({
@@ -437,6 +450,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           results: ["success", "ERROR: boom", "cancelled"],
         }),
     })
+    // When the agent adds a cell and runs it
     const res = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "SELECT 1; SELECT bad; SELECT 2", run: true },
@@ -445,6 +459,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the run is auto-run gated and every query status is reported
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
@@ -459,7 +474,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("update_cell writes only the value", async () => {
+    // Given a named cell
     const { state } = mountLive(1, [cell("c", "SELECT 1", { name: "keep" })])
+    // When the agent updates its value
     await dispatchTool(
       "update_cell",
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
@@ -468,11 +485,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then only the value changes
     expect(cellById(state, "c")?.value).toBe("SELECT 2")
     expect(cellById(state, "c")?.name).toBe("keep")
   })
 
   it("run_cell serialises the explicit per-query shape and never leaks data keys", async () => {
+    // Given a runner that fails its only query
     mountLive(1, [cell("c")], {
       runCell: () =>
         Promise.resolve({
@@ -481,6 +500,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           results: ["ERROR: syntax"],
         }),
     })
+    // When the agent runs the cell
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -489,6 +509,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the response is the explicit per-query shape
     const parsed = JSON.parse(res.content) as Record<string, unknown>
     expect(parsed).toEqual({
       success: false,
@@ -503,6 +524,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   // A superseded/backgrounded run yields unverified+note; the agent must see it
   // on ALL run-bearing tools (not just run_cell) or it re-runs a committed write.
   it("propagates unverified/note from runCell to run_cell, add_cell{run}, and apply runs", async () => {
+    // Given a runner whose outcome is unverified
     mountLive(1, [cell("c")], {
       runCell: () =>
         Promise.resolve({
@@ -514,6 +536,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         }),
     })
 
+    // When the agent uses run_cell
     const runCellRes = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -522,10 +545,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the note reaches it
     const p1 = JSON.parse(runCellRes.content) as Record<string, unknown>
     expect(p1.unverified).toBe(true)
     expect(typeof p1.note).toBe("string")
 
+    // When the agent uses add_cell with run
     const addRes = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "INSERT INTO t VALUES(1)", run: true },
@@ -534,10 +559,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the note reaches it
     const p2 = JSON.parse(addRes.content) as Record<string, unknown>
     expect(p2.unverified).toBe(true)
     expect(typeof p2.note).toBe("string")
 
+    // When the agent applies a run-mode cell
     const applyRes = await dispatchTool(
       "apply_notebook_state",
       {
@@ -549,6 +576,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the note reaches its runs entry
     const p3 = JSON.parse(applyRes.content) as {
       runs: Array<Record<string, unknown>>
     }
@@ -557,7 +585,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_chart_config applies only fields the AI supplied (patch semantics)", async () => {
+    // Given a plain SQL cell
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When the agent supplies a partial chart config
     await dispatchTool(
       "set_cell_chart_config",
       {
@@ -577,6 +607,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then only the supplied fields land in camelCase
     expect(cellById(state, "c")?.chartConfig).toMatchObject({
       xColumn: "ts",
       queries: [
@@ -616,7 +647,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_autorefresh maps a fixed interval token to the cell (5s)", async () => {
+    // Given a cell without an override
     const { state } = mountLive(1, [cell("c")])
+    // When the agent sets a 5s interval
     await dispatchTool(
       "set_cell_autorefresh",
       { buffer_id: 1, cell_id: "c", value: "5s" },
@@ -625,11 +658,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell stores the token
     expect(cellById(state, "c")?.autoRefresh).toBe("5s")
   })
 
   it("set_cell_autorefresh maps true to adaptive (2.0.0-compatible)", async () => {
+    // Given a cell without an override
     const { state } = mountLive(1, [cell("c")])
+    // When the agent passes true
     await dispatchTool(
       "set_cell_autorefresh",
       { buffer_id: 1, cell_id: "c", value: true },
@@ -638,13 +674,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell stores adaptive
     expect(cellById(state, "c")?.autoRefresh).toBe(true)
   })
 
   it("set_cell_autorefresh maps false to disabled (2.0.0-compatible)", async () => {
+    // Given a cell on a fixed interval
     const { state } = mountLive(1, [
       cell("c", "SELECT 1", { autoRefresh: "5s" }),
     ])
+    // When the agent passes false
     await dispatchTool(
       "set_cell_autorefresh",
       { buffer_id: 1, cell_id: "c", value: false },
@@ -653,11 +692,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell stores disabled
     expect(cellById(state, "c")?.autoRefresh).toBe(false)
   })
 
   it("set_cell_autorefresh rejects a token outside the allowed set", async () => {
+    // Given a cell without an override
     const { state } = mountLive(1, [cell("c")])
+    // When the agent sends an unknown token
     const res = await dispatchTool(
       "set_cell_autorefresh",
       { buffer_id: 1, cell_id: "c", value: "2s" },
@@ -666,6 +708,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the tool errors and the cell is untouched
     expect(res.is_error).toBe(true)
     expect(cellById(state, "c")?.autoRefresh).toBeUndefined()
   })
@@ -690,7 +733,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_notebook_autorefresh stores the notebook default in settings", async () => {
+    // Given a notebook without a default
     const { state } = mountLive(1, [cell("c")])
+    // When the agent sets the notebook default
     await dispatchTool(
       "set_notebook_autorefresh",
       { buffer_id: 1, value: "30s" },
@@ -699,11 +744,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then settings store it
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")
   })
 
   it("set_notebook_autorefresh accepts Off (false) as a value", async () => {
+    // Given a notebook without a default
     const { state } = mountLive(1, [cell("c")])
+    // When the agent sets the default to Off
     await dispatchTool(
       "set_notebook_autorefresh",
       { buffer_id: 1, value: false },
@@ -712,6 +760,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then false survives as a value
     expect(state.parts.settings.autoRefreshDefault).toBe(false)
   })
 
@@ -761,7 +810,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_notebook_autorefresh rejects a token outside the allowed set", async () => {
+    // Given a notebook without a default
     const { state } = mountLive(1, [cell("c")])
+    // When the agent sends an unknown token
     const res = await dispatchTool(
       "set_notebook_autorefresh",
       { buffer_id: 1, value: "2s" },
@@ -770,6 +821,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the tool errors and settings are untouched
     expect(res.is_error).toBe(true)
     expect(state.parts.settings.autoRefreshDefault).toBeUndefined()
   })
@@ -798,6 +850,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_dimensions maps strict null/auto values to semantic pane state", async () => {
+    // Given a draw cell with resized panes
     const { state } = mountLive(1, [
       cell("c", "SELECT 1", {
         mode: "draw",
@@ -808,6 +861,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       }),
     ])
 
+    // When the agent sets an auto editor height and a fixed result height
     const res = await dispatchTool(
       "set_cell_dimensions",
       {
@@ -823,6 +877,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       dqlValidator,
     )
 
+    // Then the pane state reflects what each value means
     expect(res.is_error).toBeUndefined()
     expect(JSON.parse(res.content)).toEqual({ view: "result", mode: "draw" })
     expect(cellById(state, "c")).toMatchObject({
@@ -835,7 +890,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_dimensions reports the cell view", async () => {
+    // Given a draw cell
     const { state } = mountLive(1, [cell("c", "SELECT 1", { mode: "draw" })])
+    // When the agent sets the view
     const res = await dispatchTool(
       "set_cell_dimensions",
       {
@@ -851,6 +908,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       dqlValidator,
     )
 
+    // Then the response and the cell carry the new view
     expect(JSON.parse(res.content)).toEqual({
       view: "editor_result",
       mode: "draw",
@@ -859,7 +917,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_dimensions rejects malformed height strings at runtime", async () => {
+    // Given a plain SQL cell
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When the agent sends a malformed editor height
     const res = await dispatchTool(
       "set_cell_dimensions",
       {
@@ -875,6 +935,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       dqlValidator,
     )
 
+    // Then the tool errors and the cell is untouched
     expect(res.is_error).toBe(true)
     expect(res.content).toContain(
       "editor_height must be a number, auto, or null",
@@ -883,6 +944,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_layout returns the stored view with the new position", async () => {
+    // Given a grid notebook with a laid-out draw cell
     const { state } = mountLive(
       1,
       [
@@ -898,6 +960,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         },
       },
     )
+    // When the agent narrows the cell
     const res = await dispatchTool(
       "set_cell_layout",
       { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
@@ -907,6 +970,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       dqlValidator,
     )
 
+    // Then the response carries the new grid and the stored view
     expect(JSON.parse(res.content)).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor_result",
@@ -983,7 +1047,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_name sets the cell name", async () => {
+    // Given an unnamed cell
     const { state } = mountLive(1, [cell("c")])
+    // When the agent names it
     await dispatchTool(
       "set_cell_name",
       { buffer_id: 1, cell_id: "c", name: "BTC price" },
@@ -992,11 +1058,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the name is stored
     expect(cellById(state, "c")?.name).toBe("BTC price")
   })
 
   it("set_cell_name clears the name when passed null", async () => {
+    // Given a named cell
     const { state } = mountLive(1, [cell("c", "SELECT 1", { name: "old" })])
+    // When the agent passes null
     await dispatchTool(
       "set_cell_name",
       { buffer_id: 1, cell_id: "c", name: null },
@@ -1005,11 +1074,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the name is cleared
     expect(cellById(state, "c")?.name).toBeUndefined()
   })
 
   it("set_cell_name rejects a name over the length limit", async () => {
+    // Given a named cell
     const { state } = mountLive(1, [cell("c", "SELECT 1", { name: "orig" })])
+    // When the agent sends an over-long name
     const res = await dispatchTool(
       "set_cell_name",
       { buffer_id: 1, cell_id: "c", name: "a".repeat(101) },
@@ -1018,11 +1090,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the tool errors and the old name stays
     expect(res.is_error).toBe(true)
     expect(cellById(state, "c")?.name).toBe("orig")
   })
 
   it("run_query flags a transport-dropped error as unverified, a server error as not", async () => {
+    // Given a client whose query fails on transport
     const transport = makeClient({
       runQueryRaw: vi.fn(() =>
         Promise.resolve({
@@ -1031,6 +1105,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         }),
       ),
     })
+    // When run_query is dispatched
     const t = await dispatchTool(
       "run_query",
       { buffer_id: 1, sql: "INSERT INTO t VALUES(1)" },
@@ -1039,10 +1114,12 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the outcome is unverified
     expect((JSON.parse(t.content) as { unverified?: boolean }).unverified).toBe(
       true,
     )
 
+    // Given a client whose query fails on the server
     const serverErr = makeClient({
       runQueryRaw: vi.fn(() =>
         Promise.resolve({
@@ -1051,6 +1128,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         }),
       ),
     })
+    // When run_query is dispatched
     const s = await dispatchTool(
       "run_query",
       { buffer_id: 1, sql: "SELECT * FROM t" },
@@ -1059,6 +1137,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the outcome is not unverified
     expect(
       (JSON.parse(s.content) as { unverified?: boolean }).unverified,
     ).toBeUndefined()
@@ -1115,7 +1194,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_chart_config with only `queries` maps the query without x/name defaults", async () => {
+    // Given a plain SQL cell
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When the agent supplies only a query type
     await dispatchTool(
       "set_cell_chart_config",
       { buffer_id: 1, cell_id: "c", queries: [{ type: "bar" }] },
@@ -1124,13 +1205,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the query maps without x/name defaults
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([
       { type: "bar", yColumns: [] },
     ])
   })
 
   it("applies explicit ohlc for candlestick", async () => {
+    // Given a plain SQL cell
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When the agent supplies explicit ohlc columns
     await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1149,6 +1233,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the candlestick keeps them
     expect(cellById(state, "c")?.chartConfig).toMatchObject({
       xColumn: "ts",
       queries: [
@@ -1162,7 +1247,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("rejects a candlestick query with no ohlc (no derive from y_columns)", async () => {
+    // Given a candlestick config without ohlc
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1178,6 +1265,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected as a validation error
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
     expect(parsed.error_code).toBe("validation")
@@ -1187,7 +1275,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     // Strict tool schemas (OpenAI Structured Outputs) require every property
     // in `required`; optional-ness is expressed via nullable types. The
     // handler must treat null as "leave the cell's current value alone".
+    // Given a plain SQL cell
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    // When every optional field arrives as null
     await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1213,13 +1303,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the nulls are omitted, not written
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([
       { type: "line", yColumns: [] },
     ])
   })
 
   it("rejects a candlestick query with no ohlc (y_columns of a non-ohlc length)", async () => {
+    // Given a candlestick config whose y_columns are not ohlc-shaped
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1232,6 +1325,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected as a validation error
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
     expect(parsed.error_code).toBe("validation")
@@ -1241,7 +1335,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     mountLive(1, [cell("c", "SELECT a FROM t; SELECT b FROM t")])
 
   it("rejects a non-empty queries array whose length != the cell's statement count", async () => {
+    // Given a two-statement cell
     twoStatementCell()
+    // When the agent sends one query config
     const res = await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1255,13 +1351,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected as a validation error
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
     expect(parsed.error_code).toBe("validation")
   })
 
   it("applies a queries array that matches the cell's statement count", async () => {
+    // Given a two-statement cell
     const { state } = twoStatementCell()
+    // When the agent sends one config per statement
     await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1277,6 +1376,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then both configs land
     expect(cellById(state, "c")?.chartConfig?.queries).toMatchObject([
       { type: "line", yColumns: ["a"] },
       { type: "bar", yColumns: ["b"] },
@@ -1284,7 +1384,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("allows queries:[] (reset to inference) regardless of statement count", async () => {
+    // Given a two-statement cell
     const { state } = twoStatementCell()
+    // When the agent sends an empty queries array
     await dispatchTool(
       "set_cell_chart_config",
       { buffer_id: 1, cell_id: "c", queries: [] },
@@ -1293,11 +1395,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell resets to inference
     expect(cellById(state, "c")?.chartConfig?.queries).toEqual([])
   })
 
   it("preserves a null queries entry (infer this statement) instead of crashing", async () => {
+    // Given a two-statement cell
     const { state } = twoStatementCell()
+    // When one entry is null
     await dispatchTool(
       "set_cell_chart_config",
       {
@@ -1311,6 +1416,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the null entry is preserved
     expect(cellById(state, "c")?.chartConfig?.queries).toMatchObject([
       null,
       { type: "bar", yColumns: ["b"] },
@@ -1320,6 +1426,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   it("apply_notebook_state translates snake_case wire shape to camelCase state", async () => {
     // Given a notebook with cells b and c
     const { state } = mountLive(1, [cell("b", "old"), cell("c", "old")])
+    // When the agent applies a snake_case chart cell in grid layout
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1354,6 +1461,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the state is camelCase and the omitted cell is deleted
     expect(res.is_error).toBeUndefined()
     // The applied cell carries every field in camelCase; c (omitted) is deleted.
     expect(cellIds(state)).toEqual(["b"])
@@ -1379,6 +1487,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state stores auto_refresh_default, including Off; null preserves", async () => {
+    // Given a notebook without a default
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
     // When an apply sets the default to Off — false must survive as a value
     await dispatchTool(
@@ -1412,7 +1521,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state rejects an invalid auto_refresh_default before mutating", async () => {
+    // Given a notebook with one cell
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
+    // When the apply carries an invalid default and a new cell
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1439,6 +1550,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const { state } = mountLive(1, [
       cell("a", "SELECT 1", { autoRefresh: false }),
     ])
+    // When the apply carries a typo for that cell's auto_refresh
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1459,12 +1571,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state applies ordered variables; null preserves, [] clears", async () => {
+    // Given two ordered variables
     const variables = [
       { name: "x", value: "10" },
       { name: "from_ts", value: "dateadd('d', -7, now())" },
     ]
     // Ordered variables are written to settings.
     const a = mountLive(1)
+    // When an apply sends them
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -1479,12 +1593,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then they are written to settings
     expect(a.state.parts.settings.variables).toEqual(variables)
 
     // null preserves the notebook's existing variables.
     const b = mountLive(1, [], {
       settings: { variables: [{ name: "keep", value: "1" }] },
     })
+    // When an apply sends null
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -1499,6 +1615,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the existing variables survive
     expect(b.state.parts.settings.variables).toEqual([
       { name: "keep", value: "1" },
     ])
@@ -1507,6 +1624,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const c = mountLive(1, [], {
       settings: { variables: [{ name: "gone", value: "1" }] },
     })
+    // When an apply sends an empty list
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -1521,11 +1639,14 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the variables are cleared
     expect(c.state.parts.settings.variables).toEqual([])
   })
 
   it("apply_notebook_state rejects invalid variable names with a VALIDATION_ERROR", async () => {
+    // Given a variable with an invalid name
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1540,6 +1661,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected as a validation error
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code: string }
     expect(parsed.error_code).toBe("validation")
@@ -1547,6 +1669,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
 
   it("apply_notebook_state rejects invalid variable values via QuestDB validation", async () => {
     for (const value of ["", "select", "(1,2,3)"]) {
+      // Given a validator that rejects the variable value
       const client = makeClient()
       const validateSql = vi.fn(() =>
         Promise.resolve({
@@ -1555,6 +1678,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
           error: "bad variable value",
         }),
       )
+      // When the agent applies it
       const res = await dispatchTool(
         "apply_notebook_state",
         {
@@ -1569,6 +1693,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         ALL_GRANTED,
         validateSql,
       )
+      // Then it is rejected as a validation error
       expect(res.is_error).toBe(true)
       const parsed = JSON.parse(res.content) as { error_code: string }
       expect(parsed.error_code).toBe("validation")
@@ -1576,8 +1701,10 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state rejects multi-assignment value injection before validateSql", async () => {
+    // Given a value that smuggles a second assignment
     const client = makeClient()
     const validateSql = vi.fn()
+    // When the agent applies it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1592,6 +1719,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       validateSql,
     )
+    // Then the shape check rejects it before any validation call
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as {
       error_code: string
@@ -1603,6 +1731,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state validates ordered variable prefixes with QuestDB", async () => {
+    // Given a validator that accepts every prefix
     const client = makeClient()
     const validateSql = vi.fn(() =>
       Promise.resolve({
@@ -1611,6 +1740,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         timestamp: 0,
       }),
     )
+    // When the agent applies two dependent variables
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -1628,6 +1758,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       validateSql,
     )
+    // Then each prefix is validated in order
     expect(validateSql).toHaveBeenNthCalledWith(
       1,
       "DECLARE\n  @base := 10\nSELECT 1",
@@ -1641,6 +1772,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state rejects as STATE_STALE when the user edits during validation", async () => {
+    // Given a user edit that lands while validation awaits
     const client = makeClient()
     // The user edits a cell (keystroke) while the per-variable validation awaits.
     const validateSql = vi.fn(() => {
@@ -1651,6 +1783,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
         timestamp: 0,
       })
     })
+    // When the agent applies a variable
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -1663,18 +1796,21 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       validateSql,
     )
+    // Then the apply is rejected as stale
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code?: string }
     expect(parsed.error_code).toBe("stale")
   })
 
   it("apply_notebook_state rejects STATE_STALE on a user edit since the read baseline (in-app generation window)", async () => {
+    // Given a user action after the agent's read baseline
     const client = makeClient()
     const readSeq = getBufferActionSeq(1)
     emitUserAction({ kind: "user_added_cell", bufferId: 1, cellId: "x" })
     const toolContext = {
       notebookFreshness: createNotebookFreshness([[1, readSeq]]),
     }
+    // When the agent applies against that baseline
     const res = await dispatchTool(
       "apply_notebook_state",
       { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
@@ -1685,6 +1821,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       toolContext,
     )
+    // Then the apply is rejected as stale
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code?: string }
     expect(parsed.error_code).toBe("stale")
@@ -1754,9 +1891,11 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("update_cell rejects STATE_STALE when the user edited since the read baseline", async () => {
+    // Given a user edit after the agent's read baseline
     const client = makeClient()
     const readSeq = getBufferActionSeq(1)
     signalUserEdit(1)
+    // When the agent updates a cell against that baseline
     const res = await dispatchTool(
       "update_cell",
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
@@ -1767,6 +1906,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       { notebookFreshness: createNotebookFreshness([[1, readSeq]]) },
     )
+    // Then the update is rejected as stale
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code?: string }
     expect(parsed.error_code).toBe("stale")
@@ -1988,11 +2128,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("apply_notebook_state rejects after a user auto-refresh/maximize/spotlight toggle (signalUserEdit) since the read baseline", async () => {
+    // Given a user toggle after the agent's read baseline
     const client = makeClient()
     const readSeq = getBufferActionSeq(1)
     // handleAutoRefreshChange / handleChartMaximizedChange / the spotlight toggle
     // all call signalUserEdit(1); the agent's stale full-state apply must reject.
     signalUserEdit(1)
+    // When the agent applies against that baseline
     const res = await dispatchTool(
       "apply_notebook_state",
       { buffer_id: 1, cells: [{ value: "SELECT 1" }] },
@@ -2003,17 +2145,20 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       undefined,
       { notebookFreshness: createNotebookFreshness([[1, readSeq]]) },
     )
+    // Then the apply is rejected as stale
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code?: string }
     expect(parsed.error_code).toBe("stale")
   })
 
   it("update_cell rejects STATE_STALE when the user edits during validation", async () => {
+    // Given a user edit racing the agent's cell read
     live = mountLive(1, [cell("c")], { onRead: () => signalUserEdit(1) })
     const client = makeClient()
     const validateSql = vi.fn(() =>
       Promise.resolve({ query: "", columns: [], timestamp: 0 }),
     )
+    // When the agent updates the cell
     const res = await dispatchTool(
       "update_cell",
       { buffer_id: 1, cell_id: "c", value: "SELECT 2" },
@@ -2022,13 +2167,16 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       validateSql,
     )
+    // Then the update is rejected as stale
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as { error_code?: string }
     expect(parsed.error_code).toBe("stale")
   })
 
   it("apply_notebook_state rejects a candlestick query with no ohlc (never derived from y_columns)", async () => {
+    // Given an empty notebook
     const { state } = mountLive(1)
+    // When the apply carries a candlestick without ohlc
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2059,6 +2207,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the apply is rejected
     // ohlc is never fabricated from y_columns — the candlestick is rejected
     // outright, and nothing is committed.
     expect(res.is_error).toBe(true)
@@ -2068,7 +2217,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   it("apply_notebook_state surfaces an invalid request as VALIDATION_ERROR", async () => {
     // A supplied id that does not exist is rejected wholesale (never created,
     // which would silently drop omitted cells).
+    // Given an empty notebook
     mountLive(1)
+    // When the apply references an unknown cell id
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2092,6 +2243,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected as a validation error
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
     expect(parsed.error_code).toBe("validation")
@@ -2099,7 +2251,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("set_cell_maximized allows null to clear the spotlight", async () => {
+    // Given a spotlighted cell
     const { state } = mountLive(1, [cell("c")], { maximizedCellId: "c" })
+    // When the agent passes null
     await dispatchTool(
       "set_cell_maximized",
       { buffer_id: 1, cell_id: null },
@@ -2108,6 +2262,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the spotlight is cleared
     expect(state.parts.maximizedCellId).toBe(null)
   })
 
@@ -2212,7 +2367,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("denies apply_notebook_state with a draw cell containing DDL/DML, even with write granted", async () => {
+    // Given an empty notebook and full write permission
     mountLive(1)
+    // When the apply draws a write query
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2236,6 +2393,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { grantSchemaAccess: true, read: true, write: true },
       vi.fn().mockResolvedValue({ queryType: "DROP TABLE" }),
     )
+    // Then the draw invariant denies it
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/Cannot draw a write query/)
   })
@@ -2306,7 +2464,9 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   })
 
   it("run_cell pins the SQL it read and gates the launch explicitly", async () => {
+    // Given a SELECT cell
     const { runCell } = mountLive(1, [cell("c", "SELECT 1")])
+    // When the agent runs it
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -2315,6 +2475,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the runner receives the read SQL under an explicit gate
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith("c", undefined, "SELECT 1", {
       kind: "explicit",
@@ -2383,8 +2544,10 @@ describe("dispatchTool — notebook tools (happy path)", () => {
   // both halves so a caller that drops the gate args — or a refactor of that
   // condition — fails loudly here instead of silently auto-running a write.
   it("add_cell run:true always passes the autoRun gate, so a write is skipped", async () => {
+    // Given a validator that classifies the SQL as a write
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const gate = mountLive(1, [], { runCell: okRun, validate })
+    // When the agent adds the write and asks to run it
     const gated = await dispatchTool(
       "add_cell",
       { buffer_id: 1, sql: "INSERT INTO t VALUES (1)", run: true },
@@ -2393,6 +2556,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       { grantSchemaAccess: true, read: true, write: true },
       validate,
     )
+    // Then the runner is handed the auto-run gate and skips the write
     expect(gate.runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
@@ -2414,7 +2578,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("runs new cells with mode='run' (explicit) after apply", async () => {
+    // Given an empty notebook
     const { runCell } = mountLive(1, [], { runCell: okRun })
+    // When the apply adds an explicit run-mode cell
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2428,6 +2594,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell auto-runs and its outcome is reported
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
@@ -2447,7 +2614,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("defaults omitted mode to 'run' for new cells and runs them", async () => {
+    // Given an empty notebook
     const { runCell } = mountLive(1, [], { runCell: okRun })
+    // When the apply adds a cell without a mode
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -2461,6 +2630,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the cell auto-runs
     expect(runCell).toHaveBeenCalledWith(
       expect.any(String),
       undefined,
@@ -2472,6 +2642,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   it.each(["run", "draw"] as const)(
     "rejects mode='%s' with authoritative view='editor' before mutating",
     async (mode) => {
+      // Given a run cell holding a result
       const originalResult = {
         results: [] as SingleQueryResult[],
         activeResultIndex: 0,
@@ -2485,6 +2656,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
         }),
       ])
 
+      // When the apply pairs an explicit mode with view='editor'
       const res = await dispatchTool(
         "apply_notebook_state",
         {
@@ -2506,6 +2678,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
         dqlValidator,
       )
 
+      // Then the request is rejected and nothing changes or runs
       expect(res.is_error).toBe(true)
       expect(JSON.parse(res.content)).toMatchObject({
         error_code: "validation",
@@ -2521,6 +2694,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   )
 
   it("lets authoritative view='editor' clear a preserved draw mode without chart config", async () => {
+    // Given a draw cell with a result and a chart config
     const { state, runCell } = mountLive(
       1,
       [
@@ -2542,6 +2716,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { runCell: okRun },
     )
 
+    // When the apply preserves it with view='editor' and no mode
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2563,6 +2738,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       dqlValidator,
     )
 
+    // Then the cell returns to run mode with its result and chart cleared
     expect(res.is_error).toBeFalsy()
     expect(JSON.parse(res.content)).toMatchObject({
       results_cleared: ["cell-1"],
@@ -2575,8 +2751,49 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     expect(runCell).not.toHaveBeenCalled()
   })
 
+  it("does not re-run a run-mode SQL cell whose view='editor' discarded its result", async () => {
+    // Given a run-mode SQL cell that already holds a result
+    const { state, runCell } = mountLive(
+      1,
+      [
+        cell("cell-1", "SELECT 1", {
+          result: { results: [], activeResultIndex: 0, timestamp: 1 },
+          lastRunStatus: "success",
+          paneView: "result",
+        }),
+      ],
+      { runCell: okRun },
+    )
+
+    // When the apply preserves it with view='editor' and no mode
+    const res = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        layout_mode: null,
+        maximized_cell_id: null,
+        cells: [{ id: "cell-1", preserve_value: true, view: "editor" }],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the discarded result is reported and the SQL is not run again
+    expect(res.is_error).toBeFalsy()
+    expect(JSON.parse(res.content)).toMatchObject({
+      results_cleared: ["cell-1"],
+      runs: [],
+    })
+    expect(cellById(state, "cell-1")?.result).toBeUndefined()
+    expect(runCell).not.toHaveBeenCalled()
+  })
+
   it("skips cells whose resolved mode is 'draw'", async () => {
+    // Given an empty notebook
     const { runCell } = mountLive(1, [], { runCell: okRun })
+    // When the apply adds a draw cell
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -2597,6 +2814,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then nothing auto-runs
     expect(runCell).not.toHaveBeenCalled()
   })
 
@@ -2667,7 +2885,9 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips cells with empty SQL", async () => {
+    // Given an empty notebook
     const { runCell } = mountLive(1, [], { runCell: okRun })
+    // When the apply adds a blank run cell
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -2681,6 +2901,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then nothing auto-runs
     expect(runCell).not.toHaveBeenCalled()
   })
 
@@ -2721,12 +2942,14 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips DDL/DML cells regardless of run history (writes never auto-run)", async () => {
+    // Given an existing write cell
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
+    // When the apply restates it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2740,6 +2963,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       validate,
     )
+    // Then the runner's auto-run gate skips it
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith(
       "ins-1",
@@ -2765,12 +2989,14 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("skips DDL/DML cells that never ran before (only run_cell executes writes)", async () => {
+    // Given an existing write cell
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
+    // When the apply restates it and adds a second write
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2787,6 +3013,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       validate,
     )
+    // Then both go through the auto-run gate and are skipped
     const gates = vi.mocked(runCell).mock.calls.map((call) => call[3])
     expect(gates).toEqual([{ kind: "autoRun" }, { kind: "autoRun" }])
     const parsed = JSON.parse(res.content) as {
@@ -2805,9 +3032,11 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("re-runs DQL cells that ran before (only writes are history-gated)", async () => {
+    // Given an existing SELECT cell
     const { runCell } = mountLive(1, [cell("sel-1", "SELECT 1")], {
       runCell: okRun,
     })
+    // When the apply restates it
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -2821,17 +3050,20 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       dqlValidate,
     )
+    // Then it auto-runs again
     expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
       kind: "autoRun",
     })
   })
 
   it("preserves existing mode when omitted (draw stays draw, run stays implicit)", async () => {
+    // Given a run cell and a draw cell
     const { state, runCell } = mountLive(
       1,
       [cell("run-id", "old"), cell("draw-id", "old", { mode: "draw" })],
       { runCell: okRun },
     )
+    // When the apply rewrites both without a mode
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2855,6 +3087,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       { grantSchemaAccess: true, read: true, write: true },
       dqlValidate,
     )
+    // Then only the run cell auto-runs and both keep their mode
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledTimes(1)
     expect(runCell).toHaveBeenCalledWith("run-id", undefined, "SELECT 1", {
@@ -2865,6 +3098,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("dispatches run-mode cells in parallel — total wallclock equals slowest cell, not the sum", async () => {
+    // Given a runner that resolves each cell on demand
     const order: string[] = []
     const finish: Record<string, () => void> = {}
     mountLive(1, [], {
@@ -2875,6 +3109,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
             resolve({ success: true, queryCount: 1, results: ["success"] })
         }),
     })
+    // When the apply adds three run-mode cells
     const pending = dispatchTool(
       "apply_notebook_state",
       {
@@ -2895,12 +3130,15 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     // Flush microtasks so dispatchTool resumes past the apply and fires every
     // runCell concurrently.
     await new Promise((r) => setTimeout(r, 0))
+    // Then all three are in flight at once
     expect(order).toHaveLength(3)
+    // When they finish out of order
     // Finish out of submission order — only possible if all three are in
     // flight simultaneously.
     finish[order[2]]()
     finish[order[0]]()
     finish[order[1]]()
+    // Then the runs are reported in submission order
     const res = await pending
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ cellId: string; success: boolean }>
@@ -2910,6 +3148,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
   })
 
   it("reports per-cell runCell failure in the runs array with per-query results", async () => {
+    // Given a runner that reports mixed per-query outcomes
     mountLive(1, [], {
       runCell: () =>
         Promise.resolve({
@@ -2918,6 +3157,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
           results: ["success", "ERROR: boom", "cancelled"],
         }),
     })
+    // When the apply adds a run-mode cell
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -2933,6 +3173,7 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the runs entry carries every query status
     const parsed = JSON.parse(res.content) as {
       runs: Array<{ success: boolean; queryCount?: number; results?: string[] }>
     }
@@ -2947,12 +3188,14 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
 
 describe("dispatchTool — NotebookToolError envelope", () => {
   it("archived → { error_code: 'archived', hint, message }", async () => {
+    // Given a runner that throws archived
     mountLive(1, [cell("c")], {
       runCell: () =>
         Promise.reject(
           new NotebookToolError("archived", 'Notebook "x" is archived.'),
         ),
     })
+    // When the agent runs the cell
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -2961,6 +3204,7 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the typed envelope carries the code and a hint
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
     expect(parsed.error_code).toBe("archived")
@@ -2968,9 +3212,11 @@ describe("dispatchTool — NotebookToolError envelope", () => {
   })
 
   it("deleted → error_code 'deleted'", async () => {
+    // Given a runner that throws deleted
     mountLive(1, [cell("c")], {
       runCell: () => Promise.reject(new NotebookToolError("deleted", "gone")),
     })
+    // When the agent runs the cell
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -2979,6 +3225,7 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the envelope carries the deleted code
     expect(res.is_error).toBe(true)
     expect(
       (JSON.parse(res.content) as Record<string, unknown>).error_code,
@@ -2987,7 +3234,9 @@ describe("dispatchTool — NotebookToolError envelope", () => {
 
   it("unknown_cell → error_code 'unknown_cell' with resync hint", async () => {
     // Deleting a cell that doesn't exist throws unknown_cell from the transition.
+    // Given a notebook without the target cell
     mountLive(1, [cell("keep")])
+    // When the agent deletes it
     const res = await dispatchTool(
       "delete_cell",
       { buffer_id: 1, cell_id: "abc123" },
@@ -2996,6 +3245,7 @@ describe("dispatchTool — NotebookToolError envelope", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the envelope carries unknown_cell and a resync hint
     expect(res.is_error).toBe(true)
     const parsed = JSON.parse(res.content) as Record<string, unknown>
     expect(parsed.error_code).toBe("unknown_cell")
@@ -3005,9 +3255,11 @@ describe("dispatchTool — NotebookToolError envelope", () => {
 
 describe("dispatchTool — non-NotebookToolError falls through to default handler", () => {
   it("is captured as a generic tool execution error", async () => {
+    // Given a runner that throws a plain error
     mountLive(1, [cell("c")], {
       runCell: () => Promise.reject(new Error("network boom")),
     })
+    // When the agent runs the cell
     const res = await dispatchTool(
       "run_cell",
       { buffer_id: 1, cell_id: "c" },
@@ -3016,6 +3268,7 @@ describe("dispatchTool — non-NotebookToolError falls through to default handle
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the default handler reports the message
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/network boom/)
   })
@@ -3145,7 +3398,9 @@ describe("dispatchTool — get_cell content cap switch", () => {
   const bigValue = "x".repeat(5000)
 
   it("returns the full value when get_full_content: true", async () => {
+    // Given a cell over the content cap
     mountLive(1, [cell("c", bigValue)])
+    // When the agent asks for the full content
     const res = await dispatchTool(
       "get_cell",
       { buffer_id: 1, cell_id: "c", get_full_content: true },
@@ -3154,6 +3409,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the whole value comes back untruncated
     const parsed = JSON.parse(res.content) as {
       value: string
       truncated?: boolean
@@ -3163,11 +3419,13 @@ describe("dispatchTool — get_cell content cap switch", () => {
   })
 
   it("applies the cap when get_full_content is omitted or null", async () => {
+    // Given a cell over the content cap
     mountLive(1, [cell("c", bigValue)])
     for (const input of [
       { buffer_id: 1, cell_id: "c" },
       { buffer_id: 1, cell_id: "c", get_full_content: null },
     ]) {
+      // When the agent reads it without the switch
       const res = await dispatchTool(
         "get_cell",
         input,
@@ -3176,6 +3434,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
         ALL_GRANTED,
         dqlValidator,
       )
+      // Then the value is capped and flagged
       const parsed = JSON.parse(res.content) as {
         value: string
         truncated?: boolean
@@ -3188,6 +3447,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
   })
 
   it("reports passive result view only while its snapshot key exists", async () => {
+    // Given a passive notebook whose cell ran but holds no snapshot
     unregisterController(1)
     await db.buffers.update(1, {
       notebookViewState: {
@@ -3212,17 +3472,23 @@ describe("dispatchTool — get_cell content cap switch", () => {
       return (JSON.parse(response.content) as { view: string }).view
     }
 
-    expect(await readView()).toBe("editor")
+    // When the agent reads the cell before and after its snapshot is saved
+    const withoutSnapshot = await readView()
     await saveCellSnapshot({
       bufferId: 1,
       cellId: "c",
       results: [],
       savedAt: 1,
     })
-    expect(await readView()).toBe("result")
+    const withSnapshot = await readView()
+
+    // Then the view follows the snapshot key
+    expect(withoutSnapshot).toBe("editor")
+    expect(withSnapshot).toBe("result")
   })
 
   it("uses missing snapshot status for passive layout and dimension mutations", async () => {
+    // Given a passive notebook whose cell ran but holds no snapshot
     unregisterController(1)
     const persistedCell = cell("c", "SELECT 1", {
       lastRunStatus: "success",
@@ -3238,6 +3504,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
       },
     })
 
+    // When the agent moves the cell
     const layout = await dispatchTool(
       "set_cell_layout",
       { buffer_id: 1, cell_id: "c", x: 0, y: 0, w: 4 },
@@ -3246,6 +3513,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the view reads editor and the row height follows the missing status
     expect(JSON.parse(layout.content)).toEqual({
       grid: { x: 0, y: 0, w: 4 },
       view: "editor",
@@ -3261,6 +3529,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
       h: computeAgentCellGridH(persistedCell, false),
     })
 
+    // When the agent sets its dimensions
     const dimensions = await dispatchTool(
       "set_cell_dimensions",
       {
@@ -3275,6 +3544,7 @@ describe("dispatchTool — get_cell content cap switch", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the view still reads editor
     expect(JSON.parse(dimensions.content)).toEqual({
       view: "editor",
       mode: null,
@@ -3284,7 +3554,9 @@ describe("dispatchTool — get_cell content cap switch", () => {
 
 describe("dispatchTool — apply_notebook_state dimensions", () => {
   it("rejects a malformed editor_height string at runtime", async () => {
+    // Given a notebook with one cell
     const { state } = mountLive(1, [cell("a", "SELECT 1")])
+    // When the apply carries a malformed editor height
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -3299,6 +3571,7 @@ describe("dispatchTool — apply_notebook_state dimensions", () => {
       dqlValidator,
     )
 
+    // Then the tool errors and the cell is untouched
     expect(res.is_error).toBe(true)
     expect(res.content).toContain("has an invalid editor_height")
     expect(cellById(state, "a")?.topHeight).toBeUndefined()
@@ -3307,7 +3580,9 @@ describe("dispatchTool — apply_notebook_state dimensions", () => {
 
 describe("dispatchTool — apply_notebook_state preserve_value", () => {
   it("rejects a cell providing both value and preserve_value", async () => {
+    // Given a cell entry with both value and preserve_value
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -3321,12 +3596,15 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/exactly one/)
   })
 
   it("rejects a cell providing neither value nor preserve_value", async () => {
+    // Given a cell entry with neither value nor preserve_value
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -3340,12 +3618,15 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/has no value/)
   })
 
   it("rejects preserve_value without an existing cell id", async () => {
+    // Given a preserve_value entry without an id
     const client = makeClient()
+    // When the agent applies it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -3359,12 +3640,15 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then it is rejected
     expect(res.is_error).toBe(true)
     expect(res.content).toMatch(/without an existing cell id/)
   })
 
   it("preserves a cell's existing value with preserve_value:true", async () => {
+    // Given a cell with a value
     const { state } = mountLive(1, [cell("a", "keepme")])
+    // When the apply preserves it
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -3378,16 +3662,19 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       ALL_GRANTED,
       dqlValidator,
     )
+    // Then the value is unchanged
     expect(cellById(state, "a")?.value).toBe("keepme")
   })
 
   it("auto-run skips a preserved write cell, gating on its live SQL", async () => {
+    // Given an existing write cell
     const validate = vi.fn().mockResolvedValue({ queryType: "INSERT" })
     const { runCell } = mountLive(
       1,
       [cell("ins-1", "INSERT INTO t VALUES (1)")],
       { runCell: okRun, validate },
     )
+    // When the apply preserves it
     const res = await dispatchTool(
       "apply_notebook_state",
       {
@@ -3401,6 +3688,7 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
       { grantSchemaAccess: true, read: true, write: true },
       validate,
     )
+    // Then the runner gates its live SQL and skips it
     expect(res.is_error).toBeFalsy()
     expect(runCell).toHaveBeenCalledWith(
       "ins-1",
@@ -3415,9 +3703,11 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
   })
 
   it("auto-run executes a preserved DQL cell with its live SQL", async () => {
+    // Given an existing SELECT cell
     const { runCell } = mountLive(1, [cell("sel-1", "SELECT 1")], {
       runCell: okRun,
     })
+    // When the apply preserves it
     await dispatchTool(
       "apply_notebook_state",
       {
@@ -3435,6 +3725,7 @@ describe("dispatchTool — apply_notebook_state preserve_value", () => {
         timestamp: -1,
       }),
     )
+    // Then it auto-runs with its live SQL
     expect(runCell).toHaveBeenCalledWith("sel-1", undefined, "SELECT 1", {
       kind: "autoRun",
     })

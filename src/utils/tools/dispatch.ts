@@ -41,9 +41,9 @@ import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
   isAutoRefresh,
   isUnverifiableExecError,
-  snapshotResultsMatchQueries,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -910,7 +910,7 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         const modeBaseline = getBufferActionSeq(buffer_id)
-        if (mode === "draw" && validateSql) {
+        if (mode === "draw") {
           const modeCell = (await readCells(buffer_id, signal)).find(
             (c) => c.id === cell_id,
           )

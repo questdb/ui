@@ -51,10 +51,12 @@ import {
   discardCellResult,
   generateId,
   releaseCellResultPatch,
+} from "./notebookUtils"
+import { type RunCancelReason } from "./runCancellation"
+import {
   snapshotResultsMatchQueries,
   statementKeysFor,
-  type RunCancelReason,
-} from "./notebookUtils"
+} from "./statementIdentity"
 import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"

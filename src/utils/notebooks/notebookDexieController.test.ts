@@ -281,6 +281,7 @@ describe("createDexieNotebookController — structural edits", () => {
   })
 
   it("updateCell deletes a snapshot when none of its statements match", async () => {
+    // Given a two-statement cell with a snapshot for both statements
     await seedNotebook({
       cells: [cell("a", "select 1; select 2", { lastRunStatus: "success" })],
     })
@@ -295,12 +296,15 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When the cell is rewritten so neither statement survives
     await controller.updateCell("a", { value: "select 12; select 3" })
 
+    // Then the snapshot is deleted
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
   it("updateCell keeps a snapshot with a normalized statement match", async () => {
+    // Given a cell with a snapshot for its single statement
     await seedNotebook({
       cells: [
         cell("a", "select * from trades where sym = 'A'", {
@@ -321,14 +325,17 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When the statement is reformatted and a second one is appended
     await controller.updateCell("a", {
       value: "SELECT  *\nFROM trades WHERE sym='A'; select 3",
     })
 
+    // Then the snapshot survives
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeDefined()
   })
 
   it("updateCell deletes a matching snapshot that contains only placeholders", async () => {
+    // Given a cell whose snapshot holds only a running placeholder
     await seedNotebook({
       cells: [cell("a", "select 1", { lastRunStatus: "success" })],
     })
@@ -340,12 +347,15 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When the statement is reformatted without changing its meaning
     await controller.updateCell("a", { value: "SELECT\n  1" })
 
+    // Then the placeholder-only snapshot is deleted
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
   it("apply deletes a snapshot when none of its statements match", async () => {
+    // Given a cell with a snapshot for its statement
     await seedNotebook({
       cells: [cell("a", "select 1", { lastRunStatus: "success" })],
     })
@@ -357,10 +367,12 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When an apply rewrites the statement
     await controller.applyNotebookState({
       cells: [{ id: "a", value: "select 2" }],
     })
 
+    // Then the snapshot is deleted
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
@@ -412,6 +424,29 @@ describe("createDexieNotebookController — structural edits", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeDefined()
   })
 
+  it("apply keeps a legacy snapshot whose query holds the raw cell text", async () => {
+    // Given a passive cell whose legacy snapshot stored the whole cell text, comment included
+    await seedNotebook({
+      cells: [cell("a", "-- note\nselect 1", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [{ ...dqlResult, query: "-- note\nselect 1" }],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    // When an apply edits only the comment
+    const out = await controller.applyNotebookState({
+      cells: [{ id: "a", value: "-- note2\nselect 1" }],
+    })
+
+    // Then the snapshot survives for hydration and is not reported
+    expect(out.resultsCleared).toEqual([])
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeDefined()
+  })
+
   it("updateCell rejects an unknown cell with a typed error", async () => {
     // Given a notebook without cell "ghost"
     await seedNotebook({ cells: [cell("a")] })
@@ -447,6 +482,7 @@ describe("createDexieNotebookController — structural edits", () => {
   })
 
   it("view editor deletes a marker-less cell snapshot", async () => {
+    // Given a result-only cell with a snapshot but no run marker
     await seedNotebook({
       cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
@@ -458,18 +494,21 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When an agent asks for the editor-only view
     await controller.mutate((parts) =>
       setCellDimensionsTransition(parts, BUFFER_ID, "a", {
         view: "editor",
       }),
     )
 
+    // Then the snapshot is deleted
     await vi.waitFor(async () => {
       expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
     })
   })
 
   it("apply editor-only deletes a marker-less cell snapshot", async () => {
+    // Given a result-only cell with a snapshot but no run marker
     await seedNotebook({
       cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
@@ -481,10 +520,12 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
+    // When an apply requests the editor-only view
     await controller.applyNotebookState({
       cells: [{ id: "a", preserveValue: true, view: "editor" }],
     })
 
+    // Then the snapshot is deleted
     await vi.waitFor(async () => {
       expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
     })
@@ -540,12 +581,16 @@ describe("createDexieNotebookController — settings & layout", () => {
   })
 
   it("setCellMode draw seeds the chart bottom height and preserves preference", async () => {
-    // A mode change does not silently rewrite the user's pane preference.
+    // Given a run cell whose user prefers the result-only view
     await seedNotebook({
       cells: [cell("a", "SELECT 1", { paneView: "result" })],
     })
     const controller = makeController()
+
+    // When the cell switches to draw
     await controller.setCellMode("a", "draw")
+
+    // Then the chart height is seeded and the pane preference is not rewritten
     const view = await persistedView()
     expect(view.cells[0]).toMatchObject({
       mode: "draw",
@@ -851,6 +896,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("a skipped newer claim does not supersede an in-flight run", async () => {
+    // Given an explicit write that has passed its barrier and reached the server
     await seedNotebook({ cells: [cell("a", "INSERT INTO t VALUES (1)")] })
     const {
       quest,
@@ -860,8 +906,6 @@ describe("createDexieNotebookController — runCell", () => {
       validate: () => ({ queryType: "INSERT" }),
     })
     const controller = makeController({}, quest)
-
-    // An explicit write has passed its barrier and reached the server.
     const explicit = controller.runCell("a", undefined, undefined, {
       kind: "explicit",
       permissions: { grantSchemaAccess: true, read: true, write: true },
@@ -870,11 +914,12 @@ describe("createDexieNotebookController — runCell", () => {
       if (inFlight.length !== 1) throw new Error("write not in flight")
     })
 
-    // A newer auto-run claims the same cell, but its barrier skips writes.
-    // Since it never launches, it must not take authority from the write.
+    // When a newer auto-run claims the same cell and its barrier skips the write
     const autoRun = await controller.runCell("a", undefined, undefined, {
       kind: "autoRun",
     })
+
+    // Then the skipped claim never launches and the write keeps its authority
     expect(autoRun.skipped).toMatch(/AUTO_RUN_SKIPPED/)
     expect(inFlight).toHaveLength(1)
 
@@ -1068,6 +1113,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("a newer invocation supersedes an older run still awaiting validation", async () => {
+    // Given two auto-runs of the same cell, both held at validation
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     const validations: Array<{ resolve: (value: unknown) => void }> = []
     const {
@@ -1098,15 +1144,14 @@ describe("createDexieNotebookController — runCell", () => {
         throw new Error("second validation not started")
     })
 
-    // The newer invocation validates and launches before the older validation
-    // settles. Resolving the older barrier afterward must not let it launch or
-    // supersede the newer request.
+    // When the newer invocation validates and launches before the older validation settles
     validations[1].resolve(dqlValidation)
     await vi.waitFor(() => {
       if (inFlight.length !== 1) throw new Error("newer run not launched")
     })
     validations[0].resolve(dqlValidation)
 
+    // Then the older run is superseded without launching and the newer one records its result
     expect(await first).toMatchObject({
       success: false,
       queryCount: 0,
@@ -1121,6 +1166,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("view editor invalidates a headless run before it can restore a result", async () => {
+    // Given a headless run whose query is in flight
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     const { quest, pending: inFlight, respondNext } = makeQuest()
     const controller = makeController({}, quest)
@@ -1129,6 +1175,7 @@ describe("createDexieNotebookController — runCell", () => {
       if (inFlight.length === 0) throw new Error("run not in flight")
     })
 
+    // When an agent asks for the editor-only view and the query then settles
     await controller.mutate((parts) =>
       setCellDimensionsTransition(parts, BUFFER_ID, "a", {
         view: "editor",
@@ -1137,6 +1184,7 @@ describe("createDexieNotebookController — runCell", () => {
     respondNext(dqlResult)
     const summary = await run
 
+    // Then the run is unverified and nothing is recorded or snapshotted
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/result was cleared/)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
@@ -1144,6 +1192,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("view editor prevents a headless run from launching after validation", async () => {
+    // Given an auto-run held at validation
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     let resolveValidation!: (value: unknown) => void
     const validation = new Promise((resolve) => {
@@ -1164,6 +1213,7 @@ describe("createDexieNotebookController — runCell", () => {
       if (!validationStarted) throw new Error("validation not in flight")
     })
 
+    // When an agent asks for the editor-only view and validation then settles
     await controller.mutate((parts) =>
       setCellDimensionsTransition(parts, BUFFER_ID, "a", {
         view: "editor",
@@ -1172,6 +1222,7 @@ describe("createDexieNotebookController — runCell", () => {
     resolveValidation(dqlValidation)
     const summary = await run
 
+    // Then the run never launches and nothing is recorded or snapshotted
     expect(summary).toMatchObject({
       success: false,
       queryCount: 0,
@@ -1247,6 +1298,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("a stale validation barrier cannot unregister its replacement", async () => {
+    // Given an auto-run held at validation and then cleared by view editor
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     const validations: Array<{ resolve: (value: unknown) => void }> = []
     const {
@@ -1274,6 +1326,8 @@ describe("createDexieNotebookController — runCell", () => {
       }),
     )
 
+    // When a second auto-run registers its barrier, the stale first barrier settles,
+    // and view editor is requested again before the second validation settles
     const secondRun = controller.runCell("a", undefined, undefined, {
       kind: "autoRun",
     })
@@ -1307,6 +1361,7 @@ describe("createDexieNotebookController — runCell", () => {
     })
     if (inFlight.length > 0) respondNext(dqlResult)
 
+    // Then the second run is still cleared by its own barrier and nothing is recorded
     expect(await secondRun).toMatchObject({
       success: false,
       queryCount: 0,
@@ -1319,6 +1374,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("apply editor-only invalidates a headless run before it can restore a result", async () => {
+    // Given a headless run whose query is in flight
     await seedNotebook({ cells: [cell("a", "SELECT 1")] })
     const { quest, pending: inFlight, respondNext } = makeQuest()
     const controller = makeController({}, quest)
@@ -1327,12 +1383,14 @@ describe("createDexieNotebookController — runCell", () => {
       if (inFlight.length === 0) throw new Error("run not in flight")
     })
 
+    // When an apply requests the editor-only view and the query then settles
     await controller.applyNotebookState({
       cells: [{ id: "a", preserveValue: true, view: "editor" }],
     })
     respondNext(dqlResult)
     const summary = await run
 
+    // Then the run is unverified and nothing is recorded or snapshotted
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/result was cleared/)
     expect((await persistedView()).cells[0].lastRunStatus).toBeUndefined()
@@ -1340,6 +1398,7 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("apply deletion prevents a headless run from launching after validation", async () => {
+    // Given an auto-run of cell "a" held at validation
     await seedNotebook({
       cells: [cell("a", "SELECT 1"), cell("b", "SELECT 2")],
     })
@@ -1362,12 +1421,14 @@ describe("createDexieNotebookController — runCell", () => {
       if (!validationStarted) throw new Error("validation not in flight")
     })
 
+    // When an apply drops cell "a" and validation then settles
     await controller.applyNotebookState({
       cells: [{ id: "b", preserveValue: true }],
     })
     resolveValidation(dqlValidation)
-
     const summary = await run
+
+    // Then the run never launches and only "b" remains
     expect(summary).toMatchObject({
       success: false,
       queryCount: 0,
@@ -1415,16 +1476,19 @@ describe("createDexieNotebookController — runCell", () => {
   })
 
   it("a run whose cell was deleted mid-flight records nothing and says so", async () => {
+    // Given a run whose query is in flight
     await seedNotebook({ cells: [cell("a", "SELECT 1"), cell("b")] })
     const { quest, respondNext } = makeQuest()
     const controller = makeController({}, quest)
     const pending = controller.runCell("a")
-    // The cell disappears while the query is in flight (the queue is not held
-    // during execution, so the delete lands before the commit).
+
+    // When the cell is deleted before the commit, since the queue is not held during execution
     await controller.deleteCell("a")
     expect(quest.abort).toHaveBeenCalledWith("q-1")
     respondNext(dqlResult)
     const summary = await pending
+
+    // Then the run is unverified, names the deletion and leaves no snapshot
     expect(summary.unverified).toBe(true)
     expect(summary.note).toMatch(/cell was deleted/)
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()

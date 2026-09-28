@@ -97,9 +97,15 @@ describe("resultsEquivalent", () => {
   })
 
   it("ignores internal whitespace and keyword casing", () => {
+    // Given two results whose queries differ only in whitespace and keyword casing
     const a = [dql([{ name: "x", type: "INT" }], [[1]], "select  1\nas x")]
     const b = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
-    expect(resultsEquivalent(a, b)).toBe(true)
+
+    // When they are compared
+    const equivalent = resultsEquivalent(a, b)
+
+    // Then they are equivalent
+    expect(equivalent).toBe(true)
   })
 
   it("returns false when result counts differ", () => {
@@ -470,7 +476,13 @@ describe("toChartResult", () => {
   })
 
   it("settles a matching result with its chartable rows", () => {
-    const settled = toChartResult(settledResult("select 1"), ["select 1"])
+    // Given a settled result whose statement matches the cell
+    const result = settledResult("select 1")
+
+    // When it is converted for the chart
+    const settled = toChartResult(result, ["select 1"])
+
+    // Then it settles with one chartable row set and no error
     expect(settled.kind).toBe("settled")
     if (settled.kind === "settled") {
       expect(settled.results).toHaveLength(1)
