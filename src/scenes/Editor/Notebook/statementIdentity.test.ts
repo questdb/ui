@@ -11,6 +11,7 @@ import {
   statementIdentityOfKey,
   statementKeysFor,
   statementKeysForIdentities,
+  retextResultsToStatements,
 } from "./statementIdentity"
 
 describe("snapshotResultsMatchQueries", () => {
@@ -569,5 +570,44 @@ describe("statementKeysForIdentities", () => {
     // Then they equal the keys built from the text, duplicates included
     expect(rebuilt).toEqual(keys)
     expect(keys[0]).not.toBe(keys[1])
+  })
+})
+
+describe("retextResultsToStatements — run commit under edited text", () => {
+  const dql = (query: string): SingleQueryResult => ({
+    type: "dql",
+    query,
+    columns: [{ name: "x", type: "INT" }],
+    dataset: [[1]],
+    count: 1,
+  })
+
+  it("gives a result the current text of the statement that kept its identity", () => {
+    // Given a run that landed under the old casing while the editor re-cased it
+    const results = [dql("select 2")]
+
+    // When the results take the editor's statements
+    const retexted = retextResultsToStatements(results, [
+      "select 1",
+      "SELECT 2",
+    ])
+
+    // Then the result reads as the editor holds it
+    expect(retexted.map((r) => r.query)).toEqual(["SELECT 2"])
+  })
+
+  it("keeps a result no statement claims, and the same array when nothing changes", () => {
+    // Given one result whose statement was rewritten and one that still matches
+    const results = [dql("select 2"), dql("select 3")]
+
+    // When retexted against statements that dropped the first
+    const retexted = retextResultsToStatements(results, ["select 3"])
+
+    // Then the orphan keeps its text, the match is untouched, and an unchanged
+    // set comes back as the same array
+    expect(retexted.map((r) => r.query)).toEqual(["select 2", "select 3"])
+    expect(retextResultsToStatements(results, ["select 2", "select 3"])).toBe(
+      results,
+    )
   })
 })

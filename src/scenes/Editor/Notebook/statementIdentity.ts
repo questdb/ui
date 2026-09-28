@@ -92,6 +92,30 @@ export const resultStatementKeys = (
   results: SingleQueryResult[],
 ): StatementKey[] => statementKeysFor(results.map((r) => r.query))
 
+// A run lands its results under the text it ran as. Each result whose
+// statement kept its identity takes that statement's current text, so raw-text
+// readers (sizing, the tab frame, snapshots) see the SQL the editor holds; a
+// result no statement claims stays as it ran.
+export const retextResultsToStatements = (
+  results: SingleQueryResult[],
+  statements: string[],
+): SingleQueryResult[] => {
+  const statementByKey = new Map<StatementKey, string>()
+  statementKeysFor(statements).forEach((key, index) => {
+    statementByKey.set(key, statements[index])
+  })
+  const resultKeys = resultStatementKeys(results)
+  const retexted = results.map((result, index) => {
+    const sql = statementByKey.get(resultKeys[index])
+    return sql === undefined || sql === result.query
+      ? result
+      : { ...result, query: sql }
+  })
+  return retexted.every((result, index) => result === results[index])
+    ? results
+    : retexted
+}
+
 // Callers that already hold the previous frame's keys pass them in, so the
 // formatter runs once per result on a hydration. A survivor takes the text of
 // the statement it now belongs to: a presentation-only edit keeps the rows,

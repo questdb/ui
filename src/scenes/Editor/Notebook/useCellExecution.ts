@@ -35,7 +35,11 @@ import {
   type RunCancellation,
   type RunCancelReason,
 } from "./runCancellation"
-import { hasPendingResult, statementKeysFor } from "./statementIdentity"
+import {
+  hasPendingResult,
+  retextResultsToStatements,
+  statementKeysFor,
+} from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 
@@ -55,6 +59,18 @@ const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
 
   return () => runGenerations.get(cellId) === generation
 }
+
+// A run lands with the text it ran as. When the cell was edited while it ran,
+// the results whose statements kept their identity take the editor's current
+// text, so sizing, the tab frame and the snapshot agree at commit.
+const committedResults = (
+  results: SingleQueryResult[],
+  liveValue: string,
+  valueAtRunStart: string,
+): SingleQueryResult[] =>
+  liveValue === valueAtRunStart
+    ? results
+    : retextResultsToStatements(results, getQueriesFromText(liveValue))
 
 // The reason the cell's controllers were aborted with, when any were.
 const cancellationOf = (
@@ -373,14 +389,17 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
+        const results = committedResults(
+          liveCell.result?.results ?? finalResults,
+          liveCell.value,
+          valueAtRunStart,
+        )
         if (!liveCell.result) {
           updateCell(cellId, {
-            result: {
-              results: finalResults,
-              activeResultIndex: 0,
-              timestamp: Date.now(),
-            },
+            result: { results, activeResultIndex: 0, timestamp: Date.now() },
           })
+        } else if (results !== liveCell.result.results) {
+          updateCell(cellId, { result: { ...liveCell.result, results } })
         }
         setScriptSummary(cellId, {
           successCount,
@@ -587,14 +606,17 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
+        const results = committedResults(
+          liveCell.result?.results ?? finalResults,
+          liveCell.value,
+          valueAtRunStart,
+        )
         if (!liveCell.result) {
           updateCell(cellId, {
-            result: {
-              results: finalResults,
-              activeResultIndex: 0,
-              timestamp: Date.now(),
-            },
+            result: { results, activeResultIndex: 0, timestamp: Date.now() },
           })
+        } else if (results !== liveCell.result.results) {
+          updateCell(cellId, { result: { ...liveCell.result, results } })
         }
         if (queries.length > 1) {
           setScriptSummary(cellId, {
@@ -794,12 +816,17 @@ export const useCellExecution = ({
           updateCell(cellId, { result: priorResult })
           return { ok, superseded: false, cellChanged: true }
         }
-        const cellResult: CellResult = {
-          results: [
+        const [recorded] = committedResults(
+          [
             launch.launched
               ? singleResultFromExec(launch.exec, recordedQuery)
               : cancelledResult(recordedQuery, "user"),
           ],
+          liveCell.value,
+          valueAtRunStart,
+        )
+        const cellResult: CellResult = {
+          results: [recorded],
           activeResultIndex: 0,
           timestamp: Date.now(),
         }
