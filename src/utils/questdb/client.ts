@@ -35,7 +35,7 @@ import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export type QueryId = number
 
-const REFRESH_TIMEOUT_MS = 10_000
+export const REFRESH_TIMEOUT_MS = 10_000
 const REFRESH_RETRY_DELAY_MS = 5_000
 const MAX_REFRESH_RETRY_DELAY_MS = 30_000
 
@@ -304,7 +304,7 @@ export class Client {
     controller: AbortController,
     queryId: QueryId,
   ): Promise<QueryRawResult> {
-    const { cancellable: _, ...queryOptions } = options ?? {}
+    const { cancellable: _, onRequestStart, ...queryOptions } = options ?? {}
     const payload = {
       count: true,
       src: "con",
@@ -315,8 +315,10 @@ export class Client {
     }
 
     let response: Response
+    let fetchStartedAt = 0
+    let authPayloadAtFetch: AuthPayload | null = null
+    let authorizationAtFetch: string | undefined
 
-    const start = new Date()
     try {
       if (
         !Client.refreshPromise &&
@@ -334,9 +336,14 @@ export class Client {
         await this.awaitRefresh(Client.refreshPromise, controller.signal)
       }
 
+      onRequestStart?.()
+      const headers = this.commonHeaders
+      authPayloadAtFetch = ssoAuthState.getAuthPayload()
+      authorizationAtFetch = headers.Authorization
+      fetchStartedAt = Date.now()
       response = await fetch(`exec?${Client.encodeParams(payload)}`, {
         signal: controller.signal,
-        headers: this.commonHeaders,
+        headers,
       })
     } catch (error) {
       this.removeController(queryId)
@@ -390,7 +397,7 @@ export class Client {
             type: Type.ERROR,
           })
         }
-        const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
+        const fetchTime = (Date.now() - fetchStartedAt) * 1e6
         let data
         try {
           data = JSON.parse(responseText) as RawResult
@@ -463,7 +470,18 @@ export class Client {
 
       if (response.status === 401) {
         errorPayload.error = `Unauthorized`
-        eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        const currentAuthPayload = ssoAuthState.getAuthPayload()
+        const currentAuthorization = currentAuthPayload
+          ? `Bearer ${currentAuthPayload.groups_encoded_in_token ? currentAuthPayload.id_token : currentAuthPayload.access_token}`
+          : this.commonHeaders.Authorization
+        // An older request can return 401 after a successful token refresh.
+        // Reject that request, but do not log out the session using the new token.
+        if (
+          authPayloadAtFetch === currentAuthPayload &&
+          authorizationAtFetch === currentAuthorization
+        ) {
+          eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
+        }
       }
 
       if (response.status === 403) {

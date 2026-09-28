@@ -120,6 +120,57 @@ describe("OIDC", () => {
       })
     }
 
+    it("shows the expired-session error after a failed refresh and a later 401", () => {
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      cy.intercept("POST", oidcTokenUrl, (req) => {
+        if (
+          new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+        ) {
+          req.alias = "refreshFailure"
+          req.reply({ forceNetworkError: true })
+        } else {
+          req.reply({
+            access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+            refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+            id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+            token_type: "Bearer",
+            expires_in: 20,
+          })
+        }
+      })
+
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.wait("@refreshFailure")
+      cy.getEditor().should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.username.client1")
+        .should("not.be.empty")
+
+      // Control the SQL response: the stubbed IdP expiry alone does not make
+      // the test server reject this token.
+      cy.intercept("GET", "**/exec?*", (req) => {
+        const query = new URL(req.url).searchParams.get("query")
+        if (query?.toLowerCase().includes("select current_user()")) {
+          req.reply({ statusCode: 401, body: "Unauthorized" })
+        }
+      })
+      cy.executeSQL("select current_user();")
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.contains("Your SSO session has expired")
+        .closest("[role='alert']")
+        .should("be.focused")
+      cy.contains(
+        "Could not refresh your SSO session. Please sign in again.",
+      ).should("be.visible")
+      cy.getByDataHook("button-sso-continue").should("be.visible")
+      cy.window()
+        .its("localStorage")
+        .invoke("getItem", "sso.session.active")
+        .should("eq", "true")
+    })
+
     it("should request a new token on page reload, even if there is no refresh token", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({

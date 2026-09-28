@@ -194,7 +194,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           authPayload &&
           new Date(authPayload.expires_at).getTime() > Date.now()
         ) {
-          toast.error("Could not refresh your SSO session. Retrying shortly.")
+          toast.error(
+            "Could not refresh your SSO session. We'll retry on a later request.",
+          )
         }
       })
 

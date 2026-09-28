@@ -335,6 +335,138 @@ describe("Client token refresh", () => {
     expect((await first).type).toBe(Type.NOTICE)
   })
 
+  it("does not log out a refreshed session for an earlier request's 401", async () => {
+    vi.useFakeTimers()
+    ssoAuthState.setAuthPayload({
+      access_token: "old",
+      refresh_token: "refresh",
+      expires_at: new Date(Date.now() + 60_000).toString(),
+    } as AuthPayload)
+    let finishFirst!: (value: Response) => void
+    const firstResponse = new Promise<Response>((resolve) => {
+      finishFirst = resolve
+    })
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(firstResponse)
+      .mockResolvedValue(response({ notice: "hint" }))
+    vi.stubGlobal("fetch", fetchMock)
+    const client = new Client()
+    client.setCommonHeaders({ Authorization: "Bearer old" })
+    client.refreshTokenMethod = vi.fn(() => {
+      ssoAuthState.setAuthPayload({
+        access_token: "new",
+        refresh_token: "next",
+        expires_at: new Date(Date.now() + 300_000).toString(),
+      } as AuthPayload)
+      return Promise.resolve({ access_token: "new" })
+    })
+    const onUnauthorized = vi.fn()
+    eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
+    try {
+      const first = client.queryRaw("SELECT 1")
+      await vi.advanceTimersByTimeAsync(31_000)
+      expect((await client.queryRaw("SELECT 2")).type).toBe(Type.NOTICE)
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ headers: { Authorization: "Bearer new" } }),
+      )
+
+      finishFirst({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+      } as Response)
+      await expect(first).rejects.toMatchObject({ status: 401 })
+      expect(onUnauthorized).not.toHaveBeenCalled()
+      expect(ssoAuthState.getAuthPayload()?.access_token).toBe("new")
+    } finally {
+      eventBus.unsubscribe(
+        EventType.MSG_CONNECTION_UNAUTHORIZED,
+        onUnauthorized,
+      )
+    }
+  })
+
+  it("still reports a 401 from the current token", async () => {
+    setExpiringToken()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+      } as Response),
+    )
+    const client = new Client()
+    client.setCommonHeaders({ Authorization: "Bearer stale" })
+    const onUnauthorized = vi.fn()
+    eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
+    try {
+      await expect(client.queryRaw("SELECT 1")).rejects.toMatchObject({
+        status: 401,
+      })
+      expect(onUnauthorized).toHaveBeenCalledTimes(1)
+    } finally {
+      eventBus.unsubscribe(
+        EventType.MSG_CONNECTION_UNAUTHORIZED,
+        onUnauthorized,
+      )
+    }
+  })
+
+  it("starts SQL timing and the request callback after refresh", async () => {
+    vi.useFakeTimers()
+    setExpiringToken()
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          setTimeout(
+            () =>
+              resolve(
+                response({
+                  columns: [],
+                  count: 0,
+                  dataset: [],
+                  timings: {
+                    compiler: 0,
+                    authentication: 0,
+                    count: 0,
+                    execute: 0,
+                  },
+                }),
+              ),
+            20,
+          )
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    let resolveRefresh!: (token: Partial<AuthPayload>) => void
+    const client = new Client()
+    client.refreshTokenMethod = () =>
+      new Promise<Partial<AuthPayload>>((resolve) => {
+        resolveRefresh = resolve
+      })
+    const onRequestStart = vi.fn()
+    const query = client.queryRaw("SELECT 1", { onRequestStart })
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(onRequestStart).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    resolveRefresh({ access_token: "new" })
+    await vi.advanceTimersByTimeAsync(20)
+    const result = await query
+    expect(onRequestStart).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.not.stringContaining("onRequestStart"),
+      expect.any(Object),
+    )
+    expect(result.type).toBe(Type.DQL)
+    if (result.type !== Type.DQL) throw new Error("expected DQL")
+    expect(result.timings.fetch).toBe(20_000_000)
+  })
+
   it("releases queries across Client instances after one rejection", async () => {
     setExpiringToken()
     vi.stubGlobal(
