@@ -28,6 +28,7 @@ import {
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { toast } from "../../../../components/Toast"
+import { resolveAutoRefresh, resolveCellView } from "../notebookUtils"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
@@ -37,16 +38,14 @@ import {
   isDoubleView,
   isExpectingResult,
   minBottomHeightFor,
-  resolveAutoRefresh,
   resolveCellPaneLayout,
-  resolveCellView,
-} from "../notebookUtils"
+} from "../cellSizing"
 import {
   useCellContentMode,
   useCellVirtualizationEngine,
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
-import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
+import { useCellFetching } from "../cellRefresh/CellRefreshContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
@@ -154,7 +153,7 @@ const CellInner: React.FC<Props> = ({
   const { loading: chartLoading, refreshing: chartRefreshing } =
     useChartLoading(cell)
   const chartZoomed = useChartZoomed(cell.id)
-  const fetchState = useCellFetchState(cell.id)
+  const chartFetching = useCellFetching(cell.id)
   const contentMode = useCellContentMode(cell.id)
   const virtualizationEngine = useCellVirtualizationEngine()
   const resultStatus = useCellResultStatus(cell.id)
@@ -304,7 +303,7 @@ const CellInner: React.FC<Props> = ({
   // Stop exists for the first run or the first chart fetch only: a refresh
   // keeps its rows or frame on screen and never locks the cell.
   const showStopButton = isDrawMode
-    ? chartLoading && (fetchState?.fetching ?? false)
+    ? chartLoading && chartFetching
     : isGridLoading
 
   const isExternalSyncRef = useRef(false)

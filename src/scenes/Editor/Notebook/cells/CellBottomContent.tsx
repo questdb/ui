@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo } from "react"
-import styled from "styled-components"
 import type { NotebookCell } from "../../../../store/notebook"
 import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
@@ -9,6 +8,7 @@ import {
   useCellRefresh,
 } from "../cellRefresh/CellRefreshContext"
 import { DrawCanvas } from "../DrawCanvas"
+import { PaneEmptyState } from "../PaneEmptyState"
 import { InlineResultTable } from "../result-table"
 import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
@@ -21,17 +21,6 @@ import {
   deriveStatementFrame,
   statementKeysFor,
 } from "../statementIdentity"
-
-// Mirrors DrawCanvas's EmptyState: a failed snapshot read keeps the reserved
-// pane and says so, instead of an endless shimmer or a silent collapse.
-const LoadFailureState = styled.div`
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  font-size: ${({ theme }) => theme.fontSize.sm};
-`
 
 type Props = {
   cell: NotebookCell
@@ -165,9 +154,9 @@ export const CellBottomContent: React.FC<Props> = ({
   if (!expectingResult) return null
   if (resultStatus === "failed") {
     return (
-      <LoadFailureState role="alert" aria-live="assertive" aria-atomic="true">
+      <PaneEmptyState role="alert" aria-live="assertive" aria-atomic="true">
         Result failed to load. Run the cell again to restore it.
-      </LoadFailureState>
+      </PaneEmptyState>
     )
   }
   return <GridShimmer statementCount={0} bufferId={bufferId} cellId={cell.id} />

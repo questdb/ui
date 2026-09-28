@@ -13,7 +13,7 @@ import {
 } from "./notebookTransitions"
 import type { ViewParts } from "../notebookDexieView"
 import { NotebookToolError } from "../notebookToolError"
-import { topHeightForSql } from "../../../scenes/Editor/Notebook/notebookUtils"
+import { topHeightForSql } from "../../../scenes/Editor/Notebook/cellSizing"
 import {
   MAX_CELL_LINES,
   MAX_NOTEBOOK_CELLS,

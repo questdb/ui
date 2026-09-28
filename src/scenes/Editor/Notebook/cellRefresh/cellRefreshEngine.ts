@@ -76,7 +76,8 @@ export type CellClassifyBlock =
 export type CellFetchState = {
   queries: string[]
   // Keys of `queries`, derived once per SQL change so no round, render or
-  // edit re-keys the statement list.
+  // edit re-keys the statement list. An entry is keyed on first use, and
+  // getState only returns keyed state.
   slotKeys: StatementKey[]
   queriesKey: string
   fetching: boolean
@@ -317,8 +318,9 @@ type Entry = {
   kind: CellEntryKind
   cellId: string
   sql: string
-  // Identities of `state.queries`, derived with its keys once per SQL change.
-  identitiesKey: string
+  // Identities of `state.queries`, derived with its keys once per SQL change;
+  // null until the entry is first keyed.
+  identitiesKey: string | null
   autoRefresh: AutoRefresh
   visible: boolean
   pendingManualRefresh: boolean
@@ -614,7 +616,10 @@ export class CellRefreshEngine {
   }
 
   getState(cellId: string): CellFetchState | undefined {
-    return this.entries.get(cellId)?.state
+    const entry = this.entries.get(cellId)
+    if (!entry) return undefined
+    if (entry.identitiesKey === null) this.keyEntry(entry)
+    return entry.state
   }
 
   isRefreshing(cellId: string): boolean {
@@ -734,7 +739,7 @@ export class CellRefreshEngine {
   }
 
   private applyRefreshSeed(entry: Entry, seed: SnapshotRefreshState) {
-    const slotKeys = new Set(entry.state.slotKeys)
+    const slotKeys = new Set(this.slotKeysOf(entry))
     const slotErrors = new Map(entry.state.slotErrors)
     const patch: Partial<CellFetchState> = {}
     for (const { statementKey, message } of seed.refreshErrors ?? []) {
@@ -747,18 +752,16 @@ export class CellRefreshEngine {
 
   private createEntry(cell: NotebookCell, kind: CellEntryKind) {
     const queries = getQueriesFromText(cell.value)
-    const { slotKeys, identitiesKey } = keyedStatements(queries)
-    const state = initialFetchState(queries, slotKeys)
     const entry: Entry = {
       kind,
       cellId: cell.id,
       sql: cell.value,
-      identitiesKey,
+      identitiesKey: null,
       autoRefresh: resolveAutoRefresh(
         cell.autoRefresh,
         this.autoRefreshDefault,
       ),
-      state,
+      state: initialFetchState(queries, []),
       visible: this.visibilityByCell.get(cell.id) ?? false,
       pendingManualRefresh: false,
       manualRefreshInFlight: false,
@@ -863,9 +866,10 @@ export class CellRefreshEngine {
     this.dropPendingSnapshot(entry)
     const queries = getQueriesFromText(sql)
     const queriesKey = joinQueriesKey(queries)
+    const previousIdentitiesKey = this.identitiesKeyOf(entry)
     const { slotKeys, identitiesKey } = keyedStatements(queries)
     const sameQueries = this.settledIdentitiesKey(entry) === identitiesKey
-    if (entry.kind === "chart" && identitiesKey !== entry.identitiesKey) {
+    if (entry.kind === "chart" && identitiesKey !== previousIdentitiesKey) {
       resetChartZoom(entry.cellId)
     }
     entry.identitiesKey = identitiesKey
@@ -898,8 +902,27 @@ export class CellRefreshEngine {
   private settledIdentitiesKey(entry: Entry): string | null {
     const { settledKey, queriesKey } = entry.state
     if (settledKey === null) return null
-    if (settledKey === queriesKey) return entry.identitiesKey
+    if (settledKey === queriesKey) return this.identitiesKeyOf(entry)
     return normalizedQueriesKey(settledKey)
+  }
+
+  // Keying runs the formatter over every statement, so an entry is keyed on
+  // first use instead of on creation: the off-screen cells of a notebook that
+  // just opened never pay for it. Unkeyed state never leaves the engine.
+  private keyEntry(entry: Entry): string {
+    const { slotKeys, identitiesKey } = keyedStatements(entry.state.queries)
+    entry.identitiesKey = identitiesKey
+    entry.state = { ...entry.state, slotKeys }
+    return identitiesKey
+  }
+
+  private identitiesKeyOf(entry: Entry): string {
+    return entry.identitiesKey ?? this.keyEntry(entry)
+  }
+
+  private slotKeysOf(entry: Entry): StatementKey[] {
+    if (entry.identitiesKey === null) this.keyEntry(entry)
+    return entry.state.slotKeys
   }
 
   // One render for the whole pass: the statement list and the frame it
@@ -908,7 +931,10 @@ export class CellRefreshEngine {
   // keys come from them before the new list replaces them.
   private applySql(entry: Entry, sql: string) {
     this.batchUpdates(() => {
-      const frameKeys = new FrameKeys(entry.state.queries, entry.state.slotKeys)
+      const frameKeys = new FrameKeys(
+        entry.state.queries,
+        this.slotKeysOf(entry),
+      )
       this.applySqlState(entry, sql)
       if (entry.kind === "grid") this.reconcileGridResult(entry, frameKeys)
       if (entry.visible) this.ensureData(entry)
@@ -1298,7 +1324,9 @@ export class CellRefreshEngine {
       const carried = previousFrame
         ? chartableResultsByKey(previousFrame)
         : new Map<StatementKey, SingleQueryResult>()
-      const carriedResults = entry.state.slotKeys.map((key) => carried.get(key))
+      const carriedResults = this.slotKeysOf(entry).map((key) =>
+        carried.get(key),
+      )
       const fetchStartedAt = Date.now()
       const out = await Promise.all(
         queries.map((q, index) => {
@@ -1414,7 +1442,7 @@ export class CellRefreshEngine {
         this.updatePoll(entry)
         return
       }
-      const slotKeys = entry.state.slotKeys
+      const slotKeys = this.slotKeysOf(entry)
       const frameKeys = new FrameKeys(queries, slotKeys)
       const invalidSlots: Array<{ key: StatementKey; message: string }> = []
       const launchSlots: Array<{ key: StatementKey; index: number }> = []
@@ -1575,13 +1603,11 @@ export class CellRefreshEngine {
   // The snapshot write unit is always the WHOLE visible frame — never an
   // error alone.
   //
-  // Every settled round queues a write through the 10s throttle — an
-  // unchanged frame still re-persists once per window, so a reload's savedAt
-  // stays current instead of showing minutes-old data under a live poller.
-  // The throttle is bypassed only when the error set CHANGED (first failure,
-  // new message, recovery) — that state must survive an immediate reload —
-  // and when the user asked by hand. A repeating failure follows the
-  // throttle like any healthy tick; losing a throttled tick is
+  // Every settled round queues a write through the 10s throttle, an unchanged
+  // frame included. The throttle is bypassed only when the error set CHANGED
+  // (first failure, new message, recovery) — that state must survive an
+  // immediate reload — and when the user asked by hand. A repeating failure
+  // follows the throttle like any healthy tick; losing a throttled tick is
   // self-correcting — the next one regenerates it. The pagehide flush is a
   // best-effort backstop, not a guarantee: an IndexedDB write started during
   // teardown is routinely dropped, so nothing durable may depend on it.
@@ -1644,11 +1670,12 @@ export class CellRefreshEngine {
   // results align with the entry's slot keys by position.
   private deriveChartSlotErrors(entry: Entry) {
     const current = this.getDeps().getCellResult(entry.cellId)
+    const slotKeys = this.slotKeysOf(entry)
     const slotErrors = new Map<StatementKey, string>()
-    if (current && current.results.length === entry.state.slotKeys.length) {
+    if (current && current.results.length === slotKeys.length) {
       current.results.forEach((result, index) => {
         if (result.type === "error")
-          slotErrors.set(entry.state.slotKeys[index], result.error)
+          slotErrors.set(slotKeys[index], result.error)
       })
     }
     const previous = entry.state.slotErrors

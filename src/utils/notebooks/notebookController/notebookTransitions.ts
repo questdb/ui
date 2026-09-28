@@ -12,34 +12,38 @@ import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
 import {
-  agentCellDimensionsPatch,
   buildAppliedNotebookState,
+  clearCellAutoRefresh,
+  duplicateCellAt,
+  insertCell,
+  nextGridSeedPosition,
+  removeCell,
+  swapCellDown,
+  swapCellUp,
+  upsertCellLayout,
+  type CellGridPosition,
+  type CellResultStatus,
+} from "../../../scenes/Editor/Notebook/notebookUtils"
+import {
   carriedRunError,
   carriedRunStatus,
+} from "../../../scenes/Editor/Notebook/runHistory"
+import {
+  agentCellDimensionsPatch,
   cellGridBoundsError,
   cellHasRunOutcome,
   cellModeChangePatch,
   discardCellResult,
-  clearCellAutoRefresh,
   computeAgentCellGridH,
-  duplicateCellAt,
-  insertCell,
   isExpectingResult,
   mergeCellChartConfig,
-  nextGridSeedPosition,
   agentCellPresentation,
   type AgentCellPresentation,
-  removeCell,
-  swapCellDown,
-  swapCellUp,
   topHeightForSql,
-  upsertCellLayout,
   validateAgentCellDimensions,
-  type CellGridPosition,
   type AgentCellDimensions,
-  type CellResultStatus,
   type CellResultStatusReader,
-} from "../../../scenes/Editor/Notebook/notebookUtils"
+} from "../../../scenes/Editor/Notebook/cellSizing"
 import { type RunCancelReason } from "../../../scenes/Editor/Notebook/runCancellation"
 import { reconcileCellResultForValue } from "../../../scenes/Editor/Notebook/statementIdentity"
 

@@ -8,11 +8,11 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { CellResultStatus } from "../../../scenes/Editor/Notebook/notebookUtils"
 import type {
   AgentHeightValue,
   CellResultStatusReader,
-  CellResultStatus,
-} from "../../../scenes/Editor/Notebook/notebookUtils"
+} from "../../../scenes/Editor/Notebook/cellSizing"
 import {
   type CellRunOutcome,
   CELL_CHANGED_BEFORE_RUN_NOTE,
@@ -130,6 +130,7 @@ export type NotebookController = {
 export type NotebookControllerActions = {
   readRefreshState: () => ReadonlyMap<string, CellRefreshView>
   readResultStatus: (cellId: string) => CellResultStatus
+  noteResultMissing: (cellId: string) => void
   runCell: (
     cellId: string,
     sql?: string,
@@ -230,7 +231,7 @@ export const createNotebookController = (
   // The live surface's transition runner: apply the transition to React state
   // via the provider's applyTransition, which settles once the document is
   // durable. A result held only in a snapshot (a released cell) is checked
-  // after that; its snapshot stays for hydration to reconcile.
+  // after that, and an outdated one is dropped like on the passive route.
   const applyMutation = async <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ): Promise<T> => {
@@ -245,9 +246,16 @@ export const createNotebookController = (
       return out
     })
     if (!withSnapshotsCleared) return result
-    return withSnapshotsCleared(
-      await snapshotsOutdatedBy(bufferId, snapshotEdits),
+    const outdatedSnapshots = await snapshotsOutdatedBy(bufferId, snapshotEdits)
+    for (const cellId of outdatedSnapshots) {
+      liveActionsRef.current.noteResultMissing(cellId)
+    }
+    await Promise.all(
+      outdatedSnapshots.map((cellId) =>
+        deleteCellSnapshot(bufferId, cellId).catch(() => undefined),
+      ),
     )
+    return withSnapshotsCleared(outdatedSnapshots)
   }
   const mutate: NotebookMutate = (transition) => applyMutation(transition)
   const mutateWithResultStatus: NotebookMutateWithResultStatus = (transition) =>

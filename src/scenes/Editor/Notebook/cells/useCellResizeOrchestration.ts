@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellResize } from "./useCellResize"
@@ -14,7 +14,7 @@ import {
   minBottomHeightFor,
   partitionCellHeights,
   topHeightForSql,
-} from "../notebookUtils"
+} from "../cellSizing"
 
 type Options = {
   cell: NotebookCell
@@ -114,11 +114,18 @@ export const useCellResizeOrchestration = ({
     ),
   )
 
-  const { topHeight, bottomHeight } = computeCellHeights(cell, {
-    liveTopHeight: topResize.liveHeight,
-    liveBottomHeight: bottomResize.liveHeight,
-    expectingResult,
-  })
+  // An unpinned result pane sizes itself from the result frame, which formats
+  // the statements when the frame text and the SQL differ: once per change,
+  // not on every render in between.
+  const { topHeight, bottomHeight } = useMemo(
+    () =>
+      computeCellHeights(cell, {
+        liveTopHeight: topResize.liveHeight,
+        liveBottomHeight: bottomResize.liveHeight,
+        expectingResult,
+      }),
+    [cell, topResize.liveHeight, bottomResize.liveHeight, expectingResult],
+  )
 
   const spotlightEditorRatio =
     spotlightLiveRatio ??

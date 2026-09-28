@@ -1,4 +1,4 @@
-import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/notebookUtils"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
 import { loadSnapshotCellIds } from "../../store/notebookResults"
 
 // A passive notebook view persists only the run marker; the result payload

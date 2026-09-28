@@ -46,12 +46,14 @@ import {
 import {
   type CellRunOutcome,
   clearCellAutoRefresh,
-  computeResultBottomHeight,
   countAutoRefreshOverrides,
-  discardCellResult,
   generateId,
-  releaseCellResultPatch,
 } from "./notebookUtils"
+import {
+  computeResultBottomHeight,
+  discardCellResult,
+  releaseCellResultPatch,
+} from "./cellSizing"
 import { type RunCancelReason } from "./runCancellation"
 import {
   snapshotResultsMatchQueries,
@@ -183,6 +185,7 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   getMaximizedCellId: () => null,
   readRefreshState: () => new Map(),
   readResultStatus: () => "unrequested",
+  noteResultMissing: () => undefined,
   flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
     Promise.resolve(
@@ -398,14 +401,20 @@ export const NotebookProvider: React.FC<{
     [persistDebounced, store.cellsRef],
   )
 
+  const warnPersistFailure = useCallback(
+    (error: unknown) =>
+      console.warn(`notebook ${bufferId}: document write failed`, error),
+    [bufferId],
+  )
+
   const updateSettings = useCallback(
     (updates: Partial<NotebookSettings>) => {
       const next = { ...settingsRef.current, ...updates }
       settingsRef.current = next
       setSettingsState(next)
-      void persistImmediately(store.cellsRef.current)
+      void persistImmediately(store.cellsRef.current).catch(warnPersistFailure)
     },
-    [persistImmediately, store.cellsRef],
+    [persistImmediately, store.cellsRef, warnPersistFailure],
   )
 
   const releaseCellExecution = useCallback(
@@ -500,12 +509,10 @@ export const NotebookProvider: React.FC<{
   const applyTransition = useCallback(
     <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
       const { result, persisted } = commitTransition(run)
-      persisted.catch((error) =>
-        console.warn(`notebook ${bufferId}: document write failed`, error),
-      )
+      persisted.catch(warnPersistFailure)
       return result
     },
-    [commitTransition, bufferId],
+    [commitTransition, warnPersistFailure],
   )
 
   // The agent route reports success only once the document is durable, and a
@@ -884,6 +891,7 @@ export const NotebookProvider: React.FC<{
     getMaximizedCellId: () => maximizedCellIdRef.current,
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
     readResultStatus: (cellId) => resultHydration.statusOf(cellId),
+    noteResultMissing: (cellId) => resultHydration.noteMissing(cellId),
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
     applyTransition: applyTransitionPersisted,
   }

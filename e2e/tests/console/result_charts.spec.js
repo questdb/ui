@@ -53,7 +53,7 @@ describe("questdb charts", () => {
       .should("be.gt", 0)
   })
 
-  it("keeps reset zoom available when the responsive slider disappears", () => {
+  it("keeps reset zoom available after the viewport widens", () => {
     // Given a narrow viewport with a dense chart that shows the zoom slider
     cy.viewport(760, 900)
     cy.typeQueryDirectly(
@@ -75,7 +75,7 @@ describe("questdb charts", () => {
         cy.wrap(canvas).realMouseUp({ x: 130, y: sliderY })
       })
 
-    // Then reset zoom appears and survives the slider disappearing on a wide viewport
+    // Then reset zoom appears and survives the viewport widening
     cy.getByDataHook("result-chart-reset-zoom").should("be.visible")
 
     cy.viewport(1280, 900)

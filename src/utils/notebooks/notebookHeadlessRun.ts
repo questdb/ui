@@ -28,13 +28,13 @@ import {
   errorResult,
   MOUNTED_MID_RUN_NOTE,
   NOTEBOOK_ROW_CAP,
-  patchCellRunResult,
   RESULT_NOT_SAVED_RUN_NOTE,
   singleResultFromExec,
   STORAGE_FULL_RUN_NOTE,
   summarizeCellResults,
   USER_CHANGED_MID_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { patchCellRunResult } from "../../scenes/Editor/Notebook/cellSizing"
 import {
   cancelledBeforeLaunchSummary,
   midRunCancellationNote,

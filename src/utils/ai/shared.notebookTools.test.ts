@@ -42,7 +42,7 @@ import { dispatchMCPTool } from "../mcp/dispatchMCPTool"
 import { EXPECTED_MCP_VERSION } from "../mcp/protocolVersion"
 import type { ToolExecutionContext } from "./shared"
 import { createNotebookFreshness } from "../notebooks/notebookFreshness"
-import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
+import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/cellSizing"
 
 const cell = (
   id: string,

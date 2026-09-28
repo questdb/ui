@@ -72,3 +72,21 @@ export const useCellFetchState = (
 
   return state
 }
+
+export const useCellFetching = (cellId: string): boolean => {
+  const engine = useContext(CellRefreshContext)
+  const [fetching, setFetching] = useState<boolean>(
+    () => engine?.getState(cellId)?.fetching ?? false,
+  )
+
+  useEffect(() => {
+    if (!engine) return
+    const apply = () => setFetching(engine.getState(cellId)?.fetching ?? false)
+
+    apply()
+
+    return engine.subscribe(cellId, apply)
+  }, [engine, cellId])
+
+  return fetching
+}

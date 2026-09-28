@@ -18,13 +18,13 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
+import { isAutoRefresh } from "../Notebook/notebookUtils"
 import {
   clampPaneHeight,
   foldLegacyMaximizedHeights,
-  isAutoRefresh,
   minBottomHeightFor,
   minTopHeightFor,
-} from "../Notebook/notebookUtils"
+} from "../Notebook/cellSizing"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
   isCellPaneView,

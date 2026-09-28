@@ -1,5 +1,5 @@
 import type { EChartsOption } from "echarts"
-import { chartZoomDensity, type ChartZoomDensity } from "./chartDensity"
+import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -546,14 +546,8 @@ export const buildEchartsOption = (
 // their visibility — never the option's structure, which would remount the
 // chart through its structural key. Wheel zoom arms while marks are merely
 // tight (it costs no plot space); the slider costs plot height, so it waits
-// until marks fall under the readable floor. The renderer applies this from
-// its own measured size.
-export const withZoomSlider = (
-  option: EChartsOption,
-  containerWidthPx: number,
-): EChartsOption =>
-  withZoomDensity(option, chartZoomDensity(option, containerWidthPx))
-
+// until marks fall under the readable floor. The renderer measures the density
+// from its own width.
 export const withZoomDensity = (
   option: EChartsOption,
   density: ChartZoomDensity,

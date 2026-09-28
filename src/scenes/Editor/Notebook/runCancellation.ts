@@ -90,13 +90,13 @@ export const cancelledBeforeRunNote = (reason: RunCancellation): string =>
   "finished, so nothing was executed. Call get_notebook_state to see the " +
   "current cell state; it is safe to re-run."
 
-export const MODE_CHANGED_MID_RUN_NOTE =
+const MODE_CHANGED_MID_RUN_NOTE =
   "Run completed, but the cell was switched to chart mode while it was " +
   "running, so the result was not recorded; the chart now owns the cell. " +
   "Call get_notebook_state to see the current cell state, and verify before " +
   "re-running anything with side effects."
 
-export const CANCELLED_MID_RUN_NOTE =
+const CANCELLED_MID_RUN_NOTE =
   "Run completed, but it was cancelled while it was running, so the result " +
   "was not recorded. Call get_notebook_state to see the current cell state, " +
   "and verify before re-running anything with side effects."

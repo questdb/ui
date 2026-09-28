@@ -27,7 +27,8 @@ import {
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
-import type { CellPaneLayout, CellToolbarTier } from "../notebookUtils"
+import type { CellToolbarTier } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellFetchState } from "../cellRefresh/CellRefreshContext"

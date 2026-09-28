@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { resizeHeightForKey } from "./ResizeHandle"
+import { isResizeKey, resizeHeightForKey } from "./ResizeHandle"
 
 describe("resizeHeightForKey", () => {
   it("resizes by arrow-key steps and clamps to separator bounds", () => {
@@ -36,5 +36,20 @@ describe("resizeHeightForKey", () => {
     expect(home).toBe(72)
     expect(end).toBe(200)
     expect(unrelated).toBeNull()
+  })
+})
+
+describe("isResizeKey", () => {
+  it("names the keys whose release ends a keyboard resize", () => {
+    // Given the keys a held resize can involve
+    // When each is checked
+    // Then only the height keys count, not the modifier held with them
+    expect(["ArrowUp", "ArrowDown", "Home", "End"].map(isResizeKey)).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ])
+    expect(isResizeKey("Shift")).toBe(false)
   })
 })

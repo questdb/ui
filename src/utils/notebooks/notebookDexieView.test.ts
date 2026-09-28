@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { NotebookViewState } from "../../store/notebook"
 import { migratePersistedNotebookView } from "./notebookDexieView"
+import { MAX_PANE_HEIGHT_PX } from "../../scenes/Editor/Notebook/cellSizing"
 
 const legacyView = (isViewMaximized?: boolean): NotebookViewState =>
   ({
@@ -66,6 +67,35 @@ describe("migratePersistedNotebookView preferred view", () => {
 
     // Then nothing folds twice
     expect(reread).toEqual(migrated)
+  })
+
+  it("stops the folded result pane at the pane ceiling", () => {
+    // Given a maximized cell whose editor and result heights sum past the ceiling
+    const view = {
+      cells: [
+        {
+          id: "chart",
+          position: 0,
+          value: "SELECT 1",
+          mode: "draw",
+          topHeight: 1800,
+          bottomHeight: 1500,
+          topResized: true,
+          bottomResized: true,
+          isViewMaximized: true,
+        },
+      ],
+    } as unknown as NotebookViewState
+
+    // When it is read after the upgrade
+    const migrated = migratePersistedNotebookView(view).cells[0]
+
+    // Then the result pane is clamped to the ceiling
+    expect(migrated).toMatchObject({
+      paneView: "result",
+      bottomHeight: MAX_PANE_HEIGHT_PX,
+      bottomResized: true,
+    })
   })
 
   it("folds the default editor height when a maximized cell stored none", () => {

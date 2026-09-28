@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { clampPaneHeight } from "../notebookUtils"
+import { clampPaneHeight } from "../cellSizing"
 
 export type ResizeController = {
   /** Live drag value that should override any persisted height. Null when idle. */

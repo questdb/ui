@@ -61,11 +61,8 @@ export const useCellRunActions = ({
   // button spins the refresh button instead.
   const firstRunRef = useRef(false)
 
-  // Returns true only when the cell actually entered draw mode, so a caller can
-  // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
-  // draw was refused by validation.
-  const handleDrawClick = useCallback(async (): Promise<boolean> => {
-    if (isRunning) return false
+  const handleDrawClick = useCallback(async (): Promise<void> => {
+    if (isRunning) return
     if (isDrawMode) {
       setCellMode(cell.id, "run")
       clearCellResult(cell.id)
@@ -75,7 +72,7 @@ export const useCellRunActions = ({
         cellId: cell.id,
         mode: "run",
       })
-      return false
+      return
     }
     // A draw from an empty cell is its first run: the gate's validation is
     // the phase the Stop button can end.
@@ -87,7 +84,7 @@ export const useCellRunActions = ({
         void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED)
         toast.error(gate.reason)
       }
-      return false
+      return
     }
     setCellMode(cell.id, "draw")
     emitUserAction({
@@ -96,7 +93,6 @@ export const useCellRunActions = ({
       cellId: cell.id,
       mode: "draw",
     })
-    return true
   }, [
     cell.id,
     cell.result,

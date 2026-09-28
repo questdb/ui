@@ -15,10 +15,8 @@ import type {
 } from "../../store/notebook"
 import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
-import {
-  buildPersistPayload,
-  foldLegacyMaximizedHeights,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
+import { foldLegacyMaximizedHeights } from "../../scenes/Editor/Notebook/cellSizing"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
 // and the cell guards shared by the Dexie controller and the headless run

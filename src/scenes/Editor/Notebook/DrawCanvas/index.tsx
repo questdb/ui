@@ -30,6 +30,7 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { useNotebookBufferId } from "../NotebookProvider"
+import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
 
@@ -68,16 +69,7 @@ const Canvas = styled.div`
   background: ${({ theme }) => theme.color.surfaceInset};
 `
 
-const EmptyState = styled.div`
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  font-size: ${({ theme }) => theme.fontSize.sm};
-`
-
-const CancelledState = styled(EmptyState)`
+const CancelledState = styled(PaneEmptyState)`
   flex-direction: column;
   gap: 1rem;
 `
@@ -237,9 +229,9 @@ export const DrawCanvas: React.FC<Props> = ({
               : ""}
       </VisuallyHiddenStatus>
       {loading ? (
-        <EmptyState aria-hidden="true">
+        <PaneEmptyState aria-hidden="true">
           <CircleNotchSpinner size={24} />
-        </EmptyState>
+        </PaneEmptyState>
       ) : cancelled ? (
         <CancelledState data-hook="draw-canvas-cancelled">
           <span aria-hidden="true">Chart loading was cancelled.</span>
@@ -253,7 +245,7 @@ export const DrawCanvas: React.FC<Props> = ({
           </Button>
         </CancelledState>
       ) : empty ? (
-        <EmptyState aria-hidden="true">{emptyMessage}</EmptyState>
+        <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
         <Canvas data-hook="draw-canvas">
           <ChartRenderer

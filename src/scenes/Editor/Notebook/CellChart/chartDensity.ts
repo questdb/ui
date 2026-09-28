@@ -91,13 +91,3 @@ export const chartZoomDensity = (
   include(maxDataLength(points), 1, MIN_POINT_PX)
   return density
 }
-
-export const needsZoomSlider = (
-  option: EChartsOption,
-  containerWidthPx: number,
-): boolean => chartZoomDensity(option, containerWidthPx).slider
-
-export const needsWheelZoom = (
-  option: EChartsOption,
-  containerWidthPx: number,
-): boolean => chartZoomDensity(option, containerWidthPx).wheel

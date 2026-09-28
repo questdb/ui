@@ -2,7 +2,7 @@ import React from "react"
 import { CellViewToggle } from "./CellViewToggle"
 import { CellRefreshButton } from "./CellRefreshButton"
 import type { AutoRefresh } from "../../../../store/notebook"
-import type { CellPaneLayout } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
 
 type Props = {
   cellId: string

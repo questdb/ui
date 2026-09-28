@@ -26,9 +26,9 @@ import {
   errorResult,
   NOTEBOOK_ROW_CAP,
   resolveRunCompletion,
-  runHistoryPatch,
   singleResultFromExec,
 } from "./notebookUtils"
+import { runHistoryPatch } from "./runHistory"
 import {
   cancelledResult,
   runCancellationOf,

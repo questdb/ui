@@ -183,7 +183,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
   const { active: activeQueryExecution } = useQueryExecutionState()
   const activeSidebar = useSelector(selectors.console.getActiveSidebar)
   const gridRef = useRef<IQuestDBGrid | null>(null)
-  const resultToolbarRef = useRef<HTMLDivElement | null>(null)
+  const resultActionsRef = useRef<HTMLDivElement | null>(null)
   const runningRef = useRef(running)
   const [gridFreezeLeftState, setGridFreezeLeftState] = useState<number>(0)
   const [gridHasSelection, setGridHasSelection] = useState<boolean>(false)
@@ -408,15 +408,16 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
     downloadQueryResult(sql, format)
   }
 
+  const focusResultActions = () => {
+    resultActionsRef.current
+      ?.querySelector<HTMLButtonElement>("button")
+      ?.focus()
+  }
+
   return (
     <Root>
       <Wrapper>
-        <Actions
-          ref={resultToolbarRef}
-          role="toolbar"
-          aria-label="Result actions"
-          tabIndex={-1}
-        >
+        <Actions ref={resultActionsRef}>
           {count !== undefined && (
             <ResultCountBadge
               aria-label={`${count.toLocaleString()} ${count === 1 ? "row" : "rows"}`}
@@ -539,7 +540,7 @@ const Result = ({ viewMode }: { viewMode: ResultViewMode }) => {
             <ResultChart
               result={result?.type === QuestDB.Type.DQL ? result : null}
               visible={viewMode === "chart"}
-              onResetZoomFocus={() => resultToolbarRef.current?.focus()}
+              onResetZoomFocus={focusResultActions}
             />
           )}
         </Content>

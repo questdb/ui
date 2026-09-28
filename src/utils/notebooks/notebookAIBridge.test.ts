@@ -501,6 +501,7 @@ const makeLiveActions = (
     flushChartSnapshots: () => Promise.resolve(),
     readRefreshState: () => new Map(),
     readResultStatus: () => "unrequested" as const,
+    noteResultMissing: vi.fn(),
   }
   return { live, applied }
 }
@@ -571,7 +572,7 @@ describe("createNotebookController — applyNotebookState cleared results", () =
     await db.notebook_results.clear()
   })
 
-  it("reports a released cell whose stored snapshot the rewrite outdates, and keeps the snapshot for hydration", async () => {
+  it("reports a released cell whose stored snapshot the rewrite outdates, and drops the snapshot", async () => {
     // Given a released cell: its result lives only in its snapshot
     const released: NotebookCell = { id: "a", position: 0, value: "SELECT 1" }
     await saveCellSnapshot({
@@ -595,8 +596,9 @@ describe("createNotebookController — applyNotebookState cleared results", () =
     // Then the cell is reported as cleared
     expect(out.resultsCleared).toEqual(["a"])
 
-    // And the snapshot stays until hydration reconciles it
-    expect(await loadCellSnapshot(1, "a")).toBeDefined()
+    // And its result is gone, like on the passive route
+    expect(await loadCellSnapshot(1, "a")).toBeUndefined()
+    expect(live.noteResultMissing).toHaveBeenCalledWith("a")
   })
 })
 
@@ -623,6 +625,7 @@ describe("createNotebookController — live runCell supersession", () => {
     flushChartSnapshots: () => Promise.resolve(),
     readRefreshState: () => new Map(),
     readResultStatus: () => "unrequested" as const,
+    noteResultMissing: () => undefined,
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({

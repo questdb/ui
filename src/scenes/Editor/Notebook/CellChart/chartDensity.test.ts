@@ -1,17 +1,26 @@
 import { describe, it, expect } from "vitest"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
+import type { EChartsOption } from "echarts"
 import {
   buildEchartsOption,
-  withZoomSlider,
+  withZoomDensity,
   type ResolvedQuery,
 } from "./buildEchartsOption"
 import {
+  chartZoomDensity,
   MIN_MARK_PX,
   MIN_POINT_PX,
-  needsWheelZoom,
-  needsZoomSlider,
   WHEEL_ZOOM_HEADROOM,
 } from "./chartDensity"
+
+const needsZoomSlider = (option: EChartsOption, widthPx: number) =>
+  chartZoomDensity(option, widthPx).slider
+
+const needsWheelZoom = (option: EChartsOption, widthPx: number) =>
+  chartZoomDensity(option, widthPx).wheel
+
+const withMeasuredZoom = (option: EChartsOption, widthPx: number) =>
+  withZoomDensity(option, chartZoomDensity(option, widthPx))
 
 const col = (name: string, type: string): ColumnDefinition => ({ name, type })
 
@@ -89,7 +98,7 @@ const line = (count: number) =>
     }),
   ])
 
-describe("needsZoomSlider", () => {
+describe("chartZoomDensity slider", () => {
   it("asks for a slider only once single-series bars fall under the readable width", () => {
     // Given the most single bars the plot can show at the floor
     const limit = readableSlots(singleBarFill, MIN_MARK_PX)
@@ -171,7 +180,7 @@ describe("needsZoomSlider", () => {
   })
 })
 
-describe("needsWheelZoom", () => {
+describe("chartZoomDensity wheel", () => {
   it("arms the wheel at the headroom multiple of the readable floor", () => {
     // Given the most single bars that stay at the wheel threshold (3× the floor)
     const limit = readableSlots(
@@ -207,13 +216,13 @@ type ZoomComponents = [
   { type: string; show: boolean },
 ]
 
-describe("withZoomSlider", () => {
+describe("withZoomDensity", () => {
   it("embeds both zoom components inert on a sparse chart", () => {
     // Given a sparse chart
     const sparse = bars(15, 1)
 
     // When the zoom components are embedded
-    const option = withZoomSlider(sparse, CONTAINER_PX)
+    const option = withMeasuredZoom(sparse, CONTAINER_PX)
 
     // Then the components exist but neither is active, so density changes can
     // never alter the option's structure, and the grid keeps its margin
@@ -228,7 +237,7 @@ describe("withZoomSlider", () => {
     const tight = line(Math.floor(PLOT_PX / 2))
 
     // When the zoom components are embedded
-    const option = withZoomSlider(tight, CONTAINER_PX)
+    const option = withMeasuredZoom(tight, CONTAINER_PX)
 
     // Then only the wheel is active and the grid keeps its margin
     const [inside, slider] = option.dataZoom as ZoomComponents
@@ -242,7 +251,7 @@ describe("withZoomSlider", () => {
     const dense = line(PLOT_PX * 2)
 
     // When the zoom components are embedded
-    const option = withZoomSlider(dense, CONTAINER_PX)
+    const option = withMeasuredZoom(dense, CONTAINER_PX)
 
     // Then both zooms are active and the grid grows at the bottom
     const [inside, slider] = option.dataZoom as ZoomComponents
@@ -254,7 +263,7 @@ describe("withZoomSlider", () => {
   it("leaves an axis-less chart without zoom components", () => {
     // Given a pie option (no xAxis to zoom)
     // When the zoom components are embedded
-    const option = withZoomSlider({ series: [{ type: "pie" }] }, CONTAINER_PX)
+    const option = withMeasuredZoom({ series: [{ type: "pie" }] }, CONTAINER_PX)
 
     // Then no zoom component is added
     expect(option.dataZoom).toBeUndefined()

@@ -24,10 +24,8 @@ import {
   type PermissionDecision,
   type Permissions,
 } from "./permissions"
-import {
-  hasExplicitModeForEditor,
-  isAutoRefresh,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+import { isAutoRefresh } from "../../scenes/Editor/Notebook/notebookUtils"
+import { hasExplicitModeForEditor } from "../../scenes/Editor/Notebook/cellSizing"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
   isValidVariableName,

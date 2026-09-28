@@ -20,7 +20,7 @@ import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
 import {
   agentCellPaneDimensions,
   agentCellPresentation,
-} from "../../scenes/Editor/Notebook/notebookUtils"
+} from "../../scenes/Editor/Notebook/cellSizing"
 import type { CellResultStatus } from "../../scenes/Editor/Notebook/resultHydration/cellResultHydration"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"

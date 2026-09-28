@@ -30,7 +30,7 @@ import {
   MIN_MARKDOWN_HEIGHT_PX,
   MAX_PANE_HEIGHT_PX,
   snapMarkdownTopHeight,
-} from "../notebookUtils"
+} from "../cellSizing"
 
 // The whole cell body shares the editor canvas color so edit and rendered
 // modes are one uniform surface (no card-colored gap at the bottom).

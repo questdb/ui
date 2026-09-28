@@ -676,6 +676,28 @@ describe("CellRefreshEngine", () => {
       expect(engine.getState("c1")?.fetching).toBe(false)
     })
 
+    it("an SQL edit after a stopped first fetch fetches the new SQL", async () => {
+      // Given a stopped first fetch on a draw cell with auto-refresh off
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the user edits the SQL and the edit debounce elapses
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+
+      // Then the new SQL is fetched and the cancelled marker is gone
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.anything(),
+        expect.anything(),
+      )
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+    })
+
     it("a retry clears the cancelled marker and fetches again", async () => {
       // Given a stopped first fetch
       const resolveFetch = deferFetch()

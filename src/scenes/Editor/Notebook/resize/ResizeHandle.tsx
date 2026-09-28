@@ -94,6 +94,9 @@ type Props = {
 const DRAG_THRESHOLD_PX = 3
 const KEYBOARD_STEP_PX = 10
 const KEYBOARD_LARGE_STEP_PX = 50
+const RESIZE_KEYS = new Set(["ArrowUp", "ArrowDown", "Home", "End"])
+
+export const isResizeKey = (key: string): boolean => RESIZE_KEYS.has(key)
 
 export const resizeHeightForKey = (
   key: string,
@@ -140,6 +143,7 @@ export const ResizeHandle: React.FC<Props> = ({
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
   const finishDragRef = useRef<(() => void) | null>(null)
+  const keyboardHeightRef = useRef<number | null>(null)
   // The document listeners live for the whole drag; they read the callbacks
   // through refs so every move sees the current render, not the mousedown one.
   const onResizeRef = useRef(onResize)
@@ -195,19 +199,40 @@ export const ResizeHandle: React.FC<Props> = ({
         return
       }
       if (!targetRef.current) return
+      const currentHeight = Math.round(
+        targetRef.current.getBoundingClientRect().height,
+      )
       const next = resizeHeightForKey(
         e.key,
-        targetRef.current.getBoundingClientRect().height,
+        currentHeight,
         minHeight,
         maxHeight,
         e.shiftKey,
       )
       if (next === null) return
       e.preventDefault()
+      if (next === currentHeight) return
+      keyboardHeightRef.current = next
       onResize(next)
-      onResizeEnd(next)
     },
-    [maxHeight, minHeight, onDoubleClick, onResize, onResizeEnd, targetRef],
+    [maxHeight, minHeight, onDoubleClick, onResize, targetRef],
+  )
+
+  // The hold commits once: on release of the resize key, or on blur when
+  // focus leaves mid-hold. Reads the callback through its ref so the unmount
+  // cleanup below can commit with the pane the hold belonged to.
+  const commitKeyboardResize = useCallback(() => {
+    const height = keyboardHeightRef.current
+    if (height === null) return
+    keyboardHeightRef.current = null
+    onResizeEndRef.current(height)
+  }, [])
+
+  const handleKeyUp = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isResizeKey(e.key)) commitKeyboardResize()
+    },
+    [commitKeyboardResize],
   )
 
   useEffect(() => {
@@ -228,7 +253,13 @@ export const ResizeHandle: React.FC<Props> = ({
   // A new target is another pane: the drag commits the old one where it is
   // and stops. React 17 runs every cleanup before any effect, so the callback
   // ref still holds the old pane's onResizeEnd here.
-  useEffect(() => () => finishDragRef.current?.(), [targetRef])
+  useEffect(
+    () => () => {
+      finishDragRef.current?.()
+      commitKeyboardResize()
+    },
+    [targetRef, commitKeyboardResize],
+  )
 
   return (
     <Handle
@@ -238,6 +269,8 @@ export const ResizeHandle: React.FC<Props> = ({
       onMouseDown={handleMouseDown}
       onDoubleClick={onDoubleClick}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={commitKeyboardResize}
       role="separator"
       aria-orientation="horizontal"
       aria-label={ariaLabel}

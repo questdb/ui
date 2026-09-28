@@ -3,12 +3,14 @@ import styled from "styled-components"
 import { FileSqlIcon, TableIcon } from "@phosphor-icons/react"
 import { Reset } from "../../../../components/icons"
 import { ChartIcon } from "./ChartIcon"
-import { glassLens, IconButton, Spinner, Tooltip } from "../../../../components"
+import { IconButton, Spinner, Tooltip } from "../../../../components"
+import { glassLens } from "../../../../components/SegmentedControl"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
 } from "../NotebookViewToggle"
-import type { CellPaneLayout, CellView } from "../notebookUtils"
+import type { CellView } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
 import { useCellViewActions } from "./useCellViewActions"
 
 const DimSpinner = styled(Spinner)`

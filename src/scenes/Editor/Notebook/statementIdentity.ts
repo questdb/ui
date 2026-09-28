@@ -147,7 +147,7 @@ export const reconcileKeyedResults = (
   }
 }
 
-export const reconcileResultsForSlotKeys = (
+const reconcileResultsForSlotKeys = (
   statements: string[],
   slotKeys: StatementKey[],
   previous: CellResult,

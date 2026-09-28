@@ -5,7 +5,8 @@ import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
-import type { CellPaneLayout, CellView } from "../notebookUtils"
+import type { CellView } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
 
 type CellViewActionMethod = "menu" | "toggle"
 

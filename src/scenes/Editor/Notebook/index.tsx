@@ -43,15 +43,17 @@ import { NotebookToolbar } from "./NotebookToolbar"
 import { NotebookMcpPromo } from "./NotebookMcpPromo"
 import { renderEdgeHandle } from "./resize"
 import {
+  generateDefaultLayout as generateDefaultLayoutPure,
+  mergeCellLayout,
+} from "./notebookUtils"
+import {
   paneHeightsFromGridRows,
   computeCellGridBounds,
-  generateDefaultLayout as generateDefaultLayoutPure,
   isExpectingResult,
-  mergeCellLayout,
   NOTEBOOK_GRID_COLS,
   NOTEBOOK_GRID_MARGIN_Y,
   NOTEBOOK_GRID_ROW_HEIGHT,
-} from "./notebookUtils"
+} from "./cellSizing"
 import {
   emitUserAction,
   on as onUserAction,

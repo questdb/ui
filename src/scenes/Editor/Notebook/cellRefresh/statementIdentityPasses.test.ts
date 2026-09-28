@@ -20,13 +20,18 @@ vi.mock("@questdb/sql-parser", async (importOriginal) => {
 })
 
 import { CellRefreshEngine, type CellRefreshDeps } from "./cellRefreshEngine"
-import { computeResultBottomHeight } from "../notebookUtils"
+import { computeResultBottomHeight } from "../cellSizing"
 import {
   deriveStatementFrame,
   reconcileCellResultForValue,
   statementKeysFor,
 } from "../statementIdentity"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
+import { CellResultHydrationEngine } from "../resultHydration/cellResultHydration"
+import {
+  getChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 
 // The formatter is the only expensive step of statement identity. Every event
 // below must key each statement list at most once and each result frame at
@@ -123,6 +128,7 @@ describe("statement identity passes per event", () => {
     cellResults.set("c1", frameOf(statements))
     engine.setVisible("c1", true)
     engine.sync([gridCell(sqlOf(statements))])
+    engine.getState("c1")
     await flush()
 
     // When the cell is refreshed by hand with unchanged text
@@ -177,6 +183,107 @@ describe("statement identity passes per event", () => {
 
     // Then nothing is keyed: the frame was written for these statements
     expect(refreshCalls).toBe(0)
+  })
+
+  it("keys no entry while a notebook opens until its state is read", async () => {
+    // Given run cells with a result marker, off screen
+    const runCell = (id: string): NotebookCell =>
+      ({
+        id,
+        position: 0,
+        value: sqlOf(statements),
+        lastRunStatus: "success",
+      }) as NotebookCell
+
+    // When the engine syncs them
+    const openCalls = await countFormatterCalls(() => {
+      engine.sync([runCell("c1"), runCell("c2"), runCell("c3")])
+    })
+
+    // Then the formatter never runs
+    expect(openCalls).toBe(0)
+
+    // When a mounted cell reads its state twice
+    const readCalls = await countFormatterCalls(() => {
+      engine.getState("c1")
+      engine.getState("c1")
+    })
+
+    // Then only that cell is keyed, once
+    expect(readCalls).toBe(N)
+    expect(engine.getState("c1")?.slotKeys).toEqual(
+      statementKeysFor(statements),
+    )
+  })
+
+  it("resets the zoom of an unread chart only when its statements change", async () => {
+    // Given a zoomed, off-screen draw cell that was never read
+    const drawCell = (value: string): NotebookCell =>
+      ({
+        id: "c2",
+        position: 0,
+        value,
+        mode: "draw",
+        autoRefresh: false,
+      }) as NotebookCell
+    engine.sync([drawCell(sqlOf(statements))])
+    setChartZoom("c2", 20, 60)
+
+    // When one statement changes only its casing
+    engine.sync([
+      drawCell(
+        sqlOf(statements.map((s, i) => (i === 0 ? s.toUpperCase() : s))),
+      ),
+    ])
+    await vi.advanceTimersByTimeAsync(301)
+
+    // Then the zoom stays
+    expect(getChartZoom("c2")).toEqual({ start: 20, end: 60 })
+
+    // When one statement changes its content
+    engine.sync([drawCell(sqlOf(edited))])
+    await vi.advanceTimersByTimeAsync(301)
+
+    // Then the zoom resets
+    expect(getChartZoom("c2")).toBeUndefined()
+  })
+
+  it("keys only the statements when a snapshot written for them hydrates", async () => {
+    // Given a run cell whose stored snapshot was written for its statements
+    const cell = {
+      id: "c1",
+      position: 0,
+      value: sqlOf(statements),
+      lastRunStatus: "success",
+    } as NotebookCell
+    const stored = frameOf(statements).results.map((result) => ({
+      ...result,
+      fetchedAt: 500,
+    }))
+    const hydration = new CellResultHydrationEngine({
+      loadSnapshot: () =>
+        Promise.resolve({
+          bufferId: 1,
+          cellId: "c1",
+          results: stored,
+          savedAt: 1000,
+        }),
+      rewriteSnapshot: () => Promise.resolve(true),
+      deleteSnapshot: () => Promise.resolve(),
+      getCell: () => cell,
+      applyResult: vi.fn(),
+      releaseResult: vi.fn(),
+      canRelease: () => false,
+      seedRefreshState: vi.fn(),
+    })
+
+    // When the cell hydrates
+    const calls = await countFormatterCalls(() => hydration.request("c1"))
+
+    // Then the statements are keyed once and the results take their keys
+    expect(calls).toBe(N)
+    expect(hydration.statusOf("c1")).toBe("loaded")
+    hydration.destroy()
   })
 
   it("keeps a frame a run wrote inside the edit debounce, whatever the duplicates' casing", async () => {

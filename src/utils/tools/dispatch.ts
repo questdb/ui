@@ -89,7 +89,7 @@ import {
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
-import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/notebookUtils"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -165,9 +165,9 @@ const cellValueOf = async (
 const runCellBound = (
   bufferId: number,
   cellId: string,
-  signal?: AbortSignal,
-  sql?: string,
-  gate?: RunCellGate,
+  signal: AbortSignal | undefined,
+  sql: string,
+  gate: RunCellGate,
 ) =>
   withBoundNotebook(
     bufferId,

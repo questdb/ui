@@ -13,6 +13,7 @@ import { getQueriesFromText } from "../../Monaco/utils"
 import {
   normalizeSnapshotResultQuery,
   reconcileKeyedResults,
+  resultKeysByText,
   resultStatementKeys,
   statementKeysFor,
 } from "../statementIdentity"
@@ -247,7 +248,9 @@ export class CellResultHydrationEngine {
     const statements = getQueriesFromText(cell.value)
     const slotKeys = statementKeysFor(statements)
     const loaded = snapshot.results.map(normalizeSnapshotResultQuery)
-    const resultKeys = resultStatementKeys(loaded)
+    const resultKeys =
+      resultKeysByText(statements, slotKeys, loaded) ??
+      resultStatementKeys(loaded)
     const results = foldLegacyFetchedAt(loaded, resultKeys, snapshot)
     const rekeyed = rekeyLegacyStatementKeys(loaded, resultKeys, snapshot)
     const keyed = rekeyed ?? snapshot
