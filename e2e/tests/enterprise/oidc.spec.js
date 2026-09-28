@@ -99,9 +99,9 @@ describe("OIDC", () => {
             req.reply(reply)
           } else {
             req.reply({
-              access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
-              refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
-              id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+              access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+              refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+              id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
               token_type: "Bearer",
               expires_in: 20,
             })
