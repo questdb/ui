@@ -96,12 +96,14 @@ type Props = {
   cell: NotebookCell
   isFocused: boolean
   onConfigChange: (config: ChartConfig) => void
+  onRetryUnmountWhileFocused: () => void
 }
 
 export const DrawCanvas: React.FC<Props> = ({
   cell,
   isFocused,
   onConfigChange,
+  onRetryUnmountWhileFocused,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [zoomStart, setZoomStart] = useState(
@@ -155,7 +157,10 @@ export const DrawCanvas: React.FC<Props> = ({
     setSettingsOpen(true)
   }, [cell.chartConfig])
 
-  const handleRetry = () => {
+  // The refresh replaces the cancelled state, and Retry with it; a focused
+  // Retry hands its focus on first, like the Stop button does on unmount.
+  const handleRetry = (e: React.MouseEvent) => {
+    if (document.activeElement === e.currentTarget) onRetryUnmountWhileFocused()
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
   }

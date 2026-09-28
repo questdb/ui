@@ -624,6 +624,7 @@ const CellInner: React.FC<Props> = ({
             isFocused={isFocused}
             isRunning={isRunning}
             onConfigChange={handleChartConfigChange}
+            onRetryUnmountWhileFocused={focusCellToolbar}
             onYieldFocus={() => editorRef.current?.focus()}
           />
         </BottomSlot>

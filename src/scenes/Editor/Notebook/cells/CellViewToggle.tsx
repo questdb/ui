@@ -97,12 +97,16 @@ export const CellViewToggle: React.FC<Props> = ({
   // cell.result instead of re-querying: NOTEBOOK_CELL_DRAW enters draw, where
   // the chart settles on cell.result; switching to the table just flips the
   // mode back, where the grid shows the chart's last frame.
+  // A busy segment is locked with aria-disabled, not disabled: a native
+  // disabled control drops keyboard focus to the document body.
   const handleChart = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (isCellBusy) return
     viewChart()
   }
   const handleTable = (e: React.MouseEvent) => {
     e.stopPropagation()
+    if (isCellBusy) return
     viewTable()
   }
   const handleEditorVisibility = (e: React.MouseEvent) => {
@@ -126,7 +130,7 @@ export const CellViewToggle: React.FC<Props> = ({
             $activeTone="neutral"
             aria-pressed={view === "grid"}
             aria-busy={view === "grid" && isGridLoading}
-            disabled={isCellBusy}
+            aria-disabled={isCellBusy}
             onClick={handleTable}
             aria-label="View table"
           >
@@ -146,7 +150,7 @@ export const CellViewToggle: React.FC<Props> = ({
             $activeTone="neutral"
             aria-pressed={view === "chart"}
             aria-busy={view === "chart" && isChartLoading}
-            disabled={isCellBusy}
+            aria-disabled={isCellBusy}
             onClick={handleChart}
             aria-label="View chart"
           >

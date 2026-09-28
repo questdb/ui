@@ -40,6 +40,7 @@ type Props = {
   isFocused: boolean
   isRunning: boolean
   onConfigChange: (config: ChartConfig) => void
+  onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
 }
 
@@ -50,6 +51,7 @@ export const CellBottomContent: React.FC<Props> = ({
   isFocused,
   isRunning,
   onConfigChange,
+  onRetryUnmountWhileFocused,
   onYieldFocus,
 }) => {
   const { setActiveStatement, cancelQuery, reRunResultAt } =
@@ -120,6 +122,7 @@ export const CellBottomContent: React.FC<Props> = ({
         cell={cell}
         isFocused={isFocused}
         onConfigChange={onConfigChange}
+        onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
     ) : (
       <ChartPlaceholder />
