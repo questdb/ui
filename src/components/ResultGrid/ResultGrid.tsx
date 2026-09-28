@@ -106,6 +106,7 @@ type GridCellProps = {
   direction: CellDirection | undefined
   hasDirectionSlot: boolean
   flashParity: 0 | 1
+  flashStartedAt: number
   onCellClick: (row: number, col: number) => void
 }
 
@@ -127,6 +128,7 @@ const GridCell = React.memo(function GridCell({
   direction,
   hasDirectionSlot,
   flashParity,
+  flashStartedAt,
   onCellClick,
 }: GridCellProps) {
   const colType = col?.type ?? ""
@@ -140,6 +142,12 @@ const GridCell = React.memo(function GridCell({
       : highlight.display === "temporary" && !prefersReducedMotion()
         ? "temporary"
         : "always"
+  // The flash is timed from the result, not from the mount: a cell that
+  // mounts later joins partway through, or past the end and shows nothing.
+  const flashDelay =
+    highlightMode === "temporary"
+      ? `${flashStartedAt - Date.now()}ms`
+      : undefined
   return (
     <Cell
       id={`cell-${rowIndex}-${colIndex}`}
@@ -155,6 +163,7 @@ const GridCell = React.memo(function GridCell({
         left,
         width,
         ...(isPulsing ? { zIndex: 4 } : frozen ? { zIndex: 2 } : {}),
+        ...(flashDelay ? { animationDelay: flashDelay } : {}),
       }}
       $isNull={loaded && rawValue === null}
       $isTimestamp={isDesignatedTimestamp}
@@ -189,6 +198,9 @@ type Props = {
   cellHighlights?: HighlightLookup
   // Flips on every highlighted result so a repeated flash restarts.
   flashParity?: 0 | 1
+  // When the highlighted result landed, so a flash ends one duration after
+  // that whenever its cell mounts.
+  flashStartedAt?: number
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
   onColumnSizingCommit?: (sizing: Record<string, number>) => void
@@ -256,6 +268,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       runToken,
       cellHighlights = EMPTY_HIGHLIGHT_LOOKUP,
       flashParity = 0,
+      flashStartedAt = 0,
       isFocused = true,
       initialColumnSizing,
       onColumnSizingCommit,
@@ -898,6 +911,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     )}
                     hasDirectionSlot={cellHighlights.hasDirection(dataIndex)}
                     flashParity={flashParity}
+                    flashStartedAt={flashStartedAt}
                     col={header.column.columnDef.meta?.col}
                     colWidth={header.getSize()}
                     left={pos.left}

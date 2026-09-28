@@ -443,8 +443,9 @@ export const NotebookProvider: React.FC<{
 
   const applyTransition = useCallback(
     <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+      const cellsBefore = store.cellsRef.current
       const out = run({
-        cells: store.cellsRef.current,
+        cells: cellsBefore,
         settings: settingsRef.current,
         maximizedCellId: maximizedCellIdRef.current,
         focusedCellId: focusedCellIdRef.current,
@@ -462,6 +463,14 @@ export const NotebookProvider: React.FC<{
         setFocusedCellState(parts.focusedCellId)
       })
       persistImmediately(parts.cells, true)
+      // A settings drawer belongs to the view it was opened from; a mode
+      // change swaps that view out, so the drawer closes with it.
+      const modeBefore = new Map(cellsBefore.map((c) => [c.id, c.mode]))
+      for (const cell of parts.cells) {
+        if (modeBefore.has(cell.id) && modeBefore.get(cell.id) !== cell.mode) {
+          clearSettingsDrawerSessions(cell.id)
+        }
+      }
       // A deleted cell's in-flight run must be cancelled; the transition reports
       // deleted cells via cleanup, so every delete route (UI or agent) cancels
       // here rather than at each call site.
@@ -544,6 +553,7 @@ export const NotebookProvider: React.FC<{
         ...(cell?.bottomResized ? {} : { bottomHeight: undefined }),
       })
       resultHydration.forget(cellId)
+      clearSettingsDrawerSessions(cellId)
       void deleteCellSnapshot(bufferId, cellId)
     },
     [store, bufferId, resultHydration],

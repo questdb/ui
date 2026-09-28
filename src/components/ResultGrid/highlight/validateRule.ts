@@ -1,3 +1,4 @@
+import { parseInstant } from "./comparable"
 import { compilePattern } from "./evaluateHighlights"
 import type { BetweenBound, HighlightRule } from "./types"
 
@@ -28,7 +29,7 @@ const unquoted = (value: number | string) =>
     .replace(/^['"]|['"]$/g, "")
 
 const isTimestamp = (value: number | string) =>
-  !Number.isNaN(Date.parse(unquoted(value)))
+  parseInstant(unquoted(value)) !== null
 
 const boundError = (value: number | string, kind: BoundKind): string | null => {
   if (isBlank(value)) return EMPTY
@@ -41,12 +42,11 @@ const boundError = (value: number | string, kind: BoundKind): string | null => {
 
 const asNumber = (value: number | string, kind: BoundKind): number | null => {
   if (kind === "numeric") return Number(value)
-  if (kind === "temporal") return Date.parse(unquoted(value))
+  if (kind === "temporal") return parseInstant(unquoted(value))
   if (typeof value === "number") return value
   const numeric = Number(value)
   if (Number.isFinite(numeric)) return numeric
-  const instant = Date.parse(unquoted(value))
-  return Number.isNaN(instant) ? null : instant
+  return parseInstant(unquoted(value))
 }
 
 const fixedBound = (bound: BetweenBound): bound is number | string =>

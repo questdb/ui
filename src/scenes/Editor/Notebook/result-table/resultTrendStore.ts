@@ -6,8 +6,6 @@ import {
   type IdentityIndex,
 } from "../../../../components/ResultGrid/highlight"
 
-export const FLASH_DURATION_MS = 1000
-
 export type TrendEntry = {
   result: DqlQueryResult
   identityColumns: string[]

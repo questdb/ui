@@ -19,17 +19,16 @@ import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawe
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { useNotebookActions } from "../NotebookProvider"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
-import { FLASH_DURATION_MS } from "./resultTrendStore"
 import { useResultTrendStore } from "./ResultTrendContext"
 import { resolveHighlightConfig } from "./highlightConfig"
 import {
   columnRangeOf,
   evaluateHighlights,
   type HighlightConfig,
-  type HighlightLookup,
 } from "../../../../components/ResultGrid/highlight"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
@@ -51,22 +50,6 @@ type Props = {
   highlightConfig: HighlightConfig | undefined
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
-}
-
-// A remount after the flash window must not replay old flashes; the direction
-// glyph stays until the next comparison.
-const withoutExpiredFlashes = (
-  lookup: HighlightLookup,
-  capturedAt: number,
-): HighlightLookup => {
-  if (Date.now() - capturedAt < FLASH_DURATION_MS) return lookup
-  return {
-    ...lookup,
-    background: (row, col) => {
-      const highlight = lookup.background(row, col)
-      return highlight?.display === "temporary" ? undefined : highlight
-    },
-  }
 }
 
 const useInitialGridState = ({
@@ -146,15 +129,16 @@ const ResultGridPanelInner: React.FC<Props> = ({
     () => columnRangeOf(data.columns, data.dataset),
     [data],
   )
-  const highlights = useMemo(() => {
-    const { lookup, stats } = evaluateHighlights({
-      columns: data.columns,
-      dataset: data.dataset,
-      config: highlightConfig,
-      previous,
-    })
-    return { lookup: withoutExpiredFlashes(lookup, capturedAt), stats }
-  }, [data, highlightConfig, previous, capturedAt])
+  const highlights = useMemo(
+    () =>
+      evaluateHighlights({
+        columns: data.columns,
+        dataset: data.dataset,
+        config: highlightConfig,
+        previous,
+      }),
+    [data, highlightConfig, previous],
+  )
 
   const openHighlight = useCallback(() => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
@@ -180,12 +164,14 @@ const ResultGridPanelInner: React.FC<Props> = ({
       ruleCount: next.rules.length,
       kinds: next.rules.map((rule) => rule.kind),
     })
+    signalUserEdit(bufferId)
     setCellHighlightConfig(cellId, next)
     closeHighlight()
   }
 
   const clearHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
+    signalUserEdit(bufferId)
     setCellHighlightConfig(cellId, null)
     closeHighlight()
   }
@@ -234,6 +220,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         runToken={runToken}
         cellHighlights={highlights.lookup}
         flashParity={revision % 2 === 0 ? 0 : 1}
+        flashStartedAt={capturedAt}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}
         initialColumnOrder={columnLayout?.columnOrder}

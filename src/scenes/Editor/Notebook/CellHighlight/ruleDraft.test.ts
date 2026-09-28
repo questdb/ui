@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { isHighlightRule } from "../../../../components/ResultGrid/highlight"
 import {
   createUnsetRule,
   isCompleteRule,
@@ -9,6 +10,21 @@ import {
   targetToValue,
   withConditionOption,
 } from "./ruleDraft"
+
+describe("createRule", () => {
+  it("builds a rule that passes the persisted-config guard for every condition", () => {
+    // Given every condition the drawer offers
+    const options = conditionOptions().map((descriptor) => descriptor.value)
+
+    // When a rule is created from each one, as the drawer does
+    const rules = options.map((option) =>
+      createRule(option, { kind: "column", name: "price" }, option),
+    )
+
+    // Then each rule survives the guard that runs on the next load
+    expect(rules.map(isHighlightRule)).toEqual(options.map(() => true))
+  })
+})
 
 describe("withConditionOption", () => {
   it("switches kinds while keeping id, target and enabled state", () => {

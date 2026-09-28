@@ -1,8 +1,9 @@
+import { RE2JS } from "re2js"
 import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { CellValue, ResultGridRow } from "../types"
 import { columnKindOf, type ColumnKind } from "./columnKind"
 import { columnRangeAt, type ColumnRange } from "./columnRange"
-import { asComparable, asNumber } from "./comparable"
+import { asComparable, asNumber, parseInstant } from "./comparable"
 import {
   identityColumnIndexes,
   identityKeyOf,
@@ -44,33 +45,52 @@ const asText = (value: number | string): string => {
   return quoted ? text.slice(1, -1) : text
 }
 
-// `/pattern/flags` carries flags; a bare pattern is case-sensitive. An
-// invalid pattern never matches instead of throwing mid-render.
-export const compilePattern = (pattern: string): RegExp | null => {
+export type PatternTest = (text: string) => boolean
+
+const RE2_FLAGS: Record<string, number> = {
+  i: RE2JS.CASE_INSENSITIVE,
+  m: RE2JS.MULTILINE,
+  s: RE2JS.DOTALL,
+}
+
+// g changes nothing for a single test, and RE2 is Unicode-aware by default.
+const NO_EFFECT_FLAGS = new Set(["g", "u"])
+
+const re2FlagBits = (flags: string): number | null => {
+  let bits = 0
+  for (const flag of flags) {
+    if (NO_EFFECT_FLAGS.has(flag)) continue
+    const bit = RE2_FLAGS[flag]
+    if (bit === undefined) return null
+    bits |= bit
+  }
+  return bits
+}
+
+// `/pattern/flags` carries flags; a bare pattern is case-sensitive. RE2 matches
+// in linear time, so no pattern a user or an agent sends can stall the grid;
+// the price is no backreferences and no lookarounds. A pattern that does not
+// compile never matches instead of throwing mid-render.
+export const compilePattern = (pattern: string): PatternTest | null => {
   const text = pattern.trim()
   const slashed = /^\/(.+)\/([a-z]*)$/.exec(text)
+  const source = slashed ? slashed[1] : text
+  const flags = slashed ? slashed[2] : ""
+  const bits = re2FlagBits(flags)
+  if (bits === null) return null
   try {
-    return slashed ? new RegExp(slashed[1], slashed[2]) : new RegExp(text)
+    const compiled = RE2JS.compile(source, bits)
+    return (value) => compiled.test(value)
   } catch {
     return null
   }
-}
-
-// One pattern serves every cell of a column. The g and y flags carry
-// lastIndex between tests, so each test starts over as a fresh pattern would.
-const matchesPattern = (pattern: RegExp, text: string): boolean => {
-  pattern.lastIndex = 0
-  return pattern.test(text)
 }
 
 const asComparableInput = (
   value: number | string,
   kind: ColumnKind,
 ): number | null => {
-  if (kind === "temporal") {
-    const parsed = Date.parse(asText(value))
-    return Number.isNaN(parsed) ? null : parsed
-  }
+  if (kind === "temporal") return parseInstant(asText(value))
   const parsed = typeof value === "number" ? value : Number(asText(value))
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -181,7 +201,7 @@ const matchValue = (
   rule: ValueRule,
   value: CellValue,
   kind: ColumnKind,
-  pattern: RegExp | null,
+  pattern: PatternTest | null,
   range: ColumnRange | null,
 ): CellHighlight | undefined => {
   const hit = { color: rule.color, alpha: 1, display: rule.display }
@@ -190,9 +210,7 @@ const matchValue = (
     case "isNull":
       return value === null ? hit : undefined
     case "matches":
-      return value !== null &&
-        pattern !== null &&
-        matchesPattern(pattern, String(value))
+      return value !== null && pattern !== null && pattern(String(value))
         ? hit
         : undefined
     case "contains":
@@ -277,7 +295,7 @@ const createRuleMatchers = (
   dataset: ResultGridRow[],
 ) => {
   const sortedSteps = new Map<string, StepsRule["steps"]>()
-  const patterns = new Map<string, RegExp | null>()
+  const patterns = new Map<string, PatternTest | null>()
   const ranges = new Map<number, ColumnRange | null>()
   const rangeAt = (index: number): ColumnRange | null => {
     if (!ranges.has(index)) {

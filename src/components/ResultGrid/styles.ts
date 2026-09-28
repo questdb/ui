@@ -216,6 +216,7 @@ const pulseAnim = (ring: string, transparent: string) => keyframes`
 
 const HIGHLIGHT_STATIC_OPACITY = 30
 const HIGHLIGHT_FLASH_OPACITY = 55
+const FLASH_DURATION_MS = 1000
 
 // Two equivalent keyframes so a consecutive flash restarts: the browser only
 // restarts an animation when its name changes, and styled-components names
@@ -332,7 +333,7 @@ export const Cell = styled.div<{
         HIGHLIGHT_FLASH_OPACITY,
         $highlightBlend,
       )};
-      animation: ${flashAnim[$flashParity]} 1s ease-out;
+      animation: ${flashAnim[$flashParity]} ${FLASH_DURATION_MS}ms ease-out;
     `}
 
   ${({ $isActive, theme }) =>

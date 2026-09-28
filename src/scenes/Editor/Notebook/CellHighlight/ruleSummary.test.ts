@@ -9,10 +9,10 @@ import {
 
 describe("rule summaries", () => {
   it("distinguishes percentage and absolute thresholds and their inclusive boundary", () => {
+    // Given a changed-by rule in percent and the same rule in absolute units
     const rule = createRule("change", { kind: "allNumeric" }, "prev.changedBy")
     if (rule.kind !== "previous" || rule.condition.op !== "changedBy")
       throw new Error("Expected a change rule")
-    expect(ruleSummary(rule)).toBe("All numeric columns changes by ≥ 1%")
     const absolute = {
       ...rule,
       condition: {
@@ -21,20 +21,33 @@ describe("rule summaries", () => {
         threshold: 0.5,
       },
     }
-    expect(ruleSummary(absolute)).toBe(
-      "All numeric columns changes by ≥ 0.5 (abs)",
-    )
+
+    // When both are summarized
+    const percentSummary = ruleSummary(rule)
+    const absoluteSummary = ruleSummary(absolute)
+
+    // Then the unit and the inclusive boundary are visible
+    expect(percentSummary).toBe("All numeric columns changes by ≥ 1%")
+    expect(absoluteSummary).toBe("All numeric columns changes by ≥ 0.5 (abs)")
     expect(ruleDescription(absolute)).toBe("Flash")
   })
 
   it("names a new-row rule without a column", () => {
+    // Given a new-row rule
     const fresh = createRule("fresh", null, "newRow")
+
+    // When it is summarized
+    const summary = ruleSummary(fresh)
+    const description = ruleDescription(fresh)
+
+    // Then it is a temporary row rule named without a column
     expect(fresh).toMatchObject({ kind: "newRow", display: "temporary" })
-    expect(ruleSummary(fresh)).toBe("New row")
-    expect(ruleDescription(fresh)).toBe("Flash · Row")
+    expect(summary).toBe("New row")
+    expect(description).toBe("Flash · Row")
   })
 
   it("keeps range bounds and text predicates visible when collapsed", () => {
+    // Given a between rule and a contains rule on named columns
     const range = createRule(
       "range",
       { kind: "column", name: "price" },
@@ -47,19 +60,32 @@ describe("rule summaries", () => {
     )
     if (range.kind !== "value" || text.kind !== "value")
       throw new Error("Expected value rules")
-    expect(
-      ruleSummary({
-        ...range,
-        condition: { op: "between", from: -5, to: 10, fill: { kind: "solid" } },
-      }),
-    ).toBe("price between -5 and 10")
-    expect(ruleSummary(range)).toBe("price between auto and auto")
-    expect(
-      ruleSummary({ ...text, condition: { op: "contains", text: "USD" } }),
-    ).toBe("symbol contains 'USD'")
-    expect(
-      ruleSummary({ ...range, condition: { op: "gte", value: 100 } }),
-    ).toBe("price ≥ 100")
+    const bounded = {
+      ...range,
+      condition: {
+        op: "between" as const,
+        from: -5,
+        to: 10,
+        fill: { kind: "solid" as const },
+      },
+    }
+    const contains = {
+      ...text,
+      condition: { op: "contains" as const, text: "USD" },
+    }
+    const atLeast = { ...range, condition: { op: "gte" as const, value: 100 } }
+
+    // When each rule is summarized
+    const boundedSummary = ruleSummary(bounded)
+    const autoSummary = ruleSummary(range)
+    const containsSummary = ruleSummary(contains)
+    const atLeastSummary = ruleSummary(atLeast)
+
+    // Then bounds and predicates stay in the summary
+    expect(boundedSummary).toBe("price between -5 and 10")
+    expect(autoSummary).toBe("price between auto and auto")
+    expect(containsSummary).toBe("symbol contains 'USD'")
+    expect(atLeastSummary).toBe("price ≥ 100")
     expect(ruleDescription(text)).toBe("Permanent")
     expect(ruleDescription({ ...text, enabled: false })).toBe("Permanent")
     expect(ruleDescription({ ...text, appliesTo: "row" })).toBe(
@@ -68,6 +94,7 @@ describe("rule summaries", () => {
   })
 
   it("represents all scale colors and an unfinished draft without inventing a condition", () => {
+    // Given a steps rule, a gradient between rule, and an unfinished draft
     const steps = createRule(
       "steps",
       { kind: "column", name: "price" },
@@ -93,17 +120,26 @@ describe("rule summaries", () => {
         fill: { kind: "gradient" as const, highColor: "dataPositive" as const },
       },
     }
-    expect(ruleColors(steps)).toEqual([steps.baseColor, steps.steps[0].color])
-    expect(ruleColors(gradient)).toEqual([between.color, "dataPositive"])
-    expect(ruleSummary(gradient)).toBe("price between 1000 and 2000")
+    const unset = createUnsetRule("draft")
+    const unsetWithColumn = {
+      ...unset,
+      target: { kind: "column" as const, name: "price" },
+    }
+
+    // When colors, fill labels and summaries are read
+    const stepColors = ruleColors(steps)
+    const gradientColors = ruleColors(gradient)
+    const gradientSummary = ruleSummary(gradient)
+    const unsetSummary = ruleSummary(unset)
+    const unsetWithColumnSummary = ruleSummary(unsetWithColumn)
+
+    // Then every scale color is listed and the draft names the next choice
+    expect(stepColors).toEqual([steps.baseColor, steps.steps[0].color])
+    expect(gradientColors).toEqual([between.color, "dataPositive"])
+    expect(gradientSummary).toBe("price between 1000 and 2000")
     expect(ruleFillLabel(gradient)).toBe("gradient")
     expect(ruleFillLabel(between)).toBeNull()
-    expect(ruleSummary(createUnsetRule("draft"))).toBe("New rule")
-    expect(
-      ruleSummary({
-        ...createUnsetRule("draft"),
-        target: { kind: "column", name: "price" },
-      }),
-    ).toBe("price · Choose a condition")
+    expect(unsetSummary).toBe("New rule")
+    expect(unsetWithColumnSummary).toBe("price · Choose a condition")
   })
 })

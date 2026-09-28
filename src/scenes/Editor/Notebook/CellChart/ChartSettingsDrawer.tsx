@@ -95,11 +95,21 @@ const ChartSettings: React.FC<SettingsProps> = ({
   // Mounting already open means a remount mid-session: keep the draft.
   const drawerWasOpenRef = useRef(open)
 
+  // Every edit lands in the session store as well, so a cell remount
+  // mid-session restores it.
+  const updateDraft = useCallback(
+    (next: ChartConfig) => {
+      setDraft(next)
+      onDraftChange?.(next)
+    },
+    [onDraftChange],
+  )
+
   const resetDraft = useCallback(() => {
-    setDraft(config)
+    updateDraft(config)
     setActiveIndex(tabs[0]?.index ?? 0)
     setSaveAttempted(false)
-  }, [config, tabs])
+  }, [config, tabs, updateDraft])
 
   useEffect(() => {
     const drawerIsOpen = presentation === "drawer" && open
@@ -112,7 +122,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
     }
 
     if (presentation === "panel") {
-      setDraft(config)
+      updateDraft(config)
       setActiveIndex((current) =>
         tabs.some((tab) => tab.index === current)
           ? current
@@ -120,11 +130,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
       )
       setSaveAttempted(false)
     }
-  }, [config, open, presentation, resetDraft, tabs])
-
-  useEffect(() => {
-    onDraftChange?.(draft)
-  }, [draft, onDraftChange])
+  }, [config, open, presentation, resetDraft, tabs, updateDraft])
 
   const dismiss = useCallback(
     (method: SettingsDismissMethod) => {
@@ -154,18 +160,18 @@ const ChartSettings: React.FC<SettingsProps> = ({
   const hasRight = draft.queries.some((q) => q?.axis === "right")
 
   const updateQuery = (index: number, patch: Partial<QueryChart>) =>
-    setDraft((d) => ({
-      ...d,
-      queries: d.queries.map((q, i) =>
+    updateDraft({
+      ...draft,
+      queries: draft.queries.map((q, i) =>
         i === index && q ? { ...q, ...patch } : q,
       ),
-    }))
+    })
 
   const setQuery = (index: number, next: QueryChart) =>
-    setDraft((d) => ({
-      ...d,
-      queries: d.queries.map((q, i) => (i === index ? next : q)),
-    }))
+    updateDraft({
+      ...draft,
+      queries: draft.queries.map((q, i) => (i === index ? next : q)),
+    })
 
   const commit = () => {
     const badIdx = draft.queries.findIndex(candlestickMissingOhlc)
@@ -206,7 +212,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           value={draft.xColumn ?? ""}
           placeholder="Select column"
           onValueChange={(value) =>
-            setDraft((d) => ({ ...d, xColumn: value || null }))
+            updateDraft({ ...draft, xColumn: value || null })
           }
           options={xCandidates.map((c) => ({
             label: c.name,
@@ -223,10 +229,10 @@ const ChartSettings: React.FC<SettingsProps> = ({
             placeholder="Name (e.g. RSI)"
             value={draft.rightAxis?.name ?? ""}
             onChange={(e) =>
-              setDraft((d) => ({
-                ...d,
-                rightAxis: { ...d.rightAxis, name: e.target.value },
-              }))
+              updateDraft({
+                ...draft,
+                rightAxis: { ...draft.rightAxis, name: e.target.value },
+              })
             }
           />
           <Row>
@@ -236,13 +242,13 @@ const ChartSettings: React.FC<SettingsProps> = ({
               placeholder="min"
               value={draft.rightAxis?.min ?? ""}
               onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
+                updateDraft({
+                  ...draft,
                   rightAxis: {
-                    ...d.rightAxis,
+                    ...draft.rightAxis,
                     min: parseBound(e.target.value),
                   },
-                }))
+                })
               }
             />
             <Input
@@ -251,13 +257,13 @@ const ChartSettings: React.FC<SettingsProps> = ({
               placeholder="max"
               value={draft.rightAxis?.max ?? ""}
               onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
+                updateDraft({
+                  ...draft,
                   rightAxis: {
-                    ...d.rightAxis,
+                    ...draft.rightAxis,
                     max: parseBound(e.target.value),
                   },
-                }))
+                })
               }
             />
           </Row>

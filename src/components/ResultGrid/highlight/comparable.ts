@@ -10,14 +10,26 @@ export const asNumber = (value: CellValue): number | null => {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+const ZONELESS_INSTANT =
+  /^(\d{4}-\d{2}-\d{2})[T ](\d{2})(?::(\d{2})(?::(\d{2})(\.\d+)?)?)?$/
+
+// QuestDB reads a literal without a zone as UTC, while Date.parse reads it as
+// local time; the literal is completed with Z so both sides agree.
+export const parseInstant = (text: string): number | null => {
+  const zoneless = ZONELESS_INSTANT.exec(text)
+  const iso = zoneless
+    ? `${zoneless[1]}T${zoneless[2]}:${zoneless[3] ?? "00"}:${zoneless[4] ?? "00"}${zoneless[5] ?? ""}Z`
+    : text
+  const parsed = Date.parse(iso)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 export const asComparable = (
   value: CellValue,
   kind: ColumnKind,
 ): number | null => {
   if (kind === "temporal") {
-    if (typeof value !== "string") return null
-    const parsed = Date.parse(value)
-    return Number.isNaN(parsed) ? null : parsed
+    return typeof value === "string" ? parseInstant(value) : null
   }
   return asNumber(value)
 }

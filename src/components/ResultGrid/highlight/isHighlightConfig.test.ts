@@ -35,8 +35,11 @@ describe("isHighlightConfig", () => {
       ],
     }
 
+    // When the config is checked
+    const accepted = isHighlightConfig(config)
+
     // Then it passes
-    expect(isHighlightConfig(config)).toBe(true)
+    expect(accepted).toBe(true)
   })
 
   it("rejects a rule with a missing target, an unknown color or a half-built condition", () => {
@@ -46,11 +49,12 @@ describe("isHighlightConfig", () => {
     const noValue = { ...rule, condition: { op: "gt" } }
     const kindOnly = { kind: "value" }
 
+    // When each one is checked inside a config
+    const results = [noTarget, badColor, noValue, kindOnly].map((broken) =>
+      isHighlightConfig({ identityColumns: [], rules: [broken] }),
+    )
+
     // Then each one fails
-    for (const broken of [noTarget, badColor, noValue, kindOnly]) {
-      expect(isHighlightConfig({ identityColumns: [], rules: [broken] })).toBe(
-        false,
-      )
-    }
+    expect(results).toEqual([false, false, false, false])
   })
 })

@@ -3,7 +3,8 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import { statementKeysFor } from "../notebookUtils"
+import { deriveStatementFrame, statementKeysFor } from "../notebookUtils"
+import { getQueriesFromText } from "../../Monaco/utils"
 import { captureResultTrends } from "./resultTrendCapture"
 import { createResultTrendStore } from "./resultTrendStore"
 
@@ -66,6 +67,38 @@ describe("captureResultTrends", () => {
     // Then the store holds the baseline from the first run
     expect(store.get("c1", KEY)?.previous?.rows.get("BTC")).toEqual(["BTC", 1])
     expect(store.get("c1", KEY)?.revision).toBe(2)
+  })
+
+  it("keeps a baseline for every statement under the key the grid reads", () => {
+    // Given a two-statement cell with a comparison rule that ran twice
+    const SECOND = "select symbol, price from quotes"
+    const store = createResultTrendStore(() => 100)
+    const first = cell(
+      "c1",
+      [dql(QUERY, [["BTC", 1]]), dql(SECOND, [["ETH", 10]])],
+      comparing("symbol"),
+    )
+    const second = cell(
+      "c1",
+      [dql(QUERY, [["BTC", 2]]), dql(SECOND, [["ETH", 20]])],
+      comparing("symbol"),
+    )
+
+    // When both runs settle
+    captureResultTrends(store, [], [first])
+    captureResultTrends(store, [first], [second])
+
+    // Then the second tab's slot key finds the second statement's baseline
+    const frame = deriveStatementFrame(
+      getQueriesFromText(second.value),
+      second.result,
+    )
+    const secondTabKey = frame?.slots[1].key ?? ""
+    expect(secondTabKey).not.toBe(KEY)
+    expect(store.get("c1", secondTabKey)?.previous?.rows.get("ETH")).toEqual([
+      "ETH",
+      10,
+    ])
   })
 
   it("skips a cell whose result and rules did not change", () => {

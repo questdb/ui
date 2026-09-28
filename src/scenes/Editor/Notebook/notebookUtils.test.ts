@@ -780,6 +780,53 @@ describe("buildAppliedCells", () => {
     expect(cleared[0].name).toBeUndefined()
   })
 
+  it("keeps highlight rules on create, clears them on null, and drops them on a markdown conversion", () => {
+    // Given a rule set for a new cell
+    const highlightConfig: NotebookCell["highlightConfig"] = {
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          id: "r1",
+          enabled: true,
+          kind: "value",
+          target: { kind: "column", name: "price" },
+          appliesTo: "cell",
+          display: "always",
+          condition: { op: "gt", value: 100 },
+          color: "dataSeries2",
+        },
+      ],
+    }
+
+    // When the cell is created with the rules
+    const { nextCells: created } = buildAppliedCells([], {
+      cells: [{ value: "SELECT 1", highlightConfig }],
+    })
+    // Then the rules are on the new cell
+    expect(created[0].highlightConfig).toEqual(highlightConfig)
+
+    // When the cell is re-applied with highlightConfig: null
+    const { nextCells: cleared } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, value: "SELECT 1", highlightConfig: null }],
+    })
+    // Then the rules are gone
+    expect(cleared[0].highlightConfig).toBeUndefined()
+
+    // When a cell with rules becomes a markdown cell
+    const { nextCells: converted } = buildAppliedCells(created, {
+      cells: [
+        {
+          id: created[0].id,
+          value: "# Notes",
+          type: "markdown",
+          highlightConfig,
+        },
+      ],
+    })
+    // Then the rules are dropped with the other grid settings
+    expect(converted[0].highlightConfig).toBeUndefined()
+  })
+
   it("does not preserve an existing name when name is omitted (PUT reset)", () => {
     // Given an existing named cell
     const prev: NotebookCell[] = [
@@ -3971,9 +4018,14 @@ describe("hasActiveResultGrid", () => {
       resultOf([dqlResult("SELECT 1"), failure], { activeResultIndex: 1 }),
     )
 
+    // When each cell is checked for an active grid
+    const gridHasGrid = hasActiveResultGrid(grid)
+    const failedHasGrid = hasActiveResultGrid(failed)
+    const onErrorTabHasGrid = hasActiveResultGrid(onErrorTab)
+
     // Then only the cell showing a grid qualifies
-    expect(hasActiveResultGrid(grid)).toBe(true)
-    expect(hasActiveResultGrid(failed)).toBe(false)
-    expect(hasActiveResultGrid(onErrorTab)).toBe(false)
+    expect(gridHasGrid).toBe(true)
+    expect(failedHasGrid).toBe(false)
+    expect(onErrorTabHasGrid).toBe(false)
   })
 })

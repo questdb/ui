@@ -89,7 +89,7 @@ describe("notebook highlight rules", () => {
       1,
     )
 
-    // And Clear all removes the rules and the badge
+    // And Clear all removes the rules and the highlight
     openHighlightDrawer()
     cy.contains("button", "Clear all").click()
     cy.get("[data-hook='grid-cell'][data-highlight]").should("not.exist")

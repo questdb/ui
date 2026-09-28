@@ -299,14 +299,12 @@ export const RuleRow: React.FC<Props> = ({
                 <RuleField>
                   <FieldLabel>Column</FieldLabel>
                   <ColumnPicker
-                    variant="field"
                     options={targetOptions}
                     value={targetLabel}
                     placeholder="Column"
                     searchPlaceholder="Column name"
                     emptyLabel="No columns yet, type a name"
                     noMatchLabel="No columns matched"
-                    allowCustom
                     ariaLabel="Column"
                     ariaInvalid={errors?.column !== undefined}
                     dataHookBase="highlight-rule-column"

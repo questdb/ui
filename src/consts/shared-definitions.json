@@ -738,7 +738,7 @@
                   },
                   "value": {
                     "type": ["number", "string", "null"],
-                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings. For between, null = auto: the column's current minimum, recomputed on every result."
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings, read as UTC unless they carry a zone. For between, null = auto: the column's current minimum, recomputed on every result."
                   },
                   "to": {
                     "type": ["number", "string", "null"],
@@ -755,7 +755,7 @@
                   },
                   "text": {
                     "type": ["string", "null"],
-                    "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
+                    "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: an RE2 regular expression (linear time; no backreferences or lookarounds), e.g. ^EUR or /eur/i for flags."
                   },
                   "steps": {
                     "type": ["array", "null"],
@@ -1245,7 +1245,7 @@
                         },
                         "value": {
                           "type": ["number", "string", "null"],
-                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings. For between, null = auto: the column's current minimum, recomputed on every result."
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings, read as UTC unless they carry a zone. For between, null = auto: the column's current minimum, recomputed on every result."
                         },
                         "to": {
                           "type": ["number", "string", "null"],
@@ -1262,7 +1262,7 @@
                         },
                         "text": {
                           "type": ["string", "null"],
-                          "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: a JavaScript regular expression, e.g. ^EUR or /eur/i for flags."
+                          "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: an RE2 regular expression (linear time; no backreferences or lookarounds), e.g. ^EUR or /eur/i for flags."
                         },
                         "steps": {
                           "type": ["array", "null"],

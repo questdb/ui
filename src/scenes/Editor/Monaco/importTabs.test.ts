@@ -917,6 +917,50 @@ describe("sanitizeBuffer", () => {
       })
     })
 
+    it("keeps a valid highlightConfig and drops a malformed one", () => {
+      // Given an import with one well-formed rule set and one unknown rule kind
+      const valid = {
+        identityColumns: ["symbol"],
+        rules: [
+          {
+            id: "r1",
+            kind: "previous",
+            enabled: true,
+            target: { kind: "column", name: "price" },
+            display: "temporary",
+            appliesTo: "cell",
+            condition: { op: "gt" },
+            color: "dataPositive",
+          },
+        ],
+      }
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            { id: "c1", value: "SELECT 1", highlightConfig: valid },
+            {
+              id: "c2",
+              value: "SELECT 2",
+              highlightConfig: {
+                identityColumns: [],
+                rules: [{ kind: "nope" }],
+              },
+            },
+          ],
+        },
+      }
+
+      // When the buffer is sanitized
+      const result = sanitizeBuffer(input)
+
+      // Then the rules survive the import and the malformed config is dropped
+      expect(result.notebookViewState?.cells[0].highlightConfig).toEqual(valid)
+      expect(result.notebookViewState?.cells[1].highlightConfig).toBeUndefined()
+    })
+
     it("migrates a legacy chartConfig.name to the cell name and preserves an explicit cell name", () => {
       const input = {
         label: "Notebook",

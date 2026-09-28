@@ -3,7 +3,12 @@ import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { ResultGridRow } from "../types"
 import { evaluateHighlights } from "./evaluateHighlights"
 import { buildIdentityIndex } from "./identityIndex"
-import type { HighlightConfig, HighlightRule } from "./types"
+import type {
+  HighlightConfig,
+  HighlightRule,
+  RuleTarget,
+  ValueCondition,
+} from "./types"
 
 const columns: ColumnDefinition[] = [
   { name: "symbol", type: "SYMBOL" },
@@ -354,6 +359,59 @@ describe("evaluateHighlights: value rules", () => {
     expect(lookup.background(2, AMOUNT)).toBeDefined()
   })
 
+  it("treats a DECIMAL(p,s) column as numeric", () => {
+    // Given a decimal column, as the server reports it, with string values
+    const decimalColumns: ColumnDefinition[] = [
+      { name: "qty", type: "DECIMAL(10,3)" },
+    ]
+    const dataset: ResultGridRow[] = [["1.500"], ["2.000"]]
+    const decimalRule = (
+      id: string,
+      target: RuleTarget,
+      condition: ValueCondition,
+    ) => rule({ id, kind: "value", target, condition, color: "dataSeries2" })
+    const evaluateDecimal = (rules: HighlightRule[]) =>
+      evaluateHighlights({
+        columns: decimalColumns,
+        dataset,
+        config: config(rules, []),
+        previous: null,
+      }).lookup
+
+    // When an all-numeric, an automatic-range gradient, and an equality rule
+    // are evaluated
+    const allNumeric = evaluateDecimal([
+      decimalRule("gt", { kind: "allNumeric" }, { op: "gt", value: 1.6 }),
+    ])
+    const gradient = evaluateDecimal([
+      decimalRule(
+        "scale",
+        { kind: "column", name: "qty" },
+        {
+          op: "between",
+          from: null,
+          to: null,
+          fill: { kind: "gradient", highColor: "dataPositive" },
+        },
+      ),
+    ])
+    const equal = evaluateDecimal([
+      decimalRule(
+        "eq",
+        { kind: "column", name: "qty" },
+        { op: "eq", value: 1.5 },
+      ),
+    ])
+
+    // Then the column takes part in each rule as a number
+    expect(allNumeric.background(0, 0)).toBeUndefined()
+    expect(allNumeric.background(1, 0)).toBeDefined()
+    expect(gradient.background(0, 0)?.blend?.ratio).toBe(0)
+    expect(gradient.background(1, 0)?.blend?.ratio).toBe(1)
+    expect(equal.background(0, 0)).toBeDefined()
+    expect(equal.background(1, 0)).toBeUndefined()
+  })
+
   it("treats ≥ and ≤ as inclusive and > and < as strict", () => {
     // Given one rule of each comparison on amount, all against 10
     const at = (op: "gt" | "gte" | "lt" | "lte") =>
@@ -493,14 +551,9 @@ describe("evaluateHighlights: value rules", () => {
     expect(broken.background(0, SYMBOL)).toBeUndefined()
   })
 
-  it("tests every row on its own with the g and y flags, as a fresh pattern would", () => {
-    // Given consecutive matching rows and one with BTC past the start
-    const dataset = [
-      row("BTC-USDT", 1, 1),
-      row("BTC-USDT", 1, 1),
-      row("ETH-BTC", 1, 1),
-      row("BTC-USDT", 1, 1),
-    ]
+  it("ignores the g flag and never matches with a flag RE2 does not support", () => {
+    // Given rows that contain btc anywhere
+    const dataset = [row("BTC-USDT", 1, 1), row("ETH-BTC", 1, 1)]
     const flaggedRule = (pattern: string) =>
       rule({
         kind: "value",
@@ -512,11 +565,56 @@ describe("evaluateHighlights: value rules", () => {
     const global = evaluate([flaggedRule("/btc/gi")], dataset)
     const sticky = evaluate([flaggedRule("/btc/yi")], dataset)
     const matchedRows = (lookup: typeof global) =>
-      [0, 1, 2, 3].filter((index) => lookup.background(index, SYMBOL))
+      [0, 1].filter((index) => lookup.background(index, SYMBOL))
 
-    // Then g matches every row, and y only the rows starting with BTC
-    expect(matchedRows(global)).toEqual([0, 1, 2, 3])
-    expect(matchedRows(sticky)).toEqual([0, 1, 3])
+    // Then g matches every row, and y matches nothing
+    expect(matchedRows(global)).toEqual([0, 1])
+    expect(matchedRows(sticky)).toEqual([])
+  })
+
+  it("evaluates a pattern that backtracks exponentially in a backtracking engine without stalling", () => {
+    // Given a nested-quantifier pattern and values that almost match it
+    const almostMatching = "order rejected insufficient margin for account!"
+    const dataset = [
+      row(almostMatching, 1, 1),
+      row("order accepted", 1, 1),
+      row(almostMatching, 1, 1),
+    ]
+    const nested = rule({
+      kind: "value",
+      target: { kind: "column", name: "symbol" },
+      condition: { op: "matches", pattern: "^(\\w+\\s?)+$" },
+      color: "dataSeries2",
+    })
+
+    // When the column is evaluated
+    const lookup = evaluate([nested], dataset)
+
+    // Then the test completes within the suite timeout, and only the plain
+    // row matches
+    expect(lookup.background(0, SYMBOL)).toBeUndefined()
+    expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries2")
+    expect(lookup.background(2, SYMBOL)).toBeUndefined()
+  })
+
+  it("never matches a pattern that needs a backreference or a lookaround", () => {
+    // Given RE2 syntax limits: backreferences and lookarounds do not compile
+    const dataset = [row("BTC-BTC", 1, 1), row("BTC-USDT", 1, 1)]
+    const symbolRule = (pattern: string) =>
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "matches", pattern },
+        color: "dataSeries2",
+      })
+
+    // When a backreference and a lookahead pattern are evaluated
+    const backreference = evaluate([symbolRule("^(\\w+)-\\1$")], dataset)
+    const lookahead = evaluate([symbolRule("^BTC(?=-USDT)")], dataset)
+
+    // Then no row is highlighted by either
+    expect(backreference.background(0, SYMBOL)).toBeUndefined()
+    expect(lookahead.background(1, SYMBOL)).toBeUndefined()
   })
 
   it("applies the first matching rule and ignores disabled rules", () => {

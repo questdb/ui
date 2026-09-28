@@ -40,7 +40,6 @@ export const IdentitySection: React.FC<Props> = ({
         <SectionHint>needed for comparison rules</SectionHint>
       </SectionHeader>
       <ColumnPicker
-        variant="field"
         options={options}
         value={value.join(", ")}
         selectedValues={value}
@@ -49,7 +48,6 @@ export const IdentitySection: React.FC<Props> = ({
         searchPlaceholder="Column name"
         emptyLabel="No columns yet, type a name"
         noMatchLabel="No columns matched"
-        allowCustom
         ariaLabel="Match rows using"
         ariaInvalid={error !== null}
         dataHookBase="highlight-identity"

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   fromHighlightConfigWire,
   toHighlightConfigWire,
+  type HighlightConfigWire,
 } from "./highlightConfigWire"
 
 let counter = 0
@@ -10,58 +11,58 @@ const nextId = () => `id${++counter}`
 describe("fromHighlightConfigWire", () => {
   it("maps every rule kind with defaults filled in", () => {
     // Given one rule of each kind in wire shape
-    const result = fromHighlightConfigWire(
-      {
-        identity_columns: ["symbol"],
-        rules: [
-          {
-            kind: "previous",
-            column: "price",
-            op: "gt",
-            color: "green",
-          },
-          {
-            kind: "previous",
-            column: "price",
-            op: "changedBy",
-            threshold: 2,
-            unit: "percent",
-          },
-          { kind: "value", column: "amount", op: "between", value: 1, to: 5 },
-          { kind: "value", column: "amount", op: "gte", value: 100 },
-          {
-            kind: "value",
-            column: "symbol",
-            op: "contains",
-            text: "usdt",
-            color: "amber",
-          },
-          {
-            kind: "steps",
-            column: null,
-            steps: [{ from: 10, color: "teal" }],
-          },
-          {
-            kind: "value",
-            column: "amount",
-            op: "between",
-            value: 1000,
-            to: 2000,
-            fill: "gradient",
-            color: "red",
-            high_color: "green",
-          },
-          {
-            kind: "value",
-            column: "amount",
-            op: "gt",
-            value: 100,
-            applies_to: "row",
-          },
-        ],
-      },
-      nextId,
-    )
+    const wire: HighlightConfigWire = {
+      identity_columns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          column: "price",
+          op: "gt",
+          color: "green",
+        },
+        {
+          kind: "previous",
+          column: "price",
+          op: "changedBy",
+          threshold: 2,
+          unit: "percent",
+        },
+        { kind: "value", column: "amount", op: "between", value: 1, to: 5 },
+        { kind: "value", column: "amount", op: "gte", value: 100 },
+        {
+          kind: "value",
+          column: "symbol",
+          op: "contains",
+          text: "usdt",
+          color: "amber",
+        },
+        {
+          kind: "steps",
+          column: null,
+          steps: [{ from: 10, color: "teal" }],
+        },
+        {
+          kind: "value",
+          column: "amount",
+          op: "between",
+          value: 1000,
+          to: 2000,
+          fill: "gradient",
+          color: "red",
+          high_color: "green",
+        },
+        {
+          kind: "value",
+          column: "amount",
+          op: "gt",
+          value: 100,
+          applies_to: "row",
+        },
+      ],
+    }
+
+    // When it is parsed
+    const result = fromHighlightConfigWire(wire, nextId)
 
     // Then the config carries typed rules with ids and kind defaults
     expect(result.ok).toBe(true)
@@ -114,32 +115,55 @@ describe("fromHighlightConfigWire", () => {
 
   it("rejects a non-list identity, bad ops and unknown colors with the rule index", () => {
     // Given malformed wire configs
-    const noIdentity = fromHighlightConfigWire({
+    const noIdentityWire = {
       identity_columns: "symbol" as never,
       rules: [],
-    })
-    const badOp = fromHighlightConfigWire({
+    }
+    const badOpWire = {
       identity_columns: ["k"],
-      rules: [{ kind: "value", column: "v", op: "changed" }],
-    })
-    const badColor = fromHighlightConfigWire({
-      identity_columns: ["k"],
-      rules: [
-        { kind: "previous", column: "v", op: "lt", color: "hotpink" as never },
-      ],
-    })
-    const negativeThreshold = fromHighlightConfigWire({
+      rules: [{ kind: "value" as const, column: "v", op: "changed" as never }],
+    }
+    const badColorWire = {
       identity_columns: ["k"],
       rules: [
-        { kind: "previous", column: "v", op: "changedBy", threshold: -1 },
+        {
+          kind: "previous" as const,
+          column: "v",
+          op: "lt" as const,
+          color: "hotpink" as never,
+        },
       ],
-    })
-    const fillOnGt = fromHighlightConfigWire({
+    }
+    const negativeThresholdWire = {
       identity_columns: ["k"],
       rules: [
-        { kind: "value", column: "v", op: "gt", value: 1, fill: "gradient" },
+        {
+          kind: "previous" as const,
+          column: "v",
+          op: "changedBy" as const,
+          threshold: -1,
+        },
       ],
-    })
+    }
+    const fillOnGtWire = {
+      identity_columns: ["k"],
+      rules: [
+        {
+          kind: "value" as const,
+          column: "v",
+          op: "gt" as const,
+          value: 1,
+          fill: "gradient" as const,
+        },
+      ],
+    }
+
+    // When each is parsed
+    const noIdentity = fromHighlightConfigWire(noIdentityWire)
+    const badOp = fromHighlightConfigWire(badOpWire)
+    const badColor = fromHighlightConfigWire(badColorWire)
+    const negativeThreshold = fromHighlightConfigWire(negativeThresholdWire)
+    const fillOnGt = fromHighlightConfigWire(fillOnGtWire)
 
     // Then each fails with a pointed message
     expect(noIdentity).toEqual({
@@ -162,29 +186,41 @@ describe("fromHighlightConfigWire", () => {
 
   it("rejects values the reload check would refuse, so a saved config never vanishes", () => {
     // Given rules with an off-enum display, an off-enum unit and a numeric column
-    const badDisplay = fromHighlightConfigWire({
+    const badDisplayWire = {
       identity_columns: ["k"],
       rules: [
-        { kind: "value", column: "v", op: "gt", value: 1 },
-        { kind: "previous", column: "v", op: "gt", display: "flash" as never },
+        { kind: "value" as const, column: "v", op: "gt" as const, value: 1 },
+        {
+          kind: "previous" as const,
+          column: "v",
+          op: "gt" as const,
+          display: "flash" as never,
+        },
       ],
-    })
-    const badUnit = fromHighlightConfigWire({
+    }
+    const badUnitWire = {
       identity_columns: ["k"],
       rules: [
         {
-          kind: "previous",
+          kind: "previous" as const,
           column: "v",
-          op: "changedBy",
+          op: "changedBy" as const,
           threshold: 1,
           unit: "pct" as never,
         },
       ],
-    })
-    const numericColumn = fromHighlightConfigWire({
+    }
+    const numericColumnWire = {
       identity_columns: ["k"],
-      rules: [{ kind: "value", column: 5 as never, op: "isNull" }],
-    })
+      rules: [
+        { kind: "value" as const, column: 5 as never, op: "isNull" as const },
+      ],
+    }
+
+    // When each is parsed
+    const badDisplay = fromHighlightConfigWire(badDisplayWire)
+    const badUnit = fromHighlightConfigWire(badUnitWire)
+    const numericColumn = fromHighlightConfigWire(numericColumnWire)
 
     // Then each fails at the rule, instead of saving a config the next load drops
     expect(badDisplay).toEqual({
@@ -203,26 +239,47 @@ describe("fromHighlightConfigWire", () => {
 
   it("orders between bounds like the drawer and defaults changedBy to percent", () => {
     // Given a flat gradient, a reversed solid range, and a changedBy without a unit
-    const between = (value: number, to: number, fill?: "gradient") =>
-      fromHighlightConfigWire({
-        identity_columns: [],
-        rules: [{ kind: "value", column: "v", op: "between", value, to, fill }],
-      })
-    const noUnit = fromHighlightConfigWire({
-      identity_columns: ["k"],
-      rules: [{ kind: "previous", column: "v", op: "changedBy", threshold: 1 }],
+    const between = (value: number, to: number, fill?: "gradient") => ({
+      identity_columns: [],
+      rules: [
+        {
+          kind: "value" as const,
+          column: "v",
+          op: "between" as const,
+          value,
+          to,
+          fill,
+        },
+      ],
     })
+    const noUnitWire = {
+      identity_columns: ["k"],
+      rules: [
+        {
+          kind: "previous" as const,
+          column: "v",
+          op: "changedBy" as const,
+          threshold: 1,
+        },
+      ],
+    }
+
+    // When each is parsed
+    const flatGradient = fromHighlightConfigWire(between(10, 10, "gradient"))
+    const reversed = fromHighlightConfigWire(between(10, 5))
+    const flatSolid = fromHighlightConfigWire(between(10, 10))
+    const noUnit = fromHighlightConfigWire(noUnitWire)
 
     // Then the flat gradient and the reversed range fail, and the unit is percent
-    expect(between(10, 10, "gradient")).toMatchObject({
+    expect(flatGradient).toMatchObject({
       ok: false,
       error: "rules[0].to: Should be above From",
     })
-    expect(between(10, 5)).toMatchObject({
+    expect(reversed).toMatchObject({
       ok: false,
       error: "rules[0].to: Should be at least From",
     })
-    expect(between(10, 10).ok).toBe(true)
+    expect(flatSolid.ok).toBe(true)
     expect(noUnit).toMatchObject({
       ok: true,
       config: { rules: [{ condition: { unit: "percent" } }] },

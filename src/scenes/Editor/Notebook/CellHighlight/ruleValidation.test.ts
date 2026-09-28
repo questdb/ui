@@ -29,15 +29,21 @@ const valueRule = (
 
 describe("validateRule", () => {
   it("requires a column after resetting a configured rule's target", () => {
+    // Given a configured rule with its target cleared, then restored
     const configured = valueRule("value.gt")
     const cleared: DraftRule = {
       ...configured,
       target: { kind: "column", name: "" },
     }
-    expect(validateRule(cleared, columns)).toEqual({
-      column: "Choose a column",
-    })
-    expect(validateRule({ ...cleared, target: price }, columns)).toEqual({})
+    const restored = { ...cleared, target: price }
+
+    // When both are validated
+    const clearedErrors = validateRule(cleared, columns)
+    const restoredErrors = validateRule(restored, columns)
+
+    // Then only the cleared rule asks for a column
+    expect(clearedErrors).toEqual({ column: "Choose a column" })
+    expect(restoredErrors).toEqual({})
   })
 
   it("asks for a column, then a condition, on an unfinished rule", () => {
@@ -45,15 +51,17 @@ describe("validateRule", () => {
     const empty = createUnsetRule("u")
     const withColumn = { ...empty, target: price }
 
+    // When both are validated
+    const emptyErrors = validateRule(empty, columns)
+    const withColumnErrors = validateRule(withColumn, columns)
+
     // Then each state names the next missing choice
-    expect(validateRule(empty, columns)).toEqual({ column: "Choose a column" })
-    expect(validateRule(withColumn, columns)).toEqual({
-      condition: "Choose a condition",
-    })
+    expect(emptyErrors).toEqual({ column: "Choose a column" })
+    expect(withColumnErrors).toEqual({ condition: "Choose a condition" })
   })
 
   it("requires a non-negative number for the change threshold", () => {
-    // Given a changed-by rule with a negative threshold
+    // Given a changed-by rule with a negative threshold, and one with zero
     const rule = valueRule("prev.changedBy")
     if (rule.kind !== "previous" || rule.condition.op !== "changedBy")
       throw new Error("expected changedBy")
@@ -61,17 +69,15 @@ describe("validateRule", () => {
       ...rule,
       condition: { ...rule.condition, threshold: -1 },
     }
+    const zero = { ...rule, condition: { ...rule.condition, threshold: 0 } }
 
-    // Then the threshold is flagged, and 0 is accepted
-    expect(validateRule(negative, columns)).toEqual({
-      threshold: "Should be non-negative",
-    })
-    expect(
-      validateRule(
-        { ...rule, condition: { ...rule.condition, threshold: 0 } },
-        columns,
-      ),
-    ).toEqual({})
+    // When both are validated
+    const negativeErrors = validateRule(negative, columns)
+    const zeroErrors = validateRule(zero, columns)
+
+    // Then the negative threshold is flagged, and 0 is accepted
+    expect(negativeErrors).toEqual({ threshold: "Should be non-negative" })
+    expect(zeroErrors).toEqual({})
   })
 
   it("checks a comparison value against the column kind", () => {
@@ -85,31 +91,35 @@ describe("validateRule", () => {
       condition: { op: "gt" as const, value },
     })
 
+    // When blank, text, numeric and timestamp values are validated
+    const blank = validateRule(withValue(numeric, ""), columns)
+    const text = validateRule(withValue(numeric, "abc"), columns)
+    const number = validateRule(withValue(numeric, "12.5"), columns)
+    const words = validateRule(withValue(temporal, "yesterday"), columns)
+    const timestamp = validateRule(
+      withValue(temporal, "2026-09-25T10:00:00Z"),
+      columns,
+    )
+
     // Then blanks, non-numbers and non-timestamps are flagged with short messages
-    expect(validateRule(withValue(numeric, ""), columns)).toEqual({
-      value: "Should not be empty",
-    })
-    expect(validateRule(withValue(numeric, "abc"), columns)).toEqual({
-      value: "Should be a number",
-    })
-    expect(validateRule(withValue(numeric, "12.5"), columns)).toEqual({})
-    expect(validateRule(withValue(temporal, "yesterday"), columns)).toEqual({
-      value: "Should be a timestamp",
-    })
-    expect(
-      validateRule(withValue(temporal, "2026-09-25T10:00:00Z"), columns),
-    ).toEqual({})
+    expect(blank).toEqual({ value: "Should not be empty" })
+    expect(text).toEqual({ value: "Should be a number" })
+    expect(number).toEqual({})
+    expect(words).toEqual({ value: "Should be a timestamp" })
+    expect(timestamp).toEqual({})
   })
 
   it("lets = on a text column take any text, including empty", () => {
     // Given an = rule on symbol with an empty value
     const rule = valueRule("value.eq", symbol)
     if (rule.kind !== "value") throw new Error("expected value rule")
+    const emptyText = { ...rule, condition: { op: "eq" as const, value: "" } }
+
+    // When it is validated
+    const errors = validateRule(emptyText, columns)
 
     // Then nothing is flagged
-    expect(
-      validateRule({ ...rule, condition: { op: "eq", value: "" } }, columns),
-    ).toEqual({})
+    expect(errors).toEqual({})
   })
 
   it("orders a between range and needs a real span for a gradient", () => {
@@ -129,15 +139,17 @@ describe("validateRule", () => {
       },
     })
 
+    // When each range is validated
+    const reversed = validateRule(between(10, 5), columns)
+    const flatSolid = validateRule(between(10, 10), columns)
+    const flatGradient = validateRule(between(10, 10, true), columns)
+    const spanGradient = validateRule(between(5, 10, true), columns)
+
     // Then To is flagged relative to From
-    expect(validateRule(between(10, 5), columns)).toEqual({
-      to: "Should be at least From",
-    })
-    expect(validateRule(between(10, 10), columns)).toEqual({})
-    expect(validateRule(between(10, 10, true), columns)).toEqual({
-      to: "Should be above From",
-    })
-    expect(validateRule(between(5, 10, true), columns)).toEqual({})
+    expect(reversed).toEqual({ to: "Should be at least From" })
+    expect(flatSolid).toEqual({})
+    expect(flatGradient).toEqual({ to: "Should be above From" })
+    expect(spanGradient).toEqual({})
   })
 
   it("accepts automatic between bounds without ordering them", () => {
@@ -157,34 +169,39 @@ describe("validateRule", () => {
       condition: { ...rule.condition, from: 10, to: null },
     }
 
+    // When both are validated
+    const autoErrors = validateRule(auto, columns)
+    const openTopErrors = validateRule(openTop, columns)
+
     // Then nothing is flagged
-    expect(validateRule(auto, columns)).toEqual({})
-    expect(validateRule(openTop, columns)).toEqual({})
+    expect(autoErrors).toEqual({})
+    expect(openTopErrors).toEqual({})
   })
 
   it("requires text for contains and a compiling pattern for matches", () => {
-    // Given contains and matches rules on symbol
+    // Given an empty contains rule, a broken pattern and a valid pattern
     const contains = valueRule("value.contains", symbol)
     const matches = valueRule("value.matches", symbol)
     if (contains.kind !== "value" || matches.kind !== "value")
       throw new Error("expected value rules")
+    const broken = {
+      ...matches,
+      condition: { op: "matches" as const, pattern: "(" },
+    }
+    const compiling = {
+      ...matches,
+      condition: { op: "matches" as const, pattern: "^EUR" },
+    }
+
+    // When each is validated
+    const containsErrors = validateRule(contains, columns)
+    const brokenErrors = validateRule(broken, columns)
+    const compilingErrors = validateRule(compiling, columns)
 
     // Then blanks and a broken pattern are flagged
-    expect(validateRule(contains, columns)).toEqual({
-      text: "Should not be empty",
-    })
-    expect(
-      validateRule(
-        { ...matches, condition: { op: "matches", pattern: "(" } },
-        columns,
-      ),
-    ).toEqual({ pattern: "Invalid expression" })
-    expect(
-      validateRule(
-        { ...matches, condition: { op: "matches", pattern: "^EUR" } },
-        columns,
-      ),
-    ).toEqual({})
+    expect(containsErrors).toEqual({ text: "Should not be empty" })
+    expect(brokenErrors).toEqual({ pattern: "Invalid expression" })
+    expect(compilingErrors).toEqual({})
   })
 
   it("flags empty, non-numeric and duplicate step bounds", () => {
@@ -199,15 +216,18 @@ describe("validateRule", () => {
         { id: "c", from: Number.NaN, color: "dataSeries3" as const },
       ],
     }
+    const noSteps = { ...rule, steps: [] }
+
+    // When both are validated
+    const duplicateErrors = validateRule(duplicate, columns)
+    const noStepsErrors = validateRule(noSteps, columns)
 
     // Then only the later duplicate and the blank bound are flagged
-    expect(validateRule(duplicate, columns)).toEqual({
+    expect(duplicateErrors).toEqual({
       [stepErrorKey("b")]: "Duplicate bound",
       [stepErrorKey("c")]: "Should be a number",
     })
-    expect(validateRule({ ...rule, steps: [] }, columns)).toEqual({
-      steps: "Add at least one step",
-    })
+    expect(noStepsErrors).toEqual({ steps: "Add at least one step" })
   })
 
   it("collects errors per rule id and skips valid rules", () => {
@@ -231,26 +251,32 @@ describe("validateIdentity", () => {
       identityColumns: [],
       rules: [valueRule("prev.gt")],
     }
+    const withIdentity = { ...withPrevious, identityColumns: ["symbol"] }
+
+    // When each config is validated
+    const valueOnlyError = validateIdentity(valueOnly)
+    const withPreviousError = validateIdentity(withPrevious)
+    const withIdentityError = validateIdentity(withIdentity)
 
     // Then only the comparison rule needs an identity
-    expect(validateIdentity(valueOnly)).toBeNull()
-    expect(validateIdentity(withPrevious)).toBe("Needed for comparison rules")
-    expect(
-      validateIdentity({ ...withPrevious, identityColumns: ["symbol"] }),
-    ).toBeNull()
+    expect(valueOnlyError).toBeNull()
+    expect(withPreviousError).toBe("Needed for comparison rules")
+    expect(withIdentityError).toBeNull()
   })
 
   it("accepts any text for a comparison on a column of unknown type", () => {
     // Given a > value rule on a column no result has shown yet
     const rule = valueRule("value.gt", { kind: "column", name: "later" })
     if (rule.kind !== "value") throw new Error("expected value rule")
+    const text = { ...rule, condition: { op: "gt" as const, value: "abc" } }
+    const blank = { ...rule, condition: { op: "gt" as const, value: "" } }
+
+    // When both are validated
+    const textErrors = validateRule(text, columns)
+    const blankErrors = validateRule(blank, columns)
 
     // Then text is accepted, only blank is flagged
-    expect(
-      validateRule({ ...rule, condition: { op: "gt", value: "abc" } }, columns),
-    ).toEqual({})
-    expect(
-      validateRule({ ...rule, condition: { op: "gt", value: "" } }, columns),
-    ).toEqual({ value: "Should not be empty" })
+    expect(textErrors).toEqual({})
+    expect(blankErrors).toEqual({ value: "Should not be empty" })
   })
 })
