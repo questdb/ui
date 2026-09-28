@@ -2,9 +2,8 @@ import React from "react"
 import styled from "styled-components"
 import { FileSqlIcon, TableIcon } from "@phosphor-icons/react"
 import { Reset } from "../../../../components/icons"
-import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import { glassLens, IconButton, Tooltip } from "../../../../components"
+import { glassLens, IconButton, Spinner, Tooltip } from "../../../../components"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
