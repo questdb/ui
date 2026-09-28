@@ -30,6 +30,7 @@ export const QueryActivityList = ({
 }: Props) => (
   <List data-hook="query-activity-list">
     <VirtualList
+      data-hook="query-activity-scroller"
       height="100%"
       totalCount={items.length}
       computeItemKey={(index) => items[index].row.queryId.toString()}

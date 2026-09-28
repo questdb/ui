@@ -133,6 +133,50 @@ const rowIds = () =>
     .getByDataHook("query-activity-row")
     .then(($rows) => [...$rows].map((row) => row.dataset.queryId))
 
+const getRow = (queryId, options) =>
+  cy.get(
+    `[data-hook="query-activity-row"][data-query-id="${queryId}"]`,
+    options,
+  )
+
+const LARGE_LISTING_SIZE = 10000
+const LARGE_LISTING_FIRST_ID = 100000
+const LARGE_LISTING_USERS = ["alice", "bob", "carol"]
+const LARGE_LISTING_NEEDLE_USER = "zed"
+const LARGE_LISTING_NEEDLE_INDEX = 4321
+const LARGE_LISTING_MAX_AGE_SECONDS = 600
+const SETTLE_MS = 500
+
+const largeListing = () =>
+  Array.from({ length: LARGE_LISTING_SIZE }, (_, index) =>
+    row({
+      queryId: LARGE_LISTING_FIRST_ID + index,
+      query: `SELECT symbol, avg(price) FROM trades_${index} SAMPLE BY 1m`,
+      startedSecondsAgo: index % LARGE_LISTING_MAX_AGE_SECONDS,
+      memoryUsed: ((index * 7919) % 4096) * MIB,
+      memoryLimit: 4096 * MIB,
+      username:
+        index === LARGE_LISTING_NEEDLE_INDEX
+          ? LARGE_LISTING_NEEDLE_USER
+          : LARGE_LISTING_USERS[index % LARGE_LISTING_USERS.length],
+    }),
+  )
+
+const settledRows = () => {
+  cy.wait(SETTLE_MS)
+  return cy.getByDataHook("query-activity-row", { timeout: 0 })
+}
+
+const settledFirstRowId = (queryId) =>
+  settledRows().then(($rows) =>
+    expect($rows.first().attr("data-query-id")).to.equal(String(queryId)),
+  )
+
+const pickOrder = (key) => {
+  cy.getByDataHook("query-activity-sort-trigger").click()
+  cy.getByDataHook(`query-activity-sort-${key}`).click()
+}
+
 describe("Query Activity drawer", () => {
   beforeEach(() => {
     cy.loadConsoleWithAuth()
@@ -163,7 +207,7 @@ describe("Query Activity drawer", () => {
     )
   })
 
-  it("sorts by memory by default and grades memory-heavy queries", () => {
+  it("sorts by memory by default, grades memory-heavy queries and re-sorts from the menu", () => {
     // Given
     interceptListing([SELF_ROW, WAL_ROW, WARNING_ROW, CRITICAL_ROW])
 
@@ -171,9 +215,9 @@ describe("Query Activity drawer", () => {
     openDrawer()
     cy.wait("@queryActivity")
 
-    // Then
+    // Then the heaviest query comes first and untracked memory last
     rowIds().should("deep.equal", ["62179", "57777", "58001"])
-    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]')
+    getRow(62179)
       .should("have.attr", "data-severity", "warning")
       .within(() => {
         cy.getByDataHook("query-activity-row-started").should(
@@ -185,24 +229,13 @@ describe("Query Activity drawer", () => {
           "812.0 MiB / 1.0 GiB",
         )
       })
-    cy.get('[data-hook="query-activity-row"][data-query-id="57777"]').should(
-      "have.attr",
-      "data-severity",
-      "none",
-    )
-    cy.get('[data-hook="query-activity-row"][data-query-id="58001"]')
+    getRow(57777).should("have.attr", "data-severity", "none")
+    getRow(58001)
       .should("have.attr", "data-severity", "none")
       .within(() => {
         cy.getByDataHook("query-activity-row-wal").should("be.visible")
         cy.getByDataHook("query-activity-row-cancel").should("not.exist")
       })
-  })
-
-  it("re-sorts from the sort menu with untracked memory last", () => {
-    // Given
-    interceptListing([SELF_ROW, CRITICAL_ROW, WARNING_ROW, WAL_ROW])
-    openDrawer()
-    cy.wait("@queryActivity")
 
     // When
     cy.getByDataHook("query-activity-sort-trigger").click()
@@ -239,7 +272,7 @@ describe("Query Activity drawer", () => {
     cy.wait("@queryActivity")
 
     // Then
-    cy.get('[data-hook="query-activity-row"][data-query-id="58010"]')
+    getRow(58010)
       .should("have.attr", "data-state", "cancelled")
       .should("have.attr", "data-severity", "none")
       .within(() => {
@@ -251,43 +284,70 @@ describe("Query Activity drawer", () => {
       })
   })
 
-  it("cancels a query on the server after confirmation", () => {
+  it("cancels a query only after confirmation and drops the in-flight listing", () => {
     // Given
     interceptListing([SELF_ROW, CRITICAL_ROW])
     interceptCancel()
     openDrawer()
     cy.wait("@queryActivity")
+    rowIds().should("deep.equal", ["62179"])
 
-    // When
-    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').within(
-      () => {
-        cy.getByDataHook("query-activity-row-cancel").click({ force: true })
+    // When the confirmation is dismissed
+    cy.getByDataHook("query-activity-row-cancel").click({ force: true })
+    cy.getByDataHook("query-activity-cancel-dialog").should("be.visible")
+    cy.getByDataHook("query-activity-cancel-dismiss").click()
+
+    // Then the query is kept
+    cy.getByDataHook("query-activity-cancel-dialog").should("not.exist")
+    cy.get("@cancelQuery.all").should("have.length", 0)
+
+    // Given a slow poll is in flight
+    let slowRequests = 0
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
       },
-    )
+      (req) => {
+        slowRequests += 1
+        req.reply({
+          delay: 3000,
+          statusCode: 200,
+          body: listingResponse([SELF_ROW, CRITICAL_ROW]),
+        })
+      },
+    ).as("slowListing")
+    cy.wrap(null).should(() => expect(slowRequests).to.be.greaterThan(0))
+    cy.intercept(
+      {
+        method: "GET",
+        pathname: "/exec",
+        query: { query: /query_activity\(\)/ },
+      },
+      { statusCode: 200, body: listingResponse([SELF_ROW]) },
+    ).as("freshListing")
+
+    // When the cancel is confirmed during that poll
+    getRow(62179).within(() => {
+      cy.getByDataHook("query-activity-row-cancel").click({ force: true })
+    })
     cy.getByDataHook("query-activity-cancel-dialog").should("be.visible")
     cy.getByDataHook("query-activity-cancel-confirm").click()
 
-    // Then
+    // Then the server receives the cancel
     cy.wait("@cancelQuery")
       .its("request.url")
       .should("match", /CANCEL(?:%20|\+)QUERY(?:%20|\+)62179/)
     cy.getByDataHook("query-activity-cancel-dialog").should("not.exist")
-  })
 
-  it("keeps the query when the confirmation is dismissed", () => {
-    // Given
-    interceptListing([SELF_ROW, CRITICAL_ROW])
-    interceptCancel()
-    openDrawer()
-    cy.wait("@queryActivity")
+    // And a fresh listing lands without waiting for the slow one
+    cy.wait("@freshListing", { timeout: 2000 })
+    getRow(62179).should("have.attr", "data-state", "finished")
 
-    // When
-    cy.getByDataHook("query-activity-row-cancel").click({ force: true })
-    cy.getByDataHook("query-activity-cancel-dismiss").click()
-
-    // Then
-    cy.getByDataHook("query-activity-cancel-dialog").should("not.exist")
-    cy.get("@cancelQuery.all").should("have.length", 0)
+    // And the slow response never revives the query
+    cy.wait(3000)
+    getRow(62179).should("not.have.attr", "data-state", "running")
   })
 
   it("filters rows by query text, user, or id", () => {
@@ -364,7 +424,7 @@ describe("Query Activity drawer", () => {
     cy.wait("@queryActivity")
 
     // Then the row lingers as finished without a cancel action
-    cy.get('[data-hook="query-activity-row"][data-query-id="57777"]')
+    getRow(57777)
       .should("have.attr", "data-state", "finished")
       .within(() => {
         cy.getByDataHook("query-activity-row-state").should(
@@ -375,9 +435,7 @@ describe("Query Activity drawer", () => {
       })
 
     // And it is wiped after the grace period
-    cy.get('[data-hook="query-activity-row"][data-query-id="57777"]', {
-      timeout: 8000,
-    }).should("not.exist")
+    getRow(57777, { timeout: 8000 }).should("not.exist")
     rowIds().should("deep.equal", ["62179"])
   })
 
@@ -468,65 +526,6 @@ describe("Query Activity drawer", () => {
     cy.getByDataHook("query-activity-empty").should("be.visible")
   })
 
-  it("refreshes right after a cancel and drops the in-flight listing", () => {
-    // Given the list is loaded and a slow poll is in flight
-    interceptListing([SELF_ROW, CRITICAL_ROW])
-    interceptCancel()
-    openDrawer()
-    cy.wait("@queryActivity")
-    rowIds().should("deep.equal", ["62179"])
-    let slowRequests = 0
-    cy.intercept(
-      {
-        method: "GET",
-        pathname: "/exec",
-        query: { query: /query_activity\(\)/ },
-      },
-      (req) => {
-        slowRequests += 1
-        req.reply({
-          delay: 3000,
-          statusCode: 200,
-          body: listingResponse([SELF_ROW, CRITICAL_ROW]),
-        })
-      },
-    ).as("slowListing")
-    cy.wrap(null).should(() => expect(slowRequests).to.be.greaterThan(0))
-    cy.intercept(
-      {
-        method: "GET",
-        pathname: "/exec",
-        query: { query: /query_activity\(\)/ },
-      },
-      { statusCode: 200, body: listingResponse([SELF_ROW]) },
-    ).as("freshListing")
-
-    // When the query is cancelled during that poll
-    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').within(
-      () => {
-        cy.getByDataHook("query-activity-row-cancel").click({ force: true })
-      },
-    )
-    cy.getByDataHook("query-activity-cancel-confirm").click()
-    cy.wait("@cancelQuery")
-
-    // Then a fresh listing lands without waiting for the slow one
-    cy.wait("@freshListing", { timeout: 2000 })
-    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').should(
-      "have.attr",
-      "data-state",
-      "finished",
-    )
-
-    // And the slow response never revives the query
-    cy.wait(3000)
-    cy.get('[data-hook="query-activity-row"][data-query-id="62179"]').should(
-      "not.have.attr",
-      "data-state",
-      "running",
-    )
-  })
-
   it("keeps the start time correct when the drawer reopens", () => {
     // Given
     cy.clock(Date.parse(SERVER_NOW), ["Date", "setInterval", "clearInterval"])
@@ -574,15 +573,71 @@ describe("Query Activity drawer", () => {
     )
   })
 
-  it("closes from the sidebar button", () => {
+  it("lists, filters and sorts ten thousand queries without stalling", () => {
     // Given
-    interceptListing([SELF_ROW])
-    openDrawer()
+    interceptListing([SELF_ROW, ...largeListing()])
 
     // When
-    cy.getByDataHook("query-activity-toggle-button").click()
+    openDrawer()
+    cy.wait("@queryActivity")
+
+    // Then the listing renders through the virtual list
+    cy.wait(SETTLE_MS)
+    cy.getByDataHook("query-activity-count-badge", { timeout: 0 }).then(
+      ($badge) =>
+        expect($badge.text()).to.contain(`${LARGE_LISTING_SIZE} running`),
+    )
+    cy.getByDataHook("query-activity-row", { timeout: 0 }).then(($rows) =>
+      expect($rows.length, "rendered rows").to.be.within(1, 199),
+    )
+
+    // When the list is scrolled to the end
+    cy.getByDataHook("query-activity-scroller").scrollTo("bottom")
+
+    // Then the lightest query is rendered
+    settledRows()
+      .last()
+      .within(() =>
+        cy
+          .getByDataHook("query-activity-row-memory", { timeout: 0 })
+          .then(($memory) => expect($memory.text()).to.match(/^0 B \//)),
+      )
+
+    // When a filter matches a single user
+    cy.getByDataHook("query-activity-search").type(LARGE_LISTING_NEEDLE_USER)
+
+    // Then only that query remains
+    settledRows().then(($rows) => {
+      expect($rows.length).to.equal(1)
+      expect($rows.first().attr("data-query-id")).to.equal(
+        String(LARGE_LISTING_FIRST_ID + LARGE_LISTING_NEEDLE_INDEX),
+      )
+    })
+
+    // When the filter is cleared
+    cy.getByDataHook("query-activity-search-clear").click()
+
+    // Then the list is back
+    settledRows().then(($rows) => expect($rows.length).to.be.greaterThan(1))
+
+    // When the list is sorted by lowest id
+    pickOrder("id-asc")
 
     // Then
-    cy.getByDataHook("query-activity-drawer").should("not.exist")
+    settledFirstRowId(LARGE_LISTING_FIRST_ID)
+
+    // When the list is sorted by highest id
+    pickOrder("id-desc")
+
+    // Then
+    settledFirstRowId(LARGE_LISTING_FIRST_ID + LARGE_LISTING_SIZE - 1)
+
+    // When the list is sorted by oldest start
+    pickOrder("started-asc")
+
+    // Then
+    settledFirstRowId(
+      LARGE_LISTING_FIRST_ID + LARGE_LISTING_MAX_AGE_SECONDS - 1,
+    )
   })
 })
