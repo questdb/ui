@@ -38,6 +38,7 @@ export enum StoreKey {
   REST_TOKEN = "rest.token",
   BASIC_AUTH_HEADER = "basic.auth.header",
   AUTO_REFRESH_TABLES = "auto.refresh.tables",
+  AUTO_REFRESH_QUERY_ACTIVITY = "auto.refresh.queryActivity",
   SSO_USERNAME = "sso.username",
   SSO_SESSION_ACTIVE = "sso.session.active",
   LEFT_PANEL_STATE = "left.panel.state",
@@ -48,6 +49,7 @@ export enum StoreKey {
   USE_QUICK_VIS = "feature.quickVis",
   NOTEBOOK_ONBOARDING = "notebook.onboarding",
   RUN_WITH_SELECTION = "editor.runWithSelection",
+  CAPITALIZE_KEYWORDS_ON_FORMAT = "editor.capitalizeKeywordsOnFormat",
   MAX_COLUMN_WIDTH = "grid.maxColumnWidth",
   THEME_PREFERENCE = "appearance.themePreference",
 }

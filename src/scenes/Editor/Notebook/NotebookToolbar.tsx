@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box, Button, IconButton, Tooltip } from "../../../components"
+import { Box, Button, IconButton, Spinner, Tooltip } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import {
   DownloadSimpleIcon,
@@ -8,7 +8,6 @@ import {
   PencilSimpleLineIcon,
 } from "@phosphor-icons/react"
 import { CopyAlt } from "../../../components/icons"
-import { Spinner } from "./cells/Spinner"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"

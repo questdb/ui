@@ -1,3 +1,4 @@
+import "../test/stubBrowserGlobals"
 import { describe, it, expect } from "vitest"
 import {
   parseOne,

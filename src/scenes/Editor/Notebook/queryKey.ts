@@ -5,7 +5,7 @@ import { sqlHash } from "../../../utils/sqlHash"
 // object key ordering would enumerate first and break insertion-order LRUs.
 export const queryKeyFor = (query: string): string => {
   try {
-    return "q" + sqlHash(normalizeSql(query, false))
+    return "q" + sqlHash(normalizeSql(query, false, { capitalize: false }))
   } catch {
     return "q" + sqlHash(query.trim())
   }
