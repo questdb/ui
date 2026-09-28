@@ -130,5 +130,6 @@ export {
   setLayoutModeTransition,
   setNotebookAutoRefreshTransition,
   updateCellTransition,
+  type AppliedNotebookState,
   type NotebookTransitionResult,
 } from "./notebookTransitions"

@@ -326,8 +326,9 @@ type Entry = {
   snapshotRetained: boolean
   ensureAttempted: boolean
   lastFetchedAt: number
-  // The interval the adaptive loop last settled on. A restarted loop waits
-  // out the rest of it before its first tick.
+  // The interval the running loop last settled on, back to the floor on an
+  // auto-refresh change. A restarted loop waits out the rest of it before its
+  // first tick.
   pollIntervalMs: number
   state: CellFetchState
   sqlDebounce: ReturnType<typeof setTimeout> | null
@@ -794,6 +795,7 @@ export class CellRefreshEngine {
     )
     if (autoRefresh !== entry.autoRefresh) {
       entry.autoRefresh = autoRefresh
+      entry.pollIntervalMs = REFRESH_MIN_MS
       this.updatePoll(entry)
     }
     const target = entry.pendingSql ?? entry.sql
@@ -1130,8 +1132,12 @@ export class CellRefreshEngine {
     const fixed = autoRefreshIntervalMs(entry.autoRefresh)
     // A restarted loop resumes the schedule the last round set: its first
     // tick lands when it was due, never at once because the cell was revealed.
-    const untilDue =
-      entry.lastFetchedAt + (fixed ?? entry.pollIntervalMs) - Date.now()
+    // One interval is the most it waits, so a clock set back cannot stall it.
+    const interval = fixed ?? entry.pollIntervalMs
+    const untilDue = Math.min(
+      interval,
+      entry.lastFetchedAt + interval - Date.now(),
+    )
     if (untilDue > 0) {
       const aborted = await sleep(untilDue, abort.signal)
       if (aborted) return

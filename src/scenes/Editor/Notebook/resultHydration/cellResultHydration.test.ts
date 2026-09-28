@@ -370,7 +370,9 @@ describe("CellResultHydrationEngine", () => {
     const script = { successCount: 2, failedCount: 0, durationMs: 5 }
     seedCell({ ...ranCell("c1"), value: `${first}; ${second}` })
     snapshots.set("c1", {
-      ...snapshot("c1", [dqlResult(first), dqlResult(second)], { script }),
+      ...snapshot("c1", [legacyDqlResult(first), legacyDqlResult(second)], {
+        script,
+      }),
       activeStatementKey: legacyKeyOf(second),
       refreshErrors: [{ statementKey: legacyKeyOf(first), message: "boom" }],
     })
@@ -389,14 +391,18 @@ describe("CellResultHydrationEngine", () => {
       script,
     })
 
-    // And the disk copy now holds head keys with its frame and script intact
+    // And the disk copy now holds head keys and the folded fetch time, with
+    // its frame and script intact
     expect(rewrites).toHaveLength(1)
     expect(rewrites[0]).toMatchObject({
       activeStatementKey: headSecond,
       refreshErrors: [{ statementKey: headFirst, message: "boom" }],
       script,
     })
-    expect(rewrites[0].results).toEqual([dqlResult(first), dqlResult(second)])
+    expect(rewrites[0].results).toEqual([
+      { ...legacyDqlResult(first), fetchedAt: 1000 },
+      { ...legacyDqlResult(second), fetchedAt: 1000 },
+    ])
   })
 
   it("folds a legacy snapshot's fetch time into each result once and drops the legacy stamps from the rewrite", async () => {

@@ -125,6 +125,11 @@ export type SingleQueryResult =
   | TransientQueryResult
   | CancelledQueryResult
 
+export const isSettledResult = (
+  result: SingleQueryResult,
+): result is Exclude<SingleQueryResult, TransientQueryResult> =>
+  result.type !== "running" && result.type !== "queued"
+
 export type CellResult = {
   results: SingleQueryResult[]
   activeResultIndex: number

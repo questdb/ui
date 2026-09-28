@@ -147,10 +147,10 @@ export const useCellRunActions = ({
 
     const priorResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const { ok } = await runCell(cell.id)
+    const outcome = await runCell(cell.id)
     const freshResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+    emitRanEvent(createRunStatus(priorResult, freshResult, outcome))
   }, [
     cell.id,
     runCell,
@@ -185,10 +185,10 @@ export const useCellRunActions = ({
       clearHighlight()
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      void runCell(cell.id, normalizeQueryText(sql)).then(({ ok }) => {
+      void runCell(cell.id, normalizeQueryText(sql)).then((outcome) => {
         const freshResult =
           getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-        emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+        emitRanEvent(createRunStatus(priorResult, freshResult, outcome))
       })
       return true
     },

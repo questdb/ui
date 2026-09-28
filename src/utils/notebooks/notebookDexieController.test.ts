@@ -364,6 +364,54 @@ describe("createDexieNotebookController — structural edits", () => {
     expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeUndefined()
   })
 
+  it("apply reports a snapshot result its rewrite cleared", async () => {
+    // Given a passive cell whose result lives only in its snapshot
+    await seedNotebook({
+      cells: [cell("a", "select 1", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [{ ...dqlResult, query: "select 1" }],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    // When an apply rewrites its only statement
+    const out = await controller.applyNotebookState({
+      cells: [{ id: "a", value: "select 2" }],
+    })
+
+    // Then the cell is reported as cleared
+    expect(out.resultsCleared).toEqual(["a"])
+  })
+
+  it("apply does not report a snapshot result that keeps a statement", async () => {
+    // Given a passive cell whose snapshot holds two statements
+    await seedNotebook({
+      cells: [cell("a", "select 1; select 2", { lastRunStatus: "success" })],
+    })
+    await saveCellSnapshot({
+      bufferId: BUFFER_ID,
+      cellId: "a",
+      results: [
+        { ...dqlResult, query: "select 1" },
+        { ...dqlResult, query: "select 2" },
+      ],
+      savedAt: 1,
+    })
+    const controller = makeController()
+
+    // When an apply rewrites only the second statement
+    const out = await controller.applyNotebookState({
+      cells: [{ id: "a", value: "select 1; select 3" }],
+    })
+
+    // Then the cell keeps its snapshot and is not reported
+    expect(out.resultsCleared).toEqual([])
+    expect(await loadCellSnapshot(BUFFER_ID, "a")).toBeDefined()
+  })
+
   it("updateCell rejects an unknown cell with a typed error", async () => {
     // Given a notebook without cell "ghost"
     await seedNotebook({ cells: [cell("a")] })

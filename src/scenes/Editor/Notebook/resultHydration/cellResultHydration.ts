@@ -1,8 +1,8 @@
-import type {
-  CellResult,
-  NotebookCell,
-  SingleQueryResult,
-  TransientQueryResult,
+import {
+  isSettledResult,
+  type CellResult,
+  type NotebookCell,
+  type SingleQueryResult,
 } from "../../../../store/notebook"
 import type {
   NotebookResultSnapshot,
@@ -56,11 +56,6 @@ const foldLegacyFetchedAt = (
     }
   })
 }
-
-const isSettledResult = (
-  result: SingleQueryResult,
-): result is Exclude<SingleQueryResult, TransientQueryResult> =>
-  result.type !== "running" && result.type !== "queued"
 
 export type CellResultStatus =
   | "unrequested"
@@ -267,7 +262,7 @@ export class CellResultHydrationEngine {
     const loaded = snapshot.results.map(normalizeSnapshotResultQuery)
     const resultKeys = resultStatementKeys(loaded)
     const results = foldLegacyFetchedAt(loaded, resultKeys, snapshot)
-    const rekeyed = rekeyLegacyStatementKeys(results, resultKeys, snapshot)
+    const rekeyed = rekeyLegacyStatementKeys(loaded, resultKeys, snapshot)
     const keyed = rekeyed ?? snapshot
     const reconciled = reconcileKeyedResults(statements, slotKeys, resultKeys, {
       results,

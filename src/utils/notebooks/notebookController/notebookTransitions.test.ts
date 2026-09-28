@@ -409,14 +409,97 @@ describe("applyNotebookStateTransition", () => {
     const out = applyNotebookStateTransition(parts, {
       cells: [{ id: "a", value: "SELECT 2" }, { value: "SELECT 3" }],
     })
-    // Then the result shape the dispatch layer relays back is preserved: a
-    // single `applied` key holding the three diff arrays
-    expect(Object.keys(out.result)).toEqual(["applied"])
+    // Then the dispatch layer gets the three diff arrays and the cleared list
+    expect(Object.keys(out.result)).toEqual(["applied", "resultsCleared"])
     expect(Array.isArray(out.result.applied.added)).toBe(true)
     expect(Array.isArray(out.result.applied.updated)).toBe(true)
     expect(Array.isArray(out.result.applied.deleted)).toBe(true)
     expect(out.result.applied.added).toHaveLength(1)
     expect(out.result.applied.deleted).toHaveLength(0)
+    expect(out.result.resultsCleared).toEqual([])
+  })
+
+  describe("resultsCleared", () => {
+    const heldResult = (queries: string[]) => ({
+      results: queries.map((query) => ({
+        type: "dql" as const,
+        query,
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+      })),
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+
+    it("lists a cell whose rewrite keeps no statement", () => {
+      // Given a cell holding the result of two statements
+      const parts = partsOf([
+        cell("a", "SELECT 1;\nSELECT 2", {
+          result: heldResult(["SELECT 1", "SELECT 2"]),
+        }),
+      ])
+
+      // When an apply rewrites both statements
+      const out = applyNotebookStateTransition(parts, {
+        cells: [{ id: "a", value: "SELECT 3;\nSELECT 4" }],
+      })
+
+      // Then the cell is reported as cleared
+      expect(out.result.resultsCleared).toEqual(["a"])
+    })
+
+    it("does not list a cell whose rewrite keeps one statement", () => {
+      // Given a cell holding the result of two statements
+      const parts = partsOf([
+        cell("a", "SELECT 1;\nSELECT 2", {
+          result: heldResult(["SELECT 1", "SELECT 2"]),
+        }),
+      ])
+
+      // When an apply rewrites only the second statement
+      const out = applyNotebookStateTransition(parts, {
+        cells: [{ id: "a", value: "SELECT 1;\nSELECT 4" }],
+      })
+
+      // Then the cell keeps a result and is not reported
+      expect(out.result.resultsCleared).toEqual([])
+    })
+
+    it("lists a cell that view:'editor' discards", () => {
+      // Given a cell with a result
+      const parts = partsOf([
+        cell("a", "SELECT 1", { result: heldResult(["SELECT 1"]) }),
+      ])
+
+      // When an apply hides its result pane
+      const out = applyNotebookStateTransition(parts, {
+        cells: [{ id: "a", preserveValue: true, mode: null, view: "editor" }],
+      })
+
+      // Then the cell is reported as cleared
+      expect(out.result.resultsCleared).toEqual(["a"])
+    })
+
+    it("adds the cells whose stored snapshot the shell found outdated, once each", () => {
+      // Given an apply that clears the held result of "a"
+      const parts = partsOf([
+        cell("a", "SELECT 1", { result: heldResult(["SELECT 1"]) }),
+        cell("b", "SELECT 2"),
+      ])
+      const out = applyNotebookStateTransition(parts, {
+        cells: [
+          { id: "a", value: "SELECT 3" },
+          { id: "b", value: "SELECT 4" },
+        ],
+      })
+
+      // When the shell reports the snapshot-only results it found outdated
+      const result = out.withSnapshotsCleared?.(["a", "b"])
+
+      // Then both cells are listed, without a duplicate
+      expect(result?.resultsCleared).toEqual(["a", "b"])
+    })
   })
 
   it("revalidates focusedCellId: drops a focus whose cell the apply removed", () => {

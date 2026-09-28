@@ -170,22 +170,82 @@ export type ApplyNotebookStateRequest = {
   cells: ApplyNotebookStateCellRequest[]
 }
 
+type SqlEdit = { cellId: string; value: string; heldResult: boolean }
+
+const sqlEditsOf = (
+  previousCells: NotebookCell[],
+  nextCells: NotebookCell[],
+): SqlEdit[] => {
+  const previousCellsById = new Map(
+    previousCells.map((cell) => [cell.id, cell]),
+  )
+  return nextCells.flatMap((nextCell) => {
+    const previousCell = previousCellsById.get(nextCell.id)
+    return previousCell &&
+      nextCell.type !== "markdown" &&
+      previousCell.value !== nextCell.value
+      ? [
+          {
+            cellId: nextCell.id,
+            value: nextCell.value,
+            heldResult: previousCell.result != null,
+          },
+        ]
+      : []
+  })
+}
+
+// Edited cells whose stored snapshot keeps none of their new statements.
+const snapshotsOutdatedBy = async (
+  bufferId: number,
+  edits: SqlEdit[],
+): Promise<string[]> => {
+  const outdated: string[] = []
+  for (const { cellId, value } of edits) {
+    try {
+      const snapshot = await loadCellSnapshot(bufferId, cellId)
+      if (
+        snapshot &&
+        !snapshotResultsHaveMatchingStatement(
+          snapshot.results,
+          getQueriesFromText(value),
+        )
+      ) {
+        outdated.push(cellId)
+      }
+    } catch {
+      // The document edit is already durable. A later hydration retries
+      // reconciliation if IndexedDB could not be inspected here.
+    }
+  }
+  return outdated
+}
+
 export const createNotebookController = (
   bufferId: number,
   liveActionsRef: { current: NotebookControllerActions },
 ): NotebookController => {
   // The live surface's transition runner: apply the transition to React state
   // via the provider's applyTransition, which settles once the document is
-  // durable; the try normalizes a transition's synchronous typed throw into
-  // the same rejection channel.
-  const applyMutation = <T>(
+  // durable. A result held only in a snapshot (a released cell) is checked
+  // after that; its snapshot stays for hydration to reconcile.
+  const applyMutation = async <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ): Promise<T> => {
-    try {
-      return Promise.resolve(liveActionsRef.current.applyTransition(run))
-    } catch (error) {
-      return Promise.reject(error)
-    }
+    let snapshotEdits: SqlEdit[] = []
+    let withSnapshotsCleared: ((cellIds: string[]) => T) | undefined
+    const result = await liveActionsRef.current.applyTransition((parts) => {
+      const out = run(parts)
+      snapshotEdits = sqlEditsOf(parts.cells, out.parts.cells).filter(
+        (edit) => !edit.heldResult,
+      )
+      withSnapshotsCleared = out.withSnapshotsCleared
+      return out
+    })
+    if (!withSnapshotsCleared) return result
+    return withSnapshotsCleared(
+      await snapshotsOutdatedBy(bufferId, snapshotEdits),
+    )
   }
   const mutate: NotebookMutate = (transition) => applyMutation(transition)
   const mutateWithResultStatus: NotebookMutateWithResultStatus = (transition) =>
@@ -344,17 +404,6 @@ export const createDexieNotebookController = (
         if (commit === "archived") {
           throw notebookArchivedMidEdit(bufferId)
         }
-        const previousCellsById = new Map(
-          view.cells.map((cell) => [cell.id, cell]),
-        )
-        const changedSqlCells = out.parts.cells.flatMap((nextCell) => {
-          const previousCell = previousCellsById.get(nextCell.id)
-          return previousCell &&
-            nextCell.type !== "markdown" &&
-            previousCell.value !== nextCell.value
-            ? [{ cellId: nextCell.id, value: nextCell.value }]
-            : []
-        })
         // Invalidate only after the document commit succeeds. Because this is
         // still inside the per-buffer queue, a completed headless request
         // cannot interleave its result commit between this mutation and the
@@ -379,24 +428,14 @@ export const createDexieNotebookController = (
             clearChartZoom(cellId)
           }
         }
-        const snapshotsToDelete = new Set(out.deleteSnapshots?.cellIds ?? [])
-        for (const { cellId, value } of changedSqlCells) {
-          try {
-            const snapshot = await loadCellSnapshot(bufferId, cellId)
-            if (
-              snapshot &&
-              !snapshotResultsHaveMatchingStatement(
-                snapshot.results,
-                getQueriesFromText(value),
-              )
-            ) {
-              snapshotsToDelete.add(cellId)
-            }
-          } catch {
-            // The document edit is already durable. A later hydration retries
-            // reconciliation if IndexedDB could not be inspected here.
-          }
-        }
+        const outdatedSnapshots = await snapshotsOutdatedBy(
+          bufferId,
+          sqlEditsOf(view.cells, out.parts.cells),
+        )
+        const snapshotsToDelete = new Set([
+          ...(out.deleteSnapshots?.cellIds ?? []),
+          ...outdatedSnapshots,
+        ])
         // Semantic invalidation is awaited so an immediate passive read cannot
         // observe a stale snapshot key after the mutation resolves.
         await Promise.all(
@@ -404,7 +443,12 @@ export const createDexieNotebookController = (
             deleteCellSnapshot(bufferId, cellId).catch(() => undefined),
           ),
         )
-        return out
+        return {
+          result: out.withSnapshotsCleared
+            ? out.withSnapshotsCleared(outdatedSnapshots)
+            : out.result,
+          touchedCellId: out.touchedCellId,
+        }
       },
     )
     emitAgentEdit({ bufferId, cellId: touchedCellId })

@@ -59,6 +59,11 @@ import {
 //                            each shell deletes the snapshot so hydration
 //                            cannot resurrect the old SQL's rows.
 //   - `touchedCellId`      — the cell an agent-edit notification should point at.
+//   - `withSnapshotsCleared` — a result that also reports results held only in
+//                            snapshots. A pure transition cannot read them, so
+//                            each shell checks the snapshots of its SQL edits
+//                            after the commit and passes the cells whose new
+//                            SQL kept none of their statements.
 //
 // Identity contract: untouched cells keep object identity (the composed
 // notebookUtils helpers guarantee it), and `parts.settings` is returned by
@@ -72,6 +77,7 @@ export type NotebookTransitionResult<T = void> = {
   cleanup?: { cellIds: string[] }
   cancelRuns?: { cellIds: string[]; reason: RunCancelReason }
   deleteSnapshots?: { cellIds: string[] }
+  withSnapshotsCleared?: (cellIds: string[]) => T
 }
 
 const requireCellCapacity = (cells: NotebookCell[], bufferId: number): void => {
@@ -507,14 +513,24 @@ export const setCellMaximizedTransition = (
   }
 }
 
+// `resultsCleared` lists every cell whose whole result the apply discarded:
+// a view:"editor" discard, or an SQL rewrite that kept none of its
+// statements' results.
+export type AppliedNotebookState = {
+  applied: { added: string[]; updated: string[]; deleted: string[] }
+  resultsCleared: string[]
+}
+
 export const applyNotebookStateTransition = (
   parts: ViewParts,
   request: ApplyNotebookStateRequest,
   resultStatusOf?: CellResultStatusReader,
-): NotebookTransitionResult<{
-  applied: { added: string[]; updated: string[]; deleted: string[] }
-}> => {
+): NotebookTransitionResult<AppliedNotebookState> => {
   const next = buildAppliedNotebookState(parts, request, resultStatusOf)
+  const appliedWith = (snapshotsCleared: string[]): AppliedNotebookState => ({
+    applied: next.diff,
+    resultsCleared: [...new Set([...next.resultsCleared, ...snapshotsCleared])],
+  })
   const existingSqlCellIds = new Set(
     parts.cells
       .filter((cell) => cell.type !== "markdown")
@@ -547,7 +563,8 @@ export const applyNotebookStateTransition = (
           ? parts.focusedCellId
           : null,
     },
-    result: { applied: next.diff },
+    result: appliedWith([]),
+    withSnapshotsCleared: appliedWith,
     cleanup: { cellIds: next.diff.deleted },
     ...(invalidatedResultIds.size > 0
       ? {

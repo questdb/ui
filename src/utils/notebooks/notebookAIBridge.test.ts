@@ -44,6 +44,7 @@ import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import type { ViewParts } from "./notebookDexieView"
 import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
+import { loadCellSnapshot, saveCellSnapshot } from "../../store/notebookResults"
 import {
   type CellResult,
   type NotebookCell,
@@ -459,53 +460,53 @@ describe("summarizeCellResults", () => {
   })
 })
 
+// The live apply routes through applyTransition, so the mock runs the
+// transition against the current parts and captures the committed result —
+// exactly what the mounted provider would write.
+const makeLiveActions = (
+  prevCells: NotebookCell[],
+  currentMaximizedId: string | null = null,
+) => {
+  const applied: { parts?: ViewParts } = {}
+  const live = {
+    addCell: () => "new",
+    updateCell: () => undefined,
+    deleteCell: () => undefined,
+    moveCellUp: () => undefined,
+    moveCellDown: () => undefined,
+    duplicateCell: () => "dup",
+    runCell: () => Promise.resolve({ ok: true, superseded: false }),
+    updateSettings: () => undefined,
+    setCellMode: () => undefined,
+    setCellChartConfig: () => undefined,
+    setCellPaneView: () => undefined,
+    setMaximizedCellId: vi.fn(),
+    updateCells: () => undefined,
+    applyTransition: <T>(
+      run: (parts: ViewParts) => NotebookTransitionResult<T>,
+    ): Promise<T> => {
+      const out = run({
+        cells: prevCells,
+        settings: {},
+        maximizedCellId: currentMaximizedId,
+        focusedCellId: null,
+      })
+      applied.parts = out.parts
+      return Promise.resolve(out.result)
+    },
+    getCellsSnapshot: () => prevCells,
+    getSettings: () => ({}),
+    getMaximizedCellId: () => currentMaximizedId,
+    flushChartSnapshots: () => Promise.resolve(),
+    readRefreshState: () => new Map(),
+    readResultStatus: () => "unrequested" as const,
+  }
+  return { live, applied }
+}
+
 describe("createNotebookController — applyNotebookState maximized cell id", () => {
   const cellA: NotebookCell = { id: "a", position: 0, value: "SELECT 1" }
   const cellB: NotebookCell = { id: "b", position: 1, value: "SELECT 2" }
-
-  // The live apply routes through applyTransition, so the mock runs the
-  // transition against the current parts and captures the committed result —
-  // exactly what the mounted provider would write.
-  const makeLiveActions = (
-    prevCells: NotebookCell[],
-    currentMaximizedId: string | null = null,
-  ) => {
-    const applied: { parts?: ViewParts } = {}
-    const live = {
-      addCell: () => "new",
-      updateCell: () => undefined,
-      deleteCell: () => undefined,
-      moveCellUp: () => undefined,
-      moveCellDown: () => undefined,
-      duplicateCell: () => "dup",
-      runCell: () => Promise.resolve({ ok: true, superseded: false }),
-      updateSettings: () => undefined,
-      setCellMode: () => undefined,
-      setCellChartConfig: () => undefined,
-      setCellPaneView: () => undefined,
-      setMaximizedCellId: vi.fn(),
-      updateCells: () => undefined,
-      applyTransition: <T>(
-        run: (parts: ViewParts) => NotebookTransitionResult<T>,
-      ): Promise<T> => {
-        const out = run({
-          cells: prevCells,
-          settings: {},
-          maximizedCellId: currentMaximizedId,
-          focusedCellId: null,
-        })
-        applied.parts = out.parts
-        return Promise.resolve(out.result)
-      },
-      getCellsSnapshot: () => prevCells,
-      getSettings: () => ({}),
-      getMaximizedCellId: () => currentMaximizedId,
-      flushChartSnapshots: () => Promise.resolve(),
-      readRefreshState: () => new Map(),
-      readResultStatus: () => "unrequested" as const,
-    }
-    return { live, applied }
-  }
 
   it("reads a cell's snapshot-load status through the live actions", () => {
     // Given a live controller whose provider reports per-cell statuses
@@ -558,6 +559,40 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       }),
     )
     expect(applied.parts?.maximizedCellId).toBe(null)
+  })
+})
+
+describe("createNotebookController — applyNotebookState cleared results", () => {
+  beforeEach(async () => {
+    await db.notebook_results.clear()
+  })
+
+  it("reports a released cell whose stored snapshot the rewrite outdates, and keeps the snapshot for hydration", async () => {
+    // Given a released cell: its result lives only in its snapshot
+    const released: NotebookCell = { id: "a", position: 0, value: "SELECT 1" }
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "a",
+      results: [
+        { type: "dql", query: "SELECT 1", columns: [], dataset: [], count: 1 },
+      ],
+      savedAt: 1,
+    })
+    const { live } = makeLiveActions([released])
+    const controller = createNotebookController(1, { current: live })
+
+    // When an apply rewrites its only statement
+    const out = await controller.mutate((p) =>
+      applyNotebookStateTransition(p, {
+        cells: [{ id: "a", value: "SELECT 2" }],
+      }),
+    )
+
+    // Then the cell is reported as cleared
+    expect(out.resultsCleared).toEqual(["a"])
+
+    // And the snapshot stays until hydration reconciles it
+    expect(await loadCellSnapshot(1, "a")).toBeDefined()
   })
 })
 

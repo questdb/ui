@@ -850,6 +850,34 @@ describe("sanitizeBuffer", () => {
       expect(cells?.map((cell) => cell.bottomHeight)).toEqual([502, 350, 502])
     })
 
+    it("folds a legacy maximized chart's raw heights before the chart floor, as the in-place read does", () => {
+      // Given a legacy export of a maximized chart whose result pane was
+      // shrunk below the chart floor
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "SELECT 1",
+              mode: "draw",
+              topHeight: 72,
+              bottomHeight: 150,
+              isViewMaximized: true,
+            },
+          ],
+        },
+      }
+
+      // When it is imported
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then the fold sums the raw heights and the floor applies once
+      expect(cells?.[0].bottomHeight).toBe(296)
+    })
+
     it("strips run/draw sub-state from markdown cells", () => {
       // Given a hand-crafted import smuggling SQL sub-state onto markdown
       const input = {

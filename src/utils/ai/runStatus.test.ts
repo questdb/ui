@@ -110,27 +110,42 @@ describe("ranEventStatus", () => {
     // Multi-statement: stmt 0 committed, user cancelled stmt 1. runScript's
     // boolean is true (failedCount===0), but the truthful status is cancelled.
     const fresh = { results: [{ type: "dml" }, { type: "cancelled" }] }
-    expect(createRunStatus(prior, fresh, true)).toBe("cancelled")
+    expect(createRunStatus(prior, fresh, { ok: true })).toBe("cancelled")
   })
 
   it("reports cancelled for a single cancelled statement even when ok=false", () => {
     const fresh = { results: [{ type: "cancelled" }] }
-    expect(createRunStatus(prior, fresh, false)).toBe("cancelled")
+    expect(createRunStatus(prior, fresh, { ok: false })).toBe("cancelled")
   })
 
   it("reports success/error from the fresh result, ignoring the boolean", () => {
-    expect(createRunStatus(prior, { results: [{ type: "dml" }] }, false)).toBe(
-      "success",
-    )
-    expect(createRunStatus(prior, { results: [{ type: "error" }] }, true)).toBe(
-      "error",
-    )
+    expect(
+      createRunStatus(prior, { results: [{ type: "dml" }] }, { ok: false }),
+    ).toBe("success")
+    expect(
+      createRunStatus(prior, { results: [{ type: "error" }] }, { ok: true }),
+    ).toBe("error")
   })
 
   it("falls back to the boolean for a no-op run (result unchanged)", () => {
     // Empty cell run: runCell returns false without producing a new result.
-    expect(createRunStatus(prior, prior, false)).toBe("error")
-    expect(createRunStatus(null, null, true)).toBe("success")
+    expect(createRunStatus(prior, prior, { ok: false })).toBe("error")
+    expect(createRunStatus(null, null, { ok: true })).toBe("success")
+  })
+
+  it("reports cancelled for a run stopped before any statement launched", () => {
+    // Given a run that Stop aborted during validation, so no result was written
+    const stoppedBeforeStart = {
+      ok: false,
+      notStarted: true,
+      cancelled: "cancelled",
+    }
+
+    // When the ran event status is derived from the unchanged result
+    const status = createRunStatus(prior, prior, stoppedBeforeStart)
+
+    // Then the run is cancelled, not an error
+    expect(status).toBe("cancelled")
   })
 })
 

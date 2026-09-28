@@ -7,6 +7,7 @@ import {
   applyNotebookStateTransition,
   withBoundNotebook,
   withBoundNotebookReadOnly,
+  type AppliedNotebookState,
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
 } from "../notebooks/notebookController"
@@ -50,6 +51,11 @@ type ToolResult = { content: string; is_error?: boolean }
 
 const isAbortError = (e: unknown): boolean =>
   e instanceof Error && e.name === "AbortError"
+
+const appliedPayload = ({ applied, resultsCleared }: AppliedNotebookState) => ({
+  applied,
+  results_cleared: resultsCleared,
+})
 
 const validationError = (message: string): ToolResult => ({
   content: JSON.stringify({
@@ -441,9 +447,7 @@ export const dispatchApplyNotebookState = async (
   if (getBufferActionSeq(buffer_id) !== staleBaseline) {
     return applyStaleNotebookResult(toolContext)
   }
-  let committed:
-    | { applied: { added: string[]; updated: string[]; deleted: string[] } }
-    | undefined
+  let committed: AppliedNotebookState | undefined
   try {
     committed = await withBoundNotebook(
       buffer_id,
@@ -492,7 +496,7 @@ export const dispatchApplyNotebookState = async (
       validateSql,
       signal,
     )
-    return { content: JSON.stringify({ ...out, runs }) }
+    return { content: JSON.stringify({ ...appliedPayload(out), runs }) }
   } catch (e) {
     // Once withBoundNotebook resolved the mutation is durably committed, so an
     // abort during the post-apply read/auto-run must report the state as applied
@@ -501,7 +505,7 @@ export const dispatchApplyNotebookState = async (
     if (committed && isAbortError(e)) {
       return {
         content: JSON.stringify({
-          ...committed,
+          ...appliedPayload(committed),
           runs: [],
           state_applied: true,
           post_apply_aborted: true,

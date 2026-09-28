@@ -248,6 +248,23 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
   return config
 }
 
+// The same pane floors and ceiling every UI writer enforces, so a hand-authored
+// file can't pin an invisible editor or an overlapping pane.
+const clampPaneHeights = (cell: NotebookCell): NotebookCell => ({
+  ...cell,
+  ...(cell.topHeight !== undefined
+    ? { topHeight: clampPaneHeight(minTopHeightFor(cell), cell.topHeight) }
+    : {}),
+  ...(cell.bottomHeight !== undefined
+    ? {
+        bottomHeight: clampPaneHeight(
+          minBottomHeightFor(cell),
+          cell.bottomHeight,
+        ),
+      }
+    : {}),
+})
+
 // Whitelists notebook content fields; session/display state (results,
 // editorViewState) is intentionally dropped so an imported notebook starts
 // fresh and malformed payloads can't crash the renderers.
@@ -291,24 +308,23 @@ const sanitizeNotebookCell = (
         ? "result"
         : "editor_result"
   }
-  // Clamp to the same pane floors and ceiling every UI writer enforces, so a
-  // hand-authored file can't pin an invisible editor or an overlapping pane.
   if (typeof item.topHeight === "number" && Number.isFinite(item.topHeight))
-    cell.topHeight = clampPaneHeight(minTopHeightFor(cell), item.topHeight)
+    cell.topHeight = item.topHeight
   if (
     typeof item.bottomHeight === "number" &&
     Number.isFinite(item.bottomHeight)
   )
-    cell.bottomHeight = clampPaneHeight(
-      minBottomHeightFor(cell),
-      item.bottomHeight,
-    )
+    cell.bottomHeight = item.bottomHeight
   if (typeof item.topResized === "boolean") cell.topResized = item.topResized
   if (typeof item.bottomResized === "boolean")
     cell.bottomResized = item.bottomResized
   if (typeof item.spotlightEditorRatio === "number")
     cell.spotlightEditorRatio = item.spotlightEditorRatio
-  return inferredMaximized ? foldLegacyMaximizedHeights(cell) : cell
+  // Fold the raw legacy heights before the clamp, as the in-place read does,
+  // so an import lands at the same size as opening the notebook.
+  return clampPaneHeights(
+    inferredMaximized ? foldLegacyMaximizedHeights(cell) : cell,
+  )
 }
 
 const sanitizeNotebookSettings = (

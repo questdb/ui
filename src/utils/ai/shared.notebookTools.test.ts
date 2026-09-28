@@ -1744,9 +1744,11 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     const parsed = JSON.parse(res.content) as {
       state_applied?: boolean
       post_apply_aborted?: boolean
+      results_cleared?: string[]
     }
     expect(parsed.state_applied).toBe(true)
     expect(parsed.post_apply_aborted).toBe(true)
+    expect(parsed.results_cleared).toEqual([])
     // The mutation really committed.
     expect(state.parts.cells[0].value).toBe("SELECT 1")
   })
@@ -2562,7 +2564,10 @@ describe("dispatchTool — apply_notebook_state auto-run", () => {
     )
 
     expect(res.is_error).toBeFalsy()
-    expect(JSON.parse(res.content)).toMatchObject({ runs: [] })
+    expect(JSON.parse(res.content)).toMatchObject({
+      results_cleared: ["cell-1"],
+      runs: [],
+    })
     expect(cellById(state, "cell-1")?.mode).toBeUndefined()
     expect(cellById(state, "cell-1")?.result).toBeUndefined()
     expect(cellById(state, "cell-1")?.lastRunStatus).toBeUndefined()

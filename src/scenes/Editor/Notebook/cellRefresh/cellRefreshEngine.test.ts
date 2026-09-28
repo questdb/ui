@@ -2021,6 +2021,40 @@ describe("CellRefreshEngine", () => {
     })
   })
 
+  describe("poll schedule", () => {
+    it("starts Auto on its own floor after a cell leaves a fixed interval", async () => {
+      // Given a draw cell that polled once on a one-minute interval
+      syncOnScreen([drawCell("c1", "select 1", "1m")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // When the user switches the cell to Auto a few seconds later
+      await vi.advanceTimersByTimeAsync(5_000)
+      syncOnScreen([drawCell("c1", "select 1", true)])
+      await flushAsync()
+
+      // Then Auto fetches right away, not when the minute would have ended
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    })
+
+    it("keeps polling when the clock is set back", async () => {
+      // Given a draw cell that polls every minute
+      syncOnScreen([drawCell("c1", "select 1", "1m")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the clock moves back an hour and the cell is revealed again
+      vi.setSystemTime(Date.now() - 3_600_000)
+      engine.setVisible("c1", false)
+      engine.setVisible("c1", true)
+
+      // Then the next tick still lands within one interval
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe("refreshAll", () => {
     it("fetches only visible entries on the click; hidden entries send nothing", async () => {
       // Given one visible and one hidden settled Off cell
