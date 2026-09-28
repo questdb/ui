@@ -140,6 +140,10 @@ export const ResizeHandle: React.FC<Props> = ({
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
   const endDragRef = useRef<(() => void) | null>(null)
+  // The document listeners live for the whole drag; they read the callbacks
+  // through refs so every move sees the current render, not the mousedown one.
+  const onResizeRef = useRef(onResize)
+  const onResizeEndRef = useRef(onResizeEnd)
 
   const clampHeight = useCallback(
     (height: number) => Math.min(maxHeight, Math.max(minHeight, height)),
@@ -162,7 +166,7 @@ export const ResizeHandle: React.FC<Props> = ({
         dragged = true
         const newHeight = clampHeight(startHeightRef.current + delta)
         lastHeightRef.current = newHeight
-        onResize(newHeight)
+        onResizeRef.current(newHeight)
       }
 
       const endDrag = () => {
@@ -175,7 +179,7 @@ export const ResizeHandle: React.FC<Props> = ({
 
       const handleMouseUp = () => {
         endDrag()
-        if (dragged) onResizeEnd(lastHeightRef.current)
+        if (dragged) onResizeEndRef.current(lastHeightRef.current)
       }
 
       document.body.style.cursor = "ns-resize"
@@ -184,7 +188,7 @@ export const ResizeHandle: React.FC<Props> = ({
       document.addEventListener("mouseup", handleMouseUp)
       endDragRef.current = endDrag
     },
-    [targetRef, onResize, onResizeEnd, clampHeight],
+    [targetRef, clampHeight],
   )
 
   const handleKeyDown = useCallback(
@@ -209,6 +213,11 @@ export const ResizeHandle: React.FC<Props> = ({
     },
     [maxHeight, minHeight, onDoubleClick, onResize, onResizeEnd, targetRef],
   )
+
+  useEffect(() => {
+    onResizeRef.current = onResize
+    onResizeEndRef.current = onResizeEnd
+  }, [onResize, onResizeEnd])
 
   useEffect(() => {
     const target = targetRef.current
