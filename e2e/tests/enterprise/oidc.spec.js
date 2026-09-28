@@ -82,6 +82,44 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
     })
 
+    for (const { name, reply } of [
+      { name: "a network error", reply: { forceNetworkError: true } },
+      {
+        name: "a non-JSON 502",
+        reply: { statusCode: 502, body: "<html>Bad Gateway</html>" },
+      },
+    ]) {
+      it(`continues loading the editor when token refresh fails with ${name}`, () => {
+        interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+        cy.intercept("POST", oidcTokenUrl, (req) => {
+          if (
+            new URLSearchParams(req.body).get("grant_type") === "refresh_token"
+          ) {
+            req.alias = "refreshFailure"
+            req.reply(reply)
+          } else {
+            req.reply({
+              access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom",
+              refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv",
+              id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I",
+              token_type: "Bearer",
+              expires_in: 20,
+            })
+          }
+        }).as("tokens")
+
+        cy.getByDataHook("button-sso-login").click()
+        cy.wait("@authorizationCode")
+        cy.wait("@refreshFailure")
+        cy.getEditor().should("be.visible")
+        cy.executeSQL("select current_user();")
+        cy.getGridRow(0).should("contain", "john doe")
+        // The next query uses the still-valid token rather than retrying
+        // the failed refresh on every request.
+        cy.get("@refreshFailure.all").should("have.length", 1)
+      })
+    }
+
     it("should request a new token on page reload, even if there is no refresh token", () => {
       interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
       interceptTokenRequest({

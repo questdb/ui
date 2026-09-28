@@ -35,6 +35,10 @@ import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
 
 export type QueryId = number
 
+const REFRESH_TIMEOUT_MS = 10_000
+const REFRESH_RETRY_DELAY_MS = 5_000
+const MAX_REFRESH_RETRY_DELAY_MS = 30_000
+
 export const escapeSqlLiteral = (value: string) => value.replace(/'/g, "''")
 
 export const buildDDLQuery = (name: string, kind: TableKind): string => {
@@ -56,16 +60,21 @@ export class Client {
   private _nextQueryId: QueryId = 1
   private _activeQueryId: QueryId | null = null
   private commonHeaders: Record<string, string> = {}
-  private static refreshTokenPending = false
-  private static numOfPendingQueries = 0
-  refreshTokenMethod: () => Promise<Partial<AuthPayload>> = async (): Promise<
-    Partial<AuthPayload>
-  > => {
-    return Promise.resolve({})
-  }
+  private static refreshPromise: Promise<void> | null = null
+  private static refreshRetryCount = 0
+  private static retryRefreshAfter = 0
+  private static retryForAuthPayload: AuthPayload | null = null
+  refreshTokenMethod: (signal?: AbortSignal) => Promise<Partial<AuthPayload>> =
+    () => Promise.resolve({})
 
   private tokenNeedsRefresh() {
     const authPayload = ssoAuthState.getAuthPayload()
+    if (Client.retryForAuthPayload !== authPayload) {
+      // A new login must never inherit the previous session's backoff.
+      Client.retryForAuthPayload = authPayload
+      Client.refreshRetryCount = 0
+      Client.retryRefreshAfter = 0
+    }
     return (
       authPayload &&
       authPayload.refresh_token &&
@@ -78,20 +87,24 @@ export class Client {
   }
 
   private refreshAuthToken = async () => {
-    Client.refreshTokenPending = true
+    const controller = new AbortController()
+    let timeout: ReturnType<typeof setTimeout> | undefined
     try {
-      // Wait until all in-flight queries have finished before swapping the auth
-      // header, so we don't change it out from under a pending request.
-      await new Promise<void>((resolve) => {
-        const interval = setInterval(() => {
-          if (Client.numOfPendingQueries === 0) {
-            clearInterval(interval)
-            resolve()
-          }
-        }, 50)
+      // The timeout covers fetch AND response.json(). Aborting alone is not
+      // enough: an uncooperative fetch mock or body reader may never settle.
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort()
+          reject(new Error("Token refresh timed out"))
+        }, REFRESH_TIMEOUT_MS)
       })
-      const newToken = await this.refreshTokenMethod()
+      const newToken = await Promise.race([
+        this.refreshTokenMethod(controller.signal),
+        deadline,
+      ])
       if (newToken.access_token) {
+        // Each request captured its own headers at fetch time; no drain of
+        // in-flight queries is necessary before replacing this object.
         this.setCommonHeaders({
           ...this.commonHeaders,
           Authorization: `Bearer ${
@@ -100,17 +113,51 @@ export class Client {
               : newToken.access_token
           }`,
         })
+        Client.refreshRetryCount = 0
+        Client.retryRefreshAfter = 0
       }
     } catch (error) {
-      // A transport-level failure (token endpoint unreachable, non-JSON
-      // response, etc.) must not leave refreshTokenPending stuck true, which
-      // would deadlock every subsequent query. We keep the stale token in
-      // place; the next request will get a 401 and drive the normal re-auth
-      // flow, matching what happens when there is no refresh token at all.
+      // Keep the current token. It may remain valid until expires_at; later
+      // queries retry after backoff, and a 401 after expiry triggers logout.
+      Client.refreshRetryCount++
+      Client.retryRefreshAfter =
+        Date.now() +
+        Math.min(
+          REFRESH_RETRY_DELAY_MS * 2 ** (Client.refreshRetryCount - 1),
+          MAX_REFRESH_RETRY_DELAY_MS,
+        )
       console.error("Failed to refresh the auth token", error)
+      if (
+        ssoAuthState.isSSOAuthenticated() &&
+        !ssoAuthState.hasRefreshFailed()
+      ) {
+        ssoAuthState.markRefreshFailed()
+        eventBus.publish(EventType.MSG_AUTH_REFRESH_FAILED)
+      }
     } finally {
-      Client.refreshTokenPending = false
+      if (timeout !== undefined) clearTimeout(timeout)
     }
+  }
+
+  private awaitRefresh = (refresh: Promise<void>, signal: AbortSignal) => {
+    if (signal.aborted) {
+      return Promise.reject(new DOMException("Aborted", "AbortError"))
+    }
+    // Cancelling one query must not cancel the shared refresh or other waiters.
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(new DOMException("Aborted", "AbortError"))
+      signal.addEventListener("abort", onAbort, { once: true })
+      void refresh.then(
+        () => {
+          signal.removeEventListener("abort", onAbort)
+          resolve()
+        },
+        (error: unknown) => {
+          signal.removeEventListener("abort", onAbort)
+          reject(error)
+        },
+      )
+    })
   }
 
   static encodeParams = (
@@ -269,32 +316,30 @@ export class Client {
 
     let response: Response
 
-    if (this.tokenNeedsRefresh() && !Client.refreshTokenPending) {
-      await this.refreshAuthToken()
-    }
-
-    if (Client.refreshTokenPending) {
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          if (!Client.refreshTokenPending) {
-            clearInterval(interval)
-            return resolve(true)
-          }
-        }, 50)
-      })
-    }
-
-    Client.numOfPendingQueries++
-
     const start = new Date()
     try {
+      if (
+        !Client.refreshPromise &&
+        this.tokenNeedsRefresh() &&
+        Date.now() >= Client.retryRefreshAfter
+      ) {
+        const refresh = this.refreshAuthToken()
+        Client.refreshPromise = refresh
+        const clearRefresh = () => {
+          if (Client.refreshPromise === refresh) Client.refreshPromise = null
+        }
+        void refresh.then(clearRefresh, clearRefresh)
+      }
+      if (Client.refreshPromise) {
+        await this.awaitRefresh(Client.refreshPromise, controller.signal)
+      }
+
       response = await fetch(`exec?${Client.encodeParams(payload)}`, {
         signal: controller.signal,
         headers: this.commonHeaders,
       })
     } catch (error) {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
 
       const err = {
         position: -1,
@@ -448,7 +493,6 @@ export class Client {
       return Promise.reject(errorPayload)
     } finally {
       this.removeController(queryId)
-      Client.numOfPendingQueries--
     }
   }
 

@@ -88,8 +88,8 @@ export const QuestProvider: React.FC = ({ children }) => {
       Authorization: `Bearer ${sessionData.groups_encoded_in_token ? sessionData.id_token : sessionData.access_token}`,
     })
 
-    questClient.refreshTokenMethod = () => {
-      return refreshAuthToken(settings, sessionData.refresh_token)
+    questClient.refreshTokenMethod = (signal) => {
+      return refreshAuthToken(settings, sessionData.refresh_token, signal)
     }
 
     void finishAuthCheck()

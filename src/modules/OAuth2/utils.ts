@@ -1,4 +1,5 @@
 import { Settings } from "../../providers/SettingsProvider/types"
+import { AuthPayload } from "./types"
 import { StoreKey } from "../../utils/localStorage/types"
 
 type TokenPayload = Partial<{
@@ -69,6 +70,7 @@ export const getTokenExpirationDate = (expires_in: number) => {
 export const getAuthToken = async (
   settings: Settings,
   payload: TokenPayload,
+  signal?: AbortSignal,
 ) => {
   return fetch(
     `${getBaseURL(settings)}${settings["acl.oidc.token.endpoint"]}`,
@@ -78,8 +80,20 @@ export const getAuthToken = async (
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams(payload),
+      signal,
     },
   )
+}
+
+export const readAuthTokenResponse = async (
+  response: Response,
+  signal?: AbortSignal,
+): Promise<AuthPayload> => {
+  const tokenResponse = (await response.json()) as AuthPayload
+  // A response body can finish after the refresh deadline. Never install a
+  // late token or run the logout path of a late OAuth error response.
+  if (signal?.aborted) throw new Error("Token refresh timed out")
+  return tokenResponse
 }
 
 export const hasUIAuth = (settings: Settings) =>
