@@ -39,7 +39,7 @@ describe("fromHighlightConfigWire", () => {
           {
             kind: "steps",
             column: null,
-            steps: [{ below: 10, color: "teal" }],
+            steps: [{ from: 10, color: "teal" }],
           },
           {
             kind: "value",
@@ -95,8 +95,8 @@ describe("fromHighlightConfigWire", () => {
     })
     expect(steps).toMatchObject({
       target: { kind: "allNumeric" },
-      steps: [{ below: 10, color: "dataSeries2" }],
-      remainderColor: "dataSeries3",
+      steps: [{ from: 10, color: "dataSeries2" }],
+      baseColor: "dataSeries3",
     })
     expect(gradient).toMatchObject({
       kind: "value",
@@ -289,8 +289,8 @@ describe("toHighlightConfigWire", () => {
         {
           kind: "steps" as const,
           column: "price",
-          steps: [{ below: 100, color: "teal" as const }],
-          remainder_color: "teal" as const,
+          steps: [{ from: 100, color: "teal" as const }],
+          base_color: "teal" as const,
           display: "always" as const,
         },
         {
@@ -316,8 +316,8 @@ describe("toHighlightConfigWire", () => {
           kind: "steps" as const,
           column: "amount",
           applies_to: "row" as const,
-          steps: [{ below: 10, color: "red" as const }],
-          remainder_color: "green" as const,
+          steps: [{ from: 10, color: "red" as const }],
+          base_color: "green" as const,
           display: "always" as const,
         },
       ],

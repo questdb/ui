@@ -707,8 +707,8 @@ describe("evaluateHighlights: LONG columns as decimal strings", () => {
       id: "steps",
       kind: "steps",
       target,
-      steps: [{ id: "s", below: 60000, color: "dataNegative" }],
-      remainderColor: "dataPositive",
+      steps: [{ id: "s", from: 60000, color: "dataPositive" }],
+      baseColor: "dataNegative",
     })
     const above = rule({
       id: "above",
@@ -773,30 +773,32 @@ describe("evaluateHighlights: steps and gradient fill", () => {
       previous: null,
     }).lookup
 
-  it("picks the first step above the value, else the remainder", () => {
+  it("picks the highest step the value reaches, else the base color", () => {
     // Given unsorted steps
     const rules = [
       rule({
         kind: "steps",
         steps: [
-          { id: "s2", below: 500, color: "dataSeries2" },
-          { id: "s1", below: 100, color: "dataSeries2" },
+          { id: "s2", from: 500, color: "dataSeries3" },
+          { id: "s1", from: 100, color: "dataSeries2" },
         ],
-        remainderColor: "dataSeries3",
+        baseColor: "dataSeries6",
       }),
     ]
 
-    // When evaluated
+    // When evaluated below, between, at and above the bounds
     const lookup = evaluate(rules, [
       row("A", 50, 1),
       row("A", 200, 1),
       row("A", 500, 1),
+      row("A", 900, 1),
     ])
 
-    // Then the steps apply in ascending order
-    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries2")
+    // Then the highest reached step wins and the bound is inclusive
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries6")
     expect(lookup.background(1, PRICE)?.color).toBe("dataSeries2")
     expect(lookup.background(2, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(3, PRICE)?.color).toBe("dataSeries3")
   })
 
   it("shades a gradient fill by position in the range and clamps beyond it", () => {

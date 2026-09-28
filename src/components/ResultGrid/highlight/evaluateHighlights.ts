@@ -228,6 +228,8 @@ const matchValue = (
   }
 }
 
+// Steps arrive sorted from the highest bound down, so the first one the
+// value reaches is the highest.
 const matchSteps = (
   rule: StepsRule,
   sortedSteps: StepsRule["steps"],
@@ -235,9 +237,9 @@ const matchSteps = (
 ): CellHighlight | undefined => {
   const current = asNumber(value)
   if (current === null) return undefined
-  const step = sortedSteps.find((candidate) => current < candidate.below)
+  const step = sortedSteps.find((candidate) => current >= candidate.from)
   return {
-    color: step?.color ?? rule.remainderColor,
+    color: step?.color ?? rule.baseColor,
     alpha: 1,
     display: rule.display,
   }
@@ -286,7 +288,7 @@ const createRuleMatchers = (
       if (rule.kind === "steps" && !sortedSteps.has(rule.id)) {
         sortedSteps.set(
           rule.id,
-          [...rule.steps].sort((a, b) => a.below - b.below),
+          [...rule.steps].sort((a, b) => b.from - a.from),
         )
       }
     }

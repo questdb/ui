@@ -681,7 +681,7 @@
                   "kind": {
                     "type": "string",
                     "enum": ["previous", "value", "steps", "newRow"],
-                    "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
+                    "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ascending thresholds, one color each, value >= from, highest wins; base_color below the first."
                   },
                   "column": {
                     "type": ["string", "null"],
@@ -759,12 +759,12 @@
                   },
                   "steps": {
                     "type": ["array", "null"],
-                    "description": "steps: breakpoints, matched as value < below in ascending order.",
+                    "description": "steps: thresholds; a value takes the highest step it reaches (value >= from). Below the lowest step it takes base_color.",
                     "items": {
                       "type": "object",
                       "additionalProperties": false,
                       "properties": {
-                        "below": {
+                        "from": {
                           "type": "number"
                         },
                         "color": {
@@ -783,10 +783,10 @@
                           ]
                         }
                       },
-                      "required": ["below", "color"]
+                      "required": ["from", "color"]
                     }
                   },
-                  "remainder_color": {
+                  "base_color": {
                     "type": ["string", "null"],
                     "enum": [
                       "red",
@@ -801,7 +801,7 @@
                       "olive",
                       null
                     ],
-                    "description": "steps: color for values at or above the last breakpoint. null = amber."
+                    "description": "steps: color for values below the lowest step. null = amber."
                   },
                   "fill": {
                     "type": ["string", "null"],
@@ -840,7 +840,7 @@
                   "unit",
                   "text",
                   "steps",
-                  "remainder_color",
+                  "base_color",
                   "fill",
                   "high_color"
                 ]
@@ -1188,7 +1188,7 @@
                         "kind": {
                           "type": "string",
                           "enum": ["previous", "value", "steps", "newRow"],
-                          "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ordered breakpoints, one color each."
+                          "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ascending thresholds, one color each, value >= from, highest wins; base_color below the first."
                         },
                         "column": {
                           "type": ["string", "null"],
@@ -1266,12 +1266,12 @@
                         },
                         "steps": {
                           "type": ["array", "null"],
-                          "description": "steps: breakpoints, matched as value < below in ascending order.",
+                          "description": "steps: thresholds; a value takes the highest step it reaches (value >= from). Below the lowest step it takes base_color.",
                           "items": {
                             "type": "object",
                             "additionalProperties": false,
                             "properties": {
-                              "below": {
+                              "from": {
                                 "type": "number"
                               },
                               "color": {
@@ -1290,10 +1290,10 @@
                                 ]
                               }
                             },
-                            "required": ["below", "color"]
+                            "required": ["from", "color"]
                           }
                         },
-                        "remainder_color": {
+                        "base_color": {
                           "type": ["string", "null"],
                           "enum": [
                             "red",
@@ -1308,7 +1308,7 @@
                             "olive",
                             null
                           ],
-                          "description": "steps: color for values at or above the last breakpoint. null = amber."
+                          "description": "steps: color for values below the lowest step. null = amber."
                         },
                         "fill": {
                           "type": ["string", "null"],
@@ -1347,7 +1347,7 @@
                         "unit",
                         "text",
                         "steps",
-                        "remainder_color",
+                        "base_color",
                         "fill",
                         "high_color"
                       ]

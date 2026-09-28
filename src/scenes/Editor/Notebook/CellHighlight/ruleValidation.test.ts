@@ -194,9 +194,9 @@ describe("validateRule", () => {
     const duplicate = {
       ...rule,
       steps: [
-        { id: "a", below: 10, color: "dataSeries2" as const },
-        { id: "b", below: 10, color: "dataSeries3" as const },
-        { id: "c", below: Number.NaN, color: "dataSeries3" as const },
+        { id: "a", from: 10, color: "dataSeries2" as const },
+        { id: "b", from: 10, color: "dataSeries3" as const },
+        { id: "c", from: Number.NaN, color: "dataSeries3" as const },
       ],
     }
 

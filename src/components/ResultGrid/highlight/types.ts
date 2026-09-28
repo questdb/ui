@@ -29,7 +29,7 @@ export const hueOfToken = (token: HighlightColorToken): HighlightHue =>
   highlightHues.find((hue) => highlightHueTokens[hue] === token) ?? "teal"
 
 export const DEFAULT_RULE_COLOR: HighlightColorToken = "dataSeries2"
-export const DEFAULT_REMAINDER_COLOR: HighlightColorToken = "dataSeries3"
+export const DEFAULT_BASE_COLOR: HighlightColorToken = "dataSeries3"
 
 export type HighlightDisplay = "temporary" | "always"
 
@@ -64,9 +64,11 @@ export type ValueCondition =
   | { op: "contains"; text: string }
   | { op: "matches"; pattern: string }
 
+// A value takes the highest step it reaches (value >= from); below the
+// lowest step it takes the rule's base color.
 export type HighlightStep = {
   id: string
-  below: number
+  from: number
   color: HighlightColorToken
 }
 
@@ -103,7 +105,7 @@ export type ValueRule = TargetedRuleBase & {
 export type StepsRule = TargetedRuleBase & {
   kind: "steps"
   steps: HighlightStep[]
-  remainderColor: HighlightColorToken
+  baseColor: HighlightColorToken
 }
 
 export type TargetedRule = PreviousRule | ValueRule | StepsRule

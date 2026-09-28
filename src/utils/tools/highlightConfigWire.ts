@@ -1,5 +1,5 @@
 import {
-  DEFAULT_REMAINDER_COLOR,
+  DEFAULT_BASE_COLOR,
   DEFAULT_RULE_COLOR,
   highlightHues,
   hueOfToken,
@@ -34,7 +34,7 @@ export type ValueOpWire =
   | "contains"
   | "matches"
 
-export type HighlightStepWire = { below: number; color: HighlightHue }
+export type HighlightStepWire = { from: number; color: HighlightHue }
 
 export type HighlightRuleWire = {
   kind: HighlightRuleKind
@@ -50,7 +50,7 @@ export type HighlightRuleWire = {
   unit?: ChangeUnit | null
   text?: string | null
   steps?: HighlightStepWire[] | null
-  remainder_color?: HighlightHue | null
+  base_color?: HighlightHue | null
   fill?: "solid" | "gradient" | null
   high_color?: HighlightHue | null
 }
@@ -274,17 +274,17 @@ const mapRule = (
       }
       const steps: HighlightStep[] = []
       for (const step of rule.steps) {
-        if (typeof step?.below !== "number" || !isHue(step.color)) {
-          return fail(index, "each step needs a numeric below and a color")
+        if (typeof step?.from !== "number" || !isHue(step.color)) {
+          return fail(index, "each step needs a numeric from and a color")
         }
         steps.push({
           id: createId(),
-          below: step.below,
+          from: step.from,
           color: tokenOfHue(step.color),
         })
       }
-      if (rule.remainder_color != null && !isHue(rule.remainder_color)) {
-        return fail(index, "unknown remainder_color")
+      if (rule.base_color != null && !isHue(rule.base_color)) {
+        return fail(index, "unknown base_color")
       }
       return {
         ok: true,
@@ -294,10 +294,7 @@ const mapRule = (
           appliesTo,
           display,
           steps,
-          remainderColor: colorOf(
-            rule.remainder_color,
-            DEFAULT_REMAINDER_COLOR,
-          ),
+          baseColor: colorOf(rule.base_color, DEFAULT_BASE_COLOR),
         },
       }
     }
@@ -401,11 +398,11 @@ export const toHighlightConfigWire = (
       case "steps":
         return {
           ...shared,
-          steps: rule.steps.map(({ below, color }) => ({
-            below,
+          steps: rule.steps.map(({ from, color }) => ({
+            from,
             color: hueOfToken(color),
           })),
-          remainder_color: hueOfToken(rule.remainderColor),
+          base_color: hueOfToken(rule.baseColor),
         }
     }
   }),

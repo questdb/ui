@@ -66,7 +66,7 @@ const isValueCondition = (value: unknown) => {
 const isStep = (value: unknown) =>
   isRecord(value) &&
   typeof value.id === "string" &&
-  typeof value.below === "number" &&
+  typeof value.from === "number" &&
   isColor(value.color)
 
 const isRuleBase = (value: Record) =>
@@ -93,7 +93,7 @@ export const isHighlightRule = (value: unknown): value is HighlightRule => {
       return (
         Array.isArray(value.steps) &&
         value.steps.every(isStep) &&
-        isColor(value.remainderColor)
+        isColor(value.baseColor)
       )
     default:
       return false

@@ -128,12 +128,12 @@ export const validateRuleFields = (
       if (rule.steps.length === 0) errors.steps = "Add at least one step"
       const seen = new Set<number>()
       for (const step of rule.steps) {
-        if (!Number.isFinite(step.below)) {
+        if (!Number.isFinite(step.from)) {
           errors[stepErrorKey(step.id)] = "Should be a number"
-        } else if (seen.has(step.below)) {
+        } else if (seen.has(step.from)) {
           errors[stepErrorKey(step.id)] = "Duplicate bound"
         }
-        seen.add(step.below)
+        seen.add(step.from)
       }
       break
     }

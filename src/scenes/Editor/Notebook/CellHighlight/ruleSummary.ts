@@ -83,10 +83,7 @@ export const ruleColors = (rule: DraftRule): HighlightColorToken[] => {
         : [rule.color]
     case "steps":
       return [
-        ...new Set([
-          ...rule.steps.map((step) => step.color),
-          rule.remainderColor,
-        ]),
+        ...new Set([rule.baseColor, ...rule.steps.map((step) => step.color)]),
       ]
   }
 }

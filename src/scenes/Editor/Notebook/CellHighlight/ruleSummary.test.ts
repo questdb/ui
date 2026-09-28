@@ -93,10 +93,7 @@ describe("rule summaries", () => {
         fill: { kind: "gradient" as const, highColor: "dataPositive" as const },
       },
     }
-    expect(ruleColors(steps)).toEqual([
-      steps.steps[0].color,
-      steps.remainderColor,
-    ])
+    expect(ruleColors(steps)).toEqual([steps.baseColor, steps.steps[0].color])
     expect(ruleColors(gradient)).toEqual([between.color, "dataPositive"])
     expect(ruleSummary(gradient)).toBe("price between 1000 and 2000")
     expect(ruleFillLabel(gradient)).toBe("gradient")

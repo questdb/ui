@@ -29,8 +29,8 @@ describe("isHighlightConfig", () => {
           ...rule,
           id: "r3",
           kind: "steps",
-          steps: [{ id: "s1", below: 10, color: "dataNegative" }],
-          remainderColor: "dataPositive",
+          steps: [{ id: "s1", from: 10, color: "dataNegative" }],
+          baseColor: "dataPositive",
         },
       ],
     }

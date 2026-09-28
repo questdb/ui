@@ -2,7 +2,7 @@ import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   columnKindOf,
   createRuleId,
-  DEFAULT_REMAINDER_COLOR,
+  DEFAULT_BASE_COLOR,
   DEFAULT_RULE_COLOR,
   defaultDisplayFor,
   type ColumnKind,
@@ -239,8 +239,8 @@ export const withConditionOption = (
         ...base,
         kind: "steps",
         display: defaultDisplayFor("steps"),
-        steps: [{ id: createRuleId(), below: 0, color: DEFAULT_RULE_COLOR }],
-        remainderColor: DEFAULT_REMAINDER_COLOR,
+        steps: [{ id: createRuleId(), from: 0, color: DEFAULT_RULE_COLOR }],
+        baseColor: DEFAULT_BASE_COLOR,
       }
   }
 }
