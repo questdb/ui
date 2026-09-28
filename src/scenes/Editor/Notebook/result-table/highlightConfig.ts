@@ -21,6 +21,14 @@ export const resolveHighlightConfig = (
     rules: [],
   }
 
+export const comparesWithPrevious = (
+  config: HighlightConfig | undefined,
+): boolean =>
+  config?.rules.some(
+    (rule) =>
+      rule.enabled && (rule.kind === "previous" || rule.kind === "newRow"),
+  ) ?? false
+
 export const withHighlightConfig = (
   cell: NotebookCell,
   config: HighlightConfig | null,

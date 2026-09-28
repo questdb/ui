@@ -33,15 +33,31 @@ const cell = (
     ...(highlightConfig ? { highlightConfig } : {}),
   }) as NotebookCell
 
+const comparing = (identity: string): NotebookCell["highlightConfig"] => ({
+  identityColumns: [identity],
+  rules: [
+    {
+      id: "up",
+      enabled: true,
+      kind: "previous",
+      target: { kind: "column", name: "price" },
+      appliesTo: "cell",
+      display: "temporary",
+      condition: { op: "gt" },
+      color: "dataPositive",
+    },
+  ],
+})
+
 const QUERY = "select symbol, price from trades"
 const [KEY] = statementKeysFor([QUERY])
 
 describe("captureResultTrends", () => {
   it("captures every settled statement of a changed cell and keeps the previous index", () => {
-    // Given a cell that ran once and then again
+    // Given a cell with a comparison rule that ran once and then again
     const store = createResultTrendStore(() => 100)
-    const first = cell("c1", [dql(QUERY, [["BTC", 1]])])
-    const second = cell("c1", [dql(QUERY, [["BTC", 2]])])
+    const first = cell("c1", [dql(QUERY, [["BTC", 1]])], comparing("symbol"))
+    const second = cell("c1", [dql(QUERY, [["BTC", 2]])], comparing("symbol"))
 
     // When both results settle
     captureResultTrends(store, [], [first])
@@ -67,16 +83,13 @@ describe("captureResultTrends", () => {
   })
 
   it("recaptures with the new identity when the rules change, dropping the baseline", () => {
-    // Given two runs, then a saved config with another identity
+    // Given two compared runs, then a saved config with another identity
     const store = createResultTrendStore(() => 100)
-    const first = cell("c1", [dql(QUERY, [["BTC", 1]])])
-    const second = cell("c1", [dql(QUERY, [["BTC", 2]])])
+    const first = cell("c1", [dql(QUERY, [["BTC", 1]])], comparing("symbol"))
+    const second = cell("c1", [dql(QUERY, [["BTC", 2]])], comparing("symbol"))
     captureResultTrends(store, [], [first])
     captureResultTrends(store, [first], [second])
-    const configured = {
-      ...second,
-      highlightConfig: { identityColumns: ["price"], rules: [] },
-    }
+    const configured = { ...second, highlightConfig: comparing("price") }
 
     // When the config settles
     captureResultTrends(store, [second], [configured])
@@ -84,6 +97,51 @@ describe("captureResultTrends", () => {
     // Then the baseline is gone and the identity follows the config
     expect(store.get("c1", KEY)?.previous).toBeNull()
     expect(store.get("c1", KEY)?.identityColumns).toEqual(["price"])
+  })
+
+  it("keeps no previous rows for a cell without a comparison rule", () => {
+    // Given a cell with only a value rule that ran twice
+    const valueOnly: NotebookCell["highlightConfig"] = {
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          id: "high",
+          enabled: true,
+          kind: "value",
+          target: { kind: "column", name: "price" },
+          appliesTo: "cell",
+          display: "temporary",
+          condition: { op: "gt", value: 0 },
+          color: "dataSeries2",
+        },
+      ],
+    }
+    const store = createResultTrendStore(() => 100)
+    const first = cell("c1", [dql(QUERY, [["BTC", 1]])], valueOnly)
+    const second = cell("c1", [dql(QUERY, [["BTC", 2]])], valueOnly)
+
+    // When both results settle
+    captureResultTrends(store, [], [first])
+    captureResultTrends(store, [first], [second])
+
+    // Then no baseline is held, while the revision still advances the flash
+    expect(store.get("c1", KEY)?.previous).toBeNull()
+    expect(store.get("c1", KEY)?.revision).toBe(2)
+  })
+
+  it("forgets a cell whose result is released", () => {
+    // Given a compared cell with a baseline
+    const store = createResultTrendStore(() => 100)
+    const first = cell("c1", [dql(QUERY, [["BTC", 1]])], comparing("symbol"))
+    const second = cell("c1", [dql(QUERY, [["BTC", 2]])], comparing("symbol"))
+    captureResultTrends(store, [], [first])
+    captureResultTrends(store, [first], [second])
+
+    // When the result is released back to storage
+    captureResultTrends(store, [second], [{ ...second, result: undefined }])
+
+    // Then the store holds none of its rows
+    expect(store.get("c1", KEY)).toBeUndefined()
   })
 
   it("forgets a removed cell", () => {

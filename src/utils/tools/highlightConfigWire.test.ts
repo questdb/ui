@@ -160,6 +160,47 @@ describe("fromHighlightConfigWire", () => {
     expect(fillOnGt.error).toContain("apply to op between only")
   })
 
+  it("rejects values the reload check would refuse, so a saved config never vanishes", () => {
+    // Given rules with an off-enum display, an off-enum unit and a numeric column
+    const badDisplay = fromHighlightConfigWire({
+      identity_columns: ["k"],
+      rules: [
+        { kind: "value", column: "v", op: "gt", value: 1 },
+        { kind: "previous", column: "v", op: "gt", display: "flash" as never },
+      ],
+    })
+    const badUnit = fromHighlightConfigWire({
+      identity_columns: ["k"],
+      rules: [
+        {
+          kind: "previous",
+          column: "v",
+          op: "changedBy",
+          threshold: 1,
+          unit: "pct" as never,
+        },
+      ],
+    })
+    const numericColumn = fromHighlightConfigWire({
+      identity_columns: ["k"],
+      rules: [{ kind: "value", column: 5 as never, op: "isNull" }],
+    })
+
+    // Then each fails at the rule, instead of saving a config the next load drops
+    expect(badDisplay).toEqual({
+      ok: false,
+      error: "rules[1]: display must be temporary|always",
+    })
+    expect(badUnit).toEqual({
+      ok: false,
+      error: "rules[0]: unit must be absolute|percent",
+    })
+    expect(numericColumn).toEqual({
+      ok: false,
+      error: "rules[0]: a field has the wrong type",
+    })
+  })
+
   it("orders between bounds like the drawer and defaults changedBy to percent", () => {
     // Given a flat gradient, a reversed solid range, and a changedBy without a unit
     const between = (value: number, to: number, fill?: "gradient") =>

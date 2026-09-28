@@ -493,6 +493,32 @@ describe("evaluateHighlights: value rules", () => {
     expect(broken.background(0, SYMBOL)).toBeUndefined()
   })
 
+  it("tests every row on its own with the g and y flags, as a fresh pattern would", () => {
+    // Given consecutive matching rows and one with BTC past the start
+    const dataset = [
+      row("BTC-USDT", 1, 1),
+      row("BTC-USDT", 1, 1),
+      row("ETH-BTC", 1, 1),
+      row("BTC-USDT", 1, 1),
+    ]
+    const flaggedRule = (pattern: string) =>
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "matches", pattern },
+      })
+
+    // When a global and a sticky pattern are evaluated
+    const global = evaluate([flaggedRule("/btc/gi")], dataset)
+    const sticky = evaluate([flaggedRule("/btc/yi")], dataset)
+    const matchedRows = (lookup: typeof global) =>
+      [0, 1, 2, 3].filter((index) => lookup.background(index, SYMBOL))
+
+    // Then g matches every row, and y only the rows starting with BTC
+    expect(matchedRows(global)).toEqual([0, 1, 2, 3])
+    expect(matchedRows(sticky)).toEqual([0, 1, 3])
+  })
+
   it("applies the first matching rule and ignores disabled rules", () => {
     // Given a disabled rule first, then two overlapping rules
     const rules = [

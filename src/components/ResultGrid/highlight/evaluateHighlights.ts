@@ -56,6 +56,13 @@ export const compilePattern = (pattern: string): RegExp | null => {
   }
 }
 
+// One pattern serves every cell of a column. The g and y flags carry
+// lastIndex between tests, so each test starts over as a fresh pattern would.
+const matchesPattern = (pattern: RegExp, text: string): boolean => {
+  pattern.lastIndex = 0
+  return pattern.test(text)
+}
+
 const asComparableInput = (
   value: number | string,
   kind: ColumnKind,
@@ -183,7 +190,9 @@ const matchValue = (
     case "isNull":
       return value === null ? hit : undefined
     case "matches":
-      return value !== null && pattern !== null && pattern.test(String(value))
+      return value !== null &&
+        pattern !== null &&
+        matchesPattern(pattern, String(value))
         ? hit
         : undefined
     case "contains":

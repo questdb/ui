@@ -167,6 +167,7 @@ export const cellToolbarMenuFlags = (params: {
   isMarkdown: boolean
   sqlShown: boolean
   chartZoomed: boolean
+  hasResultGrid: boolean
   isGridMode: boolean
   cellIndex: number
   totalCells: number
@@ -177,6 +178,7 @@ export const cellToolbarMenuFlags = (params: {
     isMarkdown,
     sqlShown,
     chartZoomed,
+    hasResultGrid,
     isGridMode,
     cellIndex,
     totalCells,
@@ -207,7 +209,7 @@ export const cellToolbarMenuFlags = (params: {
   const showAutoRefreshItem = !hasToolbarInterval && !isNoneView
   const showRefreshItem = !hasToolbarRefresh && !isNoneView && !chartCollapsed
   const showChartSettings = isChartView && !chartCollapsed
-  const showHighlightSettings = isGridView && !gridCollapsed
+  const showHighlightSettings = hasResultGrid && !gridCollapsed
   const showMoveUp = !isGridMode && cellIndex > 0
   const showMoveDown = !isGridMode && cellIndex < totalCells - 1
   const showDuplicate = totalCells < MAX_NOTEBOOK_CELLS
@@ -923,6 +925,20 @@ export const derivePositionalFrame = (
       result.results.length,
     ),
   }
+}
+
+// Mirrors the bottom slot: its active tab mounts a result grid only for a DQL
+// result with columns, and grid-only actions reach nothing otherwise.
+export const hasActiveResultGrid = (
+  cell: Pick<NotebookCell, "mode" | "value" | "result">,
+): boolean => {
+  if (cell.mode === "draw") return false
+  const frame =
+    deriveStatementFrame(getQueriesFromText(cell.value), cell.result) ??
+    derivePositionalFrame(cell.result)
+  if (!frame) return false
+  const result = (frame.slots[frame.activeSlotIndex] ?? frame.slots[0]).result
+  return result?.type === "dql" && result.columns.length > 0
 }
 
 // The single-run target mirrors the tab the bottom slot renders — the active

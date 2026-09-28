@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
 import {
   ChevronUp,
@@ -26,6 +26,7 @@ import { useTriggerTooltip } from "./useTriggerTooltip"
 import {
   autoRefreshLabel,
   cellToolbarMenuFlags,
+  hasActiveResultGrid,
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
@@ -123,6 +124,7 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
+  const hasResultGrid = useMemo(() => hasActiveResultGrid(cell), [cell])
   const isViewMaximized = !isNoneView && !!cell.isViewMaximized
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
@@ -155,6 +157,7 @@ export const CellToolbar: React.FC<Props> = ({
     // "View SQL" minimizes the chart/table to the editor without dropping data.
     sqlShown: cell.isViewMaximized === false,
     chartZoomed,
+    hasResultGrid,
     isGridMode,
     cellIndex,
     totalCells,
@@ -291,7 +294,7 @@ export const CellToolbar: React.FC<Props> = ({
       $inline={inline}
       $forceVisible={menuOpen}
     >
-      {isMaximized && (isChartView || isGridView) && (
+      {isMaximized && (isChartView || hasResultGrid) && (
         <Tooltip content={isChartView ? "Chart settings" : "Highlight rules"}>
           <CellIconButton
             label={isChartView ? "Chart settings" : "Highlight rules"}

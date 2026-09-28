@@ -8,6 +8,7 @@ import {
   AUTO_REFRESH_OPTIONS,
   isAutoRefresh,
   resolveCellView,
+  hasActiveResultGrid,
   resolveRunAction,
   buildAppliedCells,
   buildAppliedLayout,
@@ -2968,6 +2969,7 @@ describe("cellToolbarMenuFlags", () => {
       isMarkdown: false,
       sqlShown: false,
       chartZoomed: false,
+      hasResultGrid: false,
       isGridMode: false,
       cellIndex: 1,
       totalCells: 3,
@@ -3079,7 +3081,7 @@ describe("cellToolbarMenuFlags", () => {
   it("expanded tier never duplicates the inline refresh / interval / split controls", () => {
     // Given the expanded toolbar, which shows refresh + interval + split inline
     const chart = flags({ tier: "expanded", view: "chart" })
-    const grid = flags({ tier: "expanded", view: "grid" })
+    const grid = flags({ tier: "expanded", view: "grid", hasResultGrid: true })
     // Then the menu drops all of them, keeping only chart settings (chart only)
     expect(chart.showRefreshItem).toBe(false)
     expect(chart.showAutoRefreshItem).toBe(false)
@@ -3094,11 +3096,28 @@ describe("cellToolbarMenuFlags", () => {
 
   it("hides highlight rules when the compact grid is collapsed behind View SQL", () => {
     // Given a compact grid cell showing its SQL instead of the grid
-    const collapsed = flags({ tier: "compact", view: "grid", sqlShown: true })
-    const shown = flags({ tier: "compact", view: "grid", sqlShown: false })
+    const collapsed = flags({
+      tier: "compact",
+      view: "grid",
+      sqlShown: true,
+      hasResultGrid: true,
+    })
+    const shown = flags({
+      tier: "compact",
+      view: "grid",
+      sqlShown: false,
+      hasResultGrid: true,
+    })
     // Then the item reaches only a mounted grid
     expect(collapsed.showHighlightSettings).toBe(false)
     expect(shown.showHighlightSettings).toBe(true)
+  })
+
+  it("hides highlight rules when the active result mounts no grid", () => {
+    // Given a grid-view cell whose active statement failed or was DDL
+    const f = flags({ tier: "compact", view: "grid", hasResultGrid: false })
+    // Then the item is not offered, since nothing would open
+    expect(f.showHighlightSettings).toBe(false)
   })
 
   it("markdown cells expose only move/duplicate/delete", () => {
@@ -3933,5 +3952,28 @@ describe("resolveActiveStatementSql — the single-run target", () => {
 
   it("returns undefined without a result, so the caller can fall back", () => {
     expect(resolveActiveStatementSql("SELECT 1", null)).toBeUndefined()
+  })
+})
+
+describe("hasActiveResultGrid", () => {
+  it("is true only when the active statement renders a DQL grid", () => {
+    // Given a grid cell, a failed cell, and a two-statement cell on its error tab
+    const failure: SingleQueryResult = {
+      type: "error",
+      query: "SELECT * FROM missing",
+      error: "table does not exist",
+    }
+    const grid = cell("a", "SELECT 1", resultOf([dqlResult("SELECT 1")]))
+    const failed = cell("b", "SELECT * FROM missing", resultOf([failure]))
+    const onErrorTab = cell(
+      "c",
+      "SELECT 1;\nSELECT * FROM missing",
+      resultOf([dqlResult("SELECT 1"), failure], { activeResultIndex: 1 }),
+    )
+
+    // Then only the cell showing a grid qualifies
+    expect(hasActiveResultGrid(grid)).toBe(true)
+    expect(hasActiveResultGrid(failed)).toBe(false)
+    expect(hasActiveResultGrid(onErrorTab)).toBe(false)
   })
 })

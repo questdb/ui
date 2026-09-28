@@ -17,6 +17,7 @@ import {
 } from "../../components/ResultGrid/highlight/types"
 import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
 import { validateRuleFields } from "../../components/ResultGrid/highlight/validateRule"
+import { isHighlightRule } from "../../components/ResultGrid/highlight/isHighlightConfig"
 
 // Snake-case shape the agent tools speak for grid highlight rules, and its
 // mapping to the internal HighlightConfig. One flat rule object carries every
@@ -116,6 +117,9 @@ const mapRule = (
     (rule.kind === "previous" || rule.kind === "newRow"
       ? "temporary"
       : "always")
+  if (display !== "temporary" && display !== "always") {
+    return fail(index, "display must be temporary|always")
+  }
   if (
     rule.applies_to != null &&
     rule.applies_to !== "cell" &&
@@ -148,6 +152,13 @@ const mapRule = (
       if (op === "changedBy") {
         if (typeof rule.threshold !== "number") {
           return fail(index, "changedBy needs a threshold")
+        }
+        if (
+          rule.unit != null &&
+          rule.unit !== "absolute" &&
+          rule.unit !== "percent"
+        ) {
+          return fail(index, "unit must be absolute|percent")
         }
         return {
           ok: true,
@@ -323,6 +334,11 @@ export const fromHighlightConfigWire = (
   for (const [index, rule] of wire.rules.entries()) {
     const mapped = mapRule(rule, index, createId)
     if (!mapped.ok) return { ok: false, error: mapped.error }
+    // The load-time check drops a whole config on reload, so a rule it would
+    // refuse must fail here instead.
+    if (!isHighlightRule(mapped.rule)) {
+      return { ok: false, error: `rules[${index}]: a field has the wrong type` }
+    }
     const [firstError] = Object.entries(
       validateRuleFields(mapped.rule, "unknown"),
     )
