@@ -91,6 +91,7 @@ const StepIndicatorContainer = styled(Box).attrs({
   backdrop-filter: blur(0.6rem);
   padding: 0.4rem;
   border-radius: 10rem;
+  border: 1px solid ${({ theme }) => theme.color.borderDefault};
   box-shadow: 0 0.1rem 0.2rem ${({ theme }) => theme.color.shadowSubtle};
   width: fit-content;
 `

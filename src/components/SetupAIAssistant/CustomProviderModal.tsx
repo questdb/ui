@@ -11,7 +11,7 @@ import type {
   ProviderType,
   CustomProviderDefinition,
 } from "../../utils/ai/settings"
-import { Select } from "../Select"
+import { SelectMenuControl } from "../SelectMenu"
 import { toast } from "../Toast"
 import {
   ModelSettings,
@@ -150,12 +150,13 @@ const StepOneContent = ({
         </InputSection>
         <InputSection align="flex-start">
           <InputLabel>Provider Type</InputLabel>
-          <Select
-            data-hook="custom-provider-type-select"
+          <SelectMenuControl
             name="providerType"
+            dataHook="custom-provider-type-select"
+            ariaLabel="Provider Type"
             value={providerType}
-            onChange={(e) =>
-              onProviderTypeChange(e.target.value as ProviderType)
+            onValueChange={(value) =>
+              onProviderTypeChange(value as ProviderType)
             }
             options={[
               {

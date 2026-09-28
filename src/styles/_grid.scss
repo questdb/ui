@@ -75,7 +75,6 @@ $col-resize-ghost-z-index: ($panel-left-z-index + 1);
 
 $active-row-background: theme-color(interactionNeutral);
 $row-hover-background: theme-color(interactionNeutralHover);
-$table-selection-background: theme-color(gridSelection);
 
 .qg-r-hover {
   background-color: $row-hover-background;
@@ -221,8 +220,9 @@ $drag-handle-margin: 2px;
 }
 
 .qg-header-name {
-  color: theme-color(contentObject) !important;
+  color: theme-color(contentPrimary) !important;
   font-size: medium;
+  font-weight: 600;
 }
 
 .qg-header-type {
@@ -262,8 +262,17 @@ $drag-handle-margin: 2px;
 }
 
 .qg-c-active {
-  box-shadow: inset 0 0 0 1px theme-color(gridFocus);
-  background: $table-selection-background;
+  box-shadow: inset 0 0 0 1px theme-color(statusInfo);
+  background:
+    linear-gradient(
+      theme-color(statusInfoSurface),
+      theme-color(statusInfoSurface)
+    ),
+    linear-gradient(
+      theme-color(interactionSelected),
+      theme-color(interactionSelected)
+    ),
+    theme-color(gridRow);
   border-radius: 0.4rem;
 }
 
@@ -274,7 +283,7 @@ $drag-handle-margin: 2px;
 
 @keyframes pulse {
   0% {
-    box-shadow: theme-color(gridFocus) 0 0 0 1px;
+    box-shadow: theme-color(statusInfo) 0 0 0 1px;
   }
   75% {
     box-shadow: theme-color(transparent) 0 0 0 16px;

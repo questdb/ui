@@ -5,7 +5,12 @@ import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
-import { getQueryFromCursor, normalizeQueryText } from "../../Monaco/utils"
+import {
+  getQueryFromCursor,
+  normalizeQueryText,
+  resolveSelectionRun,
+  type SelectionRunResolution,
+} from "../../Monaco/utils"
 import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
 import {
   emitUserAction,
@@ -29,6 +34,10 @@ type Options = {
   clearHighlight: () => void
 }
 
+type SingleRunSource = "editor" | "result"
+
+type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
+
 // Run / draw orchestration for a cell: resolves what a Run gesture means for
 // the current mode and view, runs it, and emits the agent-facing events. The
 // toolbar buttons, Monaco commands, keyboard shortcuts, and the RUN/DRAW
@@ -51,7 +60,7 @@ export const useCellRunActions = ({
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
   const validateWithGlobals = useValidateWithGlobals()
-  const { runWithSelection } = useLocalStorage()
+  const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
   // A run from the Run toggle spins the Run segment; a run from the refresh
@@ -108,25 +117,21 @@ export const useCellRunActions = ({
     validateWithGlobals,
   ])
 
-  const tryRunSelection = useCallback(async (): Promise<boolean> => {
-    if (!runWithSelection) return false
+  const tryRunSelection = useCallback((): SelectionRunResolution["kind"] => {
     const ed = editorRef.current
-    if (!ed) return false
-    const selection = ed.getSelection()
-    const model = ed.getModel()
-    if (!selection || !model || selection.isEmpty()) return false
-
-    const selectedText = model.getValueInRange(selection)
-    const normalized = normalizeQueryText(selectedText)
-    if (!normalized) return false
-
+    if (!ed) return "no-selection"
+    const resolution = resolveSelectionRun(ed, runWithSelectionMode)
+    if (resolution.kind === "no-selection") return "no-selection"
     clearHighlight()
+    if (resolution.kind === "no-query") return "no-query"
+
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_RUN)
-    const { ok } = await runCell(cell.id, normalized)
-    applyHighlight(ok)
-    return true
+    void runCell(cell.id, resolution.sql).then(({ ok }) => {
+      if (runWithSelectionMode === "partial") applyHighlight(ok)
+    })
+    return "run"
   }, [
-    runWithSelection,
+    runWithSelectionMode,
     cell.id,
     runCell,
     editorRef,
@@ -147,22 +152,60 @@ export const useCellRunActions = ({
     [bufferIdForEvents, cell.id],
   )
 
-  const handleRunAll = useCallback(
-    async (ignoreSelection = false) => {
-      if (editorRef.current) {
-        if (!ignoreSelection && (await tryRunSelection())) return
-        clearHighlight()
+  const handleRunAll = useCallback(async () => {
+    if (editorRef.current) clearHighlight()
+
+    const priorResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+    const { ok } = await runCell(cell.id)
+    const freshResult =
+      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+  }, [
+    cell.id,
+    runCell,
+    editorRef,
+    clearHighlight,
+    emitRanEvent,
+    getCellsSnapshot,
+  ])
+
+  const handleRunSingle = useCallback(
+    (source: SingleRunSource): boolean => {
+      let sql: string | undefined
+      if (source === "editor") {
+        const ed = editorRef.current
+        if (!ed) return false
+        const cursorQuery = getQueryFromCursor(ed)?.query
+        const selectionRun = tryRunSelection()
+        if (selectionRun === "run") return true
+        if (selectionRun === "no-query") {
+          toast.error("Nothing to run")
+          return false
+        }
+        sql = cursorQuery
+      } else {
+        sql = resolveActiveStatementSql(cell.value, cell.result)
       }
 
+      if (!sql?.trim()) {
+        toast.error("Nothing to run")
+        return false
+      }
+      clearHighlight()
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      const { ok } = await runCell(cell.id)
-      const freshResult =
-        getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+      void runCell(cell.id, normalizeQueryText(sql)).then(({ ok }) => {
+        const freshResult =
+          getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
+        emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+      })
+      return true
     },
     [
       cell.id,
+      cell.value,
+      cell.result,
       runCell,
       tryRunSelection,
       editorRef,
@@ -172,46 +215,11 @@ export const useCellRunActions = ({
     ],
   )
 
-  const handleRunSingle = useCallback(async () => {
-    const ed = editorRef.current
-    // Capture the cursor's statement before any await — a reveal in this same
-    // gesture can unmount the editor, and reading it afterwards loses it.
-    const cursorQuery = ed ? getQueryFromCursor(ed)?.query : undefined
-    if (ed && (await tryRunSelection())) return
-    // Cursor first; otherwise the active tab's statement — resolved from the
-    // same frame the tabs render, so a "Not run" tab runs its own SQL and a
-    // single run never silently expands into running every statement.
-    const activeQuery = resolveActiveStatementSql(cell.value, cell.result)
-    const sql = cursorQuery ?? activeQuery
-    if (!sql?.trim()) {
-      await handleRunAll()
-      return
-    }
-    clearHighlight()
-    const priorResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const { ok } = await runCell(cell.id, normalizeQueryText(sql))
-    const freshResult =
-      getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
-  }, [
-    cell.id,
-    cell.value,
-    cell.result,
-    runCell,
-    tryRunSelection,
-    editorRef,
-    clearHighlight,
-    handleRunAll,
-    emitRanEvent,
-    getCellsSnapshot,
-  ])
-
   const runResolved = useCallback(
-    (intent: "all" | "single", ignoreSelection = false) => {
+    (request: RunRequest) => {
       const plan = resolveRunAction(
         { mode: cell.mode, result: cell.result },
-        { isCompactTier, showBottomSlot, intent },
+        { isCompactTier, showBottomSlot, intent: request.kind },
       )
       if (plan.kind === "noop") return
       if (plan.kind === "chart") {
@@ -222,16 +230,22 @@ export const useCellRunActions = ({
         })
         return
       }
-      if (plan.exitDraw) {
+      const exitDrawMode = () => {
+        if (!plan.exitDraw) return
         signalUserEdit(bufferIdForEvents)
         setCellMode(cell.id, "run")
       }
       firstRunRef.current = cell.result == null
-      // Start the run before revealing: under React 17 a reveal fired from a
-      // native key event re-renders synchronously and unmounts the editor, so
-      // the run must read the cursor first.
-      if (plan.kind === "run-all") void handleRunAll(ignoreSelection)
-      else void handleRunSingle()
+      if (request.kind === "all") {
+        exitDrawMode()
+        void handleRunAll()
+        if (plan.reveal) setCellViewMaximized(cell.id, true)
+        return
+      }
+      // A single run that finds nothing to run leaves the cell untouched —
+      // a draw cell keeps its chart instead of dropping to the grid.
+      if (!handleRunSingle(request.source)) return
+      exitDrawMode()
       if (plan.reveal) setCellViewMaximized(cell.id, true)
     },
     [
@@ -247,8 +261,15 @@ export const useCellRunActions = ({
       handleRunSingle,
     ],
   )
-  const runAll = useCallback(() => runResolved("all"), [runResolved])
-  const runSingle = useCallback(() => runResolved("single"), [runResolved])
+  const runAll = useCallback(() => runResolved({ kind: "all" }), [runResolved])
+  const runSingleFromEditor = useCallback(
+    () => runResolved({ kind: "single", source: "editor" }),
+    [runResolved],
+  )
+  const runSingleFromResult = useCallback(
+    () => runResolved({ kind: "single", source: "result" }),
+    [runResolved],
+  )
   const cellRefresh = useCellRefresh()
   // Refresh on a classified non-write grid routes to the engine: every
   // statement refreshes in parallel while the old rows stay visible. A write
@@ -274,7 +295,7 @@ export const useCellRunActions = ({
       })
       return
     }
-    runResolved("all", true)
+    runResolved({ kind: "all" })
   }, [cell.id, cell.mode, cell.result, cellRefresh, emitRanEvent, runResolved])
 
   useEffect(() => {
@@ -305,5 +326,11 @@ export const useCellRunActions = ({
 
   const isGridLoading = isRunning && firstRunRef.current
 
-  return { runAll, runSingle, handleDrawClick, isGridLoading }
+  return {
+    runAll,
+    runSingleFromEditor,
+    runSingleFromResult,
+    handleDrawClick,
+    isGridLoading,
+  }
 }

@@ -142,7 +142,7 @@ const ModeIconWrapper = styled(Box).attrs({
 })`
   width: 2.4rem;
   height: 2.4rem;
-  color: ${({ theme }) => theme.color.contentAccent};
+  color: ${({ theme }) => theme.color.aiPinkStart};
 `
 
 const ModeContent = styled(Box).attrs({

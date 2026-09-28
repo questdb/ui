@@ -12,6 +12,7 @@ export type FormInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   showPassword?: boolean
   autoFocus?: boolean
   autoComplete?: string
+  tone?: "neutral" | "accent"
 }
 
 const Wrapper = styled.div<{
@@ -69,6 +70,7 @@ export const FormInput = ({
   showPassword,
   autoFocus,
   autoComplete,
+  tone,
   ...rest
 }: FormInputProps) => {
   const { formState, getFieldState, register, setFocus } = useFormContext()
@@ -99,6 +101,7 @@ export const FormInput = ({
         disabled={disabled}
         showPassword={showPassword}
         autoComplete={autoComplete}
+        $tone={tone}
         {...rest}
         id={name}
         aria-invalid={hasError || undefined}

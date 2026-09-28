@@ -11,10 +11,11 @@ import { ButtonBase } from "../Button"
 import { clamp } from "../../utils/clamp"
 import { prefersReducedMotion } from "../../utils/prefersReducedMotion"
 import { createLiquidLensMap } from "../LiquidGlass/createLiquidLensMap"
+import { withAlpha } from "../../theme"
 
 export type SegmentedControlTone = "neutral" | "success" | "info"
 
-export type SegmentedControlActiveTone = "accent" | "neutral"
+export type SegmentedControlActiveTone = "accent" | "info" | "neutral"
 
 export type SegmentedControlSize = "xs" | "sm" | "md"
 
@@ -56,7 +57,7 @@ const SegmentedControlRoot = styled.div`
   && > button[aria-pressed="true"]:focus-visible {
     outline: none;
     outline-offset: 0;
-    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.contentAccent};
+    box-shadow: inset 0 0 0 2px ${({ theme }) => theme.color.borderStrong};
   }
 `
 
@@ -82,7 +83,10 @@ const GlassSelection = styled.div`
   border-bottom-width: 2px;
   border-bottom-color: ${({ theme }) => theme.color.glassEdge};
   border-radius: 0.4rem;
-  box-shadow: 0 3px 9px ${({ theme }) => theme.color.shadowSoft};
+  box-shadow: ${({ theme }) =>
+    theme.mode === "light"
+      ? `0 1px 1px ${theme.color.shadowSubtle}, 0 1px 3px ${theme.color.shadowSoft}`
+      : `0 3px 9px ${theme.color.shadowSoft}`};
   backdrop-filter: blur(6px) saturate(145%);
   -webkit-backdrop-filter: blur(5px) saturate(150%);
   transition: opacity 100ms ease;
@@ -386,15 +390,45 @@ export const SegmentedControlButton = styled(
       `
     }
 
+    if ($activeTone === "info") {
+      return css`
+        &&,
+        &&:hover:not(:disabled):not([aria-disabled="true"]) {
+          background: ${theme.color.statusInfoSurface};
+          color: ${theme.color.statusInfoSubtle};
+        }
+      `
+    }
+
+    const accentShadow = css`
+      box-shadow: ${theme.mode === "light"
+        ? `0 1px 1px ${theme.color.shadowSubtle}, 0 1px 3px ${theme.color.shadowSoft}`
+        : `0 3px 9px ${theme.color.shadowSoft}`};
+    `
+
     return css`
       && {
-        background: ${theme.color.interactionAccentActive};
-        color: ${theme.color.contentAccent};
+        position: relative;
+        background: ${theme.color.brandAccentActive};
+        color: ${theme.color.brandAccent};
+        ${accentShadow}
+      }
+
+      &&::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 1px solid ${theme.color.brandAccentBorder};
+        border-bottom-width: 2px;
+        border-bottom-color: ${withAlpha(theme.color.brandAccentBorder, 0.22)};
+        border-radius: inherit;
+        pointer-events: none;
       }
 
       &&:hover:not(:disabled):not([aria-disabled="true"]) {
-        background: ${theme.color.interactionAccentActive};
-        color: ${theme.color.contentAccent};
+        background: ${theme.color.brandAccentActive};
+        color: ${theme.color.brandAccent};
+        ${accentShadow}
       }
     `
   }}

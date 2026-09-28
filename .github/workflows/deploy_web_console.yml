@@ -1,0 +1,99 @@
+name: Deploy Web Console
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: deploy-web-console-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: ${{ github.event_name == 'push' && 'Production' || 'Deploy preview' }}
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build
+        run: yarn build
+
+      - name: Deploy to Netlify
+        id: deploy
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            npx --yes netlify-cli@22 deploy \
+              --dir=dist \
+              --prod \
+              --message "main @ ${GITHUB_SHA::7}" \
+              --json > deploy.json
+          else
+            npx --yes netlify-cli@22 deploy \
+              --dir=dist \
+              --alias "pr-${{ github.event.number }}" \
+              --message "PR #${{ github.event.number }} @ ${GITHUB_SHA::7}" \
+              --json > deploy.json
+          fi
+          node -e "
+            const { url, deploy_url, logs } = require('./deploy.json')
+            require('fs').appendFileSync(process.env.GITHUB_OUTPUT, \`url=\${url ?? deploy_url}\nlogs=\${logs}\n\`)
+          "
+
+      - name: Comment preview URL
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          DEPLOY_LOGS: ${{ steps.deploy.outputs.logs }}
+        with:
+          script: |
+            const marker = '<!-- web-console-deploy-preview -->'
+            const body = [
+              marker,
+              '### Web Console deploy preview',
+              '',
+              '| Preview | Commit | Logs |',
+              '| --- | --- | --- |',
+              `| ${process.env.DEPLOY_URL} | \`${context.sha.slice(0, 7)}\` | [build log](${process.env.DEPLOY_LOGS}) |`,
+            ].join('\n')
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            })
+            const existing = comments.find((comment) => comment.body.includes(marker))
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              })
+            }

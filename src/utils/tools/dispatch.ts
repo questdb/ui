@@ -27,6 +27,7 @@ import {
   type RunCellGate,
 } from "./permissions"
 import type { ValidateQueryResult } from "../questdb/types"
+import { stringifyWithBigInts } from "../questdb/serialize"
 import {
   categoryFor,
   mutatesNotebook,
@@ -331,19 +332,18 @@ export const dispatchTool = async (
         if (result.length > MAX_TABLES) {
           const truncated = result.slice(0, MAX_TABLES)
           return {
-            content: JSON.stringify(
+            content: stringifyWithBigInts(
               {
                 tables: truncated,
                 total_count: result.length,
                 truncated: true,
                 message: `Showing ${MAX_TABLES} of ${result.length} tables. Use get_table_schema with a specific table name to get details if you are interested in a specific table.`,
               },
-              null,
               2,
             ),
           }
         }
-        return { content: JSON.stringify(result, null, 2) }
+        return { content: stringifyWithBigInts(result, 2) }
       }
       case "get_table_schema": {
         const tableName = (input as { table_name: string })?.table_name
@@ -392,7 +392,7 @@ export const dispatchTool = async (
         const result = await modelToolsClient.getTableDetails(tableName)
         return {
           content: result
-            ? JSON.stringify(result, null, 2)
+            ? stringifyWithBigInts(result, 2)
             : "Table details not found",
           is_error: !result,
         }

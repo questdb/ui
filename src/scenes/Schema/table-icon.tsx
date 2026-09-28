@@ -6,7 +6,7 @@ import { color } from "../../utils"
 import * as QuestDB from "../../utils/questdb"
 
 type TableIconProps = {
-  kind: "table" | "matview" | "view"
+  kind: QuestDB.TableKind
   walEnabled?: boolean
   partitionBy?: QuestDB.PartitionBy
   designatedTimestamp?: string
@@ -22,8 +22,10 @@ const Root = styled.div<{ $size: string }>`
   height: ${({ $size }) => $size};
   position: relative;
   flex-shrink: 0;
+  color: ${color("statusInfo")};
+
   svg {
-    color: ${color("contentAccent")};
+    color: inherit;
   }
 `
 
@@ -56,12 +58,17 @@ const NonPartitionedTableIcon = ({
   </svg>
 )
 
+const ObjectGlyph = styled.svg`
+  color: ${color("statusInfo")};
+  flex-shrink: 0;
+`
+
 export const MaterializedViewIcon = ({
   size = DEFAULT_SIZE,
 }: {
   size?: string
 }) => (
-  <svg
+  <ObjectGlyph
     viewBox="0 0 28 28"
     height={size}
     width={size}
@@ -82,6 +89,35 @@ export const MaterializedViewIcon = ({
       <path fill="none" d="M0 0h24v24H0z" />
       <path d="M4 8h16V5H4v3zm10 11v-9h-4v9h4zm2 0h4v-9h-4v9zm-8 0v-9H4v9h4zM3 3h18a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
     </g>
+  </ObjectGlyph>
+)
+
+export const LiveViewIcon = ({ size = DEFAULT_SIZE }: { size?: string }) => (
+  <svg
+    viewBox="0 0 28 28"
+    height={size}
+    width={size}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <g
+      stroke="currentColor"
+      strokeWidth="2"
+      fill="none"
+      transform="translate(-2, -2)"
+    >
+      <line x1="3" y1="4" x2="22" y2="4" />
+      <line x1="4" y1="4" x2="4" y2="22" />
+      <line x1="21" y1="4" x2="21" y2="11" />
+      <line x1="4" y1="21" x2="11" y2="21" />
+    </g>
+    <circle cx="18" cy="18" r="3.1" fill="currentColor" />
+    <path
+      d="M12.9 12.9a7.43 7.43 0 0 0 0 10.2M23.1 12.9a7.43 7.43 0 0 1 0 10.2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
   </svg>
 )
 
@@ -136,7 +172,7 @@ export const TableIcon: FC<TableIconProps> = ({
       <Tooltip
         content={
           <>
-            {partitionText}, {timestampText}.
+            {QuestDB.getTableKindLabel(kind)}. {partitionText}, {timestampText}.
           </>
         }
         delay={1000}
@@ -144,6 +180,24 @@ export const TableIcon: FC<TableIconProps> = ({
       >
         <Root $size={size} data-hook="table-icon">
           <MaterializedViewIcon size={size} />
+        </Root>
+      </Tooltip>
+    )
+  }
+
+  if (kind === "liveview") {
+    return (
+      <Tooltip
+        content={
+          <>
+            {QuestDB.getTableKindLabel(kind)}. {partitionText}, {timestampText}.
+          </>
+        }
+        delay={1000}
+        placement="bottom"
+      >
+        <Root $size={size} data-hook="table-icon">
+          <LiveViewIcon size={size} />
         </Root>
       </Tooltip>
     )

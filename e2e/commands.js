@@ -43,6 +43,12 @@ const viewSchemas = {
     "CREATE VIEW IF NOT EXISTS btc_trades_view AS SELECT * FROM btc_trades;",
 }
 
+const liveViewSchemas = {
+  btc_trades_lv:
+    "CREATE LIVE VIEW IF NOT EXISTS btc_trades_lv FLUSH EVERY 1s IN MEMORY 5s START FROM BEGINNING AS " +
+    "SELECT timestamp, symbol, avg(price) OVER (PARTITION BY symbol ORDER BY timestamp ROWS 100 PRECEDING) AS moving_avg FROM btc_trades;",
+}
+
 Cypress.on("uncaught:exception", (err) => {
   // Monaco editor's word highlighter throws "Canceled" errors during rapid tab switching
   // when restoreViewState cancels pending async operations - this is harmless
@@ -264,6 +270,80 @@ Cypress.Commands.add("typeQueryDirectly", (query) => {
   })
 })
 
+Cypress.Commands.add("waitForActiveBufferValue", (expectedValue) => {
+  cy.window().then((win) => {
+    const readActiveBufferValue = () =>
+      new Cypress.Promise((resolve, reject) => {
+        const openRequest = win.indexedDB.open("web-console")
+        openRequest.onerror = () => reject(openRequest.error)
+        openRequest.onblocked = () =>
+          reject(new Error("web-console IndexedDB open is blocked"))
+        openRequest.onsuccess = () => {
+          const database = openRequest.result
+          const fail = (error) => {
+            database.close()
+            reject(error)
+          }
+          try {
+            const transaction = database.transaction(
+              ["editor_settings", "buffers"],
+              "readonly",
+            )
+            transaction.onerror = () => fail(transaction.error)
+            const activeBufferRequest = transaction
+              .objectStore("editor_settings")
+              .index("key")
+              .get("activeBufferId")
+
+            activeBufferRequest.onerror = () => fail(activeBufferRequest.error)
+            activeBufferRequest.onsuccess = () => {
+              try {
+                const activeBufferId = activeBufferRequest.result?.value
+                if (activeBufferId === undefined) {
+                  fail(new Error("no activeBufferId row in editor_settings"))
+                  return
+                }
+                const bufferRequest = transaction
+                  .objectStore("buffers")
+                  .get(activeBufferId)
+                bufferRequest.onerror = () => fail(bufferRequest.error)
+                bufferRequest.onsuccess = () => {
+                  const value = bufferRequest.result?.value
+                  database.close()
+                  resolve(value)
+                }
+              } catch (error) {
+                fail(error)
+              }
+            }
+          } catch (error) {
+            fail(error)
+          }
+        }
+      })
+
+    // Poll well inside Cypress's own command timeout so this command's
+    // message wins over a generic cy.then() timeout.
+    const deadline = Date.now() + 8000
+    const poll = () =>
+      readActiveBufferValue().then((value) => {
+        if (value === expectedValue) return
+        if (Date.now() >= deadline) {
+          throw new Error(
+            `Active buffer did not persist ${JSON.stringify(
+              expectedValue,
+            )} — last read ${JSON.stringify(value)}`,
+          )
+        }
+        return new Cypress.Promise((resolve) =>
+          win.setTimeout(resolve, 50),
+        ).then(poll)
+      })
+
+    return poll()
+  })
+})
+
 Cypress.Commands.add("runLine", () => {
   cy.intercept("/exec*").as("exec")
   cy.typeQuery(`${ctrlOrCmd}{enter}`)
@@ -443,6 +523,36 @@ Cypress.Commands.add("selectRange", (startPos, endPos) => {
   })
 })
 
+Cypress.Commands.add("createNotebook", () => {
+  cy.get(".chrome-tabs .new-tab-button").click()
+  cy.getByDataHook("new-tab-notebook").click()
+  cy.getByDataHook("notebook-toolbar").should("be.visible")
+  cy.getByDataHook("cell-editor-shimmer").should("not.exist")
+  cy.getByDataHook("cell-grid-shimmer").should("not.exist")
+  cy.get("[data-notebook-cell] .monaco-editor textarea").should("exist")
+})
+
+Cypress.Commands.add("focusNotebookCell", () => {
+  cy.get("[data-notebook-cell] .monaco-editor .view-lines").first().click()
+  cy.focused().should("have.class", "inputarea")
+})
+
+Cypress.Commands.add("withFocusedEditor", (fn) => {
+  cy.window().should((win) => {
+    const hasFocusedEditor = win.monaco.editor
+      .getEditors()
+      .some((candidate) => candidate.hasTextFocus())
+    expect(hasFocusedEditor, "a Monaco editor has focus").to.eq(true)
+  })
+  cy.window().then((win) =>
+    fn(
+      win.monaco.editor
+        .getEditors()
+        .find((candidate) => candidate.hasTextFocus()),
+    ),
+  )
+})
+
 Cypress.Commands.add("getVisibleLines", () => cy.get(".view-lines"))
 
 Cypress.Commands.add("expandNotifications", () =>
@@ -507,6 +617,14 @@ Cypress.Commands.add("dropMaterializedView", (name) => {
 
 Cypress.Commands.add("dropViewIfExists", (name) => {
   cy.execQuery(`DROP VIEW IF EXISTS ${name};`)
+})
+
+Cypress.Commands.add("createLiveView", (name) => {
+  cy.execQuery(liveViewSchemas[name])
+})
+
+Cypress.Commands.add("dropLiveViewIfExists", (name) => {
+  cy.execQuery(`DROP LIVE VIEW IF EXISTS ${name};`)
 })
 
 Cypress.Commands.add("interceptQuery", (query, alias, response) => {
@@ -662,12 +780,44 @@ Cypress.Commands.add("expandViews", () => {
   })
 })
 
+Cypress.Commands.add("expandLiveViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="expand-live-views"]').length > 0) {
+      cy.get('[data-hook="expand-live-views"]').dblclick({ force: true })
+    }
+  })
+})
+
+Cypress.Commands.add("collapseLiveViews", () => {
+  cy.get("body").then((body) => {
+    if (body.find('[data-hook="collapse-live-views"]').length > 0) {
+      cy.get('[data-hook="collapse-live-views"]').dblclick({ force: true })
+    }
+  })
+})
+
 Cypress.Commands.add("openDetailsDrawer", (name, kind = "table") => {
   const titleHook = `schema-${kind}-title`
   cy.getByDataHook(titleHook).contains(name).click()
   cy.realPress("Enter")
   cy.getByDataHook("table-details-drawer").should("be.visible")
   cy.getByDataHook("table-details-name").should("have.value", name)
+})
+
+// Radix arms a tooltip only on a trigger pointermove, and realHover emits a
+// single move event. That one armed intent can be silently lost to the
+// provider's pointer-in-transit gate or to boundary events fired when the DOM
+// re-renders under the stationary pointer (e.g. right after a tab switch while
+// its data fetches land). Nothing re-arms it without another pointermove, so
+// nudge the pointer after hovering: the first move lets Radix clear stale
+// transit state, the second re-arms the tooltip.
+// Takes a factory rather than an element so every action re-queries the
+// trigger: a wrapped node that detaches on re-render keeps a zeroed rect, and
+// realMouseMove would then aim at the viewport corner instead of the trigger.
+Cypress.Commands.add("hoverForTooltip", (getTrigger) => {
+  getTrigger().realHover()
+  getTrigger().realMouseMove(2, 2, { position: "center" })
+  getTrigger().realMouseMove(0, 0, { position: "center" })
 })
 
 Cypress.Commands.add("getEditorTabs", () => {

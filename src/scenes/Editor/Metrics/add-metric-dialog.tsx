@@ -53,13 +53,6 @@ const TitleGroup = styled.span`
   gap: 0.8rem;
 `
 
-const TitleIcon = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.contentAccent};
-`
-
 const Body = styled.div`
   display: grid;
   gap: 1.4rem;
@@ -91,7 +84,7 @@ const Metric = styled(SelectableCardButton)`
   text-align: left;
 
   &:hover svg[data-arrow] {
-    color: ${({ theme }) => theme.color.contentAccent};
+    color: ${({ theme }) => theme.color.brandAccent};
     transform: translateX(0.2rem);
   }
 `
@@ -102,10 +95,10 @@ const MetricIcon = styled.span`
   justify-content: center;
   width: 4rem;
   height: 4rem;
-  border: 1px solid ${({ theme }) => theme.color.borderAccent};
+  border: 1px solid ${({ theme }) => theme.color.brandAccentBorder};
   border-radius: 0.8rem;
-  background: ${({ theme }) => theme.color.interactionAccentActive};
-  color: ${({ theme }) => theme.color.contentAccent};
+  background: ${({ theme }) => theme.color.brandAccentActive};
+  color: ${({ theme }) => theme.color.brandAccent};
 `
 
 const MetricCopy = styled.span`
@@ -227,12 +220,7 @@ export const AddMetricDialog = ({ open, onOpenChange }: Props) => {
         <Dialog.Content maxwidth="52rem">
           <Header>
             <Title>
-              <TitleGroup>
-                <TitleIcon>
-                  <AddChart size={20} />
-                </TitleIcon>
-                Add widget
-              </TitleGroup>
+              <TitleGroup>Add widget</TitleGroup>
             </Title>
             <Dialog.Close asChild>
               <CloseButton size="sm" label="Close add widget dialog">

@@ -20,6 +20,7 @@ import {
 } from "../../../utils/notebooks/notebookController"
 import { NotebookToolError } from "../../../utils/notebooks/notebookToolError"
 import { color } from "../../../utils"
+import { withAlpha } from "../../../theme"
 import {
   NotebookProvider,
   useNotebookActions,
@@ -142,8 +143,12 @@ const GridScrollContainer = styled.div<{ $suppressTransitions?: boolean }>`
   ${editorStageSurfaceStyles}
 
   .react-grid-item.react-grid-placeholder {
-    background: ${color("interactionNeutral")};
-    opacity: 0.25;
+    background: ${({ theme }) =>
+      withAlpha(
+        theme.color.contentPrimary,
+        theme.mode === "light" ? 0.08 : 0.1,
+      )};
+    opacity: 1;
   }
 
   .react-grid-item {

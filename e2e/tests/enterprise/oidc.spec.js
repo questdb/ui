@@ -288,8 +288,9 @@ describe("OIDC", () => {
       })
       cy.getByDataHook("import-table-column-schema").should("be.visible")
       cy.getByDataHook("import-table-column-owner").should("be.visible")
-      cy.contains("option", "john doe").should("not.exist")
-      cy.contains("option", "group1").should("exist")
+      cy.getByDataHook("import-table-owner-select").click()
+      cy.contains('[role="menuitemradio"]', "group1").should("exist")
+      cy.contains('[role="menuitemradio"]', "john doe").should("not.exist")
     })
   })
 

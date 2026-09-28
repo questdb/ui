@@ -100,7 +100,7 @@ const QueryPickerButton = styled(Button)<{ $firstTimeVisitor: boolean }>`
   ${({ $firstTimeVisitor, theme }) =>
     $firstTimeVisitor
       ? css`
-          animation: ${queryPickerPulse(theme.color.gridFocus)} 2s infinite;
+          animation: ${queryPickerPulse(theme.color.contentAccent)} 2s infinite;
         `
       : css`
           animation: none;

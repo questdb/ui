@@ -12,6 +12,7 @@ const input = (overrides: Record<string, unknown> = {}) => ({
   range: { startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 5 },
   notebookField: "cell" as const,
   cellType: "sql" as const,
+  mode: "highlight" as const,
   ...overrides,
 })
 

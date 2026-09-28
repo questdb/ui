@@ -16,15 +16,23 @@ export const Navigation = styled(PrimaryToggleButton)<NavigationProps>`
   height: 4rem;
   border-radius: 0.6rem;
   color: ${({ selected, theme }) =>
-    selected ? theme.color.contentAccent : theme.color.contentSecondary};
+    selected ? theme.color.brandAccent : theme.color.contentSecondary};
+
+  &&[aria-pressed="true"] {
+    background: ${({ theme }) => theme.color.brandAccentActive};
+    color: ${({ theme }) => theme.color.brandAccent};
+  }
 
   &:hover:not([disabled]) {
     color: ${({ selected, theme }) =>
-      selected ? theme.color.contentAccent : theme.color.contentPrimary};
+      selected ? theme.color.brandAccent : theme.color.contentPrimary};
     background: ${({ selected, theme }) =>
-      selected
-        ? theme.color.interactionAccentActive
-        : theme.color.interactionHover};
+      selected ? theme.color.brandAccentActive : theme.color.interactionHover};
+  }
+
+  &&[aria-pressed="true"]:hover:not([disabled]) {
+    background: ${({ theme }) => theme.color.brandAccentActive};
+    color: ${({ theme }) => theme.color.brandAccent};
   }
 
   & > span {

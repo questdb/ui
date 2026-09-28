@@ -1358,11 +1358,17 @@ describe("computeResultBottomHeight", () => {
   //   ROW_HEIGHT            = 30
   //   MAX_RESERVED_ROWS     = 10
 
+  const heightForResult = (result: CellResult | null | undefined) =>
+    computeResultBottomHeight(
+      result,
+      (result?.results ?? []).map(({ query }) => query).join(";\n"),
+    )
+
   it("null/undefined/empty result → notification-only", () => {
-    expect(computeResultBottomHeight(null)).toBe(44)
-    expect(computeResultBottomHeight(undefined)).toBe(44)
+    expect(heightForResult(null)).toBe(44)
+    expect(heightForResult(undefined)).toBe(44)
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [],
         activeResultIndex: 0,
         timestamp: 0,
@@ -1372,7 +1378,7 @@ describe("computeResultBottomHeight", () => {
 
   it("single error → notification-only", () => {
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [{ type: "error", query: "X", error: "boom" }],
         activeResultIndex: 0,
         timestamp: 0,
@@ -1383,7 +1389,7 @@ describe("computeResultBottomHeight", () => {
   it("single DDL/DML/notice → notification-only", () => {
     for (const type of ["ddl", "dml"] as const) {
       expect(
-        computeResultBottomHeight({
+        heightForResult({
           results: [{ type, query: "X" }],
           activeResultIndex: 0,
           timestamp: 0,
@@ -1395,7 +1401,7 @@ describe("computeResultBottomHeight", () => {
   it("single DQL with columns but 0 rows → notification + actions bar + header (no rows)", () => {
     // The column headers show even with no rows: 44 + 36 + 44 + 0*30 = 124.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1413,7 +1419,7 @@ describe("computeResultBottomHeight", () => {
 
   it("single DQL with no columns → notification-only", () => {
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1444,19 +1450,77 @@ describe("computeResultBottomHeight", () => {
       timestamp: 0,
     })
     // 1 row: 44 + 36 + 44 + 1*30 = 154
-    expect(computeResultBottomHeight(make(1))).toBe(154)
+    expect(heightForResult(make(1))).toBe(154)
     // 5 rows: 44 + 36 + 44 + 5*30 = 274
-    expect(computeResultBottomHeight(make(5))).toBe(274)
+    expect(heightForResult(make(5))).toBe(274)
     // 10 rows: 44 + 36 + 44 + 10*30 = 424
-    expect(computeResultBottomHeight(make(10))).toBe(424)
+    expect(heightForResult(make(10))).toBe(424)
     // 50 rows: cap at 10 → still 424
-    expect(computeResultBottomHeight(make(50))).toBe(424)
+    expect(heightForResult(make(50))).toBe(424)
+  })
+
+  it("one executed DQL in a multi-statement cell adds tabs but tight-fits its rows", () => {
+    // The result array is compact (only SELECT 2 ran), but the rendered frame
+    // has two tabs: SELECT 1 is "Not run" and SELECT 2 owns the result.
+    const result = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "select 2",
+          columns: [{ name: "2", type: "INT" }],
+          dataset: [[2]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+
+    // 40 tab + 44 notification + 36 actions + 44 header + 1*30 row = 194.
+    expect(computeResultBottomHeight(result, "select 1;\nselect 2")).toBe(194)
+  })
+
+  it("keeps the grid block reserved while the active tab is an unexecuted statement", () => {
+    // Given a two-statement cell where only the second statement ran, and the
+    // user has selected the "Not run" tab, so the active slot holds no result
+    const result = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "select 2",
+          columns: [{ name: "2", type: "INT" }],
+          dataset: [[2]],
+          count: 1,
+        },
+      ],
+      activeResultIndex: 0,
+      activeStatementKey: statementKeysFor(["select 1"])[0],
+      timestamp: 0,
+    }
+
+    // When sizing the bottom slot for that frame
+    // Then it still reserves the executed result's grid rather than collapsing
+    // to tab bar + notification (84), which would clip the visible grid.
+    expect(computeResultBottomHeight(result, "select 1;\nselect 2")).toBe(194)
+  })
+
+  it("one executed non-grid result in a multi-statement cell still includes its tabs", () => {
+    expect(
+      computeResultBottomHeight(
+        {
+          results: [{ type: "ddl", query: "create table x (n int)" }],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+        "create table x (n int);\nselect * from x",
+      ),
+    ).toBe(84)
   })
 
   it("multi-statement, first DQL with rows → tab + notification + header + 10 rows", () => {
     // 40 + 44 + 36 + 44 + 10*30 = 464
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -1473,10 +1537,11 @@ describe("computeResultBottomHeight", () => {
     ).toBe(464)
   })
 
-  it("multi-statement, first is error → tab + notification only (no grid to show)", () => {
-    // 40 + 44 = 84
+  it("multi-statement with any DQL tab reserves the full grid block", () => {
+    // The first tab is an error, but the active second tab renders a grid.
+    // Reserve the same stable multi-tab height: 40 + 44 + 36 + 44 + 10*30.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           { type: "error", query: "Q1", error: "boom" },
           {
@@ -1490,14 +1555,14 @@ describe("computeResultBottomHeight", () => {
         activeResultIndex: 1,
         timestamp: 0,
       }),
-    ).toBe(84)
+    ).toBe(464)
   })
 
   it("multi-statement, first DQL with columns but 0 rows → tab + full grid block", () => {
     // The first query shows its column headers, so we reserve the grid block
     // like any DQL-first script: 40 + 44 + 36 + 44 + 10*30 = 464.
     expect(
-      computeResultBottomHeight({
+      heightForResult({
         results: [
           {
             type: "dql",
@@ -2077,7 +2142,7 @@ describe("releaseCellResultPatch", () => {
     expect(patch).toEqual({
       result: undefined,
       lastRunStatus: "success",
-      bottomHeight: computeResultBottomHeight(threeRowResult),
+      bottomHeight: computeResultBottomHeight(threeRowResult, "select 1"),
     })
   })
 

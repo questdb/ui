@@ -4,7 +4,7 @@ import * as RadixPopover from "@radix-ui/react-popover"
 import Highlighter from "react-highlight-words"
 import { XIcon } from "@phosphor-icons/react"
 import { TableIcon } from "../../scenes/Schema/table-icon"
-import type { PartitionBy } from "../../utils/questdb"
+import type { PartitionBy, TableKind } from "../../utils/questdb"
 import {
   VirtualizedTree,
   type VirtualizedTreeHandle,
@@ -16,7 +16,7 @@ import { floatingSurfaceStyles } from "../overlayStyles"
 export type TableOption = {
   label: string
   value: string
-  kind?: "table" | "matview" | "view"
+  kind?: TableKind
   disabled?: boolean
   walEnabled?: boolean
   partitionBy?: PartitionBy
@@ -54,8 +54,8 @@ const TriggerContainer = styled.div`
 
   &:hover,
   &:focus-within {
-    border-color: ${({ theme }) => theme.color.borderAccent};
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    border-color: ${({ theme }) => theme.color.borderDefault};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 `
 
@@ -110,18 +110,18 @@ const Item = styled.div<{ $active: boolean; $disabled?: boolean }>`
   color: ${({ theme, $disabled }) =>
     $disabled ? theme.color.contentDisabled : theme.color.contentPrimary};
   background: ${({ $active, theme }) =>
-    $active ? theme.color.interactionAccentActive : "transparent"};
+    $active ? theme.color.interactionNeutral : "transparent"};
   border: 1px solid
     ${({ $active, theme }) =>
-      $active ? theme.color.borderAccent : "transparent"};
+      $active ? theme.color.borderDefault : "transparent"};
 
   &:hover {
     background: ${({ $disabled, $active, theme }) =>
       $disabled
         ? "transparent"
         : $active
-          ? theme.color.interactionAccentActive
-          : theme.color.interactionAccentHover};
+          ? theme.color.interactionNeutral
+          : theme.color.interactionHover};
   }
 
   .highlight {

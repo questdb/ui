@@ -50,12 +50,15 @@ export function applyDebounceFilter(
     overallSeverity = "critical"
   } else if (filteredIssues.some((i) => i.severity === "warning")) {
     overallSeverity = "warning"
+  } else if (rawHealthStatus.hasUnavailableSource) {
+    overallSeverity = "unknown"
   } else if (filteredIssues.some((i) => i.severity === "recovering")) {
     overallSeverity = "recovering"
   }
 
   return {
     overallSeverity,
+    hasUnavailableSource: rawHealthStatus.hasUnavailableSource,
     issues: filteredIssues,
     fieldIssues,
     trendIndicators: adjustedTrends,

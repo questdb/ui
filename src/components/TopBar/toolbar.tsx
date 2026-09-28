@@ -53,7 +53,10 @@ const CustomTooltipWrapper = styled.div`
   min-width: 26rem;
   max-width: min(36rem, calc(100vw - 2rem));
   overflow: hidden;
-  background: ${({ theme }) => theme.color.surfaceInset};
+  background: ${({ theme }) =>
+    theme.mode === "light"
+      ? theme.color.surfaceOverlay
+      : theme.color.surfaceInset};
   border: 1px solid ${({ theme }) => theme.color.borderDefault};
   border-radius: 0.8rem;
   box-shadow:
@@ -233,6 +236,8 @@ const EnterpriseBadge = styled(StatusBadge).attrs({
   size: "sm",
 })`
   height: 1.8rem;
+  color: ${({ theme }) => theme.color.contentPrimary};
+  font-weight: 600;
 
   &:not(:last-child) {
     margin-right: 0.25rem;
@@ -294,31 +299,35 @@ const CustomIconWithTooltip = ({
 }) => {
   const badgeColors = useBadgeColors(shownValues?.instance_rgb ?? null)
 
+  // The badge already shows the name and type; the tooltip only adds value
+  // when there is a description to show.
+  if (!shownValues?.instance_description) {
+    return <>{icon}</>
+  }
+
   return (
     <PopperHover placement={placement} trigger={icon}>
-      <CustomTooltipWrapper>
+      <CustomTooltipWrapper data-hook="topbar-instance-tooltip">
         <TooltipHeader>
           <EnvIconWrapper $background={badgeColors.primary}>
             <InstanceTypeIcon
               color={badgeColors.secondary}
-              instanceType={shownValues?.instance_type}
+              instanceType={shownValues.instance_type}
               size={20}
             />
           </EnvIconWrapper>
           <TooltipIdentity>
-            {shownValues?.instance_type && (
+            {shownValues.instance_type && (
               <TooltipType>{shownValues.instance_type}</TooltipType>
             )}
             <TooltipName>
-              {shownValues?.instance_name || "Unnamed instance"}
+              {shownValues.instance_name || "Unnamed instance"}
             </TooltipName>
           </TooltipIdentity>
         </TooltipHeader>
-        {shownValues?.instance_description && (
-          <TooltipDescription>
-            {shownValues.instance_description}
-          </TooltipDescription>
-        )}
+        <TooltipDescription>
+          {shownValues.instance_description}
+        </TooltipDescription>
       </CustomTooltipWrapper>
     </PopperHover>
   )

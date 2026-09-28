@@ -91,6 +91,25 @@
   color: theme-color(contentMuted);
 }
 
+html[data-theme="light"] .react-calendar {
+  background: theme-color(surfaceOverlay);
+}
+
+html[data-theme="light"] .react-calendar__tile {
+  color: theme-color(contentPrimary);
+}
+
+html[data-theme="light"] .react-calendar__tile:disabled {
+  background-color: theme-color(surfaceBase);
+  color: theme-color(contentDisabled);
+}
+
+html[data-theme="light"] .react-calendar__tile--active,
+html[data-theme="light"] .react-calendar__tile--range,
+html[data-theme="light"] .react-calendar__tile--hasActive {
+  color: theme-color(contentInverse);
+}
+
 .react-calendar__tile:enabled:hover,
 .react-calendar__tile:enabled:focus {
   background-color: theme-color(borderDefault);
