@@ -1,9 +1,8 @@
 import React from "react"
 import styled from "styled-components"
 import { PlayIcon } from "@phosphor-icons/react"
-import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import { Tooltip } from "../../../../components"
+import { Spinner, Tooltip } from "../../../../components"
 import { ctrlCmd } from "../../../../utils/platform"
 import {
   NotebookViewToggle,

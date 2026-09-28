@@ -11,13 +11,10 @@ import {
 import { Box, Text, CopyButton, TextButton } from "../../../components"
 import { LiteEditor } from "../../../components/LiteEditor"
 import type { Table, Column, StoragePolicy } from "../../../utils/questdb/types"
-import type { BaseTableStatus, SourceState, TableKindData } from "./types"
-import {
-  formatTTL,
-  formatInterval,
-  formatUtcTimestamp,
-  formatStoragePolicyClauses,
-} from "./utils"
+import type { BaseTableStatus, TableKindData } from "./types"
+import type { SourceState } from "../../../hooks/catalogSource"
+import { formatUtcTimestamp } from "../../../utils/format"
+import { formatTTL, formatInterval, formatStoragePolicyClauses } from "./utils"
 import { ColumnIcon } from "../Row"
 import {
   Section,
@@ -27,6 +24,10 @@ import {
   SectionTitleContainer,
   CaretIcon,
   UnavailableValue,
+  MetricsGrid,
+  MetricCard,
+  MetricLabel,
+  MetricValue,
 } from "./shared-styles"
 import { SchemaAIButton } from "./SchemaAIButton"
 import { ErrorBanner } from "./ErrorBanner"
@@ -78,7 +79,7 @@ const SchemaRow = styled(Box).attrs({
   }
 
   &:hover {
-    background: ${({ theme }) => theme.color.surfaceRaised};
+    background: ${({ theme }) => theme.color.interactionHover};
   }
 `
 
@@ -90,40 +91,6 @@ const BaseTableLinkButton = styled(TextButton)`
   &&:hover:not(:disabled):not([aria-disabled="true"]) {
     background: ${({ theme }) => theme.color.interactionHover};
   }
-`
-
-const MetricsGrid = styled.div<{ $columns: number }>`
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(${({ $columns }) => $columns}, 1fr);
-  gap: 0.2rem;
-  border-radius: 0.5rem;
-  overflow: hidden;
-`
-
-const MetricCard = styled(Box).attrs<{ $background?: string }>({
-  flexDirection: "column",
-  gap: "0.3rem",
-  align: "flex-start",
-  justifyContent: "space-between",
-})<{ $background?: string }>`
-  padding: 1rem 1.5rem;
-  background: ${({ theme }) => theme.color.surfaceValue};
-`
-
-const MetricLabel = styled(Text).attrs({
-  color: "contentSecondary",
-  size: "sm",
-})``
-
-const MetricValue = styled(Text).attrs({
-  color: "contentPrimary",
-  size: "md",
-})`
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 `
 
 const ColumnCopyButtonSlot = styled.span`
@@ -385,10 +352,7 @@ export const DetailsTab = ({
           {liveView || liveViewUnavailable ? (
             /* Live view: 4 cards (2×2). TTL, dedup and refresh type do not apply. */
             <MetricsGrid $columns={2}>
-              <MetricCard
-                $background={theme.color.surfaceInset}
-                data-hook="table-details-flush-every-card"
-              >
+              <MetricCard data-hook="table-details-flush-every-card">
                 <MetricLabel>Flush Every</MetricLabel>
                 <MetricValue>
                   {liveViewDiagnosticsUnavailable ? (
@@ -401,10 +365,7 @@ export const DetailsTab = ({
                   )}
                 </MetricValue>
               </MetricCard>
-              <MetricCard
-                $background={theme.color.surfaceInset}
-                data-hook="table-details-in-memory-card"
-              >
+              <MetricCard data-hook="table-details-in-memory-card">
                 <MetricLabel>In Memory</MetricLabel>
                 <MetricValue>
                   {liveViewDiagnosticsUnavailable ? (
@@ -417,10 +378,7 @@ export const DetailsTab = ({
                   )}
                 </MetricValue>
               </MetricCard>
-              <MetricCard
-                $background={theme.color.surfaceInset}
-                data-hook="table-details-start-from-card"
-              >
+              <MetricCard data-hook="table-details-start-from-card">
                 <MetricLabel>Start From</MetricLabel>
                 <MetricValue>
                   {liveViewDiagnosticsUnavailable ? (
@@ -432,7 +390,7 @@ export const DetailsTab = ({
                   )}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Partitioning</MetricLabel>
                 <MetricValue>
                   {tableData.partitionBy === "NONE"
@@ -446,20 +404,20 @@ export const DetailsTab = ({
             /* Matview: 4 cards (2×2) when TTL is configured, 3 cards (1 row) when not. */
             <MetricsGrid $columns={hasTtl ? 2 : 3}>
               {hasTtl && (
-                <MetricCard $background={theme.color.surfaceInset}>
+                <MetricCard>
                   <MetricLabel>TTL</MetricLabel>
                   <MetricValue>
                     {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
                   </MetricValue>
                 </MetricCard>
               )}
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
                   {tableData.dedup ? "Enabled" : "Disabled"}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Partitioning</MetricLabel>
                 <MetricValue>
                   {tableData.partitionBy === "NONE"
@@ -468,7 +426,7 @@ export const DetailsTab = ({
                       tableData.partitionBy.slice(1).toLowerCase()}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Refresh Type</MetricLabel>
                 <MetricValue>
                   {matViewUnavailable ? (
@@ -486,20 +444,20 @@ export const DetailsTab = ({
             /* Table: 3 cards when TTL is configured, 2 when not. */
             <MetricsGrid $columns={hasTtl ? 3 : 2}>
               {hasTtl && (
-                <MetricCard $background={theme.color.surfaceInset}>
+                <MetricCard>
                   <MetricLabel>TTL</MetricLabel>
                   <MetricValue>
                     {formatTTL(tableData.ttlValue, tableData.ttlUnit)}
                   </MetricValue>
                 </MetricCard>
               )}
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Deduplication</MetricLabel>
                 <MetricValue>
                   {tableData.dedup ? "Enabled" : "Disabled"}
                 </MetricValue>
               </MetricCard>
-              <MetricCard $background={theme.color.surfaceInset}>
+              <MetricCard>
                 <MetricLabel>Partitioning</MetricLabel>
                 <MetricValue>
                   {tableData.partitionBy === "NONE"
@@ -546,10 +504,7 @@ export const DetailsTab = ({
               )}
               <MetricsGrid $columns={storagePolicyClauses.length}>
                 {storagePolicyClauses.map((clause) => (
-                  <MetricCard
-                    key={clause.action}
-                    $background={theme.color.surfaceInset}
-                  >
+                  <MetricCard key={clause.action}>
                     <MetricLabel>{clause.action}</MetricLabel>
                     <MetricValue>{clause.duration}</MetricValue>
                   </MetricCard>

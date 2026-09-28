@@ -228,6 +228,9 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
           placeholder="Search chats"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && searchQuery) setSearchQuery("")
+          }}
           data-hook="chat-history-search"
         />
         {searchQuery && (
