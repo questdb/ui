@@ -292,7 +292,7 @@ describe("notebook highlight rules", () => {
     })
     runCell()
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
-    cy.getByDataHook("cell-chart").should("be.visible")
+    cy.getByDataHook("draw-canvas").should("be.visible")
     openChartDrawer()
     cy.getByDataHook("chart-settings-drawer")
       .find('button[aria-label^="Chart type"]')
@@ -317,7 +317,7 @@ describe("notebook highlight rules", () => {
     })
     runCell()
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
-    cy.getByDataHook("cell-chart").should("be.visible")
+    cy.getByDataHook("draw-canvas").should("be.visible")
 
     // When the chart type is changed to Line and saved from the drawer
     openChartDrawer()

@@ -4,22 +4,40 @@ import type { ChartConfig } from "../CellChart/chartTypes"
 import type { CellContentMode } from "../cellVirtualization/cellVirtualizationEngine"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import {
-  useCellFetchState,
+  shallowEqual,
+  useCellFetchSelector,
   useCellRefresh,
 } from "../cellRefresh/CellRefreshContext"
+import type { CellFetchState } from "../cellRefresh/cellRefreshEngine"
 import { DrawCanvas } from "../DrawCanvas"
+import { PaneEmptyState } from "../PaneEmptyState"
 import { InlineResultTable } from "../result-table"
-import { buildStatementSlotViews } from "../result-table/statementSlotView"
+import {
+  buildStatementSlotViews,
+  type SlotRefreshChannel,
+} from "../result-table/statementSlotView"
 import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
+import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
 import { cellColumnsOf } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
-  statementKeysFor,
-} from "../notebookUtils"
+} from "../statementIdentity"
+
+const selectSlotChannel = (
+  state: CellFetchState | undefined,
+): SlotRefreshChannel | undefined =>
+  state && {
+    slotFetching: state.slotFetching,
+    slotErrors: state.slotErrors,
+    slotVerifiedAt: state.slotVerifiedAt,
+  }
+
+// A chart draws its own frame, so a draw cell selects nothing here.
+const selectNoSlotChannel = (): SlotRefreshChannel | undefined => undefined
 
 type Props = {
   cell: NotebookCell
@@ -28,6 +46,7 @@ type Props = {
   isFocused: boolean
   isRunning: boolean
   onConfigChange: (config: ChartConfig) => void
+  onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
 }
 
@@ -38,27 +57,31 @@ export const CellBottomContent: React.FC<Props> = ({
   isFocused,
   isRunning,
   onConfigChange,
+  onRetryUnmountWhileFocused,
   onYieldFocus,
 }) => {
   const { setActiveStatement, cancelQuery, reRunResultAt } =
     useNotebookActions()
   const bufferId = useNotebookBufferId()
   const cellRefresh = useCellRefresh()
-  const fetchState = useCellFetchState(cell.id)
+  const fetchState = useCellFetchSelector(
+    cell.id,
+    cell.mode === "draw" ? selectNoSlotChannel : selectSlotChannel,
+    shallowEqual,
+  )
+  const resultStatus = useCellResultStatus(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
 
-  // Tabs follow the editor's statement list; results attach to it by content.
+  // Tabs follow the editor's statements; results attach to them by content.
   // A statement with no result renders the neutral "Not run" slot. A frame no
   // statement claims (selection run) falls back to the results' own tabs.
-  const statements = useMemo(
-    () => (cell.mode === "draw" ? [] : getQueriesFromText(cell.value)),
-    [cell.mode, cell.value],
-  )
   const frame = useMemo(
     () =>
-      deriveStatementFrame(statements, cell.result) ??
-      derivePositionalFrame(cell.result),
-    [statements, cell.result],
+      cell.mode === "draw"
+        ? null
+        : (deriveStatementFrame(getQueriesFromText(cell.value), cell.result) ??
+          derivePositionalFrame(cell.result)),
+    [cell.mode, cell.value, cell.result],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),
@@ -66,11 +89,15 @@ export const CellBottomContent: React.FC<Props> = ({
   )
 
   const resultIndexOf = useCallback(
-    (statementKey: string): number =>
-      statementKeysFor(
-        (cell.result?.results ?? []).map((r) => r.query),
-      ).indexOf(statementKey),
-    [cell.result],
+    (statementKey: string): number => {
+      const slotResult = frame?.slots.find(
+        (slot) => slot.key === statementKey,
+      )?.result
+      return slotResult && cell.result
+        ? cell.result.results.indexOf(slotResult)
+        : -1
+    },
+    [frame, cell.result],
   )
   const reRunStatement = useCallback(
     (statementKey: string) => {
@@ -98,6 +125,7 @@ export const CellBottomContent: React.FC<Props> = ({
         cell={cell}
         isFocused={isFocused}
         onConfigChange={onConfigChange}
+        onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
     ) : (
       <ChartPlaceholder />
@@ -108,7 +136,7 @@ export const CellBottomContent: React.FC<Props> = ({
       <InlineResultTable
         slots={slots}
         activeSlotIndex={frame.activeSlotIndex}
-        timestamp={cell.result.timestamp}
+        runToken={cell.result.timestamp}
         isFocused={isFocused}
         onTabChange={(statementKey) =>
           setActiveStatement(cell.id, statementKey)
@@ -139,7 +167,13 @@ export const CellBottomContent: React.FC<Props> = ({
       />
     )
   }
-  return expectingResult ? (
-    <GridShimmer statementCount={0} bufferId={bufferId} cellId={cell.id} />
-  ) : null
+  if (!expectingResult) return null
+  if (resultStatus === "failed") {
+    return (
+      <PaneEmptyState role="alert" aria-live="assertive" aria-atomic="true">
+        Result failed to load. Run the cell again to restore it.
+      </PaneEmptyState>
+    )
+  }
+  return <GridShimmer statementCount={0} bufferId={bufferId} cellId={cell.id} />
 }

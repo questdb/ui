@@ -28,7 +28,7 @@ import { useFontsReady } from "../../../../components/ResultGrid/useFontsReady"
 import type { MaxColumnWidth } from "../../../../components/ResultGrid/types"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
 import { loadNotebookColumnLayout } from "../notebookColumnLayoutStore"
-import { MAX_RESERVED_ROWS } from "../notebookUtils"
+import { MAX_RESERVED_ROWS } from "../cellSizing"
 import { ShimmerBar, ShimmerSweep } from "./ShimmerBar"
 
 // Mirrors the InlineResultTable chrome stack in result-table/styles.ts.

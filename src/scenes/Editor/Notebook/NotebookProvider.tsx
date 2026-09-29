@@ -12,6 +12,7 @@ import { unstable_batchedUpdates } from "react-dom"
 import { useEditor } from "../../../providers/EditorProvider"
 import { QuestContext } from "../../../providers/QuestProvider"
 import type {
+  CellPaneView,
   CellResult,
   NotebookCell,
   NotebookVariable,
@@ -25,6 +26,7 @@ import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
+import type { DrawGateOutcome } from "./useCellExecution"
 import { useNotebookPersistence } from "./useNotebookPersistence"
 import {
   addCellTransition,
@@ -36,7 +38,7 @@ import {
   registerController,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
+  setCellPaneViewTransition,
   unregisterController,
   type NotebookControllerActions,
   type NotebookTransitionResult,
@@ -45,19 +47,30 @@ import {
 import {
   type CellRunOutcome,
   clearCellAutoRefresh,
-  computeResultBottomHeight,
   countAutoRefreshOverrides,
   generateId,
+} from "./notebookUtils"
+import {
+  computeResultBottomHeight,
+  discardCellResult,
   releaseCellResultPatch,
+} from "./cellSizing"
+import { runCancelReasonOf, type RunCancelReason } from "./runCancellation"
+import {
   snapshotResultsMatchQueries,
   statementKeysFor,
-} from "./notebookUtils"
+} from "./statementIdentity"
 import type { RunCellGate } from "../../../utils/tools/permissions"
 import { signalUserEdit } from "../../../utils/notebooks/notebookAIBridge"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../modules/ConsoleEventTracker/events"
 import { getQueriesFromText } from "../Monaco/utils"
 import { silently } from "../../../utils/notebooks/notebookToolError"
+import {
+  dropSnapshotsAfterPersist,
+  droppedSnapshotCellIds,
+  persistFailure,
+} from "../../../utils/notebooks/notebookSnapshotCleanup"
 import type { AutoRefresh } from "../../../store/notebook"
 import {
   copyNotebookSnapshots,
@@ -123,6 +136,7 @@ export type NotebookActions = {
     expectFullValue?: boolean,
     gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
+  validateForDraw: (cellId: string) => Promise<DrawGateOutcome>
   reRunResultAt: (cellId: string, index: number) => Promise<boolean>
   cancelCell: (cellId: string) => void
   cancelQuery: (cellId: string, index: number) => void
@@ -137,7 +151,7 @@ export type NotebookActions = {
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
-  setCellViewMaximized: (cellId: string, value: boolean) => void
+  setCellPaneView: (cellId: string, view: CellPaneView) => void
   setFocusedCell: (cellId: string | null) => void
   setMaximizedCellId: (cellId: string | null) => void
   getCellsSnapshot: () => NotebookCell[]
@@ -157,6 +171,7 @@ const NOOP_ACTIONS: NotebookActions = {
   moveCellDown: () => undefined,
   duplicateCell: () => Promise.resolve(""),
   runCell: () => Promise.resolve({ ok: false, superseded: false }),
+  validateForDraw: () => Promise.resolve({ granted: false }),
   reRunResultAt: () => Promise.resolve(false),
   cancelCell: () => undefined,
   cancelQuery: () => undefined,
@@ -168,7 +183,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
-  setCellViewMaximized: () => undefined,
+  setCellPaneView: () => undefined,
   setFocusedCell: () => undefined,
   setMaximizedCellId: () => undefined,
   getCellsSnapshot: () => [],
@@ -179,14 +194,18 @@ const NOOP_LIVE_ACTIONS: LiveNotebookActions = {
   getSettings: () => ({}),
   getMaximizedCellId: () => null,
   readRefreshState: () => new Map(),
+  readResultStatus: () => "unrequested",
+  noteResultMissing: () => undefined,
   flushChartSnapshots: () => Promise.resolve(),
   applyTransition: (run) =>
-    run({
-      cells: [],
-      settings: {},
-      maximizedCellId: null,
-      focusedCellId: null,
-    }).result,
+    Promise.resolve(
+      run({
+        cells: [],
+        settings: {},
+        maximizedCellId: null,
+        focusedCellId: null,
+      }).result,
+    ),
 }
 
 const NOTEBOOK_ACTION_KEYS = Object.keys(NOOP_ACTIONS) as Array<
@@ -333,8 +352,8 @@ export const NotebookProvider: React.FC<{
         canRelease: (cellId) =>
           (virtualizationEngineRef.current?.canReleaseData(cellId) ?? false) &&
           !(cellRefreshEngineRef.current?.isRefreshing(cellId) ?? false),
-        seedRefreshErrors: (cellId, errors) =>
-          cellRefreshEngineRef.current?.seedRefreshErrors(cellId, errors),
+        seedRefreshState: (cellId, seed) =>
+          cellRefreshEngineRef.current?.seedRefreshState(cellId, seed),
       }),
     [],
   )
@@ -405,14 +424,20 @@ export const NotebookProvider: React.FC<{
     [persistDebounced, store.cellsRef],
   )
 
+  const warnPersistFailure = useCallback(
+    (error: unknown) =>
+      console.warn(`notebook ${bufferId}: document write failed`, error),
+    [bufferId],
+  )
+
   const updateSettings = useCallback(
     (updates: Partial<NotebookSettings>) => {
       const next = { ...settingsRef.current, ...updates }
       settingsRef.current = next
       setSettingsState(next)
-      persistImmediately(store.cellsRef.current)
+      void persistImmediately(store.cellsRef.current).catch(warnPersistFailure)
     },
-    [persistImmediately, store.cellsRef],
+    [persistImmediately, store.cellsRef, warnPersistFailure],
   )
 
   const releaseCellExecution = useCallback(
@@ -430,23 +455,36 @@ export const NotebookProvider: React.FC<{
   )
 
   const cancelCell = useCallback(
-    (cellId: string) => {
-      execution.cancelCell(cellId)
+    (cellId: string, reason?: RunCancelReason) => {
+      execution.cancelCell(cellId, reason)
       releaseCellExecution(cellId)
     },
     [execution, releaseCellExecution],
   )
 
   const abortCellRun = useCallback(
-    (cellId: string) => {
-      execution.abortCellRun(cellId)
+    (cellId: string, reason: RunCancelReason) => {
+      execution.abortCellRun(cellId, reason)
       releaseCellExecution(cellId)
     },
     [execution, releaseCellExecution],
   )
 
-  const applyTransition = useCallback(
-    <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+  // A controller invalidation discards the result, unlike a virtualization
+  // release or the refresh engine temporarily hiding it during an SQL edit.
+  const noteResultMissing = useCallback(
+    (cellId: string) => {
+      resultTrendStore.clearCell(cellId)
+      clearSettingsDrawerSessions(cellId)
+      resultHydration.noteMissing(cellId)
+    },
+    [resultTrendStore, resultHydration],
+  )
+
+  const commitTransition = useCallback(
+    <T,>(
+      run: (parts: ViewParts) => NotebookTransitionResult<T>,
+    ): { result: T; persisted: Promise<void> } => {
       const cellsBefore = store.cellsRef.current
       const out = run({
         cells: cellsBefore,
@@ -460,54 +498,84 @@ export const NotebookProvider: React.FC<{
       settingsRef.current = parts.settings
       maximizedCellIdRef.current = parts.maximizedCellId
       focusedCellIdRef.current = parts.focusedCellId
-      unstable_batchedUpdates(() => {
-        store.hydrateCells(() => parts.cells)
-        setSettingsState(parts.settings)
-        setMaximizedCellIdState(parts.maximizedCellId)
-        setFocusedCellState(parts.focusedCellId)
-      })
-      persistImmediately(parts.cells, true)
-      // A settings drawer belongs to the view it was opened from; a mode
-      // change swaps that view out, so the drawer closes with it.
+      // Close the old view's drawer before publishing cells, so a mode
+      // change cannot remount a panel with an obsolete session. Maximizing
+      // or restoring the same view keeps its draft.
       const modeBefore = new Map(cellsBefore.map((c) => [c.id, c.mode]))
       for (const cell of parts.cells) {
         if (modeBefore.has(cell.id) && modeBefore.get(cell.id) !== cell.mode) {
           clearSettingsDrawerSessions(cell.id)
         }
       }
-      // A deleted cell's in-flight run must be cancelled; the transition reports
-      // deleted cells via cleanup, so every delete route (UI or agent) cancels
-      // here rather than at each call site.
+      unstable_batchedUpdates(() => {
+        store.hydrateCells(() => parts.cells)
+        setSettingsState(parts.settings)
+        setMaximizedCellIdState(parts.maximizedCellId)
+        setFocusedCellState(parts.focusedCellId)
+      })
+      const persisted = persistImmediately(parts.cells, true)
+      // A deleted cell's in-flight run is discarded, not cancelled: superseding
+      // it makes a late completion report the deletion instead of a cleared
+      // result. The transition reports deleted cells via cleanup, so every
+      // delete route (UI or agent) lands here rather than at each call site.
       if (out.cleanup) {
         for (const cellId of out.cleanup.cellIds) {
-          cancelCell(cellId)
-          void deleteCellSnapshot(bufferId, cellId)
+          abortCellRun(cellId, "cell_deleted")
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
           clearSettingsDrawerSessions(cellId)
         }
       }
-      // For run->draw transitions, abort the in-flight run
       if (out.cancelRuns) {
-        for (const cellId of out.cancelRuns.cellIds) abortCellRun(cellId)
-      }
-      // noteMissing collapses the cell's reserved result area immediately
-      if (out.deleteSnapshots) {
-        for (const cellId of out.deleteSnapshots.cellIds) {
-          void deleteCellSnapshot(bufferId, cellId)
-          resultHydration.noteMissing(cellId)
+        for (const cellId of out.cancelRuns.cellIds) {
+          abortCellRun(cellId, out.cancelRuns.reason)
         }
       }
-      return out.result
+      // Discard cached display state and collapse the reserved result area
+      // immediately; the snapshot itself waits for persistence below.
+      if (out.deleteSnapshots) {
+        for (const cellId of out.deleteSnapshots.cellIds) {
+          noteResultMissing(cellId)
+        }
+      }
+      // Snapshot rows outlive a failed document write: the stored document
+      // still references them, so they go only once the new one is durable.
+      void dropSnapshotsAfterPersist(
+        persisted,
+        droppedSnapshotCellIds(out),
+        (cellId) => deleteCellSnapshot(bufferId, cellId),
+      )
+      return { result: out.result, persisted }
     },
-    [
-      store,
-      persistImmediately,
-      bufferId,
-      cancelCell,
-      abortCellRun,
-      resultHydration,
-    ],
+    [store, persistImmediately, bufferId, abortCellRun, noteResultMissing],
+  )
+
+  // A gesture sees its transition land at once; a failed document write only
+  // reaches the console, as with every other gesture-driven persist.
+  const applyTransition = useCallback(
+    <T,>(run: (parts: ViewParts) => NotebookTransitionResult<T>): T => {
+      const { result, persisted } = commitTransition(run)
+      persisted.catch(warnPersistFailure)
+      return result
+    },
+    [commitTransition, warnPersistFailure],
+  )
+
+  // The agent route reports success only once the document is durable, and a
+  // failed write as a typed error the agent can act on.
+  const applyTransitionPersisted = useCallback(
+    <T,>(
+      run: (parts: ViewParts) => NotebookTransitionResult<T>,
+    ): Promise<T> => {
+      const { result, persisted } = commitTransition(run)
+      return persisted.then(
+        () => result,
+        (error) => {
+          throw persistFailure(error)
+        },
+      )
+    },
+    [commitTransition],
   )
 
   const setMaximizedCellId = useCallback(
@@ -550,12 +618,11 @@ export const NotebookProvider: React.FC<{
   // doesn't rehydrate on the next load.
   const clearCellResult = useCallback(
     (cellId: string) => {
-      const cell = store.cellsRef.current.find((c) => c.id === cellId)
-      store.updateCell(cellId, {
-        result: undefined,
-        lastRunStatus: undefined,
-        ...(cell?.bottomResized ? {} : { bottomHeight: undefined }),
-      })
+      store.updateCells((cells) =>
+        cells.map((cell) =>
+          cell.id === cellId ? discardCellResult(cell) : cell,
+        ),
+      )
       resultHydration.forget(cellId)
       resultTrendStore.clearCell(cellId)
       clearSettingsDrawerSessions(cellId)
@@ -701,7 +768,7 @@ export const NotebookProvider: React.FC<{
         }
         const request = () =>
           questExecution.requestExecution({
-            abort: () => cancelCell(cellId),
+            abort: (reason) => cancelCell(cellId, runCancelReasonOf(reason)),
             bufferId,
             execute,
             onDismiss: () => resolve({ ok: false, superseded: false }),
@@ -711,7 +778,7 @@ export const NotebookProvider: React.FC<{
 
         if (signal) {
           questExecution.dismissPending(scopeKey)
-          questExecution.abortActiveByScope(scopeKey)
+          questExecution.abortActiveByScope(scopeKey, "superseded")
           request()
           return
         }
@@ -803,11 +870,11 @@ export const NotebookProvider: React.FC<{
     [applyTransition, bufferId],
   )
 
-  const setCellViewMaximized = useCallback(
-    (cellId: string, value: boolean) =>
+  const setCellPaneView = useCallback(
+    (cellId: string, view: CellPaneView) =>
       silently(() =>
         applyTransition((parts) =>
-          setCellViewMaximizedTransition(parts, bufferId, cellId, value),
+          setCellPaneViewTransition(parts, bufferId, cellId, view),
         ),
       ),
     [applyTransition, bufferId],
@@ -833,6 +900,7 @@ export const NotebookProvider: React.FC<{
     moveCellDown,
     duplicateCell,
     runCell,
+    validateForDraw: execution.validateForDraw,
     reRunResultAt: (cellId, index) => {
       // A per-tab rerun is a manual run: it cancels the refresh round, and
       // any COMMIT clears that statement's refresh error — a committed error
@@ -865,15 +933,17 @@ export const NotebookProvider: React.FC<{
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
-    setCellViewMaximized,
+    setCellPaneView,
     setFocusedCell,
     setMaximizedCellId,
     getCellsSnapshot: () => store.cellsRef.current.slice(),
     getSettings: () => ({ ...settingsRef.current }),
     getMaximizedCellId: () => maximizedCellIdRef.current,
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
+    readResultStatus: (cellId) => resultHydration.statusOf(cellId),
+    noteResultMissing,
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
-    applyTransition,
+    applyTransition: applyTransitionPersisted,
   }
 
   const stateValue = useMemo<NotebookState>(

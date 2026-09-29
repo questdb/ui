@@ -1,6 +1,6 @@
 import React from "react"
 import styled from "styled-components"
-import { CELL_EDITOR_LINE_HEIGHT, CELL_EDITOR_PADDING } from "../notebookUtils"
+import { CELL_EDITOR_LINE_HEIGHT, CELL_EDITOR_PADDING } from "../cellSizing"
 import { ShimmerBar, ShimmerSweep } from "./ShimmerBar"
 
 // Approximate advance width of the editor's 14px monospace font.

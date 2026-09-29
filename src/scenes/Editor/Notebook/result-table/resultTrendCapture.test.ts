@@ -4,7 +4,7 @@ import type {
   NotebookCell,
   SingleQueryResult,
 } from "../../../../store/notebook"
-import { deriveStatementFrame, statementKeysFor } from "../notebookUtils"
+import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
 import { getQueriesFromText } from "../../Monaco/utils"
 import { captureResultTrends } from "./resultTrendCapture"
 import { identityKeyOf } from "../../../../components/ResultGrid/highlight/identityIndex"

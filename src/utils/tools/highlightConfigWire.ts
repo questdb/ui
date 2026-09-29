@@ -23,7 +23,7 @@ import type { NotebookCell, SingleQueryResult } from "../../store/notebook"
 import type { NotebookResultSnapshot } from "../../store/notebookResults"
 import { validateRule } from "../../scenes/Editor/Notebook/CellHighlight/ruleValidation"
 import { cellColumnsOf } from "../../scenes/Editor/Notebook/result-table/highlightConfig"
-import { reconcileResultsForStatements } from "../../scenes/Editor/Notebook/notebookUtils"
+import { reconcileResultsForStatements } from "../../scenes/Editor/Notebook/statementIdentity"
 import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 

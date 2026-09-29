@@ -39,6 +39,19 @@ export type AutoRefresh = boolean | AutoRefreshInterval
 // migration. Markdown cells hold their source in `value` and are never executed.
 export type CellType = "sql" | "markdown"
 
+export type AgentCellView = "editor" | "result" | "editor_result"
+
+export const isAgentCellView = (value: unknown): value is AgentCellView =>
+  value === "editor" || value === "result" || value === "editor_result"
+
+// The storable pane arrangements. "editor" exists only on the agent wire: as a
+// write it discards the result (the toggle-off gesture), as a read it is the
+// derived presentation of a cell with nothing to show.
+export type CellPaneView = "result" | "editor_result"
+
+export const isCellPaneView = (value: unknown): value is CellPaneView =>
+  value === "result" || value === "editor_result"
+
 export type NotebookCell = {
   id: string
   position: number
@@ -52,13 +65,18 @@ export type NotebookCell = {
   topResized?: boolean
   bottomResized?: boolean
   spotlightEditorRatio?: number
-  mode?: CellMode
+  // Draw is persistent cell identity because it is also the marker used to
+  // hydrate and refresh a chart whose result is not currently in memory.
+  // Run is the absence of draw mode and must never be persisted.
+  mode?: "draw"
   chartConfig?: ChartConfig
   // One set of rules for every result grid of the cell, by column name; an
   // edit to the SQL never touches it.
   highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
-  isViewMaximized?: boolean
+  // Stored pane arrangement for a cell with a result. A cell without one
+  // shows only the editor; that never rewrites it.
+  paneView?: CellPaneView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }
@@ -74,17 +92,22 @@ export type DqlQueryResult = {
   timestamp?: number
   timings?: Timings
   notice?: string
+  // When the rows were fetched. Every constructor stamps it; hydration folds
+  // it once into results persisted before it existed.
+  fetchedAt?: number
 }
 
 export type DdlDmlQueryResult = {
   type: "ddl" | "dml"
   query: string
+  fetchedAt?: number
 }
 
 export type ErrorQueryResult = {
   type: "error"
   query: string
   error: string
+  fetchedAt?: number
 }
 
 export type TransientQueryResult = {
@@ -98,6 +121,7 @@ export type CancelledQueryResult = {
   type: "cancelled"
   query: string
   reason?: CancelReason
+  fetchedAt?: number
 }
 
 export type SingleQueryResult =
@@ -107,11 +131,19 @@ export type SingleQueryResult =
   | TransientQueryResult
   | CancelledQueryResult
 
+export const isSettledResult = (
+  result: SingleQueryResult,
+): result is Exclude<SingleQueryResult, TransientQueryResult> =>
+  result.type !== "running" && result.type !== "queued"
+
 export type CellResult = {
   results: SingleQueryResult[]
   activeResultIndex: number
   activeStatementKey?: string
   error?: string
+  // The run token: it changes when a run replaces the frame, and the grid
+  // keys its viewport on it. It is not a time — each result carries its own
+  // fetchedAt — and after a reload it is the snapshot's save time.
   timestamp: number
   script?: {
     successCount: number
@@ -153,6 +185,7 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
   id: crypto.randomUUID(),
   position,
   value,
+  paneView: "editor_result",
 })
 
 export const createDefaultNotebookViewState = (): NotebookViewState => ({

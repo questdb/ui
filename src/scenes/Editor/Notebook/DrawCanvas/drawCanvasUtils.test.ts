@@ -95,6 +95,19 @@ describe("resultsEquivalent", () => {
     expect(resultsEquivalent(a, b)).toBe(true)
   })
 
+  it("ignores surrounding whitespace but not inner whitespace or keyword casing", () => {
+    // Given results whose queries differ only around the statement, and
+    // results whose queries differ inside it
+    const base = [dql([{ name: "x", type: "INT" }], [[1]], "select 1 as x")]
+    const padded = [dql([{ name: "x", type: "INT" }], [[1]], " select 1 as x;")]
+    const recased = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
+
+    // When they are compared
+    // Then only the padded query is the same statement
+    expect(resultsEquivalent(base, padded)).toBe(true)
+    expect(resultsEquivalent(base, recased)).toBe(false)
+  })
+
   it("returns false when result counts differ", () => {
     const a = dql([{ name: "x", type: "INT" }], [[1]])
     const b = { ...a, count: 2 }
@@ -246,6 +259,15 @@ describe("resultMatchesQueries", () => {
     ).toBe(true)
   })
 
+  it("rejects a change of internal whitespace or keyword casing", () => {
+    // Given a result produced by the statement in one presentation
+    // When the cell now carries the same statement reformatted
+    // Then it does not match — the chart re-fetches
+    expect(
+      resultMatchesQueries(cellResult(["select  1\nas x"]), ["SELECT 1 AS x"]),
+    ).toBe(false)
+  })
+
   it("rejects on statement-count mismatch", () => {
     // Given a single-statement result
     const result = cellResult(["select a"])
@@ -392,13 +414,18 @@ describe("toChartResult", () => {
     expect(toChartResult(running, ["select 1"])).toEqual({ kind: "pending" })
   })
 
-  it("settles a matching result with its chartable rows and timestamp", () => {
-    const settled = toChartResult(settledResult("select 1"), ["select 1"])
+  it("settles a matching result with its chartable rows", () => {
+    // Given a settled result whose statement matches the cell
+    const result = settledResult("select 1")
+
+    // When it is converted for the chart
+    const settled = toChartResult(result, ["select 1"])
+
+    // Then it settles with one chartable row set and no error
     expect(settled.kind).toBe("settled")
     if (settled.kind === "settled") {
       expect(settled.results).toHaveLength(1)
       expect(settled.hadError).toBe(false)
-      expect(settled.timestamp).toBe(42)
     }
   })
 

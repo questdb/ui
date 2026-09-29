@@ -1,5 +1,5 @@
 import type { CellResult, NotebookCell } from "../../../../store/notebook"
-import { hasPendingResult, statementKeysFor } from "../notebookUtils"
+import { hasPendingResult, statementKeysFor } from "../statementIdentity"
 import { comparesWithPrevious } from "./highlightConfig"
 import type { ResultLanding, ResultTrendStore } from "./resultTrendStore"
 

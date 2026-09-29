@@ -13,15 +13,19 @@ import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSes
 import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
+import { Button } from "../../../../components/Button"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
 import {
-  deriveChartLoading,
+  shallowEqual,
+  useCellFetchSelector,
+} from "../cellRefresh/CellRefreshContext"
+import {
   pendingCellFetchState,
+  type CellFetchState,
 } from "../cellRefresh/cellRefreshEngine"
-import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
+import { useChartLoading } from "../cells/useChartLoading"
 import {
   getChartZoom,
   setChartZoom,
@@ -29,8 +33,29 @@ import {
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import type { ChartSettingsTelemetry } from "../CellChart/chartSettingsTelemetry"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
+import { useNotebookBufferId } from "../NotebookProvider"
+import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
+
+type DrawState = Pick<
+  CellFetchState,
+  "queries" | "queriesKey" | "settledKey" | "classifyBlock" | "fetchCancelled"
+>
+
+// Leaves out `fetching`: the canvas reads it only through `loading`, so a
+// refresh of a drawn chart does not re-render it.
+const selectDrawState = (
+  state: CellFetchState | undefined,
+): DrawState | undefined =>
+  state && {
+    queries: state.queries,
+    queriesKey: state.queriesKey,
+    settledKey: state.settledKey,
+    classifyBlock: state.classifyBlock,
+    fetchCancelled: state.fetchCancelled,
+  }
 
 const notebookChartSettingsTelemetry: ChartSettingsTelemetry = {
   onCancel: (method) => {
@@ -70,13 +95,9 @@ const Canvas = styled.div`
   background: ${({ theme }) => theme.color.surfaceInset};
 `
 
-const EmptyState = styled.div`
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.color.contentSecondary};
-  font-size: ${({ theme }) => theme.fontSize.sm};
+const CancelledState = styled(PaneEmptyState)`
+  flex-direction: column;
+  gap: 1rem;
 `
 
 // Announces loading/empty transitions. Stays mounted with only its text
@@ -95,12 +116,14 @@ type Props = {
   cell: NotebookCell
   isFocused: boolean
   onConfigChange: (config: ChartConfig) => void
+  onRetryUnmountWhileFocused: () => void
 }
 
 export const DrawCanvas: React.FC<Props> = ({
   cell,
   isFocused,
   onConfigChange,
+  onRetryUnmountWhileFocused,
 }) => {
   const trackSettingsOpen = useCallback(() => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
@@ -117,6 +140,10 @@ export const DrawCanvas: React.FC<Props> = ({
     changedWhileOpenMessage:
       "Chart settings were updated by the assistant. Reopen chart configuration to edit.",
   })
+  const bufferId = useNotebookBufferId()
+  const drawState = useCellFetchSelector(cell.id, selectDrawState, shallowEqual)
+  const { loading } = useChartLoading(cell)
+
   const [zoomStart, setZoomStart] = useState(
     () => getChartZoom(cell.id)?.start ?? 0,
   )
@@ -126,11 +153,9 @@ export const DrawCanvas: React.FC<Props> = ({
 
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
-  const fetchState = useCellFetchState(cell.id)
-  const resultStatus = useCellResultStatus(cell.id)
-  const state = useMemo(
-    () => fetchState ?? pendingCellFetchState(cell.value),
-    [fetchState, cell.value],
+  const state: DrawState = useMemo(
+    () => drawState ?? pendingCellFetchState(cell.value),
+    [drawState, cell.value],
   )
   const { queries, queriesKey, settledKey, classifyBlock } = state
   const chartResult = useMemo(
@@ -162,6 +187,15 @@ export const DrawCanvas: React.FC<Props> = ({
     [queries, results, cell.chartConfig],
   )
 
+  // The refresh replaces the cancelled state, and Retry with it; a focused
+  // Retry hands its focus on first, like the Stop button does on unmount.
+  const handleRetry = (e: React.MouseEvent) => {
+    if (e.currentTarget.matches(":focus-visible")) onRetryUnmountWhileFocused()
+    signalUserEdit(bufferId)
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
+    eventBus.publish(EventType.NOTEBOOK_CELL_REFRESH_CHART, { cellId: cell.id })
+  }
+
   const option = useMemo(
     () => buildEchartsOption(resolution.chart, resolution.renderQueries),
     [resolution],
@@ -170,13 +204,7 @@ export const DrawCanvas: React.FC<Props> = ({
   const empty =
     classifyBlock !== null || queries.length === 0 || results.length === 0
   const settledForCurrentQueries = settledKey === queriesKey
-  // Initial load (snapshot hydration or first fetch) with nothing to show yet:
-  // a spinner replaces the chart area until data lands.
-  const { loading } = deriveChartLoading(
-    state,
-    chartResult,
-    resultStatus === "loading",
-  )
+  const cancelled = state.fetchCancelled && results.length === 0 && !loading
   let emptyMessage: string
   if (classifyBlock?.kind === "write") {
     emptyMessage = `Cannot draw a write query ('${classifyBlock.queryType}'). Switch to Run mode to execute this SQL.`
@@ -203,16 +231,34 @@ export const DrawCanvas: React.FC<Props> = ({
   return (
     <Wrapper>
       <VisuallyHiddenStatus role="status">
-        {loading ? "Loading chart data" : empty ? emptyMessage : ""}
+        {loading
+          ? "Loading chart data"
+          : cancelled
+            ? "Chart loading was cancelled"
+            : empty
+              ? emptyMessage
+              : ""}
       </VisuallyHiddenStatus>
       {loading ? (
-        <EmptyState aria-hidden="true">
+        <PaneEmptyState aria-hidden="true">
           <CircleNotchSpinner size={24} />
-        </EmptyState>
+        </PaneEmptyState>
+      ) : cancelled ? (
+        <CancelledState data-hook="draw-canvas-cancelled">
+          <span aria-hidden="true">Chart loading was cancelled.</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleRetry}
+            dataHook="draw-canvas-retry"
+          >
+            Retry
+          </Button>
+        </CancelledState>
       ) : empty ? (
-        <EmptyState aria-hidden="true">{emptyMessage}</EmptyState>
+        <PaneEmptyState aria-hidden="true">{emptyMessage}</PaneEmptyState>
       ) : (
-        <Canvas data-hook="cell-chart">
+        <Canvas data-hook="draw-canvas">
           <ChartRenderer
             ref={chartRendererRef}
             option={option}

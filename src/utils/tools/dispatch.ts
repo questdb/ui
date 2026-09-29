@@ -10,7 +10,11 @@ import {
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 import { requireCellIn } from "../notebooks/notebookDexieView"
-import type { CellMode, NotebookCell } from "../../store/notebook"
+import type {
+  AgentCellView,
+  CellMode,
+  NotebookCell,
+} from "../../store/notebook"
 import {
   MAX_CELL_NAME_LENGTH,
   exceedsCellNameLimit,
@@ -39,9 +43,9 @@ import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import {
   isAutoRefresh,
   isUnverifiableExecError,
-  snapshotResultsMatchQueries,
   UNVERIFIED_RUN_NOTE,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { buildRunQueryPayload, RUN_QUERY_DEFAULT_LIMIT } from "./runQuery"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -80,10 +84,10 @@ import {
   moveCellUpTransition,
   setCellChartConfigTransition,
   setCellHighlightConfigTransition,
+  setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
   setCellModeTransition,
-  setCellViewMaximizedTransition,
   setLayoutModeTransition,
   setNotebookAutoRefreshTransition,
   updateCellTransition,
@@ -91,10 +95,12 @@ import {
   type NotebookTransitionResult,
 } from "../notebooks/notebookController"
 import {
+  loadNotebookResultStatusReader,
   readNotebookState,
   serializeCell,
   summarizeCells,
 } from "../ai/notebookSnapshot"
+import type { CellResultStatusReader } from "../../scenes/Editor/Notebook/cellSizing"
 import { generateId } from "../../scenes/Editor/Notebook/notebookUtils"
 import {
   copyNotebookSnapshots,
@@ -105,6 +111,19 @@ import {
 // every mutation takes. The transition validates and throws typed errors
 // identically on both routes.
 class NotebookStateChangedError extends Error {}
+class DuplicateSourceChangedError extends Error {}
+
+const requireUnchangedSince = (
+  bufferId: number,
+  expectedActionSeq: number | undefined,
+): void => {
+  if (
+    expectedActionSeq !== undefined &&
+    getBufferActionSeq(bufferId) !== expectedActionSeq
+  ) {
+    throw new NotebookStateChangedError()
+  }
+}
 
 const runTransition = <T>(
   bufferId: number,
@@ -115,14 +134,23 @@ const runTransition = <T>(
   withBoundNotebook(
     bufferId,
     (ctrl) => {
-      if (
-        expectedActionSeq !== undefined &&
-        getBufferActionSeq(bufferId) !== expectedActionSeq
-      ) {
-        throw new NotebookStateChangedError()
-      }
+      requireUnchangedSince(bufferId, expectedActionSeq)
       return ctrl.mutate(transition)
     },
+    signal,
+  )
+
+const runTransitionWithResultStatus = <T>(
+  bufferId: number,
+  transition: (
+    parts: ViewParts,
+    resultStatusOf: CellResultStatusReader,
+  ) => NotebookTransitionResult<T>,
+  signal?: AbortSignal,
+): Promise<T> =>
+  withBoundNotebook(
+    bufferId,
+    (ctrl) => ctrl.mutateWithResultStatus(transition),
     signal,
   )
 
@@ -148,9 +176,9 @@ const cellValueOf = async (
 const runCellBound = (
   bufferId: number,
   cellId: string,
-  signal?: AbortSignal,
-  sql?: string,
-  gate?: RunCellGate,
+  signal: AbortSignal | undefined,
+  sql: string,
+  gate: RunCellGate,
 ) =>
   withBoundNotebook(
     bufferId,
@@ -174,7 +202,10 @@ const routeNotebookTool = async <T>(
         is_error: true,
         content: JSON.stringify({
           error_code: e.code,
-          message: e.message,
+          message:
+            e.code === "validation"
+              ? `VALIDATION_ERROR: ${e.message}`
+              : e.message,
           hint: notebookErrorHint(e.code),
         }),
       }
@@ -196,8 +227,8 @@ const dispatchRunQuery = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
-  perms: Permissions | undefined,
-  validateSql: ((sql: string) => Promise<ValidateQueryResult>) | undefined,
+  perms: Permissions,
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal: AbortSignal | undefined,
   toolContext: ToolExecutionContext | undefined,
 ): Promise<{ content: string; is_error?: boolean }> => {
@@ -211,15 +242,9 @@ const dispatchRunQuery = async (
       is_error: true,
     }
   }
-  if (perms && validateSql) {
-    const decision = await classifyAndCheckSqlForRunQuery(
-      sql,
-      perms,
-      validateSql,
-    )
-    if (!decision.granted) {
-      return { content: decision.reason, is_error: true }
-    }
+  const decision = await classifyAndCheckSqlForRunQuery(sql, perms, validateSql)
+  if (!decision.granted) {
+    return { content: decision.reason, is_error: true }
   }
   let formattedSql = sql
   try {
@@ -272,22 +297,20 @@ export const dispatchTool = async (
   input: unknown,
   modelToolsClient: ModelToolsClient,
   setStatus: StatusCallback,
-  permsOrResolver?: Permissions | (() => Permissions),
-  validateSql?: (sql: string) => Promise<ValidateQueryResult>,
+  permsOrResolver: Permissions | (() => Permissions),
+  validateSql: (sql: string) => Promise<ValidateQueryResult>,
   signal?: AbortSignal,
   toolContext?: ToolExecutionContext,
 ): Promise<{ content: string; is_error?: boolean }> => {
   const perms =
     typeof permsOrResolver === "function" ? permsOrResolver() : permsOrResolver
 
-  if (perms) {
-    const decision = runPermissionGate(toolName, {
-      permissions: perms,
-      categoryFor,
-    })
-    if (!decision.granted) {
-      return { content: decision.reason, is_error: true }
-    }
+  const gate = runPermissionGate(toolName, {
+    permissions: perms,
+    categoryFor,
+  })
+  if (!gate.granted) {
+    return { content: gate.reason, is_error: true }
   }
   if (toolContext && mutatesNotebook(toolName)) {
     toolContext.notebookMutated = true
@@ -509,7 +532,7 @@ export const dispatchTool = async (
           )
           return {
             ...res,
-            hint: "Duplicated in the background — the tab was not switched. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
+            hint: "Duplicated in the background — the tab was not switched. Run history is preserved; matching saved result snapshots copy best-effort in the background and hydrate when opened. The user is notified and can open it. Only call activate_notebook if they explicitly ask to be taken there.",
           }
         })
       }
@@ -526,10 +549,17 @@ export const dispatchTool = async (
         return routeNotebookTool(async () => ({
           cells: await withBoundNotebookReadOnly(
             buffer_id,
-            (view, controller) =>
-              Promise.resolve(
-                summarizeCells(view.cells, controller?.readRefreshState?.()),
-              ),
+            async (view, controller) => {
+              const resultStatusOf = await loadNotebookResultStatusReader(
+                buffer_id,
+                controller,
+              )
+              return summarizeCells(
+                view.cells,
+                controller?.readRefreshState?.(),
+                resultStatusOf,
+              )
+            },
             signal,
           ),
         }))
@@ -545,16 +575,20 @@ export const dispatchTool = async (
         return routeNotebookTool(() =>
           withBoundNotebookReadOnly(
             buffer_id,
-            (view, controller) =>
-              Promise.resolve(
-                serializeCell(
-                  view.cells,
-                  cell_id,
-                  buffer_id,
-                  get_full_content === true,
-                  controller?.readRefreshState?.(),
-                ),
-              ),
+            async (view, controller) => {
+              const resultStatusOf = await loadNotebookResultStatusReader(
+                buffer_id,
+                controller,
+              )
+              return serializeCell(
+                view.cells,
+                cell_id,
+                buffer_id,
+                get_full_content === true,
+                controller?.readRefreshState?.(),
+                resultStatusOf(cell_id),
+              )
+            },
             signal,
           ),
         )
@@ -607,13 +641,9 @@ export const dispatchTool = async (
             setStatus(AIOperationStatus.RunningCell, { cellId })
             // The runner's barrier classification decides auto-run
             // eligibility — writes are skipped at launch, never pre-checked.
-            const r = await runCellBound(
-              buffer_id,
-              cellId,
-              signal,
-              perms && validateSql ? sql : undefined,
-              perms && validateSql ? { kind: "autoRun" } : undefined,
-            )
+            const r = await runCellBound(buffer_id, cellId, signal, sql, {
+              kind: "autoRun",
+            })
             if (r.denied !== undefined) {
               return { cellId, ran: false, error: r.denied }
             }
@@ -625,6 +655,7 @@ export const dispatchTool = async (
               ran: r.success,
               queryCount: r.queryCount,
               results: r.results,
+              ...(r.cancelled !== undefined ? { cancelled: r.cancelled } : {}),
               ...(r.unverified ? { unverified: r.unverified } : {}),
               ...(r.note ? { note: r.note } : {}),
             }
@@ -643,15 +674,13 @@ export const dispatchTool = async (
         const updateBaseline =
           toolContext?.notebookFreshness?.getReadSeq(buffer_id) ??
           getBufferActionSeq(buffer_id)
-        if (validateSql) {
-          const current = (await readCells(buffer_id, signal)).find(
-            (c) => c.id === cell_id,
-          )
-          if (current?.mode === "draw") {
-            const decision = await requireAllDQL(value, validateSql)
-            if (!decision.granted) {
-              return { content: decision.reason, is_error: true }
-            }
+        const current = (await readCells(buffer_id, signal)).find(
+          (c) => c.id === cell_id,
+        )
+        if (current?.mode === "draw") {
+          const decision = await requireAllDQL(value, validateSql)
+          if (!decision.granted) {
+            return { content: decision.reason, is_error: true }
           }
         }
         // The read above awaits a round-trip; re-check the baseline so a user
@@ -741,19 +770,34 @@ export const dispatchTool = async (
             }
           }
 
+          const duplicateCurrentCell = (guardCopiedSnapshot: boolean) =>
+            runTransition(
+              buffer_id,
+              (parts) => {
+                if (
+                  guardCopiedSnapshot &&
+                  controller?.kind === "live" &&
+                  parts.cells.find((cell) => cell.id === cell_id) !== sourceCell
+                ) {
+                  throw new DuplicateSourceChangedError()
+                }
+                return duplicateCellTransition(parts, buffer_id, cell_id, newId)
+              },
+              signal,
+              seqBeforeRead,
+            )
+
           try {
             return {
-              cellId: await runTransition(
-                buffer_id,
-                (parts) =>
-                  duplicateCellTransition(parts, buffer_id, cell_id, newId),
-                signal,
-                seqBeforeRead,
-              ),
+              cellId: await duplicateCurrentCell(snapshotsCopied > 0),
             }
           } catch (error) {
             if (snapshotsCopied > 0) {
               await deleteCellSnapshot(buffer_id, newId).catch(() => undefined)
+              snapshotsCopied = 0
+            }
+            if (error instanceof DuplicateSourceChangedError) {
+              return { cellId: await duplicateCurrentCell(false) }
             }
             throw error
           }
@@ -777,39 +821,36 @@ export const dispatchTool = async (
             }),
           )
         }
-        if (perms && validateSql) {
-          if (value === null) {
-            return {
-              content: denyReasonUnresolvedSql("run_cell"),
-              is_error: true,
-            }
+        if (value === null) {
+          return {
+            content: denyReasonUnresolvedSql("run_cell"),
+            is_error: true,
           }
-          // The runner's barrier classification enforces the permission — one
-          // classification per launch, shared with strategy selection.
-          let deniedReason: string | undefined
-          const routed = await routeNotebookTool(async () => {
-            const summary = await runCellBound(
-              buffer_id,
-              cell_id,
-              signal,
-              value,
-              {
-                kind: "explicit",
-                permissions: perms,
-              },
-            )
-            if (summary.denied !== undefined) {
-              deniedReason = summary.denied
-              return {}
-            }
-            return summary
-          })
-          if (deniedReason !== undefined) {
-            return { content: deniedReason, is_error: true }
-          }
-          return routed
         }
-        return routeNotebookTool(() => runCellBound(buffer_id, cell_id, signal))
+        // The runner's barrier classification enforces the permission — one
+        // classification per launch, shared with strategy selection.
+        let deniedReason: string | undefined
+        const routed = await routeNotebookTool(async () => {
+          const summary = await runCellBound(
+            buffer_id,
+            cell_id,
+            signal,
+            value,
+            {
+              kind: "explicit",
+              permissions: perms,
+            },
+          )
+          if (summary.denied !== undefined) {
+            deniedReason = summary.denied
+            return {}
+          }
+          return summary
+        })
+        if (deniedReason !== undefined) {
+          return { content: deniedReason, is_error: true }
+        }
+        return routed
       }
       case "set_layout_mode": {
         const { buffer_id, mode } =
@@ -824,25 +865,48 @@ export const dispatchTool = async (
         )
       }
       case "set_cell_layout": {
-        const { buffer_id, cell_id, x, y, w, h } =
+        const { buffer_id, cell_id, x, y, w } =
           (input as {
             buffer_id: number
             cell_id: string
             x: number
             y: number
             w: number
-            h: number
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         return routeNotebookTool(() =>
-          runTransition(
+          runTransitionWithResultStatus(
             buffer_id,
-            (parts) =>
+            (parts, resultStatusOf) =>
               setCellLayoutTransition(parts, buffer_id, cell_id, {
                 x,
                 y,
                 w,
-                h,
+                resultStatus: resultStatusOf(cell_id),
+              }),
+            signal,
+          ),
+        )
+      }
+      case "set_cell_dimensions": {
+        const { buffer_id, cell_id, editor_height, result_height, view } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            editor_height: number | "auto" | null
+            result_height: number | "auto" | null
+            view: AgentCellView | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
+        return routeNotebookTool(() =>
+          runTransitionWithResultStatus(
+            buffer_id,
+            (parts, resultStatusOf) =>
+              setCellDimensionsTransition(parts, buffer_id, cell_id, {
+                editorHeight: editor_height,
+                resultHeight: result_height,
+                view,
+                resultStatus: resultStatusOf(cell_id),
               }),
             signal,
           ),
@@ -857,17 +921,24 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringLayout, { cellId: cell_id })
         const modeBaseline = getBufferActionSeq(buffer_id)
-        if (mode === "draw" && validateSql) {
-          const cellSql = await cellValueOf(buffer_id, cell_id, signal)
-          if (cellSql === null) {
-            return {
-              content: denyReasonUnresolvedSql("set_cell_mode"),
-              is_error: true,
+        if (mode === "draw") {
+          const modeCell = (await readCells(buffer_id, signal)).find(
+            (c) => c.id === cell_id,
+          )
+          // Markdown holds prose, not SQL: the transition rejects it with the
+          // typed error instead of a misleading DQL verdict on the prose.
+          if (modeCell?.type !== "markdown") {
+            const cellSql = modeCell?.value ?? null
+            if (cellSql === null) {
+              return {
+                content: denyReasonUnresolvedSql("set_cell_mode"),
+                is_error: true,
+              }
             }
-          }
-          const decision = await requireAllDQL(cellSql, validateSql)
-          if (!decision.granted) {
-            return { content: decision.reason, is_error: true }
+            const decision = await requireAllDQL(cellSql, validateSql)
+            if (!decision.granted) {
+              return { content: decision.reason, is_error: true }
+            }
           }
         }
         return routeNotebookTool(
@@ -1089,23 +1160,6 @@ export const dispatchTool = async (
                 value,
                 reset_cell_overrides === true,
               ),
-            signal,
-          ),
-        )
-      }
-      case "set_cell_view_maximized": {
-        const { buffer_id, cell_id, value } =
-          (input as {
-            buffer_id: number
-            cell_id: string
-            value: boolean
-          }) || {}
-        setStatus(AIOperationStatus.ConfiguringChart, { cellId: cell_id })
-        return routeNotebookTool(() =>
-          runTransition(
-            buffer_id,
-            (parts) =>
-              setCellViewMaximizedTransition(parts, buffer_id, cell_id, value),
             signal,
           ),
         )
