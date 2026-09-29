@@ -1,9 +1,24 @@
 import type { SourceState } from "./types"
 
-export const SOURCE_FAILURE_THRESHOLD = 3
-export const SOURCE_FAILURE_GRACE_MS = 2_000
-const SOURCE_RECOVERY_THRESHOLD = 2
 export const SOURCE_TIMEOUT_MS = 10_000
+
+export type SourceRetryPolicy = {
+  failureThreshold: number
+  failureGraceMs: number
+  recoveryThreshold: number
+}
+
+export const POLLING_RETRY_POLICY: SourceRetryPolicy = {
+  failureThreshold: 3,
+  failureGraceMs: 2_000,
+  recoveryThreshold: 2,
+}
+
+export const MANUAL_RETRY_POLICY: SourceRetryPolicy = {
+  failureThreshold: 1,
+  failureGraceMs: 0,
+  recoveryThreshold: 1,
+}
 
 export type SourceMachineState<T> = {
   key: string
@@ -41,9 +56,19 @@ const unavailableState = <T>(
   consecutiveRecoveries: 0,
 })
 
+const hasExhaustedFailures = <T>(
+  state: SourceMachineState<T>,
+  at: number,
+  policy: SourceRetryPolicy,
+): boolean =>
+  state.consecutiveFailures >= policy.failureThreshold &&
+  state.firstFailureAt !== null &&
+  at - state.firstFailureAt >= policy.failureGraceMs
+
 export const nextSourceState = <T>(
   state: SourceMachineState<T>,
   outcome: SourceOutcome<T>,
+  policy: SourceRetryPolicy,
 ): SourceMachineState<T> => {
   if (outcome.key !== state.key || outcome.type === "cancelled") {
     return state
@@ -63,7 +88,7 @@ export const nextSourceState = <T>(
   if (outcome.type === "success") {
     if (state.source.status === "unavailable") {
       const consecutiveRecoveries = state.consecutiveRecoveries + 1
-      if (consecutiveRecoveries < SOURCE_RECOVERY_THRESHOLD) {
+      if (consecutiveRecoveries < policy.recoveryThreshold) {
         return {
           ...state,
           consecutiveFailures: 0,
@@ -84,28 +109,19 @@ export const nextSourceState = <T>(
   }
 
   if (outcome.type === "failure-deadline") {
-    const failureWindowElapsed =
-      state.firstFailureAt !== null &&
-      outcome.at - state.firstFailureAt >= SOURCE_FAILURE_GRACE_MS
-    return state.consecutiveFailures >= SOURCE_FAILURE_THRESHOLD &&
-      failureWindowElapsed
+    return hasExhaustedFailures(state, outcome.at, policy)
       ? unavailableState(state)
       : state
   }
 
-  const firstFailureAt = state.firstFailureAt ?? outcome.at
-  const consecutiveFailures = state.consecutiveFailures + 1
-  const failureWindowElapsed =
-    outcome.at - firstFailureAt >= SOURCE_FAILURE_GRACE_MS
-
   const failedState: SourceMachineState<T> = {
     ...state,
-    consecutiveFailures,
-    firstFailureAt,
+    consecutiveFailures: state.consecutiveFailures + 1,
+    firstFailureAt: state.firstFailureAt ?? outcome.at,
     consecutiveRecoveries: 0,
   }
 
-  return consecutiveFailures >= SOURCE_FAILURE_THRESHOLD && failureWindowElapsed
+  return hasExhaustedFailures(failedState, outcome.at, policy)
     ? unavailableState(failedState)
     : failedState
 }

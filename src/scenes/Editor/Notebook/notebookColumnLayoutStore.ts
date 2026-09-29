@@ -7,7 +7,7 @@ const LRU_MAX = 20
 
 export const columnLayoutQueryKey = (query: string): string => {
   try {
-    return "q" + sqlHash(normalizeSql(query, false))
+    return "q" + sqlHash(normalizeSql(query, false, { capitalize: false }))
   } catch {
     return "q" + sqlHash(query.trim())
   }
