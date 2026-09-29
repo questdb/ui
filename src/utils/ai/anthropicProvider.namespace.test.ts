@@ -65,6 +65,8 @@ describe("anthropic provider model namespaces", () => {
       modelToolsClient: {} as never,
       tools: [],
       setStatus: () => {},
+      perms: { grantSchemaAccess: false, read: false, write: false },
+      validateSql: () => Promise.resolve({ queryType: "DQL" }),
     })
     await provider.generateTitle({ model, prompt: "title" })
     await provider.generateSummary({
