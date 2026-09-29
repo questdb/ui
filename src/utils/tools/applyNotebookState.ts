@@ -41,8 +41,10 @@ import {
   type HighlightConfigWire,
   parseHighlightConfigFor,
   regexLiteralNotes,
+  shownResultsOf,
   wireUsesPatterns,
 } from "./highlightConfigWire"
+import { loadCellSnapshot } from "../../store/notebookResults"
 import {
   applyStaleNotebookResult,
   notebookErrorHint,
@@ -392,6 +394,13 @@ export const dispatchApplyNotebookState = async (
   ) {
     await loadRe2()
   }
+  const snapshots = await Promise.all(
+    cells.map(async (c) =>
+      c.highlight_config && c.id
+        ? loadCellSnapshot(buffer_id, c.id)
+        : undefined,
+    ),
+  )
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
     autoRefreshDefault: isAutoRefresh(auto_refresh_default)
@@ -426,9 +435,10 @@ export const dispatchApplyNotebookState = async (
       return cell
     }),
   }
-  // Rules are checked against the columns the cell's results have shown, so
-  // the parse waits for the live cells. A new cell, or one whose SQL this
-  // request rewrites, has no columns to check against yet.
+  // Rules are checked against the columns the cell's results have shown, in
+  // memory or in its snapshot, so the parse waits for the live cells. A new
+  // cell, or one whose SQL this request rewrites, has no columns to check
+  // against yet.
   const shownCellFor = (
     existing: NotebookCell[],
     c: (typeof cells)[number],
@@ -448,7 +458,10 @@ export const dispatchApplyNotebookState = async (
         ...cell,
         highlightConfig: parseHighlightConfigFor(
           wire,
-          shownCellFor(existing, cells[index]),
+          shownResultsOf(
+            shownCellFor(existing, cells[index]),
+            snapshots[index],
+          ),
           `cells[${index}].highlight_config`,
         ),
       }

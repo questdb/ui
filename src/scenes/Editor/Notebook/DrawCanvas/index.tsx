@@ -8,13 +8,11 @@ import {
   ChartRenderer,
   type ChartRendererHandle,
 } from "../CellChart/ChartRenderer"
-import {
-  chartSettingsSessions,
-  type SettingsDrawerRequest,
-} from "../settingsDrawer/settingsDrawerSessions"
+import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
+import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
+import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
-import { toast } from "../../../../components/Toast"
 import { CircleNotchSpinner } from "../../Monaco/icons"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
@@ -51,6 +49,9 @@ const notebookChartSettingsTelemetry: ChartSettingsTelemetry = {
     void trackEvent(ConsoleEvent.NOTEBOOK_CHART_RESET_AUTO, { chartType })
   },
 }
+
+const trackChartSettingsCancel = (method: SettingsDismissMethod) =>
+  notebookChartSettingsTelemetry.onCancel?.(method)
 
 const Wrapper = styled.div`
   display: flex;
@@ -101,10 +102,21 @@ export const DrawCanvas: React.FC<Props> = ({
   isFocused,
   onConfigChange,
 }) => {
-  const [restoredSettings] = useState(
-    () => chartSettingsSessions.get(cell.id) !== undefined,
-  )
-  const [settingsOpen, setSettingsOpen] = useState(restoredSettings)
+  const trackSettingsOpen = useCallback(() => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
+      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+    })
+  }, [cell.chartConfig])
+  const settingsDrawer = useSettingsDrawerSession({
+    sessions: chartSettingsSessions,
+    cellId: cell.id,
+    config: cell.chartConfig,
+    openEvent: EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS,
+    onOpen: trackSettingsOpen,
+    onCancel: trackChartSettingsCancel,
+    changedWhileOpenMessage:
+      "Chart settings were updated by the assistant. Reopen chart configuration to edit.",
+  })
   const [zoomStart, setZoomStart] = useState(
     () => getChartZoom(cell.id)?.start ?? 0,
   )
@@ -112,9 +124,6 @@ export const DrawCanvas: React.FC<Props> = ({
     () => getChartZoom(cell.id)?.end ?? 100,
   )
 
-  const configAtSettingsOpenRef = useRef<ChartConfig | undefined>(
-    chartSettingsSessions.get(cell.id)?.configAtOpen,
-  )
   const chartRendererRef = useRef<ChartRendererHandle | null>(null)
 
   const fetchState = useCellFetchState(cell.id)
@@ -153,33 +162,6 @@ export const DrawCanvas: React.FC<Props> = ({
     [queries, results, cell.chartConfig],
   )
 
-  const openSettings = useCallback(() => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
-      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
-    })
-    configAtSettingsOpenRef.current = cell.chartConfig
-    chartSettingsSessions.set(cell.id, {
-      configAtOpen: cell.chartConfig,
-      draft: null,
-    })
-    setSettingsOpen(true)
-  }, [cell.id, cell.chartConfig])
-
-  const closeSettings = useCallback(() => {
-    chartSettingsSessions.clear(cell.id)
-    setSettingsOpen(false)
-  }, [cell.id])
-
-  const cancelSettings = useCallback(() => {
-    notebookChartSettingsTelemetry.onCancel?.("button")
-    closeSettings()
-  }, [closeSettings])
-
-  const keepSettingsDraft = useCallback(
-    (draft: ChartConfig) => chartSettingsSessions.update(cell.id, { draft }),
-    [cell.id],
-  )
-
   const option = useMemo(
     () => buildEchartsOption(resolution.chart, resolution.renderQueries),
     [resolution],
@@ -211,31 +193,12 @@ export const DrawCanvas: React.FC<Props> = ({
   }
 
   useEffect(() => {
-    if (!settingsOpen) return
-    if (cell.chartConfig !== configAtSettingsOpenRef.current) {
-      closeSettings()
-      toast.info(
-        "Chart settings were updated by the assistant. Reopen chart configuration to edit.",
-      )
-    }
-  }, [cell.chartConfig, settingsOpen, closeSettings])
-
-  useEffect(() => {
-    const respond = (payload?: SettingsDrawerRequest) => {
-      if (payload?.cellId !== cell.id) return
-      if (!settingsOpen) openSettings()
-      else if (payload.mode === "toggle") cancelSettings()
-    }
     const reset = (payload?: { cellId?: string }) => {
       if (payload?.cellId === cell.id) handleResetZoom()
     }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, respond)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
-    return () => {
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, respond)
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
-    }
-  }, [cell.id, settingsOpen, openSettings, cancelSettings, handleResetZoom])
+    return () => eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
+  }, [cell.id, handleResetZoom])
 
   return (
     <Wrapper>
@@ -260,11 +223,11 @@ export const DrawCanvas: React.FC<Props> = ({
         </Canvas>
       )}
       <ChartSettingsDrawer
-        open={settingsOpen}
-        appearInPlace={restoredSettings}
-        onClose={closeSettings}
-        initialDraft={chartSettingsSessions.get(cell.id)?.draft ?? null}
-        onDraftChange={keepSettingsDraft}
+        open={settingsDrawer.open}
+        appearInPlace={settingsDrawer.appearInPlace}
+        onClose={settingsDrawer.close}
+        initialDraft={settingsDrawer.initialDraft}
+        onDraftChange={settingsDrawer.keepDraft}
         tabs={resolution.tabs}
         config={resolution.effectiveConfig}
         onSave={onConfigChange}

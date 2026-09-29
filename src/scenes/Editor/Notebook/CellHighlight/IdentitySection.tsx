@@ -1,7 +1,6 @@
 import React from "react"
 import { WarningIcon } from "@phosphor-icons/react"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import type { MatchStats } from "../../../../components/ResultGrid/highlight"
 import { FieldGroup } from "../CellChart/chartSettingsStyles"
 import {
   ColumnPicker,
@@ -15,7 +14,7 @@ import {
 type Props = {
   columns: ColumnDefinition[]
   value: string[]
-  stats: MatchStats | null
+  duplicateCount: number
   error: string | null
   onChange: (columns: string[]) => void
 }
@@ -23,11 +22,10 @@ type Props = {
 export const IdentitySection: React.FC<Props> = ({
   columns,
   value,
-  stats,
+  duplicateCount,
   error,
   onChange,
 }) => {
-  const duplicateCount = stats?.ambiguous ?? 0
   const options = columns.map((column) => ({
     label: column.name,
     value: column.name,

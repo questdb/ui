@@ -9,8 +9,13 @@ import {
   canonicalInstant,
   compareValues,
   differenceOf,
-  toNumber,
+  isZero,
+  magnitudeOf,
+  productOf,
+  ratioOf,
+  toDecimal,
   type Comparable,
+  type Decimal,
 } from "./comparable"
 import {
   identityColumnIndexes,
@@ -138,6 +143,8 @@ const sameCellValue = (a: CellValue, b: CellValue): boolean =>
     Array.isArray(b) &&
     JSON.stringify(a) === JSON.stringify(b))
 
+const PERCENT: Decimal = { unscaled: BigInt(100), scale: 0 }
+
 const matchPrevious = (
   rule: PreviousRule,
   value: CellValue,
@@ -161,15 +168,18 @@ const matchPrevious = (
       if (typeof current === "string" || typeof previous === "string") {
         return undefined
       }
-      const delta = Math.abs(differenceOf(current, previous))
+      const delta = magnitudeOf(differenceOf(current, previous))
       // A threshold of 0 means "any change"; an unchanged cell never matches.
-      if (delta === 0) return undefined
+      if (isZero(delta)) return undefined
+      const threshold = toDecimal(condition.threshold)
       if (condition.unit === "absolute") {
-        return delta >= condition.threshold ? hit : undefined
+        return compareValues(delta, threshold) >= 0 ? hit : undefined
       }
-      const base = Math.abs(toNumber(previous))
-      if (base === 0) return undefined
-      return (delta / base) * 100 >= condition.threshold ? hit : undefined
+      const base = magnitudeOf(toDecimal(previous))
+      if (isZero(base)) return undefined
+      const change = productOf(delta, PERCENT)
+      const limit = productOf(threshold, base)
+      return compareValues(change, limit) >= 0 ? hit : undefined
     }
   }
 }
@@ -259,7 +269,7 @@ const matchValue = (
           ? 1
           : compareValues(current, from) <= 0
             ? 0
-            : differenceOf(current, from) / differenceOf(to, from)
+            : ratioOf(differenceOf(current, from), differenceOf(to, from))
       return { ...hit, blend: { color: condition.fill.highColor, ratio } }
     }
   }

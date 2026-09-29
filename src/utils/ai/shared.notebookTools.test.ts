@@ -898,6 +898,112 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
   })
 
+  it("set_cell_highlight_config checks a released cell against the columns its snapshot shows", async () => {
+    // Given a cell whose result was released, with a snapshot that shows a DOUBLE column
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "c",
+      results: [
+        {
+          type: "dql",
+          query: "SELECT price FROM t",
+          columns: [{ name: "price", type: "DOUBLE" }],
+          dataset: [],
+          count: 0,
+        },
+      ],
+      savedAt: 100,
+      activeResultIndex: 0,
+    })
+    const { state } = mountLive(1, [
+      cell("c", "SELECT price FROM t", { lastRunStatus: "success" }),
+    ])
+
+    // When a text condition is sent for that column
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [
+            { kind: "value", column: "price", op: "contains", text: "1" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then it is rejected as it would be for the cell in memory
+    expect(result.is_error).toBe(true)
+    expect(result.content).toContain("Not for a numeric column")
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state checks a released cell against its snapshot only while its SQL still matches", async () => {
+    // Given two released cells with the same snapshot of a SYMBOL column, one since edited
+    const snapshotOf = (cellId: string) =>
+      saveCellSnapshot({
+        bufferId: 1,
+        cellId,
+        results: [
+          {
+            type: "dql",
+            query: "SELECT sym AS price FROM t",
+            columns: [{ name: "price", type: "SYMBOL" }],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        savedAt: 100,
+        activeResultIndex: 0,
+      })
+    await snapshotOf("kept")
+    await snapshotOf("edited")
+    const { state } = mountLive(1, [
+      cell("kept", "SELECT sym AS price FROM t"),
+      cell("edited", "SELECT 7 AS price"),
+    ])
+    const numericRule = {
+      identity_columns: [],
+      rules: [{ kind: "value", column: "price", op: "gt", value: 5 }],
+    }
+
+    // When a numeric rule is sent for each cell with its SQL kept
+    const kept = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "kept", preserve_value: true, highlight_config: numericRule },
+          { id: "edited", preserve_value: true },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const edited = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "kept", preserve_value: true },
+          { id: "edited", preserve_value: true, highlight_config: numericRule },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the matching snapshot rejects the rule, and the stale one does not apply
+    expect(kept.is_error).toBe(true)
+    expect(kept.content).toContain("Not for a text column")
+    expect(edited.is_error).toBeFalsy()
+    expect(cellById(state, "edited")?.highlightConfig?.rules).toHaveLength(1)
+  })
+
   it("apply_notebook_state checks rules loosely for a cell whose SQL it rewrites", async () => {
     // Given two cells whose shown results have a SYMBOL column named price
     const shown = {

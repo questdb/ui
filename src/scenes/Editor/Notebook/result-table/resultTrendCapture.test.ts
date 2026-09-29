@@ -252,6 +252,40 @@ describe("captureResultTrends", () => {
     expect(store.get("c1", KEY)?.previous).toBeNull()
   })
 
+  it("keeps the baseline across a failed run of the same statement", () => {
+    // Given a cell with a comparison rule whose second run fails
+    const store = createResultTrendStore()
+    const first = cell("c1", [dql(QUERY, [["BTC", 1]])], comparing("symbol"))
+    const running = cell(
+      "c1",
+      [{ type: "running", query: QUERY }],
+      comparing("symbol"),
+    )
+    const failed = cell(
+      "c1",
+      [{ type: "error", query: QUERY, error: "table is locked" }],
+      comparing("symbol"),
+    )
+    const recovered = cell(
+      "c1",
+      [dql(QUERY, [["BTC", 2]])],
+      comparing("symbol"),
+    )
+    captureResultTrends(store, restored, [], [first])
+    captureResultTrends(store, restored, [first], [running])
+    captureResultTrends(store, restored, [running], [failed])
+
+    // When the same statement runs again and succeeds
+    captureResultTrends(store, restored, [failed], [recovered])
+
+    // Then the recovered run compares against the last good rows
+    expect(store.get("c1", KEY)?.previous?.rows.get(symbolKey("BTC"))).toEqual([
+      "BTC",
+      1,
+    ])
+    expect(store.get("c1", KEY)?.revision).toBe(2)
+  })
+
   it("keeps the baseline of a released cell for its rehydrate", () => {
     // Given a compared cell with a baseline
     const store = createResultTrendStore()

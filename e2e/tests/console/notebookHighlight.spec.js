@@ -286,7 +286,7 @@ describe("notebook highlight rules", () => {
   })
 
   it("keeps an open chart draft when Chart settings is chosen again from the menu", () => {
-    // Given a chart drawer with the type changed to Bar, not saved
+    // Given a chart drawer with the type changed to Line, not saved
     cy.focused().type("select x, x * 2 as y from long_sequence(5)", {
       delay: 0,
     })
@@ -297,7 +297,7 @@ describe("notebook highlight rules", () => {
     cy.getByDataHook("chart-settings-drawer")
       .find('button[aria-label^="Chart type"]')
       .click()
-    cy.contains('[role="menuitemradio"]', "Bar").click()
+    cy.contains('[role="menuitemradio"]', "Line").click()
 
     // When the menu entry is chosen again
     cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
@@ -307,7 +307,7 @@ describe("notebook highlight rules", () => {
     cy.getByDataHook("chart-settings-drawer")
       .should("be.visible")
       .find('button[aria-label^="Chart type"]')
-      .should("contain.text", "Bar")
+      .should("contain.text", "Line")
   })
 
   it("saves a chart setting from the drawer and shows it again on reopen", () => {
@@ -319,25 +319,25 @@ describe("notebook highlight rules", () => {
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
     cy.getByDataHook("cell-chart").should("be.visible")
 
-    // When the chart type is changed to Bar and saved from the drawer
+    // When the chart type is changed to Line and saved from the drawer
     openChartDrawer()
     cy.getByDataHook("chart-settings-drawer")
       .find('button[aria-label^="Chart type"]')
       .click()
-    cy.contains('[role="menuitemradio"]', "Bar").click()
+    cy.contains('[role="menuitemradio"]', "Line").click()
     cy.contains("button", "Save").click()
     cy.getByDataHook("chart-settings-drawer").should("not.exist")
 
-    // Then the drawer opens again with Bar, and Cancel leaves it saved
+    // Then the drawer opens again with Line, and Cancel leaves it saved
     openChartDrawer()
     cy.getByDataHook("chart-settings-drawer")
       .find('button[aria-label^="Chart type"]')
-      .should("contain.text", "Bar")
+      .should("contain.text", "Line")
     cy.contains("button", "Cancel").click()
     cy.getByDataHook("chart-settings-drawer").should("not.exist")
     openChartDrawer()
     cy.getByDataHook("chart-settings-drawer")
       .find('button[aria-label^="Chart type"]')
-      .should("contain.text", "Bar")
+      .should("contain.text", "Line")
   })
 })

@@ -17,6 +17,7 @@ export {
 export { exceedsDoublePrecision } from "./comparable"
 export {
   buildIdentityIndex,
+  duplicateRowCount,
   identityColumnIndexes,
   type IdentityIndex,
 } from "./identityIndex"

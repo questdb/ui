@@ -19,9 +19,12 @@ import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
 import { validateIdentity } from "../../components/ResultGrid/highlight/validateRule"
 import { isHighlightRule } from "../../components/ResultGrid/highlight/isHighlightConfig"
 import type { ColumnDefinition } from "../questdb/types"
-import type { NotebookCell } from "../../store/notebook"
+import type { NotebookCell, SingleQueryResult } from "../../store/notebook"
+import type { NotebookResultSnapshot } from "../../store/notebookResults"
 import { validateRule } from "../../scenes/Editor/Notebook/CellHighlight/ruleValidation"
 import { cellColumnsOf } from "../../scenes/Editor/Notebook/result-table/highlightConfig"
+import { reconcileResultsForStatements } from "../../scenes/Editor/Notebook/notebookUtils"
+import { getQueriesFromText } from "../../scenes/Editor/Monaco/utils"
 import { NotebookToolError } from "../notebooks/notebookToolError"
 
 // Snake-case shape the agent tools speak for grid highlight rules, and its
@@ -378,17 +381,34 @@ export const fromHighlightConfigWire = (
   return { ok: true, config }
 }
 
+// A released or unmounted cell holds no result in memory; its snapshot still
+// has the columns it showed, for the statements the cell still has.
+export const shownResultsOf = (
+  cell: NotebookCell | undefined,
+  snapshot: NotebookResultSnapshot | undefined,
+): SingleQueryResult[] => {
+  if (!cell) return []
+  if (cell.result) return cell.result.results
+  if (!snapshot) return []
+  const reconciled = reconcileResultsForStatements(
+    getQueriesFromText(cell.value),
+    {
+      results: snapshot.results,
+      activeResultIndex: 0,
+      timestamp: snapshot.savedAt,
+    },
+  )
+  return reconciled?.results ?? []
+}
+
 // Checks the rules against the columns the cell's results have shown, as the
 // drawer does on Save; a column no result has shown yet is checked loosely.
 export const parseHighlightConfigFor = (
   wire: HighlightConfigWire,
-  cell: NotebookCell | undefined,
+  shownResults: SingleQueryResult[],
   label: string,
 ): HighlightConfig => {
-  const parsed = fromHighlightConfigWire(
-    wire,
-    cellColumnsOf(cell?.result?.results ?? []),
-  )
+  const parsed = fromHighlightConfigWire(wire, cellColumnsOf(shownResults))
   if (!parsed.ok) {
     throw new NotebookToolError(
       "validation",

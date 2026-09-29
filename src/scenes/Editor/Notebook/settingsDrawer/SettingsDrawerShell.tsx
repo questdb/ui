@@ -104,6 +104,7 @@ const Title = styled.h3`
   font-size: 1.4rem;
   font-weight: 600;
   color: ${({ theme }) => theme.color.contentPrimary};
+  outline: none;
 `
 
 const Body = styled.form`
@@ -126,6 +127,9 @@ const Footer = styled.div`
 const FooterStart = styled.div`
   margin-right: auto;
 `
+
+// How long after opening a menu may still hand focus back to its trigger.
+const OPENER_HANDBACK_WINDOW_MS = 1000
 
 const isRadixPopperOpen = () =>
   document.querySelector("[data-radix-popper-content-wrapper]") !== null
@@ -173,6 +177,8 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
   } = props
   const popperOpenAtPointerDownRef = useRef(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const titleRef = useRef<HTMLHeadingElement | null>(null)
+  const openerRef = useRef<HTMLElement | null>(null)
   const [exiting, setExiting] = useState(false)
   const [wasOpen, setWasOpen] = useState(open)
   const [still, setStill] = useState(open && appearInPlace)
@@ -213,6 +219,49 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     }
   }, [exiting])
 
+  // The control that opened the drawer gets focus back on close. A menu
+  // item opens it while the closing menu still traps focus; the menu hands
+  // focus to its trigger once it is gone, and the drawer takes it from
+  // there. Any other control hands over at once.
+  useEffect(() => {
+    if (!isDrawer) return
+    if (!open) {
+      const opener = openerRef.current
+      openerRef.current = null
+      if (opener?.isConnected) opener.focus()
+      return
+    }
+    const controlOutside = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      target !== document.body &&
+      !panelRef.current?.contains(target)
+        ? target
+        : null
+    const inMenu = (control: HTMLElement) =>
+      control.closest("[role='menu']") !== null
+    const focused = controlOutside(document.activeElement)
+    if (focused && !inMenu(focused)) {
+      openerRef.current = focused
+      titleRef.current?.focus()
+      return
+    }
+    if (!focused) titleRef.current?.focus()
+    const adoptOpener = (event: FocusEvent) => {
+      const opener = controlOutside(event.target)
+      if (!opener || inMenu(opener)) return
+      openerRef.current = opener
+      titleRef.current?.focus()
+      stopAdopting()
+    }
+    const stopAdopting = () => {
+      document.removeEventListener("focusin", adoptOpener)
+      window.clearTimeout(timer)
+    }
+    document.addEventListener("focusin", adoptOpener)
+    const timer = window.setTimeout(stopAdopting, OPENER_HANDBACK_WINDOW_MS)
+    return stopAdopting
+  }, [open, isDrawer])
+
   useEffect(() => {
     if (!open || !isDrawer) return
     const onKey = (e: KeyboardEvent) => {
@@ -246,11 +295,14 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
         $still={still}
         onAnimationEnd={handlePanelAnimationEnd}
         role={isDrawer ? "dialog" : "region"}
+        aria-modal={isDrawer || undefined}
         aria-label={title}
         data-hook={`${dataHookBase}-${presentation}`}
       >
         <Header>
-          <Title>{title}</Title>
+          <Title ref={titleRef} tabIndex={-1}>
+            {title}
+          </Title>
           {isDrawer && (
             <Button
               variant="ghost"

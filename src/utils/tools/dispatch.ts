@@ -58,8 +58,10 @@ import {
   type HighlightConfigWire,
   parseHighlightConfigFor,
   regexLiteralNotes,
+  shownResultsOf,
   wireUsesPatterns,
 } from "./highlightConfigWire"
+import { loadCellSnapshot } from "../../store/notebookResults"
 import {
   invalidBufferIdResult,
   notebookErrorHint,
@@ -961,6 +963,9 @@ export const dispatchTool = async (
           ? regexLiteralNotes(highlight_config)
           : []
         return routeNotebookTool(async () => {
+          const snapshot = highlight_config
+            ? await loadCellSnapshot(buffer_id, cell_id)
+            : undefined
           await runTransition(
             buffer_id,
             (parts) =>
@@ -971,7 +976,10 @@ export const dispatchTool = async (
                 highlight_config
                   ? parseHighlightConfigFor(
                       highlight_config,
-                      requireCellIn(parts.cells, cell_id, buffer_id),
+                      shownResultsOf(
+                        requireCellIn(parts.cells, cell_id, buffer_id),
+                        snapshot,
+                      ),
                       "highlight_config",
                     )
                   : null,

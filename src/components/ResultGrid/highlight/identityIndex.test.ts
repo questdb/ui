@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildIdentityIndex,
+  duplicateRowCount,
   identityColumnIndexes,
   identityKeyOf,
 } from "./identityIndex"
@@ -48,6 +49,27 @@ describe("buildIdentityIndex", () => {
     expect(index.ambiguous).toEqual(
       new Set([identityKeyOf(["BTC", "buy"], [0, 1])]),
     )
+  })
+})
+
+describe("duplicateRowCount", () => {
+  it("counts the rows past the first of each key for a chosen identity", () => {
+    // Given six rows where k repeats and id is unique
+    const columns = [
+      { name: "k", type: "LONG" },
+      { name: "id", type: "LONG" },
+    ]
+    const rows = [1, 2, 3, 4, 5, 6].map((id) => [id % 2, id])
+
+    // When counted by k, by id, and by a column the result lacks
+    const byK = duplicateRowCount(columns, rows, ["k"])
+    const byId = duplicateRowCount(columns, rows, ["id"])
+    const byMissing = duplicateRowCount(columns, rows, ["venue"])
+
+    // Then only the repeating key reports duplicates
+    expect(byK).toBe(4)
+    expect(byId).toBe(0)
+    expect(byMissing).toBe(0)
   })
 })
 

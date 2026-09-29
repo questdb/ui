@@ -22,6 +22,25 @@ export const identityColumnIndexes = (
 export const identityKeyOf = (row: ResultGridRow, indexes: number[]): string =>
   JSON.stringify(indexes.map((index) => row[index]))
 
+// Rows past the first of each key, the same count the match stats report as
+// ambiguous, so the drawer can show it for an unsaved identity.
+export const duplicateRowCount = (
+  columns: ColumnDefinition[],
+  dataset: ResultGridRow[],
+  identityColumns: string[],
+): number => {
+  const indexes = identityColumnIndexes(columns, identityColumns)
+  if (indexes === null) return 0
+  const seen = new Set<string>()
+  let duplicates = 0
+  for (const row of dataset) {
+    const key = identityKeyOf(row, indexes)
+    if (seen.has(key)) duplicates++
+    else seen.add(key)
+  }
+  return duplicates
+}
+
 export const buildIdentityIndex = (
   dataset: ResultGridRow[],
   indexes: number[],

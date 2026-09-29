@@ -1,10 +1,9 @@
-import React, { useEffect, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   type ColumnRange,
   type HighlightConfig,
-  type MatchStats,
   createRuleId,
   isRe2Ready,
   loadRe2,
@@ -48,7 +47,8 @@ type Props = {
   columns: ColumnDefinition[]
   columnRange: (column: string) => ColumnRange | null
   config: HighlightConfig
-  stats: MatchStats | null
+  // Rows of the current result that share a key under a chosen identity.
+  duplicateCountOf: (identityColumns: string[]) => number
   onSave: (config: HighlightConfig) => void
   onClear: () => void
   onCancel: (method: SettingsDismissMethod) => void
@@ -65,7 +65,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   columns,
   columnRange,
   config,
-  stats,
+  duplicateCountOf,
   onSave,
   onClear,
   onCancel,
@@ -81,6 +81,10 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // it waited.
   const acceptsSaveRef = useRef(open)
   const draftRef = useRef(draft)
+  const duplicateCount = useMemo(
+    () => duplicateCountOf(draft.identityColumns),
+    [duplicateCountOf, draft.identityColumns],
+  )
 
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
@@ -168,7 +172,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       <IdentitySection
         columns={columns}
         value={draft.identityColumns}
-        stats={stats}
+        duplicateCount={duplicateCount}
         error={identityError}
         onChange={(identityColumns) => setDraft({ ...draft, identityColumns })}
       />

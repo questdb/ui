@@ -4,6 +4,7 @@ import {
   canonicalInstant,
   compareValues,
   differenceOf,
+  ratioOf,
 } from "./comparable"
 
 const originalTz = process.env.TZ
@@ -152,8 +153,8 @@ describe("differenceOf", () => {
     const fraction = differenceOf(1.5, 1)
 
     // Then both differences are exact
-    expect(unit).toBe(1)
-    expect(fraction).toBe(0.5)
+    expect(unit).toEqual({ unscaled: BigInt(1), scale: 0 })
+    expect(fraction).toEqual({ unscaled: BigInt(5), scale: 1 })
   })
 
   it("measures one unit at the eighteenth decimal", () => {
@@ -165,6 +166,30 @@ describe("differenceOf", () => {
     )
 
     // Then the difference is that unit, not zero
-    expect(unit).toBe(1e-18)
+    expect(unit).toEqual({ unscaled: BigInt(1), scale: 18 })
+  })
+
+  it("subtracts doubles as the decimals they print as", () => {
+    // Given doubles whose binary difference is not the printed one
+    // When subtracted
+    const tick = differenceOf(1.1001, 1.1)
+    const tenth = differenceOf(1.2, 1.1)
+    const tiny = differenceOf(1.234e-7, 0)
+
+    // Then each difference is the printed decimal
+    expect(compareValues(tick, 0.0001)).toBe(0)
+    expect(compareValues(tenth, 0.1)).toBe(0)
+    expect(compareValues(tiny, 1.234e-7)).toBe(0)
+  })
+})
+
+describe("ratioOf", () => {
+  it("divides two exact differences as a number", () => {
+    // Given a value a quarter of the way from 1.1 to 1.5
+    // When the differences are divided
+    const ratio = ratioOf(differenceOf(1.2, 1.1), differenceOf(1.5, 1.1))
+
+    // Then the ratio is exact
+    expect(ratio).toBe(0.25)
   })
 })

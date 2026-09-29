@@ -47,8 +47,9 @@ export const useCellsStore = ({
   // schedule a persist. Results are stripped from the persist payload, so the
   // write would be pure churn — and because persistCells' identity changes with
   // every EditorProvider render (via updateBuffer), a persisting hydrate effect
-  // re-triggers itself off its own buffer write, looping forever. Stable
-  // identity ([] deps) so the hydration effect runs once per mount.
+  // re-triggers itself off its own buffer write, looping forever. Its only
+  // dependency is onCellsChange, which the caller must keep referentially
+  // stable, so the hydration effect runs once per mount.
   const hydrateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
       const prev = cellsRef.current

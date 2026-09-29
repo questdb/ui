@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useMemo, useRef, useState } from "react"
 import { queryKeyFor } from "../queryKey"
 import {
   ResultGrid,
@@ -15,22 +15,19 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
-import { toast } from "../../../../components/Toast"
 import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
-import type { HighlightDraft } from "../CellHighlight/ruleDraft"
-import {
-  highlightSettingsSessions,
-  type SettingsDrawerRequest,
-} from "../settingsDrawer/settingsDrawerSessions"
+import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
+import { useSettingsDrawerSession } from "../settingsDrawer/useSettingsDrawerSession"
+import type { SettingsDismissMethod } from "../settingsDrawer/SettingsDrawerShell"
 import { useNotebookActions } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
-import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { useResultTrendStore } from "./ResultTrendContext"
 import { resolveHighlightConfig } from "./highlightConfig"
 import {
   columnRangeOf,
+  duplicateRowCount,
   evaluateHighlights,
   useRe2Ready,
   usesPatterns,
@@ -57,6 +54,15 @@ type Props = {
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
 }
+
+const trackHighlightOpen = () =>
+  void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
+
+const trackHighlightCancel = (method: SettingsDismissMethod) =>
+  void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
+    source: "notebook",
+    method,
+  })
 
 const useInitialGridState = ({
   bufferId,
@@ -103,12 +109,17 @@ const ResultGridPanelInner: React.FC<Props> = ({
   const { maxColumnWidth } = useLocalStorage()
   const { setCellHighlightConfig } = useNotebookActions()
   const trendStore = useResultTrendStore()
+  const highlightDrawer = useSettingsDrawerSession({
+    sessions: highlightSettingsSessions,
+    cellId,
+    config: savedHighlightConfig,
+    openEvent: EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
+    onOpen: trackHighlightOpen,
+    onCancel: trackHighlightCancel,
+    changedWhileOpenMessage:
+      "Highlight rules were updated since last check. Reopen highlight rules to edit.",
+  })
   const [hasSelection, setHasSelection] = useState(false)
-  const [restoredHighlight] = useState(
-    () => highlightSettingsSessions.get(cellId) !== undefined,
-  )
-  const [highlightOpen, setHighlightOpen] = useState(restoredHighlight)
-  const [highlightSession, setHighlightSession] = useState(0)
   const [pinnedCount, setPinnedCount] = useState(
     columnLayout?.pinnedColumns?.length ?? 0,
   )
@@ -135,6 +146,11 @@ const ResultGridPanelInner: React.FC<Props> = ({
     () => columnRangeOf(data.columns, data.dataset),
     [data],
   )
+  const duplicateCountOf = useCallback(
+    (identityColumns: string[]) =>
+      duplicateRowCount(data.columns, data.dataset, identityColumns),
+    [data],
+  )
   // Pattern rules match nothing until RE2 has loaded, then evaluate again.
   const re2Ready = useRe2Ready(usesPatterns(highlightConfig))
   const highlights = useMemo(
@@ -148,27 +164,6 @@ const ResultGridPanelInner: React.FC<Props> = ({
     [data, highlightConfig, previous, re2Ready],
   )
 
-  const openHighlight = useCallback(() => {
-    void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
-    highlightSettingsSessions.set(cellId, {
-      configAtOpen: savedHighlightConfig,
-      draft: null,
-    })
-    setHighlightSession((session) => session + 1)
-    setHighlightOpen(true)
-  }, [cellId, savedHighlightConfig])
-
-  const closeHighlight = useCallback(() => {
-    highlightSettingsSessions.clear(cellId)
-    setHighlightOpen(false)
-  }, [cellId])
-
-  const keepHighlightDraft = useCallback(
-    (draft: HighlightDraft) =>
-      highlightSettingsSessions.update(cellId, { draft }),
-    [cellId],
-  )
-
   const saveHighlight = (next: typeof highlightConfig) => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_SAVE, {
       source: "notebook",
@@ -177,51 +172,15 @@ const ResultGridPanelInner: React.FC<Props> = ({
     })
     signalUserEdit(bufferId)
     setCellHighlightConfig(cellId, next)
-    closeHighlight()
+    highlightDrawer.close()
   }
 
   const clearHighlight = () => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CLEAR, { source: "notebook" })
     signalUserEdit(bufferId)
     setCellHighlightConfig(cellId, null)
-    closeHighlight()
+    highlightDrawer.close()
   }
-
-  const cancelHighlight = useCallback(
-    (method: string) => {
-      void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_CANCEL, {
-        source: "notebook",
-        method,
-      })
-      closeHighlight()
-    },
-    [closeHighlight],
-  )
-
-  useEffect(() => {
-    if (!highlightOpen) return
-    const session = highlightSettingsSessions.get(cellId)
-    if (session && session.configAtOpen !== savedHighlightConfig) {
-      closeHighlight()
-      toast.info(
-        "Highlight rules were updated since last check. Reopen highlight rules to edit.",
-      )
-    }
-  }, [cellId, highlightOpen, savedHighlightConfig, closeHighlight])
-
-  useEffect(() => {
-    const respond = (payload?: SettingsDrawerRequest) => {
-      if (payload?.cellId !== cellId) return
-      if (!highlightOpen) openHighlight()
-      else if (payload.mode === "toggle") cancelHighlight("button")
-    }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, respond)
-    return () =>
-      eventBus.unsubscribe(
-        EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
-        respond,
-      )
-  }, [cellId, highlightOpen, openHighlight, cancelHighlight])
 
   return (
     <>
@@ -278,18 +237,18 @@ const ResultGridPanelInner: React.FC<Props> = ({
         }
       />
       <HighlightSettingsDrawer
-        key={highlightSession}
-        open={highlightOpen}
-        appearInPlace={restoredHighlight && highlightSession === 0}
-        initialDraft={highlightSettingsSessions.get(cellId)?.draft ?? null}
-        onDraftChange={keepHighlightDraft}
+        key={highlightDrawer.generation}
+        open={highlightDrawer.open}
+        appearInPlace={highlightDrawer.appearInPlace}
+        initialDraft={highlightDrawer.initialDraft}
+        onDraftChange={highlightDrawer.keepDraft}
         columns={cellColumns}
         columnRange={columnRange}
         config={highlightConfig}
-        stats={highlights.stats}
+        duplicateCountOf={duplicateCountOf}
         onSave={saveHighlight}
         onClear={clearHighlight}
-        onCancel={cancelHighlight}
+        onCancel={highlightDrawer.cancel}
       />
     </>
   )

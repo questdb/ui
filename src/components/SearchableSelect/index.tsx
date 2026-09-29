@@ -26,9 +26,10 @@ type Props<O extends SearchableSelectOption> = {
   value: string
   // Controlled multi-selection; value remains the closed trigger label.
   selectedValues?: string[]
-  // Enter picks the exact or first match; with none it creates the typed
-  // name, kept at the top while it remains selected. Custom names are
-  // reported with option null.
+  // Enter on a typed name picks the exact or first match; with none it
+  // creates the typed name, kept at the top while it remains selected.
+  // Custom names are reported with option null. Enter on an empty search
+  // keeps the current selection and closes.
   onSelect: (value: string, option: O | null) => void
   // Clearing controlled state is required for the built-in Reset action.
   onReset: () => void
@@ -287,10 +288,16 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       }
     } else if (event.key === "Enter") {
       event.preventDefault()
-      const item =
-        focusedIndex === null
-          ? defaultItem(filtered, query.trim())
-          : filtered[focusedIndex]
+      if (focusedIndex !== null) {
+        selectItem(filtered[focusedIndex])
+        return
+      }
+      const typed = query.trim()
+      if (typed === "") {
+        closeAndFocusTrigger()
+        return
+      }
+      const item = defaultItem(filtered, typed)
       if (item) selectItem(item)
     } else if (event.key === "Escape") {
       event.preventDefault()

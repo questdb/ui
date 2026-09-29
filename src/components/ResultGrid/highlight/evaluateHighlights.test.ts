@@ -270,6 +270,84 @@ describe("evaluateHighlights: previous result rules", () => {
     expect(anyChange.background(1, PRICE)).toBeDefined()
   })
 
+  it("flags a change of exactly the threshold on doubles, absolute and percent", () => {
+    // Given prices that move by exactly one tick and by exactly one percent
+    const previous = previousOf([
+      row("TICK", 1.1, 1),
+      row("PCT", 1.1, 1),
+      row("UNDER", 1.1, 1),
+    ])
+    const dataset = [
+      row("TICK", 1.1001, 1),
+      row("PCT", 1.111, 1),
+      row("UNDER", 1.1000999, 1),
+    ]
+
+    // When evaluated with a one-tick and a one-percent threshold
+    const byAbsolute = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([
+        rule({
+          id: "tick",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 0.0001, unit: "absolute" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+    const byPercent = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([
+        rule({
+          id: "pct",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 1, unit: "percent" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+
+    // Then the exact moves match and the move just under does not
+    expect(byAbsolute.background(0, PRICE)).toBeDefined()
+    expect(byPercent.background(1, PRICE)).toBeDefined()
+    expect(byAbsolute.background(2, PRICE)).toBeUndefined()
+  })
+
+  it("flags a change of exactly the threshold on a short DECIMAL column", () => {
+    // Given a DECIMAL(10,4) column whose value moves by one unit of scale
+    const decimalColumns: ColumnDefinition[] = [
+      { name: "id", type: "LONG" },
+      { name: "qty", type: "DECIMAL(10,4)" },
+    ]
+    const previous = buildIdentityIndex([[1, "1.1000"]], [0])
+
+    // When evaluated with a threshold of that unit
+    const { lookup } = evaluateHighlights({
+      columns: decimalColumns,
+      dataset: [[1, "1.1001"]],
+      config: config(
+        [
+          rule({
+            id: "tick",
+            kind: "previous",
+            target: { kind: "column", name: "qty" },
+            condition: { op: "changedBy", threshold: 0.0001, unit: "absolute" },
+            color: "dataSeries2",
+          }),
+        ],
+        ["id"],
+      ),
+      previous,
+    })
+
+    // Then the one-unit move matches
+    expect(lookup.background(0, 1)).toBeDefined()
+  })
+
   it("paints a row whose identity was not in the previous result", () => {
     // Given a new-row rule
     const fresh: HighlightRule = {

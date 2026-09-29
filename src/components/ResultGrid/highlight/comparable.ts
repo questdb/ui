@@ -71,7 +71,7 @@ const decimalOfNumber = (value: number): Decimal => {
   }
 }
 
-const toDecimal = (value: Numeric): Decimal => {
+export const toDecimal = (value: Numeric): Decimal => {
   if (isDecimal(value)) return value
   if (typeof value === "bigint") return { unscaled: value, scale: 0 }
   return decimalOfNumber(value)
@@ -87,28 +87,28 @@ const alignedUnscaled = (a: Decimal, b: Decimal): [bigint, bigint, number] => {
   return [raise(a), raise(b), scale]
 }
 
-export const toNumber = (value: Numeric): number =>
-  isDecimal(value) ? Number(value.unscaled) / 10 ** value.scale : Number(value)
+export const isZero = (value: Decimal): boolean => value.unscaled === BigInt(0)
 
-const asBigInt = (value: number | bigint): bigint | null =>
-  typeof value === "bigint"
-    ? value
-    : Number.isInteger(value)
-      ? BigInt(value)
-      : null
+export const magnitudeOf = (value: Decimal): Decimal => ({
+  unscaled: value.unscaled < BigInt(0) ? -value.unscaled : value.unscaled,
+  scale: value.scale,
+})
 
-// Exact for two integers and for two decimals, so a change of one unit past
-// 2^53, or at the eighteenth decimal, still counts.
-export const differenceOf = (a: Numeric, b: Numeric): number => {
-  if (isDecimal(a) || isDecimal(b)) {
-    const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
-    return Number(left - right) / 10 ** scale
-  }
-  const left = asBigInt(a)
-  const right = asBigInt(b)
-  return left !== null && right !== null
-    ? Number(left - right)
-    : Number(a) - Number(b)
+export const productOf = (a: Decimal, b: Decimal): Decimal => ({
+  unscaled: a.unscaled * b.unscaled,
+  scale: a.scale + b.scale,
+})
+
+// Exact for every numeric pair: a double becomes the decimal it prints as, so
+// 1.1001 - 1.1 is 0.0001 and a change of exactly the threshold counts.
+export const differenceOf = (a: Numeric, b: Numeric): Decimal => {
+  const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
+  return { unscaled: left - right, scale }
+}
+
+export const ratioOf = (numerator: Decimal, denominator: Decimal): number => {
+  const [left, right] = alignedUnscaled(numerator, denominator)
+  return Number(left) / Number(right)
 }
 
 const ISO_INSTANT =
