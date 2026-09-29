@@ -156,6 +156,7 @@ describe("singleResultFromExec", () => {
     const exec: QueryExecResult = {
       type: "dql",
       query: "SELECT 1",
+      effectiveQuery: "DECLARE @x := 1 SELECT 1",
       columns: [{ name: "x", type: "INT" }],
       dataset: [[1]],
       count: 1,
@@ -170,6 +171,7 @@ describe("singleResultFromExec", () => {
     expect(singleResultFromExec(exec, "SELECT 1")).toEqual({
       type: "dql",
       query: "SELECT 1",
+      effectiveQuery: "DECLARE @x := 1 SELECT 1",
       columns: exec.columns,
       dataset: exec.dataset,
       count: 1,

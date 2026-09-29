@@ -14,9 +14,15 @@ export type TrendEntry = {
   capturedAt: number
 }
 
+// When a result first showed: a result read back from storage landed when
+// it was saved, a run lands now.
+export type ResultLanding = { at: number; restored: boolean }
+
 // One per notebook, keyed per cell and statement. Fed once, when the cells
 // state changes, so every statement advances its baseline whether or not its
-// tab is mounted, and a cell remount keeps it. The grid only reads.
+// tab is mounted, and a cell remount keeps it. The grid only reads. A flash
+// is timed from the landing, so a result read back from storage never
+// replays it.
 export type ResultTrendStore = {
   get: (cellId: string, statementKey: string) => TrendEntry | undefined
   capture: (
@@ -24,7 +30,9 @@ export type ResultTrendStore = {
     statementKey: string,
     result: DqlQueryResult,
     identityColumns: string[],
+    landing: ResultLanding,
   ) => TrendEntry
+  releaseCell: (cellId: string) => void
   clearCell: (cellId: string) => void
 }
 
@@ -51,22 +59,126 @@ const indexOf = (
   return indexes ? buildIdentityIndex(result.dataset, indexes) : null
 }
 
-export const createResultTrendStore = (
-  now: () => number = Date.now,
-): ResultTrendStore => {
-  const entries = new Map<
-    string,
-    TrendEntry & { current: IdentityIndex | null }
-  >()
+// A truncated result is a restored snapshot prefix; rows past it would read
+// as new against it, so it never becomes a baseline.
+const baselineIndexOf = (
+  result: DqlQueryResult,
+  identityColumns: string[],
+): IdentityIndex | null =>
+  result.truncated ? null : indexOf(result, identityColumns)
+
+type ReplacedResult = Pick<TrendEntry, "result" | "revision" | "capturedAt">
+
+// A run discarded mid-flight puts the replaced result back as the same
+// object; remembering it lets that restore return to what was shown instead
+// of comparing against the discarded rows.
+type LiveEntry = TrendEntry & {
+  current: IdentityIndex | null
+  replaced: ReplacedResult | null
+}
+
+// A released result leaves behind only what its rehydrate needs: the baseline
+// it was compared against, and the shape that tells the same rows read back
+// from storage apart from a new run.
+type ReleasedEntry = Omit<TrendEntry, "result" | "previous"> & {
+  result: null
+  previous: IdentityIndex
+  columns: ColumnDefinition[]
+  effectiveQuery: string | undefined
+}
+
+type StoredEntry = LiveEntry | ReleasedEntry
+
+const replacedResultOf = (
+  existing: LiveEntry | undefined,
+  identityColumns: string[],
+): ReplacedResult | null =>
+  existing !== undefined && identityColumns.length > 0
+    ? {
+        result: existing.result,
+        revision: existing.revision,
+        capturedAt: existing.capturedAt,
+      }
+    : null
+
+const releasedEntryOf = (entry: LiveEntry): ReleasedEntry | null =>
+  entry.previous === null
+    ? null
+    : {
+        result: null,
+        identityColumns: entry.identityColumns,
+        previous: entry.previous,
+        revision: entry.revision,
+        capturedAt: entry.capturedAt,
+        columns: entry.result.columns,
+        effectiveQuery: entry.result.effectiveQuery,
+      }
+
+const rehydratedEntryOf = (
+  released: ReleasedEntry,
+  result: DqlQueryResult,
+  identityColumns: string[],
+  landing: ResultLanding,
+): LiveEntry => {
+  const sameRun =
+    sameStrings(released.identityColumns, identityColumns) &&
+    released.effectiveQuery === result.effectiveQuery &&
+    sameColumns(released.columns, result.columns)
+  return {
+    result,
+    identityColumns,
+    previous: sameRun ? released.previous : null,
+    current: baselineIndexOf(result, identityColumns),
+    revision: sameRun ? released.revision : released.revision + 1,
+    capturedAt: sameRun ? released.capturedAt : landing.at,
+    replaced: null,
+  }
+}
+
+// A run over a released statement has nothing to compare with: the released
+// rows are gone, and the baseline they were compared with is one run too old.
+const entryAfterReleaseOf = (
+  released: ReleasedEntry,
+  result: DqlQueryResult,
+  identityColumns: string[],
+  landing: ResultLanding,
+): LiveEntry => ({
+  result,
+  identityColumns,
+  previous: null,
+  current: baselineIndexOf(result, identityColumns),
+  revision: released.revision + 1,
+  capturedAt: landing.at,
+  replaced: null,
+})
+
+export const createResultTrendStore = (): ResultTrendStore => {
+  const entries = new Map<string, StoredEntry>()
+
+  const cellKeys = (cellId: string) => {
+    const prefix = entryKey(cellId, "")
+    return [...entries.keys()].filter((key) => key.startsWith(prefix))
+  }
 
   return {
     get(cellId, statementKey) {
-      return entries.get(entryKey(cellId, statementKey))
+      const entry = entries.get(entryKey(cellId, statementKey))
+      return entry !== undefined && entry.result !== null ? entry : undefined
     },
 
-    capture(cellId, statementKey, result, identityColumns) {
+    capture(cellId, statementKey, result, identityColumns, landing) {
       const key = entryKey(cellId, statementKey)
-      const existing = entries.get(key)
+      const stored = entries.get(key)
+
+      if (stored !== undefined && stored.result === null) {
+        const entry = landing.restored
+          ? rehydratedEntryOf(stored, result, identityColumns, landing)
+          : entryAfterReleaseOf(stored, result, identityColumns, landing)
+        entries.set(key, entry)
+        return entry
+      }
+
+      const existing = stored
       const sameIdentity =
         existing !== undefined &&
         sameStrings(existing.identityColumns, identityColumns)
@@ -75,31 +187,55 @@ export const createResultTrendStore = (
         return existing
       }
 
+      const replaced = existing?.replaced
+      if (existing && replaced?.result === result && sameIdentity) {
+        const restored = {
+          ...replaced,
+          identityColumns,
+          previous: null,
+          current: existing.previous,
+          replaced: null,
+        }
+        entries.set(key, restored)
+        return restored
+      }
+
       const isNewResult = existing === undefined || existing.result !== result
       const keepsBaseline =
         existing !== undefined &&
         sameIdentity &&
+        existing.result.effectiveQuery === result.effectiveQuery &&
         sameColumns(existing.result.columns, result.columns)
 
       const entry = {
         result,
         identityColumns,
         previous: keepsBaseline ? existing.current : null,
-        current: indexOf(result, identityColumns),
+        current: baselineIndexOf(result, identityColumns),
         revision: isNewResult
           ? (existing?.revision ?? 0) + 1
           : existing.revision,
-        capturedAt: isNewResult ? now() : existing.capturedAt,
+        capturedAt: isNewResult ? landing.at : existing.capturedAt,
+        replaced: isNewResult
+          ? replacedResultOf(existing, identityColumns)
+          : existing.replaced,
       }
       entries.set(key, entry)
       return entry
     },
 
-    clearCell(cellId) {
-      const prefix = entryKey(cellId, "")
-      for (const key of [...entries.keys()]) {
-        if (key.startsWith(prefix)) entries.delete(key)
+    releaseCell(cellId) {
+      for (const key of cellKeys(cellId)) {
+        const entry = entries.get(key)
+        if (entry === undefined || entry.result === null) continue
+        const released = releasedEntryOf(entry)
+        if (released === null) entries.delete(key)
+        else entries.set(key, released)
       }
+    },
+
+    clearCell(cellId) {
+      for (const key of cellKeys(cellId)) entries.delete(key)
     },
   }
 }

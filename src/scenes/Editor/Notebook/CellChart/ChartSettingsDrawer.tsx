@@ -195,13 +195,14 @@ const ChartSettings: React.FC<SettingsProps> = ({
 
   return (
     <SettingsDrawerShell
-      presentation={presentation}
+      {...(presentation === "panel"
+        ? { presentation, onReset: resetDraft }
+        : { presentation })}
       open={open}
       appearInPlace={appearInPlace}
       title="Chart settings"
       dataHookBase="chart-settings"
       onDismiss={dismiss}
-      onReset={resetDraft}
       onCommit={commit}
     >
       <Field>

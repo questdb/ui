@@ -249,6 +249,9 @@ export const singleResultFromExec = (
       return {
         type: "dql",
         query,
+        ...(exec.effectiveQuery !== undefined
+          ? { effectiveQuery: exec.effectiveQuery }
+          : {}),
         columns: exec.columns,
         dataset: exec.dataset,
         count: exec.count,

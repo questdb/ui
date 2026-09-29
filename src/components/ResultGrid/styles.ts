@@ -170,41 +170,23 @@ export const ResizeGhost = styled.div`
   z-index: 7;
 `
 
+const tint = (value: string) => `linear-gradient(${value}, ${value})`
+
+// The row's selection or hover tint, read by the row itself and by its pinned
+// cells, which paint their own opaque copy of the row.
 export const Row = styled.div<{ $active: boolean }>`
+  --grid-row-overlay: ${({ $active, theme }) =>
+    $active ? theme.color.interactionSelected : theme.color.transparent};
   display: flex;
   height: ${ROW_HEIGHT}px;
-  background: ${color("gridRow")};
-
-  ${({ $active, theme }) =>
-    $active &&
-    css`
-      background:
-        linear-gradient(
-          ${theme.color.interactionSelected},
-          ${theme.color.interactionSelected}
-        ),
-        ${theme.color.gridRow};
-    `}
+  background: ${({ theme }) =>
+    `${tint("var(--grid-row-overlay)")}, ${theme.color.gridRow}`};
 
   ${({ $active, theme }) =>
     !$active &&
     css`
       &:hover {
-        background:
-          linear-gradient(
-            ${theme.color.interactionHover},
-            ${theme.color.interactionHover}
-          ),
-          ${theme.color.surfaceInset};
-
-        [data-frozen="true"] {
-          background:
-            linear-gradient(
-              ${theme.color.interactionHover},
-              ${theme.color.interactionHover}
-            ),
-            ${theme.color.surfaceInset};
-        }
+        --grid-row-overlay: ${theme.color.interactionHover};
       }
     `}
 `
@@ -218,18 +200,20 @@ const HIGHLIGHT_STATIC_OPACITY = 30
 const HIGHLIGHT_FLASH_OPACITY = 55
 const FLASH_DURATION_MS = 1000
 
-// Two equivalent keyframes so a consecutive flash restarts: the browser only
-// restarts an animation when its name changes, and styled-components names
-// keyframes by content, so the bodies must differ.
+// The flash animates the registered --grid-flash color, which the cell paints
+// as its top background layer; a background-color would sit under a pinned
+// cell's opaque base. Two equivalent keyframes so a consecutive flash
+// restarts: the browser only restarts an animation when its name changes, and
+// styled-components names keyframes by content, so the bodies must differ.
 const flashAnim = [
   keyframes`
-    from { background-color: var(--grid-highlight-flash); }
-    to { background-color: transparent; }
+    from { --grid-flash: var(--grid-highlight-flash); }
+    to { --grid-flash: transparent; }
   `,
   keyframes`
-    from { background-color: var(--grid-highlight-flash); }
-    99% { background-color: transparent; }
-    to { background-color: transparent; }
+    from { --grid-flash: var(--grid-highlight-flash); }
+    99% { --grid-flash: transparent; }
+    to { --grid-flash: transparent; }
   `,
 ]
 
@@ -245,25 +229,53 @@ const highlightHue = (
 const highlightColor = (
   theme: DefaultTheme,
   token: HighlightColorToken,
-  alpha: number,
   opacity: number,
   blend: HighlightBlend | undefined,
 ) =>
-  `color-mix(in srgb, ${highlightHue(theme, token, blend)} ${Math.round(alpha * opacity)}%, transparent)`
+  `color-mix(in srgb, ${highlightHue(theme, token, blend)} ${opacity}%, transparent)`
 
-export const Cell = styled.div<{
+type CellProps = {
   $isNull: boolean
   $isTimestamp: boolean
   $isActive: boolean
   $isPulsing: boolean
   $frozen?: boolean
-  $rowActive?: boolean
   $highlightColor: HighlightColorToken | undefined
-  $highlightAlpha: number
   $highlightBlend: HighlightBlend | undefined
   $highlightMode: "temporary" | "always" | undefined
   $flashParity: 0 | 1
-}>`
+}
+
+// One stack, top to bottom: the flash, a permanent highlight, and for a
+// pinned cell the row's tint over an opaque base so scrolled columns never
+// show through. A scrolling cell stays transparent and shows the row.
+const cellBackground = ({
+  $frozen,
+  $highlightColor,
+  $highlightBlend,
+  $highlightMode,
+  theme,
+}: CellProps & { theme: DefaultTheme }) => {
+  const layers: string[] = []
+  if ($highlightMode === "temporary") layers.push(tint("var(--grid-flash)"))
+  if ($highlightColor !== undefined && $highlightMode === "always") {
+    layers.push(
+      tint(
+        highlightColor(
+          theme,
+          $highlightColor,
+          HIGHLIGHT_STATIC_OPACITY,
+          $highlightBlend,
+        ),
+      ),
+    )
+  }
+  if ($frozen) layers.push(tint("var(--grid-row-overlay)"), theme.color.gridRow)
+  else layers.push(theme.color.transparent)
+  return layers.join(", ")
+}
+
+export const Cell = styled.div<CellProps>`
   flex-shrink: 0;
   height: ${ROW_HEIGHT}px;
   display: flex;
@@ -284,40 +296,10 @@ export const Cell = styled.div<{
   box-sizing: border-box;
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
   contain: layout;
-
-  ${({ $frozen, $rowActive, theme }) =>
-    $frozen &&
-    css`
-      background: ${$rowActive
-        ? `linear-gradient(${theme.color.interactionSelected}, ${theme.color.interactionSelected}), ${theme.color.gridRow}`
-        : color("gridRow")};
-    `}
+  background: ${cellBackground};
 
   ${({
     $highlightColor,
-    $highlightAlpha,
-    $highlightBlend,
-    $highlightMode,
-    $frozen,
-    theme,
-  }) =>
-    $highlightColor !== undefined &&
-    $highlightMode === "always" &&
-    css`
-      background: ${$frozen
-        ? `linear-gradient(${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY, $highlightBlend)}, ${highlightColor(theme, $highlightColor, $highlightAlpha, HIGHLIGHT_STATIC_OPACITY, $highlightBlend)}), ${theme.color.gridRow}`
-        : highlightColor(
-            theme,
-            $highlightColor,
-            $highlightAlpha,
-            HIGHLIGHT_STATIC_OPACITY,
-            $highlightBlend,
-          )};
-    `}
-
-  ${({
-    $highlightColor,
-    $highlightAlpha,
     $highlightBlend,
     $highlightMode,
     $flashParity,
@@ -329,7 +311,6 @@ export const Cell = styled.div<{
       --grid-highlight-flash: ${highlightColor(
         theme,
         $highlightColor,
-        $highlightAlpha,
         HIGHLIGHT_FLASH_OPACITY,
         $highlightBlend,
       )};

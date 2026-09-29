@@ -41,6 +41,7 @@ import {
   targetKind,
   targetToValue,
   withConditionOption,
+  withTarget,
   type ConditionOption,
   type DraftRule,
   type RuleMove,
@@ -118,13 +119,16 @@ export const RuleRow: React.FC<Props> = ({
   onRemove,
 }) => {
   const target = ruleTargetOf(rule)
-  const kind = target ? targetKind(target, columns) : "other"
-  const conditionChoices = conditionOptions().map((descriptor) => ({
-    label: descriptor.label,
-    value: descriptor.value,
-    description:
-      descriptor.group === "previous" ? "vs previous result" : "vs value",
-  }))
+  const kind = target ? targetKind(target, columns) : null
+  const currentOption = rule.kind === "unset" ? null : conditionOptionOf(rule)
+  const conditionChoices = conditionOptions(kind, currentOption).map(
+    (descriptor) => ({
+      label: descriptor.label,
+      value: descriptor.value,
+      description:
+        descriptor.group === "previous" ? "vs previous result" : "vs value",
+    }),
+  )
   const targetOptions = [
     { label: ALL_NUMERIC_LABEL, value: ALL_NUMERIC_TARGET },
     ...columns.map((column) => ({
@@ -140,8 +144,6 @@ export const RuleRow: React.FC<Props> = ({
         : target.name
   const isUnset = rule.kind === "unset"
   const isNewRow = rule.kind === "newRow"
-  const currentOption = isUnset ? "" : conditionOptionOf(rule)
-
   const rangeOf = (target: RuleTarget) =>
     target.kind === "column" ? columnRange(target.name) : null
 
@@ -151,7 +153,7 @@ export const RuleRow: React.FC<Props> = ({
     const next: RuleTarget = option
       ? targetFromValue(value)
       : { kind: "column", name: value }
-    onChange({ ...rule, target: next })
+    onChange(withTarget(rule, next, columns))
   }
 
   const changeCondition = (option: string) => {
@@ -325,7 +327,7 @@ export const RuleRow: React.FC<Props> = ({
                 <CompactSelect
                   name={`rule-${rule.id}-condition`}
                   ariaLabel="Condition"
-                  value={currentOption}
+                  value={currentOption ?? ""}
                   placeholder="Condition"
                   options={conditionChoices}
                   onValueChange={changeCondition}
@@ -340,7 +342,7 @@ export const RuleRow: React.FC<Props> = ({
                 <RuleParameters>
                   <ConditionInputs
                     rule={rule}
-                    numeric={kind === "numeric"}
+                    kind={kind}
                     range={target ? rangeOf(target) : null}
                     errors={errors ?? {}}
                     onChange={onChange}
@@ -354,7 +356,7 @@ export const RuleRow: React.FC<Props> = ({
                   />
                 )}
                 <RuleAppearance>
-                  {betweenFill && (
+                  {betweenFill && (kind === null || kind === "numeric") && (
                     <RuleField>
                       <FieldLabel>Fill</FieldLabel>
                       <CompactSelect
@@ -364,6 +366,7 @@ export const RuleRow: React.FC<Props> = ({
                         options={FILL_OPTIONS}
                         onValueChange={changeFill}
                       />
+                      {errors?.fill && <FieldError>{errors.fill}</FieldError>}
                     </RuleField>
                   )}
                   {rule.kind !== "steps" && (

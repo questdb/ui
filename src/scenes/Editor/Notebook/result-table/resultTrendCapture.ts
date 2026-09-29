@@ -1,7 +1,7 @@
-import type { NotebookCell } from "../../../../store/notebook"
+import type { CellResult, NotebookCell } from "../../../../store/notebook"
 import { statementKeysFor } from "../notebookUtils"
 import { comparesWithPrevious } from "./highlightConfig"
-import type { ResultTrendStore } from "./resultTrendStore"
+import type { ResultLanding, ResultTrendStore } from "./resultTrendStore"
 
 // Only a comparison rule needs the previous rows, so any other cell keeps no
 // identity index and holds nothing beyond its live result.
@@ -10,12 +10,21 @@ const trackedIdentityColumns = (cell: NotebookCell): string[] =>
     ? cell.highlightConfig.identityColumns
     : []
 
+const landingOf = (
+  restoredResults: WeakSet<CellResult>,
+  result: CellResult,
+): ResultLanding =>
+  restoredResults.has(result)
+    ? { at: result.timestamp, restored: true }
+    : { at: Date.now(), restored: false }
+
 // The single writer of the trend store: runs on every cells change, before
 // React renders it, so the grid reads a baseline that matches its result.
-// A cell whose result or rules did not change is skipped; a released or
-// removed cell is forgotten.
+// A cell whose result or rules did not change is skipped. A released cell
+// keeps only its baseline for the rehydrate; a removed cell is forgotten.
 export const captureResultTrends = (
   store: ResultTrendStore,
+  restoredResults: WeakSet<CellResult>,
   prev: NotebookCell[],
   next: NotebookCell[],
 ) => {
@@ -30,14 +39,15 @@ export const captureResultTrends = (
       before.highlightConfig === cell.highlightConfig
     if (unchanged) continue
     if (!cell.result) {
-      store.clearCell(cell.id)
+      store.releaseCell(cell.id)
       continue
     }
     const keys = statementKeysFor(cell.result.results.map((r) => r.query))
     const identityColumns = trackedIdentityColumns(cell)
+    const landing = landingOf(restoredResults, cell.result)
     cell.result.results.forEach((result, index) => {
       if (result.type !== "dql") return
-      store.capture(cell.id, keys[index], result, identityColumns)
+      store.capture(cell.id, keys[index], result, identityColumns, landing)
     })
   }
 

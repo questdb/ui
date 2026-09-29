@@ -1,5 +1,5 @@
-import { parseInstant } from "./comparable"
-import { compilePattern } from "./evaluateHighlights"
+import { canonicalInstant, compareValues, type Comparable } from "./comparable"
+import { compilePattern } from "./pattern"
 import type { BetweenBound, HighlightRule } from "./types"
 
 // Field key → short message. Keys match the inputs in the rule editor; a
@@ -29,7 +29,7 @@ const unquoted = (value: number | string) =>
     .replace(/^['"]|['"]$/g, "")
 
 const isTimestamp = (value: number | string) =>
-  parseInstant(unquoted(value)) !== null
+  canonicalInstant(unquoted(value)) !== null
 
 const boundError = (value: number | string, kind: BoundKind): string | null => {
   if (isBlank(value)) return EMPTY
@@ -40,13 +40,16 @@ const boundError = (value: number | string, kind: BoundKind): string | null => {
   return null
 }
 
-const asNumber = (value: number | string, kind: BoundKind): number | null => {
+const asBoundComparable = (
+  value: number | string,
+  kind: BoundKind,
+): Comparable | null => {
   if (kind === "numeric") return Number(value)
-  if (kind === "temporal") return parseInstant(unquoted(value))
+  if (kind === "temporal") return canonicalInstant(unquoted(value))
   if (typeof value === "number") return value
   const numeric = Number(value)
   if (Number.isFinite(numeric)) return numeric
-  return parseInstant(unquoted(value))
+  return canonicalInstant(unquoted(value))
 }
 
 const fixedBound = (bound: BetweenBound): bound is number | string =>
@@ -111,12 +114,15 @@ export const validateRuleFields = (
           if (to) errors.to = to
           if (from || to) break
           if (!fixedBound(condition.from) || !fixedBound(condition.to)) break
-          const low = asNumber(condition.from, kind)
-          const high = asNumber(condition.to, kind)
-          if (low === null || high === null) break
-          if (condition.fill.kind === "gradient" && high <= low) {
+          const low = asBoundComparable(condition.from, kind)
+          const high = asBoundComparable(condition.to, kind)
+          if (low === null || high === null || typeof low !== typeof high) {
+            break
+          }
+          const order = compareValues(high, low)
+          if (condition.fill.kind === "gradient" && order <= 0) {
             errors.to = "Should be above From"
-          } else if (high < low) {
+          } else if (order < 0) {
             errors.to = "Should be at least From"
           }
           break

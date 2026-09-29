@@ -33,7 +33,7 @@ const Backdrop = styled.div<{ $exiting: boolean; $still: boolean }>`
   position: absolute;
   inset: 0;
   z-index: 3;
-  pointer-events: auto;
+  pointer-events: ${({ $exiting }) => ($exiting ? "none" : "auto")};
   background: ${({ theme }) => theme.color.shadowMedium};
   animation-name: ${({ $exiting, $still }) =>
     $exiting ? fadeOut : $still ? "none" : fadeIn};
@@ -63,7 +63,7 @@ const Panel = styled.div<{
     $presentation === "drawer" ? "0 0 auto" : "0 0 clamp(26rem, 30%, 34rem)"};
   min-width: 0;
   min-height: 0;
-  pointer-events: auto;
+  pointer-events: ${({ $exiting }) => ($exiting ? "none" : "auto")};
   z-index: ${({ $presentation }) => ($presentation === "drawer" ? "4" : "1")};
   background: ${({ theme, $presentation }) =>
     $presentation === "drawer"
@@ -130,13 +130,11 @@ const FooterStart = styled.div`
 const isRadixPopperOpen = () =>
   document.querySelector("[data-radix-popper-content-wrapper]") !== null
 
-type Props = {
-  presentation: SettingsPresentation
+type SharedProps = {
   open: boolean
   title: string
   dataHookBase: string
   onDismiss: (method: SettingsDismissMethod) => void
-  onReset: () => void
   onCommit: () => void
   footerStart?: React.ReactNode
   // Shown next to the action buttons, e.g. a validation summary.
@@ -148,25 +146,34 @@ type Props = {
   children: React.ReactNode
 }
 
-export const SettingsDrawerShell: React.FC<Props> = ({
-  presentation,
-  open,
-  title,
-  dataHookBase,
-  onDismiss,
-  onReset,
-  onCommit,
-  footerStart,
-  footerNote,
-  drawerWidth = DRAWER_WIDTH,
-  appearInPlace = false,
-  children,
-}) => {
+// A panel's secondary action resets the draft in place; a drawer's cancels.
+type PresentationProps =
+  | { presentation: "drawer" }
+  | { presentation: "panel"; onReset: () => void }
+
+type Props = SharedProps & PresentationProps
+
+export const SettingsDrawerShell: React.FC<Props> = (props) => {
+  const {
+    presentation,
+    open,
+    title,
+    dataHookBase,
+    onDismiss,
+    onCommit,
+    footerStart,
+    footerNote,
+    drawerWidth = DRAWER_WIDTH,
+    appearInPlace = false,
+    children,
+  } = props
   const popperOpenAtPointerDownRef = useRef(false)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const [exiting, setExiting] = useState(false)
   const [wasOpen, setWasOpen] = useState(open)
   const [still, setStill] = useState(open && appearInPlace)
-  const isDrawer = presentation === "drawer"
+  const isDrawer = props.presentation === "drawer"
+  const secondaryAction = isDrawer ? () => onDismiss("button") : props.onReset
   // A closing drawer stays mounted until its slide-out ends. Reduced motion
   // drops it at once, as before.
   if (open !== wasOpen) {
@@ -191,6 +198,16 @@ export const SettingsDrawerShell: React.FC<Props> = ({
   const handlePanelAnimationEnd = (e: React.AnimationEvent) => {
     if (exiting && e.target === e.currentTarget) setExiting(false)
   }
+
+  // A sliding-out drawer takes no clicks (see Panel) and no keys: a focused
+  // input would still submit on Enter, and a focused button still activate.
+  useEffect(() => {
+    if (!exiting) return
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && panelRef.current?.contains(focused)) {
+      focused.blur()
+    }
+  }, [exiting])
 
   useEffect(() => {
     if (!open || !isDrawer) return
@@ -218,6 +235,7 @@ export const SettingsDrawerShell: React.FC<Props> = ({
         />
       )}
       <Panel
+        ref={panelRef}
         $presentation={presentation}
         $drawerWidth={drawerWidth}
         $exiting={exiting}
@@ -253,11 +271,7 @@ export const SettingsDrawerShell: React.FC<Props> = ({
         <Footer>
           {footerStart && <FooterStart>{footerStart}</FooterStart>}
           {footerNote}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => (isDrawer ? onDismiss("button") : onReset())}
-          >
+          <Button type="button" variant="secondary" onClick={secondaryAction}>
             {isDrawer ? "Cancel" : "Reset changes"}
           </Button>
           <Button type="button" variant="primary" onClick={onCommit}>

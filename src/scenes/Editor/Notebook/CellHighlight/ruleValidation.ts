@@ -2,22 +2,31 @@ import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
   validateRuleFields,
   type BoundKind,
+  type ColumnKind,
   type RuleErrors,
 } from "../../../../components/ResultGrid/highlight"
-import { targetKind, type DraftConfig, type DraftRule } from "./ruleDraft"
+import {
+  conditionFitsKind,
+  conditionOptionOf,
+  targetKind,
+  type DraftConfig,
+  type DraftRule,
+} from "./ruleDraft"
 
 export {
   stepErrorKey,
   type RuleErrors,
 } from "../../../../components/ResultGrid/highlight"
 
-const boundKindOf = (
-  rule: DraftRule,
-  columns: ColumnDefinition[],
-): BoundKind => {
-  if (rule.kind === "unset" || rule.kind === "newRow") return "unknown"
-  const kind = targetKind(rule.target, columns)
-  return kind === "numeric" || kind === "temporal" ? kind : "unknown"
+const boundKindOf = (kind: ColumnKind | null): BoundKind =>
+  kind === "numeric" || kind === "temporal" ? kind : "unknown"
+
+const KIND_LABELS: Record<ColumnKind, string> = {
+  numeric: "a numeric",
+  temporal: "a timestamp",
+  text: "a text",
+  boolean: "a boolean",
+  other: "this",
 }
 
 export const validateRule = (
@@ -29,13 +38,22 @@ export const validateRule = (
       ? { condition: "Choose a condition" }
       : { column: "Choose a column" }
   }
-  const errors = validateRuleFields(rule, boundKindOf(rule, columns))
+  if (rule.kind === "newRow") return validateRuleFields(rule, "unknown")
+  if (rule.target.kind === "column" && !rule.target.name.trim()) {
+    return { column: "Choose a column" }
+  }
+  const kind = targetKind(rule.target, columns)
+  if (!conditionFitsKind(conditionOptionOf(rule), kind)) {
+    return { condition: `Not for ${KIND_LABELS[kind ?? "other"]} column` }
+  }
+  const errors = validateRuleFields(rule, boundKindOf(kind))
   if (
-    rule.kind !== "newRow" &&
-    rule.target.kind === "column" &&
-    !rule.target.name.trim()
+    kind === "temporal" &&
+    rule.kind === "value" &&
+    rule.condition.op === "between" &&
+    rule.condition.fill.kind === "gradient"
   ) {
-    return { column: "Choose a column", ...errors }
+    return { fill: "Gradient needs a numeric column", ...errors }
   }
   return errors
 }

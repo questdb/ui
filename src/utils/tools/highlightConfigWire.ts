@@ -102,13 +102,9 @@ const fail = (index: number, message: string): MappedRule => ({
   error: `rules[${index}]: ${message}`,
 })
 
-const mapRule = (
-  rule: HighlightRuleWire,
-  index: number,
-  createId: () => string,
-): MappedRule => {
+const mapRule = (rule: HighlightRuleWire, index: number): MappedRule => {
   const base = {
-    id: createId(),
+    id: createRuleId(),
     enabled: rule.enabled !== false,
     target: targetOf(rule.column),
   }
@@ -289,7 +285,7 @@ const mapRule = (
           return fail(index, "each step needs a numeric from and a color")
         }
         steps.push({
-          id: createId(),
+          id: createRuleId(),
           from: step.from,
           color: tokenOfHue(step.color),
         })
@@ -319,7 +315,6 @@ const mapRule = (
 
 export const fromHighlightConfigWire = (
   wire: HighlightConfigWire,
-  createId: () => string = createRuleId,
 ): HighlightWireResult => {
   if (
     !Array.isArray(wire.identity_columns) ||
@@ -332,7 +327,7 @@ export const fromHighlightConfigWire = (
   }
   const rules: HighlightRule[] = []
   for (const [index, rule] of wire.rules.entries()) {
-    const mapped = mapRule(rule, index, createId)
+    const mapped = mapRule(rule, index)
     if (!mapped.ok) return { ok: false, error: mapped.error }
     // The load-time check drops a whole config on reload, so a rule it would
     // refuse must fail here instead.

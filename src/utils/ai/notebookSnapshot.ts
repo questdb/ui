@@ -5,7 +5,10 @@ import {
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
 import { NotebookToolError } from "../notebooks/notebookToolError"
-import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
+import {
+  sanitizeForPromptContext,
+  stringifyForPromptContext,
+} from "./sanitizeForPromptContext"
 import type {
   AutoRefresh,
   CellLayoutItem,
@@ -312,16 +315,12 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       lines.push(`      is_view_maximized: ${c.is_view_maximized}`)
     if (c.chart_config) {
       lines.push(
-        `      chart_config: ${sanitizeForPromptContext(
-          JSON.stringify(c.chart_config),
-        )}`,
+        `      chart_config: ${stringifyForPromptContext(c.chart_config)}`,
       )
     }
     if (c.highlight_config) {
       lines.push(
-        `      highlight_config: ${sanitizeForPromptContext(
-          JSON.stringify(c.highlight_config),
-        )}`,
+        `      highlight_config: ${stringifyForPromptContext(c.highlight_config)}`,
       )
     }
     if (c.last_run_status)

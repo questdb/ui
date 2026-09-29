@@ -1,5 +1,6 @@
-import React from "react"
+import React, { useEffect } from "react"
 import { ResultGridPanel } from "./ResultGridPanel"
+import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
 import { StatusNotification } from "./StatusNotification"
 import { TabBar } from "./TabBar"
 import { ResultWrapper, SuccessMessage } from "./styles"
@@ -41,6 +42,18 @@ export const InlineResultTable: React.FC<Props> = ({
   highlightConfig,
   cellColumns,
 }) => {
+  const activeSlot = slots[activeSlotIndex] ?? slots[0]
+  const activeResult = activeSlot?.result
+  const isMultiQuery = slots.length > 1
+  const hasGrid =
+    activeResult?.type === "dql" && activeResult.columns.length > 0
+
+  // A run or an error takes the grid away; the drawer session it carried must
+  // not bring the drawer back when a later result mounts a grid again.
+  useEffect(() => {
+    if (!hasGrid) highlightSettingsSessions.clear(cellId)
+  }, [hasGrid, cellId])
+
   if (slots.length === 0) {
     return (
       <ResultWrapper>
@@ -48,10 +61,6 @@ export const InlineResultTable: React.FC<Props> = ({
       </ResultWrapper>
     )
   }
-
-  const activeSlot = slots[activeSlotIndex] ?? slots[0]
-  const activeResult = activeSlot.result
-  const isMultiQuery = slots.length > 1
 
   return (
     <ResultWrapper>
@@ -69,7 +78,7 @@ export const InlineResultTable: React.FC<Props> = ({
         onCancelQuery={onCancelQuery}
       />
 
-      {activeResult?.type === "dql" && activeResult.columns.length > 0 && (
+      {hasGrid && (
         <ResultGridPanel
           key={activeSlot.key}
           data={activeResult}

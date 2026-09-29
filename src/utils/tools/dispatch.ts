@@ -1,4 +1,5 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
@@ -952,6 +953,7 @@ export const dispatchTool = async (
         const highlightBaseline = getBufferActionSeq(buffer_id)
         let config = null
         if (highlight_config) {
+          await loadRe2()
           const parsed = fromHighlightConfigWire(highlight_config)
           if (!parsed.ok) {
             return {

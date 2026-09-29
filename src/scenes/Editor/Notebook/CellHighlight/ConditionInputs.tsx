@@ -1,6 +1,7 @@
 import React from "react"
 import type {
   BetweenBound,
+  ColumnKind,
   ColumnRange,
   HighlightRule,
 } from "../../../../components/ResultGrid/highlight"
@@ -28,30 +29,36 @@ const parseBound = (raw: string, numeric: boolean): BetweenBound =>
 
 const compact = (value: number) => String(Number(value.toPrecision(6)))
 
-const autoPlaceholder = (
-  end: keyof ColumnRange,
-  numeric: boolean,
-  range: ColumnRange | null,
-) =>
-  numeric && range
-    ? `auto · ${compact(range[end])}`
+const autoPlaceholder = (end: keyof ColumnRange, range: ColumnRange | null) => {
+  const bound = range?.[end]
+  return typeof bound === "number"
+    ? `auto · ${compact(bound)}`
     : `auto (${end === "from" ? "min" : "max"})`
-
-// Uncontrolled so the field can be emptied while typing; the draft keeps its
-// last value until a new magnitude (0 or more) is typed.
-const parseThreshold = (raw: string): number | null => {
-  if (raw.trim() === "") return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
 }
+
+const TIMESTAMP_PLACEHOLDER = "2026-09-28T10:00:00.000000Z"
+
+const valuePlaceholder = (kind: ColumnKind | null) =>
+  kind === "numeric"
+    ? "100"
+    : kind === "temporal"
+      ? TIMESTAMP_PLACEHOLDER
+      : "EURUSD"
+
+// An emptied number field is kept as NaN so Save can flag it.
+const parseNumberField = (raw: string): number =>
+  raw.trim() === "" ? NaN : Number(raw)
+
+const numberFieldValue = (value: number) => (Number.isNaN(value) ? "" : value)
 
 export const ConditionInputs: React.FC<{
   rule: HighlightRule
-  numeric: boolean
+  kind: ColumnKind | null
   range: ColumnRange | null
   errors: RuleErrors
   onChange: (rule: HighlightRule) => void
-}> = ({ rule, numeric, range, errors, onChange }) => {
+}> = ({ rule, kind, range, errors, onChange }) => {
+  const numeric = kind === "numeric"
   const inputType = numeric ? "number" : "text"
   const variantFor = (field: string) => (errors[field] ? "error" : undefined)
   const errorFor = (field: string) =>
@@ -70,13 +77,16 @@ export const ConditionInputs: React.FC<{
               min="0"
               variant={variantFor("threshold")}
               aria-label="Change threshold"
-              defaultValue={condition.threshold}
-              onChange={(e) => {
-                const threshold = parseThreshold(e.target.value)
-                if (threshold !== null) {
-                  onChange({ ...rule, condition: { ...condition, threshold } })
-                }
-              }}
+              value={numberFieldValue(condition.threshold)}
+              onChange={(e) =>
+                onChange({
+                  ...rule,
+                  condition: {
+                    ...condition,
+                    threshold: parseNumberField(e.target.value),
+                  },
+                })
+              }
             />
             {errorFor("threshold")}
           </RuleField>
@@ -156,7 +166,7 @@ export const ConditionInputs: React.FC<{
                   step="any"
                   variant={variantFor("from")}
                   aria-label="From"
-                  placeholder={autoPlaceholder("from", numeric, range)}
+                  placeholder={autoPlaceholder("from", range)}
                   value={condition.from ?? ""}
                   onChange={(e) =>
                     onChange({
@@ -177,7 +187,7 @@ export const ConditionInputs: React.FC<{
                   step="any"
                   variant={variantFor("to")}
                   aria-label="To"
-                  placeholder={autoPlaceholder("to", numeric, range)}
+                  placeholder={autoPlaceholder("to", range)}
                   value={condition.to ?? ""}
                   onChange={(e) =>
                     onChange({
@@ -202,7 +212,7 @@ export const ConditionInputs: React.FC<{
                 step="any"
                 variant={variantFor("value")}
                 aria-label="Value"
-                placeholder={numeric ? "100" : "EURUSD"}
+                placeholder={valuePlaceholder(kind)}
                 value={condition.value}
                 onChange={(e) =>
                   onChange({

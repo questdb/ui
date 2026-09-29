@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it } from "vitest"
+import { loadRe2 } from "./pattern"
 import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { ResultGridRow } from "../types"
 import { evaluateHighlights } from "./evaluateHighlights"
@@ -9,6 +10,8 @@ import type {
   RuleTarget,
   ValueCondition,
 } from "./types"
+
+beforeAll(() => loadRe2())
 
 const columns: ColumnDefinition[] = [
   { name: "symbol", type: "SYMBOL" },
@@ -79,7 +82,6 @@ describe("evaluateHighlights: previous result rules", () => {
     // Then each cell gets the matching color and direction
     expect(lookup.background(0, PRICE)).toEqual({
       color: "dataPositive",
-      alpha: 1,
       display: "temporary",
     })
     expect(lookup.direction(0, PRICE)).toBe("up")
@@ -163,6 +165,47 @@ describe("evaluateHighlights: previous result rules", () => {
 
     // Then the text cell is highlighted
     expect(lookup.background(0, 1)?.color).toBe("dataSeries2")
+  })
+
+  it("compares array cells by content, so an equal array is not a change", () => {
+    // Given a changed rule on an array column, and rows whose arrays arrive as new objects
+    const arrayColumns: ColumnDefinition[] = [
+      { name: "id", type: "LONG" },
+      { name: "bids", type: "ARRAY" },
+    ]
+    const previous = buildIdentityIndex(
+      [
+        [1, [1.5, 2.5]],
+        [2, [[1, 2], [3]]],
+        [3, [1.5, 2.5]],
+      ] as ResultGridRow[],
+      [0],
+    )
+    const rules = [
+      rule({
+        kind: "previous",
+        target: { kind: "column", name: "bids" },
+        condition: { op: "changed" },
+        color: "dataSeries2",
+      }),
+    ]
+
+    // When one array is equal, one is nested differently, and one has another value
+    const { lookup } = evaluateHighlights({
+      columns: arrayColumns,
+      dataset: [
+        [1, [1.5, 2.5]],
+        [2, [[1], [2, 3]]],
+        [3, [1.5, 2.6]],
+      ] as ResultGridRow[],
+      config: config(rules, ["id"]),
+      previous,
+    })
+
+    // Then only the arrays whose content differs are highlighted
+    expect(lookup.background(0, 1)).toBeUndefined()
+    expect(lookup.background(1, 1)?.color).toBe("dataSeries2")
+    expect(lookup.background(2, 1)?.color).toBe("dataSeries2")
   })
 
   it("applies an absolute and a percent threshold, and never matches a zero baseline in percent", () => {
@@ -292,6 +335,46 @@ describe("evaluateHighlights: previous result rules", () => {
     expect(lookup.direction(0, TS)).toBe("up")
     expect(lookup.background(1, TS)?.color).toBe("dataNegative")
     expect(lookup.direction(1, TS)).toBe("down")
+  })
+
+  it("compares timestamps at nanosecond precision", () => {
+    // Given up and down rules on ts
+    const later = rule({
+      id: "later",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const earlier = rule({
+      id: "earlier",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "lt" },
+      color: "dataNegative",
+    })
+
+    // When a timestamp moves by one microsecond, one by a nanosecond, and one not at all
+    const { lookup } = evaluateHighlights({
+      columns,
+      dataset: [
+        row("A", 1, 1, "2026-09-24T10:00:00.369374Z"),
+        row("B", 1, 1, "2026-09-24T10:00:00.369373999Z"),
+        row("C", 1, 1, "2026-09-24T10:00:00.369373Z"),
+      ],
+      config: config([later, earlier]),
+      previous: previousOf([
+        row("A", 1, 1, "2026-09-24T10:00:00.369373Z"),
+        row("B", 1, 1, "2026-09-24T10:00:00.369374000Z"),
+        row("C", 1, 1, "2026-09-24T10:00:00.369373000Z"),
+      ]),
+    })
+
+    // Then the smallest move is seen, and an equal instant in another layout is not a move
+    expect(lookup.direction(0, TS)).toBe("up")
+    expect(lookup.direction(1, TS)).toBe("down")
+    expect(lookup.direction(2, TS)).toBeUndefined()
+    expect(lookup.background(2, TS)).toBeUndefined()
   })
 
   it("keeps the direction glyph when a value rule wins the background", () => {
@@ -454,6 +537,30 @@ describe("evaluateHighlights: value rules", () => {
     // Then only the later row matches
     expect(lookup.background(0, TS)).toBeDefined()
     expect(lookup.background(1, TS)).toBeUndefined()
+  })
+
+  it("matches a timestamp literal exactly, whatever its fraction length", () => {
+    // Given an = rule with a microsecond literal
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "ts" },
+        condition: { op: "eq", value: "2026-09-24T10:00:00.369373Z" },
+        color: "dataSeries5",
+      }),
+    ]
+
+    // When rows differ from it by a microsecond or only in layout
+    const lookup = evaluate(rules, [
+      row("A", 1, 1, "2026-09-24T10:00:00.369373000Z"),
+      row("A", 1, 1, "2026-09-24T10:00:00.369374Z"),
+      row("A", 1, 1, "2026-09-24T10:00:00.369372Z"),
+    ])
+
+    // Then only the same instant matches
+    expect(lookup.background(0, TS)).toBeDefined()
+    expect(lookup.background(1, TS)).toBeUndefined()
+    expect(lookup.background(2, TS)).toBeUndefined()
   })
 
   it("matches null and text contains", () => {
@@ -698,7 +805,6 @@ describe("evaluateHighlights: rules that apply to the row", () => {
     // Then every cell of the breaching row gets the color
     expect(lookup.row(0)).toEqual({
       color: "dataSeries10",
-      alpha: 1,
       display: "always",
     })
     expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries10")
@@ -951,7 +1057,6 @@ describe("evaluateHighlights: steps and gradient fill", () => {
     // Then the blend ratio follows the position and is clamped at the ends
     expect(lookup.background(0, PRICE)).toEqual({
       color: "dataNegative",
-      alpha: 1,
       display: "always",
       blend: { color: "dataPositive", ratio: 0 },
     })
@@ -994,6 +1099,45 @@ describe("evaluateHighlights: steps and gradient fill", () => {
     expect(solid.background(1, PRICE)?.color).toBe("dataSeries3")
   })
 
+  it("keeps a gradient clamped at its fixed bound when the data lies beyond it", () => {
+    // Given a floor of 100 with an automatic top, and a ceiling of 100 with an automatic bottom
+    const floor = rule({
+      id: "floor",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: 100,
+        to: null,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+    const ceiling = rule({
+      id: "ceiling",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: null,
+        to: 100,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+
+    // When every value sits below the floor, and every value sits above the ceiling
+    const belowFloor = evaluate([floor], [row("A", 10, 1), row("B", 50, 1)])
+    const aboveCeiling = evaluate(
+      [ceiling],
+      [row("A", 200, 1), row("B", 300, 1)],
+    )
+
+    // Then the cells take the color of the bound they are beyond
+    expect(belowFloor.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(belowFloor.background(1, PRICE)?.blend?.ratio).toBe(0)
+    expect(aboveCeiling.background(0, PRICE)?.blend?.ratio).toBe(1)
+    expect(aboveCeiling.background(1, PRICE)?.blend?.ratio).toBe(1)
+  })
+
   it("leaves a solid between rule as a plain range match", () => {
     // Given the same range with a solid fill
     const rules = [
@@ -1010,5 +1154,51 @@ describe("evaluateHighlights: steps and gradient fill", () => {
     // Then it does not match, and an inside value carries no blend
     expect(lookup.background(0, PRICE)).toBeUndefined()
     expect(lookup.background(1, PRICE)?.blend).toBeUndefined()
+  })
+})
+
+describe("evaluateHighlights: direction slot", () => {
+  it("reserves a slot only for a column with an up or down rule and a baseline", () => {
+    // Given an up rule on price and a changed rule on amount
+    const previous = previousOf([row("BTC", 100, 1)])
+    const dataset = [row("BTC", 100, 1)]
+    const rules = [
+      rule({
+        id: "up",
+        kind: "previous",
+        condition: { op: "gt" },
+        color: "dataPositive",
+        display: "temporary",
+      }),
+      rule({
+        id: "moved",
+        kind: "previous",
+        target: { kind: "column", name: "amount" },
+        condition: { op: "changed" },
+        color: "dataSeries2",
+        display: "temporary",
+      }),
+    ]
+
+    // When evaluated against a baseline and without one
+    const compared = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous,
+    })
+    const first = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous: null,
+    })
+
+    // Then price keeps its slot even while unchanged, amount never gets one,
+    // and no slot is reserved before there is a baseline
+    expect(compared.lookup.hasDirection(PRICE)).toBe(true)
+    expect(compared.lookup.direction(0, PRICE)).toBeUndefined()
+    expect(compared.lookup.hasDirection(AMOUNT)).toBe(false)
+    expect(first.lookup.hasDirection(PRICE)).toBe(false)
   })
 })

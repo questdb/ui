@@ -4,6 +4,8 @@ export { defaultIdentityColumns } from "./defaultIdentity"
 export { createRuleId } from "./ruleId"
 export { columnRangeOf, type ColumnRange } from "./columnRange"
 export { evaluateHighlights } from "./evaluateHighlights"
+export { isRe2Ready, loadRe2, usesPatterns } from "./pattern"
+export { useRe2Ready } from "./useRe2Ready"
 export { isHighlightConfig, isHighlightRule } from "./isHighlightConfig"
 export {
   validateRuleFields,

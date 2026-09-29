@@ -6,7 +6,6 @@ export type SettingsDrawerSessionStore<Session> = {
   set: (key: string, session: Session) => void
   update: (key: string, patch: Partial<Session>) => void
   clear: (key: string) => void
-  clearWhere: (predicate: (key: string) => boolean) => void
 }
 
 export const createSettingsDrawerSessionStore = <
@@ -24,11 +23,6 @@ export const createSettingsDrawerSessionStore = <
     },
     clear: (key) => {
       sessions.delete(key)
-    },
-    clearWhere: (predicate) => {
-      for (const key of [...sessions.keys()]) {
-        if (predicate(key)) sessions.delete(key)
-      }
     },
   }
 }

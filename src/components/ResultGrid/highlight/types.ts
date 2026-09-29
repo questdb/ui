@@ -120,7 +120,6 @@ export type HighlightConfig = {
 // other hue); only a gradient fill sets it.
 export type CellHighlight = {
   color: HighlightColorToken
-  alpha: number
   display: HighlightDisplay
   blend?: { color: HighlightColorToken; ratio: number }
 }

@@ -1,14 +1,20 @@
-import { RE2JS } from "re2js"
 import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { CellValue, ResultGridRow } from "../types"
 import { columnKindOf, type ColumnKind } from "./columnKind"
 import { columnRangeAt, type ColumnRange } from "./columnRange"
-import { asComparable, asNumber, parseInstant } from "./comparable"
+import {
+  asComparable,
+  asNumber,
+  canonicalInstant,
+  compareValues,
+  type Comparable,
+} from "./comparable"
 import {
   identityColumnIndexes,
   identityKeyOf,
   type IdentityIndex,
 } from "./identityIndex"
+import { compilePattern, type PatternTest } from "./pattern"
 import type {
   BetweenBound,
   CellDirection,
@@ -21,6 +27,7 @@ import type {
   PreviousRule,
   StepsRule,
   TargetedRule,
+  ValueCondition,
   ValueRule,
 } from "./types"
 
@@ -45,52 +52,11 @@ const asText = (value: number | string): string => {
   return quoted ? text.slice(1, -1) : text
 }
 
-export type PatternTest = (text: string) => boolean
-
-const RE2_FLAGS: Record<string, number> = {
-  i: RE2JS.CASE_INSENSITIVE,
-  m: RE2JS.MULTILINE,
-  s: RE2JS.DOTALL,
-}
-
-// g changes nothing for a single test, and RE2 is Unicode-aware by default.
-const NO_EFFECT_FLAGS = new Set(["g", "u"])
-
-const re2FlagBits = (flags: string): number | null => {
-  let bits = 0
-  for (const flag of flags) {
-    if (NO_EFFECT_FLAGS.has(flag)) continue
-    const bit = RE2_FLAGS[flag]
-    if (bit === undefined) return null
-    bits |= bit
-  }
-  return bits
-}
-
-// `/pattern/flags` carries flags; a bare pattern is case-sensitive. RE2 matches
-// in linear time, so no pattern a user or an agent sends can stall the grid;
-// the price is no backreferences and no lookarounds. A pattern that does not
-// compile never matches instead of throwing mid-render.
-export const compilePattern = (pattern: string): PatternTest | null => {
-  const text = pattern.trim()
-  const slashed = /^\/(.+)\/([a-z]*)$/.exec(text)
-  const source = slashed ? slashed[1] : text
-  const flags = slashed ? slashed[2] : ""
-  const bits = re2FlagBits(flags)
-  if (bits === null) return null
-  try {
-    const compiled = RE2JS.compile(source, bits)
-    return (value) => compiled.test(value)
-  } catch {
-    return null
-  }
-}
-
 const asComparableInput = (
   value: number | string,
   kind: ColumnKind,
-): number | null => {
-  if (kind === "temporal") return parseInstant(asText(value))
+): Comparable | null => {
+  if (kind === "temporal") return canonicalInstant(asText(value))
   const parsed = typeof value === "number" ? value : Number(asText(value))
   return Number.isFinite(parsed) ? parsed : null
 }
@@ -100,8 +66,34 @@ const asBound = (
   end: keyof ColumnRange,
   kind: ColumnKind,
   range: ColumnRange | null,
-): number | null =>
+): Comparable | null =>
   bound === null ? (range?.[end] ?? null) : asComparableInput(bound, kind)
+
+const lower = (a: Comparable, b: Comparable) =>
+  compareValues(a, b) <= 0 ? a : b
+
+const higher = (a: Comparable, b: Comparable) =>
+  compareValues(a, b) >= 0 ? a : b
+
+// An automatic bound follows the data, but never crosses the fixed one: when
+// every value sits beyond it, the range collapses onto the fixed bound and
+// the scale keeps its direction.
+const resolveBetweenBounds = (
+  condition: Extract<ValueCondition, { op: "between" }>,
+  kind: ColumnKind,
+  range: ColumnRange | null,
+): ColumnRange | null => {
+  const from = asBound(condition.from, "from", kind, range)
+  const to = asBound(condition.to, "to", kind, range)
+  if (from === null || to === null) return null
+  if (condition.from === null && condition.to !== null) {
+    return { from: lower(from, to), to }
+  }
+  if (condition.to === null && condition.from !== null) {
+    return { from, to: higher(to, from) }
+  }
+  return { from, to }
+}
 
 const resolveTargets = (
   rule: TargetedRule,
@@ -146,26 +138,37 @@ const directionColumns = (rules: ColumnRules): Set<number> => {
   return result
 }
 
+// Array cells arrive as fresh arrays on every result, so they compare by
+// content.
+const sameCellValue = (a: CellValue, b: CellValue): boolean =>
+  a === b ||
+  (Array.isArray(a) &&
+    Array.isArray(b) &&
+    JSON.stringify(a) === JSON.stringify(b))
+
 const matchPrevious = (
   rule: PreviousRule,
   value: CellValue,
   previousValue: CellValue,
   kind: ColumnKind,
 ): CellHighlight | undefined => {
-  const hit = { color: rule.color, alpha: 1, display: rule.display }
+  const hit = { color: rule.color, display: rule.display }
   const condition = rule.condition
   if (condition.op === "changed") {
-    return value !== previousValue ? hit : undefined
+    return sameCellValue(value, previousValue) ? undefined : hit
   }
   const current = asComparable(value, kind)
   const previous = asComparable(previousValue, kind)
   if (current === null || previous === null) return undefined
   switch (condition.op) {
     case "gt":
-      return current > previous ? hit : undefined
+      return compareValues(current, previous) > 0 ? hit : undefined
     case "lt":
-      return current < previous ? hit : undefined
+      return compareValues(current, previous) < 0 ? hit : undefined
     case "changedBy": {
+      if (typeof current !== "number" || typeof previous !== "number") {
+        return undefined
+      }
       const delta = Math.abs(current - previous)
       // A threshold of 0 means "any change"; an unchanged cell never matches.
       if (delta === 0) return undefined
@@ -182,18 +185,19 @@ const matchPrevious = (
 
 const compare = (
   op: "gt" | "gte" | "lt" | "lte",
-  current: number,
-  expected: number,
+  current: Comparable,
+  expected: Comparable,
 ): boolean => {
+  const order = compareValues(current, expected)
   switch (op) {
     case "gt":
-      return current > expected
+      return order > 0
     case "gte":
-      return current >= expected
+      return order >= 0
     case "lt":
-      return current < expected
+      return order < 0
     case "lte":
-      return current <= expected
+      return order <= 0
   }
 }
 
@@ -204,7 +208,7 @@ const matchValue = (
   pattern: PatternTest | null,
   range: ColumnRange | null,
 ): CellHighlight | undefined => {
-  const hit = { color: rule.color, alpha: 1, display: rule.display }
+  const hit = { color: rule.color, display: rule.display }
   const condition = rule.condition
   switch (condition.op) {
     case "isNull":
@@ -222,7 +226,11 @@ const matchValue = (
       if (kind === "numeric" || kind === "temporal") {
         const current = asComparable(value, kind)
         const expected = asComparableInput(condition.value, kind)
-        return current !== null && current === expected ? hit : undefined
+        return current !== null &&
+          expected !== null &&
+          compareValues(current, expected) === 0
+          ? hit
+          : undefined
       }
       return value !== null &&
         String(value).toLowerCase() === asText(condition.value).toLowerCase()
@@ -240,16 +248,23 @@ const matchValue = (
     }
     case "between": {
       const current = asComparable(value, kind)
-      const from = asBound(condition.from, "from", kind, range)
-      const to = asBound(condition.to, "to", kind, range)
-      if (current === null || from === null || to === null) return undefined
+      const bounds = resolveBetweenBounds(condition, kind, range)
+      if (current === null || bounds === null) return undefined
+      const { from, to } = bounds
+      const inRange =
+        compareValues(current, from) >= 0 && compareValues(current, to) <= 0
       if (condition.fill.kind === "solid") {
-        return current >= from && current <= to ? hit : undefined
+        return inRange ? hit : undefined
+      }
+      if (
+        typeof current !== "number" ||
+        typeof from !== "number" ||
+        typeof to !== "number"
+      ) {
+        return undefined
       }
       const ratio =
-        to === from
-          ? 1
-          : Math.min(1, Math.max(0, (current - from) / (to - from)))
+        current >= to ? 1 : current <= from ? 0 : (current - from) / (to - from)
       return { ...hit, blend: { color: condition.fill.highColor, ratio } }
     }
   }
@@ -267,7 +282,6 @@ const matchSteps = (
   const step = sortedSteps.find((candidate) => current >= candidate.from)
   return {
     color: step?.color ?? rule.baseColor,
-    alpha: 1,
     display: rule.display,
   }
 }
@@ -283,10 +297,10 @@ const directionOf = (
 ): CellDirection | undefined => {
   const current = asComparable(value, kind)
   const previous = asComparable(previousValue, kind)
-  if (current === null || previous === null || current === previous) {
-    return undefined
-  }
-  return current > previous ? "up" : "down"
+  if (current === null || previous === null) return undefined
+  const order = compareValues(current, previous)
+  if (order === 0) return undefined
+  return order > 0 ? "up" : "down"
 }
 
 const createRuleMatchers = (
@@ -346,6 +360,72 @@ const createRuleMatchers = (
   }
 }
 
+type RowEvaluation = {
+  cells: Map<number, OrderedHit>
+  row: OrderedHit | undefined
+  directions: Map<number, CellDirection>
+}
+
+const EMPTY_ROW: RowEvaluation = {
+  cells: new Map(),
+  row: undefined,
+  directions: new Map(),
+}
+
+type Comparison = {
+  previous: IdentityIndex
+  identityIndexes: number[]
+  firstRowByKey: Map<string, number>
+  stats: MatchStats
+}
+
+// The first row of an identity key is the one that compares; a later
+// duplicate is ambiguous and compares with nothing. One pass over the keys
+// settles that for every row and yields the match stats.
+const compareRows = (
+  dataset: ResultGridRow[],
+  previous: IdentityIndex,
+  identityIndexes: number[],
+): Comparison => {
+  const firstRowByKey = new Map<string, number>()
+  const stats: MatchStats = {
+    total: dataset.length,
+    matched: 0,
+    added: 0,
+    ambiguous: 0,
+  }
+  dataset.forEach((row, rowIndex) => {
+    const key = identityKeyOf(row, identityIndexes)
+    if (firstRowByKey.has(key)) {
+      stats.ambiguous++
+      return
+    }
+    firstRowByKey.set(key, rowIndex)
+    if (previous.rows.has(key)) stats.matched++
+    else if (!previous.ambiguous.has(key)) stats.added++
+  })
+  return { previous, identityIndexes, firstRowByKey, stats }
+}
+
+const previousRowOf = (
+  comparison: Comparison | null,
+  row: ResultGridRow,
+  rowIndex: number,
+): { previousRow: ResultGridRow | undefined; added: boolean } => {
+  if (comparison === null) return { previousRow: undefined, added: false }
+  const key = identityKeyOf(row, comparison.identityIndexes)
+  if (comparison.firstRowByKey.get(key) !== rowIndex) {
+    return { previousRow: undefined, added: false }
+  }
+  const previousRow = comparison.previous.rows.get(key)
+  return {
+    previousRow,
+    added: previousRow === undefined && !comparison.previous.ambiguous.has(key),
+  }
+}
+
+// Rules run per row on first lookup, so a refresh pays for the rows the grid
+// renders rather than for the whole result.
 export const evaluateHighlights = ({
   columns,
   dataset,
@@ -357,38 +437,23 @@ export const evaluateHighlights = ({
   const directions = directionColumns(rules)
   const matchRule = createRuleMatchers(rules, columns, dataset)
   const identityIndexes = identityColumnIndexes(columns, config.identityColumns)
-  const canCompare = previous !== null && identityIndexes !== null
-
-  const background = new Map<number, OrderedHit>()
-  const rowBackground = new Map<number, OrderedHit>()
-  const direction = new Map<number, CellDirection>()
+  const comparison =
+    previous !== null && identityIndexes !== null
+      ? compareRows(dataset, previous, identityIndexes)
+      : null
   const priority = new Map(config.rules.map((rule, order) => [rule, order]))
   // The first enabled new-row rule wins for the row channel; list order
   // still decides against cell rules.
   const newRowRule = config.rules.find(
     (rule): rule is NewRowRule => rule.enabled && rule.kind === "newRow",
   )
-  const columnCount = columns.length
-  const stats: MatchStats | null = canCompare
-    ? { total: dataset.length, matched: 0, added: 0, ambiguous: 0 }
-    : null
-  const seenKeys = new Set<string>()
 
-  dataset.forEach((row, rowIndex) => {
-    let previousRow: ResultGridRow | undefined
-    let added = false
-    if (canCompare && stats) {
-      const key = identityKeyOf(row, identityIndexes)
-      if (seenKeys.has(key)) {
-        stats.ambiguous++
-      } else {
-        seenKeys.add(key)
-        previousRow = previous.rows.get(key)
-        added = previousRow === undefined && !previous.ambiguous.has(key)
-        if (previousRow) stats.matched++
-        else if (added) stats.added++
-      }
-    }
+  const evaluateRow = (rowIndex: number): RowEvaluation => {
+    const row = dataset[rowIndex]
+    if (row === undefined) return EMPTY_ROW
+    const { previousRow, added } = previousRowOf(comparison, row, rowIndex)
+    const cells = new Map<number, OrderedHit>()
+    const rowDirections = new Map<number, CellDirection>()
     // Rules are walked per column, so the row channel keeps the hit of the
     // rule listed first rather than the first column that matched. A cell
     // hit settles its own cell, but the column keeps looking for a row rule
@@ -397,19 +462,18 @@ export const evaluateHighlights = ({
     if (added && newRowRule) {
       rowHit = {
         order: priority.get(newRowRule) ?? Number.MAX_SAFE_INTEGER,
-        hit: { color: newRowRule.color, alpha: 1, display: newRowRule.display },
+        hit: { color: newRowRule.color, display: newRowRule.display },
       }
     }
     for (const [index, list] of rules) {
       const value = row[index]
-      const cellKey = rowIndex * columnCount + index
       if (previousRow && directions.has(index)) {
         const cellDirection = directionOf(
           value,
           previousRow[index],
           kinds[index],
         )
-        if (cellDirection) direction.set(cellKey, cellDirection)
+        if (cellDirection) rowDirections.set(index, cellDirection)
       }
       let cellHit: OrderedHit | undefined
       for (const rule of list) {
@@ -422,17 +486,27 @@ export const evaluateHighlights = ({
           break
         }
         cellHit = { order, hit }
-        background.set(cellKey, cellHit)
+        cells.set(index, cellHit)
       }
     }
-    if (rowHit) rowBackground.set(rowIndex, rowHit)
-  })
+    return { cells, row: rowHit, directions: rowDirections }
+  }
+
+  const rows = new Map<number, RowEvaluation>()
+  const rowAt = (rowIndex: number): RowEvaluation => {
+    const cached = rows.get(rowIndex)
+    if (cached) return cached
+    const evaluated = evaluateRow(rowIndex)
+    rows.set(rowIndex, evaluated)
+    return evaluated
+  }
 
   // List order decides for every cell; a row rule counts as a match for each
   // cell of its row.
   const winner = (row: number, col: number): CellHighlight | undefined => {
-    const cell = background.get(row * columnCount + col)
-    const rowHit = rowBackground.get(row)
+    const evaluated = rowAt(row)
+    const cell = evaluated.cells.get(col)
+    const rowHit = evaluated.row
     if (cell && rowHit) return cell.order < rowHit.order ? cell.hit : rowHit.hit
     return (cell ?? rowHit)?.hit
   }
@@ -440,10 +514,10 @@ export const evaluateHighlights = ({
   return {
     lookup: {
       background: winner,
-      row: (row) => rowBackground.get(row)?.hit,
-      direction: (row, col) => direction.get(row * columnCount + col),
-      hasDirection: (col) => canCompare && directions.has(col),
+      row: (row) => rowAt(row).row?.hit,
+      direction: (row, col) => rowAt(row).directions.get(col),
+      hasDirection: (col) => comparison !== null && directions.has(col),
     },
-    stats,
+    stats: comparison?.stats ?? null,
   }
 }

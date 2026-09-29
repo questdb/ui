@@ -1,4 +1,5 @@
 import type { ChartConfig } from "../CellChart/chartTypes"
+import type { HighlightConfig } from "../../../../components/ResultGrid/highlight"
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
 import { createSettingsDrawerSessionStore } from "./settingsDrawerSessionStore"
 
@@ -8,6 +9,7 @@ export type ChartSettingsSession = {
 }
 
 export type HighlightSettingsSession = {
+  configAtOpen: HighlightConfig | undefined
   draft: HighlightDraft | null
 }
 

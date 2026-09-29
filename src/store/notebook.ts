@@ -66,6 +66,7 @@ export type NotebookCell = {
 export type DqlQueryResult = {
   type: "dql"
   query: string
+  effectiveQuery?: string
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number

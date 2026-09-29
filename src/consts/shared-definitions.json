@@ -734,11 +734,11 @@
                       "matches",
                       null
                     ],
-                    "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow."
+                    "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow. Per column type: numeric takes everything except contains/matches; timestamp takes gt/lt/changed, the ordering ops, eq, between (solid fill) and isNull; text takes changed, eq, isNull, contains and matches; boolean takes changed, eq and isNull; other types (arrays, uuid, …) take changed and isNull. A condition that does not fit the column never matches."
                   },
                   "value": {
                     "type": ["number", "string", "null"],
-                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings, read as UTC unless they carry a zone. For between, null = auto: the column's current minimum, recomputed on every result."
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
                   },
                   "to": {
                     "type": ["number", "string", "null"],
@@ -1241,11 +1241,11 @@
                             "matches",
                             null
                           ],
-                          "description": "previous: gt|lt|changed|changedBy (gt/lt/changedBy on numeric and timestamp columns). value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow."
+                          "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow. Per column type: numeric takes everything except contains/matches; timestamp takes gt/lt/changed, the ordering ops, eq, between (solid fill) and isNull; text takes changed, eq, isNull, contains and matches; boolean takes changed, eq and isNull; other types (arrays, uuid, …) take changed and isNull. A condition that does not fit the column never matches."
                         },
                         "value": {
                           "type": ["number", "string", "null"],
-                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings, read as UTC unless they carry a zone. For between, null = auto: the column's current minimum, recomputed on every result."
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
                         },
                         "to": {
                           "type": ["number", "string", "null"],

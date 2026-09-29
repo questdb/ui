@@ -11,6 +11,7 @@ import {
 } from "../notebooks/notebookController"
 import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import type { HighlightConfig } from "../../components/ResultGrid/highlight/types"
 import {
   denyReasonUnresolvedSql,
@@ -379,6 +380,7 @@ export const dispatchApplyNotebookState = async (
     }
   }
   const highlightConfigs: (HighlightConfig | undefined)[] = []
+  if (cells.some((c) => c.highlight_config)) await loadRe2()
   for (const [index, c] of cells.entries()) {
     if (!c.highlight_config) {
       highlightConfigs.push(undefined)

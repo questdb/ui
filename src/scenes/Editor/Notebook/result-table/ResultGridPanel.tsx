@@ -15,6 +15,7 @@ import {
   removeNotebookColumnLayout,
 } from "../notebookColumnLayoutStore"
 import { ResultActionsBar } from "./ResultActionsBar"
+import { toast } from "../../../../components/Toast"
 import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
 import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
@@ -28,6 +29,8 @@ import { resolveHighlightConfig } from "./highlightConfig"
 import {
   columnRangeOf,
   evaluateHighlights,
+  useRe2Ready,
+  usesPatterns,
   type HighlightConfig,
 } from "../../../../components/ResultGrid/highlight"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
@@ -129,6 +132,8 @@ const ResultGridPanelInner: React.FC<Props> = ({
     () => columnRangeOf(data.columns, data.dataset),
     [data],
   )
+  // Pattern rules match nothing until RE2 has loaded, then evaluate again.
+  const re2Ready = useRe2Ready(usesPatterns(highlightConfig))
   const highlights = useMemo(
     () =>
       evaluateHighlights({
@@ -137,15 +142,18 @@ const ResultGridPanelInner: React.FC<Props> = ({
         config: highlightConfig,
         previous,
       }),
-    [data, highlightConfig, previous],
+    [data, highlightConfig, previous, re2Ready],
   )
 
   const openHighlight = useCallback(() => {
     void trackEvent(ConsoleEvent.GRID_HIGHLIGHT_OPEN, { source: "notebook" })
-    highlightSettingsSessions.set(cellId, { draft: null })
+    highlightSettingsSessions.set(cellId, {
+      configAtOpen: savedHighlightConfig,
+      draft: null,
+    })
     setHighlightSession((session) => session + 1)
     setHighlightOpen(true)
-  }, [cellId])
+  }, [cellId, savedHighlightConfig])
 
   const closeHighlight = useCallback(() => {
     highlightSettingsSessions.clear(cellId)
@@ -186,6 +194,17 @@ const ResultGridPanelInner: React.FC<Props> = ({
     },
     [closeHighlight],
   )
+
+  useEffect(() => {
+    if (!highlightOpen) return
+    const session = highlightSettingsSessions.get(cellId)
+    if (session && session.configAtOpen !== savedHighlightConfig) {
+      closeHighlight()
+      toast.info(
+        "Highlight rules were updated by the assistant. Reopen highlight rules to edit.",
+      )
+    }
+  }, [cellId, highlightOpen, savedHighlightConfig, closeHighlight])
 
   // The spotlight gear and the kebab entry send the same event; while the
   // drawer is open it acts as a toggle instead of remounting the draft.

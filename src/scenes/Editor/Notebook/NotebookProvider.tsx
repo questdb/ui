@@ -280,10 +280,13 @@ export const NotebookProvider: React.FC<{
   // Baselines for "previous result" highlight rules live with the notebook,
   // so a cell remount (maximize, restore) keeps them.
   const resultTrendStore = useMemo(() => createResultTrendStore(), [])
+  // Results the hydration engine read back from storage, so their flashes
+  // are timed from the save and never replay.
+  const restoredResults = useMemo(() => new WeakSet<CellResult>(), [])
   const captureTrends = useCallback(
     (prev: NotebookCell[], next: NotebookCell[]) =>
-      captureResultTrends(resultTrendStore, prev, next),
-    [resultTrendStore],
+      captureResultTrends(resultTrendStore, restoredResults, prev, next),
+    [resultTrendStore, restoredResults],
   )
   const store = useCellsStore({
     initialCells: initialState.cells,
@@ -313,6 +316,7 @@ export const NotebookProvider: React.FC<{
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
         getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
         applyResult: (cellId, result) => {
+          restoredResults.add(result)
           hydrateCells((prev) =>
             prev.map((c) =>
               c.id === cellId && c.result == null ? { ...c, result } : c,
@@ -553,10 +557,11 @@ export const NotebookProvider: React.FC<{
         ...(cell?.bottomResized ? {} : { bottomHeight: undefined }),
       })
       resultHydration.forget(cellId)
+      resultTrendStore.clearCell(cellId)
       clearSettingsDrawerSessions(cellId)
       void deleteCellSnapshot(bufferId, cellId)
     },
-    [store, bufferId, resultHydration],
+    [store, bufferId, resultHydration, resultTrendStore],
   )
 
   const setCellResult = useCallback(

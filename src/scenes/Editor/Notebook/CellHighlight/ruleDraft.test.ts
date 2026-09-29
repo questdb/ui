@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import { isHighlightRule } from "../../../../components/ResultGrid/highlight"
 import {
   createUnsetRule,
@@ -9,12 +10,16 @@ import {
   targetFromValue,
   targetToValue,
   withConditionOption,
+  withTarget,
+  type DraftRule,
 } from "./ruleDraft"
 
 describe("createRule", () => {
   it("builds a rule that passes the persisted-config guard for every condition", () => {
     // Given every condition the drawer offers
-    const options = conditionOptions().map((descriptor) => descriptor.value)
+    const options = conditionOptions(null, null).map(
+      (descriptor) => descriptor.value,
+    )
 
     // When a rule is created from each one, as the drawer does
     const rules = options.map((option) =>
@@ -86,15 +91,67 @@ describe("withConditionOption", () => {
 })
 
 describe("conditionOptions", () => {
-  it("offers every condition regardless of column type", () => {
-    // When listing the options
-    const values = conditionOptions().map((o) => o.value)
+  it("offers every condition while the column kind is unknown", () => {
+    // When listing the options for a column no result has shown yet
+    const values = conditionOptions(null, null).map((o) => o.value)
 
     // Then comparison, value and steps conditions are all there
     expect(values).toContain("prev.gt")
     expect(values).toContain("value.between")
     expect(values).toContain("value.contains")
     expect(values).toContain("steps")
+  })
+
+  it("offers only the conditions that can match the column kind", () => {
+    // When listing the options per kind
+    const optionsFor = (kind: Parameters<typeof conditionOptions>[0]) =>
+      conditionOptions(kind, null).map((o) => o.value)
+    const numeric = optionsFor("numeric")
+    const temporal = optionsFor("temporal")
+    const text = optionsFor("text")
+    const other = optionsFor("other")
+
+    // Then a number never matches text
+    expect(numeric).toContain("steps")
+    expect(numeric).toContain("prev.changedBy")
+    expect(numeric).not.toContain("value.contains")
+    expect(numeric).not.toContain("value.matches")
+    // And a timestamp compares and orders but never steps or changes by an amount
+    expect(temporal).toContain("prev.gt")
+    expect(temporal).toContain("value.between")
+    expect(temporal).not.toContain("prev.changedBy")
+    expect(temporal).not.toContain("steps")
+    expect(temporal).not.toContain("value.contains")
+    // And a text column matches text but never orders
+    expect(text).toEqual([
+      "prev.changed",
+      "newRow",
+      "value.eq",
+      "value.isNull",
+      "value.contains",
+      "value.matches",
+    ])
+    // And an array column can only change, be null or be new
+    expect(other).toEqual(["prev.changed", "newRow", "value.isNull"])
+  })
+
+  it("keeps a rule's saved condition listed even when its column kind excludes it", () => {
+    // When listing the options for a text column whose rule was saved with steps
+    const values = conditionOptions("text", "steps").map((o) => o.value)
+
+    // Then steps stays selectable next to the text conditions
+    expect(values).toContain("steps")
+    expect(values).not.toContain("prev.gt")
+  })
+})
+
+describe("createRule", () => {
+  it("starts a comparison value empty so nothing is compared until typed", () => {
+    // When a > value rule is created
+    const rule = createRule("r", { kind: "column", name: "ts" }, "value.gt")
+
+    // Then its value is empty
+    expect(rule).toMatchObject({ condition: { op: "gt", value: "" } })
   })
 })
 
@@ -156,5 +213,66 @@ describe("moveRule and targets", () => {
       kind: "column",
       name: "col:x",
     })
+  })
+})
+
+describe("withTarget", () => {
+  const columns: ColumnDefinition[] = [
+    { name: "price", type: "DOUBLE" },
+    { name: "volume", type: "LONG" },
+    { name: "ts", type: "TIMESTAMP" },
+  ]
+  const gradientOn = (name: string): DraftRule => {
+    const rule = createRule("r", { kind: "column", name }, "value.between")
+    if (rule.kind !== "value" || rule.condition.op !== "between") {
+      throw new Error("expected a between rule")
+    }
+    return {
+      ...rule,
+      condition: {
+        ...rule.condition,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+    }
+  }
+  const fillOf = (rule: DraftRule) =>
+    rule.kind === "value" && rule.condition.op === "between"
+      ? rule.condition.fill.kind
+      : null
+
+  it("keeps a gradient when the rule moves to a numeric or unknown column", () => {
+    // Given a gradient rule on price
+    const rule = gradientOn("price")
+    if (rule.kind === "newRow") throw new Error("expected a targeted rule")
+
+    // When it moves to another numeric column and to a column no result has shown
+    const onVolume = withTarget(
+      rule,
+      { kind: "column", name: "volume" },
+      columns,
+    )
+    const onUnknown = withTarget(
+      rule,
+      { kind: "column", name: "later" },
+      columns,
+    )
+
+    // Then the gradient stays
+    expect(onVolume).toMatchObject({ target: { name: "volume" } })
+    expect(fillOf(onVolume)).toBe("gradient")
+    expect(fillOf(onUnknown)).toBe("gradient")
+  })
+
+  it("turns a gradient into a solid fill when the rule moves to a timestamp column", () => {
+    // Given a gradient rule on price
+    const rule = gradientOn("price")
+    if (rule.kind === "newRow") throw new Error("expected a targeted rule")
+
+    // When it moves to ts
+    const onTs = withTarget(rule, { kind: "column", name: "ts" }, columns)
+
+    // Then the range stays but the fill is solid
+    expect(onTs).toMatchObject({ target: { name: "ts" } })
+    expect(fillOf(onTs)).toBe("solid")
   })
 })

@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it, vi } from "vitest"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import {
   fromHighlightConfigWire,
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "./highlightConfigWire"
 
+beforeAll(() => loadRe2())
+
 let counter = 0
-const nextId = () => `id${++counter}`
+vi.mock("../../components/ResultGrid/highlight/ruleId", () => ({
+  createRuleId: () => `id${++counter}`,
+}))
 
 describe("fromHighlightConfigWire", () => {
   it("maps every rule kind with defaults filled in", () => {
@@ -62,7 +67,7 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When it is parsed
-    const result = fromHighlightConfigWire(wire, nextId)
+    const result = fromHighlightConfigWire(wire)
 
     // Then the config carries typed rules with ids and kind defaults
     expect(result.ok).toBe(true)
@@ -303,12 +308,12 @@ describe("fromHighlightConfigWire: new rows", () => {
     }
 
     // When parsed and serialized back
-    const parsed = fromHighlightConfigWire(wire, () => "fresh")
+    const parsed = fromHighlightConfigWire(wire)
     if (!parsed.ok) throw new Error(parsed.error)
 
     // Then the rule carries only color and display, and the wire round-trips
     expect(parsed.config.rules[0]).toEqual({
-      id: "fresh",
+      id: expect.any(String) as string,
       kind: "newRow",
       enabled: true,
       display: "temporary",
@@ -348,7 +353,7 @@ describe("fromHighlightConfigWire: automatic between bounds", () => {
     }
 
     // When parsed
-    const parsed = fromHighlightConfigWire(wire, nextId)
+    const parsed = fromHighlightConfigWire(wire)
     if (!parsed.ok) throw new Error(parsed.error)
 
     // Then both bounds are automatic on the first rule and only `to` on the second
@@ -420,7 +425,7 @@ describe("toHighlightConfigWire", () => {
         },
       ],
     }
-    const parsed = fromHighlightConfigWire(wire, nextId)
+    const parsed = fromHighlightConfigWire(wire)
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
 

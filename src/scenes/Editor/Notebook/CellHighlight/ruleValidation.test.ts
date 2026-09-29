@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { beforeAll, describe, expect, it } from "vitest"
+import { loadRe2 } from "../../../../components/ResultGrid/highlight"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { RuleTarget } from "../../../../components/ResultGrid/highlight"
 import { createRule, createUnsetRule, type DraftRule } from "./ruleDraft"
@@ -8,6 +9,8 @@ import {
   validateRule,
   validateRules,
 } from "./ruleValidation"
+
+beforeAll(() => loadRe2())
 
 const columns: ColumnDefinition[] = [
   { name: "symbol", type: "SYMBOL" },
@@ -30,7 +33,9 @@ const valueRule = (
 describe("validateRule", () => {
   it("requires a column after resetting a configured rule's target", () => {
     // Given a configured rule with its target cleared, then restored
-    const configured = valueRule("value.gt")
+    const rule = valueRule("value.gt")
+    if (rule.kind !== "value") throw new Error("expected a value rule")
+    const configured = { ...rule, condition: { op: "gt" as const, value: 10 } }
     const cleared: DraftRule = {
       ...configured,
       target: { kind: "column", name: "" },
@@ -107,6 +112,73 @@ describe("validateRule", () => {
     expect(number).toEqual({})
     expect(words).toEqual({ value: "Should be a timestamp" })
     expect(timestamp).toEqual({})
+  })
+
+  it("accepts only ISO instants as timestamp bounds", () => {
+    // Given a > value rule on the timestamp column
+    const temporal = valueRule("value.gt", ts)
+    if (temporal.kind !== "value") throw new Error("expected a value rule")
+    const withValue = (value: string | number) => ({
+      ...temporal,
+      condition: { op: "gt" as const, value },
+    })
+
+    // When ISO forms and the forms Date.parse would take are validated
+    const dateOnly = validateRule(withValue("2026-09-28"), columns)
+    const spaced = validateRule(withValue("2026-09-28 10:00"), columns)
+    const nanos = validateRule(
+      withValue("2026-09-28T10:00:00.123456789Z"),
+      columns,
+    )
+    const slashes = validateRule(withValue("2026/09/28 10:00"), columns)
+    const words = validateRule(withValue("Sep 28 2026 10:00"), columns)
+    const zero = validateRule(withValue(0), columns)
+    const yearOnly = validateRule(withValue("2030"), columns)
+
+    // Then only the ISO forms pass
+    expect(dateOnly).toEqual({})
+    expect(spaced).toEqual({})
+    expect(nanos).toEqual({})
+    expect(slashes).toEqual({ value: "Should be a timestamp" })
+    expect(words).toEqual({ value: "Should be a timestamp" })
+    expect(zero).toEqual({ value: "Should be a timestamp" })
+    expect(yearOnly).toEqual({ value: "Should be a timestamp" })
+  })
+
+  it("rejects a condition that cannot match the column kind", () => {
+    // Given rules whose condition does not fit the column, and one on an unknown column
+    const changedBySymbol = valueRule("prev.changedBy", symbol)
+    const stepsOnTs = valueRule("steps", ts)
+    const containsPrice = valueRule("value.contains", price)
+    const betweenOnTs = valueRule("value.between", ts)
+    if (betweenOnTs.kind !== "value") throw new Error("expected a value rule")
+    const gradientOnTs = {
+      ...betweenOnTs,
+      condition: {
+        op: "between" as const,
+        from: "2026-01-01",
+        to: "2026-12-31",
+        fill: { kind: "gradient" as const, highColor: "dataPositive" as const },
+      },
+    }
+    const changedByUnknown = valueRule("prev.changedBy", {
+      kind: "column",
+      name: "not_in_result",
+    })
+
+    // When they are validated
+    const symbolErrors = validateRule(changedBySymbol, columns)
+    const tsErrors = validateRule(stepsOnTs, columns)
+    const priceErrors = validateRule(containsPrice, columns)
+    const gradientErrors = validateRule(gradientOnTs, columns)
+    const unknownErrors = validateRule(changedByUnknown, columns)
+
+    // Then each misfit names the column kind, and the unknown column passes
+    expect(symbolErrors).toEqual({ condition: "Not for a text column" })
+    expect(tsErrors).toEqual({ condition: "Not for a timestamp column" })
+    expect(priceErrors).toEqual({ condition: "Not for a numeric column" })
+    expect(gradientErrors).toEqual({ fill: "Gradient needs a numeric column" })
+    expect(unknownErrors).toEqual({})
   })
 
   it("lets = on a text column take any text, including empty", () => {

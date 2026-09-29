@@ -77,20 +77,72 @@ export const targetFromValue = (value: string): RuleTarget =>
     ? { kind: "allNumeric" }
     : { kind: "column", name: value.slice("col:".length) }
 
+// null until a result has shown the column, or for a column no result has.
 export const targetKind = (
   target: RuleTarget,
   columns: ColumnDefinition[],
-): ColumnKind => {
+): ColumnKind | null => {
   if (target.kind === "allNumeric") return "numeric"
   const name = target.name
   const column = columns.find((candidate) => candidate.name === name)
-  return column ? columnKindOf(column) : "other"
+  return column ? columnKindOf(column) : null
 }
 
-// Every condition is offered for every column: a rule that cannot apply to a
-// grid's column type is a no-op there, decided at evaluation.
-export const conditionOptions = (): ConditionDescriptor[] =>
-  conditionDescriptors
+const ORDERED: ConditionOption[] = [
+  "prev.gt",
+  "prev.lt",
+  "value.gt",
+  "value.gte",
+  "value.lt",
+  "value.lte",
+  "value.between",
+]
+
+const conditionOptionsByKind: Record<ColumnKind, ConditionOption[]> = {
+  numeric: [
+    "prev.changed",
+    "newRow",
+    "prev.changedBy",
+    ...ORDERED,
+    "value.eq",
+    "value.isNull",
+    "steps",
+  ],
+  temporal: ["prev.changed", "newRow", ...ORDERED, "value.eq", "value.isNull"],
+  text: [
+    "prev.changed",
+    "newRow",
+    "value.eq",
+    "value.isNull",
+    "value.contains",
+    "value.matches",
+  ],
+  boolean: ["prev.changed", "newRow", "value.eq", "value.isNull"],
+  other: ["prev.changed", "newRow", "value.isNull"],
+}
+
+// A column of unknown kind takes every condition; once a result shows the
+// kind, only the conditions that can match it are offered. A rule saved
+// with another condition keeps it listed until it is changed.
+export const conditionOptions = (
+  kind: ColumnKind | null,
+  current: ConditionOption | null,
+): ConditionDescriptor[] => {
+  if (kind === null) return conditionDescriptors
+  const allowed = new Set(conditionOptionsByKind[kind])
+  if (current !== null) allowed.add(current)
+  return conditionDescriptors.filter((descriptor) =>
+    allowed.has(descriptor.value),
+  )
+}
+
+export const conditionFitsKind = (
+  option: ConditionOption,
+  kind: ColumnKind | null,
+): boolean => kind === null || conditionOptionsByKind[kind].includes(option)
+
+export const isPatternRule = (rule: DraftRule): boolean =>
+  rule.kind === "value" && rule.condition.op === "matches"
 
 export const conditionOptionOf = (rule: HighlightRule): ConditionOption => {
   switch (rule.kind) {
@@ -120,7 +172,7 @@ export const createRule = (
       display: "always",
       kind: "value",
       appliesTo: "cell",
-      condition: { op: "gt", value: 0 },
+      condition: { op: "gt", value: "" },
       color: DEFAULT_RULE_COLOR,
     },
     option,
@@ -193,7 +245,7 @@ export const withConditionOption = (
         ...base,
         kind: "value",
         display: defaultDisplayFor("value"),
-        condition: { op, value: 0 },
+        condition: { op, value: "" },
         color: carriedColor,
       }
     }
@@ -242,6 +294,30 @@ export const withConditionOption = (
         steps: [{ id: createRuleId(), from: 0, color: DEFAULT_RULE_COLOR }],
         baseColor: DEFAULT_BASE_COLOR,
       }
+  }
+}
+
+// A gradient scales numbers only. A rule moved onto a column of another
+// kind keeps its range as a solid fill.
+export const withTarget = (
+  rule: Exclude<DraftRule, { kind: "newRow" }>,
+  target: RuleTarget,
+  columns: ColumnDefinition[],
+): DraftRule => {
+  const moved = { ...rule, target }
+  const kind = targetKind(target, columns)
+  if (
+    kind === null ||
+    kind === "numeric" ||
+    moved.kind !== "value" ||
+    moved.condition.op !== "between" ||
+    moved.condition.fill.kind !== "gradient"
+  ) {
+    return moved
+  }
+  return {
+    ...moved,
+    condition: { ...moved.condition, fill: { kind: "solid" } },
   }
 }
 

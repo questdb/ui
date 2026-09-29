@@ -9,6 +9,7 @@ export const RESULT_DISPLAY_LIMIT = 50_000
 export type QueryExecResult = {
   type: "dql" | "ddl" | "dml" | "error"
   query: string
+  effectiveQuery?: string
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
@@ -57,6 +58,7 @@ export const executeSingleRaw = async (
       return {
         type: "dql",
         query: sql,
+        effectiveQuery: expanded,
         columns: result.columns,
         dataset: result.dataset,
         count: result.count,
@@ -69,6 +71,7 @@ export const executeSingleRaw = async (
       return {
         type: "dql",
         query: sql,
+        effectiveQuery: expanded,
         columns: result.columns ?? [],
         dataset: result.dataset ?? [],
         count: result.count ?? 0,

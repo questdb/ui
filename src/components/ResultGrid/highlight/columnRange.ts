@@ -1,12 +1,12 @@
 import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { ResultGridRow } from "../types"
 import { columnKindOf } from "./columnKind"
-import { asComparable } from "./comparable"
+import { asComparable, compareValues, type Comparable } from "./comparable"
 
-export type ColumnRange = { from: number; to: number }
+export type ColumnRange = { from: Comparable; to: Comparable }
 
-// Min and max of a numeric or temporal column in the current result, as
-// comparable numbers. An automatic between bound reads them at evaluation.
+// Min and max of a numeric or temporal column in the current result. An
+// automatic between bound reads them at evaluation.
 export const columnRangeAt = (
   columns: ColumnDefinition[],
   dataset: ResultGridRow[],
@@ -16,15 +16,15 @@ export const columnRangeAt = (
   if (!column) return null
   const kind = columnKindOf(column)
   if (kind !== "numeric" && kind !== "temporal") return null
-  let from = Infinity
-  let to = -Infinity
+  let from: Comparable | null = null
+  let to: Comparable | null = null
   for (const row of dataset) {
     const value = asComparable(row[index], kind)
     if (value === null) continue
-    if (value < from) from = value
-    if (value > to) to = value
+    if (from === null || compareValues(value, from) < 0) from = value
+    if (to === null || compareValues(value, to) > 0) to = value
   }
-  return from <= to ? { from, to } : null
+  return from !== null && to !== null ? { from, to } : null
 }
 
 export const columnRangeOf =

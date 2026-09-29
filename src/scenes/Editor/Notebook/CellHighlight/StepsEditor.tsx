@@ -27,24 +27,19 @@ type Props = {
 }
 
 // Steps stay in edit order; the engine sorts by bound when it evaluates.
-// The field is uncontrolled so it can be emptied while typing; the draft
-// keeps its last finite value until a new one is typed.
-const parseBound = (raw: string): number | null => {
-  if (raw.trim() === "") return null
-  const parsed = Number(raw)
-  return Number.isFinite(parsed) ? parsed : null
-}
+// An emptied bound is kept as NaN so Save can flag it.
+const parseBound = (raw: string): number =>
+  raw.trim() === "" ? NaN : Number(raw)
+
+const boundFieldValue = (value: number) => (Number.isNaN(value) ? "" : value)
 
 export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
   const steps = rule.steps
-  const lowestBound = steps.reduce(
-    (min, step) => Math.min(min, step.from),
-    Infinity,
-  )
-  const highestBound = steps.reduce(
-    (max, step) => Math.max(max, step.from),
-    -Infinity,
-  )
+  const bounds = steps
+    .map((step) => step.from)
+    .filter((from) => Number.isFinite(from))
+  const lowestBound = Math.min(...bounds)
+  const highestBound = Math.max(...bounds)
 
   const updateStep = (id: string, patch: Partial<HighlightStep>) =>
     onChange({
@@ -65,7 +60,7 @@ export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
         ...steps,
         {
           id: createRuleId(),
-          from: last ? highestBound + 1 : 0,
+          from: bounds.length ? highestBound + 1 : 0,
           color: last?.color ?? DEFAULT_RULE_COLOR,
         },
       ],
@@ -78,7 +73,7 @@ export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
       <StepLine>
         <StepLabel>&lt;</StepLabel>
         <StepRemainder>
-          {steps.length ? `below ${lowestBound}` : "All values"}
+          {bounds.length ? `below ${lowestBound}` : "All values"}
         </StepRemainder>
         <ColorSwatch
           value={rule.baseColor}
@@ -95,11 +90,10 @@ export const StepsEditor: React.FC<Props> = ({ rule, errors, onChange }) => {
             step="any"
             variant={errors[stepErrorKey(step.id)] ? "error" : undefined}
             aria-label={`Step ${index + 1} from`}
-            defaultValue={step.from}
-            onChange={(e) => {
-              const from = parseBound(e.target.value)
-              if (from !== null) updateStep(step.id, { from })
-            }}
+            value={boundFieldValue(step.from)}
+            onChange={(e) =>
+              updateStep(step.id, { from: parseBound(e.target.value) })
+            }
           />
           <ColorSwatch
             value={step.color}

@@ -13,7 +13,7 @@ describe("settings drawer session store", () => {
 
     // Then the draft is there, and clearing the cell removes it
     expect(restored).toEqual({ draft: "edited" })
-    store.clearWhere((key) => key.startsWith("c1:"))
+    store.clear("c1:0")
     expect(store.get("c1:0")).toBeUndefined()
   })
 

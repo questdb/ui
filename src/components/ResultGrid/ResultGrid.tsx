@@ -101,7 +101,6 @@ type GridCellProps = {
   isPulsing: boolean
   isDesignatedTimestamp: boolean
   frozen?: boolean
-  rowActive: boolean
   highlight: CellHighlight | undefined
   direction: CellDirection | undefined
   hasDirectionSlot: boolean
@@ -123,7 +122,6 @@ const GridCell = React.memo(function GridCell({
   isPulsing,
   isDesignatedTimestamp,
   frozen,
-  rowActive,
   highlight,
   direction,
   hasDirectionSlot,
@@ -144,10 +142,14 @@ const GridCell = React.memo(function GridCell({
         : "always"
   // The flash is timed from the result, not from the mount: a cell that
   // mounts later joins partway through, or past the end and shows nothing.
-  const flashDelay =
-    highlightMode === "temporary"
-      ? `${flashStartedAt - Date.now()}ms`
-      : undefined
+  // Fixed per result so a re-render, such as a click, does not move it.
+  const flashDelay = useMemo(
+    () =>
+      highlightMode === "temporary"
+        ? `${flashStartedAt - Date.now()}ms`
+        : undefined,
+    [flashStartedAt, highlightMode],
+  )
   return (
     <Cell
       id={`cell-${rowIndex}-${colIndex}`}
@@ -170,9 +172,7 @@ const GridCell = React.memo(function GridCell({
       $isActive={isActive}
       $isPulsing={isPulsing}
       $frozen={frozen}
-      $rowActive={rowActive}
       $highlightColor={highlight?.color}
-      $highlightAlpha={highlight?.alpha ?? 0}
       $highlightBlend={highlight?.blend}
       $highlightMode={highlightMode}
       $flashParity={flashParity}
@@ -917,7 +917,6 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     left={pos.left}
                     width={pos.width}
                     frozen={pos.frozen}
-                    rowActive={pos.frozen && focusedCell?.row === virtualIndex}
                     isActive={isCellFocused(virtualIndex, colIdx)}
                     isPulsing={isCellPulsing(virtualIndex, colIdx)}
                     isDesignatedTimestamp={dataIndex === designatedTimestamp}
