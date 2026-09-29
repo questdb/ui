@@ -219,18 +219,12 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     }
   }, [exiting])
 
-  // The control that opened the drawer gets focus back on close. A menu
-  // item opens it while the closing menu still traps focus; the menu hands
-  // focus to its trigger once it is gone, and the drawer takes it from
-  // there. Any other control hands over at once.
+  // The control that opened the drawer gets focus back once the drawer is
+  // gone. A menu item opens it while the closing menu still traps focus; the
+  // menu hands focus to its trigger once it is gone, and the drawer takes it
+  // from there. Any other control hands over at once.
   useEffect(() => {
-    if (!isDrawer) return
-    if (!open) {
-      const opener = openerRef.current
-      openerRef.current = null
-      if (opener?.isConnected) opener.focus()
-      return
-    }
+    if (!isDrawer || !open) return
     const controlOutside = (target: EventTarget | null) =>
       target instanceof HTMLElement &&
       target !== document.body &&
@@ -242,15 +236,15 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     const focused = controlOutside(document.activeElement)
     if (focused && !inMenu(focused)) {
       openerRef.current = focused
-      titleRef.current?.focus()
+      titleRef.current?.focus({ preventScroll: true })
       return
     }
-    if (!focused) titleRef.current?.focus()
+    if (!focused) titleRef.current?.focus({ preventScroll: true })
     const adoptOpener = (event: FocusEvent) => {
       const opener = controlOutside(event.target)
       if (!opener || inMenu(opener)) return
       openerRef.current = opener
-      titleRef.current?.focus()
+      titleRef.current?.focus({ preventScroll: true })
       stopAdopting()
     }
     const stopAdopting = () => {
@@ -261,6 +255,15 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     const timer = window.setTimeout(stopAdopting, OPENER_HANDBACK_WINDOW_MS)
     return stopAdopting
   }, [open, isDrawer])
+
+  // Handing focus back mid slide-out would let the keys meant for the drawer
+  // reach the opener, e.g. Enter reopening the menu it came from.
+  useEffect(() => {
+    if (visible) return
+    const opener = openerRef.current
+    openerRef.current = null
+    if (opener?.isConnected) opener.focus()
+  }, [visible])
 
   useEffect(() => {
     if (!open || !isDrawer) return

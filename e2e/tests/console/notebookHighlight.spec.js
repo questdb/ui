@@ -132,7 +132,13 @@ describe("notebook highlight rules", () => {
 
     // When the drawer is dismissed and Enter arrives while it slides out
     cy.realPress("Escape")
+    cy.document().then((doc) =>
+      doc.getAnimations().forEach((animation) => animation.pause()),
+    )
     cy.realPress("Enter")
+    cy.document().then((doc) =>
+      doc.getAnimations().forEach((animation) => animation.finish()),
+    )
     cy.getByDataHook("highlight-settings-drawer").should("not.exist")
 
     // Then nothing was saved
