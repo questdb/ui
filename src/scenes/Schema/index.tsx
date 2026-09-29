@@ -91,6 +91,9 @@ const Wrapper = styled(PaneWrapper)<{
 }>`
   overflow-x: auto;
   height: 100%;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
   ${({ open }) =>
     !open &&
     css`
@@ -104,10 +107,15 @@ const Content = styled(PaneContent)<{
   display: flex;
   flex-direction: column;
   overflow: auto;
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
   ${({ _loading }) => _loading && loadingStyles};
 `
 
-const ToolbarToggleButton = styled(PrimaryToggleButton)`
+const ToolbarToggleButton = styled(PrimaryToggleButton).attrs({
+  activeTone: "info" as const,
+})`
   &&:not(:disabled) {
     width: auto;
     padding: 0 1rem;
@@ -389,7 +397,7 @@ const Schema = ({
               setFilterSuspendedOnly={setFilterSuspendedOnly}
             />
             {tables && (
-              <Box align="center" gap="0">
+              <Box align="center" gap="0.2rem">
                 {selectOpen && (
                   <Tooltip
                     delay={350}

@@ -59,9 +59,9 @@ const DrawerContent = styled(RadixDialog.Content).attrs({ forceMount: true })<{
 }>`
   display: flex;
   flex-direction: column;
-  background-color: ${({ theme }) => theme.color.surfaceBase};
+  background-color: ${({ theme }) => theme.color.surfaceRaised};
   border-left: 1px solid ${({ theme }) => theme.color.borderSubtle};
-  box-shadow: -18px 0 52px ${({ theme }) => theme.color.shadowSoft};
+  box-shadow: -4px 0 16px ${({ theme }) => theme.color.shadowSoft};
   position: ${({ mode }) => (mode === "modal" ? "fixed" : "inherit")};
   top: 0;
   right: 0;
@@ -123,6 +123,11 @@ const TitleWrapper = styled.div`
   min-width: 0;
 `
 
+const isTextFieldWithValue = (target: EventTarget | null) =>
+  (target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement) &&
+  target.value.length > 0
+
 export const Drawer = ({
   mode = "modal",
   children,
@@ -154,6 +159,16 @@ export const Drawer = ({
   }
 
   const showNavigation = mode === "side" && (canGoBack || canGoForward)
+
+  // A text field with content owns Escape: it clears itself first, and the
+  // drawer only closes on the next press.
+  const handleEscapeKeyDown = (event: KeyboardEvent) => {
+    if (isTextFieldWithValue(event.target) || !closeOnEscape || !onDismiss) {
+      event.preventDefault()
+      return
+    }
+    onDismiss()
+  }
 
   const closeButton = (
     <StyledClose
@@ -228,15 +243,12 @@ export const Drawer = ({
           mode={mode}
           width={width}
           {...(onDismiss && {
-            onEscapeKeyDown: closeOnEscape ? onDismiss : undefined,
+            onEscapeKeyDown: closeOnEscape ? handleEscapeKeyDown : undefined,
             onInteractOutside: closeOnOverlayClick ? onDismiss : undefined,
           })}
           {...(mode === "side" && {
             onInteractOutside: (e) => e.preventDefault(),
-            onEscapeKeyDown:
-              closeOnEscape && onDismiss
-                ? onDismiss
-                : (e) => e.preventDefault(),
+            onEscapeKeyDown: handleEscapeKeyDown,
             onPointerDownOutside: (e) => e.preventDefault(),
           })}
         >

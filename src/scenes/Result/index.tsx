@@ -50,6 +50,7 @@ import {
   PrimaryToggleButton,
   Text,
   Tooltip,
+  TOOLBAR_CONTROL_HEIGHT,
 } from "../../components"
 import { actions, selectors } from "../../store"
 import { color, ErrorResult } from "../../utils"
@@ -71,14 +72,13 @@ import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 import { useLocalStorage } from "../../providers/LocalStorageProvider"
 import { ResultGridAdapter } from "./ResultGridAdapter"
 import { type PaginationFn } from "./usePagedDataSource"
-import { CELL_FONT_SIZE_PX } from "../../components/ResultGrid"
 import { ResultChart } from "./ResultChart"
 
 const Root = styled.div`
   display: flex;
   flex: 1;
   width: 100%;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
 `
 
 const Wrapper = styled(PaneWrapper)`
@@ -88,6 +88,9 @@ const Wrapper = styled(PaneWrapper)`
 const Content = styled(PaneContent)`
   flex: 1 1 0;
   color: ${color("contentPrimary")};
+  && {
+    background: ${({ theme }) => theme.color.surfaceRaised};
+  }
 `
 
 const Actions = styled.div`
@@ -98,6 +101,7 @@ const Actions = styled.div`
   padding: 0 1rem;
   width: 100%;
   height: 5.2rem;
+  border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
   border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
   background: ${({ theme }) => theme.color.surfaceRaised};
 `
@@ -108,27 +112,36 @@ const ResultCountBadge = styled.span`
   align-items: baseline;
   gap: 0.4rem;
   color: ${({ theme }) => theme.color.contentSecondary};
-  font-size: ${CELL_FONT_SIZE_PX}px;
-  line-height: 1.2;
+  font-family: ${({ theme }) => theme.font};
+  font-size: ${({ theme }) => theme.fontSize.sm};
+  font-weight: 400;
+  line-height: 1.56rem;
   white-space: nowrap;
 `
 
 const ResultCount = styled.span`
   color: ${({ theme }) => theme.color.contentPrimary};
-  font-family: ${({ theme }) => theme.fontMonospace};
-  font-size: inherit;
-  font-variant-numeric: tabular-nums;
+  font-family: ${({ theme }) => theme.font};
+  font-size: ${({ theme }) => theme.fontSize.lg};
   font-weight: 600;
+  line-height: 2.14rem;
+  font-variant-numeric: tabular-nums;
 `
 
 const TableFreezeColumnIcon = styled(TableFreezeColumn)`
   transform: scaleX(-1);
 `
 
-const StyledPrimaryToggleButton = styled(PrimaryToggleButton)`
-  padding: 0 1rem;
-  height: 3rem;
-  width: 4rem;
+const StyledPrimaryToggleButton = styled(PrimaryToggleButton).attrs({
+  activeTone: "info" as const,
+})`
+  && {
+    height: ${TOOLBAR_CONTROL_HEIGHT};
+    min-height: ${TOOLBAR_CONTROL_HEIGHT};
+    width: auto;
+    min-width: ${TOOLBAR_CONTROL_HEIGHT};
+    padding: 0 1.2rem;
+  }
 `
 
 const DownloadButton = styled(Button)`

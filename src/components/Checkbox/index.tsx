@@ -1,6 +1,7 @@
 import React, { forwardRef } from "react"
 import { Check } from "@phosphor-icons/react"
 import styled from "styled-components"
+import { statusInfoFocus } from "../../theme"
 
 type Props = React.InputHTMLAttributes<HTMLInputElement>
 
@@ -42,13 +43,12 @@ const NativeCheckbox = styled.input`
   cursor: pointer;
 
   &:not(:checked):not(:disabled):hover + ${Indicator} {
-    border-color: ${({ theme }) => theme.color.borderAccentStrong};
     background: ${({ theme }) => theme.color.controlSurfaceHover};
   }
 
   &:checked + ${Indicator} {
-    border-color: ${({ theme }) => theme.color.contentAccent};
-    background: ${({ theme }) => theme.color.contentAccent};
+    border-color: ${({ theme }) => theme.color.statusInfoControl};
+    background: ${({ theme }) => theme.color.statusInfoControl};
 
     svg {
       opacity: 1;
@@ -57,14 +57,13 @@ const NativeCheckbox = styled.input`
   }
 
   &:checked:not(:disabled):hover + ${Indicator} {
-    border-color: ${({ theme }) => theme.color.contentAccentStrong};
-    background: ${({ theme }) => theme.color.contentAccentStrong};
+    border-color: ${({ theme }) => theme.color.statusInfoControl};
+    background: ${({ theme }) => theme.color.statusInfoControl};
   }
 
   &:focus-visible + ${Indicator} {
-    border-color: ${({ theme }) => theme.color.actionPrimaryHover};
-    box-shadow: 0 0 0 0.2rem
-      ${({ theme }) => theme.color.interactionAccentActive};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
+    outline-offset: 2px;
   }
 
   &:disabled {

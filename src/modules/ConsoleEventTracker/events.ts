@@ -78,6 +78,10 @@ export enum ConsoleEvent {
   TABLE_DETAILS_ASK_AI = "table_details.ask_ai",
   TABLE_DETAILS_COPY_DDL = "table_details.copy_ddl",
 
+  QUERY_ACTIVITY_OPEN = "query_activity.open",
+  QUERY_ACTIVITY_SORT = "query_activity.sort",
+  QUERY_ACTIVITY_CANCEL = "query_activity.cancel",
+
   SIDEBAR_NAVIGATE = "sidebar.navigate",
 
   TAB_ADD = "tab.add",

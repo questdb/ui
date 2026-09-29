@@ -29,7 +29,7 @@ const Container = styled.div`
   height: 100%;
   width: 100%;
   padding: 2rem 1rem 4rem 1rem;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   overflow: hidden;
 `
 
@@ -228,6 +228,9 @@ export const ChatHistoryView: React.FC<ChatHistoryViewProps> = ({
           placeholder="Search chats"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && searchQuery) setSearchQuery("")
+          }}
           data-hook="chat-history-search"
         />
         {searchQuery && (

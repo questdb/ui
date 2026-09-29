@@ -18,7 +18,7 @@ import {
 } from "../../../providers/AIStatusProvider"
 import { AIStopButton } from "../../../components/AIStopButton"
 import { slideAnimation } from "../../../components/Animation"
-import { brandLinearGradientHorizontal } from "../../../theme"
+import { assistantLinearGradientHorizontal } from "../../../theme"
 import { TableIcon } from "../../Schema/table-icon"
 import { getTableKind } from "../../../utils/questdb/types"
 import { selectors } from "../../../store"
@@ -43,7 +43,9 @@ const InputWrapper = styled(Box)`
   overflow: hidden;
 `
 
-const StyledTextArea = styled(TextArea)<{ $hasContext: boolean }>`
+const StyledTextArea = styled(TextArea).attrs({ $tone: "accent" })<{
+  $hasContext: boolean
+}>`
   flex: 1;
   min-height: 8rem;
   max-height: 30rem;
@@ -106,7 +108,7 @@ const ThoughtStream = styled.div`
   background:
     linear-gradient(${color("surfaceInset")}, ${color("surfaceInset")})
       padding-box,
-    ${({ theme }) => brandLinearGradientHorizontal(theme.color)} border-box;
+    ${({ theme }) => assistantLinearGradientHorizontal(theme.color)} border-box;
   border-radius: 0.6rem;
   height: 4rem;
 `

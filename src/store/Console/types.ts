@@ -29,7 +29,7 @@ export type TableDetailsTarget = {
   kind: TableKind
 } | null
 
-export type SidebarType = "news" | "aiChat" | "tableDetails"
+export type SidebarType = "news" | "aiChat" | "tableDetails" | "queryActivity"
 
 export type Sidebar = {
   type: SidebarType

@@ -66,6 +66,15 @@ const ToolbarWrapper = styled.div<{
         `}
 `
 
+const CellIconButton = styled(IconButton)`
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) =>
+      theme.mode === "light"
+        ? theme.color.surfaceBase
+        : theme.color.surfaceRaised};
+  }
+`
+
 type Props = {
   cellId: string
   cell: NotebookCell
@@ -283,7 +292,7 @@ export const CellToolbar: React.FC<Props> = ({
       $forceVisible={menuOpen}
     >
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
-        <IconButton
+        <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
           variant="ghost"
           onClick={handleMaximizeCell}
@@ -293,7 +302,7 @@ export const CellToolbar: React.FC<Props> = ({
           ) : (
             <CornersOutIcon size={20} />
           )}
-        </IconButton>
+        </CellIconButton>
       </Tooltip>
       {!isMaximized && (
         <DropdownMenu.Root
@@ -304,9 +313,9 @@ export const CellToolbar: React.FC<Props> = ({
         >
           <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
-              <IconButton label="More actions" variant="ghost">
+              <CellIconButton label="More actions" variant="ghost">
                 <DotsThreeVerticalIcon size={20} weight="bold" />
-              </IconButton>
+              </CellIconButton>
             </DropdownMenu.Trigger>
           </Tooltip>
           <DropdownMenu.Portal>

@@ -2193,6 +2193,50 @@ describe("editor settings", () => {
     cy.getByDataHook("editor-settings-modal").should("not.exist")
   })
 
+  it("toggles 'Capitalize keywords on format' and formats with it", () => {
+    // Given the setting defaults to off
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-capitalize-keywords").should(
+      "have.attr",
+      "data-state",
+      "unchecked",
+    )
+
+    // When it is switched on and saved
+    cy.getByDataHook("editor-settings-capitalize-keywords").click()
+    cy.getByDataHook("editor-settings-save").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+
+    // Then the choice is persisted to local storage
+    cy.window()
+      .its("localStorage")
+      .invoke("getItem", "editor.capitalizeKeywordsOnFormat")
+      .should("eq", "true")
+
+    // And formatting the document uppercases keywords but not identifiers
+    cy.clearEditor()
+    cy.typeQuery(`select a from ${runWithSelectionTable}`)
+    cy.window().then((win) => {
+      const editor = win.monaco.editor.getEditors()[0]
+      editor.focus()
+      editor.trigger("test", "editor.action.formatDocument")
+    })
+    cy.getEditorContent().should(
+      "have.value",
+      `SELECT a\nFROM ${runWithSelectionTable}`,
+    )
+
+    // And reopening the modal shows it still on
+    openEditorSettings()
+    cy.getByDataHook("editor-settings-capitalize-keywords").should(
+      "have.attr",
+      "data-state",
+      "checked",
+    )
+    cy.getByDataHook("editor-settings-cancel").click()
+    cy.getByDataHook("editor-settings-modal").should("not.exist")
+  })
+
   // Only the legacy "false" is asserted here: "true" migrates to the same
   // "partial" the default already produces, so seeding it could not fail.
   it("migrates a legacy disabled setting to Off on boot", () => {

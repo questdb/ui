@@ -18,7 +18,7 @@ import { trackEvent } from "../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../modules/ConsoleEventTracker/events"
 
 const KeyBinding = styled(Box).attrs({ alignItems: "center", gap: "0" })`
-  color: ${({ theme }) => theme.color.contentAccentStrong};
+  color: ${({ theme }) => theme.color.aiPinkStart};
 `
 
 const shortcutTitle = `${ctrlCmd}+E`
@@ -92,8 +92,8 @@ export const ExplainQueryButton = ({
       <AISparkle size={12} variant="hollow" />
       Explain query
       <KeyBinding>
-        <Key keyString={ctrlCmd} color={color("contentAccentStrong")} />
-        <Key keyString="E" color={color("contentAccentStrong")} />
+        <Key keyString={ctrlCmd} color={color("aiPinkStart")} />
+        <Key keyString="E" color={color("aiPinkStart")} />
       </KeyBinding>
     </ExplainButton>
   )

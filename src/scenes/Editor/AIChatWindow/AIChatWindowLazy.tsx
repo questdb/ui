@@ -11,7 +11,7 @@ const AIChatWindow = lazy(() => import("./index"))
 const LoaderContainer = styled.div`
   display: flex;
   align-items: center;
-  background: ${({ theme }) => theme.color.surfaceBase};
+  background: ${({ theme }) => theme.color.surfaceRaised};
   justify-content: center;
   height: 100%;
   width: 100%;

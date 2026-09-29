@@ -6,9 +6,8 @@ import {
   ArrowsInLineVerticalIcon,
 } from "@phosphor-icons/react"
 import { Reset } from "../../../../components/icons"
-import { Spinner } from "./Spinner"
 import { ChartIcon } from "./ChartIcon"
-import { IconButton, Tooltip } from "../../../../components"
+import { IconButton, Spinner, Tooltip } from "../../../../components"
 import {
   NotebookViewToggle,
   NotebookViewToggleSegment,
@@ -38,6 +37,13 @@ const ViewIconButton = styled(IconButton)`
   svg {
     width: 1.8rem;
     height: 1.8rem;
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) =>
+      theme.mode === "light"
+        ? theme.color.interactionHover
+        : theme.color.surfaceRaised};
   }
 `
 

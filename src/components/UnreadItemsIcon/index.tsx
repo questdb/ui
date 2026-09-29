@@ -9,10 +9,10 @@ const Tick = styled.span`
   position: absolute;
   right: 0;
   top: 0;
-  width: 1.3rem;
-  height: 1.3rem;
+  width: 1rem;
+  height: 1rem;
   border-radius: 50%;
-  background-color: ${({ theme }) => theme.color.statusDanger};
+  background-color: ${({ theme }) => theme.color.statusSuccess};
 `
 
 const Count = styled.span`

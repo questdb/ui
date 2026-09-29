@@ -181,7 +181,16 @@ describe("ai assistant", () => {
       // Then
       cy.getByDataHook("ai-promo-modal").should("be.visible")
 
+      // When the button is clicked again
+      cy.getByDataHook("ai-assistant-settings-button").click()
+
+      // Then the promo closes and no modal opens
+      cy.getByDataHook("ai-promo-modal").should("not.exist")
+      cy.getByDataHook("ai-settings-modal-step-one").should("not.exist")
+
       // When
+      cy.getByDataHook("ai-assistant-settings-button").click()
+      cy.getByDataHook("ai-promo-modal").should("be.visible")
       cy.getByDataHook("ai-promo-close").should("be.visible").click()
 
       // Then
@@ -868,6 +877,15 @@ describe("ai assistant", () => {
       cy.getByDataHook("chat-history-search-clear").click()
       cy.getByDataHook("chat-history-search").should("have.value", "")
       cy.getByDataHook("chat-history-item").should("have.length", 3)
+
+      // When - Escape on a populated search clears it and keeps the window open
+      cy.getByDataHook("chat-history-search").type("Database{esc}")
+      cy.getByDataHook("chat-history-search").should("have.value", "")
+      cy.getByDataHook("ai-chat-window").should("be.visible")
+
+      // Then - Escape on an empty search closes the window
+      cy.getByDataHook("chat-history-search").type("{esc}")
+      cy.getByDataHook("ai-chat-window").should("not.exist")
     })
 
     it("should switch between chats from history", () => {
@@ -3291,10 +3309,9 @@ describe("custom providers", () => {
     cy.getByDataHook("custom-provider-name-input")
       .should("be.visible")
       .type("Ollama")
-    cy.getByDataHook("custom-provider-type-select").should(
-      "have.value",
-      "openai-chat-completions",
-    )
+    cy.getByDataHook("custom-provider-type-select")
+      .should("be.visible")
+      .should("contain", "OpenAI Chat Completions API")
     cy.getByDataHook("custom-provider-base-url-input").type(
       "http://localhost:11434/v1",
     )

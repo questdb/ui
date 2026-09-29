@@ -12,6 +12,7 @@ export const MAX_COLUMN_WIDTH_BOUNDS = {
 }
 export const CELL_FONT_SIZE_PX = 13
 export const HEADER_NAME_FONT_SIZE_PX = 14
+export const HEADER_NAME_FONT_WEIGHT = 600
 export const HEADER_TYPE_FONT_SIZE_PX = 10
 
 export const CELL_PADDING_PX = 12

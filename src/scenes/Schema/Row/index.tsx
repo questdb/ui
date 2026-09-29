@@ -24,10 +24,11 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import styled, { useTheme, keyframes, css } from "styled-components"
-import { SortDown, Bracket, InfoCircle } from "../../../components/icons"
+import { Bracket, InfoCircle } from "../../../components/icons"
 import { Error as ErrorIcon } from "../../../components/icons"
 import { CheckboxBlankCircle, Loader4 } from "../../../components/icons"
 import type { StyledIcon } from "../../../components/icons"
+import type { Color } from "../../../types"
 import {
   OneHundredTwentyThree,
   CalendarMinus,
@@ -54,7 +55,10 @@ import { color, copyToClipboard } from "../../../utils"
 import { useSchema } from "../SchemaContext"
 import { Checkbox } from "../checkbox"
 import { Tooltip } from "../../../components/Tooltip"
-import { mapColumnTypeToUI } from "../../../scenes/Import/ImportCSVFiles/utils"
+import {
+  isTimestamp,
+  mapColumnTypeToUI,
+} from "../../../scenes/Import/ImportCSVFiles/utils"
 import {
   LIVEVIEWS_GROUP_KEY,
   MATVIEWS_GROUP_KEY,
@@ -62,7 +66,7 @@ import {
   VIEWS_GROUP_KEY,
 } from "../localStorageUtils"
 import { TreeNavigationOptions } from "../VirtualTables"
-import { CaretRightIcon, InfoIcon } from "@phosphor-icons/react"
+import { CaretRightIcon, ClockIcon, InfoIcon } from "@phosphor-icons/react"
 
 export type TreeNodeKind =
   | "column"
@@ -103,9 +107,9 @@ type Props = Readonly<{
   value?: string | React.ReactNode
 }>
 
-const copyPulse = (pink: string) => keyframes`
+const copyPulse = (color: string) => keyframes`
   0% {
-    box-shadow: ${pink} 0 0 0 1px;
+    box-shadow: ${color} 0 0 0 1px;
   }
   75% {
     box-shadow: transparent 0 0 0 16px;
@@ -150,7 +154,7 @@ const Wrapper = styled.div<{
   `}
 
   &:hover {
-    background: ${({ theme }) => theme.color.interactionAccentHover};
+    background: ${({ theme }) => theme.color.interactionHover};
     .table-menu-button {
       opacity: 1;
     }
@@ -160,14 +164,14 @@ const Wrapper = styled.div<{
     $focused &&
     `
     outline: none;
-    background: ${theme.color.interactionAccentActive};
-    box-shadow: inset 0 0 0 1px ${theme.color.borderAccent};
+    background: ${theme.color.interactionNeutral};
+    box-shadow: inset 0 0 0 1px ${theme.color.borderDefault};
     .table-menu-button {
       opacity: 1;
     }
 
     &:hover {
-      background: ${theme.color.interactionAccentActive};
+      background: ${theme.color.interactionNeutral};
     }
   `}
 
@@ -180,7 +184,7 @@ const Wrapper = styled.div<{
   ${({ $isPulsing, theme }) =>
     $isPulsing &&
     css`
-      animation: ${copyPulse(theme.color.contentAccent)} 1000ms 0.1s;
+      animation: ${copyPulse(theme.color.borderDefault)} 1000ms 0.1s;
     `}
 `
 
@@ -210,10 +214,6 @@ const StyledTitle = styled(Title)`
     background-color: ${({ theme }) => theme.color.contentAccentStrong};
     color: ${({ theme }) => theme.color.contentInverse};
   }
-
-  svg {
-    color: ${color("contentAccent")};
-  }
 `
 
 const TableActions = styled.span`
@@ -238,10 +238,13 @@ const Spacer = styled.span`
   flex: 1;
 `
 
-const SortDownIcon = styled(SortDown)`
-  color: ${color("contentAccent")};
+const TimestampTypeIcon = styled.div<{ $designated: boolean }>`
   margin-right: 0.8rem;
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  color: ${({ $designated, theme }) =>
+    $designated ? theme.color.statusSuccess : theme.color.statusInfo};
 `
 
 const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
@@ -262,7 +265,6 @@ const ExpandButton = styled(IconButton)<{ $expanded?: boolean }>`
 `
 
 const DotIcon = styled(CheckboxBlankCircle)`
-  color: ${color("contentSecondary")};
   margin-right: 1rem;
 `
 
@@ -288,11 +290,17 @@ const ErrorItem = styled.div`
   gap: 0.5rem;
 `
 
-const TypeIcon = styled.div`
+const TypeIcon = styled.div<{ $color: Color }>`
   margin-right: 0.8rem;
   display: flex;
   align-items: center;
-  color: ${color("contentAccent")};
+  color: ${({ $color, theme }) => theme.color[$color]};
+`
+
+const DetailIcon = styled.div`
+  display: flex;
+  align-items: center;
+  color: ${color("statusInfo")};
 `
 
 const TYPE_ICONS = {
@@ -325,7 +333,7 @@ const TYPE_ICONS = {
   },
   time: {
     types: ["TIMESTAMP", "INTERVAL", "TIMESTAMP_NS"],
-    icon: SortDown,
+    icon: ClockIcon,
   },
   network: {
     types: ["IPV4"],
@@ -343,22 +351,27 @@ const TYPE_ICONS = {
 
 const IconWrapper = ({
   icon: Icon,
+  color,
   size = "14px",
 }: {
   icon: StyledIcon
+  color: Color
   size?: string
 }) => (
-  <TypeIcon>
+  <TypeIcon $color={color}>
     <Icon size={size} />
   </TypeIcon>
 )
 
 const getIcon = (type: string) => {
+  const uiType = mapColumnTypeToUI(type)
   const iconConfig = Object.values(TYPE_ICONS).find(({ types }) =>
-    types.some((t) => t === mapColumnTypeToUI(type)),
+    types.some((t) => t === uiType),
   )
+  const iconColor: Color =
+    iconConfig === TYPE_ICONS.symbol ? "statusWarning" : "statusInfo"
 
-  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} />
+  return <IconWrapper icon={iconConfig?.icon ?? DotIcon} color={iconColor} />
 }
 
 export const ColumnIcon = ({
@@ -370,16 +383,30 @@ export const ColumnIcon = ({
 }) => {
   if (!type) return null
 
-  if (isDesignatedTimestamp) {
-    return (
-      <IconWithTooltip
-        icon={
-          <SortDownIcon data-hook="designated-timestamp-icon" size="14px" />
-        }
-        placement="top"
-        tooltip="Designated timestamp"
-      />
+  if (isTimestamp(mapColumnTypeToUI(type))) {
+    const glyph = (
+      <TimestampTypeIcon $designated={isDesignatedTimestamp}>
+        <ClockIcon
+          data-hook={
+            isDesignatedTimestamp ? "designated-timestamp-icon" : undefined
+          }
+          size={14}
+          weight={isDesignatedTimestamp ? "fill" : "regular"}
+        />
+      </TimestampTypeIcon>
     )
+
+    if (isDesignatedTimestamp) {
+      return (
+        <IconWithTooltip
+          icon={glyph}
+          placement="top"
+          tooltip="Designated timestamp"
+        />
+      )
+    }
+
+    return glyph
   }
 
   return getIcon(type)
@@ -627,7 +654,11 @@ const Row = ({
                 kind={kind}
               />
             )}
-            {kind === "detail" && <InfoCircle size="14px" />}
+            {kind === "detail" && (
+              <DetailIcon>
+                <InfoCircle size="14px" />
+              </DetailIcon>
+            )}
             {["column", "table", "matview", "view", "liveview"].includes(
               kind,
             ) ? (
@@ -692,7 +723,7 @@ const Row = ({
           onClick={onOpenDetailsDrawer}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <InfoIcon size={18} color={theme.color.contentAccent} />
+          <InfoIcon size={18} color={theme.color.statusInfo} />
         </DetailsDrawerButton>
       )}
     </Wrapper>

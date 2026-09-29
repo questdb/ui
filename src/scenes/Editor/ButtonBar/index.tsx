@@ -5,6 +5,7 @@ import { Stop } from "../../../components/icons"
 import { Key } from "../../../components"
 import { ChevronDown } from "../../../components/icons"
 import { Box, Button, PopperToggle } from "../../../components"
+import { floatingSurfaceStyles } from "../../../components/overlayStyles"
 import { actions, selectors } from "../../../store"
 import { color } from "../../../utils"
 import { ctrlCmd, altOption } from "../../../utils/platform"
@@ -63,9 +64,31 @@ const ButtonGroup = styled.div`
   }
 `
 
-const SuccessButton = styled(Button)`
+const RunButton = styled(Button)`
   margin-left: auto;
   font-size: 1.5rem;
+
+  &&:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.brandAction};
+    border-color: ${({ theme }) => theme.color.brandActionBorder};
+    color: ${({ theme }) => theme.color.brandActionForeground};
+  }
+
+  &&:hover:not(:disabled):not([aria-disabled="true"]),
+  &&[aria-pressed="true"]:not(:disabled):not([aria-disabled="true"]),
+  &&:active:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.brandActionHover};
+    border-color: ${({ theme }) => theme.color.brandActionBorder};
+    color: ${({ theme }) => theme.color.brandActionForeground};
+  }
+
+  &&&:disabled,
+  &&&[aria-disabled="true"] {
+    color: ${({ theme }) =>
+      theme.mode === "dark"
+        ? theme.color.contentMuted
+        : theme.color.contentDisabled};
+  }
 `
 
 const StopButton = styled(Button)`
@@ -73,17 +96,27 @@ const StopButton = styled(Button)`
   font-size: 1.5rem;
 `
 
-const MainRunButton = styled(SuccessButton)`
+const MainRunButton = styled(RunButton)`
   border-right: 0;
   overflow: hidden;
 `
 
-const DropdownButton = styled(SuccessButton)<{ $open: boolean }>`
+const DropdownButton = styled(RunButton)<{ $open: boolean }>`
   padding: 0 0.5rem;
   min-width: auto;
   svg {
     transform: ${({ $open }) => ($open ? "rotate(180deg)" : "rotate(0deg)")};
   }
+
+  ${({ $open, theme }) =>
+    $open &&
+    `
+    &&:not(:disabled):not([aria-disabled="true"]) {
+      background: ${theme.color.brandActionHover};
+      border-color: ${theme.color.brandActionBorder};
+      color: ${theme.color.brandActionForeground};
+    }
+  `}
 `
 
 const CopyLinkMenuButton = styled(Button)`
@@ -93,20 +126,15 @@ const CopyLinkMenuButton = styled(Button)`
 `
 
 const DropdownMenu = styled.div`
-  background: ${color("surfaceInset")};
-  border: 1px solid ${color("borderDefault")};
-  border-radius: 0.7rem;
-  box-shadow:
-    0 1.2rem 3rem ${({ theme }) => theme.color.shadowMedium},
-    0 0.2rem 0.6rem ${({ theme }) => theme.color.shadowSoft};
+  ${floatingSurfaceStyles}
   overflow: hidden;
-  transform: translateX(-7rem) translateY(0.5rem);
   padding: 0;
   min-width: unset;
   display: flex;
   flex-direction: column;
 
-  > button {
+  /* Lock the item hairline; secondary Button hover would paint borderStrong. */
+  && > button {
     justify-content: space-between;
     width: 100%;
     min-height: 4rem;
@@ -114,15 +142,32 @@ const DropdownMenu = styled.div`
     border: 0;
     border-radius: 0;
     font-size: 1.5rem;
+    background: transparent;
   }
 
-  > button + button {
+  && > button + button {
     border-top: 1px solid ${({ theme }) => theme.color.borderSubtle};
+  }
+
+  && > button:hover:not(:disabled):not([aria-disabled="true"]),
+  && > button:active:not(:disabled):not([aria-disabled="true"]) {
+    background: ${({ theme }) => theme.color.interactionHover};
+    filter: none;
+  }
+
+  && > button + button:hover:not(:disabled):not([aria-disabled="true"]),
+  && > button + button:active:not(:disabled):not([aria-disabled="true"]) {
+    border-top-color: ${({ theme }) => theme.color.borderSubtle};
   }
 `
 
 const RunShortcut = styled(Box).attrs({ alignItems: "center", gap: "0" })`
   margin-left: 1rem;
+
+  [data-hook="button-run-query"]:disabled &,
+  [data-hook="button-run-query"][aria-disabled="true"] & {
+    opacity: 0.5;
+  }
 `
 
 const RUN_DROPDOWN_MENU_ID = "run-query-dropdown-menu"
@@ -317,7 +362,13 @@ const ButtonBar = ({
         <PopperToggle
           active={dropdownActive}
           onToggle={handleDropdownToggle}
-          placement="bottom"
+          placement="bottom-end"
+          modifiers={[
+            {
+              name: "offset",
+              options: { offset: [0, 5] },
+            },
+          ]}
           trigger={
             <DropdownButton
               variant="primary"

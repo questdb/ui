@@ -12,6 +12,7 @@ import {
 import { Preferences, InstanceType } from "../../utils/questdb/types"
 import { menuContainerStyles } from "../menuStyles"
 import { InstanceTypeIcon } from "./InstanceTypeIcon"
+import { statusInfoFocus } from "../../theme"
 
 const Wrapper = styled.div`
   ${menuContainerStyles}
@@ -65,6 +66,25 @@ const ColorOption = styled(ButtonBase)<{
 
   &:hover {
     border-color: ${({ theme }) => theme.color.borderStrong};
+  }
+`
+
+const DefaultColorOption = styled(ColorOption).attrs({
+  $colorValue: "default",
+})`
+  position: relative;
+
+  &::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    width: 100%;
+    height: 1px;
+    border-radius: 1px;
+    background: ${({ theme }) => theme.color.borderAccentStrong};
+    box-shadow: 0 0 0 0.5px ${({ theme }) => theme.color.contentPrimary};
+    transform: rotate(-45deg);
   }
 `
 
@@ -154,7 +174,7 @@ const ColorSlider = styled.input.attrs({ type: "range", min: 0, max: 255 })`
   }
 
   &:focus-visible {
-    outline: 1px solid ${({ theme }) => theme.color.contentAccent};
+    outline: 1px solid ${({ theme }) => statusInfoFocus(theme.color.statusInfo)};
     outline-offset: 2px;
   }
 
@@ -429,9 +449,8 @@ export const InstanceSettingsPopper = ({
               Color
             </FormLabel>
             <ColorSelector role="group" aria-labelledby="instance-color-label">
-              <ColorOption
+              <DefaultColorOption
                 type="button"
-                $colorValue="default"
                 $selected={!values.instance_rgb || values.instance_rgb === ""}
                 onClick={() => handleColorSelect("")}
                 data-hook="topbar-instance-color-option-default"

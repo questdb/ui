@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled from "styled-components"
-import { Box, Button, IconButton, Tooltip } from "../../../components"
+import { Box, Button, IconButton, Spinner, Tooltip } from "../../../components"
 import { AISparkle } from "../../../components/AISparkle"
 import {
   DownloadSimpleIcon,
@@ -8,7 +8,6 @@ import {
   PencilSimpleLineIcon,
 } from "@phosphor-icons/react"
 import { CopyAlt } from "../../../components/icons"
-import { Spinner } from "./cells/Spinner"
 import { color } from "../../../utils"
 import { toast } from "../../../components/Toast"
 import { trackEvent } from "../../../modules/ConsoleEventTracker"
@@ -48,7 +47,10 @@ const Toolbar = styled(Box).attrs({
   padding: 1rem 2rem;
   background: ${color("surfaceBase")};
   border-bottom: 1px solid ${({ theme }) => theme.color.borderSubtle};
-  box-shadow: 0 12px 24px ${({ theme }) => theme.color.shadowSoft};
+  box-shadow: ${({ theme }) =>
+    theme.mode === "light"
+      ? `0 1px 2px ${theme.color.shadowSubtle}, 0 2px 6px ${theme.color.shadowSoft}`
+      : `0 12px 24px ${theme.color.shadowSoft}`};
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
@@ -67,7 +69,7 @@ const NotebookGlyph = styled(NotebookIcon).attrs({
 })`
   display: block;
   flex-shrink: 0;
-  color: ${color("contentObject")};
+  color: ${color("statusInfo")};
 `
 
 const NotebookIdentity = styled(Box).attrs({ align: "center", gap: "1rem" })`
