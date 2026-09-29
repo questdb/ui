@@ -164,7 +164,10 @@ describe("Notebook variables", () => {
     cy.applyNotebookVariables()
     cy.selectNotebookVariable("desk", "1")
     cy.selectNotebookVariable("account", "1")
-    cy.getByDataHook("notebook-variables").click()
+    cy.getByDataHook("variable-list-account").should("contain", "1")
+    cy.getByDataHook("notebook-variables")
+      .should("have.attr", "aria-busy", "false")
+      .click()
     cy.addNotebookVariable({
       name: "adjusted",
       kind: "custom",
