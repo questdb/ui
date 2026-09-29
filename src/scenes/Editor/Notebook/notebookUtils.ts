@@ -1091,7 +1091,7 @@ export const buildAppliedLayout = (
   request: ApplyRequest,
   nextCells: NotebookCell[],
   prevLayout: CellLayoutItem[] | undefined,
-  defaults: { gridCols: number; rowHeight: number; marginY?: number },
+  defaults: { gridCols: number; rowHeight: number; marginY: number },
   resultStatusOf: CellResultStatusReader,
 ): CellLayoutItem[] => {
   const prevById = new Map((prevLayout ?? []).map((l) => [l.i, l]))

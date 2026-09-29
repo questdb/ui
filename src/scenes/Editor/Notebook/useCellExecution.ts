@@ -37,6 +37,8 @@ import {
 } from "./runCancellation"
 import {
   hasPendingResult,
+  reconcileCellResultForStatements,
+  resultStatementKeys,
   retextResultsToStatements,
   statementKeysFor,
 } from "./statementIdentity"
@@ -61,9 +63,29 @@ const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
 }
 
 // A run lands with the text it ran as. When the cell was edited while it ran,
-// the results whose statements kept their identity take the editor's current
-// text, so sizing, the tab frame and the snapshot agree at commit.
-const committedResults = (
+// the frame reconciles to the editor's statements at commit, as the engine
+// does after any settled edit: survivors take the current text, results no
+// statement claims drop. A frame with no survivor stays as it ran.
+export const committedResult = (
+  result: CellResult,
+  liveValue: string,
+  valueAtRunStart: string,
+): CellResult => {
+  if (liveValue === valueAtRunStart) return result
+  const statements = getQueriesFromText(liveValue)
+  return (
+    reconcileCellResultForStatements(
+      result,
+      statements,
+      statementKeysFor(statements),
+      resultStatementKeys(result.results),
+    ) ?? result
+  )
+}
+
+// A recorded fragment (selection or cursor run) often matches no statement,
+// so it only takes the current text of the statement it belongs to.
+export const committedResults = (
   results: SingleQueryResult[],
   liveValue: string,
   valueAtRunStart: string,
@@ -389,23 +411,23 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
-        const results = committedResults(
-          liveCell.result?.results ?? finalResults,
+        const result = committedResult(
+          liveCell.result ?? {
+            results: finalResults,
+            activeResultIndex: 0,
+            timestamp: Date.now(),
+          },
           liveCell.value,
           valueAtRunStart,
         )
-        if (!liveCell.result) {
-          updateCell(cellId, {
-            result: { results, activeResultIndex: 0, timestamp: Date.now() },
+        if (result !== liveCell.result) updateCell(cellId, { result })
+        if (result.results.length === queries.length) {
+          setScriptSummary(cellId, {
+            successCount,
+            failedCount,
+            durationMs: Date.now() - startTime,
           })
-        } else if (results !== liveCell.result.results) {
-          updateCell(cellId, { result: { ...liveCell.result, results } })
         }
-        setScriptSummary(cellId, {
-          successCount,
-          failedCount,
-          durationMs: Date.now() - startTime,
-        })
         stampRunHistory(cellId)
         persistSnapshot(cellId)
       } finally {
@@ -606,19 +628,17 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
-        const results = committedResults(
-          liveCell.result?.results ?? finalResults,
+        const result = committedResult(
+          liveCell.result ?? {
+            results: finalResults,
+            activeResultIndex: 0,
+            timestamp: Date.now(),
+          },
           liveCell.value,
           valueAtRunStart,
         )
-        if (!liveCell.result) {
-          updateCell(cellId, {
-            result: { results, activeResultIndex: 0, timestamp: Date.now() },
-          })
-        } else if (results !== liveCell.result.results) {
-          updateCell(cellId, { result: { ...liveCell.result, results } })
-        }
-        if (queries.length > 1) {
+        if (result !== liveCell.result) updateCell(cellId, { result })
+        if (queries.length > 1 && result.results.length === queries.length) {
           setScriptSummary(cellId, {
             successCount: queries.length - failedCount - cancelledCount,
             failedCount,

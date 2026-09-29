@@ -19,7 +19,11 @@ vi.mock("@questdb/sql-parser", async (importOriginal) => {
   }
 })
 
-import { CellRefreshEngine, type CellRefreshDeps } from "./cellRefreshEngine"
+import {
+  CellRefreshEngine,
+  pendingCellFetchState,
+  type CellRefreshDeps,
+} from "./cellRefreshEngine"
 import { computeResultBottomHeight } from "../cellSizing"
 import {
   deriveStatementFrame,
@@ -214,6 +218,18 @@ describe("statement identity passes per event", () => {
     expect(engine.getState("c1")?.slotKeys).toEqual(
       statementKeysFor(statements),
     )
+  })
+
+  it("builds a chart's pending state without the formatter", async () => {
+    // Given a draw cell that mounts before the engine holds its entry
+
+    // When the chart derives its pending state from the SQL it shows
+    const calls = await countFormatterCalls(() => {
+      pendingCellFetchState(sqlOf(statements))
+    })
+
+    // Then no statement is keyed: the loading derivation reads no slot keys
+    expect(calls).toBe(0)
   })
 
   it("resets the zoom of an unread chart only when its statements change", async () => {

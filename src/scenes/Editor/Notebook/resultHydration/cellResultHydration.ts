@@ -283,8 +283,8 @@ export class CellResultHydrationEngine {
       ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
     }
     // A re-keyed or time-folded snapshot rewrites too, so the disk copy holds
-    // head keys and every result's fetch time, and the next reload translates
-    // and folds nothing.
+    // current keys and every result's fetch time, and the next reload
+    // translates and folds nothing.
     if (frameChanged || rekeyed !== null) {
       const rewritten: NotebookResultSnapshot = {
         ...snapshot,

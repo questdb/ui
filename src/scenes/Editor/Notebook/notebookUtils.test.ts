@@ -1907,7 +1907,7 @@ describe("buildAppliedLayout", () => {
       },
       cells,
       [],
-      { gridCols: 12, rowHeight: 50 },
+      { gridCols: 12, rowHeight: 50, marginY: 0 },
       unrequested,
     )
     // Then the explicit grid is kept and the other cell derives its height
@@ -1926,7 +1926,7 @@ describe("buildAppliedLayout", () => {
       { cells: [{ id: "a", value: "" }] },
       cells,
       [{ i: "a", x: 3, y: 4, w: 8, h: 5 }],
-      { gridCols: 12, rowHeight: 50 },
+      { gridCols: 12, rowHeight: 50, marginY: 0 },
       unrequested,
     )
     // Then the placement stays and the height is re-derived
@@ -1958,7 +1958,7 @@ describe("buildAppliedLayout", () => {
       },
       cells,
       [],
-      { gridCols: 12, rowHeight: 50 },
+      { gridCols: 12, rowHeight: 50, marginY: 0 },
       unrequested,
     )
     // Then the draw cell is taller and stacks below
@@ -3028,10 +3028,15 @@ describe("pane height ceiling", () => {
     // the save path clamps any overshoot back to the 2400px pane ceiling.
     // result-only: 2400 + 44 chrome = 2444px → 83 rows
     expect(
-      computeCellGridBounds({ ...withResult, paneView: "result" }, 10, 20).maxH,
+      computeCellGridBounds(
+        { ...withResult, paneView: "result" },
+        10,
+        20,
+        false,
+      ).maxH,
     ).toBe(83)
     // split keeps the 100px editor: 100 + 2400 + 50 = 2550px → 86 rows
-    expect(computeCellGridBounds(withResult, 10, 20).maxH).toBe(86)
+    expect(computeCellGridBounds(withResult, 10, 20, false).maxH).toBe(86)
   })
 
   it("rejects agent heights above the ceiling in apply", () => {

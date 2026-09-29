@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
+import { clamp } from "../../../../utils/clamp"
 import { SideChip } from "./chips"
 
 // Matches the grid EdgeHandle `s` (south) affordance: a 2px pink line plus a
@@ -126,7 +127,7 @@ export const resizeHeightForKey = (
     default:
       return null
   }
-  const clamped = Math.min(maxHeight, Math.max(minHeight, next))
+  const clamped = clamp(next, minHeight, maxHeight)
   return SHRINK_KEYS.has(key)
     ? Math.min(currentHeight, clamped)
     : Math.max(currentHeight, clamped)
@@ -155,11 +156,6 @@ export const ResizeHandle: React.FC<Props> = ({
   const onResizeRef = useRef(onResize)
   const onResizeEndRef = useRef(onResizeEnd)
 
-  const clampHeight = useCallback(
-    (height: number) => Math.min(maxHeight, Math.max(minHeight, height)),
-    [maxHeight, minHeight],
-  )
-
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
@@ -174,7 +170,11 @@ export const ResizeHandle: React.FC<Props> = ({
         const delta = moveEvent.clientY - startYRef.current
         if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
         dragged = true
-        const newHeight = clampHeight(startHeightRef.current + delta)
+        const newHeight = clamp(
+          startHeightRef.current + delta,
+          minHeight,
+          maxHeight,
+        )
         lastHeightRef.current = newHeight
         onResizeRef.current(newHeight)
       }
@@ -194,7 +194,7 @@ export const ResizeHandle: React.FC<Props> = ({
       document.addEventListener("mouseup", finishDrag)
       finishDragRef.current = finishDrag
     },
-    [targetRef, clampHeight],
+    [targetRef, minHeight, maxHeight],
   )
 
   const handleKeyDown = useCallback(
@@ -234,12 +234,9 @@ export const ResizeHandle: React.FC<Props> = ({
     onResizeEndRef.current(height)
   }, [])
 
-  const handleKeyUp = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (isResizeKey(e.key)) commitKeyboardResize()
-    },
-    [commitKeyboardResize],
-  )
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    if (isResizeKey(e.key)) commitKeyboardResize()
+  }
 
   useEffect(() => {
     onResizeRef.current = onResize

@@ -156,10 +156,11 @@ const initialFetchState = (
   fetchCancelled: false,
 })
 
-export const pendingCellFetchState = (sql: string): CellFetchState => {
-  const queries = getQueriesFromText(sql)
-  return initialFetchState(queries, statementKeysFor(queries))
-}
+// The chart's pending answer before the engine holds the cell's entry. The
+// loading derivation reads no slot keys, so none are built: a notebook open
+// runs the formatter only for the entries the engine keys on first read.
+export const pendingCellFetchState = (sql: string): CellFetchState =>
+  initialFetchState(getQueriesFromText(sql), [])
 
 export const deriveChartLoading = (
   state: CellFetchState,

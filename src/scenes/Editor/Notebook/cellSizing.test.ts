@@ -473,7 +473,9 @@ describe("partitionCellHeights", () => {
 describe("computeCellGridH", () => {
   it("single-view (run, no result): topHeight + chrome rounded up", () => {
     // 72 + 56 = 128 → ceil(128/50) = 3
-    expect(computeCellGridH({ id: "x", position: 0, value: "" }, 50)).toBe(3)
+    expect(
+      computeCellGridH({ id: "x", position: 0, value: "" }, 50, 0, false),
+    ).toBe(3)
   })
   it("double-view (run with empty result): notification bottom floored to the pane minimum", () => {
     // Given a run cell with an empty result
@@ -491,6 +493,8 @@ describe("computeCellGridH", () => {
           result: { results: [], activeResultIndex: 0, timestamp: 0 },
         },
         50,
+        0,
+        false,
       ),
     ).toBe(5)
   })
@@ -507,18 +511,30 @@ describe("computeCellGridH", () => {
           result: { results: [], activeResultIndex: 0, timestamp: 0 },
         },
         50,
+        0,
+        false,
       ),
     ).toBe(11)
   })
   it("draw cell uses chart default 350 when bottomHeight is unset", () => {
     // 72 + 56 + 350 = 478 → ceil(478/50) = 10
     expect(
-      computeCellGridH({ id: "x", position: 0, value: "", mode: "draw" }, 50),
+      computeCellGridH(
+        { id: "x", position: 0, value: "", mode: "draw" },
+        50,
+        0,
+        false,
+      ),
     ).toBe(10)
   })
   it("returns at least 1 row even for an empty cell", () => {
     expect(
-      computeCellGridH({ id: "x", position: 0, value: "", topHeight: 0 }, 50),
+      computeCellGridH(
+        { id: "x", position: 0, value: "", topHeight: 0 },
+        50,
+        0,
+        false,
+      ),
     ).toBeGreaterThanOrEqual(1)
   })
   it("accounts for marginY (inter-row gaps from react-grid-layout)", () => {
@@ -541,6 +557,7 @@ describe("computeCellGridH", () => {
         },
         10,
         20,
+        false,
       ),
     ).toBe(19)
   })
@@ -608,6 +625,7 @@ describe("computeCellGridH", () => {
         },
         10,
         20,
+        false,
       ),
     ).toBe(9)
   })
@@ -630,6 +648,7 @@ describe("computeCellGridH", () => {
         },
         10,
         20,
+        false,
       ),
     ).toBe(6)
   })
@@ -648,11 +667,15 @@ describe("computeCellGridH", () => {
     // When the grid height is computed per pane layout
     // Then each layout counts only its visible panes
     // Editor: 200 + 44 chrome = 244px → 9 rows (250px rendered).
-    expect(computeCellGridH({ ...cell, result: undefined }, 10, 20)).toBe(9)
+    expect(
+      computeCellGridH({ ...cell, result: undefined }, 10, 20, false),
+    ).toBe(9)
     // Result: 300 + 44 chrome = 344px → 13 rows (370px rendered).
-    expect(computeCellGridH({ ...cell, paneView: "result" }, 10, 20)).toBe(13)
+    expect(
+      computeCellGridH({ ...cell, paneView: "result" }, 10, 20, false),
+    ).toBe(13)
     // Wide split retains both panes and the 6px divider: 550px → 19 rows.
-    expect(computeCellGridH(cell, 10, 20)).toBe(19)
+    expect(computeCellGridH(cell, 10, 20, false)).toBe(19)
   })
 })
 
@@ -782,7 +805,7 @@ describe("computeCellGridBounds", () => {
     // Then the minimum reserves the editor height plus the result minimum
     // 400px editor + 100px result minimum + 50px split chrome = 550px,
     // which is exactly 19 rows at rowHeight=10 and marginY=20.
-    expect(computeCellGridBounds(cell, 10, 20).minH).toBe(19)
+    expect(computeCellGridBounds(cell, 10, 20, false).minH).toBe(19)
   })
 
   it("does not reserve the remembered editor height when it is hidden", () => {
@@ -800,7 +823,7 @@ describe("computeCellGridBounds", () => {
     // When the grid bounds are computed
     // Then the minimum covers only the result pane
     // 100px result minimum + 44px base chrome requires 6 rows.
-    expect(computeCellGridBounds(cell, 10, 20).minH).toBe(6)
+    expect(computeCellGridBounds(cell, 10, 20, false).minH).toBe(6)
   })
 
   it("uses the chart-specific result minimum", () => {
@@ -817,7 +840,7 @@ describe("computeCellGridBounds", () => {
     // When the grid bounds are computed
     // Then the minimum uses the chart floor
     // 400px editor + 296px chart minimum + 50px split chrome requires 26 rows.
-    expect(computeCellGridBounds(cell, 10, 20).minH).toBe(26)
+    expect(computeCellGridBounds(cell, 10, 20, false).minH).toBe(26)
   })
 
   it("uses only the visible pane minimum for editor-only and result-only layouts", () => {
@@ -834,10 +857,11 @@ describe("computeCellGridBounds", () => {
     // When the grid bounds are computed per single-pane layout
     // Then each minimum covers only its visible pane
     expect(
-      computeCellGridBounds({ ...cell, result: undefined }, 10, 20).minH,
+      computeCellGridBounds({ ...cell, result: undefined }, 10, 20, false).minH,
     ).toBe(5)
     expect(
-      computeCellGridBounds({ ...cell, paneView: "result" }, 10, 20).minH,
+      computeCellGridBounds({ ...cell, paneView: "result" }, 10, 20, false)
+        .minH,
     ).toBe(6)
   })
 
@@ -918,12 +942,12 @@ describe("markdown cell grid lattice", () => {
     // Given a markdown cell with no stored topHeight
     // When grid h derives from the 56px default + 44px markdown chrome
     // Then 56 + 44 = 100px = exactly 4 rows (4×10 + 3×20), zero slack
-    expect(computeCellGridH(markdown(), 10, 20)).toBe(4)
+    expect(computeCellGridH(markdown(), 10, 20, false)).toBe(4)
   })
 
   it("markdown carries the base chrome only — its box lands exactly", () => {
     // 56 + 44 = 100px = exactly 4 rows; markdown never adds the divider
-    expect(computeCellGridH(markdown({ topHeight: 56 }), 10, 20)).toBe(4)
+    expect(computeCellGridH(markdown({ topHeight: 56 }), 10, 20, false)).toBe(4)
   })
 
   it("paneHeightsFromGridRows back-solves markdown rows with markdown chrome", () => {
@@ -981,8 +1005,8 @@ describe("gridBoxRowsChange", () => {
 
     // Then the store is written only at row boundaries, not per pixel
     const rowsGained =
-      computeAgentCellGridH({ ...runCell, topHeight: end }) -
-      computeAgentCellGridH(runCell)
+      computeAgentCellGridH({ ...runCell, topHeight: end }, false) -
+      computeAgentCellGridH(runCell, false)
     expect(rowsGained).toBeGreaterThan(0)
     expect(storeWrites).toBe(rowsGained)
     expect(storeWrites).toBeLessThan(end - start)

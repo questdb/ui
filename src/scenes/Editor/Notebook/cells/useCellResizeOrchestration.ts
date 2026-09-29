@@ -63,6 +63,10 @@ export const useCellResizeOrchestration = ({
     useState<NotebookCell | null>(null)
   const [spotlightSpan, setSpotlightSpan] = useState<number | null>(null)
 
+  // The grid edge handle publishes its reset; the subscription lives for the
+  // cell and reads the handler of the current render.
+  const resetBottomAreaRef = useRef<(() => void) | null>(null)
+
   const readResetTopHeight = useCallback(() => {
     const contentHeight = getEditorContentHeight()
     return contentHeight != null
@@ -218,9 +222,6 @@ export const useCellResizeOrchestration = ({
     })
     bottomResize.resetHeight()
   }
-  // The grid edge handle publishes its reset; the subscription lives for the
-  // cell and reads the handler of the current render.
-  const resetBottomAreaRef = useRef(resetBottomArea)
 
   useEffect(() => {
     const editor = editorContainerRef.current
@@ -244,11 +245,11 @@ export const useCellResizeOrchestration = ({
 
   useEffect(() => {
     resetBottomAreaRef.current = resetBottomArea
-  }, [resetBottomArea])
+  })
 
   useEffect(() => {
     const handler = (payload?: { cellId?: string }) => {
-      if (payload?.cellId === cell.id) resetBottomAreaRef.current()
+      if (payload?.cellId === cell.id) resetBottomAreaRef.current?.()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_SIZE, handler)
     return () =>

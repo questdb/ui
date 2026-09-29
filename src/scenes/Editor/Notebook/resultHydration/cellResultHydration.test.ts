@@ -360,12 +360,12 @@ describe("CellResultHydrationEngine", () => {
     ])
   })
 
-  it("re-keys a base-format snapshot to head keys and rewrites it once, keeping the frame and script", async () => {
-    // Given a snapshot saved by base: trimmed-text keys for a failed refresh
+  it("re-keys a legacy snapshot to current keys and rewrites it once, keeping the frame and script", async () => {
+    // Given a legacy snapshot: trimmed-text keys for a failed refresh
     // on the first statement and the active tab on the second
     const first = "select  1"
     const second = "select  2"
-    const [headFirst, headSecond] = statementKeysFor([first, second])
+    const [currentFirst, currentSecond] = statementKeysFor([first, second])
     const legacyKeyOf = (trimmedSql: string) => `${trimmedSql}\u00010`
     const script = { successCount: 2, failedCount: 0, durationMs: 5 }
     seedCell({ ...ranCell("c1"), value: `${first}; ${second}` })
@@ -377,26 +377,29 @@ describe("CellResultHydrationEngine", () => {
       refreshErrors: [{ statementKey: legacyKeyOf(first), message: "boom" }],
     })
 
-    // When it hydrates on head
+    // When it hydrates
     engine.request("c1")
     await resolveLoad("c1")
 
-    // Then the error and the active tab survive under head keys
+    // Then the error and the active tab survive under current keys
     expect(seededRefreshState).toEqual([
-      ["c1", { refreshErrors: [{ statementKey: headFirst, message: "boom" }] }],
+      [
+        "c1",
+        { refreshErrors: [{ statementKey: currentFirst, message: "boom" }] },
+      ],
     ])
     expect(applied[0][1]).toMatchObject({
-      activeStatementKey: headSecond,
+      activeStatementKey: currentSecond,
       activeResultIndex: 1,
       script,
     })
 
-    // And the disk copy now holds head keys and the folded fetch time, with
+    // And the disk copy now holds current keys and the folded fetch time, with
     // its frame and script intact
     expect(rewrites).toHaveLength(1)
     expect(rewrites[0]).toMatchObject({
-      activeStatementKey: headSecond,
-      refreshErrors: [{ statementKey: headFirst, message: "boom" }],
+      activeStatementKey: currentSecond,
+      refreshErrors: [{ statementKey: currentFirst, message: "boom" }],
       script,
     })
     expect(rewrites[0].results).toEqual([
@@ -433,7 +436,7 @@ describe("CellResultHydrationEngine", () => {
   })
 
   it("leaves a snapshot whose results already carry their fetch time untouched", async () => {
-    // Given a snapshot saved by head
+    // Given a snapshot saved with current keys
     seedCell(ranCell("c1"))
     snapshots.set("c1", snapshot("c1", [dqlResult("select 1")]))
 

@@ -451,7 +451,7 @@ export const hasExplicitModeForEditor = (
 // rewrites its stored view.
 export const resolveCellPaneLayout = (
   cell: NotebookCell,
-  expectingResult: boolean = false,
+  expectingResult: boolean,
 ): CellPaneLayout => {
   if (!isDoubleView(cell) && !expectingResult) return "editor"
   return storedCellPaneView(cell) === "result" ? "result" : "split"
@@ -607,8 +607,7 @@ type CellGridBounds = { h: number; minH: number; maxH: number }
 // `ceil((totalPx + marginY) / (rowHeight + marginY))` rows. Forgetting
 // the marginY term inflated cell heights by ~3× at rowHeight=10,
 // marginY=20 (a 500-px content asked for 50 rows that rendered as
-// ~1480 px). Default marginY=0 keeps backwards-compat for tests/callers
-// that ignore margins.
+// ~1480 px).
 //
 // In a split cell the south edge owns only the result pane, so the bounds
 // reserve the editor's current allocation rather than merely its minimum.
@@ -618,8 +617,8 @@ type CellGridBounds = { h: number; minH: number; maxH: number }
 export const computeCellGridBounds = (
   cell: NotebookCell,
   rowHeight: number,
-  marginY: number = 0,
-  expectingResult: boolean = false,
+  marginY: number,
+  expectingResult: boolean,
 ): CellGridBounds => {
   const paneLayout = resolveCellPaneLayout(cell, expectingResult)
   const { topHeight, bottomHeight } = computeCellHeights(cell, {
@@ -654,8 +653,8 @@ export const computeCellGridBounds = (
 export const computeCellGridH = (
   cell: NotebookCell,
   rowHeight: number,
-  marginY: number = 0,
-  expectingResult: boolean = false,
+  marginY: number,
+  expectingResult: boolean,
 ): number => computeCellGridBounds(cell, rowHeight, marginY, expectingResult).h
 
 export const snapMarkdownTopHeight = (px: number): number => {
@@ -668,12 +667,9 @@ export const snapMarkdownTopHeight = (px: number): number => {
   )
 }
 
-// Hydration status isn't knowable headlessly; "unrequested" (reserved space)
-// matches what the notebook renders for a run-marked cell before its snapshot
-// loads, so agent-visible heights agree with the screen.
 export const computeAgentCellGridH = (
   cell: NotebookCell,
-  expectingResult: boolean = isExpectingResult(cell, "unrequested"),
+  expectingResult: boolean,
 ): number =>
   computeCellGridH(
     cell,
