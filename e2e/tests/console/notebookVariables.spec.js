@@ -138,7 +138,7 @@ describe("Notebook variables", () => {
       cy.getByDataHook("variable-row").eq(0).should("contain", "@region")
       cy.getByDataHook("variable-row").eq(1).should("contain", "@device")
     })
-    cy.getByDataHook("variables-dialog").type("{esc}")
+    cy.closeNotebookVariables()
     cy.runNotebookQuery(
       "select @device as restored_device, @threshold as restored_threshold",
     )
@@ -433,7 +433,7 @@ describe("Notebook variables", () => {
     )
     cy.getByDataHook("notebook-variables").click()
     cy.getByDataHook("variable-problem").should("contain", "variable_ranges")
-    cy.getByDataHook("variable-name").type("{esc}")
+    cy.closeNotebookVariables()
 
     // When the table returns, a new preset restores the list.
     cy.execQuery("create table variable_ranges as (select 1 as id)")

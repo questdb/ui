@@ -971,11 +971,15 @@ Cypress.Commands.add(
 Cypress.Commands.add("applyNotebookVariables", () => {
   cy.getByDataHook("variables-apply").should("not.be.disabled").click()
   cy.getByDataHook("variables-dialog").should("not.exist")
-  cy.getByDataHook("notebook-variables").should(
-    "have.attr",
-    "aria-busy",
-    "false",
-  )
+  cy.getByDataHook("notebook-variables")
+    .should("be.focused")
+    .and("have.attr", "aria-busy", "false")
+})
+
+Cypress.Commands.add("closeNotebookVariables", () => {
+  cy.getByDataHook("variables-dialog").type("{esc}")
+  cy.getByDataHook("variables-dialog").should("not.exist")
+  cy.getByDataHook("notebook-variables").should("be.focused")
 })
 
 Cypress.Commands.add("moveNotebookVariableBefore", (name, beforeName) => {
