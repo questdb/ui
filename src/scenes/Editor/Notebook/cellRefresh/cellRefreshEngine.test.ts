@@ -196,6 +196,28 @@ describe("CellRefreshEngine", () => {
     vi.clearAllMocks()
   })
 
+  it("uses one captured variable snapshot for every statement in a refresh round", async () => {
+    // Given
+    const executeSingle = vi.fn((sql: string) =>
+      Promise.resolve(dqlResult(sql)),
+    )
+    const validateWithGlobals = vi.fn().mockResolvedValue(dqlValidation)
+    const captureExecution = vi
+      .fn()
+      .mockResolvedValue({ executeSingle, validateWithGlobals })
+    Object.assign(deps, { captureExecution })
+    // When
+    syncOnScreen([drawCell("c1", "select @a; select @a + 1", false)])
+    await flushAsync()
+    // Then
+    expect(captureExecution).toHaveBeenCalledTimes(1)
+    expect(captureExecution).toHaveBeenCalledWith("c1", expect.anything())
+    expect(executeSingle).toHaveBeenCalledTimes(2)
+    expect(validateWithGlobals).toHaveBeenCalledTimes(2)
+    expect(deps.executeSingle).not.toHaveBeenCalled()
+    expect(deps.validateWithGlobals).not.toHaveBeenCalled()
+  })
+
   it("fetches once for a draw cell with auto-refresh off", async () => {
     // Given a draw cell with auto-refresh disabled and no prior data
     const cell = drawCell("c1", "select 1", false)

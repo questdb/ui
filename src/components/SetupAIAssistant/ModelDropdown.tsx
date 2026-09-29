@@ -54,7 +54,6 @@ export const ModelDropdown = () => {
         disabled
         disabledTooltip="You can enable models in the AI Assistant settings"
         label="No models enabled"
-        labelFontSize="1.3rem"
         leadingIcon={<WarningCircleIcon size={16} />}
         minWidth="17rem"
       />
@@ -66,7 +65,6 @@ export const ModelDropdown = () => {
       <SelectMenu.Trigger
         dataHook="ai-settings-model-dropdown"
         label={displayModel.label}
-        labelFontSize="1.3rem"
         minWidth="17rem"
         leadingIcon={
           displayModel.provider === "anthropic" ? (

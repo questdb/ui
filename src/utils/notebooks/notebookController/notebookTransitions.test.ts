@@ -144,9 +144,9 @@ describe("applyNotebookStateTransition", () => {
     const out = applyNotebookStateTransition(parts, {
       cells: [{ id: "a", value: "SELECT 2" }, { value: "SELECT 3" }],
     })
-    // Then the result shape the dispatch layer relays back is preserved: a
-    // single `applied` key holding the three diff arrays
-    expect(Object.keys(out.result)).toEqual(["applied"])
+    // Then the result carries the cell diff under `applied` next to the
+    // variables diff
+    expect(Object.keys(out.result)).toEqual(["applied", "variables"])
     expect(Array.isArray(out.result.applied.added)).toBe(true)
     expect(Array.isArray(out.result.applied.updated)).toBe(true)
     expect(Array.isArray(out.result.applied.deleted)).toBe(true)
@@ -466,5 +466,68 @@ describe("transition validation guards", () => {
         ),
       ),
     ).toBe("unknown_cell")
+  })
+})
+
+describe("applyNotebookStateTransition — variables diff", () => {
+  const list = (query: string) => ({
+    name: "pair",
+    kind: "list" as const,
+    source: { type: "query" as const, query },
+    sort: "none" as const,
+    multi: true,
+    includeAll: true,
+    all: { mode: "list" as const },
+    selected: "all" as const,
+  })
+
+  it("names the changed and redefined variables and a changed time range", () => {
+    // Given a notebook with one query list and a time range
+    const parts = partsOf([cell("a")], {
+      settings: {
+        variables: [
+          { name: "venue", kind: "text", value: "'LSE'" },
+          list("SELECT symbol FROM t"),
+        ],
+        timeRange: { from: "now-1h", to: "now" },
+      },
+    })
+
+    // When the agent rewrites the list query, keeps the text and moves the range
+    const out = applyNotebookStateTransition(parts, {
+      variables: [
+        { name: "venue", kind: "text", value: "'LSE'" },
+        list("SELECT DISTINCT symbol FROM t"),
+      ],
+      timeRange: { from: "now-1d", to: "now" },
+      cells: [{ id: "a", preserveValue: true }],
+    })
+
+    // Then only the list counts as changed and redefined, and the range moved
+    expect(out.variables).toEqual({
+      changed: ["pair"],
+      redefined: ["pair"],
+      timeRangeChanged: true,
+    })
+    expect(out.result.variables).toBe(out.variables)
+  })
+
+  it("reports no change when variables and time range are preserved", () => {
+    // Given a notebook with a variable
+    const parts = partsOf([cell("a")], {
+      settings: { variables: [{ name: "x", kind: "expression", value: "1" }] },
+    })
+
+    // When the apply leaves them alone
+    const out = applyNotebookStateTransition(parts, {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+
+    // Then nothing needs a refetch
+    expect(out.variables).toEqual({
+      changed: [],
+      redefined: [],
+      timeRangeChanged: false,
+    })
   })
 })

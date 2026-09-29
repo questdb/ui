@@ -1,9 +1,13 @@
+import { getNotebookGlobals } from "../../../store/notebookGlobals"
+import { normalizeVariables } from "../../../scenes/Editor/Notebook/variables/normalizeVariables"
+import { TIME_VARIABLE_NAMES } from "../../../scenes/Editor/Notebook/variables/timeRange"
 import type {
   AutoRefresh,
   CellType,
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
+  TimeRange,
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
@@ -35,7 +39,16 @@ import {
   type DexieControllerDeps,
 } from "../notebookHeadlessRun"
 import type { RunCellGate } from "../../tools/permissions"
-import type { NotebookTransitionResult } from "./notebookTransitions"
+import type { VariableValuesEntry } from "../../../scenes/Editor/Notebook/variables/options/fetchVariableOptions"
+import {
+  syncHeadlessVariableOptions,
+  prepareNotebookVariables,
+  commitNotebookVariables,
+} from "../notebookVariableOptions"
+import type {
+  NotebookTransitionResult,
+  VariableSettingsDiff,
+} from "./notebookTransitions"
 
 // The two NotebookController implementations, side by side. Both expose the same
 // tiny interface — `mutate` runs a transition, `readView` reads the document,
@@ -60,6 +73,7 @@ export type RunCellSummary = {
 // identically on both routes.
 export type NotebookMutate = <T>(
   transition: (parts: ViewParts) => NotebookTransitionResult<T>,
+  signal?: AbortSignal,
 ) => Promise<T>
 
 // Live-only refresh state, read straight off the refresh engine. Absent for
@@ -85,6 +99,10 @@ export type NotebookController = {
     sql?: string,
     gate?: RunCellGate,
   ) => Promise<RunCellSummary>
+  syncVariableOptions: (
+    diff: VariableSettingsDiff,
+  ) => Promise<VariableValuesEntry[]>
+  waitForVariableOptions: () => Promise<VariableValuesEntry[]>
   flushChartSnapshots?: () => Promise<void>
 }
 
@@ -100,6 +118,7 @@ export type NotebookControllerActions = {
     expectFullValue?: boolean,
     gate?: RunCellGate,
   ) => Promise<CellRunOutcome>
+  applyVariableTransition?: NotebookMutate
   applyTransition: <T>(
     run: (parts: ViewParts) => NotebookTransitionResult<T>,
   ) => T
@@ -107,6 +126,7 @@ export type NotebookControllerActions = {
   getSettings: () => NotebookSettings
   getMaximizedCellId: () => string | null
   flushChartSnapshots: () => Promise<void>
+  settleVariableOptions: () => Promise<VariableValuesEntry[]>
 }
 
 // Wire shape accepted by `applyNotebookState`. The fields are camelCase here
@@ -120,6 +140,9 @@ export type ApplyNotebookStateCellRequest = {
   type?: CellType | null
   mode?: "run" | "draw" | null
   autoRefresh?: AutoRefresh | null
+  timeRange?: TimeRange | null
+  timeShift?: string | null
+  showTimeRange?: boolean | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
@@ -130,6 +153,7 @@ export type ApplyNotebookStateRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  timeRange?: TimeRange | null
   cells: ApplyNotebookStateCellRequest[]
 }
 
@@ -140,7 +164,9 @@ export const createNotebookController = (
   // The live surface's transition runner: apply the transition to React state
   // (synchronously, via the provider's applyTransition), then normalize to a
   // Promise so a transition's typed throw reaches the agent as a rejection.
-  const mutate: NotebookMutate = (transition) => {
+  const mutate: NotebookMutate = (transition, signal) => {
+    if (liveActionsRef.current.applyVariableTransition)
+      return liveActionsRef.current.applyVariableTransition(transition, signal)
     try {
       return Promise.resolve(liveActionsRef.current.applyTransition(transition))
     } catch (error) {
@@ -177,6 +203,7 @@ export const createNotebookController = (
         }
       }
 
+      await liveActionsRef.current.settleVariableOptions()
       const outcome = await liveActionsRef.current.runCell(
         cellId,
         sql,
@@ -219,6 +246,9 @@ export const createNotebookController = (
 
       return summarizeCellResults(freshCell)
     },
+    syncVariableOptions: () => liveActionsRef.current.settleVariableOptions(),
+    waitForVariableOptions: () =>
+      liveActionsRef.current.settleVariableOptions(),
     flushChartSnapshots: () => liveActionsRef.current.flushChartSnapshots(),
   }
 }
@@ -268,6 +298,7 @@ export const createDexieNotebookController = (
     }
   }
 
+  let variableReport: VariableValuesEntry[] | undefined
   const mutate: NotebookMutate = async (transition) => {
     requireActive()
     requireUnclaimed()
@@ -277,7 +308,45 @@ export const createDexieNotebookController = (
         const view = await readNotebookView(bufferId)
         const out = transition(partsOf(view))
         requireActive()
-        const commit = await commitView(bufferId, out.parts)
+        let commit: Awaited<ReturnType<typeof commitView>> = "committed"
+        if (out.variables) {
+          const diff = out.variables
+          const operationSignal = signal ?? new AbortController().signal
+          const prepared =
+            out.preparedVariables ??
+            (await prepareNotebookVariables(
+              {
+                quest: deps.getQuest(),
+                signal: operationSignal,
+                validateAll: true,
+                force: new Set(
+                  [
+                    ...diff.changed,
+                    ...diff.redefined,
+                    ...(diff.timeRangeChanged ? TIME_VARIABLE_NAMES : []),
+                  ].map((name) => name.toLowerCase()),
+                ),
+              },
+              bufferId,
+              out.parts.settings,
+              normalizeVariables((await getNotebookGlobals())?.variables),
+            ))
+          requireActive()
+          requireUnclaimed()
+          await commitNotebookVariables(
+            bufferId,
+            prepared,
+            async () => {
+              commit = await commitView(bufferId, out.parts)
+              if (commit !== "committed") throw notebookGone(bufferId)
+            },
+            operationSignal,
+          )
+          variableReport = [
+            ...prepared.global.report,
+            ...prepared.notebook.report,
+          ]
+        } else commit = await commitView(bufferId, out.parts)
         if (commit === "deleted") {
           throw notebookGone(bufferId)
         }
@@ -314,5 +383,10 @@ export const createDexieNotebookController = (
       enqueueBufferTask(bufferId, () => readNotebookView(bufferId)),
     runCell: (cellId, signal, sql, gate) =>
       runHeadlessCell(bufferId, deps, cellId, signal, sql, gate),
+    syncVariableOptions: (diff) =>
+      variableReport
+        ? Promise.resolve(variableReport)
+        : syncHeadlessVariableOptions(bufferId, deps, diff, signal),
+    waitForVariableOptions: () => Promise.resolve([]),
   }
 }

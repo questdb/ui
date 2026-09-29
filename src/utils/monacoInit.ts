@@ -17,6 +17,9 @@ const MONACO_THEME_NAMES: Record<ThemeMode, string> = {
 
 export const getMonacoThemeName = (mode: ThemeMode) => MONACO_THEME_NAMES[mode]
 
+export const getMonacoThemeClassName = (mode: ThemeMode) =>
+  `${mode === "light" ? "vs" : "vs-dark"} ${MONACO_THEME_NAMES[mode]}`
+
 export const ensureMonacoThemes = (monaco: typeof import("monaco-editor")) => {
   monaco.editor.defineTheme(
     MONACO_THEME_NAMES.dark,

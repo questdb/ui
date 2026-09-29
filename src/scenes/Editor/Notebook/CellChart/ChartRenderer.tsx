@@ -24,6 +24,7 @@ type Props = {
   option: EChartsOption
   height?: number | string
   onZoomChange?: (start: number, end: number) => void
+  onHeightChange: (height: number) => void
   isFocused?: boolean
   animateEntry?: boolean
   zoomWindow: { start: number; end: number }
@@ -66,6 +67,9 @@ const structuralKey = (option: EChartsOption): string => {
   ].join("::")
 }
 
+// Pane layout only needs a coarse height; small steps avoid a rebuild per pixel.
+const HEIGHT_STEP = 8
+
 type DataZoomEvent = {
   start?: number
   end?: number
@@ -78,6 +82,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       option,
       height = "100%",
       onZoomChange,
+      onHeightChange,
       isFocused = true,
       animateEntry = true,
       zoomWindow,
@@ -126,9 +131,19 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         reactEchartsRef.current?.getEchartsInstance()?.resize({ width, height })
       }
 
+      let reportedHeight = 0
+      const reportHeight = (height: number) => {
+        const quantized = Math.round(height / HEIGHT_STEP) * HEIGHT_STEP
+        if (quantized === 0 || quantized === reportedHeight) return
+        reportedHeight = quantized
+        onHeightChange(quantized)
+      }
+
       const observer = new ResizeObserver((entries) => {
         const box = entries[0]?.contentRect
-        if (box) resizeTo(box.width, box.height)
+        if (!box) return
+        resizeTo(box.width, box.height)
+        reportHeight(box.height)
       })
       observer.observe(wrapper)
 
@@ -137,6 +152,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         requestAnimationFrame(() => {
           const rect = wrapper.getBoundingClientRect()
           resizeTo(rect.width, rect.height)
+          reportHeight(rect.height)
         })
       }
       document.addEventListener("visibilitychange", handleVisibility)
@@ -145,7 +161,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
         observer.disconnect()
         document.removeEventListener("visibilitychange", handleVisibility)
       }
-    }, [])
+    }, [onHeightChange])
 
     useImperativeHandle(
       ref,

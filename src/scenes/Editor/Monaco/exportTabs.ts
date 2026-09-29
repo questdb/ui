@@ -1,6 +1,10 @@
 import { exportDB } from "dexie-export-import"
 import { db } from "../../../store/db"
 import type { Buffer } from "../../../store/buffers"
+import type { NotebookVariable } from "../../../store/notebook"
+import { getNotebookGlobals } from "../../../store/notebookGlobals"
+import { inlineReferencedGlobals } from "../Notebook/variables/inlineGlobals"
+import { normalizeVariables } from "../Notebook/variables/normalizeVariables"
 
 type ExportOptions = { bufferId?: number }
 
@@ -63,6 +67,28 @@ export const reconcileRowCounts = (json: DexieExport): DexieExport => {
   return json
 }
 
+export const withInlinedGlobals = (
+  json: DexieExport,
+  globals: NotebookVariable[],
+): DexieExport => {
+  for (const entry of json.data?.data ?? []) {
+    if (entry?.tableName !== "buffers" || !Array.isArray(entry.rows)) continue
+    entry.rows = entry.rows.map((row) => {
+      const buffer = row as Buffer
+      return buffer.notebookViewState
+        ? {
+            ...buffer,
+            notebookViewState: inlineReferencedGlobals(
+              buffer.notebookViewState,
+              globals,
+            ),
+          }
+        : row
+    })
+  }
+  return json
+}
+
 export const exportBuffers = async (options?: ExportOptions) => {
   const skipTables = db.tables
     .map((t) => t.name)
@@ -72,8 +98,10 @@ export const exportBuffers = async (options?: ExportOptions) => {
     filter: (_table, value) => shouldExportBuffer(value as Buffer, options),
   })
 
-  const reconciled = reconcileRowCounts(
-    JSON.parse(await blob.text()) as unknown as DexieExport,
+  const globals = normalizeVariables((await getNotebookGlobals())?.variables)
+  const reconciled = withInlinedGlobals(
+    reconcileRowCounts(JSON.parse(await blob.text()) as unknown as DexieExport),
+    globals,
   )
   const finalBlob = new Blob([JSON.stringify(reconciled)], {
     type: "application/json",

@@ -57,6 +57,8 @@ const makeController = (
 ): NotebookController => ({
   bufferId,
   kind: "live",
+  syncVariableOptions: () => Promise.resolve([]),
+  waitForVariableOptions: () => Promise.resolve([]),
   mutate: (transition) =>
     Promise.resolve(
       transition({
@@ -489,6 +491,7 @@ describe("createNotebookController — applyNotebookState maximized cell id", ()
       getMaximizedCellId: () => currentMaximizedId,
       flushChartSnapshots: () => Promise.resolve(),
       readRefreshState: () => new Map(),
+      settleVariableOptions: () => Promise.resolve([]),
     }
     return { live, applied }
   }
@@ -553,6 +556,7 @@ describe("createNotebookController — live runCell supersession", () => {
     getMaximizedCellId: () => null,
     flushChartSnapshots: () => Promise.resolve(),
     readRefreshState: () => new Map(),
+    settleVariableOptions: () => Promise.resolve([]),
   })
 
   const cellWith = (result: CellResult): NotebookCell => ({
@@ -566,6 +570,39 @@ describe("createNotebookController — live runCell supersession", () => {
     results: [{ type: "dml", query: "INSERT INTO t VALUES (1)" }],
     activeResultIndex: 0,
     timestamp,
+  })
+
+  it("waits for in-flight variable values before running", async () => {
+    // Given values still loading when the agent asks for a run
+    const order: string[] = []
+    let settled!: () => void
+    const settle = new Promise<void>((resolve) => {
+      settled = resolve
+    })
+    const runCell = () => {
+      order.push("run")
+      return Promise.resolve({ ok: true, superseded: false })
+    }
+    const controller = createNotebookController(1, {
+      current: {
+        ...liveActions(() => [cellWith(dmlResult(1))], runCell),
+        settleVariableOptions: () =>
+          settle.then(() => {
+            order.push("settled")
+            return []
+          }),
+      },
+    })
+
+    // When the run is requested and the values land afterwards
+    const pending = controller.runCell(cellId)
+    await Promise.resolve()
+    expect(order).toEqual([])
+    settled()
+    await pending
+
+    // Then the run started only after the values settled
+    expect(order).toEqual(["settled", "run"])
   })
 
   it("reports a superseded live run as unverified instead of the newer run's result", async () => {

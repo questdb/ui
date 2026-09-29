@@ -10,6 +10,12 @@ import {
   type Suggestion,
 } from "@questdb/sql-parser"
 import { isCursorInComment, isCursorInQuotedIdentifier } from "../utils"
+import {
+  substitutionItems,
+  variableItems,
+  variableReferenceRange,
+  variableSuggestionsFor,
+} from "./variableCompletion"
 
 /**
  * Map parser's SuggestionKind to Monaco's CompletionItemKind
@@ -133,7 +139,7 @@ export const createSchemaCompletionProvider = (
 
   const completionProvider: languages.CompletionItemProvider = {
     triggerCharacters:
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":('.split(""),
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .":(@'.split(""),
 
     provideCompletionItems(model, position) {
       const word = model.getWordUntilPosition(position)
@@ -143,6 +149,12 @@ export const createSchemaCompletionProvider = (
       // Suppress suggestions inside comments (the parser handles strings itself)
       if (isCursorInComment(fullText, cursorOffset)) {
         return null
+      }
+
+      const variables = variableSuggestionsFor(model)
+      const referenceRange = variableReferenceRange(model, position)
+      if (referenceRange && variables.length > 0) {
+        return { suggestions: variableItems(variables, referenceRange) }
       }
 
       const charBeforeCursor =
@@ -266,9 +278,15 @@ export const createSchemaCompletionProvider = (
 
       return {
         incomplete: true,
-        suggestions: filtered.map((s) =>
-          toCompletionItem(s, range, isInsideQuotedIdentifier),
-        ),
+        suggestions: filtered.flatMap((s) => {
+          const item = toCompletionItem(s, range, isInsideQuotedIdentifier)
+          return isInsideQuotedIdentifier
+            ? [item]
+            : [
+                item,
+                ...substitutionItems(variables, s, item.sortText ?? "", range),
+              ]
+        }),
       }
     },
   }

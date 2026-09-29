@@ -50,6 +50,11 @@ import {
   deleteNotebookSnapshots,
   pruneToRecentNotebooks,
 } from "../../store/notebookResults"
+import {
+  copyStoredOptions,
+  deleteAllStoredOptions,
+  notebookOptionsOwner,
+} from "../../store/notebookOptions"
 import { removeNotebookBufferLayouts } from "../../scenes/Editor/Notebook/notebookColumnLayoutStore"
 import { eventBus } from "../../modules/EventBus"
 import { EventType } from "../../modules/EventBus/types"
@@ -684,6 +689,10 @@ export const EditorProvider: React.FC = ({ children }) => {
     const duplicateId = duplicate.id
 
     const resultsCopied = enqueueBufferTask(duplicateId, async () => {
+      await copyStoredOptions(
+        notebookOptionsOwner(id),
+        notebookOptionsOwner(duplicateId),
+      ).catch(() => undefined)
       try {
         await copyNotebookSnapshots(id, duplicateId, cellIdMap, (snapshot) => {
           const queries = sourceQueries.get(snapshot.cellId)
@@ -722,6 +731,7 @@ export const EditorProvider: React.FC = ({ children }) => {
     })
     if (wasNotebook) {
       void deleteNotebookSnapshots(id)
+      void deleteAllStoredOptions(notebookOptionsOwner(id))
       removeNotebookBufferLayouts(id)
       emitUserAction({ kind: "user_deleted_notebook", bufferId: id })
     }

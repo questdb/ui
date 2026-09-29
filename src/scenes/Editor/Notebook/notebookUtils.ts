@@ -9,6 +9,7 @@ import type {
   NotebookCell,
   NotebookSettings,
   NotebookVariable,
+  TimeRange,
   NotebookViewState,
   SingleQueryResult,
 } from "../../../store/notebook"
@@ -27,6 +28,7 @@ import { sanitizeForPromptContext } from "../../../utils/ai/sanitizeForPromptCon
 import type { ChartConfig, QueryChart } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
+import { normalizeVariables } from "./variables/normalizeVariables"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -698,6 +700,9 @@ type ApplyCellRequest = {
   type?: CellType | null
   mode?: CellMode | null
   autoRefresh?: AutoRefresh | null
+  timeRange?: TimeRange | null
+  timeShift?: string | null
+  showTimeRange?: boolean | null
   isViewMaximized?: boolean | null
   chartConfig?: ChartConfig | null
   grid?: { x: number; y: number; w: number; h: number } | null
@@ -708,6 +713,7 @@ type ApplyRequest = {
   autoRefreshDefault?: AutoRefresh | null
   maximizedCellId?: string | null
   variables?: NotebookVariable[] | null
+  timeRange?: TimeRange | null
   cells: ApplyCellRequest[]
 }
 
@@ -966,7 +972,7 @@ export const cloneNotebookViewStateWithCellIdMap = (
         .map((item) => ({ ...item, i: idMap.get(item.i) as string }))
     }
     if (source.settings.variables) {
-      settings.variables = source.settings.variables.map((v) => ({ ...v }))
+      settings.variables = normalizeVariables(source.settings.variables)
     }
     next.settings = settings
   }
@@ -990,6 +996,7 @@ export const cloneNotebookViewState = (
 const normalizeQueryChart = (q: QueryChart): QueryChart => {
   const next: QueryChart = { type: q.type, yColumns: q.yColumns ?? [] }
   if (q.ohlc) next.ohlc = q.ohlc
+  if (q.volume) next.volume = q.volume
   if (q.partitionByColumn) next.partitionByColumn = q.partitionByColumn
   if (q.axis) next.axis = q.axis
   if (q.enabled === false) next.enabled = false
@@ -1005,6 +1012,7 @@ const normalizeChartConfig = (
     xColumn: cfg.xColumn ?? null,
     queries: cfg.queries.map((q) => (q ? normalizeQueryChart(q) : null)),
   }
+  if (cfg.leftAxis) next.leftAxis = cfg.leftAxis
   if (cfg.rightAxis) next.rightAxis = cfg.rightAxis
   return next
 }
@@ -1159,6 +1167,11 @@ export const buildAppliedCells = (
           ? true
           : undefined
     const autoRefresh = req.autoRefresh != null ? req.autoRefresh : undefined
+    const timeRange = req.timeRange != null ? req.timeRange : undefined
+    const timeShift = req.timeShift != null ? req.timeShift : undefined
+    const showTimeRange =
+      req.showTimeRange === true &&
+      (timeRange !== undefined || timeShift !== undefined)
 
     if (existing) {
       updated.push(existing.id)
@@ -1201,6 +1214,12 @@ export const buildAppliedCells = (
       else delete next.autoRefresh
       if (isViewMaximized !== undefined) next.isViewMaximized = isViewMaximized
       else delete next.isViewMaximized
+      if (timeRange !== undefined) next.timeRange = timeRange
+      else delete next.timeRange
+      if (timeShift !== undefined) next.timeShift = timeShift
+      else delete next.timeShift
+      if (showTimeRange) next.showTimeRange = true
+      else delete next.showTimeRange
       if (resolvedType === "markdown") {
         // Markdown cells carry none of the SQL/chart sub-state.
         next.type = "markdown"
@@ -1209,6 +1228,9 @@ export const buildAppliedCells = (
         delete next.chartConfig
         delete next.autoRefresh
         delete next.isViewMaximized
+        delete next.timeRange
+        delete next.timeShift
+        delete next.showTimeRange
         delete next.bottomHeight
         delete next.lastRunStatus
         delete next.lastRunError
@@ -1245,6 +1267,9 @@ export const buildAppliedCells = (
     if (chartConfig !== undefined) created.chartConfig = chartConfig
     if (autoRefresh !== undefined) created.autoRefresh = autoRefresh
     if (isViewMaximized !== undefined) created.isViewMaximized = isViewMaximized
+    if (timeRange !== undefined) created.timeRange = timeRange
+    if (timeShift !== undefined) created.timeShift = timeShift
+    if (showTimeRange) created.showTimeRange = true
     // Draw cells are double-view from creation (chart visible immediately),
     // so seed bottomHeight with the chart default. Run cells stay single-
     // view (no bottomHeight) until the user runs them.
@@ -1815,6 +1840,12 @@ export const buildAppliedNotebookState = (
   }
   if (request.variables !== undefined) {
     nextSettings = { ...nextSettings, variables: request.variables ?? [] }
+  }
+  if (request.timeRange !== undefined) {
+    const { timeRange: _timeRange, ...withoutTimeRange } = nextSettings
+    nextSettings = request.timeRange
+      ? { ...withoutTimeRange, timeRange: request.timeRange }
+      : withoutTimeRange
   }
 
   let nextMaximizedCellId = current.maximizedCellId

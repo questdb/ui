@@ -1,15 +1,19 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
 import { QuestDBLanguageName, stripSQLComments } from "../../Monaco/utils"
 import { QuestContext } from "../../../../providers/QuestProvider"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { useGlobalVariablesActions } from "../variables/globals/GlobalVariablesProvider"
+import { variableSuggestions } from "../variables/variableSuggestions"
 import { CellDragHeader } from "./CellDragHeader"
 import { CellRunDrawToggles } from "./CellRunDrawToggles"
 import { CellWideActions } from "./CellWideActions"
 import { CellViewToggle } from "./CellViewToggle"
 import { CellNameLabel } from "./CellNameLabel"
+import { CellTimeControl } from "./time/CellTimeControl"
+import { CellTimeDialog } from "./time/CellTimeDialog"
 import { useChartLoading } from "./useChartLoading"
 import { useChartZoomed } from "./useChartZoomed"
 import { useCellToolbarTier } from "./useCellToolbarTier"
@@ -42,7 +46,7 @@ import {
 } from "../cellVirtualization/CellVirtualizationContext"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { EditorShimmer } from "../cellVirtualization/EditorShimmer"
-import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
+import { useValidateWithGlobals } from "../variables/useValidateWithGlobals"
 import { useCellRunActions } from "./useCellRunActions"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
@@ -130,11 +134,19 @@ const CellInner: React.FC<Props> = ({
   isMaximized,
   isRunning,
 }) => {
-  const { setCellChartConfig, clearCellResult, updateCell, setFocusedCell } =
-    useNotebookActions()
+  const {
+    setCellChartConfig,
+    clearCellResult,
+    updateCell,
+    setFocusedCell,
+    getVariables,
+    getCellDeclareEntries,
+  } = useNotebookActions()
+  const globals = useGlobalVariablesActions()
   const theme = useTheme()
   const { quest } = React.useContext(QuestContext)
   const bufferIdForEvents = useNotebookBufferId()
+  const [timeRangeOpen, setTimeRangeOpen] = useState(false)
   const isDrawMode = cell.mode === "draw"
 
   const { wrapperRef, wrapperHandlers } = useCellWrapperInteractions({
@@ -161,7 +173,7 @@ const CellInner: React.FC<Props> = ({
     [],
   )
 
-  const validateWithGlobals = useValidateWithGlobals()
+  const validateWithGlobals = useValidateWithGlobals(cell.id)
 
   const handleChartConfigChange = (config: ChartConfig) => {
     signalUserEdit(bufferIdForEvents)
@@ -249,6 +261,12 @@ const CellInner: React.FC<Props> = ({
     onRunAll: () => runAll(),
     onContentHeightChange: handleContentHeightChange,
     validate: validateWithGlobals,
+    getVariableSuggestions: () =>
+      variableSuggestions(
+        globals.getVariables(),
+        getVariables() ?? [],
+        getCellDeclareEntries(cell.id),
+      ),
   })
 
   const { applyHighlight, clearHighlight } = useCellSelectionDecoration(
@@ -437,6 +455,7 @@ const CellInner: React.FC<Props> = ({
         headerRef={headerRef}
         toolbarTier={toolbarTier}
         chartZoomed={chartZoomed}
+        onOpenTimeRange={() => setTimeRangeOpen(true)}
         left={
           <CellNameLabel
             name={cell.name}
@@ -451,56 +470,67 @@ const CellInner: React.FC<Props> = ({
           />
         }
         right={
-          toolbarTier === "compact" ? null : view === "none" ? (
-            // Neutral: action verbs (Run / Draw) — labelled only when expanded.
-            <CellRunDrawToggles
-              isRunning={isRunning}
-              isChartLoading={chartLoading}
-              runActive={runActive}
-              isDrawMode={isDrawMode}
-              canRun={canRun}
-              autoRefreshOn={effectiveAutoRefresh !== false}
-              showLabels={toolbarTier === "expanded"}
-              onRun={runAll}
-              onHideResult={() => {
-                signalUserEdit(bufferIdForEvents)
-                clearCellResult(cell.id)
-              }}
-              onDraw={() => {
-                void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
-                  mode: isDrawMode ? "run" : "draw",
-                })
-                void handleDrawClick()
-              }}
-            />
-          ) : toolbarTier === "expanded" ? (
-            <CellWideActions
-              cellId={cell.id}
-              view={view}
-              cellAutoRefresh={cell.autoRefresh}
-              autoRefreshDefault={autoRefreshDefault}
-              isViewMaximized={isViewMaximized}
-              isRunning={isRunning}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isChartRefreshing={chartRefreshing}
-              chartZoomed={chartZoomed}
-            />
-          ) : (
-            // Standard tier with a result: the compact (label-less) view toggle.
-            <CellViewToggle
-              cellId={cell.id}
-              view={view}
-              isViewMaximized={isViewMaximized}
-              isGridLoading={isGridLoading}
-              isChartLoading={chartLoading}
-              isRunning={isRunning}
-              chartZoomed={chartZoomed}
-              showLabels={false}
-            />
+          toolbarTier === "compact" ? null : (
+            <>
+              <CellTimeControl
+                cell={cell}
+                onClick={() => setTimeRangeOpen(true)}
+              />
+              {view === "none" ? (
+                // Neutral: action verbs (Run / Draw) — labelled only when expanded.
+                <CellRunDrawToggles
+                  isRunning={isRunning}
+                  isChartLoading={chartLoading}
+                  runActive={runActive}
+                  isDrawMode={isDrawMode}
+                  canRun={canRun}
+                  autoRefreshOn={effectiveAutoRefresh !== false}
+                  showLabels={toolbarTier === "expanded"}
+                  onRun={runAll}
+                  onHideResult={() => {
+                    signalUserEdit(bufferIdForEvents)
+                    clearCellResult(cell.id)
+                  }}
+                  onDraw={() => {
+                    void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_TOGGLE, {
+                      mode: isDrawMode ? "run" : "draw",
+                    })
+                    void handleDrawClick()
+                  }}
+                />
+              ) : toolbarTier === "expanded" ? (
+                <CellWideActions
+                  cellId={cell.id}
+                  view={view}
+                  cellAutoRefresh={cell.autoRefresh}
+                  autoRefreshDefault={autoRefreshDefault}
+                  isViewMaximized={isViewMaximized}
+                  isRunning={isRunning}
+                  isGridLoading={isGridLoading}
+                  isChartLoading={chartLoading}
+                  isChartRefreshing={chartRefreshing}
+                  chartZoomed={chartZoomed}
+                />
+              ) : (
+                // Standard tier with a result: the compact (label-less) view toggle.
+                <CellViewToggle
+                  cellId={cell.id}
+                  view={view}
+                  isViewMaximized={isViewMaximized}
+                  isGridLoading={isGridLoading}
+                  isChartLoading={chartLoading}
+                  isRunning={isRunning}
+                  chartZoomed={chartZoomed}
+                  showLabels={false}
+                />
+              )}
+            </>
           )
         }
       />
+      {timeRangeOpen && (
+        <CellTimeDialog cell={cell} onClose={() => setTimeRangeOpen(false)} />
+      )}
       {!isViewMaximized && (
         <EditorContainer
           ref={editorContainerRef}

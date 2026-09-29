@@ -270,6 +270,91 @@ describe("resultMatchesQueries", () => {
   })
 })
 
+describe("resolveDraw — candlestick volume column", () => {
+  const ohlc = { open: "open", high: "high", low: "low", close: "close" }
+  const columns = ["ts", "open", "high", "low", "close", "volume"].map(
+    (name) => ({ name, type: name === "ts" ? "TIMESTAMP" : "DOUBLE" }),
+  )
+  const saved: ChartConfig = {
+    xColumn: "ts",
+    queries: [{ type: "candlestick", yColumns: [], ohlc, volume: "volume" }],
+  }
+  const statements = ["SELECT * FROM candles"]
+
+  it("passes the volume column through for a candlestick", () => {
+    // Given / When
+    const { renderQueries } = resolveDraw(
+      statements,
+      [dql(columns, [[1000, 10, 12, 9, 11, 5]], statements[0])],
+      saved,
+    )
+    // Then
+    expect(renderQueries[0].volume).toBe("volume")
+  })
+
+  it("drops a volume column the query no longer returns", () => {
+    // Given / When
+    const { renderQueries, effectiveConfig } = resolveDraw(
+      statements,
+      [dql(columns.slice(0, 5), [[1000, 10, 12, 9, 11]], statements[0])],
+      saved,
+    )
+    // Then
+    expect(renderQueries[0].volume).toBeUndefined()
+    expect(effectiveConfig.queries[0]?.volume).toBeUndefined()
+  })
+})
+
+describe("resolveDraw — a numeric anchor combines numeric statements", () => {
+  const depth = (query: string) =>
+    dql(
+      [
+        { name: "price", type: "DOUBLE" },
+        { name: "size", type: "DOUBLE" },
+      ],
+      [[100, 5]],
+      query,
+    )
+
+  it("marks a second numeric-x statement compatible and renders both", () => {
+    // Given
+    const statements = [
+      "SELECT price, size FROM bids",
+      "SELECT price, size FROM asks",
+    ]
+    const results = statements.map(depth)
+    // When
+    const { tabs, renderQueries } = resolveDraw(statements, results, undefined)
+    // Then
+    expect(tabs.map((t) => t.compatible)).toEqual([true, true])
+    expect(renderQueries).toHaveLength(2)
+  })
+
+  it("keeps a temporal statement incompatible with a numeric anchor", () => {
+    // Given
+    const statements = [
+      "SELECT price, size FROM bids",
+      "SELECT ts, size FROM trades",
+    ]
+    const results = [
+      depth(statements[0]),
+      dql(
+        [
+          { name: "ts", type: "TIMESTAMP" },
+          { name: "size", type: "DOUBLE" },
+        ],
+        [[1000, 5]],
+        statements[1],
+      ),
+    ]
+    // When
+    const { tabs, renderQueries } = resolveDraw(statements, results, undefined)
+    // Then
+    expect(tabs.map((t) => t.compatible)).toEqual([true, false])
+    expect(renderQueries).toHaveLength(1)
+  })
+})
+
 describe("resolveDraw — unresolved statements use a null slot, not an inert config", () => {
   const tsPrice = (query: string) =>
     dql(

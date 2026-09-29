@@ -154,8 +154,8 @@ export const Graph = ({
 
   const { isTableMetric, mapYValue, chartTitle } = widgetConfig
 
-  const startTime = new Date(durationTokenToDate(dateFrom)).getTime()
-  const endTime = new Date(durationTokenToDate(dateTo)).getTime()
+  const startTime = new Date(durationTokenToDate(dateFrom, "from")).getTime()
+  const endTime = new Date(durationTokenToDate(dateTo, "to")).getTime()
 
   const [delayedLoading, setDelayedLoading] = useState(loading)
   const [uplotOptions, setUplotOptions] = useState<UplotOptions | undefined>(
@@ -175,8 +175,8 @@ export const Graph = ({
     [],
   )
 
-  const from = durationTokenToDate(dateFrom)
-  const to = durationTokenToDate(dateTo)
+  const from = durationTokenToDate(dateFrom, "from")
+  const to = durationTokenToDate(dateTo, "to")
 
   useEffect(() => {
     setUplotOptions(
