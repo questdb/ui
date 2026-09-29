@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { DqlQueryResult } from "../../../../store/notebook"
+import { identityKeyOf } from "../../../../components/ResultGrid/highlight/identityIndex"
 import { createResultTrendStore } from "./resultTrendStore"
+
+const symbolKey = (symbol: string) => identityKeyOf([symbol], [0])
 
 const result = (
   dataset: (string | number)[][],
@@ -33,7 +36,7 @@ describe("createResultTrendStore", () => {
     // Then the second compares against the first
     expect(firstEntry.previous).toBeNull()
     expect(firstEntry.revision).toBe(1)
-    expect(secondEntry.previous?.rows.get("BTC")).toEqual(["BTC", 1])
+    expect(secondEntry.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 1])
     expect(secondEntry.revision).toBe(2)
   })
 
@@ -131,7 +134,7 @@ describe("createResultTrendStore", () => {
 
     // Then rows past the prefix are not compared, and the next result is
     expect(afterPrefix.previous).toBeNull()
-    expect(next.previous?.rows.get("ETH")).toEqual(["ETH", 5])
+    expect(next.previous?.rows.get(symbolKey("ETH"))).toEqual(["ETH", 5])
   })
 
   it("brings back a replaced result as it was shown, not compared against the discarded one", () => {
@@ -160,7 +163,7 @@ describe("createResultTrendStore", () => {
       ["symbol"],
       ran(time),
     )
-    expect(next.previous?.rows.get("BTC")).toEqual(["BTC", 2])
+    expect(next.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 2])
   })
 
   it("keeps the landing time of the first capture when only the identity changes", () => {
@@ -197,7 +200,7 @@ describe("createResultTrendStore: release and rehydrate", () => {
 
     // Then nothing shows while released, and the rehydrate compares as before, timed from the run
     expect(hidden).toBeUndefined()
-    expect(rehydrated.previous?.rows.get("BTC")).toEqual(["BTC", 1])
+    expect(rehydrated.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 1])
     expect(rehydrated.capturedAt).toBe(200)
     expect(rehydrated.revision).toBe(2)
   })
@@ -220,7 +223,7 @@ describe("createResultTrendStore: release and rehydrate", () => {
     )
 
     // Then it compares against the rehydrated rows
-    expect(next.previous?.rows.get("BTC")).toEqual(["BTC", 2])
+    expect(next.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 2])
     expect(next.capturedAt).toBe(1000)
   })
 
@@ -326,6 +329,6 @@ describe("createResultTrendStore: cell scope", () => {
 
     // Then only the kept cell still has a baseline
     expect(cleared.previous).toBeNull()
-    expect(kept.previous?.rows.get("BTC")).toEqual(["BTC", 1])
+    expect(kept.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 1])
   })
 })

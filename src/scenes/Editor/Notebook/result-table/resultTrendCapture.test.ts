@@ -7,7 +7,10 @@ import type {
 import { deriveStatementFrame, statementKeysFor } from "../notebookUtils"
 import { getQueriesFromText } from "../../Monaco/utils"
 import { captureResultTrends } from "./resultTrendCapture"
+import { identityKeyOf } from "../../../../components/ResultGrid/highlight/identityIndex"
 import { createResultTrendStore } from "./resultTrendStore"
+
+const symbolKey = (symbol: string) => identityKeyOf([symbol], [0])
 
 const dql = (
   query: string,
@@ -67,7 +70,10 @@ describe("captureResultTrends", () => {
     captureResultTrends(store, restored, [first], [second])
 
     // Then the store holds the baseline from the first run
-    expect(store.get("c1", KEY)?.previous?.rows.get("BTC")).toEqual(["BTC", 1])
+    expect(store.get("c1", KEY)?.previous?.rows.get(symbolKey("BTC"))).toEqual([
+      "BTC",
+      1,
+    ])
     expect(store.get("c1", KEY)?.revision).toBe(2)
   })
 
@@ -97,10 +103,9 @@ describe("captureResultTrends", () => {
     )
     const secondTabKey = frame?.slots[1].key ?? ""
     expect(secondTabKey).not.toBe(KEY)
-    expect(store.get("c1", secondTabKey)?.previous?.rows.get("ETH")).toEqual([
-      "ETH",
-      10,
-    ])
+    expect(
+      store.get("c1", secondTabKey)?.previous?.rows.get(symbolKey("ETH")),
+    ).toEqual(["ETH", 10])
   })
 
   it("skips a cell whose result and rules did not change", () => {
@@ -202,8 +207,8 @@ describe("captureResultTrends", () => {
 
     // Then the second run reads the first run's rows, so ETH counts as new
     const previous = store.get("c1", KEY)?.previous
-    expect(previous?.rows.has("BTC")).toBe(true)
-    expect(previous?.rows.has("ETH")).toBe(false)
+    expect(previous?.rows.has(symbolKey("BTC"))).toBe(true)
+    expect(previous?.rows.has(symbolKey("ETH"))).toBe(false)
   })
 
   it("shows no comparison when a run is discarded and the prior result comes back", () => {
@@ -269,7 +274,10 @@ describe("captureResultTrends", () => {
 
     // Then nothing shows while released, and the rehydrate compares as before
     expect(hidden).toBeUndefined()
-    expect(store.get("c1", KEY)?.previous?.rows.get("BTC")).toEqual(["BTC", 1])
+    expect(store.get("c1", KEY)?.previous?.rows.get(symbolKey("BTC"))).toEqual([
+      "BTC",
+      1,
+    ])
   })
 
   it("does not compare a run on a released cell against the older baseline", () => {
