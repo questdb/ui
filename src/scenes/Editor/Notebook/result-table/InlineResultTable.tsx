@@ -9,7 +9,7 @@ import type { ResultGridViewportStore } from "./resultGridViewportStore"
 type Props = {
   slots: StatementSlotView[]
   activeSlotIndex: number
-  timestamp: number
+  runToken: number
   isFocused: boolean
   onTabChange: (statementKey: string) => void
   onCancelQuery: (statementKey: string) => void
@@ -24,7 +24,7 @@ type Props = {
 export const InlineResultTable: React.FC<Props> = ({
   slots,
   activeSlotIndex,
-  timestamp,
+  runToken,
   isFocused,
   onTabChange,
   onCancelQuery,
@@ -57,18 +57,14 @@ export const InlineResultTable: React.FC<Props> = ({
         />
       )}
 
-      <StatusNotification
-        timestamp={timestamp}
-        slot={activeSlot}
-        onCancelQuery={onCancelQuery}
-      />
+      <StatusNotification slot={activeSlot} onCancelQuery={onCancelQuery} />
 
       {activeResult?.type === "dql" && activeResult.columns.length > 0 && (
         <ResultGridPanel
           key={activeSlot.key}
           data={activeResult}
           statementKey={activeSlot.key}
-          runToken={timestamp}
+          runToken={runToken}
           isFocused={isFocused}
           bufferId={bufferId}
           cellId={cellId}

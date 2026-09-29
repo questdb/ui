@@ -9,7 +9,7 @@ export type ActiveExecution = {
   scopeKey: ScopeKey
   bufferId: NotificationNamespaceKey
   queryKey: QueryKey
-  abort: () => void
+  abort: (reason?: string) => void
 }
 
 type PendingExecution = ActiveExecution & {
@@ -18,7 +18,7 @@ type PendingExecution = ActiveExecution & {
 }
 
 export type QueryExecutionRequest = {
-  abort: () => void
+  abort: (reason?: string) => void
   bufferId: NotificationNamespaceKey
   execute: () => void
   onDismiss?: () => void
@@ -142,17 +142,18 @@ export class QueryExecutionManager {
     this.refreshSnapshot()
   }
 
-  private abortActive(scopeKey: ScopeKey): void {
+  private abortActive(scopeKey: ScopeKey, reason?: string): void {
     const active = this._activeByScope.get(scopeKey)
     if (!active) return
-    active.abort()
+    active.abort(reason)
   }
 
   abortActiveByScope = (
     scopeKey: ScopeKey = DEFAULT_QUERY_EXECUTION_SCOPE,
+    reason?: string,
   ): void => {
     if (!this._activeByScope.has(scopeKey)) return
-    this.abortActive(scopeKey)
+    this.abortActive(scopeKey, reason)
     this._activeByScope.delete(scopeKey)
     this.refreshSnapshot()
     this.flushIdleWaiters(scopeKey)

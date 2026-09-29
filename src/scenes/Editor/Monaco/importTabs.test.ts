@@ -775,6 +775,198 @@ describe("sanitizeBuffer", () => {
   })
 
   describe("notebookViewState sanitization", () => {
+    it("imports one preferred view and maps main's legacy boolean", () => {
+      // Given cells with a preferred view, main's legacy boolean, and a markdown cell
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            { id: "preferred", value: "SELECT 1", paneView: "result" },
+            { id: "legacy-editor", value: "SELECT 2", paneView: "editor" },
+            { id: "legacy-on", value: "SELECT 3", isViewMaximized: true },
+            { id: "legacy-off", value: "SELECT 4", isViewMaximized: false },
+            {
+              id: "markdown",
+              value: "# Title",
+              type: "markdown",
+              paneView: "result",
+            },
+          ],
+        },
+      }
+
+      // When the buffer is sanitized
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then each cell carries one preferred view and the legacy boolean is gone
+      expect(cells?.map((cell) => cell.paneView)).toEqual([
+        "result",
+        "editor_result",
+        "result",
+        "editor_result",
+        undefined,
+      ])
+      expect(cells?.every((cell) => !("isViewMaximized" in cell))).toBe(true)
+    })
+
+    it("folds a legacy maximized cell's editor height into its result pane", () => {
+      // Given an export from main with a maximized chart and a split grid
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "SELECT 1",
+              mode: "draw",
+              topHeight: 152,
+              bottomHeight: 350,
+              isViewMaximized: true,
+            },
+            {
+              id: "grid",
+              value: "SELECT 2",
+              topHeight: 152,
+              bottomHeight: 350,
+              paneView: "result",
+            },
+            {
+              id: "agent-chart",
+              value: "SELECT 3",
+              mode: "draw",
+              topHeight: 152,
+              isViewMaximized: true,
+            },
+          ],
+        },
+      }
+
+      // When it is imported
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then only the legacy cells keep their former size — a chart with no
+      // stored result height folds its default; a head export with a stored
+      // pane view passes through untouched
+      expect(cells?.map((cell) => cell.bottomHeight)).toEqual([502, 350, 502])
+    })
+
+    it("folds a legacy maximized chart's raw heights before the chart floor, as the in-place read does", () => {
+      // Given a legacy export of a maximized chart whose result pane was
+      // shrunk below the chart floor
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "chart",
+              value: "SELECT 1",
+              mode: "draw",
+              topHeight: 72,
+              bottomHeight: 150,
+              isViewMaximized: true,
+            },
+          ],
+        },
+      }
+
+      // When it is imported
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then the fold sums the raw heights and the floor applies once
+      expect(cells?.[0].bottomHeight).toBe(296)
+    })
+
+    it("strips run/draw sub-state from markdown cells", () => {
+      // Given a hand-crafted import smuggling SQL sub-state onto markdown
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "md",
+              value: "# Title",
+              type: "markdown",
+              mode: "draw",
+              autoRefresh: true,
+              chartConfig: { name: "Legacy title", xColumn: "ts", queries: [] },
+            },
+          ],
+        },
+      }
+      // When the buffer is sanitized
+      const cell = sanitizeBuffer(input).notebookViewState?.cells[0]
+      // Then the legacy chart name still becomes the cell name, but the
+      // run/draw sub-state apply_notebook_state would reject is gone
+      expect(cell).toMatchObject({ type: "markdown", name: "Legacy title" })
+      expect(cell && "mode" in cell).toBe(false)
+      expect(cell && "chartConfig" in cell).toBe(false)
+      expect(cell && "autoRefresh" in cell).toBe(false)
+    })
+
+    it("normalizes legacy SQL run mode to the implicit default", () => {
+      // Given a legacy export that stores mode "run" explicitly
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            { id: "run", value: "SELECT 1", mode: "run" },
+            { id: "draw", value: "SELECT 2", mode: "draw" },
+          ],
+        },
+      }
+
+      // When the buffer is sanitized
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+
+      // Then run mode is dropped and draw mode is preserved
+      expect(cells?.[0].mode).toBeUndefined()
+      expect(cells?.[1].mode).toBe("draw")
+    })
+
+    it("clamps imported pane heights to the floors and ceiling the UI enforces", () => {
+      // Given a hand-authored file pinning out-of-range heights
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "sql",
+              value: "SELECT 1",
+              topHeight: 0,
+              topResized: true,
+              bottomHeight: -500,
+              bottomResized: true,
+            },
+            { id: "chart", value: "SELECT 1", mode: "draw", bottomHeight: 100 },
+            { id: "md", value: "# t", type: "markdown", topHeight: 10 },
+            { id: "huge", value: "SELECT 1", topHeight: 99999 },
+            { id: "ok", value: "SELECT 1", topHeight: 300, bottomHeight: 250 },
+          ],
+        },
+      }
+      // When the buffer is sanitized
+      const cells = sanitizeBuffer(input).notebookViewState?.cells
+      // Then every height lands inside its pane's floor and ceiling, and
+      // in-range values pass through untouched
+      expect(cells?.[0]).toMatchObject({ topHeight: 72, bottomHeight: 100 })
+      expect(cells?.[1].bottomHeight).toBe(296)
+      expect(cells?.[2].topHeight).toBe(56)
+      expect(cells?.[3].topHeight).toBe(2400)
+      expect(cells?.[4]).toMatchObject({ topHeight: 300, bottomHeight: 250 })
+    })
+
     it("whitelists cell fields, reindexes positions, drops session state", () => {
       const input = {
         label: "Notebook",

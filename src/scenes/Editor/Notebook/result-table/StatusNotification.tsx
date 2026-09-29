@@ -44,13 +44,11 @@ const liveRegionMessage = (slot: StatementSlotView): string => {
 }
 
 type Props = {
-  timestamp: number
   slot: StatementSlotView
   onCancelQuery?: (statementKey: string) => void
 }
 
 export const StatusNotification: React.FC<Props> = ({
-  timestamp,
   slot,
   onCancelQuery,
 }) => {
@@ -64,9 +62,12 @@ export const StatusNotification: React.FC<Props> = ({
   const isCancelled = type === "cancelled"
   const notice = activeResult.type === "dql" ? activeResult.notice : undefined
 
+  // A settled slot's time is when its rows were fetched; a queued or running
+  // slot has none yet and shows no time.
   const baseProps = {
     query: "@0-0" as const,
-    createdAt: new Date(slot.fetchedAt ?? timestamp),
+    createdAt: new Date(slot.fetchedAt ?? 0),
+    hideTimestamp: slot.fetchedAt === undefined,
     compact: true,
     isMinimized: true,
     sideContent: <QueryInNotification query={slot.sql} />,

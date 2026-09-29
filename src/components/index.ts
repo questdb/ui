@@ -61,7 +61,13 @@ export * from "./PopperHover"
 export * from "./PopperToggle"
 export * from "./Popover"
 export * from "./SelectMenu"
-export * from "./SegmentedControl"
+export {
+  SegmentedControl,
+  SegmentedControlButton,
+  type SegmentedControlActiveTone,
+  type SegmentedControlSize,
+  type SegmentedControlTone,
+} from "./SegmentedControl"
 export * from "./SelectableCardButton"
 export * from "./SetupAIAssistant"
 export * from "./Spinner"

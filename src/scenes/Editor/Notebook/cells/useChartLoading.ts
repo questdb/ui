@@ -3,55 +3,72 @@ import type { CellResult, NotebookCell } from "../../../../store/notebook"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import {
   deriveChartLoading,
+  pendingCellFetchState,
   type CellFetchState,
 } from "../cellRefresh/cellRefreshEngine"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 
-type ChartLoadingState = { loading: boolean; refreshing: boolean }
+// `stopVisible`: a first fetch is in flight, so Stop can cancel it. A refresh
+// of a drawn chart keeps both flags false, so a poll tick re-renders no one.
+type ChartLoadingState = { loading: boolean; stopVisible: boolean }
 
-const IDLE: ChartLoadingState = { loading: false, refreshing: false }
+const IDLE: ChartLoadingState = { loading: false, stopVisible: false }
 
 const derive = (
-  fetchState: CellFetchState | undefined,
+  fetchState: CellFetchState,
   result: CellResult | null | undefined,
   resultLoading: boolean,
 ): ChartLoadingState => {
-  if (!fetchState) return IDLE
-  return deriveChartLoading(
+  const loading = deriveChartLoading(
     fetchState,
     toChartResult(result, fetchState.queries),
     resultLoading,
   )
+  return { loading, stopVisible: loading && fetchState.fetching }
 }
 
-// Tracks a cell's chart fetch state, derived from the chart engine, so the
-// cell toolbar can spin its controls without owning the fetch. Reading the
-// engine (rather than listening for broadcasts) keeps a toolbar that mounts
-// mid-fetch correct, and covers entry removal — getState turns undefined and
-// the state derives back to idle.
+// Tracks a draw cell's chart fetch state, derived from the chart engine, so
+// the cell toolbar and the canvas share one answer without owning the fetch.
+// Reading the engine (rather than listening for broadcasts) keeps a toolbar
+// that mounts mid-fetch correct. Until the engine holds the cell's entry, the
+// chart is pending on the SQL it shows. A run cell has no chart and never
+// subscribes.
 export const useChartLoading = (cell: NotebookCell): ChartLoadingState => {
   const engine = useCellRefresh()
   const resultStatus = useCellResultStatus(cell.id)
+  const isDrawCell = cell.mode === "draw"
   const resultLoading = resultStatus === "loading"
-  const result = cell.result
+  const { id: cellId, result, value } = cell
   const [state, setState] = useState<ChartLoadingState>(() =>
-    derive(engine?.getState(cell.id), result, resultLoading),
+    isDrawCell
+      ? derive(
+          engine?.getState(cellId) ?? pendingCellFetchState(value),
+          result,
+          resultLoading,
+        )
+      : IDLE,
   )
 
   useEffect(() => {
-    if (!engine) return
     const apply = () => {
-      const next = derive(engine.getState(cell.id), result, resultLoading)
+      const next = isDrawCell
+        ? derive(
+            engine?.getState(cellId) ?? pendingCellFetchState(value),
+            result,
+            resultLoading,
+          )
+        : IDLE
       setState((prev) =>
-        prev.loading === next.loading && prev.refreshing === next.refreshing
+        prev.loading === next.loading && prev.stopVisible === next.stopVisible
           ? prev
           : next,
       )
     }
     apply()
-    return engine.subscribe(cell.id, apply)
-  }, [cell.id, result, engine, resultLoading])
+    if (!isDrawCell) return
+    return engine?.subscribe(cellId, apply)
+  }, [cellId, isDrawCell, result, value, engine, resultLoading])
 
   return state
 }

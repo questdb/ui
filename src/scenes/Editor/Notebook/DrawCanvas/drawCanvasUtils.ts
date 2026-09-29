@@ -1,7 +1,7 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { hasPendingResult } from "../notebookUtils"
+import { hasPendingResult } from "../statementIdentity"
 import { normalizeQueryText } from "../../Monaco/utils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
@@ -84,7 +84,6 @@ export type ChartResult =
       kind: "settled"
       results: QueryExecResult[]
       hadError: boolean
-      timestamp: number
     }
 
 export const toChartResult = (
@@ -98,7 +97,6 @@ export const toChartResult = (
     kind: "settled",
     results: successResults(result.results.map(toExecResult)),
     hadError: result.results.some((r) => r.type === "error"),
-    timestamp: result.timestamp,
   }
 }
 

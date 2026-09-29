@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import styled from "styled-components"
 import { color } from "../../../../utils"
+import { clamp } from "../../../../utils/clamp"
 import { SideChip } from "./chips"
 
 // Matches the grid EdgeHandle `s` (south) affordance: a 2px pink line plus a
@@ -78,7 +79,9 @@ type Props = {
   onResize: (height: number) => void
   onResizeEnd: (height: number) => void
   onDoubleClick: () => void
-  minHeight?: number
+  minHeight: number
+  maxHeight: number
+  ariaLabel: string
   background?: string
   doubleView?: boolean
   // The cell's bottom-edge handle: an absolute strip straddling the cell edge
@@ -90,78 +93,170 @@ type Props = {
 // mouseup is a click and must not commit a resize (which would pin the
 // cell's auto-height).
 const DRAG_THRESHOLD_PX = 3
+const KEYBOARD_STEP_PX = 10
+const KEYBOARD_LARGE_STEP_PX = 50
+const RESIZE_KEYS = new Set(["ArrowUp", "ArrowDown", "Home", "End"])
+const SHRINK_KEYS = new Set(["ArrowUp", "Home"])
+
+const isResizeKey = (key: string): boolean => RESIZE_KEYS.has(key)
+
+// A pane can render outside its bounds (a one-line markdown body below the
+// floor), so the clamp never turns a shrink key into a grow or the reverse.
+export const resizeHeightForKey = (
+  key: string,
+  currentHeight: number,
+  minHeight: number,
+  maxHeight: number,
+  largeStep = false,
+): number | null => {
+  const step = largeStep ? KEYBOARD_LARGE_STEP_PX : KEYBOARD_STEP_PX
+  let next: number
+  switch (key) {
+    case "ArrowUp":
+      next = currentHeight - step
+      break
+    case "ArrowDown":
+      next = currentHeight + step
+      break
+    case "Home":
+      next = minHeight
+      break
+    case "End":
+      next = maxHeight
+      break
+    default:
+      return null
+  }
+  const clamped = clamp(next, minHeight, maxHeight)
+  return SHRINK_KEYS.has(key)
+    ? Math.min(currentHeight, clamped)
+    : Math.max(currentHeight, clamped)
+}
 
 export const ResizeHandle: React.FC<Props> = ({
   targetRef,
   onResize,
   onResizeEnd,
   onDoubleClick,
-  minHeight = 48,
+  minHeight,
+  maxHeight,
+  ariaLabel,
   background,
   doubleView,
   overlay,
 }) => {
+  const [targetHeight, setTargetHeight] = useState<number>()
   const startYRef = useRef(0)
   const startHeightRef = useRef(0)
   const lastHeightRef = useRef(0)
-  const endDragRef = useRef<(() => void) | null>(null)
+  const finishDragRef = useRef<(() => void) | null>(null)
+  const keyboardHeightRef = useRef<number | null>(null)
+  // The document listeners live for the whole drag; they read the callbacks
+  // through refs so every move sees the current render, not the mousedown one.
+  const onResizeRef = useRef(onResize)
+  const onResizeEndRef = useRef(onResizeEnd)
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    startYRef.current = e.clientY
+
+    if (!targetRef.current) return
+    startHeightRef.current = targetRef.current.getBoundingClientRect().height
+    lastHeightRef.current = startHeightRef.current
+    let dragged = false
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientY - startYRef.current
+      if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
+      dragged = true
+      const newHeight = clamp(
+        startHeightRef.current + delta,
+        minHeight,
+        maxHeight,
+      )
+      lastHeightRef.current = newHeight
+      onResizeRef.current(newHeight)
+    }
+
+    const finishDrag = () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", finishDrag)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      finishDragRef.current = null
+      if (dragged) onResizeEndRef.current(lastHeightRef.current)
+    }
+
+    document.body.style.cursor = "ns-resize"
+    document.body.style.userSelect = "none"
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", finishDrag)
+    finishDragRef.current = finishDrag
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault()
-      startYRef.current = e.clientY
+      onDoubleClick()
+      return
+    }
+    if (!targetRef.current) return
+    const currentHeight = Math.round(
+      targetRef.current.getBoundingClientRect().height,
+    )
+    const next = resizeHeightForKey(
+      e.key,
+      currentHeight,
+      minHeight,
+      maxHeight,
+      e.shiftKey,
+    )
+    if (next === null) return
+    e.preventDefault()
+    if (next === currentHeight) return
+    keyboardHeightRef.current = next
+    onResize(next)
+  }
 
-      if (!targetRef.current) return
-      startHeightRef.current = targetRef.current.getBoundingClientRect().height
-      lastHeightRef.current = startHeightRef.current
-      let dragged = false
+  // The hold commits once: on release of the resize key, or on blur when
+  // focus leaves mid-hold. Reads the callback through its ref so the unmount
+  // cleanup below can commit with the pane the hold belonged to.
+  const commitKeyboardResize = useCallback(() => {
+    const height = keyboardHeightRef.current
+    if (height === null) return
+    keyboardHeightRef.current = null
+    onResizeEndRef.current(height)
+  }, [])
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const delta = moveEvent.clientY - startYRef.current
-        if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
-        dragged = true
-        const newHeight = Math.max(minHeight, startHeightRef.current + delta)
-        lastHeightRef.current = newHeight
-        onResize(newHeight)
-      }
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    if (isResizeKey(e.key)) commitKeyboardResize()
+  }
 
-      const endDrag = () => {
-        document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", handleMouseUp)
-        document.body.style.cursor = ""
-        document.body.style.userSelect = ""
-        endDragRef.current = null
-      }
+  useEffect(() => {
+    onResizeRef.current = onResize
+    onResizeEndRef.current = onResizeEnd
+  }, [onResize, onResizeEnd])
 
-      const handleMouseUp = () => {
-        endDrag()
-        if (dragged) onResizeEnd(lastHeightRef.current)
-      }
+  useEffect(() => {
+    const target = targetRef.current
+    if (!target) return
+    const observer = new ResizeObserver(() =>
+      setTargetHeight(Math.round(target.getBoundingClientRect().height)),
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [targetRef])
 
-      document.body.style.cursor = "ns-resize"
-      document.body.style.userSelect = "none"
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-      endDragRef.current = endDrag
+  // A new target is another pane: the drag commits the old one where it is
+  // and stops. React 17 runs every cleanup before any effect, so the callback
+  // ref still holds the old pane's onResizeEnd here.
+  useEffect(
+    () => () => {
+      finishDragRef.current?.()
+      commitKeyboardResize()
     },
-    [targetRef, onResize, onResizeEnd, minHeight],
+    [targetRef, commitKeyboardResize],
   )
-
-  // Enter/Space on a focused handle resets to default. This is the only
-  // keyboard-accessible interaction we offer — mouse-drag resizing has no
-  // ergonomic keyboard equivalent here, so don't pretend otherwise in
-  // the aria-label.
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault()
-        onDoubleClick()
-      }
-    },
-    [onDoubleClick],
-  )
-
-  useEffect(() => () => endDragRef.current?.(), [])
 
   return (
     <Handle
@@ -171,12 +266,15 @@ export const ResizeHandle: React.FC<Props> = ({
       onMouseDown={handleMouseDown}
       onDoubleClick={onDoubleClick}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onBlur={commitKeyboardResize}
       role="separator"
       aria-orientation="horizontal"
-      // Sighted mouse users hover for the tooltip; screen-reader users
-      // hear the aria-label. Two audiences, two affordances.
-      aria-label="Resize handle. Press Enter to reset to default size."
-      title="Drag to resize. Double-click to reset."
+      aria-label={ariaLabel}
+      aria-valuemin={Math.round(Math.min(minHeight, targetHeight ?? minHeight))}
+      aria-valuemax={Math.round(Math.max(maxHeight, targetHeight ?? maxHeight))}
+      aria-valuenow={targetHeight}
+      title="Drag or use arrow keys to resize. Double-click or press Enter to reset."
       tabIndex={0}
     >
       <span className="resize-line" />

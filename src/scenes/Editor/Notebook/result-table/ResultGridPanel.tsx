@@ -82,7 +82,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   const gridRef = useRef<ResultGridHandle | null>(null)
   const dataSource = useMemo(
     () => inMemoryDataSource(data.columns, data.dataset, data.timestamp ?? -1),
-    [data],
+    [data.columns, data.dataset, data.timestamp],
   )
   const saveViewport = useCallback(
     (nextViewport: ResultGridViewport) =>
