@@ -389,6 +389,85 @@ describe("Client token refresh", () => {
     }
   })
 
+  it.each([
+    {
+      name: "access token",
+      groupsEncoded: false,
+      oldAccess: "same-access",
+      nextAccess: "same-access",
+      oldId: "old-id",
+      nextId: "next-id",
+    },
+    {
+      name: "ID token",
+      groupsEncoded: true,
+      oldAccess: "old-access",
+      nextAccess: "next-access",
+      oldId: "same-id",
+      nextId: "same-id",
+    },
+  ])(
+    "reports a 401 after refresh when the $name bearer is unchanged",
+    async ({ groupsEncoded, oldAccess, nextAccess, oldId, nextId }) => {
+      vi.useFakeTimers()
+      const oldPayload = {
+        access_token: oldAccess,
+        id_token: oldId,
+        refresh_token: "refresh",
+        groups_encoded_in_token: groupsEncoded,
+        expires_at: new Date(Date.now() + 60_000).toString(),
+      } as AuthPayload
+      ssoAuthState.setAuthPayload(oldPayload)
+
+      let finishFirst!: (value: Response) => void
+      const firstResponse = new Promise<Response>((resolve) => {
+        finishFirst = resolve
+      })
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockReturnValueOnce(firstResponse)
+          .mockResolvedValue(response({ notice: "hint" })),
+      )
+      const client = new Client()
+      const bearer = groupsEncoded ? oldId : oldAccess
+      client.setCommonHeaders({ Authorization: `Bearer ${bearer}` })
+      client.refreshTokenMethod = () => {
+        ssoAuthState.setAuthPayload({
+          ...oldPayload,
+          access_token: nextAccess,
+          id_token: nextId,
+          expires_at: new Date(Date.now() + 300_000).toString(),
+        })
+        return Promise.resolve({
+          access_token: nextAccess,
+          id_token: nextId,
+          groups_encoded_in_token: groupsEncoded,
+        })
+      }
+      const onUnauthorized = vi.fn()
+      eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, onUnauthorized)
+      try {
+        const first = client.queryRaw("SELECT 1")
+        await vi.advanceTimersByTimeAsync(31_000)
+        await client.queryRaw("SELECT 2")
+        finishFirst({
+          ok: false,
+          status: 401,
+          statusText: "Unauthorized",
+        } as Response)
+        await expect(first).rejects.toMatchObject({ status: 401 })
+        expect(onUnauthorized).toHaveBeenCalledTimes(1)
+      } finally {
+        eventBus.unsubscribe(
+          EventType.MSG_CONNECTION_UNAUTHORIZED,
+          onUnauthorized,
+        )
+      }
+    },
+  )
+
   it("still reports a 401 from the current token", async () => {
     setExpiringToken()
     vi.stubGlobal(

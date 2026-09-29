@@ -145,6 +145,51 @@ describe("questdb grid", () => {
       })
     })
 
+    it("discards a delayed legacy-grid page after a new query replaces its result", () => {
+      cy.location("href").then((href) => {
+        const url = new URL(href)
+        url.searchParams.set("useNewGrid", "0")
+        cy.visit(url.toString())
+      })
+      cy.getEditor().should("be.visible")
+      cy.get(".qg-viewport").should("be.visible")
+
+      let releaseOldPage
+      cy.intercept("/exec*", (req) => {
+        const lo = parseInt(String(req.query.limit).split(",")[0], 10)
+        if (
+          String(req.query.query).includes("select x a from long_sequence") &&
+          lo > 1000
+        ) {
+          req.alias = "oldPage"
+          req.continue(
+            () =>
+              new Promise((resolve) => {
+                releaseOldPage = resolve
+              }),
+          )
+        }
+      })
+
+      cy.typeQuery("select x a from long_sequence(5000)")
+      cy.runLine()
+      cy.get(".qg-r:visible").should("contain.text", "1")
+      cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
+      cy.wrap(null).should(() => expect(releaseOldPage).to.be.a("function"))
+
+      cy.clearEditor()
+      cy.typeQuery("select x * 1000 a from long_sequence(5000)")
+      cy.runLine()
+      cy.get(".qg-r:visible").should("contain.text", "1000")
+      cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
+      cy.get(".qg-r:visible").should("contain.text", "2501000")
+      cy.then(() => releaseOldPage())
+      cy.wait("@oldPage")
+      cy.get(".qg-viewport").scrollTo("top")
+      cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
+      cy.get(".qg-r:visible").should("contain.text", "2501000")
+    })
+
     it("updates the header names when a new query reuses the same column widths", () => {
       // Given a result whose single column clamps to some width
       cy.typeQuery("select x aa from long_sequence(20)")

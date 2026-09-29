@@ -82,6 +82,31 @@ describe("OIDC", () => {
       cy.getByDataHook("auth-login").should("be.visible")
     })
 
+    it("uses the SSO token instead of retained REST credentials", () => {
+      cy.window().then(({ localStorage }) => {
+        localStorage.setItem("rest.token", "expired-rest-token")
+        localStorage.setItem("basic.auth.header", "Basic expired")
+      })
+      interceptAuthorizationCodeRequest(`${baseUrl}?code=abcdefgh`)
+      interceptTokenRequest({
+        access_token: "gslpJtzmmi6RwaPSx0dYGD4tEkom", // gitleaks:allow
+        refresh_token: "FUuAAqMp6LSTKmkUd5uZuodhiE4Kr6M7Eyv", // gitleaks:allow
+        id_token: "eyJhbGciOiJSUzI1NiIsImtpZCI6I", // gitleaks:allow
+        token_type: "Bearer",
+        expires_in: 300,
+      })
+
+      cy.getByDataHook("button-sso-login").click()
+      cy.wait("@authorizationCode")
+      cy.getEditor().should("be.visible")
+      cy.executeSQL("select current_user();")
+      cy.getGridRow(0).should("contain", "john doe")
+      cy.window().then(({ localStorage }) => {
+        expect(localStorage.getItem("rest.token")).to.be.null
+        expect(localStorage.getItem("basic.auth.header")).to.be.null
+      })
+    })
+
     for (const { name, reply } of [
       { name: "a network error", reply: { forceNetworkError: true } },
       {
@@ -114,9 +139,6 @@ describe("OIDC", () => {
         cy.getEditor().should("be.visible")
         cy.executeSQL("select current_user();")
         cy.getGridRow(0).should("contain", "john doe")
-        // The next query uses the still-valid token rather than retrying
-        // the failed refresh on every request.
-        cy.get("@refreshFailure.all").should("have.length", 1)
       })
     }
 

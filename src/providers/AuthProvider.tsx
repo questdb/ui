@@ -131,6 +131,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         tokenResponse.expires_in,
       ).toString() // convert from the sec offset
       ssoAuthState.setAuthPayload(tokenResponse)
+      removeValue(StoreKey.REST_TOKEN)
+      removeValue(StoreKey.BASIC_AUTH_HEADER)
       setSessionData(tokenResponse)
       setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
       // Remove the code from the URL

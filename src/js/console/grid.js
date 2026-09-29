@@ -109,6 +109,8 @@ export function grid(rootElement, _paginationFn, id) {
   let timestampIndex = -1
   let ogTimestampIndex = -1
   let data = []
+  let resultGeneration = 0
+  let setDataTimer
   let totalWidth = -1
   let deferVisualsCompute = false
   // number of divs in "rows" cache, has to be power of two
@@ -357,6 +359,7 @@ export function grid(rootElement, _paginationFn, id) {
 
   function loadPages(p1, p2) {
     purgeOutlierPages()
+    const requestedGeneration = resultGeneration
 
     let lo
     let hi
@@ -390,7 +393,9 @@ export function grid(rootElement, _paginationFn, id) {
     }
 
     if (paginationFn) {
-      paginationFn(sql, lo + 1, hi, renderFunc)
+      paginationFn(sql, lo + 1, hi, (response) => {
+        if (requestedGeneration === resultGeneration) renderFunc(response)
+      })
       void trackEvent(ConsoleEvent.GRID_SCROLL, { offset: hi })
     }
   }
@@ -2183,13 +2188,22 @@ export function grid(rootElement, _paginationFn, id) {
   }
 
   function setData(_data) {
+    const generation = ++resultGeneration
+    if (queryTimer) {
+      clearTimeout(queryTimer)
+      queryTimer = null
+    }
+    if (setDataTimer) clearTimeout(setDataTimer)
     initialFocusSkipped = false
     triggerEvent("selection.change", { hasSelection: false })
-    setTimeout(() => {
+    setDataTimer = setTimeout(() => {
+      setDataTimer = null
       setDataPart1(_data)
       // This part of the update sequence requires layoutStore access.
       // For that we need to calculate layout key and hash, which is async
-      layoutStoreComputeKeyAndHash(setDataPart2)
+      layoutStoreComputeKeyAndHash(() => {
+        if (generation === resultGeneration) setDataPart2()
+      })
     }, 0)
   }
 

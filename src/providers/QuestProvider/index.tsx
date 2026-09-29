@@ -103,20 +103,22 @@ export const QuestProvider: React.FC = ({ children }) => {
   }, [sessionData])
 
   useEffect(() => {
-    const restToken = getValue(StoreKey.REST_TOKEN)
-    // User has provided the basic auth credentials
-    if (restToken) {
-      questClient.setCommonHeaders({
-        Authorization: `Bearer ${restToken}`,
-      })
-      void finishAuthCheck()
-    } else {
-      const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
-      if (basicAuth) {
+    // Stored REST/basic credentials must not override an active SSO session.
+    if (!sessionData) {
+      const restToken = getValue(StoreKey.REST_TOKEN)
+      if (restToken) {
         questClient.setCommonHeaders({
-          Authorization: basicAuth,
+          Authorization: `Bearer ${restToken}`,
         })
         void finishAuthCheck()
+      } else {
+        const basicAuth = getValue(StoreKey.BASIC_AUTH_HEADER)
+        if (basicAuth) {
+          questClient.setCommonHeaders({
+            Authorization: basicAuth,
+          })
+          void finishAuthCheck()
+        }
       }
     }
 

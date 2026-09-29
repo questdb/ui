@@ -316,7 +316,6 @@ export class Client {
 
     let response: Response
     let fetchStartedAt = 0
-    let authPayloadAtFetch: AuthPayload | null = null
     let authorizationAtFetch: string | undefined
 
     try {
@@ -338,7 +337,6 @@ export class Client {
 
       onRequestStart?.()
       const headers = this.commonHeaders
-      authPayloadAtFetch = ssoAuthState.getAuthPayload()
       authorizationAtFetch = headers.Authorization
       fetchStartedAt = Date.now()
       response = await fetch(`exec?${Client.encodeParams(payload)}`, {
@@ -474,12 +472,9 @@ export class Client {
         const currentAuthorization = currentAuthPayload
           ? `Bearer ${currentAuthPayload.groups_encoded_in_token ? currentAuthPayload.id_token : currentAuthPayload.access_token}`
           : this.commonHeaders.Authorization
-        // An older request can return 401 after a successful token refresh.
-        // Reject that request, but do not log out the session using the new token.
-        if (
-          authPayloadAtFetch === currentAuthPayload &&
-          authorizationAtFetch === currentAuthorization
-        ) {
+        // Reject an older request without logging out a session using a
+        // different bearer. A refresh can also return the same bearer value.
+        if (authorizationAtFetch === currentAuthorization) {
           eventBus.publish(EventType.MSG_CONNECTION_UNAUTHORIZED, errorPayload)
         }
       }
