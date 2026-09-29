@@ -152,7 +152,6 @@ describe("questdb grid", () => {
         cy.visit(url.toString())
       })
       cy.getEditor().should("be.visible")
-      cy.get(".qg-viewport").should("be.visible")
 
       let releaseOldPage
       cy.intercept("/exec*", (req) => {
@@ -173,6 +172,9 @@ describe("questdb grid", () => {
 
       cy.typeQuery("select x a from long_sequence(5000)")
       cy.runLine()
+      // The result panel, and with it the legacy grid, mounts only once the
+      // first result arrives, so the legacy viewport can't be asserted earlier.
+      cy.get(".qg-viewport").should("be.visible")
       cy.get(".qg-r:visible").should("contain.text", "1")
       cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
       cy.wrap(null).should(() => expect(releaseOldPage).to.be.a("function"))
@@ -181,11 +183,15 @@ describe("questdb grid", () => {
       cy.typeQuery("select x * 1000 a from long_sequence(5000)")
       cy.runLine()
       cy.get(".qg-r:visible").should("contain.text", "1000")
-      cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
-      cy.get(".qg-r:visible").should("contain.text", "2501000")
+
+      // Deliver the old query's page after the new result has replaced it, but
+      // before the new result loads that page itself
       cy.then(() => releaseOldPage())
       cy.wait("@oldPage")
-      cy.get(".qg-viewport").scrollTo("top")
+
+      // Scrolling there must fetch the new query's rows. A stale page stored in
+      // the new result would count as loaded, so it would render and never
+      // be refetched
       cy.get(".qg-viewport").scrollTo(0, 2500 * rowHeight)
       cy.get(".qg-r:visible").should("contain.text", "2501000")
     })
