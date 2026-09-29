@@ -201,7 +201,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
     if (session && session.configAtOpen !== savedHighlightConfig) {
       closeHighlight()
       toast.info(
-        "Highlight rules were updated by the assistant. Reopen highlight rules to edit.",
+        "Highlight rules were updated since last check. Reopen highlight rules to edit.",
       )
     }
   }, [cellId, highlightOpen, savedHighlightConfig, closeHighlight])
