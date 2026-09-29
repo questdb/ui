@@ -104,7 +104,7 @@ describe("notebook cell controls", () => {
     cy.createNotebook()
   })
 
-  context("keyboard resize", () => {
+  describe("keyboard resize", () => {
     it("stores the height on key release and keeps it across a reload", () => {
       // Given a cell whose result splits it into an editor and a result pane
       setCellSql("select 1")
@@ -135,7 +135,7 @@ describe("notebook cell controls", () => {
     })
   })
 
-  context("commit under an edit", () => {
+  describe("commit under an edit", () => {
     it("sizes the result pane by the edited text when a run lands after a re-case", () => {
       // Given a two-statement cell whose cursor run of the second statement
       // the server has not answered yet
@@ -161,7 +161,7 @@ describe("notebook cell controls", () => {
     })
   })
 
-  context("Stop", () => {
+  describe("Stop", () => {
     it("cancels a first run and reports it in the result", () => {
       // Given a cell whose first run the server has not answered yet
       const held = holdFirstExec()
