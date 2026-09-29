@@ -35,13 +35,7 @@ import {
   type RunCancellation,
   type RunCancelReason,
 } from "./runCancellation"
-import {
-  hasPendingResult,
-  reconcileCellResultForStatements,
-  resultStatementKeys,
-  retextResultsToStatements,
-  statementKeysFor,
-} from "./statementIdentity"
+import { hasPendingResult, statementKeysFor } from "./statementIdentity"
 import { persistCellSnapshot } from "./persistCellSnapshot"
 import { updateCellSnapshotActiveIndex } from "../../../store/notebookResults"
 
@@ -61,38 +55,6 @@ const beginCellRun = (runGenerations: Map<string, number>, cellId: string) => {
 
   return () => runGenerations.get(cellId) === generation
 }
-
-// A run lands with the text it ran as. When the cell was edited while it ran,
-// the frame reconciles to the editor's statements at commit, as the engine
-// does after any settled edit: survivors take the current text, results no
-// statement claims drop. A frame with no survivor stays as it ran.
-export const committedResult = (
-  result: CellResult,
-  liveValue: string,
-  valueAtRunStart: string,
-): CellResult => {
-  if (liveValue === valueAtRunStart) return result
-  const statements = getQueriesFromText(liveValue)
-  return (
-    reconcileCellResultForStatements(
-      result,
-      statements,
-      statementKeysFor(statements),
-      resultStatementKeys(result.results),
-    ) ?? result
-  )
-}
-
-// A recorded fragment (selection or cursor run) often matches no statement,
-// so it only takes the current text of the statement it belongs to.
-export const committedResults = (
-  results: SingleQueryResult[],
-  liveValue: string,
-  valueAtRunStart: string,
-): SingleQueryResult[] =>
-  liveValue === valueAtRunStart
-    ? results
-    : retextResultsToStatements(results, getQueriesFromText(liveValue))
 
 // The reason the cell's controllers were aborted with, when any were.
 const cancellationOf = (
@@ -411,23 +373,20 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
-        const result = committedResult(
-          liveCell.result ?? {
-            results: finalResults,
-            activeResultIndex: 0,
-            timestamp: Date.now(),
-          },
-          liveCell.value,
-          valueAtRunStart,
-        )
-        if (result !== liveCell.result) updateCell(cellId, { result })
-        if (result.results.length === queries.length) {
-          setScriptSummary(cellId, {
-            successCount,
-            failedCount,
-            durationMs: Date.now() - startTime,
+        if (!liveCell.result) {
+          updateCell(cellId, {
+            result: {
+              results: finalResults,
+              activeResultIndex: 0,
+              timestamp: Date.now(),
+            },
           })
         }
+        setScriptSummary(cellId, {
+          successCount,
+          failedCount,
+          durationMs: Date.now() - startTime,
+        })
         stampRunHistory(cellId)
         persistSnapshot(cellId)
       } finally {
@@ -628,17 +587,16 @@ export const useCellExecution = ({
             cellChanged: true,
           }
         }
-        const result = committedResult(
-          liveCell.result ?? {
-            results: finalResults,
-            activeResultIndex: 0,
-            timestamp: Date.now(),
-          },
-          liveCell.value,
-          valueAtRunStart,
-        )
-        if (result !== liveCell.result) updateCell(cellId, { result })
-        if (queries.length > 1 && result.results.length === queries.length) {
+        if (!liveCell.result) {
+          updateCell(cellId, {
+            result: {
+              results: finalResults,
+              activeResultIndex: 0,
+              timestamp: Date.now(),
+            },
+          })
+        }
+        if (queries.length > 1) {
           setScriptSummary(cellId, {
             successCount: queries.length - failedCount - cancelledCount,
             failedCount,
@@ -836,15 +794,9 @@ export const useCellExecution = ({
           updateCell(cellId, { result: priorResult })
           return { ok, superseded: false, cellChanged: true }
         }
-        const [recorded] = committedResults(
-          [
-            launch.launched
-              ? singleResultFromExec(launch.exec, recordedQuery)
-              : cancelledResult(recordedQuery, "user"),
-          ],
-          liveCell.value,
-          valueAtRunStart,
-        )
+        const recorded = launch.launched
+          ? singleResultFromExec(launch.exec, recordedQuery)
+          : cancelledResult(recordedQuery, "user")
         const cellResult: CellResult = {
           results: [recorded],
           activeResultIndex: 0,

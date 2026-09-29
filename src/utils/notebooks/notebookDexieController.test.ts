@@ -328,9 +328,9 @@ describe("createDexieNotebookController — structural edits", () => {
     })
     const controller = makeController()
 
-    // When the statement is reformatted and a second one is appended
+    // When the statement gains surrounding whitespace and a second one is appended
     await controller.updateCell("a", {
-      value: "SELECT  *\nFROM trades WHERE sym='A'; select 3",
+      value: "  select * from trades where sym = 'A' ;\nselect 3",
     })
 
     // Then the snapshot survives

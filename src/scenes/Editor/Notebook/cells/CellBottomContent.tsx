@@ -24,25 +24,19 @@ import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
   deriveStatementFrame,
-  statementKeysFor,
 } from "../statementIdentity"
-
-type SlotChannel = SlotRefreshChannel &
-  Pick<CellFetchState, "queries" | "slotKeys">
 
 const selectSlotChannel = (
   state: CellFetchState | undefined,
-): SlotChannel | undefined =>
+): SlotRefreshChannel | undefined =>
   state && {
-    queries: state.queries,
-    slotKeys: state.slotKeys,
     slotFetching: state.slotFetching,
     slotErrors: state.slotErrors,
     slotVerifiedAt: state.slotVerifiedAt,
   }
 
 // A chart draws its own frame, so a draw cell selects nothing here.
-const selectNoSlotChannel = (): SlotChannel | undefined => undefined
+const selectNoSlotChannel = (): SlotRefreshChannel | undefined => undefined
 
 type Props = {
   cell: NotebookCell
@@ -77,28 +71,16 @@ export const CellBottomContent: React.FC<Props> = ({
   const resultStatus = useCellResultStatus(cell.id)
   const viewportStore = useMemo(() => createResultGridViewportStore(), [])
 
-  // Tabs follow the engine's debounced statement list, so a keystroke never
-  // re-keys the cell; results attach to it by content. A statement with no
-  // result renders the neutral "Not run" slot. A frame no statement claims
-  // (selection run) falls back to the results' own tabs.
-  const debouncedQueries = fetchState?.queries
-  const statements = useMemo(
-    () =>
-      cell.mode === "draw"
-        ? []
-        : (debouncedQueries ?? getQueriesFromText(cell.value)),
-    [cell.mode, debouncedQueries, cell.value],
-  )
-  const engineSlotKeys = fetchState?.slotKeys
-  const slotKeys = useMemo(
-    () => engineSlotKeys ?? statementKeysFor(statements),
-    [engineSlotKeys, statements],
-  )
+  // Tabs follow the editor's statements; results attach to them by content.
+  // A statement with no result renders the neutral "Not run" slot. A frame no
+  // statement claims (selection run) falls back to the results' own tabs.
   const frame = useMemo(
     () =>
-      deriveStatementFrame(statements, cell.result, slotKeys) ??
-      derivePositionalFrame(cell.result),
-    [statements, cell.result, slotKeys],
+      cell.mode === "draw"
+        ? null
+        : (deriveStatementFrame(getQueriesFromText(cell.value), cell.result) ??
+          derivePositionalFrame(cell.result)),
+    [cell.mode, cell.value, cell.result],
   )
   const slots = useMemo(
     () => (frame ? buildStatementSlotViews(frame, fetchState) : []),

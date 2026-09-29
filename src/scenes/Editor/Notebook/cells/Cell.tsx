@@ -265,6 +265,17 @@ const CellInner: React.FC<Props> = ({
     [handleEditorMount, applyReveal],
   )
 
+  const focusCellToolbar = () => {
+    headerRef.current
+      ?.querySelector<HTMLButtonElement>('[data-hook="cell-toolbar"] button')
+      ?.focus()
+  }
+
+  const handleChartConfigChange = (config: ChartConfig) => {
+    signalUserEdit(bufferIdForEvents)
+    setCellChartConfig(cell.id, config)
+  }
+
   // Install the content-height getter that `topResize.resetHeight`
   // reads (declared above, before `editorRef` is in scope). The
   // closure over the stable `editorRef` means we don't need to
@@ -317,17 +328,6 @@ const CellInner: React.FC<Props> = ({
       }
     }
   }, [])
-
-  const focusCellToolbar = () => {
-    headerRef.current
-      ?.querySelector<HTMLButtonElement>('[data-hook="cell-toolbar"] button')
-      ?.focus()
-  }
-
-  const handleChartConfigChange = (config: ChartConfig) => {
-    signalUserEdit(bufferIdForEvents)
-    setCellChartConfig(cell.id, config)
-  }
 
   const handleEditorChange = useCallback(
     (value: string | undefined) => {

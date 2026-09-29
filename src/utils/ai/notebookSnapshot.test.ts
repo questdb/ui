@@ -360,6 +360,8 @@ describe("buildSnapshot", () => {
       "a",
       id,
       false,
+      undefined,
+      "unrequested",
     )
     expect(details).toMatchObject({
       view: null,
@@ -538,7 +540,11 @@ describe("summarizeCells", () => {
     ]
 
     // When summarizing for list_cells
-    const [named, unnamed] = summarizeCells(cells)
+    const [named, unnamed] = summarizeCells(
+      cells,
+      undefined,
+      () => "unrequested",
+    )
 
     // Then the name is surfaced for the named cell and omitted otherwise
     expect(named.name).toBe("Recent Trades")

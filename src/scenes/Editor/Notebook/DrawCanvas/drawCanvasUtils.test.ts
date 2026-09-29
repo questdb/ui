@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest"
 import {
-  alignResultsToQueries,
   resolveDraw,
   resultMatchesQueries,
   resultsEquivalent,
@@ -96,16 +95,17 @@ describe("resultsEquivalent", () => {
     expect(resultsEquivalent(a, b)).toBe(true)
   })
 
-  it("ignores internal whitespace and keyword casing", () => {
-    // Given two results whose queries differ only in whitespace and keyword casing
-    const a = [dql([{ name: "x", type: "INT" }], [[1]], "select  1\nas x")]
-    const b = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
+  it("ignores surrounding whitespace but not inner whitespace or keyword casing", () => {
+    // Given results whose queries differ only around the statement, and
+    // results whose queries differ inside it
+    const base = [dql([{ name: "x", type: "INT" }], [[1]], "select 1 as x")]
+    const padded = [dql([{ name: "x", type: "INT" }], [[1]], " select 1 as x;")]
+    const recased = [dql([{ name: "x", type: "INT" }], [[1]], "SELECT 1 AS x")]
 
     // When they are compared
-    const equivalent = resultsEquivalent(a, b)
-
-    // Then they are equivalent
-    expect(equivalent).toBe(true)
+    // Then only the padded query is the same statement
+    expect(resultsEquivalent(base, padded)).toBe(true)
+    expect(resultsEquivalent(base, recased)).toBe(false)
   })
 
   it("returns false when result counts differ", () => {
@@ -259,13 +259,13 @@ describe("resultMatchesQueries", () => {
     ).toBe(true)
   })
 
-  it("matches across internal whitespace and keyword casing", () => {
+  it("rejects a change of internal whitespace or keyword casing", () => {
     // Given a result produced by the statement in one presentation
     // When the cell now carries the same statement reformatted
-    // Then it still matches — a presentation-only edit never re-fetches
+    // Then it does not match — the chart re-fetches
     expect(
       resultMatchesQueries(cellResult(["select  1\nas x"]), ["SELECT 1 AS x"]),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it("rejects on statement-count mismatch", () => {
@@ -289,67 +289,6 @@ describe("resultMatchesQueries", () => {
     // Then there is nothing to transfer
     expect(resultMatchesQueries(null, ["select a"])).toBe(false)
     expect(resultMatchesQueries(undefined, ["select a"])).toBe(false)
-  })
-})
-
-describe("alignResultsToQueries", () => {
-  it("returns the same frame when every slot already carries its statement's text", () => {
-    // Given a frame written for these statements
-    const result = cellResult(["select 1", "select 2"])
-    // When it is aligned to them
-    // Then nothing is copied
-    expect(alignResultsToQueries(result, ["select 1", "select 2"])).toBe(result)
-  })
-
-  it("gives a reformatted statement's slot the new text and keeps the others", () => {
-    // Given a frame accepted for a reformatted first statement
-    const result = cellResult(["select 1", "select 2"])
-    // When it is aligned
-    const aligned = alignResultsToQueries(result, ["SELECT 1", "select 2"])
-    // Then only the changed slot is a new object, under the statement's text
-    expect(aligned.results.map((r) => r.query)).toEqual([
-      "SELECT 1",
-      "select 2",
-    ])
-    expect(aligned.results[1]).toBe(result.results[1])
-  })
-
-  it("lets the chart resolver find the saved config after a formatting edit", () => {
-    // Given a bar config saved for the first query and a frame with old text
-    const rows = [[1, 2]]
-    const columns: ColumnDefinition[] = [
-      { name: "ts", type: "TIMESTAMP" },
-      { name: "qty", type: "DOUBLE" },
-    ]
-    const result: CellResult = {
-      results: [
-        {
-          type: "dql",
-          query: "select ts, qty from t",
-          columns,
-          dataset: rows,
-          count: 1,
-        },
-      ],
-      activeResultIndex: 0,
-      timestamp: 0,
-    }
-    const config = {
-      xColumn: "ts",
-      queries: [
-        { type: "bar" as const, yColumns: ["qty"], axis: "right" as const },
-      ],
-    }
-    const statements = ["SELECT ts, qty\nFROM t"]
-    // When the frame is aligned to the reformatted statement and resolved
-    const aligned = alignResultsToQueries(result, statements)
-    const { renderQueries } = resolveDraw(
-      statements,
-      aligned.results.map(toExecResult),
-      config,
-    )
-    // Then the saved bar config applies instead of the inferred one
-    expect(renderQueries[0]).toMatchObject({ index: 0, type: "bar" })
   })
 })
 

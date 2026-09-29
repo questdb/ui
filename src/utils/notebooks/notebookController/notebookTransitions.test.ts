@@ -330,7 +330,12 @@ describe("setCellLayoutTransition", () => {
 
     // When an agent places the cell past the last column
     const apply = () =>
-      setCellLayoutTransition(parts, BUFFER_ID, "a", { x: 11, y: 0, w: 2 })
+      setCellLayoutTransition(parts, BUFFER_ID, "a", {
+        x: 11,
+        y: 0,
+        w: 2,
+        resultStatus: "unrequested",
+      })
 
     // Then the transition rejects it
     expect(apply).toThrow(NotebookToolError)

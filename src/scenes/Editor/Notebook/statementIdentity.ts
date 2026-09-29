@@ -1,33 +1,5 @@
-import { format } from "@questdb/sql-parser"
 import type { CellResult, SingleQueryResult } from "../../../store/notebook"
 import { getQueriesFromText, normalizeQueryText } from "../Monaco/utils"
-
-// Result identity ignores presentation-only edits while preserving SQL values:
-// the QuestDB formatter canonicalizes whitespace/newlines and keyword casing,
-// but keeps literals, identifiers and aliases as written. SQL it cannot read
-// comes back unchanged, so mid-typing statements keep their trimmed text.
-// `capitalize` is pinned here: identity must not follow the editor's
-// keyword-casing setting, or every stored result key would change with it.
-// Formatting costs about 1 ms per KB and runs several times per edit, so
-// statements above the limit keep their trimmed text as identity.
-export const MAX_FORMATTED_IDENTITY_LENGTH = 8 * 1024
-
-export const normalizeStatementIdentity = (query: string): string => {
-  const normalized = normalizeQueryText(query)
-  if (!normalized || normalized.length > MAX_FORMATTED_IDENTITY_LENGTH) {
-    return normalized
-  }
-  try {
-    return format(normalized, { capitalize: true })
-  } catch {
-    return normalized
-  }
-}
-
-// Every frame is written with the statement text it ran as, so at rest both
-// sides are byte-equal and the formatter never runs.
-export const sameStatementIdentity = (a: string, b: string): boolean =>
-  a === b || normalizeStatementIdentity(a) === normalizeStatementIdentity(b)
 
 export const snapshotResultsMatchQueries = (
   results: SingleQueryResult[],
@@ -35,8 +7,9 @@ export const snapshotResultsMatchQueries = (
 ): boolean =>
   results.length > 0 &&
   results.length === queries.length &&
-  results.every((result, index) =>
-    sameStatementIdentity(result.query, queries[index]),
+  results.every(
+    (result, index) =>
+      normalizeQueryText(result.query) === normalizeQueryText(queries[index]),
   )
 
 // Statement identity across edits: normalized text plus occurrence order for
@@ -45,22 +18,15 @@ export type StatementKey = string
 
 const STATEMENT_KEY_SEPARATOR = "\u0001"
 
-export const statementKeysForIdentities = (
-  identities: string[],
-): StatementKey[] => {
+export const statementKeysFor = (texts: string[]): StatementKey[] => {
   const occurrences = new Map<string, number>()
-  return identities.map((identity) => {
-    const occurrence = occurrences.get(identity) ?? 0
-    occurrences.set(identity, occurrence + 1)
-    return `${identity}${STATEMENT_KEY_SEPARATOR}${occurrence}`
+  return texts.map((text) => {
+    const normalized = normalizeQueryText(text)
+    const occurrence = occurrences.get(normalized) ?? 0
+    occurrences.set(normalized, occurrence + 1)
+    return `${normalized}${STATEMENT_KEY_SEPARATOR}${occurrence}`
   })
 }
-
-export const statementKeysFor = (texts: string[]): StatementKey[] =>
-  statementKeysForIdentities(texts.map(normalizeStatementIdentity))
-
-export const statementIdentityOfKey = (key: StatementKey): string =>
-  key.slice(0, key.lastIndexOf(STATEMENT_KEY_SEPARATOR))
 
 const clampIndex = (index: number, length: number): number =>
   Math.min(Math.max(index, 0), Math.max(length - 1, 0))
@@ -88,68 +54,32 @@ export type ReconciledCellResult = {
   allResultsKept: boolean
 }
 
-export const resultStatementKeys = (
-  results: SingleQueryResult[],
-): StatementKey[] => statementKeysFor(results.map((r) => r.query))
-
-// A run lands its results under the text it ran as. Each result whose
-// statement kept its identity takes that statement's current text, so raw-text
-// readers (sizing, the tab frame, snapshots) see the SQL the editor holds; a
-// result no statement claims stays as it ran.
-export const retextResultsToStatements = (
-  results: SingleQueryResult[],
+export const reconcileResultsForStatements = (
   statements: string[],
-): SingleQueryResult[] => {
-  const statementByKey = new Map<StatementKey, string>()
-  statementKeysFor(statements).forEach((key, index) => {
-    statementByKey.set(key, statements[index])
-  })
-  const resultKeys = resultStatementKeys(results)
-  const retexted = results.map((result, index) => {
-    const sql = statementByKey.get(resultKeys[index])
-    return sql === undefined || sql === result.query
-      ? result
-      : { ...result, query: sql }
-  })
-  return retexted.every((result, index) => result === results[index])
-    ? results
-    : retexted
-}
-
-// Callers that already hold the previous frame's keys pass them in, so the
-// formatter runs once per result on a hydration. A survivor takes the text of
-// the statement it now belongs to: a presentation-only edit keeps the rows,
-// and everything that reads `result.query` as raw text (chart resolution,
-// snapshots, the tab frame) sees the SQL as the editor holds it.
-export const reconcileKeyedResults = (
-  statements: string[],
-  slotKeys: StatementKey[],
-  resultKeys: StatementKey[],
   previous: CellResult,
 ): ReconciledCellResult | null => {
-  if (slotKeys.length === 0 || previous.results.length === 0) return null
+  if (statements.length === 0 || previous.results.length === 0) return null
+  const slotKeys = statementKeysFor(statements)
+  const resultKeys = statementKeysFor(previous.results.map((r) => r.query))
   const oldIndexByKey = new Map<StatementKey, number>()
   resultKeys.forEach((key, index) => oldIndexByKey.set(key, index))
   const survivors: SingleQueryResult[] = []
   const survivorKeys: StatementKey[] = []
   const sourceIndices: number[] = []
   const newKeyByOldIndex = new Map<number, StatementKey>()
-  slotKeys.forEach((key, slotIndex) => {
+  for (const key of slotKeys) {
     const oldIndex = oldIndexByKey.get(key)
-    if (oldIndex === undefined) return
+    if (oldIndex === undefined) continue
     const candidate = previous.results[oldIndex]
     // A placeholder is not a carryable result: carrying one would resurrect a
     // ghost "Running" slot no execution backs (e.g. from a snapshot a crash
     // left behind). The slot regenerates as "Not run" at display time.
-    if (candidate.type === "running" || candidate.type === "queued") return
-    const sql = statements[slotIndex]
-    survivors.push(
-      candidate.query === sql ? candidate : { ...candidate, query: sql },
-    )
+    if (candidate.type === "running" || candidate.type === "queued") continue
+    survivors.push(candidate)
     survivorKeys.push(key)
     sourceIndices.push(oldIndex)
     newKeyByOldIndex.set(oldIndex, key)
-  })
+  }
   if (survivors.length === 0) return null
   const carriedActiveKey =
     previous.activeStatementKey !== undefined &&
@@ -170,30 +100,6 @@ export const reconcileKeyedResults = (
       sourceIndices.every((oldIndex, index) => oldIndex === index),
   }
 }
-
-const reconcileResultsForSlotKeys = (
-  statements: string[],
-  slotKeys: StatementKey[],
-  previous: CellResult,
-): ReconciledCellResult | null =>
-  statements.length === 0
-    ? null
-    : reconcileKeyedResults(
-        statements,
-        slotKeys,
-        resultStatementKeys(previous.results),
-        previous,
-      )
-
-export const reconcileResultsForStatements = (
-  statements: string[],
-  previous: CellResult,
-): ReconciledCellResult | null =>
-  reconcileResultsForSlotKeys(
-    statements,
-    statementKeysFor(statements),
-    previous,
-  )
 
 // Legacy records hold the raw cell text — comments included — as the
 // statement's query. Parsing it back to the statement lets those results
@@ -235,21 +141,13 @@ export const hasPendingResult = (
 export const reconcileCellResultForStatements = (
   result: CellResult,
   statements: string[],
-  slotKeys: StatementKey[],
-  resultKeys: StatementKey[],
 ): CellResult | null => {
   // A pending frame is run-owned: the run writes results into it by position,
   // so reshaping it here would land rows under the wrong statement. The frame
   // stays pending until the run's last slot settles, and every completion step
   // after that runs synchronously — deferring the reconcile is always safe.
   if (hasPendingResult(result)) return result
-  if (statements.length === 0) return null
-  const reconciled = reconcileKeyedResults(
-    statements,
-    slotKeys,
-    resultKeys,
-    result,
-  )
+  const reconciled = reconcileResultsForStatements(statements, result)
   if (!reconciled) return null
   const next: CellResult = {
     ...result,
@@ -264,16 +162,10 @@ export const reconcileCellResultForStatements = (
 export const reconcileCellResultForValue = (
   result: CellResult | null | undefined,
   value: string,
-): CellResult | null => {
-  if (result == null) return null
-  const statements = getQueriesFromText(value)
-  return reconcileCellResultForStatements(
-    result,
-    statements,
-    statementKeysFor(statements),
-    resultStatementKeys(result.results),
-  )
-}
+): CellResult | null =>
+  result == null
+    ? null
+    : reconcileCellResultForStatements(result, getQueriesFromText(value))
 
 export type StatementSlot = {
   key: StatementKey
@@ -286,91 +178,32 @@ export type StatementFrame = {
   activeSlotIndex: number
 }
 
-type SlotResults = Array<SingleQueryResult | null>
-
-// Display and sizing claim results by raw text in slot order, skipping a
-// statement no result text matches (one added, one edited away). Every run
-// and settle writes results with the text they ran as, so at rest this is
-// one string compare per statement and the formatter never runs. The slot a
-// result lands in only decides where its rows show until the next reconcile,
-// so a skipped case-variant duplicate costs nothing here. A result no
-// statement text claims (mid-typing, a selection run) sends the frame to the
-// keys.
-export const slotResultsByText = (
-  statements: string[],
-  results: SingleQueryResult[],
-): SlotResults | null => {
-  const slots: SlotResults = statements.map(() => null)
-  let slot = 0
-  for (const result of results) {
-    while (slot < statements.length && statements[slot] !== result.query) {
-      slot++
-    }
-    if (slot === statements.length) return null
-    slots[slot] = result
-    slot++
-  }
-  return slots
-}
-
-// Keys must be exact: a run that lands inside the edit debounce writes text
-// the entry has not adopted yet, and reading past a statement to claim a
-// later one could number a case-variant duplicate wrong. A frame takes the
-// statements' keys only when it leads them in order; any other shape goes to
-// the formatter.
-export const resultKeysByText = (
-  statements: string[],
-  slotKeys: StatementKey[],
-  results: SingleQueryResult[],
-): StatementKey[] | null =>
-  results.length <= statements.length &&
-  results.every((result, index) => result.query === statements[index])
-    ? slotKeys.slice(0, results.length)
-    : null
-
-export const slotResultsByKey = (
-  slotKeys: StatementKey[],
-  results: SingleQueryResult[],
-): SlotResults => {
-  const resultByKey = new Map<StatementKey, SingleQueryResult>()
-  resultStatementKeys(results).forEach((key, index) => {
-    resultByKey.set(key, results[index])
-  })
-  return slotKeys.map((key) => resultByKey.get(key) ?? null)
-}
-
-const activeSlotIndexOf = (
-  slotKeys: StatementKey[],
-  slotResults: SlotResults,
-  result: CellResult,
-): number => {
-  if (result.activeStatementKey !== undefined) {
-    return Math.max(0, slotKeys.indexOf(result.activeStatementKey))
-  }
-  const active =
-    result.results[clampIndex(result.activeResultIndex, result.results.length)]
-  return Math.max(0, slotResults.indexOf(active))
-}
-
 export const deriveStatementFrame = (
   statements: string[],
   result: CellResult | null | undefined,
-  slotKeys: StatementKey[],
 ): StatementFrame | null => {
   if (!result || statements.length === 0 || result.results.length === 0) {
     return null
   }
-  const slotResults =
-    slotResultsByText(statements, result.results) ??
-    slotResultsByKey(slotKeys, result.results)
-  if (slotResults.every((slot) => slot === null)) return null
+  const slotKeys = statementKeysFor(statements)
+  const resultKeys = statementKeysFor(result.results.map((r) => r.query))
+  const resultByKey = new Map<StatementKey, SingleQueryResult>()
+  resultKeys.forEach((key, index) => {
+    resultByKey.set(key, result.results[index])
+  })
+  const slots = slotKeys.map((key, index) => ({
+    key,
+    sql: statements[index],
+    result: resultByKey.get(key) ?? null,
+  }))
+  if (slots.every((slot) => slot.result === null)) return null
+  const activeKey =
+    result.activeStatementKey ??
+    resultKeys[clampIndex(result.activeResultIndex, resultKeys.length)]
+  const activeSlotIndex = slotKeys.indexOf(activeKey)
   return {
-    slots: statements.map((sql, index) => ({
-      key: slotKeys[index],
-      sql,
-      result: slotResults[index],
-    })),
-    activeSlotIndex: activeSlotIndexOf(slotKeys, slotResults, result),
+    slots,
+    activeSlotIndex: activeSlotIndex === -1 ? 0 : activeSlotIndex,
   }
 }
 
@@ -402,9 +235,8 @@ export const resolveActiveStatementSql = (
   value: string,
   result: CellResult | null | undefined,
 ): string | undefined => {
-  const statements = getQueriesFromText(value)
   const frame =
-    deriveStatementFrame(statements, result, statementKeysFor(statements)) ??
+    deriveStatementFrame(getQueriesFromText(value), result) ??
     derivePositionalFrame(result)
   return frame?.slots[frame.activeSlotIndex]?.sql
 }

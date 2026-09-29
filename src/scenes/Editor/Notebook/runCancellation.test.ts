@@ -8,14 +8,25 @@ import {
 
 describe("runCancelReasonOf", () => {
   it("accepts a reason a transition named", () => {
-    expect(runCancelReasonOf("superseded")).toBe("superseded")
-    expect(runCancelReasonOf("cell_deleted")).toBe("cell_deleted")
+    // Given abort reasons a transition passed to the run's controller
+    const reasons = ["superseded", "cell_deleted"]
+
+    // When each one is read back
+    const read = reasons.map(runCancelReasonOf)
+
+    // Then each comes back as the named reason
+    expect(read).toEqual(reasons)
   })
 
   it("rejects a foreign string and a non-string abort reason", () => {
-    expect(runCancelReasonOf("user")).toBeUndefined()
-    expect(runCancelReasonOf(new Error("aborted"))).toBeUndefined()
-    expect(runCancelReasonOf(undefined)).toBeUndefined()
+    // Given reasons no transition names: a user string, an Error, and none
+    const foreign = ["user", new Error("aborted"), undefined]
+
+    // When each one is read back
+    const read = foreign.map(runCancelReasonOf)
+
+    // Then none is a run cancel reason
+    expect(read).toEqual([undefined, undefined, undefined])
   })
 })
 
@@ -39,7 +50,9 @@ describe("runCancellationOf", () => {
     controller.abort()
 
     // When the shell reports the cancellation
+    const cancellation = runCancellationOf(controller.signal)
+
     // Then it is a plain cancellation
-    expect(runCancellationOf(controller.signal)).toBe("cancelled")
+    expect(cancellation).toBe("cancelled")
   })
 })

@@ -12,12 +12,9 @@ import { shallowArrayEquals } from "../../../../utils/shallowArrayEquals"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   normalizeSnapshotResultQuery,
-  reconcileKeyedResults,
-  resultKeysByText,
-  resultStatementKeys,
+  reconcileResultsForStatements,
   statementKeysFor,
 } from "../statementIdentity"
-import { rekeyLegacyStatementKeys } from "./legacyStatementKeys"
 import { scheduleIdle } from "../notebookScheduling"
 import { PerKeyListeners } from "../perKeyListeners"
 
@@ -246,19 +243,17 @@ export class CellResultHydrationEngine {
     snapshot: NotebookResultSnapshot,
   ) {
     const statements = getQueriesFromText(cell.value)
-    const slotKeys = statementKeysFor(statements)
     const loaded = snapshot.results.map(normalizeSnapshotResultQuery)
-    const resultKeys =
-      resultKeysByText(statements, slotKeys, loaded) ??
-      resultStatementKeys(loaded)
-    const results = foldLegacyFetchedAt(loaded, resultKeys, snapshot)
-    const rekeyed = rekeyLegacyStatementKeys(loaded, resultKeys, snapshot)
-    const keyed = rekeyed ?? snapshot
-    const reconciled = reconcileKeyedResults(statements, slotKeys, resultKeys, {
+    const results = foldLegacyFetchedAt(
+      loaded,
+      statementKeysFor(loaded.map((result) => result.query)),
+      snapshot,
+    )
+    const reconciled = reconcileResultsForStatements(statements, {
       results,
       activeResultIndex: snapshot.activeResultIndex ?? 0,
-      ...(keyed.activeStatementKey !== undefined
-        ? { activeStatementKey: keyed.activeStatementKey }
+      ...(snapshot.activeStatementKey !== undefined
+        ? { activeStatementKey: snapshot.activeStatementKey }
         : {}),
       timestamp: snapshot.savedAt,
     })
@@ -275,17 +270,16 @@ export class CellResultHydrationEngine {
       reconciled.results.some((result, index) => {
         return result !== snapshot.results[index]
       })
-    const slotKeySet = new Set(slotKeys)
-    const refreshErrors = keyed.refreshErrors?.filter((error) =>
+    const slotKeySet = new Set(statementKeysFor(statements))
+    const refreshErrors = snapshot.refreshErrors?.filter((error) =>
       slotKeySet.has(error.statementKey),
     )
     const refreshState: SnapshotRefreshState = {
       ...(refreshErrors && refreshErrors.length > 0 ? { refreshErrors } : {}),
     }
-    // A re-keyed or time-folded snapshot rewrites too, so the disk copy holds
-    // current keys and every result's fetch time, and the next reload
-    // translates and folds nothing.
-    if (frameChanged || rekeyed !== null) {
+    // A time-folded snapshot rewrites too, so the disk copy holds every
+    // result's fetch time and the next reload folds nothing.
+    if (frameChanged) {
       const rewritten: NotebookResultSnapshot = {
         ...snapshot,
         results: reconciled.results,

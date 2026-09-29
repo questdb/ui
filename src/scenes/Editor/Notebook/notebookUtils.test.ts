@@ -3016,6 +3016,7 @@ describe("pane height ceiling", () => {
         500,
         10,
         20,
+        false,
       ),
     ).toEqual({ bottomHeight: 2400, bottomResized: true })
   })

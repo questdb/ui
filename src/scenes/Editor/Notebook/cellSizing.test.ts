@@ -954,7 +954,7 @@ describe("markdown cell grid lattice", () => {
     // Given a markdown cell rendered at 4 rows
     const cell = markdown({ topHeight: 56 })
     // When the user drags the cell to 7 rows (7×10 + 6×20 = 190px box)
-    const patch = paneHeightsFromGridRows(cell, 7, 10, 20)
+    const patch = paneHeightsFromGridRows(cell, 7, 10, 20, false)
     // Then content = 190 − 44 = 146, pinned like a manual drag
     expect(patch).toEqual({ topHeight: 146, topResized: true })
   })
@@ -963,7 +963,7 @@ describe("markdown cell grid lattice", () => {
     // Given a markdown cell rendered at 4 rows
     const cell = markdown({ topHeight: 56 })
     // When the user drags the cell down to 2 rows (40px box < 44px chrome)
-    const patch = paneHeightsFromGridRows(cell, 2, 10, 20)
+    const patch = paneHeightsFromGridRows(cell, 2, 10, 20, false)
     // Then the content floors at the markdown minimum, not the SQL 72px
     expect(patch).toEqual({
       topHeight: MIN_MARKDOWN_HEIGHT_PX,
@@ -1090,7 +1090,7 @@ describe("paneHeightsFromGridRows", () => {
     // Given a single-view run cell whose content-derived height is 5 rows
     const runCell: NotebookCell = { id: "x", position: 0, value: "" }
     // When the requested rows equal that derived height (not a real resize)
-    const patch = paneHeightsFromGridRows(runCell, 5, 10, 20)
+    const patch = paneHeightsFromGridRows(runCell, 5, 10, 20, false)
     // Then nothing is pinned — auto-height is left intact
     expect(patch).toEqual({})
   })
@@ -1100,7 +1100,7 @@ describe("paneHeightsFromGridRows", () => {
     const runCell: NotebookCell = { id: "x", position: 0, value: "" }
     // When a taller height is requested (box 10*10+9*20 = 280,
     // targetContentPx = 280 - 44 = 236)
-    const patch = paneHeightsFromGridRows(runCell, 10, 10, 20)
+    const patch = paneHeightsFromGridRows(runCell, 10, 10, 20, false)
     // Then the editor grows to fill it and is pinned
     expect(patch).toEqual({ topHeight: 236, topResized: true })
   })
@@ -1110,7 +1110,7 @@ describe("paneHeightsFromGridRows", () => {
     const c = withResult({ topHeight: 72, bottomHeight: 100 })
     // When a taller height is requested (box 15*10+14*20 = 430,
     // targetContentPx = 430 - 50 = 380)
-    const patch = paneHeightsFromGridRows(c, 15, 10, 20)
+    const patch = paneHeightsFromGridRows(c, 15, 10, 20, false)
     // Then only the bottom slot grows (editor kept), pinned via bottomResized
     expect(patch).toEqual({ bottomHeight: 308, bottomResized: true })
   })
@@ -1122,7 +1122,7 @@ describe("paneHeightsFromGridRows", () => {
     // When the cell is resized to the split minimum
     // The split minimum is 400px editor + 100px result + 50px chrome,
     // or 19 rows. Resizing to that floor changes only the result pane.
-    const patch = paneHeightsFromGridRows(c, 19, 10, 20)
+    const patch = paneHeightsFromGridRows(c, 19, 10, 20, false)
 
     // Then only the result pane shrinks
     expect(patch).toEqual({ bottomHeight: 100, bottomResized: true })
@@ -1139,7 +1139,7 @@ describe("paneHeightsFromGridRows", () => {
     })
     // When a taller height is requested (targetContentPx = 430 - 44 = 386,
     // and no editor allocation in its visible footprint)
-    const patch = paneHeightsFromGridRows(c, 15, 10, 20)
+    const patch = paneHeightsFromGridRows(c, 15, 10, 20, false)
     // Then only the result changes; the remembered editor height is untouched
     expect(patch).toEqual({
       bottomHeight: 386,
@@ -1154,13 +1154,13 @@ describe("paneHeightsFromGridRows", () => {
     // When each single-pane layout is resized
     // Then only the visible pane changes
     expect(
-      paneHeightsFromGridRows({ ...c, result: undefined }, 10, 10, 20),
+      paneHeightsFromGridRows({ ...c, result: undefined }, 10, 10, 20, false),
     ).toEqual({
       topHeight: 236,
       topResized: true,
     })
     expect(
-      paneHeightsFromGridRows({ ...c, paneView: "result" }, 15, 10, 20),
+      paneHeightsFromGridRows({ ...c, paneView: "result" }, 15, 10, 20, false),
     ).toEqual({
       bottomHeight: 386,
       bottomResized: true,

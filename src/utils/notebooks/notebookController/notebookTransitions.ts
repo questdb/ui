@@ -299,7 +299,7 @@ export const setCellLayoutTransition = (
   parts: ViewParts,
   bufferId: number,
   cellId: string,
-  pos: Omit<CellGridPosition, "h"> & { resultStatus?: CellResultStatus },
+  pos: Omit<CellGridPosition, "h"> & { resultStatus: CellResultStatus },
 ): NotebookTransitionResult<
   AgentCellPresentation & { grid: { x: number; y: number; w: number } }
 > => {
@@ -310,10 +310,7 @@ export const setCellLayoutTransition = (
     x: pos.x,
     y: pos.y,
     w: pos.w,
-    h: computeAgentCellGridH(
-      cell,
-      isExpectingResult(cell, pos.resultStatus ?? "unrequested"),
-    ),
+    h: computeAgentCellGridH(cell, isExpectingResult(cell, pos.resultStatus)),
   }
   return {
     parts: {

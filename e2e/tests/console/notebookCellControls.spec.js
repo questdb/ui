@@ -18,9 +18,6 @@ const runFocusedCell = () =>
 const editorSeparator = () =>
   cy.get('[role="separator"][aria-label="Resize editor pane"]')
 
-const resultSeparator = () =>
-  cy.get('[role="separator"][aria-label="Resize result pane"]')
-
 const valueNow = ($separator) => Number($separator.attr("aria-valuenow"))
 
 const readStoredEditorHeight = (win) =>
@@ -131,32 +128,6 @@ describe("notebook cell controls", () => {
       cy.reload()
       editorSeparator().should(($restored) => {
         expect(valueNow($restored)).to.eq(before + 30)
-      })
-    })
-  })
-
-  describe("commit under an edit", () => {
-    it("sizes the result pane by the edited text when a run lands after a re-case", () => {
-      // Given a two-statement cell whose cursor run of the second statement
-      // the server has not answered yet
-      const held = holdFirstExec()
-      setCellSql("select 1;\nselect x from long_sequence(1)")
-      cy.withFocusedEditor((editor) =>
-        editor.setPosition({ lineNumber: 2, column: 1 }),
-      )
-      runFocusedCell()
-      awaitHeld(held)
-
-      // When the ran statement is re-cased before the server answers
-      cy.withFocusedEditor((editor) =>
-        editor.setValue("select 1;\nSELECT x FROM long_sequence(1)"),
-      )
-      cy.then(() => held.release())
-
-      // Then the pane reserves a tab for both statements around the one-row
-      // grid: 40 tab + 44 notification + 36 actions + 44 header + 30 row
-      resultSeparator().should(($separator) => {
-        expect(valueNow($separator)).to.eq(194)
       })
     })
   })

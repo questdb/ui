@@ -256,26 +256,6 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites[0].script).toBeUndefined()
   })
 
-  it("rewrites a snapshot whose statement was reformatted, keeping its rows and script", async () => {
-    // Given a snapshot saved under the statement's old casing
-    const script = { successCount: 1, failedCount: 0, durationMs: 5 }
-    seedCell({ ...ranCell("c1"), value: "SELECT 1" })
-    snapshots.set("c1", snapshot("c1", [dqlResult("select 1")], { script }))
-
-    // When it hydrates
-    engine.request("c1")
-    await resolveLoad("c1")
-
-    // Then the rows hydrate under the current text with their summary, and
-    // the disk copy follows so raw-text readers never see the old text again
-    expect(applied).toHaveLength(1)
-    expect(applied[0][1].results).toEqual([dqlResult("SELECT 1")])
-    expect(applied[0][1].script).toEqual(script)
-    expect(rewrites).toHaveLength(1)
-    expect(rewrites[0].results).toEqual([dqlResult("SELECT 1")])
-    expect(rewrites[0].script).toEqual(script)
-  })
-
   it("keeps a reconciled frame in memory until its rewrite confirms", async () => {
     // Given a hydrated cell whose snapshot needed reconciliation
     seedCell({ ...ranCell("c1"), value: "select 1" })
@@ -357,54 +337,6 @@ describe("CellResultHydrationEngine", () => {
     expect(rewrites).toHaveLength(1)
     expect(rewrites[0].refreshErrors).toEqual([
       { statementKey: statementKeysFor(["select 1"])[0], message: "boom" },
-    ])
-  })
-
-  it("re-keys a legacy snapshot to current keys and rewrites it once, keeping the frame and script", async () => {
-    // Given a legacy snapshot: trimmed-text keys for a failed refresh
-    // on the first statement and the active tab on the second
-    const first = "select  1"
-    const second = "select  2"
-    const [currentFirst, currentSecond] = statementKeysFor([first, second])
-    const legacyKeyOf = (trimmedSql: string) => `${trimmedSql}\u00010`
-    const script = { successCount: 2, failedCount: 0, durationMs: 5 }
-    seedCell({ ...ranCell("c1"), value: `${first}; ${second}` })
-    snapshots.set("c1", {
-      ...snapshot("c1", [legacyDqlResult(first), legacyDqlResult(second)], {
-        script,
-      }),
-      activeStatementKey: legacyKeyOf(second),
-      refreshErrors: [{ statementKey: legacyKeyOf(first), message: "boom" }],
-    })
-
-    // When it hydrates
-    engine.request("c1")
-    await resolveLoad("c1")
-
-    // Then the error and the active tab survive under current keys
-    expect(seededRefreshState).toEqual([
-      [
-        "c1",
-        { refreshErrors: [{ statementKey: currentFirst, message: "boom" }] },
-      ],
-    ])
-    expect(applied[0][1]).toMatchObject({
-      activeStatementKey: currentSecond,
-      activeResultIndex: 1,
-      script,
-    })
-
-    // And the disk copy now holds current keys and the folded fetch time, with
-    // its frame and script intact
-    expect(rewrites).toHaveLength(1)
-    expect(rewrites[0]).toMatchObject({
-      activeStatementKey: currentSecond,
-      refreshErrors: [{ statementKey: currentFirst, message: "boom" }],
-      script,
-    })
-    expect(rewrites[0].results).toEqual([
-      { ...legacyDqlResult(first), fetchedAt: 1000 },
-      { ...legacyDqlResult(second), fetchedAt: 1000 },
     ])
   })
 

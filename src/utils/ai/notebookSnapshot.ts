@@ -481,8 +481,8 @@ export type NotebookCellDetails = {
 
 export const summarizeCells = (
   cells: NotebookCell[],
-  refreshState?: ReadonlyMap<string, CellRefreshView>,
-  resultStatusOf?: (cellId: string) => CellResultStatus,
+  refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatusOf: (cellId: string) => CellResultStatus,
 ): NotebookCellSummary[] =>
   cells.map((cell) => {
     const summary: NotebookCellSummary = {
@@ -492,10 +492,7 @@ export const summarizeCells = (
           ? cell.value
           : `${cell.value.slice(0, 117)}...`,
       position: cell.position,
-      mode: agentCellPresentation(
-        cell,
-        resultStatusOf?.(cell.id) ?? "unrequested",
-      ).mode,
+      mode: agentCellPresentation(cell, resultStatusOf(cell.id)).mode,
       last_run_status: runStatusOf(cell).status,
       ...refreshFields(refreshState?.get(cell.id)),
     }
@@ -509,8 +506,8 @@ export const serializeCell = (
   cellId: string,
   bufferId: number,
   getFullContent: boolean,
-  refreshState?: ReadonlyMap<string, CellRefreshView>,
-  resultStatus: CellResultStatus = "unrequested",
+  refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatus: CellResultStatus,
 ): NotebookCellDetails => {
   const cell = cells.find((c) => c.id === cellId)
   if (!cell) {

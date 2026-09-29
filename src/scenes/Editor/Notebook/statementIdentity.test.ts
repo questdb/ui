@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest"
 import type { CellResult, SingleQueryResult } from "../../../store/notebook"
 import {
-  MAX_FORMATTED_IDENTITY_LENGTH,
   derivePositionalFrame,
   deriveStatementFrame,
   reconcileCellResultForValue,
   reconcileResultsForStatements,
   resolveActiveStatementSql,
   snapshotResultsMatchQueries,
-  statementIdentityOfKey,
   statementKeysFor,
-  statementKeysForIdentities,
-  retextResultsToStatements,
 } from "./statementIdentity"
 
 describe("snapshotResultsMatchQueries", () => {
@@ -23,8 +19,8 @@ describe("snapshotResultsMatchQueries", () => {
     count: 0,
   })
 
-  it("matches when results line up 1-1 with the queries, ignoring whitespace and trailing semicolons", () => {
-    // Given a snapshot whose result queries match the cell's statements modulo formatting
+  it("matches when results line up 1-1 with the queries, ignoring surrounding whitespace and trailing semicolons", () => {
+    // Given a snapshot whose result queries match the cell's statements modulo trimming
     const results = [dql("SELECT 1"), dql("SELECT 2")]
 
     // When compared to the cell's current queries
@@ -54,79 +50,25 @@ describe("snapshotResultsMatchQueries", () => {
     expect(snapshotResultsMatchQueries(results, ["SELECT 2"])).toBe(false)
   })
 
+  it("rejects a keyword casing or inner whitespace change", () => {
+    // Given a snapshot for a lowercase single-line statement
+    const results = [dql("select a from t where b > 1")]
+
+    // When the statement is re-cased or re-spaced
+    // Then the snapshot no longer represents the cell
+    expect(
+      snapshotResultsMatchQueries(results, ["SELECT a FROM t WHERE b > 1"]),
+    ).toBe(false)
+    expect(
+      snapshotResultsMatchQueries(results, ["select a  from t where b > 1"]),
+    ).toBe(false)
+  })
+
   it("rejects an empty snapshot", () => {
     // Given a cell with no queries and a snapshot with no results
     // When compared
     // Then there is nothing to present
     expect(snapshotResultsMatchQueries([], [])).toBe(false)
-  })
-
-  it("rejects a literal-only edit after a backslash literal", () => {
-    // Given a snapshot for a statement with a `'\\'` literal, which QuestDB
-    // reads as one character, not as an escaped quote
-    const results = [
-      dql("SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice  smith'"),
-    ]
-
-    // When the whitespace inside a later string literal is edited
-    // Then the statements differ in value and the snapshot is stale
-    expect(
-      snapshotResultsMatchQueries(results, [
-        "SELECT replace(p, '\\', '/') p FROM t WHERE owner = 'alice smith'",
-      ]),
-    ).toBe(false)
-  })
-
-  it("rejects an alias case change, which QuestDB keeps in the column name", () => {
-    // Given a snapshot for a statement whose alias is a lowercase keyword name
-    const results = [dql("select 1 as rank")]
-
-    // When only the alias case changes
-    // Then the column name differs and the snapshot is stale
-    expect(snapshotResultsMatchQueries(results, ["select 1 as Rank"])).toBe(
-      false,
-    )
-  })
-
-  it("rejects a spacing change inside a number literal", () => {
-    // Given a snapshot for `1. e5`, which QuestDB reads as 1.0 aliased e5
-    const results = [dql("select 1. e5")]
-
-    // When the space goes away, which makes the literal 100000
-    // Then the value differs and the snapshot is stale
-    expect(snapshotResultsMatchQueries(results, ["select 1.e5"])).toBe(false)
-  })
-
-  it("matches across keyword casing", () => {
-    // Given a snapshot for a lowercase statement
-    const results = [dql("select a from t where b > 1")]
-
-    // When only the keyword casing changes
-    // Then the snapshot still represents the cell
-    expect(
-      snapshotResultsMatchQueries(results, ["SELECT a FROM t WHERE b > 1"]),
-    ).toBe(true)
-  })
-
-  it("ignores whitespace edits only up to the formatted-identity size limit", () => {
-    // Given two IN-list statements, one well under the limit and one over it
-    const inList = (length: number) => {
-      let sql = "select * from t where s in ("
-      for (let i = 0; sql.length < length; i++) sql += `'S${i}', `
-      return sql.slice(0, -2) + ")"
-    }
-    const under = inList(MAX_FORMATTED_IDENTITY_LENGTH / 2)
-    const over = inList(MAX_FORMATTED_IDENTITY_LENGTH + 64)
-    const respaced = (sql: string) => sql.replace(/, /g, ",  ")
-
-    // When each one gets a whitespace-only edit
-    // Then the small statement keeps its result and the large one is stale
-    expect(snapshotResultsMatchQueries([dql(under)], [respaced(under)])).toBe(
-      true,
-    )
-    expect(snapshotResultsMatchQueries([dql(over)], [respaced(over)])).toBe(
-      false,
-    )
   })
 })
 
@@ -148,109 +90,80 @@ const resultOf = (
   ...extra,
 })
 
-describe("reconcileResultsForStatements — content carryover", () => {
-  it("uses one canonical key space before reconciliation", () => {
-    // Given a two-statement frame keyed under its lowercase text
-    const results = [dqlResult("select 1"), dqlResult("select 2")]
-    const previous = resultOf(results, {
-      activeStatementKey: statementKeysFor(["select 1"])[0],
-    })
-    const edited = ["select 1", "SELECT\n  2"]
+describe("statementKeysFor", () => {
+  it("keys a statement by its trimmed text and numbers duplicates by occurrence", () => {
+    // Given statements that differ only by surrounding whitespace, plus a duplicate
+    const keys = statementKeysFor(["select 1", "  select 1;", "select 2"])
 
-    // When the frame is derived for a presentation-only edit
-    // The render path must attach both results immediately, even before the
-    // refresh engine's debounced reconciliation runs.
-    const frame = deriveStatementFrame(
-      edited,
-      previous,
-      statementKeysFor(edited),
-    )
-    // Then both results attach immediately
-    expect(frame?.slots.map((slot) => slot.result?.query)).toEqual([
-      "select 1",
-      "select 2",
+    // Then trimming folds the first two into one identity, told apart by occurrence
+    expect(keys).toEqual([
+      "select 1\u00010",
+      "select 1\u00011",
+      "select 2\u00010",
     ])
-
-    // When the same edit is reconciled
-    // Reconciliation uses exactly the same identities and keeps the active
-    // statement stable without needing a cache-priming render. Survivors take
-    // the text of the statement they now belong to.
-    const reconciled = reconcileResultsForStatements(edited, previous)
-    // Then the survivors take the new text and the active key stays
-    expect(reconciled?.results).toEqual(
-      results.map((r, index) => ({ ...r, query: edited[index] })),
-    )
-    expect(reconciled?.activeStatementKey).toBe(previous.activeStatementKey)
   })
 
-  it("keeps results for unchanged statements across whitespace and semicolon edits, under the statements' text", () => {
+  it("keeps keyword casing and inner whitespace as part of the identity", () => {
+    // Given the same SQL in two presentations
+    const [lower, upper, spaced] = statementKeysFor([
+      "select 1",
+      "SELECT 1",
+      "select  1",
+    ])
+
+    // Then each is its own statement
+    expect(new Set([lower, upper, spaced]).size).toBe(3)
+  })
+})
+
+describe("reconcileResultsForStatements — content carryover", () => {
+  it("keeps results for unchanged statements across surrounding whitespace and semicolon edits", () => {
     // Given a two-statement frame
     const previous = resultOf([dqlResult("SELECT 1"), dqlResult("SELECT 2")])
-    // When the statements only gain whitespace and semicolons
+
+    // When the statements only gain surrounding whitespace and semicolons
     const reconciled = reconcileResultsForStatements(
       ["  SELECT 1;", "SELECT 2  "],
       previous,
     )
-    // Then both results survive in statement order, carrying the new text
-    expect(reconciled?.results.map((r) => r.query)).toEqual([
-      "  SELECT 1;",
-      "SELECT 2  ",
-    ])
+
+    // Then both results survive untouched, in statement order
+    expect(reconciled?.results).toEqual(previous.results)
+    expect(reconciled?.allResultsKept).toBe(true)
   })
 
-  it("keeps results across internal whitespace, newlines, and keyword casing", () => {
+  it("drops the result of a statement whose casing or inner whitespace changed", () => {
     // Given a result for a lowercase single-line statement
     const previous = resultOf([
       dqlResult("select * from trades where sym = 'A'"),
     ])
 
     // When the statement is reformatted
-    const reconciled = reconcileResultsForStatements(
-      ["SELECT  *\nFROM trades WHERE sym='A';"],
-      previous,
-    )
-
-    // Then the result survives under the new text
-    expect(reconciled?.results).toEqual([
-      {
-        ...previous.results[0],
-        query: "SELECT  *\nFROM trades WHERE sym='A';",
-      },
-    ])
+    // Then nothing survives: the statement must run again
+    expect(
+      reconcileResultsForStatements(
+        ["SELECT  *\nFROM trades WHERE sym='A';"],
+        previous,
+      ),
+    ).toBeNull()
   })
 
-  it("keeps the script summary on a presentation-only edit and drops it when a slot is lost", () => {
+  it("keeps the script summary when every result survives and drops it when a slot is lost", () => {
     // Given a settled two-statement frame with a script summary
     const script = { successCount: 2, failedCount: 0, durationMs: 12 }
     const settled = resultOf([dqlResult("select 1"), dqlResult("select 2")], {
       script,
     })
 
-    // When only keyword casing changes, the counts still describe the frame
-    const reformatted = reconcileCellResultForValue(
-      settled,
-      "SELECT 1;\nSELECT 2",
-    )
-    // Then the summary and the new text stay
-    expect(reformatted?.script).toEqual(script)
-    expect(reformatted?.results.map((r) => r.query)).toEqual([
-      "SELECT 1",
-      "SELECT 2",
-    ])
+    // When only a trailing semicolon is added, the counts still describe the frame
+    const kept = reconcileCellResultForValue(settled, "select 1;\nselect 2;")
+    // Then the summary stays
+    expect(kept?.script).toEqual(script)
 
     // When a statement is edited away, the counts no longer do
     const shrunk = reconcileCellResultForValue(settled, "select 1")
     // Then the summary is dropped
     expect(shrunk?.script).toBeUndefined()
-  })
-
-  it("does not fold case inside SQL string values", () => {
-    // Given a result for a statement with an uppercase string literal
-    const previous = resultOf([dqlResult("select 'A'")])
-
-    // When the literal changes case
-    // Then nothing survives
-    expect(reconcileResultsForStatements(["SELECT 'a'"], previous)).toBeNull()
   })
 
   it("drops an edited statement's result and keeps its siblings", () => {
@@ -263,6 +176,7 @@ describe("reconcileResultsForStatements — content carryover", () => {
     )
     // Then only the untouched statement keeps its result
     expect(reconciled?.results.map((r) => r.query)).toEqual(["SELECT 1"])
+    expect(reconciled?.allResultsKept).toBe(false)
   })
 
   it("matches duplicate statements by occurrence order", () => {
@@ -302,6 +216,7 @@ describe("reconcileResultsForStatements — content carryover", () => {
     expect(reconciled?.activeStatementKey).toBe(
       statementKeysFor(["SELECT 2"])[0],
     )
+    expect(reconciled?.allResultsKept).toBe(false)
   })
 
   it("falls back to the nearest surviving statement when the active one is removed", () => {
@@ -403,7 +318,6 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 1", "SELECT 2", "SELECT 3"],
       result,
-      statementKeysFor(["SELECT 1", "SELECT 2", "SELECT 3"]),
     )
     // Then slots follow editor order and the unmatched slot is empty
     expect(frame?.slots.map((s) => s.result?.query ?? null)).toEqual([
@@ -422,7 +336,6 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 1", "SELECT 99", "SELECT 2"],
       result,
-      statementKeysFor(["SELECT 1", "SELECT 99", "SELECT 2"]),
     )
     // Then the active slot index follows the statement, not the result index
     expect(frame?.activeSlotIndex).toBe(2)
@@ -437,7 +350,6 @@ describe("deriveStatementFrame — display slots", () => {
     const frame = deriveStatementFrame(
       ["SELECT 0", "SELECT 1", "SELECT 2"],
       result,
-      statementKeysFor(["SELECT 0", "SELECT 1", "SELECT 2"]),
     )
     // Then the active slot follows the statement content
     expect(frame?.activeSlotIndex).toBe(2)
@@ -450,11 +362,7 @@ describe("deriveStatementFrame — display slots", () => {
       dqlResult("SELECT 1", 20),
     ])
     // When the frame is derived
-    const frame = deriveStatementFrame(
-      ["SELECT 1", "SELECT 1"],
-      result,
-      statementKeysFor(["SELECT 1", "SELECT 1"]),
-    )
+    const frame = deriveStatementFrame(["SELECT 1", "SELECT 1"], result)
     // Then each slot keeps its own occurrence's result
     expect(frame?.slots.map((s) => s.result)).toMatchObject([
       { count: 10 },
@@ -467,17 +375,9 @@ describe("deriveStatementFrame — display slots", () => {
     const result = resultOf([dqlResult("SELECT 1")])
     // When the frame is derived
     // Then there is no frame
-    expect(
-      deriveStatementFrame(["SELECT 1"], null, statementKeysFor(["SELECT 1"])),
-    ).toBeNull()
-    expect(deriveStatementFrame([], result, [])).toBeNull()
-    expect(
-      deriveStatementFrame(
-        ["SELECT 2"],
-        result,
-        statementKeysFor(["SELECT 2"]),
-      ),
-    ).toBeNull()
+    expect(deriveStatementFrame(["SELECT 1"], null)).toBeNull()
+    expect(deriveStatementFrame([], result)).toBeNull()
+    expect(deriveStatementFrame(["SELECT 2"], result)).toBeNull()
   })
 })
 
@@ -555,59 +455,5 @@ describe("resolveActiveStatementSql — the single-run target", () => {
 
   it("returns undefined without a result, so the caller can fall back", () => {
     expect(resolveActiveStatementSql("SELECT 1", null)).toBeUndefined()
-  })
-})
-
-describe("statementKeysForIdentities", () => {
-  it("rebuilds a frame's keys from the identities of the keys it was written under", () => {
-    // Given statements with a duplicate and presentation-only differences
-    const statements = ["select 1", "SELECT  1", "select 2"]
-    const keys = statementKeysFor(statements)
-
-    // When the keys are rebuilt from their identities alone
-    const rebuilt = statementKeysForIdentities(keys.map(statementIdentityOfKey))
-
-    // Then they equal the keys built from the text, duplicates included
-    expect(rebuilt).toEqual(keys)
-    expect(keys[0]).not.toBe(keys[1])
-  })
-})
-
-describe("retextResultsToStatements — run commit under edited text", () => {
-  const dql = (query: string): SingleQueryResult => ({
-    type: "dql",
-    query,
-    columns: [{ name: "x", type: "INT" }],
-    dataset: [[1]],
-    count: 1,
-  })
-
-  it("gives a result the current text of the statement that kept its identity", () => {
-    // Given a run that landed under the old casing while the editor re-cased it
-    const results = [dql("select 2")]
-
-    // When the results take the editor's statements
-    const retexted = retextResultsToStatements(results, [
-      "select 1",
-      "SELECT 2",
-    ])
-
-    // Then the result reads as the editor holds it
-    expect(retexted.map((r) => r.query)).toEqual(["SELECT 2"])
-  })
-
-  it("keeps a result no statement claims, and the same array when nothing changes", () => {
-    // Given one result whose statement was rewritten and one that still matches
-    const results = [dql("select 2"), dql("select 3")]
-
-    // When retexted against statements that dropped the first
-    const retexted = retextResultsToStatements(results, ["select 3"])
-
-    // Then the orphan keeps its text, the match is untouched, and an unchanged
-    // set comes back as the same array
-    expect(retexted.map((r) => r.query)).toEqual(["select 2", "select 3"])
-    expect(retextResultsToStatements(results, ["select 2", "select 3"])).toBe(
-      results,
-    )
   })
 })

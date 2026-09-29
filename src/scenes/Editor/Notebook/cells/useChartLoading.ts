@@ -32,9 +32,8 @@ const derive = (
 // the cell toolbar and the canvas share one answer without owning the fetch.
 // Reading the engine (rather than listening for broadcasts) keeps a toolbar
 // that mounts mid-fetch correct. Until the engine holds the cell's entry, the
-// chart is pending on the SQL it shows; the entry's first state change
-// notifies, so the effect never rebuilds the pending state and the editor's
-// value stays off its deps. A run cell has no chart and never subscribes.
+// chart is pending on the SQL it shows. A run cell has no chart and never
+// subscribes.
 export const useChartLoading = (cell: NotebookCell): ChartLoadingState => {
   const engine = useCellRefresh()
   const resultStatus = useCellResultStatus(cell.id)
@@ -52,21 +51,24 @@ export const useChartLoading = (cell: NotebookCell): ChartLoadingState => {
   )
 
   useEffect(() => {
-    const settle = (next: ChartLoadingState) =>
+    const apply = () => {
+      const next = isDrawCell
+        ? derive(
+            engine?.getState(cellId) ?? pendingCellFetchState(value),
+            result,
+            resultLoading,
+          )
+        : IDLE
       setState((prev) =>
         prev.loading === next.loading && prev.stopVisible === next.stopVisible
           ? prev
           : next,
       )
-    const apply = () => {
-      if (!isDrawCell) return settle(IDLE)
-      const fetchState = engine?.getState(cellId)
-      if (fetchState) settle(derive(fetchState, result, resultLoading))
     }
     apply()
     if (!isDrawCell) return
     return engine?.subscribe(cellId, apply)
-  }, [cellId, isDrawCell, result, engine, resultLoading])
+  }, [cellId, isDrawCell, result, value, engine, resultLoading])
 
   return state
 }

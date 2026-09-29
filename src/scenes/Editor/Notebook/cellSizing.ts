@@ -10,7 +10,10 @@ import { isAgentCellView, isCellPaneView } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
 import type { CellResultStatus } from "./resultHydration/cellResultHydration"
 import { getQueriesFromText } from "../Monaco/utils"
-import { slotResultsByText } from "./statementIdentity"
+import {
+  derivePositionalFrame,
+  deriveStatementFrame,
+} from "./statementIdentity"
 import {
   HEADER_HEIGHT,
   ROW_HEIGHT,
@@ -331,24 +334,18 @@ export const computeResultBottomHeight = (
   value: string,
 ): number => {
   if (!result || result.results.length === 0) return NOTIFICATION_PX
-  // Sizing claims slots by text only. The tab bar also claims by key, but it
-  // has the engine's keys for free; here the formatter would run on every
-  // keystroke. A frame under other text (an edit the engine has not adopted
-  // yet, a selection run) sizes by its own results.
-  const claimedSlots = slotResultsByText(
-    getQueriesFromText(value),
-    result.results,
-  )
-  const slotResults = claimedSlots?.some((slot) => slot !== null)
-    ? claimedSlots
-    : result.results
-  const hasMultipleTabs = slotResults.length > 1
+  const frame =
+    deriveStatementFrame(getQueriesFromText(value), result) ??
+    derivePositionalFrame(result)
+  if (!frame) return NOTIFICATION_PX
+  const slots = frame.slots
+  const hasMultipleTabs = slots.length > 1
   const hasMultipleResults = result.results.length > 1
   const tabBar = hasMultipleTabs ? TAB_BAR_PX : 0
 
   if (hasMultipleResults) {
-    const hasGrid = slotResults.some(
-      (slot) => slot !== null && isDqlWithColumns(slot),
+    const hasGrid = slots.some(
+      (slot) => slot.result && isDqlWithColumns(slot.result),
     )
     if (!hasGrid) {
       return tabBar + NOTIFICATION_PX
@@ -364,8 +361,8 @@ export const computeResultBottomHeight = (
 
   // Single executed result: tight-fit up to 10 rows. The tab bar is still
   // included when the editor contributes additional "Not run" slots.
-  const only = result.results[0]
-  if (!isDqlWithColumns(only)) {
+  const only = frame.slots[frame.activeSlotIndex]?.result ?? result.results[0]
+  if (!only || !isDqlWithColumns(only)) {
     return tabBar + NOTIFICATION_PX
   }
   const rows = Math.min(MAX_RESERVED_ROWS, dqlRowCount(only))
@@ -737,7 +734,7 @@ export const paneHeightsFromGridRows = (
   rows: number,
   rowHeight: number,
   marginY: number,
-  expectingResult: boolean = false,
+  expectingResult: boolean,
 ): Partial<NotebookCell> => {
   if (rows === computeCellGridH(cell, rowHeight, marginY, expectingResult)) {
     return {}

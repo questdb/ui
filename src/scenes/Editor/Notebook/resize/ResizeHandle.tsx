@@ -156,73 +156,67 @@ export const ResizeHandle: React.FC<Props> = ({
   const onResizeRef = useRef(onResize)
   const onResizeEndRef = useRef(onResizeEnd)
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault()
-      startYRef.current = e.clientY
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    startYRef.current = e.clientY
 
-      if (!targetRef.current) return
-      startHeightRef.current = targetRef.current.getBoundingClientRect().height
-      lastHeightRef.current = startHeightRef.current
-      let dragged = false
+    if (!targetRef.current) return
+    startHeightRef.current = targetRef.current.getBoundingClientRect().height
+    lastHeightRef.current = startHeightRef.current
+    let dragged = false
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        const delta = moveEvent.clientY - startYRef.current
-        if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
-        dragged = true
-        const newHeight = clamp(
-          startHeightRef.current + delta,
-          minHeight,
-          maxHeight,
-        )
-        lastHeightRef.current = newHeight
-        onResizeRef.current(newHeight)
-      }
-
-      const finishDrag = () => {
-        document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", finishDrag)
-        document.body.style.cursor = ""
-        document.body.style.userSelect = ""
-        finishDragRef.current = null
-        if (dragged) onResizeEndRef.current(lastHeightRef.current)
-      }
-
-      document.body.style.cursor = "ns-resize"
-      document.body.style.userSelect = "none"
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", finishDrag)
-      finishDragRef.current = finishDrag
-    },
-    [targetRef, minHeight, maxHeight],
-  )
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault()
-        onDoubleClick()
-        return
-      }
-      if (!targetRef.current) return
-      const currentHeight = Math.round(
-        targetRef.current.getBoundingClientRect().height,
-      )
-      const next = resizeHeightForKey(
-        e.key,
-        currentHeight,
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientY - startYRef.current
+      if (!dragged && Math.abs(delta) < DRAG_THRESHOLD_PX) return
+      dragged = true
+      const newHeight = clamp(
+        startHeightRef.current + delta,
         minHeight,
         maxHeight,
-        e.shiftKey,
       )
-      if (next === null) return
+      lastHeightRef.current = newHeight
+      onResizeRef.current(newHeight)
+    }
+
+    const finishDrag = () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", finishDrag)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      finishDragRef.current = null
+      if (dragged) onResizeEndRef.current(lastHeightRef.current)
+    }
+
+    document.body.style.cursor = "ns-resize"
+    document.body.style.userSelect = "none"
+    document.addEventListener("mousemove", handleMouseMove)
+    document.addEventListener("mouseup", finishDrag)
+    finishDragRef.current = finishDrag
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault()
-      if (next === currentHeight) return
-      keyboardHeightRef.current = next
-      onResize(next)
-    },
-    [maxHeight, minHeight, onDoubleClick, onResize, targetRef],
-  )
+      onDoubleClick()
+      return
+    }
+    if (!targetRef.current) return
+    const currentHeight = Math.round(
+      targetRef.current.getBoundingClientRect().height,
+    )
+    const next = resizeHeightForKey(
+      e.key,
+      currentHeight,
+      minHeight,
+      maxHeight,
+      e.shiftKey,
+    )
+    if (next === null) return
+    e.preventDefault()
+    if (next === currentHeight) return
+    keyboardHeightRef.current = next
+    onResize(next)
+  }
 
   // The hold commits once: on release of the resize key, or on blur when
   // focus leaves mid-hold. Reads the callback through its ref so the unmount

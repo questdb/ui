@@ -1,7 +1,8 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import type { CellResult, SingleQueryResult } from "../../../../store/notebook"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
-import { hasPendingResult, sameStatementIdentity } from "../statementIdentity"
+import { hasPendingResult } from "../statementIdentity"
+import { normalizeQueryText } from "../../Monaco/utils"
 import type { ChartConfig, QueryChart } from "../CellChart/chartTypes"
 import type {
   ChartGlobals,
@@ -72,24 +73,8 @@ export const resultMatchesQueries = (
   result.results.every(
     (r, i) =>
       !(r.type === "dql" && r.truncated) &&
-      sameStatementIdentity(r.query, queries[i]),
+      normalizeQueryText(r.query) === normalizeQueryText(queries[i]),
   )
-
-// A frame accepted for the current queries by identity takes their text, so
-// raw-text readers (resolveDraw, snapshots) see the SQL the editor holds.
-// Callers have matched the frame first, so the mapping is positional.
-export const alignResultsToQueries = (
-  result: CellResult,
-  queries: string[],
-): CellResult => {
-  if (result.results.every((r, i) => r.query === queries[i])) return result
-  return {
-    ...result,
-    results: result.results.map((r, i) =>
-      r.query === queries[i] ? r : { ...r, query: queries[i] },
-    ),
-  }
-}
 
 export type ChartResult =
   | { kind: "missing" }
@@ -123,11 +108,13 @@ export const resultsEquivalent = (
   for (let i = 0; i < a.length; i++) {
     const x = a[i]
     const y = b[i]
-    // Query identity is the primary discriminator. Presentation-only edits
-    // (whitespace, newlines, keyword casing) do not make a new result, but
-    // different SQL must always replace the prior frame even when it happens
-    // to return identical rows.
-    if (!sameStatementIdentity(x.query, y.query)) return false
+    // Query identity is the primary discriminator. Formatting differences
+    // introduced by parsing (surrounding whitespace / trailing semicolon) do
+    // not make a new result, but different SQL must always replace the prior
+    // frame even when it happens to return identical rows.
+    if (normalizeQueryText(x.query) !== normalizeQueryText(y.query)) {
+      return false
+    }
     if (x.type !== y.type) return false
     if (x.count !== y.count) return false
     if (x.error !== y.error) return false
