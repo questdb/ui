@@ -1,9 +1,10 @@
 import React from "react"
-import type {
-  BetweenBound,
-  ColumnKind,
-  ColumnRange,
-  HighlightRule,
+import {
+  exceedsSafeInteger,
+  type BetweenBound,
+  type ColumnKind,
+  type ColumnRange,
+  type HighlightRule,
 } from "../../../../components/ResultGrid/highlight"
 import { FieldLabel } from "../CellChart/chartSettingsStyles"
 import {
@@ -19,8 +20,14 @@ const CHANGE_UNIT_OPTIONS = [
   { label: "Percentage (%)", value: "percent" },
 ]
 
+// An integer past 2^53 stays text, so a LONG compares at full precision.
 const parseInput = (raw: string, numeric: boolean): number | string =>
-  numeric && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : raw
+  numeric &&
+  raw !== "" &&
+  Number.isFinite(Number(raw)) &&
+  !exceedsSafeInteger(raw)
+    ? Number(raw)
+    : raw
 
 // An empty between bound is automatic and follows the column's current
 // minimum or maximum.
@@ -31,9 +38,9 @@ const compact = (value: number) => String(Number(value.toPrecision(6)))
 
 const autoPlaceholder = (end: keyof ColumnRange, range: ColumnRange | null) => {
   const bound = range?.[end]
-  return typeof bound === "number"
-    ? `auto · ${compact(bound)}`
-    : `auto (${end === "from" ? "min" : "max"})`
+  if (typeof bound === "number") return `auto · ${compact(bound)}`
+  if (typeof bound === "bigint") return `auto · ${bound}`
+  return `auto (${end === "from" ? "min" : "max"})`
 }
 
 const TIMESTAMP_PLACEHOLDER = "2026-09-28T10:00:00.000000Z"
@@ -124,7 +131,7 @@ export const ConditionInputs: React.FC<{
                 type="text"
                 variant={variantFor("pattern")}
                 aria-label="Regular expression"
-                placeholder="^EUR or /eur/i"
+                placeholder="^EUR or (?i)eur"
                 value={condition.pattern}
                 onChange={(e) =>
                   onChange({

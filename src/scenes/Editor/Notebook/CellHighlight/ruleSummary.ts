@@ -1,13 +1,17 @@
-import type {
-  BetweenBound,
-  HighlightColorToken,
-  RuleTarget,
+import {
+  exceedsSafeInteger,
+  type BetweenBound,
+  type HighlightColorToken,
+  type RuleTarget,
 } from "../../../../components/ResultGrid/highlight"
 import type { DraftRule } from "./ruleDraft"
 
-// Strings read like the SQL the user just wrote: single quotes.
+// Strings read like the SQL the user just wrote: single quotes. An integer
+// past 2^53 is kept as text only for its precision, so it reads as a number.
 const formatValue = (value: string | number) =>
-  typeof value === "string" ? `'${value}'` : String(value)
+  typeof value === "string" && !exceedsSafeInteger(value)
+    ? `'${value}'`
+    : String(value)
 
 const formatBound = (bound: BetweenBound) =>
   bound === null ? "auto" : formatValue(bound)

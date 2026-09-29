@@ -10,7 +10,7 @@ export const useRe2Ready = (needed: boolean): boolean => {
     if (!needed || ready) return
     let active = true
     void loadRe2().then(() => {
-      if (active) setReady(true)
+      if (active) setReady(isRe2Ready())
     })
     return () => {
       active = false

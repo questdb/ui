@@ -8,11 +8,13 @@ export { isRe2Ready, loadRe2, usesPatterns } from "./pattern"
 export { useRe2Ready } from "./useRe2Ready"
 export { isHighlightConfig, isHighlightRule } from "./isHighlightConfig"
 export {
+  validateIdentity,
   validateRuleFields,
   stepErrorKey,
   type BoundKind,
   type RuleErrors,
 } from "./validateRule"
+export { exceedsSafeInteger } from "./comparable"
 export {
   buildIdentityIndex,
   identityColumnIndexes,

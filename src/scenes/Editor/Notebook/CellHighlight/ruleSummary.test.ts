@@ -8,6 +8,26 @@ import {
 } from "./ruleSummary"
 
 describe("rule summaries", () => {
+  it("reads an integer past 2^53 as a number, and other text as a string", () => {
+    // Given an = rule with a LONG kept as text, and one with a symbol
+    const rule = createRule("eq", { kind: "column", name: "id" }, "value.eq")
+    if (rule.kind !== "value" || rule.condition.op !== "eq")
+      throw new Error("Expected an = rule")
+    const long = {
+      ...rule,
+      condition: { ...rule.condition, value: "1727000000000000011" },
+    }
+    const symbol = { ...rule, condition: { ...rule.condition, value: "BTC" } }
+
+    // When both are summarized
+    const longSummary = ruleSummary(long)
+    const symbolSummary = ruleSummary(symbol)
+
+    // Then only the symbol is quoted
+    expect(longSummary).toBe("id = 1727000000000000011")
+    expect(symbolSummary).toBe("id = 'BTC'")
+  })
+
   it("distinguishes percentage and absolute thresholds and their inclusive boundary", () => {
     // Given a changed-by rule in percent and the same rule in absolute units
     const rule = createRule("change", { kind: "allNumeric" }, "prev.changedBy")

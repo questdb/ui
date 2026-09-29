@@ -26,8 +26,9 @@ type Props<O extends SearchableSelectOption> = {
   value: string
   // Controlled multi-selection; value remains the closed trigger label.
   selectedValues?: string[]
-  // Enter creates a typed name at the top while it remains selected.
-  // Custom names are reported with option null.
+  // Enter picks the exact or first match; with none it creates the typed
+  // name, kept at the top while it remains selected. Custom names are
+  // reported with option null.
   onSelect: (value: string, option: O | null) => void
   // Clearing controlled state is required for the built-in Reset action.
   onReset: () => void
@@ -44,6 +45,19 @@ type Props<O extends SearchableSelectOption> = {
 const ITEM_HEIGHT_REM = 3.2
 const MAX_LIST_HEIGHT_REM = 25.6
 let nextId = 0
+
+const defaultItem = <O extends SearchableSelectOption>(
+  filtered: ListItem<O>[],
+  query: string,
+): ListItem<O> | undefined => {
+  const selectable = filtered.filter((entry) => !entry.disabled)
+  const existing = selectable.filter((entry) => !entry.create)
+  return (
+    existing.find((entry) => entry.label === query) ??
+    existing[0] ??
+    selectable[0]
+  )
+}
 
 const Trigger = styled(SelectMenuTriggerButton)`
   &&,
@@ -275,8 +289,7 @@ export const SearchableSelect = <O extends SearchableSelectOption>({
       event.preventDefault()
       const item =
         focusedIndex === null
-          ? (filtered.find((entry) => entry.label === query.trim()) ??
-            filtered.find((entry) => !entry.disabled))
+          ? defaultItem(filtered, query.trim())
           : filtered[focusedIndex]
       if (item) selectItem(item)
     } else if (event.key === "Escape") {

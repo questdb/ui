@@ -10,7 +10,9 @@ import {
   validateRules,
 } from "./ruleValidation"
 
-beforeAll(() => loadRe2())
+beforeAll(async () => {
+  await loadRe2()
+})
 
 const columns: ColumnDefinition[] = [
   { name: "symbol", type: "SYMBOL" },

@@ -4,9 +4,10 @@ import { columnKindOf, type ColumnKind } from "./columnKind"
 import { columnRangeAt, type ColumnRange } from "./columnRange"
 import {
   asComparable,
-  asNumber,
+  asNumeric,
   canonicalInstant,
   compareValues,
+  differenceOf,
   type Comparable,
 } from "./comparable"
 import {
@@ -55,11 +56,10 @@ const asText = (value: number | string): string => {
 const asComparableInput = (
   value: number | string,
   kind: ColumnKind,
-): Comparable | null => {
-  if (kind === "temporal") return canonicalInstant(asText(value))
-  const parsed = typeof value === "number" ? value : Number(asText(value))
-  return Number.isFinite(parsed) ? parsed : null
-}
+): Comparable | null =>
+  kind === "temporal"
+    ? canonicalInstant(asText(value))
+    : asNumeric(asText(value))
 
 const asBound = (
   bound: BetweenBound,
@@ -166,19 +166,18 @@ const matchPrevious = (
     case "lt":
       return compareValues(current, previous) < 0 ? hit : undefined
     case "changedBy": {
-      if (typeof current !== "number" || typeof previous !== "number") {
+      if (typeof current === "string" || typeof previous === "string") {
         return undefined
       }
-      const delta = Math.abs(current - previous)
+      const delta = Math.abs(differenceOf(current, previous))
       // A threshold of 0 means "any change"; an unchanged cell never matches.
       if (delta === 0) return undefined
       if (condition.unit === "absolute") {
         return delta >= condition.threshold ? hit : undefined
       }
-      if (previous === 0) return undefined
-      return (delta / Math.abs(previous)) * 100 >= condition.threshold
-        ? hit
-        : undefined
+      const base = Math.abs(Number(previous))
+      if (base === 0) return undefined
+      return (delta / base) * 100 >= condition.threshold ? hit : undefined
     }
   }
 }
@@ -257,14 +256,18 @@ const matchValue = (
         return inRange ? hit : undefined
       }
       if (
-        typeof current !== "number" ||
-        typeof from !== "number" ||
-        typeof to !== "number"
+        typeof current === "string" ||
+        typeof from === "string" ||
+        typeof to === "string"
       ) {
         return undefined
       }
       const ratio =
-        current >= to ? 1 : current <= from ? 0 : (current - from) / (to - from)
+        compareValues(current, to) >= 0
+          ? 1
+          : compareValues(current, from) <= 0
+            ? 0
+            : differenceOf(current, from) / differenceOf(to, from)
       return { ...hit, blend: { color: condition.fill.highColor, ratio } }
     }
   }
@@ -277,7 +280,7 @@ const matchSteps = (
   sortedSteps: StepsRule["steps"],
   value: CellValue,
 ): CellHighlight | undefined => {
-  const current = asNumber(value)
+  const current = asNumeric(value)
   if (current === null) return undefined
   const step = sortedSteps.find((candidate) => current >= candidate.from)
   return {

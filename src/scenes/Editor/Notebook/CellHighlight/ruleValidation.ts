@@ -9,12 +9,12 @@ import {
   conditionFitsKind,
   conditionOptionOf,
   targetKind,
-  type DraftConfig,
   type DraftRule,
 } from "./ruleDraft"
 
 export {
   stepErrorKey,
+  validateIdentity,
   type RuleErrors,
 } from "../../../../components/ResultGrid/highlight"
 
@@ -69,10 +69,3 @@ export const validateRules = (
   }
   return result
 }
-
-// Identity is needed only by rules that compare with the previous result.
-export const validateIdentity = (draft: DraftConfig): string | null =>
-  draft.identityColumns.length === 0 &&
-  draft.rules.some((rule) => rule.kind === "previous" || rule.kind === "newRow")
-    ? "Needed for comparison rules"
-    : null

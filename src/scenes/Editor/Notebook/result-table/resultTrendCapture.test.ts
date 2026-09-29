@@ -290,6 +290,23 @@ describe("captureResultTrends", () => {
     expect(store.get("c1", KEY)?.previous).toBeNull()
   })
 
+  it("forgets a statement the cell edited away", () => {
+    // Given a cell that ran one statement, then another after an edit
+    const EDITED = "select symbol, price from trades where price > 0"
+    const store = createResultTrendStore()
+    const before = cell("c1", [dql(QUERY, [["BTC", 1]])])
+    const after = cell("c1", [dql(EDITED, [["BTC", 2]])])
+
+    // When both results land
+    captureResultTrends(store, restored, [], [before])
+    captureResultTrends(store, restored, [before], [after])
+
+    // Then only the current statement keeps its rows
+    const [editedKey] = statementKeysFor([EDITED])
+    expect(store.get("c1", KEY)).toBeUndefined()
+    expect(store.get("c1", editedKey)?.result).toBe(after.result?.results[0])
+  })
+
   it("forgets a removed cell", () => {
     // Given a captured cell
     const store = createResultTrendStore()

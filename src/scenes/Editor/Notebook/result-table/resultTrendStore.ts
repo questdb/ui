@@ -32,6 +32,9 @@ export type ResultTrendStore = {
     identityColumns: string[],
     landing: ResultLanding,
   ) => TrendEntry
+  // Forgets the cell's other statements: an edited statement gets a new key,
+  // and the old one would otherwise hold its rows for good.
+  retainStatements: (cellId: string, statementKeys: string[]) => void
   releaseCell: (cellId: string) => void
   clearCell: (cellId: string) => void
 }
@@ -67,11 +70,15 @@ const baselineIndexOf = (
 ): IdentityIndex | null =>
   result.truncated ? null : indexOf(result, identityColumns)
 
-type ReplacedResult = Pick<TrendEntry, "result" | "revision" | "capturedAt">
+type ReplacedResult = Pick<TrendEntry, "revision" | "capturedAt"> & {
+  result: WeakRef<DqlQueryResult>
+}
 
 // A run discarded mid-flight puts the replaced result back as the same
 // object; remembering it lets that restore return to what was shown instead
-// of comparing against the discarded rows.
+// of comparing against the discarded rows. The run holds that object only
+// until it settles, so a weak reference lasts exactly as long as the restore
+// is possible and never keeps a whole result alive after it.
 type LiveEntry = TrendEntry & {
   current: IdentityIndex | null
   replaced: ReplacedResult | null
@@ -95,7 +102,7 @@ const replacedResultOf = (
 ): ReplacedResult | null =>
   existing !== undefined && identityColumns.length > 0
     ? {
-        result: existing.result,
+        result: new WeakRef(existing.result),
         revision: existing.revision,
         capturedAt: existing.capturedAt,
       }
@@ -188,9 +195,11 @@ export const createResultTrendStore = (): ResultTrendStore => {
       }
 
       const replaced = existing?.replaced
-      if (existing && replaced?.result === result && sameIdentity) {
+      if (existing && replaced?.result.deref() === result && sameIdentity) {
         const restored = {
-          ...replaced,
+          result,
+          revision: replaced.revision,
+          capturedAt: replaced.capturedAt,
           identityColumns,
           previous: null,
           current: existing.previous,
@@ -222,6 +231,15 @@ export const createResultTrendStore = (): ResultTrendStore => {
       }
       entries.set(key, entry)
       return entry
+    },
+
+    retainStatements(cellId, statementKeys) {
+      const retained = new Set(
+        statementKeys.map((statementKey) => entryKey(cellId, statementKey)),
+      )
+      for (const key of cellKeys(cellId)) {
+        if (!retained.has(key)) entries.delete(key)
+      }
     },
 
     releaseCell(cellId) {

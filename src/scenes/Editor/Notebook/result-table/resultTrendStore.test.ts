@@ -294,6 +294,22 @@ describe("createResultTrendStore: release and rehydrate", () => {
   })
 })
 
+describe("createResultTrendStore: retained statements", () => {
+  it("forgets the statements a cell no longer has", () => {
+    // Given a cell with two captured statements
+    const store = createResultTrendStore()
+    store.capture("c1", "old", result([["BTC", 1]]), [], ran(100))
+    store.capture("c1", "kept", result([["ETH", 1]]), [], ran(100))
+
+    // When only one of them is retained
+    store.retainStatements("c1", ["kept"])
+
+    // Then the other statement and its rows are gone
+    expect(store.get("c1", "old")).toBeUndefined()
+    expect(store.get("c1", "kept")?.result.dataset).toEqual([["ETH", 1]])
+  })
+})
+
 describe("createResultTrendStore: cell scope", () => {
   it("keeps cells apart and clears only the asked cell", () => {
     // Given the same statement key captured for two cells

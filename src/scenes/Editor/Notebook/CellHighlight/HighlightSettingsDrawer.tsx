@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import React, { useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
@@ -6,7 +6,6 @@ import {
   type HighlightConfig,
   type MatchStats,
   createRuleId,
-  isRe2Ready,
   loadRe2,
 } from "../../../../components/ResultGrid/highlight"
 import {
@@ -101,13 +100,8 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
 
-  // A pattern validates against RE2, which started loading when the drawer
-  // mounted; a Save that beats the load waits for it.
-  const save = () => {
-    if (!isRe2Ready() && draft.rules.some(isPatternRule)) {
-      void loadRe2().then(save)
-      return
-    }
+  const save = async () => {
+    if (draft.rules.some(isPatternRule)) await loadRe2()
     const next = validateRules(draft.rules, columns)
     const identity = validateIdentity(draft)
     setErrors(next)
@@ -118,10 +112,6 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       rules: draft.rules.filter(isCompleteRule),
     })
   }
-
-  useEffect(() => {
-    void loadRe2()
-  }, [])
 
   return (
     <SettingsDrawerShell

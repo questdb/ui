@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { canonicalInstant, compareValues } from "./comparable"
+import {
+  asNumeric,
+  canonicalInstant,
+  compareValues,
+  differenceOf,
+} from "./comparable"
 
 const originalTz = process.env.TZ
 
@@ -73,5 +78,50 @@ describe("compareValues", () => {
     expect(compareValues(earlier, later)).toBeLessThan(0)
     expect(compareValues(later, earlier)).toBeGreaterThan(0)
     expect(compareValues(later, later)).toBe(0)
+  })
+
+  it("orders integers past 2^53 by their exact value, also against a number", () => {
+    // Given two LONGs one unit apart, and one on each side of the safe range
+    const lower = BigInt("1727000000000000010")
+    const higher = BigInt("1727000000000000011")
+
+    // When compared
+    // Then a double would call them equal, a bigint does not
+    expect(compareValues(higher, lower)).toBeGreaterThan(0)
+    expect(compareValues(higher, higher)).toBe(0)
+    expect(compareValues(BigInt("9007199254740993"), 9007199254740992)).toBe(1)
+  })
+})
+
+describe("asNumeric", () => {
+  it("keeps an integer past 2^53 exact and reads everything else as a number", () => {
+    // Given a LONG past 2^53 as the server sends it, a small LONG and a double
+    // When read
+    const long = asNumeric("1727000000000000011")
+    const small = asNumeric("50825")
+    const double = asNumeric("1.5")
+    const blank = asNumeric(" ")
+
+    // Then only the large integer becomes a bigint
+    expect(long).toBe(BigInt("1727000000000000011"))
+    expect(small).toBe(50825)
+    expect(double).toBe(1.5)
+    expect(blank).toBeNull()
+  })
+})
+
+describe("differenceOf", () => {
+  it("measures one unit past 2^53 and a fraction below it", () => {
+    // Given two LONGs one unit apart and two doubles
+    // When subtracted
+    const unit = differenceOf(
+      BigInt("1727000000000000011"),
+      BigInt("1727000000000000010"),
+    )
+    const fraction = differenceOf(1.5, 1)
+
+    // Then both differences are exact
+    expect(unit).toBe(1)
+    expect(fraction).toBe(0.5)
   })
 })

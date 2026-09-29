@@ -56,6 +56,7 @@ import {
 import {
   fromHighlightConfigWire,
   type HighlightConfigWire,
+  wireUsesPatterns,
 } from "./highlightConfigWire"
 import {
   invalidBufferIdResult,
@@ -953,7 +954,7 @@ export const dispatchTool = async (
         const highlightBaseline = getBufferActionSeq(buffer_id)
         let config = null
         if (highlight_config) {
-          await loadRe2()
+          if (wireUsesPatterns(highlight_config)) await loadRe2()
           const parsed = fromHighlightConfigWire(highlight_config)
           if (!parsed.ok) {
             return {
@@ -1104,7 +1105,7 @@ export const dispatchTool = async (
         )
       }
       case "apply_notebook_state": {
-        return dispatchApplyNotebookState(
+        return await dispatchApplyNotebookState(
           input,
           setStatus,
           perms,

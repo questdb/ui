@@ -21,7 +21,8 @@ const landingOf = (
 // The single writer of the trend store: runs on every cells change, before
 // React renders it, so the grid reads a baseline that matches its result.
 // A cell whose result or rules did not change is skipped. A released cell
-// keeps only its baseline for the rehydrate; a removed cell is forgotten.
+// keeps only its baseline for the rehydrate; a removed cell, and a statement
+// the cell no longer has, are forgotten.
 export const captureResultTrends = (
   store: ResultTrendStore,
   restoredResults: WeakSet<CellResult>,
@@ -45,6 +46,7 @@ export const captureResultTrends = (
     const keys = statementKeysFor(cell.result.results.map((r) => r.query))
     const identityColumns = trackedIdentityColumns(cell)
     const landing = landingOf(restoredResults, cell.result)
+    store.retainStatements(cell.id, keys)
     cell.result.results.forEach((result, index) => {
       if (result.type !== "dql") return
       store.capture(cell.id, keys[index], result, identityColumns, landing)

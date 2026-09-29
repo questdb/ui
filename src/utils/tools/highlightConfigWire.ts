@@ -16,7 +16,10 @@ import {
   type RuleTarget,
 } from "../../components/ResultGrid/highlight/types"
 import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
-import { validateRuleFields } from "../../components/ResultGrid/highlight/validateRule"
+import {
+  validateIdentity,
+  validateRuleFields,
+} from "../../components/ResultGrid/highlight/validateRule"
 import { isHighlightRule } from "../../components/ResultGrid/highlight/isHighlightConfig"
 
 // Snake-case shape the agent tools speak for grid highlight rules, and its
@@ -313,6 +316,9 @@ const mapRule = (rule: HighlightRuleWire, index: number): MappedRule => {
   }
 }
 
+export const wireUsesPatterns = (wire: HighlightConfigWire): boolean =>
+  Array.isArray(wire.rules) && wire.rules.some((rule) => rule?.op === "matches")
+
 export const fromHighlightConfigWire = (
   wire: HighlightConfigWire,
 ): HighlightWireResult => {
@@ -343,7 +349,12 @@ export const fromHighlightConfigWire = (
     }
     rules.push(mapped.rule)
   }
-  return { ok: true, config: { identityColumns: wire.identity_columns, rules } }
+  const config = { identityColumns: wire.identity_columns, rules }
+  const identityError = validateIdentity(config)
+  if (identityError) {
+    return { ok: false, error: `identity_columns: ${identityError}` }
+  }
+  return { ok: true, config }
 }
 
 const columnOf = (target: RuleTarget): string | null =>

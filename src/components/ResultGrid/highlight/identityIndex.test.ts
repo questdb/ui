@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { buildIdentityIndex, identityColumnIndexes } from "./identityIndex"
+import {
+  buildIdentityIndex,
+  identityColumnIndexes,
+  identityKeyOf,
+} from "./identityIndex"
 import { defaultIdentityColumns } from "./defaultIdentity"
 
 describe("identityColumnIndexes", () => {
@@ -36,8 +40,41 @@ describe("buildIdentityIndex", () => {
 
     // Then only the unique key remains and the duplicate is reported
     expect(index.rows.size).toBe(1)
-    expect(index.rows.get("BTC\u0000sell")).toEqual(["BTC", "sell", 2])
-    expect(index.ambiguous).toEqual(new Set(["BTC\u0000buy"]))
+    expect(index.rows.get(identityKeyOf(["BTC", "sell"], [0, 1]))).toEqual([
+      "BTC",
+      "sell",
+      2,
+    ])
+    expect(index.ambiguous).toEqual(
+      new Set([identityKeyOf(["BTC", "buy"], [0, 1])]),
+    )
+  })
+})
+
+describe("identityKeyOf", () => {
+  it("keeps SQL NULL apart from the text 'null'", () => {
+    // Given one row with a NULL symbol and one with the text 'null'
+    const nullRow = [null, 1]
+    const textRow = ["null", 5]
+
+    // When both are keyed by the symbol column
+    const nullKey = identityKeyOf(nullRow, [0])
+    const textKey = identityKeyOf(textRow, [0])
+
+    // Then the keys differ
+    expect(nullKey).not.toBe(textKey)
+  })
+
+  it("keeps a number apart from its text form and a boolean apart from its text form", () => {
+    // Given rows whose identity values print the same
+    const numberKey = identityKeyOf([1], [0])
+    const numberTextKey = identityKeyOf(["1"], [0])
+    const booleanKey = identityKeyOf([true], [0])
+    const booleanTextKey = identityKeyOf(["true"], [0])
+
+    // Then each typed value gets its own key
+    expect(numberKey).not.toBe(numberTextKey)
+    expect(booleanKey).not.toBe(booleanTextKey)
   })
 })
 

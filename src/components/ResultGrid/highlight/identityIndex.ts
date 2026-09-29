@@ -3,8 +3,6 @@ import type { ResultGridRow } from "../types"
 
 export const MAX_INDEXED_ROWS = 10_000
 
-const KEY_SEPARATOR = "\u0000"
-
 export type IdentityIndex = {
   rows: Map<string, ResultGridRow>
   ambiguous: Set<string>
@@ -22,7 +20,7 @@ export const identityColumnIndexes = (
 }
 
 export const identityKeyOf = (row: ResultGridRow, indexes: number[]): string =>
-  indexes.map((index) => String(row[index])).join(KEY_SEPARATOR)
+  JSON.stringify(indexes.map((index) => row[index]))
 
 export const buildIdentityIndex = (
   dataset: ResultGridRow[],

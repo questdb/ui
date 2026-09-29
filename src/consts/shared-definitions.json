@@ -738,11 +738,11 @@
                   },
                   "value": {
                     "type": ["number", "string", "null"],
-                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes; an integer past 2^53 (a LONG id) as a string, so JSON keeps every digit. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
                   },
                   "to": {
                     "type": ["number", "string", "null"],
-                    "description": "value between: the upper bound, inclusive. null = auto: the column's current maximum, recomputed on every result."
+                    "description": "value between: the upper bound, inclusive; an integer past 2^53 as a string. null = auto: the column's current maximum, recomputed on every result."
                   },
                   "threshold": {
                     "type": ["number", "null"],
@@ -1245,11 +1245,11 @@
                         },
                         "value": {
                           "type": ["number", "string", "null"],
-                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes; an integer past 2^53 (a LONG id) as a string, so JSON keeps every digit. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
                         },
                         "to": {
                           "type": ["number", "string", "null"],
-                          "description": "value between: the upper bound, inclusive. null = auto: the column's current maximum, recomputed on every result."
+                          "description": "value between: the upper bound, inclusive; an integer past 2^53 as a string. null = auto: the column's current maximum, recomputed on every result."
                         },
                         "threshold": {
                           "type": ["number", "null"],

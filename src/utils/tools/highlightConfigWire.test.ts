@@ -6,7 +6,9 @@ import {
   type HighlightConfigWire,
 } from "./highlightConfigWire"
 
-beforeAll(() => loadRe2())
+beforeAll(async () => {
+  await loadRe2()
+})
 
 let counter = 0
 vi.mock("../../components/ResultGrid/highlight/ruleId", () => ({
@@ -116,6 +118,31 @@ describe("fromHighlightConfigWire", () => {
     })
     expect(wholeRow).toMatchObject({ kind: "value", appliesTo: "row" })
     expect(new Set(result.config.rules.map((r) => r.id)).size).toBe(8)
+  })
+
+  it("rejects a comparison rule without identity columns, as the drawer does", () => {
+    // Given an empty identity with a new-row rule, and with a value rule
+    const comparisonWire = {
+      identity_columns: [],
+      rules: [{ kind: "newRow" as const, column: null }],
+    }
+    const valueWire = {
+      identity_columns: [],
+      rules: [
+        { kind: "value" as const, column: "v", op: "gt" as const, value: 1 },
+      ],
+    }
+
+    // When each is parsed
+    const comparison = fromHighlightConfigWire(comparisonWire)
+    const value = fromHighlightConfigWire(valueWire)
+
+    // Then only the comparison rule needs an identity
+    expect(comparison).toEqual({
+      ok: false,
+      error: "identity_columns: Needed for comparison rules",
+    })
+    expect(value.ok).toBe(true)
   })
 
   it("rejects a non-list identity, bad ops and unknown colors with the rule index", () => {

@@ -27,11 +27,22 @@ export const columnRangeAt = (
   return from !== null && to !== null ? { from, to } : null
 }
 
-export const columnRangeOf =
-  (columns: ColumnDefinition[], dataset: ResultGridRow[]) =>
-  (name: string): ColumnRange | null =>
-    columnRangeAt(
+// The drawer asks for a range on every render, so each column scans once
+// per result.
+export const columnRangeOf = (
+  columns: ColumnDefinition[],
+  dataset: ResultGridRow[],
+) => {
+  const ranges = new Map<string, ColumnRange | null>()
+  return (name: string): ColumnRange | null => {
+    const cached = ranges.get(name)
+    if (cached !== undefined) return cached
+    const range = columnRangeAt(
       columns,
       dataset,
       columns.findIndex((column) => column.name === name),
     )
+    ranges.set(name, range)
+    return range
+  }
+}

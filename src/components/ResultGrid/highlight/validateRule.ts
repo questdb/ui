@@ -1,5 +1,10 @@
-import { canonicalInstant, compareValues, type Comparable } from "./comparable"
-import { compilePattern } from "./pattern"
+import {
+  asNumeric,
+  canonicalInstant,
+  compareValues,
+  type Comparable,
+} from "./comparable"
+import { compilePattern, isRe2Ready } from "./pattern"
 import type { BetweenBound, HighlightRule } from "./types"
 
 // Field key → short message. Keys match the inputs in the rule editor; a
@@ -44,13 +49,13 @@ const asBoundComparable = (
   value: number | string,
   kind: BoundKind,
 ): Comparable | null => {
-  if (kind === "numeric") return Number(value)
+  if (kind === "numeric") return asNumeric(value)
   if (kind === "temporal") return canonicalInstant(unquoted(value))
-  if (typeof value === "number") return value
-  const numeric = Number(value)
-  if (Number.isFinite(numeric)) return numeric
-  return canonicalInstant(unquoted(value))
+  return asNumeric(value) ?? canonicalInstant(unquoted(value))
 }
+
+const sameKind = (a: Comparable, b: Comparable) =>
+  (typeof a === "string") === (typeof b === "string")
 
 const fixedBound = (bound: BetweenBound): bound is number | string =>
   bound !== null
@@ -83,7 +88,9 @@ export const validateRuleFields = (
           break
         case "matches":
           if (isBlank(condition.pattern)) errors.pattern = EMPTY
-          else if (compilePattern(condition.pattern) === null) {
+          else if (!isRe2Ready()) {
+            errors.pattern = "Could not load regex engine"
+          } else if (compilePattern(condition.pattern) === null) {
             errors.pattern = "Invalid expression"
           }
           break
@@ -116,9 +123,7 @@ export const validateRuleFields = (
           if (!fixedBound(condition.from) || !fixedBound(condition.to)) break
           const low = asBoundComparable(condition.from, kind)
           const high = asBoundComparable(condition.to, kind)
-          if (low === null || high === null || typeof low !== typeof high) {
-            break
-          }
+          if (low === null || high === null || !sameKind(low, high)) break
           const order = compareValues(high, low)
           if (condition.fill.kind === "gradient" && order <= 0) {
             errors.to = "Should be above From"
@@ -146,3 +151,15 @@ export const validateRuleFields = (
   }
   return errors
 }
+
+// Identity is needed only by rules that compare with the previous result.
+export const validateIdentity = (config: {
+  identityColumns: string[]
+  rules: { kind: string }[]
+}): string | null =>
+  config.identityColumns.length === 0 &&
+  config.rules.some(
+    (rule) => rule.kind === "previous" || rule.kind === "newRow",
+  )
+    ? "Needed for comparison rules"
+    : null

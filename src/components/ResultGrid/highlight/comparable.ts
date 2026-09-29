@@ -1,17 +1,43 @@
 import type { CellValue } from "../types"
 import type { ColumnKind } from "./columnKind"
 
-// A numeric column compares as a number; a temporal column compares as a
-// canonical instant string, so nanosecond timestamps keep their precision.
-export type Comparable = number | string
+// A numeric column compares as a number, or as a bigint past 2^53; a temporal
+// column compares as a canonical instant string, so nanosecond timestamps
+// keep their precision.
+export type Numeric = number | bigint
+export type Comparable = Numeric | string
 
-// LONG columns reach the grid as decimal strings, so their 64-bit precision
-// survives JSON; for highlighting, a double is close enough.
-export const asNumber = (value: CellValue): number | null => {
+const INTEGER_LITERAL = /^[+-]?\d+$/
+
+// LONG and DECIMAL columns reach the grid as decimal strings, so their 64-bit
+// precision survives JSON; a double would round such an integer past 2^53.
+export const exceedsSafeInteger = (text: string): boolean =>
+  INTEGER_LITERAL.test(text) && !Number.isSafeInteger(Number(text))
+
+export const asNumeric = (value: CellValue): Numeric | null => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (typeof value !== "string" || value.trim() === "") return null
-  const parsed = Number(value)
+  if (typeof value !== "string") return null
+  const text = value.trim()
+  if (text === "") return null
+  if (exceedsSafeInteger(text)) return BigInt(text)
+  const parsed = Number(text)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+const asBigInt = (value: Numeric): bigint | null =>
+  typeof value === "bigint"
+    ? value
+    : Number.isInteger(value)
+      ? BigInt(value)
+      : null
+
+// Exact for two integers, so a change of one unit past 2^53 still counts.
+export const differenceOf = (a: Numeric, b: Numeric): number => {
+  const left = asBigInt(a)
+  const right = asBigInt(b)
+  return left !== null && right !== null
+    ? Number(left - right)
+    : Number(a) - Number(b)
 }
 
 const ISO_INSTANT =
@@ -64,14 +90,14 @@ export const asComparable = (
   if (kind === "temporal") {
     return typeof value === "string" ? canonicalInstant(value) : null
   }
-  return asNumber(value)
+  return asNumeric(value)
 }
 
 export const compareValues = (a: Comparable, b: Comparable): number => {
-  if (typeof a === "number" && typeof b === "number") {
-    return a === b ? 0 : a < b ? -1 : 1
+  if (typeof a === "string" || typeof b === "string") {
+    const left = String(a)
+    const right = String(b)
+    return left === right ? 0 : left < right ? -1 : 1
   }
-  const left = String(a)
-  const right = String(b)
-  return left === right ? 0 : left < right ? -1 : 1
+  return a < b ? -1 : a > b ? 1 : 0
 }

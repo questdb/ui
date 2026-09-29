@@ -36,6 +36,7 @@ import {
 import {
   fromHighlightConfigWire,
   type HighlightConfigWire,
+  wireUsesPatterns,
 } from "./highlightConfigWire"
 import {
   applyStaleNotebookResult,
@@ -380,7 +381,13 @@ export const dispatchApplyNotebookState = async (
     }
   }
   const highlightConfigs: (HighlightConfig | undefined)[] = []
-  if (cells.some((c) => c.highlight_config)) await loadRe2()
+  if (
+    cells.some(
+      (c) => c.highlight_config && wireUsesPatterns(c.highlight_config),
+    )
+  ) {
+    await loadRe2()
+  }
   for (const [index, c] of cells.entries()) {
     if (!c.highlight_config) {
       highlightConfigs.push(undefined)

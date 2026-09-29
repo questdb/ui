@@ -11,7 +11,9 @@ import type {
   ValueCondition,
 } from "./types"
 
-beforeAll(() => loadRe2())
+beforeAll(async () => {
+  await loadRe2()
+})
 
 const columns: ColumnDefinition[] = [
   { name: "symbol", type: "SYMBOL" },
@@ -623,8 +625,8 @@ describe("evaluateHighlights: value rules", () => {
     expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries3")
   })
 
-  it("matches a regular expression, honours /flags/, and never matches an invalid pattern", () => {
-    // Given a case-sensitive pattern, a flagged one and a broken one on symbol
+  it("matches a regular expression, honours an inline (?i) flag, and never matches an invalid pattern", () => {
+    // Given a case-sensitive pattern, an inline-flagged one and a broken one on symbol
     const symbolRule = (
       id: string,
       pattern: string,
@@ -646,7 +648,7 @@ describe("evaluateHighlights: value rules", () => {
     // When each rule is evaluated alone
     const anchored = evaluate([symbolRule("a", "^BTC", "dataSeries2")], dataset)
     const flagged = evaluate(
-      [symbolRule("b", "/^eth/i", "dataSeries3")],
+      [symbolRule("b", "(?i)^eth", "dataSeries3")],
       dataset,
     )
     const broken = evaluate([symbolRule("c", "(", "dataSeries4")], dataset)
@@ -658,25 +660,29 @@ describe("evaluateHighlights: value rules", () => {
     expect(broken.background(0, SYMBOL)).toBeUndefined()
   })
 
-  it("ignores the g flag and never matches with a flag RE2 does not support", () => {
-    // Given rows that contain btc anywhere
-    const dataset = [row("BTC-USDT", 1, 1), row("ETH-BTC", 1, 1)]
-    const flaggedRule = (pattern: string) =>
+  it("treats slashes as literal characters instead of regex bounds", () => {
+    // Given path-like values and patterns wrapped in or containing slashes
+    const dataset = [
+      row("/api/users/1", 1, 1),
+      row("xapiY", 1, 1),
+      row("/api/s", 1, 1),
+    ]
+    const pathRule = (pattern: string) =>
       rule({
         kind: "value",
         target: { kind: "column", name: "symbol" },
         condition: { op: "matches", pattern },
       })
 
-    // When a global and a sticky pattern are evaluated
-    const global = evaluate([flaggedRule("/btc/gi")], dataset)
-    const sticky = evaluate([flaggedRule("/btc/yi")], dataset)
-    const matchedRows = (lookup: typeof global) =>
-      [0, 1].filter((index) => lookup.background(index, SYMBOL))
+    // When a slash-wrapped pattern and a path pattern are evaluated
+    const slashWrapped = evaluate([pathRule("/api/s")], dataset)
+    const path = evaluate([pathRule("^/api/users")], dataset)
+    const matchedRows = (lookup: typeof slashWrapped) =>
+      [0, 1, 2].filter((index) => lookup.background(index, SYMBOL))
 
-    // Then g matches every row, and y matches nothing
-    expect(matchedRows(global)).toEqual([0, 1])
-    expect(matchedRows(sticky)).toEqual([])
+    // Then /api/s matches only the literal text and the path pattern matches the path
+    expect(matchedRows(slashWrapped)).toEqual([2])
+    expect(matchedRows(path)).toEqual([0])
   })
 
   it("evaluates a pattern that backtracks exponentially in a backtracking engine without stalling", () => {
@@ -991,6 +997,87 @@ describe("evaluateHighlights: LONG columns as decimal strings", () => {
       "dataPositive",
     )
     expect(evaluate([up], rows).direction(0, VOLUME)).toBe("up")
+  })
+})
+
+describe("evaluateHighlights: LONG columns past 2^53", () => {
+  const longColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "id", type: "LONG" },
+  ]
+  const ID = 1
+  const target = { kind: "column", name: "id" } as const
+  const evaluate = (
+    rules: HighlightRule[],
+    dataset: ResultGridRow[],
+    previous: ReturnType<typeof buildIdentityIndex> | null = null,
+  ) =>
+    evaluateHighlights({
+      columns: longColumns,
+      dataset,
+      config: config(rules),
+      previous,
+    }).lookup
+
+  it("matches = and > previous at full precision, as the grid shows the ids", () => {
+    // Given ids one unit apart, closer than a double can tell
+    const rows: ResultGridRow[] = [
+      ["A", "1727000000000000010"],
+      ["B", "1727000000000000011"],
+      ["C", "1727000000000000012"],
+    ]
+    const equals = rule({
+      id: "eq",
+      kind: "value",
+      target,
+      condition: { op: "eq", value: "1727000000000000011" },
+      color: "dataSeries3",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1727000000000000010"]],
+      [SYMBOL],
+    )
+
+    // When evaluated
+    const byValue = evaluate([equals], rows)
+    const byPrevious = evaluate([up], [["A", "1727000000000000011"]], previous)
+
+    // Then only the exact id matches, and a rise of one unit counts
+    expect(byValue.background(0, ID)).toBeUndefined()
+    expect(byValue.background(1, ID)?.color).toBe("dataSeries3")
+    expect(byValue.background(2, ID)).toBeUndefined()
+    expect(byPrevious.background(0, ID)?.color).toBe("dataPositive")
+    expect(byPrevious.direction(0, ID)).toBe("up")
+  })
+
+  it("measures a change of one unit for a changed-by rule", () => {
+    // Given a changed-by rule with a threshold of one unit
+    const byOne = rule({
+      id: "by",
+      kind: "previous",
+      target,
+      condition: { op: "changedBy", threshold: 1, unit: "absolute" },
+      color: "dataSeries3",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1727000000000000010"]],
+      [SYMBOL],
+    )
+
+    // When the id moves by one unit, and when it stays
+    const moved = evaluate([byOne], [["A", "1727000000000000011"]], previous)
+    const same = evaluate([byOne], [["A", "1727000000000000010"]], previous)
+
+    // Then only the move matches
+    expect(moved.background(0, ID)?.color).toBe("dataSeries3")
+    expect(same.background(0, ID)).toBeUndefined()
   })
 })
 
