@@ -13,7 +13,7 @@ import {
   resolveGetWorkspaceState,
   type MetaToolContext,
 } from "./metaResolvers"
-import { DEFAULT_GRANTED, type Permissions } from "../tools/permissions"
+import type { Permissions } from "../tools/permissions"
 import type { ToolCallMessage, ToolContent, ToolResultPayload } from "./types"
 import type { ValidateQueryResult } from "../questdb/types"
 import {
@@ -38,8 +38,8 @@ export type DispatchContext = {
   modelToolsClient: ModelToolsClient
   freshness: NotebookFreshness
   metaToolContext: MetaToolContext
-  permissions?: PermissionsRefs
-  validateSql?: (sql: string) => Promise<ValidateQueryResult>
+  permissions: PermissionsRefs
+  validateSql: (sql: string) => Promise<ValidateQueryResult>
   signal?: AbortSignal
 }
 
@@ -153,9 +153,9 @@ export const dispatchMCPTool = async (
   const result = await dispatchInner(call, ctx)
   // Suppress dirty-notice on a denial — the deny reason already names
   // the missing permission.
-  const dirty = ctx.permissions?.consumeDirty() ?? false
+  const dirty = ctx.permissions.consumeDirty()
   const withPermsNotice =
-    dirty && ctx.permissions && !result.isError
+    dirty && !result.isError
       ? prependPermissionsNotice(
           result,
           buildPermissionsUpdatedBlock(ctx.permissions.get()),
@@ -213,9 +213,7 @@ const dispatchInner = async (
     }
   }
 
-  const perms = ctx.permissions
-    ? (ctx.permissions.get() ?? DEFAULT_GRANTED)
-    : undefined
+  const perms = ctx.permissions.get()
   const fullReadTarget =
     call.name === "get_notebook_state" ? bufferIdOf(call.arguments) : null
   const seqBeforeFullRead =

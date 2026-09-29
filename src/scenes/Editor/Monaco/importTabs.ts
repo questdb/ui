@@ -19,8 +19,15 @@ import type {
 } from "../../../store/notebook"
 import type { ChartConfig, QueryChart } from "../Notebook/CellChart/chartTypes"
 import { isAutoRefresh } from "../Notebook/notebookUtils"
+import {
+  clampPaneHeight,
+  foldLegacyMaximizedHeights,
+  minBottomHeightFor,
+  minTopHeightFor,
+} from "../Notebook/cellSizing"
 import { LINE_NUMBER_HARD_LIMIT } from "./index"
 import {
+  isCellPaneView,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
   MAX_CELL_NAME_LENGTH,
@@ -241,6 +248,23 @@ const sanitizeChartConfig = (item: unknown): ChartConfig | undefined => {
   return config
 }
 
+// The same pane floors and ceiling every UI writer enforces, so a hand-authored
+// file can't pin an invisible editor or an overlapping pane.
+const clampPaneHeights = (cell: NotebookCell): NotebookCell => ({
+  ...cell,
+  ...(cell.topHeight !== undefined
+    ? { topHeight: clampPaneHeight(minTopHeightFor(cell), cell.topHeight) }
+    : {}),
+  ...(cell.bottomHeight !== undefined
+    ? {
+        bottomHeight: clampPaneHeight(
+          minBottomHeightFor(cell),
+          cell.bottomHeight,
+        ),
+      }
+    : {}),
+})
+
 // Whitelists notebook content fields; session/display state (results,
 // editorViewState) is intentionally dropped so an imported notebook starts
 // fresh and malformed payloads can't crash the renderers.
@@ -267,21 +291,40 @@ const sanitizeNotebookCell = (
   // Whitelist the kind so a hand-crafted import can't smuggle a bogus type
   // (anything other than "markdown" collapses to the SQL default).
   if (item.type === "markdown") cell.type = "markdown"
-  if (item.mode === "run" || item.mode === "draw") cell.mode = item.mode
-  const chartConfig = sanitizeChartConfig(item.chartConfig)
-  if (chartConfig) cell.chartConfig = chartConfig
-  if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
-  if (typeof item.isViewMaximized === "boolean")
-    cell.isViewMaximized = item.isViewMaximized
-  if (typeof item.topHeight === "number") cell.topHeight = item.topHeight
-  if (typeof item.bottomHeight === "number")
+  // Markdown cells carry no run/draw sub-state — gating it here keeps a
+  // hand-crafted import from producing a cell apply_notebook_state rejects.
+  const inferredMaximized =
+    item.type !== "markdown" &&
+    !isCellPaneView(item.paneView) &&
+    item.isViewMaximized === true
+  if (item.type !== "markdown") {
+    if (item.mode === "draw") cell.mode = "draw"
+    const chartConfig = sanitizeChartConfig(item.chartConfig)
+    if (chartConfig) cell.chartConfig = chartConfig
+    if (isAutoRefresh(item.autoRefresh)) cell.autoRefresh = item.autoRefresh
+    cell.paneView = isCellPaneView(item.paneView)
+      ? item.paneView
+      : inferredMaximized
+        ? "result"
+        : "editor_result"
+  }
+  if (typeof item.topHeight === "number" && Number.isFinite(item.topHeight))
+    cell.topHeight = item.topHeight
+  if (
+    typeof item.bottomHeight === "number" &&
+    Number.isFinite(item.bottomHeight)
+  )
     cell.bottomHeight = item.bottomHeight
   if (typeof item.topResized === "boolean") cell.topResized = item.topResized
   if (typeof item.bottomResized === "boolean")
     cell.bottomResized = item.bottomResized
   if (typeof item.spotlightEditorRatio === "number")
     cell.spotlightEditorRatio = item.spotlightEditorRatio
-  return cell
+  // Fold the raw legacy heights before the clamp, as the in-place read does,
+  // so an import lands at the same size as opening the notebook.
+  return clampPaneHeights(
+    inferredMaximized ? foldLegacyMaximizedHeights(cell) : cell,
+  )
 }
 
 const sanitizeNotebookSettings = (

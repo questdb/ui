@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
+import type { Permissions } from "../tools/permissions"
 import {
   __resetNotebookAIBridgeForTests,
   registerWorkspace,
@@ -9,6 +10,16 @@ import { dispatchTool } from "../tools/dispatch"
 import type { Client } from "../questdb/client"
 
 const noop = () => undefined
+
+// Every agent surface supplies permissions and a validator; tests that do not
+// exercise gating use the widest grant and a validator that classifies as DQL.
+const ALL_GRANTED: Permissions = {
+  grantSchemaAccess: true,
+  read: true,
+  write: true,
+}
+const dqlValidator = () =>
+  Promise.resolve({ query: "", columns: [], timestamp: 0 })
 
 const makeWorkspace = (
   overrides: Partial<NotebookWorkspaceController> = {},
@@ -116,27 +127,39 @@ describe("dispatch — create/duplicate/activate", () => {
     }) as unknown as Parameters<typeof dispatchTool>[2]
 
   it("create_notebook tells the agent it was built in the background", async () => {
+    // Given a client that creates notebooks
     const client = makeClient()
+
+    // When the agent creates a notebook
     const res = await dispatchTool(
       "create_notebook",
       { label: "n" },
       client,
       noop,
+      ALL_GRANTED,
+      dqlValidator,
     )
-    // The exact wording is pinned once in shared.notebookTools.test.ts.
+
+    // Then the response carries a hint (the exact wording is pinned once in shared.notebookTools.test.ts)
     const parsed = JSON.parse(res.content) as { hint?: string }
     expect(typeof parsed.hint).toBe("string")
   })
 
   it("duplicate_notebook tells the agent it was built in the background", async () => {
+    // Given a client that duplicates notebooks
     const client = makeClient()
+
+    // When the agent duplicates a notebook
     const res = await dispatchTool(
       "duplicate_notebook",
       { buffer_id: 1 },
       client,
       noop,
+      ALL_GRANTED,
+      dqlValidator,
     )
-    // The exact wording is pinned once in shared.notebookTools.test.ts.
+
+    // Then the response carries a hint (the exact wording is pinned once in shared.notebookTools.test.ts)
     const parsed = JSON.parse(res.content) as { hint?: string }
     expect(typeof parsed.hint).toBe("string")
   })
@@ -155,8 +178,8 @@ describe("dispatch — create/duplicate/activate", () => {
       { label: "n" },
       client,
       noop,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       signal,
     )
 
@@ -178,8 +201,8 @@ describe("dispatch — create/duplicate/activate", () => {
       { buffer_id: 1 },
       client,
       noop,
-      undefined,
-      undefined,
+      ALL_GRANTED,
+      dqlValidator,
       signal,
     )
 
@@ -197,6 +220,8 @@ describe("dispatch — create/duplicate/activate", () => {
       { buffer_id: 9, cell_to_focus: "c2" },
       client,
       noop,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then it activated that buffer, passing the cell to focus through
     expect(activateNotebook).toHaveBeenCalledWith(9, "c2")
@@ -214,6 +239,8 @@ describe("dispatch — create/duplicate/activate", () => {
       { buffer_id: 9, cell_to_focus: null },
       client,
       noop,
+      ALL_GRANTED,
+      dqlValidator,
     )
     // Then it is an error naming the failure
     expect(res.is_error).toBe(true)

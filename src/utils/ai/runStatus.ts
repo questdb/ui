@@ -59,16 +59,23 @@ export const getCellRunStatus = (
   return { status: "none" }
 }
 
+type RunOutcomeSummary = {
+  ok: boolean
+  notStarted?: boolean
+  cancelled?: string
+}
+
 export const createRunStatus = (
   priorResult: { results: ReadonlyArray<{ type: string }> } | null | undefined,
   freshResult: { results: ReadonlyArray<{ type: string }> } | null | undefined,
-  ok: boolean,
+  outcome: RunOutcomeSummary,
 ): RanStatus => {
+  if (outcome.notStarted && outcome.cancelled !== undefined) return "cancelled"
   if (freshResult && freshResult !== priorResult) {
     const { status } = deriveRunStatusFromResults(freshResult.results)
     if (status === "success" || status === "error" || status === "cancelled") {
       return status
     }
   }
-  return ok ? "success" : "error"
+  return outcome.ok ? "success" : "error"
 }

@@ -1,4 +1,5 @@
 import "../../test/stubBrowserGlobals"
+import type { Permissions } from "../tools/permissions"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { dispatchMCPTool, type DispatchContext } from "./dispatchMCPTool"
@@ -95,6 +96,12 @@ import { dispatchTool as mockedDispatchTool } from "../tools/dispatch"
 
 type Freshness = "unfetched" | "fresh" | "stale"
 
+const ALL_GRANTED: Permissions = {
+  grantSchemaAccess: true,
+  read: true,
+  write: true,
+}
+
 // Sets up the gate for buffer 1: "unfetched" records nothing; "fresh" records a
 // read at the current seq; "stale" records a read and then bumps buffer 1's seq
 // via a user edit so the recorded read no longer matches.
@@ -113,6 +120,9 @@ const ctx = (
     modelToolsClient: {} as unknown as ModelToolsClient,
     freshness: gate,
     metaToolContext: meta,
+    permissions: { get: () => ALL_GRANTED, consumeDirty: () => false },
+    validateSql: () =>
+      Promise.resolve({ query: "", columns: [], timestamp: 0 }),
   }
 }
 
@@ -173,11 +183,11 @@ describe("dispatchMCPTool — state-freshness gate", () => {
     "run_cell",
     "set_layout_mode",
     "set_cell_layout",
+    "set_cell_dimensions",
     "set_cell_mode",
     "set_cell_chart_config",
     "set_notebook_autorefresh",
     "set_cell_autorefresh",
-    "set_cell_view_maximized",
     "set_cell_maximized",
   ]
 

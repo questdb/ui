@@ -73,8 +73,8 @@ export type ExecuteFlowParams = {
   setStatus: StatusCallback
   abortSignal?: AbortSignal
   streaming?: StreamingCallback
-  perms?: Permissions | (() => Permissions)
-  validateSql?: (sql: string) => Promise<ValidateQueryResult>
+  perms: Permissions | (() => Permissions)
+  validateSql: (sql: string) => Promise<ValidateQueryResult>
   toolContext?: ToolExecutionContext
 }
 

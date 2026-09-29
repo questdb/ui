@@ -4,7 +4,11 @@ import { SelectMenu, Spinner, Tooltip } from "../../../../components"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
-import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
+import {
+  selectFetching,
+  selectWriteBlocked,
+  useCellFetchSelector,
+} from "../cellRefresh/CellRefreshContext"
 import { autoRefreshLabel, resolveAutoRefresh } from "../notebookUtils"
 import type { AutoRefresh } from "../../../../store/notebook"
 import { OverrideDot } from "../refreshSplitButton"
@@ -23,34 +27,22 @@ import {
 const WRITE_BLOCK_TOOLTIP =
   "This cell contains DDL/DML, auto-refresh is disabled"
 
-type Props = {
+type RefreshTriggerProps = {
   cellId: string
-  // Chart refreshes its own fetch; a grid refresh re-runs the statements while
-  // the old rows stay visible. Both views expose the interval dropdown.
-  view: "grid" | "chart"
-  cellAutoRefresh: AutoRefresh | undefined
-  autoRefreshDefault: AutoRefresh | undefined
-  isRefreshing: boolean
+  isChart: boolean
+  isRerunning: boolean
 }
 
-export const CellRefreshButton: React.FC<Props> = ({
+// Owns the fetching subscription, so a poll tick re-renders the button alone
+// and not the interval menu beside it.
+const RefreshTrigger: React.FC<RefreshTriggerProps> = ({
   cellId,
-  view,
-  cellAutoRefresh,
-  autoRefreshDefault,
-  isRefreshing,
+  isChart,
+  isRerunning,
 }) => {
-  const { setCellRefresh } = useNotebookActions()
   const bufferId = useNotebookBufferId()
-  const fetchState = useCellFetchState(cellId)
-  const isChart = view === "chart"
-  const autoRefresh = resolveAutoRefresh(cellAutoRefresh, autoRefreshDefault)
-  const hasOverride = cellAutoRefresh !== undefined
-  const writeBlocked =
-    view === "grid" && fetchState?.classifyBlock?.kind === "write"
-  const refreshing =
-    isRefreshing || (view === "grid" && (fetchState?.fetching ?? false))
-  const intervalTooltip = useTriggerTooltip()
+  const fetching = useCellFetchSelector(cellId, selectFetching)
+  const refreshing = isRerunning || fetching
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -64,6 +56,51 @@ export const CellRefreshButton: React.FC<Props> = ({
       { cellId },
     )
   }
+
+  return (
+    <Tooltip content={isChart ? "Refresh chart" : "Refresh"}>
+      <EditorRefreshButton
+        variant="secondary"
+        type="button"
+        onClick={handleRefresh}
+        aria-label="Refresh"
+        aria-busy={refreshing}
+        // aria-disabled + click guard, not native disabled: a poll tick must
+        // not evict keyboard focus from the button mid-cycle.
+        aria-disabled={refreshing || undefined}
+      >
+        {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
+      </EditorRefreshButton>
+    </Tooltip>
+  )
+}
+
+type Props = {
+  cellId: string
+  // Chart refreshes its own fetch; a grid refresh re-runs the statements while
+  // the old rows stay visible. Both views expose the interval dropdown.
+  view: "grid" | "chart"
+  cellAutoRefresh: AutoRefresh | undefined
+  autoRefreshDefault: AutoRefresh | undefined
+  isRerunning: boolean
+}
+
+export const CellRefreshButton: React.FC<Props> = ({
+  cellId,
+  view,
+  cellAutoRefresh,
+  autoRefreshDefault,
+  isRerunning,
+}) => {
+  const { setCellRefresh } = useNotebookActions()
+  const bufferId = useNotebookBufferId()
+  const writeBlockedCell = useCellFetchSelector(cellId, selectWriteBlocked)
+  const isChart = view === "chart"
+  const autoRefresh = resolveAutoRefresh(cellAutoRefresh, autoRefreshDefault)
+  const hasOverride = cellAutoRefresh !== undefined
+  const writeBlocked = view === "grid" && writeBlockedCell
+  const intervalTooltip = useTriggerTooltip()
+
   const handleSelect = (value: AutoRefresh | undefined) => {
     if (value === cellAutoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
@@ -77,20 +114,11 @@ export const CellRefreshButton: React.FC<Props> = ({
 
   return (
     <EditorRefreshControlGroup>
-      <Tooltip content={isChart ? "Refresh chart" : "Refresh"}>
-        <EditorRefreshButton
-          variant="secondary"
-          type="button"
-          onClick={handleRefresh}
-          aria-label="Refresh"
-          aria-busy={refreshing}
-          // aria-disabled + click guard, not native disabled: a poll tick must
-          // not evict keyboard focus from the button mid-cycle.
-          aria-disabled={refreshing || undefined}
-        >
-          {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
-        </EditorRefreshButton>
-      </Tooltip>
+      <RefreshTrigger
+        cellId={cellId}
+        isChart={isChart}
+        isRerunning={isRerunning}
+      />
       {writeBlocked ? (
         <Tooltip content={WRITE_BLOCK_TOOLTIP}>
           <EditorRefreshIntervalTriggerButton
