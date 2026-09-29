@@ -1,15 +1,16 @@
 import {
-  exceedsSafeInteger,
+  exceedsDoublePrecision,
   type BetweenBound,
   type HighlightColorToken,
   type RuleTarget,
 } from "../../../../components/ResultGrid/highlight"
 import type { DraftRule } from "./ruleDraft"
 
-// Strings read like the SQL the user just wrote: single quotes. An integer
-// past 2^53 is kept as text only for its precision, so it reads as a number.
+// Strings read like the SQL the user just wrote: single quotes. A number past
+// double precision is kept as text only for its digits, so it reads as one.
+// A pattern is not a string value, so it shows bare.
 const formatValue = (value: string | number) =>
-  typeof value === "string" && !exceedsSafeInteger(value)
+  typeof value === "string" && !exceedsDoublePrecision(value)
     ? `'${value}'`
     : String(value)
 
@@ -64,7 +65,7 @@ export const ruleSummary = (rule: DraftRule): string => {
         case "contains":
           return `${target} contains ${formatValue(condition.text)}`
         case "matches":
-          return `${target} matches ${formatValue(condition.pattern)}`
+          return `${target} matches ${condition.pattern}`
       }
       break
     }

@@ -166,6 +166,21 @@ describe("createResultTrendStore", () => {
     expect(next.previous?.rows.get(symbolKey("BTC"))).toEqual(["BTC", 2])
   })
 
+  it("brings back a replaced result with its landing time when nothing is compared", () => {
+    // Given a result without identity columns, then a run whose rows are later discarded
+    const store = createResultTrendStore()
+    const shown = result([["BTC", 2]])
+    const shownEntry = store.capture("c1", "s1", shown, [], ran(200))
+    store.capture("c1", "s1", result([["BTC", 9]]), [], ran(300))
+
+    // When the shown result is put back as the same object
+    const restored = store.capture("c1", "s1", shown, [], ran(400))
+
+    // Then it keeps its flash timing instead of landing as new
+    expect(restored.revision).toBe(shownEntry.revision)
+    expect(restored.capturedAt).toBe(200)
+  })
+
   it("keeps the landing time of the first capture when only the identity changes", () => {
     // Given a captured result
     const store = createResultTrendStore()

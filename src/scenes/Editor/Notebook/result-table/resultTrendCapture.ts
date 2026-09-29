@@ -1,5 +1,5 @@
 import type { CellResult, NotebookCell } from "../../../../store/notebook"
-import { statementKeysFor } from "../notebookUtils"
+import { hasPendingResult, statementKeysFor } from "../notebookUtils"
 import { comparesWithPrevious } from "./highlightConfig"
 import type { ResultLanding, ResultTrendStore } from "./resultTrendStore"
 
@@ -46,7 +46,9 @@ export const captureResultTrends = (
     const keys = statementKeysFor(cell.result.results.map((r) => r.query))
     const identityColumns = trackedIdentityColumns(cell)
     const landing = landingOf(restoredResults, cell.result)
-    store.retainStatements(cell.id, keys)
+    // A run with rewritten statements may still be discarded, which puts the
+    // prior result back under its own keys, so they are kept until it settles.
+    if (!hasPendingResult(cell.result)) store.retainStatements(cell.id, keys)
     cell.result.results.forEach((result, index) => {
       if (result.type !== "dql") return
       store.capture(cell.id, keys[index], result, identityColumns, landing)

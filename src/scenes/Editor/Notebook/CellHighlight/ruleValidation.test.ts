@@ -147,6 +147,34 @@ describe("validateRule", () => {
     expect(yearOnly).toEqual({ value: "Should be a timestamp" })
   })
 
+  it("reports an unmatched quote on a bound instead of saving a rule that never matches", () => {
+    // Given > value rules on the timestamp and the numeric columns
+    const temporal = valueRule("value.gt", ts)
+    const numeric = valueRule("value.gt")
+    if (temporal.kind !== "value" || numeric.kind !== "value")
+      throw new Error("expected value rules")
+    const withValue = (rule: typeof temporal, value: string) => ({
+      ...rule,
+      condition: { op: "gt" as const, value },
+    })
+
+    // When quoted, half-quoted and mixed-quote bounds are validated
+    const paired = validateRule(withValue(temporal, "'2026-09-28'"), columns)
+    const leading = validateRule(withValue(temporal, "'2026-09-28"), columns)
+    const trailing = validateRule(withValue(temporal, "2026-09-28'"), columns)
+    const mixed = validateRule(withValue(temporal, "'2026-09-28\""), columns)
+    const lone = validateRule(withValue(temporal, "'"), columns)
+    const halfNumber = validateRule(withValue(numeric, "'5"), columns)
+
+    // Then only the matched pair passes, and every lone quote is named
+    expect(paired).toEqual({})
+    expect(leading).toEqual({ value: "Unmatched quote" })
+    expect(trailing).toEqual({ value: "Unmatched quote" })
+    expect(mixed).toEqual({ value: "Unmatched quote" })
+    expect(lone).toEqual({ value: "Unmatched quote" })
+    expect(halfNumber).toEqual({ value: "Unmatched quote" })
+  })
+
   it("rejects a condition that cannot match the column kind", () => {
     // Given rules whose condition does not fit the column, and one on an unknown column
     const changedBySymbol = valueRule("prev.changedBy", symbol)

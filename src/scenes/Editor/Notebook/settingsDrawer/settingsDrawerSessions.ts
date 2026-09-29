@@ -13,6 +13,13 @@ export type HighlightSettingsSession = {
   draft: HighlightDraft | null
 }
 
+// What a toolbar control asks of a cell's drawer: the kebab entry opens and
+// keeps an open draft, the spotlight gear toggles.
+export type SettingsDrawerRequest = {
+  cellId: string
+  mode: "open" | "toggle"
+}
+
 export const chartSettingsSessions =
   createSettingsDrawerSessionStore<ChartSettingsSession>()
 

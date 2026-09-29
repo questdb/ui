@@ -5,6 +5,7 @@ import {
   type Comparable,
 } from "./comparable"
 import { compilePattern, isRe2Ready } from "./pattern"
+import { hasUnmatchedQuote, unquoted } from "./quotes"
 import type { BetweenBound, HighlightRule } from "./types"
 
 // Field key → short message. Keys match the inputs in the rule editor; a
@@ -28,16 +29,13 @@ const isNumber = (value: number | string) =>
     ? Number.isFinite(value)
     : value.trim() !== "" && Number.isFinite(Number(value))
 
-const unquoted = (value: number | string) =>
-  String(value)
-    .trim()
-    .replace(/^['"]|['"]$/g, "")
-
 const isTimestamp = (value: number | string) =>
   canonicalInstant(unquoted(value)) !== null
 
 const boundError = (value: number | string, kind: BoundKind): string | null => {
   if (isBlank(value)) return EMPTY
+  // A lone quote would stay in the value and never match.
+  if (hasUnmatchedQuote(value)) return "Unmatched quote"
   if (kind === "numeric") return isNumber(value) ? null : "Should be a number"
   if (kind === "temporal") {
     return isTimestamp(value) ? null : "Should be a timestamp"

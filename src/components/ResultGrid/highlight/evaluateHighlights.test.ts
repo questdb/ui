@@ -1081,6 +1081,100 @@ describe("evaluateHighlights: LONG columns past 2^53", () => {
   })
 })
 
+describe("evaluateHighlights: DECIMAL columns past double precision", () => {
+  const decimalColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "amount", type: "DECIMAL(38,18)" },
+  ]
+  const AMOUNT = 1
+  const target = { kind: "column", name: "amount" } as const
+  const evaluate = (
+    rules: HighlightRule[],
+    dataset: ResultGridRow[],
+    previous: ReturnType<typeof buildIdentityIndex> | null = null,
+  ) =>
+    evaluateHighlights({
+      columns: decimalColumns,
+      dataset,
+      config: config(rules),
+      previous,
+    }).lookup
+
+  it("matches =, > and > previous at full scale, as the grid shows the amounts", () => {
+    // Given amounts one unit apart at the eighteenth decimal
+    const rows: ResultGridRow[] = [
+      ["A", "1234.123456789012345678"],
+      ["B", "1234.123456789012345679"],
+    ]
+    const equals = rule({
+      id: "eq",
+      kind: "value",
+      target,
+      condition: { op: "eq", value: "1234.123456789012345678" },
+      color: "dataSeries3",
+    })
+    const above = rule({
+      id: "gt",
+      kind: "value",
+      target,
+      condition: { op: "gt", value: "1234.123456789012345678" },
+      color: "dataSeries2",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1234.123456789012345678"]],
+      [SYMBOL],
+    )
+
+    // When evaluated
+    const byValue = evaluate([equals, above], rows)
+    const byPrevious = evaluate(
+      [up],
+      [["A", "1234.123456789012345679"]],
+      previous,
+    )
+
+    // Then only the exact amount equals, the next unit is above, and a rise of one unit counts
+    expect(byValue.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(byValue.background(1, AMOUNT)?.color).toBe("dataSeries2")
+    expect(byPrevious.background(0, AMOUNT)?.color).toBe("dataPositive")
+    expect(byPrevious.direction(0, AMOUNT)).toBe("up")
+  })
+
+  it("measures a change of one unit for a changed-by rule", () => {
+    // Given a changed-by rule that counts any change
+    const byAny = rule({
+      id: "by",
+      kind: "previous",
+      target,
+      condition: { op: "changedBy", threshold: 0, unit: "absolute" },
+      color: "dataSeries3",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1234.123456789012345678"]],
+      [SYMBOL],
+    )
+
+    // When the amount moves by one unit, and when it stays
+    const moved = evaluate(
+      [byAny],
+      [["A", "1234.123456789012345679"]],
+      previous,
+    )
+    const same = evaluate([byAny], [["A", "1234.123456789012345678"]], previous)
+
+    // Then only the move matches
+    expect(moved.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(same.background(0, AMOUNT)).toBeUndefined()
+  })
+})
+
 describe("evaluateHighlights: steps and gradient fill", () => {
   const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
     evaluateHighlights({

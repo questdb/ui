@@ -30,6 +30,7 @@ import {
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
+import type { SettingsDrawerRequest } from "../settingsDrawer/settingsDrawerSessions"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
@@ -232,15 +233,16 @@ export const CellToolbar: React.FC<Props> = ({
     clearChartZoom(cellId)
     eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
   }
-  const handleChartSettings = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
-      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+  const handleChartSettings = (mode: SettingsDrawerRequest["mode"]) => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, {
+      cellId,
+      mode,
     })
-    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
   }
-  const handleHighlightSettings = () => {
+  const handleHighlightSettings = (mode: SettingsDrawerRequest["mode"]) => {
     eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
       cellId,
+      mode,
     })
   }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
@@ -299,8 +301,10 @@ export const CellToolbar: React.FC<Props> = ({
           <CellIconButton
             label={isChartView ? "Chart settings" : "Highlight rules"}
             variant="ghost"
-            onClick={
-              isChartView ? handleChartSettings : handleHighlightSettings
+            onClick={() =>
+              isChartView
+                ? handleChartSettings("toggle")
+                : handleHighlightSettings("toggle")
             }
           >
             <GearIcon size={20} />
@@ -424,7 +428,7 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showChartSettings && (
                 <DropdownMenu.Item
-                  onSelect={handleChartSettings}
+                  onSelect={() => handleChartSettings("open")}
                   icon={<GearIcon size={16} />}
                 >
                   Chart settings
@@ -432,7 +436,7 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showHighlightSettings && (
                 <DropdownMenu.Item
-                  onSelect={handleHighlightSettings}
+                  onSelect={() => handleHighlightSettings("open")}
                   icon={<GearIcon size={16} />}
                 >
                   Highlight rules

@@ -91,6 +91,23 @@ describe("compareValues", () => {
     expect(compareValues(higher, higher)).toBe(0)
     expect(compareValues(BigInt("9007199254740993"), 9007199254740992)).toBe(1)
   })
+
+  it("orders decimals past double precision exactly, also against a literal", () => {
+    // Given DECIMAL(38,18) values one unit apart, a negative one, and the literal 1.5
+    const lower = asNumeric("1234.123456789012345678") ?? 0
+    const higher = asNumeric("1234.123456789012345679") ?? 0
+    const negative = asNumeric("-1234.123456789012345678") ?? 0
+    const aboveLiteral = asNumeric("1.500000000000000001") ?? 0
+    const equalToLiteral = asNumeric("1.500000000000000000") ?? 0
+
+    // When compared
+    // Then a double would call them equal, a scaled bigint does not
+    expect(compareValues(higher, lower)).toBeGreaterThan(0)
+    expect(compareValues(higher, higher)).toBe(0)
+    expect(compareValues(negative, lower)).toBeLessThan(0)
+    expect(compareValues(aboveLiteral, 1.5)).toBe(1)
+    expect(compareValues(equalToLiteral, 1.5)).toBe(0)
+  })
 })
 
 describe("asNumeric", () => {
@@ -108,6 +125,20 @@ describe("asNumeric", () => {
     expect(double).toBe(1.5)
     expect(blank).toBeNull()
   })
+
+  it("keeps a decimal past double precision exact as a scaled bigint", () => {
+    // Given a DECIMAL(38,18) value as the server sends it, and a short one
+    // When read
+    const long = asNumeric("1234.123456789012345678")
+    const short = asNumeric("1234.125")
+
+    // Then only the long one becomes a scaled bigint
+    expect(long).toEqual({
+      unscaled: BigInt("1234123456789012345678"),
+      scale: 18,
+    })
+    expect(short).toBe(1234.125)
+  })
 })
 
 describe("differenceOf", () => {
@@ -123,5 +154,17 @@ describe("differenceOf", () => {
     // Then both differences are exact
     expect(unit).toBe(1)
     expect(fraction).toBe(0.5)
+  })
+
+  it("measures one unit at the eighteenth decimal", () => {
+    // Given two DECIMAL(38,18) values one unit apart
+    // When subtracted
+    const unit = differenceOf(
+      asNumeric("1234.123456789012345679") ?? 0,
+      asNumeric("1234.123456789012345678") ?? 0,
+    )
+
+    // Then the difference is that unit, not zero
+    expect(unit).toBe(1e-18)
   })
 })

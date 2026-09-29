@@ -765,6 +765,38 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(config?.rules[0].id).toBeTruthy()
   })
 
+  it("set_cell_highlight_config saves a regex literal as plain RE2 and tells the agent", async () => {
+    // Given a run cell
+    const { state } = mountLive(1, [cell("c", "SELECT sym FROM t")])
+
+    // When a matches rule arrives written like a JavaScript regex literal
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [
+            { kind: "value", column: "sym", op: "matches", text: "/eur/i" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the rule is saved as typed, and the result notes how it reads
+    expect(result.is_error).toBeFalsy()
+    expect(cellById(state, "c")?.highlightConfig?.rules[0]).toMatchObject({
+      condition: { op: "matches", pattern: "/eur/i" },
+    })
+    const { notes } = JSON.parse(result.content) as { notes: string[] }
+    const [note] = notes
+    expect(note).toContain("plain RE2")
+    expect(note).toContain("(?i)eur")
+  })
+
   it("set_cell_highlight_config clears with null and accepts an empty identity", async () => {
     // Given a cell with a value rule and no identity
     const { state } = mountLive(1, [cell("c", "SELECT 1")])
@@ -820,6 +852,112 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       error_code: "validation",
     })
     expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("set_cell_highlight_config rejects a condition that does not fit a column the cell has shown", async () => {
+    // Given a cell whose result shows a SYMBOL column
+    const { state } = mountLive(1, [
+      cell("c", "SELECT sym FROM t", {
+        result: {
+          results: [
+            {
+              type: "dql",
+              query: "SELECT sym FROM t",
+              columns: [{ name: "sym", type: "SYMBOL" }],
+              dataset: [],
+              count: 0,
+            },
+          ],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      }),
+    ])
+
+    // When a numeric comparison is sent for that column
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["sym"],
+          rules: [{ kind: "value", column: "sym", op: "gt", value: "abc" }],
+        },
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then it is a validation error that names the column type, and the cell has no rules
+    expect(result.is_error).toBe(true)
+    expect(JSON.parse(result.content)).toMatchObject({
+      error_code: "validation",
+    })
+    expect(result.content).toContain("Not for a text column")
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state checks rules loosely for a cell whose SQL it rewrites", async () => {
+    // Given two cells whose shown results have a SYMBOL column named price
+    const shown = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "SELECT sym AS price FROM t",
+          columns: [{ name: "price", type: "SYMBOL" }],
+          dataset: [],
+          count: 0,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+    const { state } = mountLive(1, [
+      cell("c", "SELECT sym AS price FROM t", { result: shown }),
+      cell("d", "SELECT sym AS price FROM t", { result: shown }),
+    ])
+    const numericRule = {
+      identity_columns: ["price"],
+      rules: [{ kind: "value", column: "price", op: "gt", value: 5 }],
+    }
+
+    // When a numeric rule comes with new SQL for one cell, and with the SQL kept for the other
+    const rewritten = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "c",
+            value: "SELECT 7 AS price",
+            highlight_config: numericRule,
+          },
+          { id: "d", preserve_value: true },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+    const kept = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "c", preserve_value: true },
+          { id: "d", preserve_value: true, highlight_config: numericRule },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+    )
+
+    // Then the rewritten cell takes the rule, and the kept one is checked against its shown column
+    expect(rewritten.is_error).toBeFalsy()
+    expect(cellById(state, "c")?.highlightConfig?.rules).toHaveLength(1)
+    expect(kept.is_error).toBe(true)
+    expect(kept.content).toContain("Not for a text column")
+    expect(cellById(state, "d")?.highlightConfig).toBeUndefined()
   })
 
   it("apply_notebook_state sets highlight_config and clears when omitted", async () => {

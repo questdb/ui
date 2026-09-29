@@ -6,6 +6,8 @@ import { EDITOR_CARD_HEADER_HEIGHT } from "../../sharedStyles"
 // The slot a cell's settings drawers render into: it spans the editor and the
 // result area below the header, so a drawer opened from either covers the
 // whole cell body.
+// Rendered as the wrapper's first child: absolute, so it takes no flex slot,
+// and the grid layout lets the wrapper's last child grow.
 export const CellOverlaySlot = styled.div`
   position: absolute;
   top: ${EDITOR_CARD_HEADER_HEIGHT};

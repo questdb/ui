@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react"
 import styled, { keyframes } from "styled-components"
 import { XIcon } from "@phosphor-icons/react"
-import { Button } from "../../../../components"
+import { Button, Spinner } from "../../../../components"
 import { prefersReducedMotion } from "../../../../utils/prefersReducedMotion"
 import { CellOverlayPortal } from "./CellOverlayContext"
 
@@ -136,6 +136,9 @@ type SharedProps = {
   dataHookBase: string
   onDismiss: (method: SettingsDismissMethod) => void
   onCommit: () => void
+  // True while a commit waits on something async; the commit button shows
+  // it and takes no second click. Dismissing stays possible.
+  committing?: boolean
   footerStart?: React.ReactNode
   // Shown next to the action buttons, e.g. a validation summary.
   footerNote?: React.ReactNode
@@ -161,6 +164,7 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
     dataHookBase,
     onDismiss,
     onCommit,
+    committing = false,
     footerStart,
     footerNote,
     drawerWidth = DRAWER_WIDTH,
@@ -274,7 +278,14 @@ export const SettingsDrawerShell: React.FC<Props> = (props) => {
           <Button type="button" variant="secondary" onClick={secondaryAction}>
             {isDrawer ? "Cancel" : "Reset changes"}
           </Button>
-          <Button type="button" variant="primary" onClick={onCommit}>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={onCommit}
+            disabled={committing}
+            aria-busy={committing}
+            prefixIcon={committing ? <Spinner size={16} /> : undefined}
+          >
             {isDrawer ? "Save" : "Apply"}
           </Button>
         </Footer>

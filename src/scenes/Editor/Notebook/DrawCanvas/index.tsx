@@ -8,7 +8,10 @@ import {
   ChartRenderer,
   type ChartRendererHandle,
 } from "../CellChart/ChartRenderer"
-import { chartSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
+import {
+  chartSettingsSessions,
+  type SettingsDrawerRequest,
+} from "../settingsDrawer/settingsDrawerSessions"
 import { ChartSettingsDrawer } from "../CellChart/ChartSettingsDrawer"
 import { resolveDraw, toChartResult } from "./drawCanvasUtils"
 import { toast } from "../../../../components/Toast"
@@ -151,6 +154,9 @@ export const DrawCanvas: React.FC<Props> = ({
   )
 
   const openSettings = useCallback(() => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
+      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+    })
     configAtSettingsOpenRef.current = cell.chartConfig
     chartSettingsSessions.set(cell.id, {
       configAtOpen: cell.chartConfig,
@@ -163,6 +169,11 @@ export const DrawCanvas: React.FC<Props> = ({
     chartSettingsSessions.clear(cell.id)
     setSettingsOpen(false)
   }, [cell.id])
+
+  const cancelSettings = useCallback(() => {
+    notebookChartSettingsTelemetry.onCancel?.("button")
+    closeSettings()
+  }, [closeSettings])
 
   const keepSettingsDraft = useCallback(
     (draft: ChartConfig) => chartSettingsSessions.update(cell.id, { draft }),
@@ -210,20 +221,21 @@ export const DrawCanvas: React.FC<Props> = ({
   }, [cell.chartConfig, settingsOpen, closeSettings])
 
   useEffect(() => {
-    const forThisCell =
-      (run: () => void) => (payload?: { cellId?: string }) => {
-        if (payload?.cellId === cell.id) run()
-      }
-    // The gear toggles: a second click closes instead of reopening.
-    const toggle = forThisCell(settingsOpen ? closeSettings : openSettings)
-    const reset = forThisCell(handleResetZoom)
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, toggle)
+    const respond = (payload?: SettingsDrawerRequest) => {
+      if (payload?.cellId !== cell.id) return
+      if (!settingsOpen) openSettings()
+      else if (payload.mode === "toggle") cancelSettings()
+    }
+    const reset = (payload?: { cellId?: string }) => {
+      if (payload?.cellId === cell.id) handleResetZoom()
+    }
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, respond)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
     return () => {
-      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, toggle)
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, respond)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, reset)
     }
-  }, [cell.id, settingsOpen, openSettings, closeSettings, handleResetZoom])
+  }, [cell.id, settingsOpen, openSettings, cancelSettings, handleResetZoom])
 
   return (
     <Wrapper>
@@ -237,7 +249,7 @@ export const DrawCanvas: React.FC<Props> = ({
       ) : empty ? (
         <EmptyState aria-hidden="true">{emptyMessage}</EmptyState>
       ) : (
-        <Canvas>
+        <Canvas data-hook="cell-chart">
           <ChartRenderer
             ref={chartRendererRef}
             option={option}

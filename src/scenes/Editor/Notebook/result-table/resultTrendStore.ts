@@ -75,10 +75,11 @@ type ReplacedResult = Pick<TrendEntry, "revision" | "capturedAt"> & {
 }
 
 // A run discarded mid-flight puts the replaced result back as the same
-// object; remembering it lets that restore return to what was shown instead
-// of comparing against the discarded rows. The run holds that object only
-// until it settles, so a weak reference lasts exactly as long as the restore
-// is possible and never keeps a whole result alive after it.
+// object; remembering it lets that restore return to what was shown, with
+// its landing time, instead of comparing against the discarded rows or
+// flashing as new. The run holds that object only until it settles, so a
+// weak reference lasts exactly as long as the restore is possible and never
+// keeps a whole result alive after it.
 type LiveEntry = TrendEntry & {
   current: IdentityIndex | null
   replaced: ReplacedResult | null
@@ -98,9 +99,8 @@ type StoredEntry = LiveEntry | ReleasedEntry
 
 const replacedResultOf = (
   existing: LiveEntry | undefined,
-  identityColumns: string[],
 ): ReplacedResult | null =>
-  existing !== undefined && identityColumns.length > 0
+  existing !== undefined
     ? {
         result: new WeakRef(existing.result),
         revision: existing.revision,
@@ -225,9 +225,7 @@ export const createResultTrendStore = (): ResultTrendStore => {
           ? (existing?.revision ?? 0) + 1
           : existing.revision,
         capturedAt: isNewResult ? landing.at : existing.capturedAt,
-        replaced: isNewResult
-          ? replacedResultOf(existing, identityColumns)
-          : existing.replaced,
+        replaced: isNewResult ? replacedResultOf(existing) : existing.replaced,
       }
       entries.set(key, entry)
       return entry

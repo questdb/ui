@@ -2,12 +2,14 @@ import type { ColumnDefinition } from "../../../utils/questdb/types"
 import type { CellValue, ResultGridRow } from "../types"
 import { columnKindOf, type ColumnKind } from "./columnKind"
 import { columnRangeAt, type ColumnRange } from "./columnRange"
+import { unquoted } from "./quotes"
 import {
   asComparable,
   asNumeric,
   canonicalInstant,
   compareValues,
   differenceOf,
+  toNumber,
   type Comparable,
 } from "./comparable"
 import {
@@ -43,23 +45,13 @@ type ColumnRules = Map<number, TargetedRule[]>
 
 type OrderedHit = { order: number; hit: CellHighlight }
 
-// SQL habits carry over: a typed 'EURUSD' or "EURUSD" means EURUSD.
-const asText = (value: number | string): string => {
-  const text = String(value).trim()
-  const quoted =
-    text.length >= 2 &&
-    ((text.startsWith("'") && text.endsWith("'")) ||
-      (text.startsWith('"') && text.endsWith('"')))
-  return quoted ? text.slice(1, -1) : text
-}
-
 const asComparableInput = (
   value: number | string,
   kind: ColumnKind,
 ): Comparable | null =>
   kind === "temporal"
-    ? canonicalInstant(asText(value))
-    : asNumeric(asText(value))
+    ? canonicalInstant(unquoted(value))
+    : asNumeric(unquoted(value))
 
 const asBound = (
   bound: BetweenBound,
@@ -175,7 +167,7 @@ const matchPrevious = (
       if (condition.unit === "absolute") {
         return delta >= condition.threshold ? hit : undefined
       }
-      const base = Math.abs(Number(previous))
+      const base = Math.abs(toNumber(previous))
       if (base === 0) return undefined
       return (delta / base) * 100 >= condition.threshold ? hit : undefined
     }
@@ -218,7 +210,7 @@ const matchValue = (
         : undefined
     case "contains":
       return typeof value === "string" &&
-        value.toLowerCase().includes(asText(condition.text).toLowerCase())
+        value.toLowerCase().includes(unquoted(condition.text).toLowerCase())
         ? hit
         : undefined
     case "eq": {
@@ -232,7 +224,7 @@ const matchValue = (
           : undefined
       }
       return value !== null &&
-        String(value).toLowerCase() === asText(condition.value).toLowerCase()
+        String(value).toLowerCase() === unquoted(condition.value).toLowerCase()
         ? hit
         : undefined
     }
@@ -282,7 +274,9 @@ const matchSteps = (
 ): CellHighlight | undefined => {
   const current = asNumeric(value)
   if (current === null) return undefined
-  const step = sortedSteps.find((candidate) => current >= candidate.from)
+  const step = sortedSteps.find(
+    (candidate) => compareValues(current, candidate.from) >= 0,
+  )
   return {
     color: step?.color ?? rule.baseColor,
     display: rule.display,

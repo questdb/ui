@@ -134,7 +134,7 @@ describe("notebook highlight rules with the assistant (e2e)", () => {
 
     // Then the drawer closes with a notice, and the assistant's rule is what applies
     cy.getByDataHook("highlight-settings-drawer").should("not.exist")
-    cy.contains("updated by the assistant").should("be.visible")
+    cy.contains("updated since last check").should("be.visible")
     cy.get("[data-hook='grid-cell'][data-highlight='always']").should(
       "have.length",
       1,

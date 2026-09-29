@@ -93,18 +93,24 @@ describe("rule summaries", () => {
       ...text,
       condition: { op: "contains" as const, text: "USD" },
     }
+    const matches = {
+      ...text,
+      condition: { op: "matches" as const, pattern: "(?i)^eur" },
+    }
     const atLeast = { ...range, condition: { op: "gte" as const, value: 100 } }
 
     // When each rule is summarized
     const boundedSummary = ruleSummary(bounded)
     const autoSummary = ruleSummary(range)
     const containsSummary = ruleSummary(contains)
+    const matchesSummary = ruleSummary(matches)
     const atLeastSummary = ruleSummary(atLeast)
 
-    // Then bounds and predicates stay in the summary
+    // Then bounds and predicates stay in the summary, and a pattern shows bare
     expect(boundedSummary).toBe("price between -5 and 10")
     expect(autoSummary).toBe("price between auto and auto")
     expect(containsSummary).toBe("symbol contains 'USD'")
+    expect(matchesSummary).toBe("symbol matches (?i)^eur")
     expect(atLeastSummary).toBe("price ≥ 100")
     expect(ruleDescription(text)).toBe("Permanent")
     expect(ruleDescription({ ...text, enabled: false })).toBe("Permanent")

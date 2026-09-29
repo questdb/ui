@@ -14,7 +14,7 @@ export {
   type BoundKind,
   type RuleErrors,
 } from "./validateRule"
-export { exceedsSafeInteger } from "./comparable"
+export { exceedsDoublePrecision } from "./comparable"
 export {
   buildIdentityIndex,
   identityColumnIndexes,

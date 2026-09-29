@@ -427,6 +427,7 @@ const CellInner: React.FC<Props> = ({
         if (isFocused) setFocusedCell(null)
       }}
     >
+      <CellOverlaySlot ref={setOverlayElement} />
       {contentMode === "placeholder" && (
         <HiddenCellStatus>
           Cell content is unloaded while off screen; focus the cell to load it.
@@ -608,7 +609,6 @@ const CellInner: React.FC<Props> = ({
           </CellOverlayProvider>
         </BottomSlot>
       )}
-      <CellOverlaySlot ref={setOverlayElement} />
     </CellWrapper>
   )
 

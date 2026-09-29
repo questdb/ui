@@ -16,11 +16,13 @@ import {
   type RuleTarget,
 } from "../../components/ResultGrid/highlight/types"
 import { createRuleId } from "../../components/ResultGrid/highlight/ruleId"
-import {
-  validateIdentity,
-  validateRuleFields,
-} from "../../components/ResultGrid/highlight/validateRule"
+import { validateIdentity } from "../../components/ResultGrid/highlight/validateRule"
 import { isHighlightRule } from "../../components/ResultGrid/highlight/isHighlightConfig"
+import type { ColumnDefinition } from "../questdb/types"
+import type { NotebookCell } from "../../store/notebook"
+import { validateRule } from "../../scenes/Editor/Notebook/CellHighlight/ruleValidation"
+import { cellColumnsOf } from "../../scenes/Editor/Notebook/result-table/highlightConfig"
+import { NotebookToolError } from "../notebooks/notebookToolError"
 
 // Snake-case shape the agent tools speak for grid highlight rules, and its
 // mapping to the internal HighlightConfig. One flat rule object carries every
@@ -93,6 +95,10 @@ const colorOf = (
   hue: HighlightHue | null | undefined,
   fallback: HighlightColorToken,
 ): HighlightColorToken => (hue == null ? fallback : tokenOfHue(hue))
+
+// A JavaScript regex literal: one slash-free body between slashes, then flag
+// letters. A path pattern such as /var/log has a second slash and reads plain.
+const REGEX_LITERAL = /^\/(?:[^/\\]|\\.)*\/[gimsuyd]+$/
 
 const isScalar = (value: unknown): value is number | string =>
   typeof value === "number" || typeof value === "string"
@@ -319,8 +325,25 @@ const mapRule = (rule: HighlightRuleWire, index: number): MappedRule => {
 export const wireUsesPatterns = (wire: HighlightConfigWire): boolean =>
   Array.isArray(wire.rules) && wire.rules.some((rule) => rule?.op === "matches")
 
+// The engine reads every pattern as plain RE2, so a regex literal saves fine
+// and matches its own slashes and letters. The agent hears about it, since a
+// path such as /var/i is a valid pattern and only the agent knows which it meant.
+export const regexLiteralNotes = (wire: HighlightConfigWire): string[] =>
+  Array.isArray(wire.rules)
+    ? wire.rules.flatMap((rule, index) =>
+        rule?.op === "matches" &&
+        typeof rule.text === "string" &&
+        REGEX_LITERAL.test(rule.text.trim())
+          ? [
+              `rules[${index}]: the pattern ${rule.text.trim()} is read as plain RE2, not as a /…/flags literal: it matches that exact text, slashes included, case-sensitive. To ignore case put (?i) in front, e.g. (?i)eur.`,
+            ]
+          : [],
+      )
+    : []
+
 export const fromHighlightConfigWire = (
   wire: HighlightConfigWire,
+  columns: ColumnDefinition[],
 ): HighlightWireResult => {
   if (
     !Array.isArray(wire.identity_columns) ||
@@ -340,9 +363,7 @@ export const fromHighlightConfigWire = (
     if (!isHighlightRule(mapped.rule)) {
       return { ok: false, error: `rules[${index}]: a field has the wrong type` }
     }
-    const [firstError] = Object.entries(
-      validateRuleFields(mapped.rule, "unknown"),
-    )
+    const [firstError] = Object.entries(validateRule(mapped.rule, columns))
     if (firstError) {
       const [field, message] = firstError
       return { ok: false, error: `rules[${index}].${field}: ${message}` }
@@ -355,6 +376,26 @@ export const fromHighlightConfigWire = (
     return { ok: false, error: `identity_columns: ${identityError}` }
   }
   return { ok: true, config }
+}
+
+// Checks the rules against the columns the cell's results have shown, as the
+// drawer does on Save; a column no result has shown yet is checked loosely.
+export const parseHighlightConfigFor = (
+  wire: HighlightConfigWire,
+  cell: NotebookCell | undefined,
+  label: string,
+): HighlightConfig => {
+  const parsed = fromHighlightConfigWire(
+    wire,
+    cellColumnsOf(cell?.result?.results ?? []),
+  )
+  if (!parsed.ok) {
+    throw new NotebookToolError(
+      "validation",
+      `VALIDATION_ERROR: ${label} ${parsed.error}`,
+    )
+  }
+  return parsed.config
 }
 
 const columnOf = (target: RuleTarget): string | null =>

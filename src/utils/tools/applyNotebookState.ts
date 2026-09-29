@@ -9,10 +9,14 @@ import {
   type ApplyNotebookStateCellRequest,
   type ApplyNotebookStateRequest,
 } from "../notebooks/notebookController"
-import type { CellMode, CellType, NotebookVariable } from "../../store/notebook"
+import type {
+  CellMode,
+  CellType,
+  NotebookCell,
+  NotebookVariable,
+} from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
-import type { HighlightConfig } from "../../components/ResultGrid/highlight/types"
 import {
   denyReasonUnresolvedSql,
   requireAllDQL,
@@ -34,8 +38,9 @@ import {
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
-  fromHighlightConfigWire,
   type HighlightConfigWire,
+  parseHighlightConfigFor,
+  regexLiteralNotes,
   wireUsesPatterns,
 } from "./highlightConfigWire"
 import {
@@ -380,30 +385,12 @@ export const dispatchApplyNotebookState = async (
       return { content: denied.reason, is_error: true }
     }
   }
-  const highlightConfigs: (HighlightConfig | undefined)[] = []
   if (
     cells.some(
       (c) => c.highlight_config && wireUsesPatterns(c.highlight_config),
     )
   ) {
     await loadRe2()
-  }
-  for (const [index, c] of cells.entries()) {
-    if (!c.highlight_config) {
-      highlightConfigs.push(undefined)
-      continue
-    }
-    const result = fromHighlightConfigWire(c.highlight_config)
-    if (!result.ok) {
-      return {
-        content: JSON.stringify({
-          error_code: "validation",
-          message: `VALIDATION_ERROR: cells[${index}].highlight_config ${result.error}`,
-        }),
-        is_error: true,
-      }
-    }
-    highlightConfigs.push(result.config)
   }
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
@@ -414,7 +401,7 @@ export const dispatchApplyNotebookState = async (
       maximized_cell_id === undefined ? undefined : maximized_cell_id,
     variables:
       variables === undefined || variables === null ? undefined : variables,
-    cells: cells.map<ApplyNotebookStateCellRequest>((c, index) => {
+    cells: cells.map<ApplyNotebookStateCellRequest>((c) => {
       const cell: ApplyNotebookStateCellRequest =
         c.preserve_value === true ? { preserveValue: true } : { value: c.value }
       if (c.id !== undefined && c.id !== null) cell.id = c.id
@@ -435,12 +422,38 @@ export const dispatchApplyNotebookState = async (
         if (cfg.right_axis) chartConfig.rightAxis = mapRightAxis(cfg.right_axis)
         cell.chartConfig = chartConfig
       }
-      const highlightConfig = highlightConfigs[index]
-      if (highlightConfig) cell.highlightConfig = highlightConfig
       if (c.grid) cell.grid = c.grid
       return cell
     }),
   }
+  // Rules are checked against the columns the cell's results have shown, so
+  // the parse waits for the live cells. A new cell, or one whose SQL this
+  // request rewrites, has no columns to check against yet.
+  const shownCellFor = (
+    existing: NotebookCell[],
+    c: (typeof cells)[number],
+  ): NotebookCell | undefined => {
+    const live = existing.find((cell) => cell.id === c.id)
+    const sameSql = c.preserve_value === true || c.value === live?.value
+    return sameSql ? live : undefined
+  }
+  const withHighlightConfigs = (
+    existing: NotebookCell[],
+  ): ApplyNotebookStateRequest => ({
+    ...request,
+    cells: request.cells.map((cell, index) => {
+      const wire = cells[index].highlight_config
+      if (!wire) return cell
+      return {
+        ...cell,
+        highlightConfig: parseHighlightConfigFor(
+          wire,
+          shownCellFor(existing, cells[index]),
+          `cells[${index}].highlight_config`,
+        ),
+      }
+    }),
+  })
   if (signal?.aborted) {
     return {
       content: JSON.stringify({
@@ -463,7 +476,12 @@ export const dispatchApplyNotebookState = async (
     committed = await withBoundNotebook(
       buffer_id,
       (ctrl) =>
-        ctrl.mutate((parts) => applyNotebookStateTransition(parts, request)),
+        ctrl.mutate((parts) =>
+          applyNotebookStateTransition(
+            parts,
+            withHighlightConfigs(parts.cells),
+          ),
+        ),
       signal,
     )
     const out = committed
@@ -504,7 +522,20 @@ export const dispatchApplyNotebookState = async (
       validateSql,
       signal,
     )
-    return { content: JSON.stringify({ ...out, runs }) }
+    const notes = cells.flatMap((c, index) =>
+      c.highlight_config
+        ? regexLiteralNotes(c.highlight_config).map(
+            (note) => `cells[${index}].highlight_config ${note}`,
+          )
+        : [],
+    )
+    return {
+      content: JSON.stringify({
+        ...out,
+        runs,
+        ...(notes.length > 0 ? { notes } : {}),
+      }),
+    }
   } catch (e) {
     // Once withBoundNotebook resolved the mutation is durably committed, so an
     // abort during the post-apply read/auto-run must report the state as applied

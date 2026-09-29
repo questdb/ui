@@ -1,38 +1,109 @@
 import type { CellValue } from "../types"
 import type { ColumnKind } from "./columnKind"
 
-// A numeric column compares as a number, or as a bigint past 2^53; a temporal
-// column compares as a canonical instant string, so nanosecond timestamps
-// keep their precision.
-export type Numeric = number | bigint
+// A numeric column compares as a number; past what a double holds exactly,
+// an integer compares as a bigint and a fraction as a scaled bigint. A
+// temporal column compares as a canonical instant string, so nanosecond
+// timestamps keep their precision.
+export type Decimal = { unscaled: bigint; scale: number }
+export type Numeric = number | bigint | Decimal
 export type Comparable = Numeric | string
 
 const INTEGER_LITERAL = /^[+-]?\d+$/
+const DECIMAL_LITERAL = /^([+-]?)(\d*)\.(\d+)$/
+const DOUBLE_DIGITS = 15
 
-// LONG and DECIMAL columns reach the grid as decimal strings, so their 64-bit
-// precision survives JSON; a double would round such an integer past 2^53.
-export const exceedsSafeInteger = (text: string): boolean =>
-  INTEGER_LITERAL.test(text) && !Number.isSafeInteger(Number(text))
+const significantDigits = (text: string): number =>
+  text.replace(/^[+-]/, "").replace(".", "").replace(/^0+/, "").length
+
+// LONG and DECIMAL columns reach the grid as decimal strings, so every digit
+// survives JSON; a double keeps fifteen, and DECIMAL goes up to 76.
+export const exceedsDoublePrecision = (text: string): boolean =>
+  INTEGER_LITERAL.test(text)
+    ? !Number.isSafeInteger(Number(text))
+    : DECIMAL_LITERAL.test(text) && significantDigits(text) > DOUBLE_DIGITS
+
+const exactOf = (text: string): Numeric => {
+  const match = DECIMAL_LITERAL.exec(text)
+  if (!match) return BigInt(text)
+  const [, sign, whole, fraction] = match
+  return {
+    unscaled: BigInt(`${sign}${whole}${fraction}`),
+    scale: fraction.length,
+  }
+}
 
 export const asNumeric = (value: CellValue): Numeric | null => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null
   if (typeof value !== "string") return null
   const text = value.trim()
   if (text === "") return null
-  if (exceedsSafeInteger(text)) return BigInt(text)
+  if (exceedsDoublePrecision(text)) return exactOf(text)
   const parsed = Number(text)
   return Number.isFinite(parsed) ? parsed : null
 }
 
-const asBigInt = (value: Numeric): bigint | null =>
+const isDecimal = (value: Comparable): value is Decimal =>
+  typeof value === "object"
+
+const textOf = (value: Comparable): string => {
+  if (!isDecimal(value)) return String(value)
+  const negative = value.unscaled < BigInt(0)
+  const digits = (negative ? -value.unscaled : value.unscaled)
+    .toString()
+    .padStart(value.scale + 1, "0")
+  const point = digits.length - value.scale
+  return `${negative ? "-" : ""}${digits.slice(0, point)}.${digits.slice(point)}`
+}
+
+// The shortest text that reads back as the double is the literal the user
+// typed, so a literal of 1.5 equals a cell of 1.500000000000000000. A
+// non-integer double prints plain or with a negative exponent, never a
+// positive one.
+const decimalOfNumber = (value: number): Decimal => {
+  if (Number.isInteger(value)) return { unscaled: BigInt(value), scale: 0 }
+  const [mantissa, exponent = "0"] = String(value).split("e")
+  const point = mantissa.indexOf(".")
+  const fractionDigits = point === -1 ? 0 : mantissa.length - point - 1
+  return {
+    unscaled: BigInt(mantissa.replace(".", "")),
+    scale: fractionDigits - Number(exponent),
+  }
+}
+
+const toDecimal = (value: Numeric): Decimal => {
+  if (isDecimal(value)) return value
+  if (typeof value === "bigint") return { unscaled: value, scale: 0 }
+  return decimalOfNumber(value)
+}
+
+const powerOfTen = (exponent: number): bigint =>
+  BigInt(`1${"0".repeat(exponent)}`)
+
+const alignedUnscaled = (a: Decimal, b: Decimal): [bigint, bigint, number] => {
+  const scale = Math.max(a.scale, b.scale)
+  const raise = (decimal: Decimal) =>
+    decimal.unscaled * powerOfTen(scale - decimal.scale)
+  return [raise(a), raise(b), scale]
+}
+
+export const toNumber = (value: Numeric): number =>
+  isDecimal(value) ? Number(value.unscaled) / 10 ** value.scale : Number(value)
+
+const asBigInt = (value: number | bigint): bigint | null =>
   typeof value === "bigint"
     ? value
     : Number.isInteger(value)
       ? BigInt(value)
       : null
 
-// Exact for two integers, so a change of one unit past 2^53 still counts.
+// Exact for two integers and for two decimals, so a change of one unit past
+// 2^53, or at the eighteenth decimal, still counts.
 export const differenceOf = (a: Numeric, b: Numeric): number => {
+  if (isDecimal(a) || isDecimal(b)) {
+    const [left, right, scale] = alignedUnscaled(toDecimal(a), toDecimal(b))
+    return Number(left - right) / 10 ** scale
+  }
   const left = asBigInt(a)
   const right = asBigInt(b)
   return left !== null && right !== null
@@ -95,9 +166,13 @@ export const asComparable = (
 
 export const compareValues = (a: Comparable, b: Comparable): number => {
   if (typeof a === "string" || typeof b === "string") {
-    const left = String(a)
-    const right = String(b)
+    const left = textOf(a)
+    const right = textOf(b)
     return left === right ? 0 : left < right ? -1 : 1
+  }
+  if (isDecimal(a) || isDecimal(b)) {
+    const [left, right] = alignedUnscaled(toDecimal(a), toDecimal(b))
+    return left < right ? -1 : left > right ? 1 : 0
   }
   return a < b ? -1 : a > b ? 1 : 0
 }

@@ -366,4 +366,38 @@ describe("captureResultTrends: landing time", () => {
     // Then the flash is timed from now, not from the run's start
     expect(store.get("c1", KEY)?.capturedAt).toBe(5_000)
   })
+
+  it("brings a prior result back as shown when a run with rewritten SQL is discarded", () => {
+    // Given a compared cell with a baseline, shown at a known time
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000)
+    const REWRITTEN = "select symbol, price from trades where price > 0"
+    const store = createResultTrendStore()
+    const earlier = cell("c1", [dql(QUERY, [["BTC", 1]])], comparing("symbol"))
+    const prior = cell("c1", [dql(QUERY, [["BTC", 2]])], comparing("symbol"))
+    captureResultTrends(store, restored, [], [earlier])
+    captureResultTrends(store, restored, [earlier], [prior])
+    const shown = store.get("c1", KEY)
+
+    // When a run of rewritten SQL starts and is discarded before it settles
+    now.mockReturnValue(5_000)
+    const running = cell(
+      "c1",
+      [{ type: "running", query: REWRITTEN }],
+      comparing("symbol"),
+    )
+    const restoredCell = { ...running, result: prior.result }
+    captureResultTrends(store, restored, [prior], [running])
+    captureResultTrends(store, restored, [running], [restoredCell])
+
+    // Then the prior rows keep their landing time and baseline the next run
+    expect(store.get("c1", KEY)?.result).toBe(prior.result?.results[0])
+    expect(store.get("c1", KEY)?.capturedAt).toBe(shown?.capturedAt)
+    expect(store.get("c1", KEY)?.revision).toBe(shown?.revision)
+    const next = cell("c1", [dql(QUERY, [["BTC", 3]])], comparing("symbol"))
+    captureResultTrends(store, restored, [restoredCell], [next])
+    expect(store.get("c1", KEY)?.previous?.rows.get(symbolKey("BTC"))).toEqual([
+      "BTC",
+      2,
+    ])
+  })
 })

@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { Button } from "../../../../components"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import {
@@ -6,6 +6,7 @@ import {
   type HighlightConfig,
   type MatchStats,
   createRuleId,
+  isRe2Ready,
   loadRe2,
 } from "../../../../components/ResultGrid/highlight"
 import {
@@ -74,6 +75,12 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
   // Checked on Save only; the map stays until the next Save.
   const [errors, setErrors] = useState<Map<string, RuleErrors>>(new Map())
   const [identityError, setIdentityError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  // Read after the regex engine loads: a save started before a dismiss or
+  // an unmount is dropped, and one that goes on saves the edits made while
+  // it waited.
+  const acceptsSaveRef = useRef(open)
+  const draftRef = useRef(draft)
 
   // Every edit lands in the session store as well, so a cell remount
   // mid-session restores it.
@@ -100,18 +107,39 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
     setRules(draft.rules.map((rule) => (rule.id === next.id ? next : rule)))
   }
 
-  const save = async () => {
-    if (draft.rules.some(isPatternRule)) await loadRe2()
-    const next = validateRules(draft.rules, columns)
-    const identity = validateIdentity(draft)
+  const commit = (current: DraftConfig) => {
+    const next = validateRules(current.rules, columns)
+    const identity = validateIdentity(current)
     setErrors(next)
     setIdentityError(identity)
     if (next.size > 0 || identity !== null) return
     onSave({
-      identityColumns: draft.identityColumns,
-      rules: draft.rules.filter(isCompleteRule),
+      identityColumns: current.identityColumns,
+      rules: current.rules.filter(isCompleteRule),
     })
   }
+
+  const save = async () => {
+    if (saving) return
+    if (draft.rules.some(isPatternRule) && !isRe2Ready()) {
+      setSaving(true)
+      await loadRe2()
+      if (!acceptsSaveRef.current) return
+      setSaving(false)
+    }
+    commit(draftRef.current)
+  }
+
+  useEffect(() => {
+    acceptsSaveRef.current = open
+    return () => {
+      acceptsSaveRef.current = false
+    }
+  }, [open])
+
+  useEffect(() => {
+    draftRef.current = draft
+  }, [draft])
 
   return (
     <SettingsDrawerShell
@@ -123,6 +151,7 @@ export const HighlightSettingsDrawer: React.FC<Props> = ({
       drawerWidth="48rem"
       onDismiss={onCancel}
       onCommit={save}
+      committing={saving}
       footerStart={
         <Button type="button" variant="ghost" onClick={onClear}>
           Clear all

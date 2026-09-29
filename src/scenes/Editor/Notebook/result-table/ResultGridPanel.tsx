@@ -18,7 +18,10 @@ import { ResultActionsBar } from "./ResultActionsBar"
 import { toast } from "../../../../components/Toast"
 import { HighlightSettingsDrawer } from "../CellHighlight/HighlightSettingsDrawer"
 import type { HighlightDraft } from "../CellHighlight/ruleDraft"
-import { highlightSettingsSessions } from "../settingsDrawer/settingsDrawerSessions"
+import {
+  highlightSettingsSessions,
+  type SettingsDrawerRequest,
+} from "../settingsDrawer/settingsDrawerSessions"
 import { useNotebookActions } from "../NotebookProvider"
 import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
@@ -206,19 +209,17 @@ const ResultGridPanelInner: React.FC<Props> = ({
     }
   }, [cellId, highlightOpen, savedHighlightConfig, closeHighlight])
 
-  // The spotlight gear and the kebab entry send the same event; while the
-  // drawer is open it acts as a toggle instead of remounting the draft.
   useEffect(() => {
-    const toggle = (payload?: { cellId?: string }) => {
+    const respond = (payload?: SettingsDrawerRequest) => {
       if (payload?.cellId !== cellId) return
-      if (highlightOpen) cancelHighlight("button")
-      else openHighlight()
+      if (!highlightOpen) openHighlight()
+      else if (payload.mode === "toggle") cancelHighlight("button")
     }
-    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, toggle)
+    eventBus.subscribe(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, respond)
     return () =>
       eventBus.unsubscribe(
         EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS,
-        toggle,
+        respond,
       )
   }, [cellId, highlightOpen, openHighlight, cancelHighlight])
 

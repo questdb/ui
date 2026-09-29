@@ -9,6 +9,7 @@ import {
 } from "../questdbDocsRetrieval"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
+import { requireCellIn } from "../notebooks/notebookDexieView"
 import type { CellMode, NotebookCell } from "../../store/notebook"
 import {
   MAX_CELL_NAME_LENGTH,
@@ -54,8 +55,9 @@ import {
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
-  fromHighlightConfigWire,
   type HighlightConfigWire,
+  parseHighlightConfigFor,
+  regexLiteralNotes,
   wireUsesPatterns,
 } from "./highlightConfigWire"
 import {
@@ -952,37 +954,33 @@ export const dispatchTool = async (
           }) || {}
         setStatus(AIOperationStatus.ConfiguringHighlight, { cellId: cell_id })
         const highlightBaseline = getBufferActionSeq(buffer_id)
-        let config = null
-        if (highlight_config) {
-          if (wireUsesPatterns(highlight_config)) await loadRe2()
-          const parsed = fromHighlightConfigWire(highlight_config)
-          if (!parsed.ok) {
-            return {
-              content: JSON.stringify({
-                error_code: "validation",
-                message: `VALIDATION_ERROR: highlight_config ${parsed.error}`,
-              }),
-              is_error: true,
-            }
-          }
-          config = parsed.config
+        if (highlight_config && wireUsesPatterns(highlight_config)) {
+          await loadRe2()
         }
-        return routeNotebookTool(
-          () =>
-            runTransition(
-              buffer_id,
-              (parts) =>
-                setCellHighlightConfigTransition(
-                  parts,
-                  buffer_id,
-                  cell_id,
-                  config,
-                ),
-              signal,
-              highlightBaseline,
-            ),
-          toolContext,
-        )
+        const notes = highlight_config
+          ? regexLiteralNotes(highlight_config)
+          : []
+        return routeNotebookTool(async () => {
+          await runTransition(
+            buffer_id,
+            (parts) =>
+              setCellHighlightConfigTransition(
+                parts,
+                buffer_id,
+                cell_id,
+                highlight_config
+                  ? parseHighlightConfigFor(
+                      highlight_config,
+                      requireCellIn(parts.cells, cell_id, buffer_id),
+                      "highlight_config",
+                    )
+                  : null,
+              ),
+            signal,
+            highlightBaseline,
+          )
+          return notes.length > 0 ? { notes } : undefined
+        }, toolContext)
       }
       case "set_cell_name": {
         const { buffer_id, cell_id, name } =

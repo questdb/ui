@@ -104,6 +104,22 @@ describe("notebook highlight rules", () => {
     cy.get("[data-hook='grid-cell'][data-highlight]").should("not.exist")
   })
 
+  it("keeps an open draft when Highlight rules is chosen again from the menu", () => {
+    // Given a drafted rule in the open drawer
+    cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
+    runCell()
+    openHighlightDrawer()
+    addRule("v", "> value")
+
+    // When the menu entry is chosen again
+    cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
+    cy.contains("[role='menuitem']", "Highlight rules").click()
+
+    // Then the drawer stays open with the draft
+    cy.getByDataHook("highlight-settings-drawer").should("be.visible")
+    cy.getByDataHook("highlight-rule").should("have.length", 1)
+  })
+
   it("does not save a dismissed draft when Enter follows Escape", () => {
     // Given a drafted rule whose value input has focus
     cy.focused().type("select 'A' as k, 5 as v", { delay: 0 })
@@ -269,6 +285,31 @@ describe("notebook highlight rules", () => {
       .and("have.attr", "data-highlight-color", "dataSeries2")
   })
 
+  it("keeps an open chart draft when Chart settings is chosen again from the menu", () => {
+    // Given a chart drawer with the type changed to Bar, not saved
+    cy.focused().type("select x, x * 2 as y from long_sequence(5)", {
+      delay: 0,
+    })
+    runCell()
+    cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
+    cy.getByDataHook("cell-chart").should("be.visible")
+    openChartDrawer()
+    cy.getByDataHook("chart-settings-drawer")
+      .find('button[aria-label^="Chart type"]')
+      .click()
+    cy.contains('[role="menuitemradio"]', "Bar").click()
+
+    // When the menu entry is chosen again
+    cy.get("[data-notebook-cell] button[aria-label='More actions']").click()
+    cy.contains("[role='menuitem']", "Chart settings").click()
+
+    // Then the drawer stays open with the draft
+    cy.getByDataHook("chart-settings-drawer")
+      .should("be.visible")
+      .find('button[aria-label^="Chart type"]')
+      .should("contain.text", "Bar")
+  })
+
   it("saves a chart setting from the drawer and shows it again on reopen", () => {
     // Given a cell shown as a chart
     cy.focused().type("select x, x * 2 as y from long_sequence(5)", {
@@ -276,7 +317,7 @@ describe("notebook highlight rules", () => {
     })
     runCell()
     cy.get("[data-notebook-cell] button[aria-label='View chart']").click()
-    cy.getByDataHook("result-chart").should("be.visible")
+    cy.getByDataHook("cell-chart").should("be.visible")
 
     // When the chart type is changed to Bar and saved from the drawer
     openChartDrawer()

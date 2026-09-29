@@ -1,6 +1,6 @@
 import React from "react"
 import {
-  exceedsSafeInteger,
+  exceedsDoublePrecision,
   type BetweenBound,
   type ColumnKind,
   type ColumnRange,
@@ -25,7 +25,7 @@ const parseInput = (raw: string, numeric: boolean): number | string =>
   numeric &&
   raw !== "" &&
   Number.isFinite(Number(raw)) &&
-  !exceedsSafeInteger(raw)
+  !exceedsDoublePrecision(raw)
     ? Number(raw)
     : raw
 

@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest"
 import { loadRe2 } from "../../components/ResultGrid/highlight"
 import {
   fromHighlightConfigWire,
+  regexLiteralNotes,
   toHighlightConfigWire,
   type HighlightConfigWire,
 } from "./highlightConfigWire"
@@ -69,7 +70,7 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When it is parsed
-    const result = fromHighlightConfigWire(wire)
+    const result = fromHighlightConfigWire(wire, [])
 
     // Then the config carries typed rules with ids and kind defaults
     expect(result.ok).toBe(true)
@@ -134,8 +135,8 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When each is parsed
-    const comparison = fromHighlightConfigWire(comparisonWire)
-    const value = fromHighlightConfigWire(valueWire)
+    const comparison = fromHighlightConfigWire(comparisonWire, [])
+    const value = fromHighlightConfigWire(valueWire, [])
 
     // Then only the comparison rule needs an identity
     expect(comparison).toEqual({
@@ -191,11 +192,11 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When each is parsed
-    const noIdentity = fromHighlightConfigWire(noIdentityWire)
-    const badOp = fromHighlightConfigWire(badOpWire)
-    const badColor = fromHighlightConfigWire(badColorWire)
-    const negativeThreshold = fromHighlightConfigWire(negativeThresholdWire)
-    const fillOnGt = fromHighlightConfigWire(fillOnGtWire)
+    const noIdentity = fromHighlightConfigWire(noIdentityWire, [])
+    const badOp = fromHighlightConfigWire(badOpWire, [])
+    const badColor = fromHighlightConfigWire(badColorWire, [])
+    const negativeThreshold = fromHighlightConfigWire(negativeThresholdWire, [])
+    const fillOnGt = fromHighlightConfigWire(fillOnGtWire, [])
 
     // Then each fails with a pointed message
     expect(noIdentity).toEqual({
@@ -214,6 +215,56 @@ describe("fromHighlightConfigWire", () => {
     )
     if (fillOnGt.ok) throw new Error("expected fillOnGt to fail")
     expect(fillOnGt.error).toContain("apply to op between only")
+  })
+
+  it("accepts a slash-wrapped pattern and notes that it reads as plain RE2", () => {
+    // Given a matches rule written like a JavaScript regex literal, and path patterns
+    const withText = (text: string): HighlightConfigWire => ({
+      identity_columns: ["k"],
+      rules: [{ kind: "value", column: "symbol", op: "matches", text }],
+    })
+    const literal = withText("/eur/i")
+
+    // When each is parsed and checked for notes
+    const parsed = fromHighlightConfigWire(literal, [])
+    const literalNotes = regexLiteralNotes(literal)
+    const pathNotes = [
+      "^/var/log/",
+      "/var/log",
+      "/usr/local/bin",
+      "(?i)eur",
+    ].flatMap((text) => regexLiteralNotes(withText(text)))
+
+    // Then the literal saves as is, with one note that points at (?i), and paths get none
+    expect(parsed.ok).toBe(true)
+    expect(literalNotes).toHaveLength(1)
+    expect(literalNotes[0]).toContain("rules[0]")
+    expect(literalNotes[0]).toContain("(?i)eur")
+    expect(pathNotes).toEqual([])
+  })
+
+  it("checks a rule against the column type once the cell has shown it", () => {
+    // Given the columns a cell has shown, and a numeric comparison on a text column, a numeric column and a column not shown yet
+    const columns = [
+      { name: "symbol", type: "SYMBOL" },
+      { name: "price", type: "DOUBLE" },
+    ]
+    const ruleOn = (column: string): HighlightConfigWire => ({
+      identity_columns: ["k"],
+      rules: [{ kind: "value", column, op: "gt", value: "abc" }],
+    })
+
+    // When each is parsed
+    const onText = fromHighlightConfigWire(ruleOn("symbol"), columns)
+    const onNumber = fromHighlightConfigWire(ruleOn("price"), columns)
+    const onUnshown = fromHighlightConfigWire(ruleOn("later"), columns)
+
+    // Then the shown columns fail as the drawer would, and the unshown one passes
+    if (onText.ok) throw new Error("expected onText to fail")
+    expect(onText.error).toBe("rules[0].condition: Not for a text column")
+    if (onNumber.ok) throw new Error("expected onNumber to fail")
+    expect(onNumber.error).toBe("rules[0].value: Should be a number")
+    expect(onUnshown.ok).toBe(true)
   })
 
   it("rejects values the reload check would refuse, so a saved config never vanishes", () => {
@@ -250,9 +301,9 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When each is parsed
-    const badDisplay = fromHighlightConfigWire(badDisplayWire)
-    const badUnit = fromHighlightConfigWire(badUnitWire)
-    const numericColumn = fromHighlightConfigWire(numericColumnWire)
+    const badDisplay = fromHighlightConfigWire(badDisplayWire, [])
+    const badUnit = fromHighlightConfigWire(badUnitWire, [])
+    const numericColumn = fromHighlightConfigWire(numericColumnWire, [])
 
     // Then each fails at the rule, instead of saving a config the next load drops
     expect(badDisplay).toEqual({
@@ -297,10 +348,13 @@ describe("fromHighlightConfigWire", () => {
     }
 
     // When each is parsed
-    const flatGradient = fromHighlightConfigWire(between(10, 10, "gradient"))
-    const reversed = fromHighlightConfigWire(between(10, 5))
-    const flatSolid = fromHighlightConfigWire(between(10, 10))
-    const noUnit = fromHighlightConfigWire(noUnitWire)
+    const flatGradient = fromHighlightConfigWire(
+      between(10, 10, "gradient"),
+      [],
+    )
+    const reversed = fromHighlightConfigWire(between(10, 5), [])
+    const flatSolid = fromHighlightConfigWire(between(10, 10), [])
+    const noUnit = fromHighlightConfigWire(noUnitWire, [])
 
     // Then the flat gradient and the reversed range fail, and the unit is percent
     expect(flatGradient).toMatchObject({
@@ -335,7 +389,7 @@ describe("fromHighlightConfigWire: new rows", () => {
     }
 
     // When parsed and serialized back
-    const parsed = fromHighlightConfigWire(wire)
+    const parsed = fromHighlightConfigWire(wire, [])
     if (!parsed.ok) throw new Error(parsed.error)
 
     // Then the rule carries only color and display, and the wire round-trips
@@ -380,7 +434,7 @@ describe("fromHighlightConfigWire: automatic between bounds", () => {
     }
 
     // When parsed
-    const parsed = fromHighlightConfigWire(wire)
+    const parsed = fromHighlightConfigWire(wire, [])
     if (!parsed.ok) throw new Error(parsed.error)
 
     // Then both bounds are automatic on the first rule and only `to` on the second
@@ -452,7 +506,7 @@ describe("toHighlightConfigWire", () => {
         },
       ],
     }
-    const parsed = fromHighlightConfigWire(wire)
+    const parsed = fromHighlightConfigWire(wire, [])
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
 
