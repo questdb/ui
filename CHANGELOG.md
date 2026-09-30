@@ -17,6 +17,19 @@ and this project adheres to
 - `Security` in case of vulnerabilities.
 
 
+## 2.0.4 - 2026.09.30
+### Added
+- full query text support to run with selection option [#604](https://github.com/questdb/ui/pull/604)
+- live views support [#605](https://github.com/questdb/ui/pull/605)
+- query activity drawer [#612](https://github.com/questdb/ui/pull/612)
+- dynamic model listing, single enablement step, provider-level reasoning control [#608](https://github.com/questdb/ui/pull/608)
+- show rule-based trends in ResultGrid [#613](https://github.com/questdb/ui/pull/613)
+
+### Changed
+- theme steering initial pass [#609](https://github.com/questdb/ui/pull/609)
+- redesign notebook cell dimensions and responsive views [#606](https://github.com/questdb/ui/pull/606)
+
+
 ## 2.0.3 - 2026.08.20
 ### Added
 - light/dark theme support, shared component style updates [#600](https://github.com/questdb/ui/pull/600)
