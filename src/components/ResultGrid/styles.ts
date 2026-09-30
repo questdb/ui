@@ -1,10 +1,13 @@
-import styled, { css, keyframes } from "styled-components"
+import styled, { css, keyframes, type DefaultTheme } from "styled-components"
 import { color } from "../../utils"
+import type { CellHighlight, HighlightColorToken } from "./highlight/types"
 import { CopyButton } from "../CopyButton"
 import {
   CELL_BORDER_PX,
   CELL_FONT_SIZE_PX,
   CELL_PADDING_PX,
+  DIRECTION_GLYPH_SIZE,
+  DIRECTION_GLYPH_WIDTH,
   HEADER_BORDER_PX,
   HEADER_GAP_PX,
   HEADER_HEIGHT,
@@ -14,6 +17,8 @@ import {
   HEADER_TYPE_FONT_SIZE_PX,
   ROW_HEIGHT,
 } from "./dimensions"
+
+type HighlightBlend = NonNullable<CellHighlight["blend"]>
 
 export { HEADER_HEIGHT, ROW_HEIGHT }
 
@@ -165,41 +170,23 @@ export const ResizeGhost = styled.div`
   z-index: 7;
 `
 
+const tint = (value: string) => `linear-gradient(${value}, ${value})`
+
+// The row's selection or hover tint, read by the row itself and by its pinned
+// cells, which paint their own opaque copy of the row.
 export const Row = styled.div<{ $active: boolean }>`
+  --grid-row-overlay: ${({ $active, theme }) =>
+    $active ? theme.color.interactionSelected : theme.color.transparent};
   display: flex;
   height: ${ROW_HEIGHT}px;
-  background: ${color("gridRow")};
-
-  ${({ $active, theme }) =>
-    $active &&
-    css`
-      background:
-        linear-gradient(
-          ${theme.color.interactionSelected},
-          ${theme.color.interactionSelected}
-        ),
-        ${theme.color.gridRow};
-    `}
+  background: ${({ theme }) =>
+    `${tint("var(--grid-row-overlay)")}, ${theme.color.gridRow}`};
 
   ${({ $active, theme }) =>
     !$active &&
     css`
       &:hover {
-        background:
-          linear-gradient(
-            ${theme.color.interactionHover},
-            ${theme.color.interactionHover}
-          ),
-          ${theme.color.surfaceInset};
-
-        [data-frozen="true"] {
-          background:
-            linear-gradient(
-              ${theme.color.interactionHover},
-              ${theme.color.interactionHover}
-            ),
-            ${theme.color.surfaceInset};
-        }
+        --grid-row-overlay: ${theme.color.interactionHover};
       }
     `}
 `
@@ -209,14 +196,86 @@ const pulseAnim = (ring: string, transparent: string) => keyframes`
   75% { box-shadow: ${transparent} 0 0 0 16px; }
 `
 
-export const Cell = styled.div<{
+const HIGHLIGHT_STATIC_OPACITY = 30
+const HIGHLIGHT_FLASH_OPACITY = 55
+export const DEFAULT_FLASH_DURATION_MS = 1000
+
+// The flash animates the registered --grid-flash color, which the cell paints
+// as its top background layer; a background-color would sit under a pinned
+// cell's opaque base. Two equivalent keyframes so a consecutive flash
+// restarts: the browser only restarts an animation when its name changes, and
+// styled-components names keyframes by content, so the bodies must differ.
+const flashAnim = [
+  keyframes`
+    from { --grid-flash: var(--grid-highlight-flash); }
+    to { --grid-flash: transparent; }
+  `,
+  keyframes`
+    from { --grid-flash: var(--grid-highlight-flash); }
+    99% { --grid-flash: transparent; }
+    to { --grid-flash: transparent; }
+  `,
+]
+
+const highlightHue = (
+  theme: DefaultTheme,
+  token: HighlightColorToken,
+  blend: HighlightBlend | undefined,
+) =>
+  blend
+    ? `color-mix(in oklch, ${theme.color[token]} ${Math.round((1 - blend.ratio) * 100)}%, ${theme.color[blend.color]})`
+    : theme.color[token]
+
+const highlightColor = (
+  theme: DefaultTheme,
+  token: HighlightColorToken,
+  opacity: number,
+  blend: HighlightBlend | undefined,
+) =>
+  `color-mix(in srgb, ${highlightHue(theme, token, blend)} ${opacity}%, transparent)`
+
+type CellProps = {
   $isNull: boolean
   $isTimestamp: boolean
   $isActive: boolean
   $isPulsing: boolean
   $frozen?: boolean
-  $rowActive?: boolean
-}>`
+  $highlightColor: HighlightColorToken | undefined
+  $highlightBlend: HighlightBlend | undefined
+  $highlightMode: "temporary" | "always" | undefined
+  $flashParity: 0 | 1
+}
+
+// One stack, top to bottom: the flash, a permanent highlight, and for a
+// pinned cell the row's tint over an opaque base so scrolled columns never
+// show through. A scrolling cell stays transparent and shows the row.
+const cellBackground = ({
+  $frozen,
+  $highlightColor,
+  $highlightBlend,
+  $highlightMode,
+  theme,
+}: CellProps & { theme: DefaultTheme }) => {
+  const layers: string[] = []
+  if ($highlightMode === "temporary") layers.push(tint("var(--grid-flash)"))
+  if ($highlightColor !== undefined && $highlightMode === "always") {
+    layers.push(
+      tint(
+        highlightColor(
+          theme,
+          $highlightColor,
+          HIGHLIGHT_STATIC_OPACITY,
+          $highlightBlend,
+        ),
+      ),
+    )
+  }
+  if ($frozen) layers.push(tint("var(--grid-row-overlay)"), theme.color.gridRow)
+  else layers.push(theme.color.transparent)
+  return layers.join(", ")
+}
+
+export const Cell = styled.div<CellProps>`
   flex-shrink: 0;
   height: ${ROW_HEIGHT}px;
   display: flex;
@@ -237,13 +296,26 @@ export const Cell = styled.div<{
   box-sizing: border-box;
   /* contain: layout, not paint — paint would clip the copy-pulse glow. */
   contain: layout;
+  background: ${cellBackground};
 
-  ${({ $frozen, $rowActive, theme }) =>
-    $frozen &&
+  ${({
+    $highlightColor,
+    $highlightBlend,
+    $highlightMode,
+    $flashParity,
+    theme,
+  }) =>
+    $highlightColor !== undefined &&
+    $highlightMode === "temporary" &&
     css`
-      background: ${$rowActive
-        ? `linear-gradient(${theme.color.interactionSelected}, ${theme.color.interactionSelected}), ${theme.color.gridRow}`
-        : color("gridRow")};
+      --grid-highlight-flash: ${highlightColor(
+        theme,
+        $highlightColor,
+        HIGHLIGHT_FLASH_OPACITY,
+        $highlightBlend,
+      )};
+      animation: ${flashAnim[$flashParity]} ${DEFAULT_FLASH_DURATION_MS}ms
+        ease-out;
     `}
 
   ${({ $isActive, theme }) =>
@@ -278,6 +350,20 @@ export const CellText = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre;
+`
+
+export const CellDirectionGlyph = styled.span<{
+  $direction: "up" | "down" | undefined
+}>`
+  flex-shrink: 0;
+  display: inline-flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: ${DIRECTION_GLYPH_WIDTH}px;
+  font-size: ${DIRECTION_GLYPH_SIZE}px;
+  line-height: 1;
+  color: ${({ $direction }) =>
+    $direction === "up" ? color("dataPositive") : color("dataNegative")};
 `
 
 export const CellTooltipAnchor = styled.div`

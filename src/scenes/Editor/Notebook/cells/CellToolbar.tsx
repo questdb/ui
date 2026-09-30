@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
 import {
   ChevronUp,
@@ -24,9 +24,11 @@ import { useTriggerTooltip } from "./useTriggerTooltip"
 import {
   autoRefreshLabel,
   cellToolbarMenuFlags,
+  hasActiveResultGrid,
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
+import type { SettingsDrawerRequest } from "../settingsDrawer/settingsDrawerSessions"
 import type { CellToolbarTier } from "../notebookUtils"
 import type { CellPaneLayout } from "../cellSizing"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
@@ -125,6 +127,7 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
+  const hasResultGrid = useMemo(() => hasActiveResultGrid(cell), [cell])
   const resultOnly = paneLayout === "result"
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
@@ -153,6 +156,7 @@ export const CellToolbar: React.FC<Props> = ({
     showAutoRefreshItem,
     showRefreshItem,
     showChartSettings,
+    showHighlightSettings,
     showMoveUp,
     showMoveDown,
     showDuplicate,
@@ -164,6 +168,7 @@ export const CellToolbar: React.FC<Props> = ({
     view,
     isMarkdown,
     chartZoomed,
+    hasResultGrid,
     isGridMode,
     cellIndex,
     totalCells,
@@ -186,11 +191,21 @@ export const CellToolbar: React.FC<Props> = ({
     }
     eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
   }
-  const handleChartSettings = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
-      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+  const handleChartSettings = (mode: SettingsDrawerRequest["mode"]) => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, {
+      cellId,
+      mode,
     })
-    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
+  }
+  const handleHighlightSettings = (mode: SettingsDrawerRequest["mode"]) => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+      cellId,
+      mode,
+    })
+  }
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    moreActionsTooltip.onMenuOpenChange(open)
   }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
     if (value === cell.autoRefresh) return
@@ -244,6 +259,21 @@ export const CellToolbar: React.FC<Props> = ({
       $inline={inline}
       $forceVisible={menuOpen}
     >
+      {isMaximized && (isChartView || hasResultGrid) && (
+        <Tooltip content={isChartView ? "Chart settings" : "Highlight rules"}>
+          <CellIconButton
+            label={isChartView ? "Chart settings" : "Highlight rules"}
+            variant="ghost"
+            onClick={() =>
+              isChartView
+                ? handleChartSettings("toggle")
+                : handleHighlightSettings("toggle")
+            }
+          >
+            <GearIcon size={20} />
+          </CellIconButton>
+        </Tooltip>
+      )}
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
         <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
@@ -257,24 +287,8 @@ export const CellToolbar: React.FC<Props> = ({
           )}
         </CellIconButton>
       </Tooltip>
-      {isMaximized && showChartSettings && (
-        <Tooltip content="Chart settings">
-          <CellIconButton
-            label="Chart settings"
-            variant="ghost"
-            onClick={handleChartSettings}
-          >
-            <GearIcon size={20} />
-          </CellIconButton>
-        </Tooltip>
-      )}
       {!isMaximized && (
-        <DropdownMenu.Root
-          onOpenChange={(o) => {
-            setMenuOpen(o)
-            moreActionsTooltip.onMenuOpenChange(o)
-          }}
-        >
+        <DropdownMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
               <CellIconButton label="More actions" variant="ghost">
@@ -354,6 +368,7 @@ export const CellToolbar: React.FC<Props> = ({
                       <AutoRefreshOptions
                         value={cell.autoRefresh}
                         onSelect={handleRefreshSelect}
+                        onClose={() => handleMenuOpenChange(false)}
                         inheritedValue={resolveAutoRefresh(
                           undefined,
                           autoRefreshDefault,
@@ -373,10 +388,18 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showChartSettings && (
                 <DropdownMenu.Item
-                  onSelect={handleChartSettings}
+                  onSelect={() => handleChartSettings("open")}
                   icon={<GearIcon size={16} />}
                 >
                   Chart settings
+                </DropdownMenu.Item>
+              )}
+              {showHighlightSettings && (
+                <DropdownMenu.Item
+                  onSelect={() => handleHighlightSettings("open")}
+                  icon={<GearIcon size={16} />}
+                >
+                  Highlight rules
                 </DropdownMenu.Item>
               )}
 

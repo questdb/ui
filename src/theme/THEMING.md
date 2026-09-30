@@ -266,10 +266,11 @@ bar is the structure cue.
 | `gridSelection` | `#252830` / `#d8dce3` | Monaco selection substrate. The React grid does not read it.               |
 
 Grid interaction is composed from shared roles: row hover is one
-`interactionHover` over the field, the selected row is `interactionSelected`,
-the focused cell stacks `statusInfoSurface` over that with a `statusInfo` ring,
-and the copy pulse follows the ring. Column resize and frozen-handle hover use
-`borderStrong`.
+`interactionHover` over `gridRow`, the selected row is `interactionSelected`
+over `gridRow`, the focused cell stacks `statusInfoSurface` over that with a
+`statusInfo` ring, and the copy pulse follows the ring. A pinned cell paints the
+same hover or selection tint over an opaque `gridRow` base, so scrolled columns
+never show through it. Column resize and frozen-handle hover use `borderStrong`.
 
 ### Monaco editor
 

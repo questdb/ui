@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react"
+import React, { useState, useCallback, useEffect, useRef } from "react"
 import styled, { css, useTheme } from "styled-components"
 import { color } from "../../../../utils"
 import { Editor } from "@monaco-editor/react"
@@ -28,7 +28,11 @@ import {
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { toast } from "../../../../components/Toast"
-import { resolveAutoRefresh, resolveCellView } from "../notebookUtils"
+import {
+  autoRefreshIntervalMs,
+  resolveAutoRefresh,
+  resolveCellView,
+} from "../notebookUtils"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
@@ -52,6 +56,10 @@ import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 import { useCellResizeOrchestration } from "./useCellResizeOrchestration"
 import { CellBottomContent } from "./CellBottomContent"
+import {
+  CellOverlayProvider,
+  CellOverlaySlot,
+} from "../settingsDrawer/CellOverlayContext"
 import { getMonacoThemeName } from "../../../../utils/monacoInit"
 
 const EditorContainer = styled.div<{ $spotlight: boolean }>`
@@ -146,6 +154,9 @@ const CellInner: React.FC<Props> = ({
   })
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const resultRef = useRef<HTMLDivElement | null>(null)
+  const [overlayElement, setOverlayElement] = useState<HTMLDivElement | null>(
+    null,
+  )
   const headerRef = useRef<HTMLDivElement | null>(null)
 
   const toolbarTier = useCellToolbarTier(headerRef, isMaximized)
@@ -427,6 +438,7 @@ const CellInner: React.FC<Props> = ({
         if (isFocused) setFocusedCell(null)
       }}
     >
+      <CellOverlaySlot ref={setOverlayElement} />
       {contentMode === "placeholder" && (
         <HiddenCellStatus>
           Cell content is unloaded while off screen; focus the cell to load it.
@@ -614,16 +626,19 @@ const CellInner: React.FC<Props> = ({
               : { height: bottomHeight }
           }
         >
-          <CellBottomContent
-            cell={cell}
-            contentMode={contentMode}
-            expectingResult={expectingResult}
-            isFocused={isFocused}
-            isRunning={isRunning}
-            onConfigChange={handleChartConfigChange}
-            onRetryUnmountWhileFocused={focusCellToolbar}
-            onYieldFocus={() => editorRef.current?.focus()}
-          />
+          <CellOverlayProvider value={overlayElement}>
+            <CellBottomContent
+              cell={cell}
+              contentMode={contentMode}
+              expectingResult={expectingResult}
+              isFocused={isFocused}
+              isRunning={isRunning}
+              refreshIntervalMs={autoRefreshIntervalMs(effectiveAutoRefresh)}
+              onConfigChange={handleChartConfigChange}
+              onRetryUnmountWhileFocused={focusCellToolbar}
+              onYieldFocus={() => editorRef.current?.focus()}
+            />
+          </CellOverlayProvider>
         </BottomSlot>
       )}
     </CellWrapper>

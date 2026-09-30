@@ -1,6 +1,7 @@
-import React from "react"
+import React, { useState } from "react"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react"
 import { SelectMenu, Spinner, Tooltip } from "../../../../components"
+import { useHeldFlag } from "../../../../hooks"
 import { AutoRefreshOptions } from "./AutoRefreshOptions"
 import { useTriggerTooltip } from "./useTriggerTooltip"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
@@ -27,6 +28,12 @@ import {
 const WRITE_BLOCK_TOOLTIP =
   "This cell contains DDL/DML, auto-refresh is disabled"
 
+// A refresh keeps the button busy (spinner, no clicks) for at least this
+// long: a cell polling at this rate or faster shows one continuous spinner
+// instead of a flicker, and a refresh by hand waits until the last one is a
+// moment old.
+const REFRESH_BUSY_MIN_MS = 1000
+
 type RefreshTriggerProps = {
   cellId: string
   isChart: boolean
@@ -43,10 +50,11 @@ const RefreshTrigger: React.FC<RefreshTriggerProps> = ({
   const bufferId = useNotebookBufferId()
   const fetching = useCellFetchSelector(cellId, selectFetching)
   const refreshing = isRerunning || fetching
+  const busy = useHeldFlag(refreshing, REFRESH_BUSY_MIN_MS)
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (refreshing) return
+    if (busy) return
     signalUserEdit(bufferId)
     if (isChart) void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
     eventBus.publish(
@@ -64,12 +72,12 @@ const RefreshTrigger: React.FC<RefreshTriggerProps> = ({
         type="button"
         onClick={handleRefresh}
         aria-label="Refresh"
-        aria-busy={refreshing}
+        aria-busy={busy}
         // aria-disabled + click guard, not native disabled: a poll tick must
         // not evict keyboard focus from the button mid-cycle.
-        aria-disabled={refreshing || undefined}
+        aria-disabled={busy || undefined}
       >
-        {refreshing ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
+        {busy ? <Spinner size={18} /> : <ArrowClockwiseIcon />}
       </EditorRefreshButton>
     </Tooltip>
   )
@@ -100,7 +108,12 @@ export const CellRefreshButton: React.FC<Props> = ({
   const hasOverride = cellAutoRefresh !== undefined
   const writeBlocked = view === "grid" && writeBlockedCell
   const intervalTooltip = useTriggerTooltip()
+  const [menuOpen, setMenuOpen] = useState(false)
 
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    intervalTooltip.onMenuOpenChange(open)
+  }
   const handleSelect = (value: AutoRefresh | undefined) => {
     if (value === cellAutoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
@@ -129,7 +142,7 @@ export const CellRefreshButton: React.FC<Props> = ({
           />
         </Tooltip>
       ) : (
-        <SelectMenu.Root onOpenChange={intervalTooltip.onMenuOpenChange}>
+        <SelectMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <Tooltip
             content={
               hasOverride
@@ -153,6 +166,7 @@ export const CellRefreshButton: React.FC<Props> = ({
               <AutoRefreshOptions
                 value={cellAutoRefresh}
                 onSelect={handleSelect}
+                onClose={() => handleMenuOpenChange(false)}
                 inheritedValue={resolveAutoRefresh(
                   undefined,
                   autoRefreshDefault,

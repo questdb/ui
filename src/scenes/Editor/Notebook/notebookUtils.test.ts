@@ -4,10 +4,12 @@ import {
   buildAppliedNotebookState,
   attachScriptSummary,
   autoRefreshIntervalMs,
+  parseAutoRefreshInterval,
   autoRefreshLabel,
   AUTO_REFRESH_OPTIONS,
   isAutoRefresh,
   resolveCellView,
+  hasActiveResultGrid,
   resolveRunAction,
   buildAppliedCells,
   buildAppliedLayout,
@@ -152,6 +154,7 @@ describe("singleResultFromExec", () => {
     const exec: QueryExecResult = {
       type: "dql",
       query: "SELECT 1",
+      effectiveQuery: "DECLARE @x := 1 SELECT 1",
       columns: [{ name: "x", type: "INT" }],
       dataset: [[1]],
       count: 1,
@@ -168,6 +171,7 @@ describe("singleResultFromExec", () => {
     expect(singleResultFromExec(exec, "SELECT 1")).toEqual({
       type: "dql",
       query: "SELECT 1",
+      effectiveQuery: "DECLARE @x := 1 SELECT 1",
       columns: exec.columns,
       dataset: exec.dataset,
       count: 1,
@@ -820,6 +824,112 @@ describe("buildAppliedCells", () => {
     })
     // Then the name is dropped (apply is a full PUT, no preservation)
     expect(cleared[0].name).toBeUndefined()
+  })
+
+  it("keeps highlight rules on create and clears them on null or omission (PUT)", () => {
+    // Given a rule set for a new cell
+    const highlightConfig: NotebookCell["highlightConfig"] = {
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          id: "r1",
+          enabled: true,
+          kind: "value",
+          target: { kind: "column", name: "price" },
+          appliesTo: "cell",
+          display: "always",
+          condition: { op: "gt", value: 100 },
+          color: "dataSeries2",
+        },
+      ],
+    }
+
+    // When the cell is created with the rules
+    const { nextCells: created } = buildAppliedCells([], {
+      cells: [{ value: "SELECT 1", highlightConfig }],
+    })
+    // Then the rules are on the new cell
+    expect(created[0].highlightConfig).toEqual(highlightConfig)
+
+    // When the cell is re-applied with highlightConfig: null
+    const { nextCells: cleared } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, value: "SELECT 1", highlightConfig: null }],
+    })
+    // Then the rules are gone
+    expect(cleared[0].highlightConfig).toBeUndefined()
+
+    const { nextCells: omitted } = buildAppliedCells(created, {
+      cells: [{ id: created[0].id, preserveValue: true }],
+    })
+    expect(omitted[0].highlightConfig).toBeUndefined()
+  })
+
+  it("preserves supplied highlight rules through resizing and editor-only result discard", () => {
+    const highlightConfig = { identityColumns: ["symbol"], rules: [] }
+    const previous: NotebookCell = {
+      ...cell("a", "SELECT 1", dql("SELECT 1")),
+      highlightConfig,
+    }
+    const { nextCells: resized, resultsCleared: resizeCleared } =
+      buildAppliedCells([previous], {
+        cells: [
+          { id: "a", preserveValue: true, editorHeight: 200, highlightConfig },
+        ],
+      })
+    expect(resized[0].highlightConfig).toEqual(highlightConfig)
+    expect(resized[0].topHeight).toBe(200)
+    expect(resized[0].result).toBe(previous.result)
+    expect(resizeCleared).toEqual([])
+
+    const { nextCells: discarded, resultsCleared } = buildAppliedCells(
+      resized,
+      {
+        cells: [
+          { id: "a", preserveValue: true, view: "editor", highlightConfig },
+        ],
+      },
+    )
+    expect(discarded[0].highlightConfig).toEqual(highlightConfig)
+    expect(discarded[0].result).toBeUndefined()
+    expect(resultsCleared).toEqual(["a"])
+    expect(hasActiveResultGrid(discarded[0])).toBe(false)
+  })
+
+  it("rejects SQL-to-markdown conversion even when highlight rules are supplied", () => {
+    expect(() =>
+      buildAppliedCells([cell("a", "SELECT 1")], {
+        cells: [
+          {
+            id: "a",
+            value: "# Notes",
+            type: "markdown",
+            highlightConfig: { identityColumns: [], rules: [] },
+          },
+        ],
+      }),
+    ).toThrow(/cell kind cannot change/)
+  })
+
+  it("rejects explicit markdown highlight rules and clears legacy rules when omitted", () => {
+    const highlightConfig = { identityColumns: ["symbol"], rules: [] }
+    const previous: NotebookCell = {
+      ...cell("a", "# Notes"),
+      type: "markdown",
+      highlightConfig,
+    }
+    for (const cells of [
+      [{ value: "# Notes", type: "markdown" as const, highlightConfig }],
+      [{ id: "a", preserveValue: true, highlightConfig }],
+    ]) {
+      expect(() => buildAppliedCells([previous], { cells })).toThrow(
+        /markdown cell and cannot have a highlight_config/,
+      )
+    }
+    const { nextCells } = buildAppliedCells([previous], {
+      cells: [{ id: "a", preserveValue: true }],
+    })
+    expect(nextCells[0].type).toBe("markdown")
+    expect(nextCells[0].highlightConfig).toBeUndefined()
   })
 
   it("does not preserve an existing name when name is omitted (PUT reset)", () => {
@@ -2207,16 +2317,31 @@ describe("sqlHash", () => {
 })
 
 describe("isAutoRefresh", () => {
-  it("accepts booleans and the fixed-interval tokens", () => {
+  it("accepts booleans and any interval from 50ms to 60m", () => {
     // Booleans are the 2.0.0-compatible auto/off values.
     expect(isAutoRefresh(true)).toBe(true)
     expect(isAutoRefresh(false)).toBe(true)
     expect(isAutoRefresh("5s")).toBe(true)
-    expect(isAutoRefresh("1m")).toBe(true)
+    expect(isAutoRefresh("2s")).toBe(true)
+    expect(isAutoRefresh("50ms")).toBe(true)
+    expect(isAutoRefresh("60m")).toBe(true)
+  })
+
+  it("rejects intervals outside 50ms to 60m", () => {
+    expect(isAutoRefresh("49ms")).toBe(false)
+    expect(isAutoRefresh("61m")).toBe(false)
+    expect(isAutoRefresh("3601s")).toBe(false)
+  })
+
+  it("rejects tokens that are not stored in their canonical form", () => {
+    expect(isAutoRefresh("0250ms")).toBe(false)
+    expect(isAutoRefresh("5 s")).toBe(false)
+    expect(isAutoRefresh("5S")).toBe(false)
+    expect(isAutoRefresh("1h")).toBe(false)
+    expect(isAutoRefresh("1.5s")).toBe(false)
   })
 
   it("rejects unknown tokens and non-values", () => {
-    expect(isAutoRefresh("2s")).toBe(false)
     expect(isAutoRefresh("")).toBe(false)
     expect(isAutoRefresh(5000)).toBe(false)
     expect(isAutoRefresh(null)).toBe(false)
@@ -2247,8 +2372,29 @@ describe("autoRefreshIntervalMs", () => {
     expect(autoRefreshIntervalMs("1s")).toBe(1000)
     expect(autoRefreshIntervalMs("5s")).toBe(5000)
     expect(autoRefreshIntervalMs("1m")).toBe(60000)
+    expect(autoRefreshIntervalMs("750ms")).toBe(750)
+    expect(autoRefreshIntervalMs("15m")).toBe(900000)
     expect(autoRefreshIntervalMs(true)).toBeUndefined()
     expect(autoRefreshIntervalMs(false)).toBeUndefined()
+  })
+})
+
+describe("parseAutoRefreshInterval", () => {
+  it("reads typed input as the stored token", () => {
+    // Given what a user may type in the custom interval box
+    // When each input is parsed
+    // Then spaces, case and leading zeros fold into the canonical token
+    expect(parseAutoRefreshInterval("750ms")).toBe("750ms")
+    expect(parseAutoRefreshInterval(" 2 S ")).toBe("2s")
+    expect(parseAutoRefreshInterval("0250ms")).toBe("250ms")
+  })
+
+  it("rejects input outside 50ms to 60m or without a unit", () => {
+    expect(parseAutoRefreshInterval("49ms")).toBeUndefined()
+    expect(parseAutoRefreshInterval("61m")).toBeUndefined()
+    expect(parseAutoRefreshInterval("0s")).toBeUndefined()
+    expect(parseAutoRefreshInterval("500")).toBeUndefined()
+    expect(parseAutoRefreshInterval("1h")).toBeUndefined()
   })
 })
 
@@ -2436,6 +2582,8 @@ describe("AUTO_REFRESH_OPTIONS", () => {
     expect(AUTO_REFRESH_OPTIONS).toEqual([
       true,
       false,
+      "250ms",
+      "500ms",
       "1s",
       "5s",
       "10s",
@@ -2454,6 +2602,7 @@ describe("cellToolbarMenuFlags", () => {
       view: "none",
       isMarkdown: false,
       chartZoomed: false,
+      hasResultGrid: false,
       isGridMode: false,
       cellIndex: 1,
       totalCells: 3,
@@ -2561,7 +2710,7 @@ describe("cellToolbarMenuFlags", () => {
     // Given the expanded toolbar, which shows refresh + interval + split inline
     // When the menu flags are computed for a chart and a grid
     const chart = flags({ tier: "expanded", view: "chart" })
-    const grid = flags({ tier: "expanded", view: "grid" })
+    const grid = flags({ tier: "expanded", view: "grid", hasResultGrid: true })
     // Then the menu drops all of them, keeping only chart settings (chart only)
     expect(chart.showRefreshItem).toBe(false)
     expect(chart.showAutoRefreshItem).toBe(false)
@@ -2570,6 +2719,25 @@ describe("cellToolbarMenuFlags", () => {
     expect(grid.showRefreshItem).toBe(false)
     expect(grid.showEditorToggleItem).toBe(false)
     expect(grid.showChartSettings).toBe(false)
+    expect(grid.showHighlightSettings).toBe(true)
+    expect(chart.showHighlightSettings).toBe(false)
+  })
+
+  it.each(["compact", "standard", "expanded"] as const)(
+    "offers highlight rules for an active result grid in the %s tier",
+    (tier) => {
+      expect(
+        flags({ tier, view: "grid", hasResultGrid: true })
+          .showHighlightSettings,
+      ).toBe(true)
+    },
+  )
+
+  it("hides highlight rules when the active result mounts no grid", () => {
+    // Given a grid-view cell whose active statement failed or was DDL
+    const f = flags({ tier: "compact", view: "grid", hasResultGrid: false })
+    // Then the item is not offered, since nothing would open
+    expect(f.showHighlightSettings).toBe(false)
   })
 
   it("markdown cells expose only move/duplicate/delete", () => {
@@ -2628,7 +2796,8 @@ describe("cellToolbarMenuFlags", () => {
           f.showResetZoom ||
             f.showAutoRefreshItem ||
             f.showRefreshItem ||
-            f.showChartSettings,
+            f.showChartSettings ||
+            f.showHighlightSettings,
         )
       }
     }
@@ -3054,5 +3223,50 @@ describe("pane height ceiling", () => {
         cells: [{ value: "SELECT 1", resultHeight: 2401 }],
       }),
     ).toThrow(/maximum is 2400px/)
+  })
+})
+
+describe("hasActiveResultGrid", () => {
+  const resultOf = (
+    results: SingleQueryResult[],
+    activeResultIndex = 0,
+  ): NonNullable<NotebookCell["result"]> => ({
+    results,
+    activeResultIndex,
+    timestamp: 0,
+  })
+
+  it("is true only when the active statement renders a DQL grid", () => {
+    // Given a grid cell, a failed cell, and a two-statement cell on its error tab
+    const failure: SingleQueryResult = {
+      type: "error",
+      query: "SELECT * FROM missing",
+      error: "table does not exist",
+    }
+    const success: SingleQueryResult = {
+      type: "dql",
+      query: "SELECT 1",
+      columns: [{ name: "x", type: "INT" }],
+      dataset: [[1]],
+      count: 1,
+    }
+    const grid = cell("a", "SELECT 1", resultOf([success]))
+    const failed = cell("b", "SELECT * FROM missing", resultOf([failure]))
+    const onErrorTab = cell(
+      "c",
+      "SELECT 1;\nSELECT * FROM missing",
+      resultOf([success, failure], 1),
+    )
+
+    // When each cell is checked for an active grid
+    const gridHasGrid = hasActiveResultGrid(grid)
+    const failedHasGrid = hasActiveResultGrid(failed)
+    const onErrorTabHasGrid = hasActiveResultGrid(onErrorTab)
+
+    // Then only the cell showing a grid qualifies
+    expect(gridHasGrid).toBe(true)
+    expect(failedHasGrid).toBe(false)
+    expect(onErrorTabHasGrid).toBe(false)
+    expect(hasActiveResultGrid({ ...grid, mode: "draw" })).toBe(false)
   })
 })

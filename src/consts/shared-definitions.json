@@ -696,12 +696,222 @@
     }
   },
   {
+    "name": "set_cell_highlight_config",
+    "category": "free",
+    "surfaces": ["ai", "mcp"],
+    "mutatesNotebook": true,
+    "createsNotebook": false,
+    "description": "Set or clear the highlight rules of a run-mode cell's result grids (trend coloring): flash cells that moved up or down since the previous refresh, color threshold breaches, band values into steps, or shade a range. One config per cell, applied to every statement's grid by column name; a grid without the column is not affected. Replaces the whole config (PUT). `highlight_config: null` clears it. Typical watchlist: identity_columns [\"symbol\"], rules [{kind:\"previous\",column:\"price\",op:\"gt\",color:\"green\"},{kind:\"previous\",column:\"price\",op:\"lt\",color:\"red\"}]. Pair with set_cell_autorefresh so the grid ticks. Colors are hue names (theme-aware): red, teal, amber, lime, orange, purple, green, pink, blue, olive; red and green are the loss/gain pair.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "buffer_id": {
+          "type": "number"
+        },
+        "cell_id": {
+          "type": "string"
+        },
+        "highlight_config": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "Highlight rules for the cell's result grids. Rules evaluate top-down per cell; the first match colors the background. previous rules also show an up/down glyph.",
+          "properties": {
+            "identity_columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. Needed only by previous rules; may be empty otherwise. A grid missing any of them gets no comparison. Never the designated timestamp for latest-row queries."
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["previous", "value", "steps", "newRow"],
+                    "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ascending thresholds, one color each, value >= from, highest wins; base_color below the first."
+                  },
+                  "column": {
+                    "type": ["string", "null"],
+                    "description": "Result column the rule targets. null = every numeric column (ignored by newRow)."
+                  },
+                  "enabled": {
+                    "type": ["boolean", "null"],
+                    "description": "false keeps the rule but skips it. null = enabled."
+                  },
+                  "display": {
+                    "type": ["string", "null"],
+                    "enum": ["temporary", "always", null],
+                    "description": "UI labels: Flash = temporary (briefly highlight matching cells, then fade out); Permanent = always (keep matching cells highlighted until the next result). Use these UI labels when describing the display mode to the user, but send temporary or always in this field. null = temporary for previous rules, always otherwise."
+                  },
+                  "applies_to": {
+                    "type": ["string", "null"],
+                    "enum": ["cell", "row", null],
+                    "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell."
+                  },
+                  "color": {
+                    "type": ["string", "null"],
+                    "enum": [
+                      "red",
+                      "teal",
+                      "amber",
+                      "lime",
+                      "orange",
+                      "purple",
+                      "green",
+                      "pink",
+                      "blue",
+                      "olive",
+                      null
+                    ],
+                    "description": "Cell color for previous and value rules; for between with fill gradient, the color at the `value` end. null = teal. Use green/red for up/down (the gain/loss pair)."
+                  },
+                  "op": {
+                    "type": ["string", "null"],
+                    "enum": [
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "changed",
+                      "changedBy",
+                      "eq",
+                      "between",
+                      "isNull",
+                      "contains",
+                      "matches",
+                      null
+                    ],
+                    "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow. Per column type: numeric takes everything except contains/matches; timestamp takes gt/lt/changed, the ordering ops, eq, between (solid fill) and isNull; text takes changed, eq, isNull, contains and matches; boolean takes changed, eq and isNull; other types (arrays, uuid, …) take changed and isNull. A condition that does not fit the column never matches."
+                  },
+                  "value": {
+                    "type": ["number", "string", "null"],
+                    "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes; a number with more than 15 significant digits (a LONG id past 2^53, a high-scale DECIMAL) as a string, so JSON keeps every digit. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
+                  },
+                  "to": {
+                    "type": ["number", "string", "null"],
+                    "description": "value between: the upper bound, inclusive; a number with more than 15 significant digits as a string. null = auto: the column's current maximum, recomputed on every result."
+                  },
+                  "threshold": {
+                    "type": ["number", "null"],
+                    "description": "previous changedBy: minimum change to match, inclusive (|change| >= threshold), 0 or more; 0 = any change, unchanged cells never match."
+                  },
+                  "unit": {
+                    "type": ["string", "null"],
+                    "enum": ["absolute", "percent", null],
+                    "description": "previous changedBy: threshold unit. null = percent."
+                  },
+                  "text": {
+                    "type": ["string", "null"],
+                    "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: an RE2 regular expression (linear time; no backreferences or lookarounds), e.g. ^EUR; there are no /…/flags, put (?i) in front to ignore case, e.g. (?i)eur."
+                  },
+                  "steps": {
+                    "type": ["array", "null"],
+                    "description": "steps: thresholds; a value takes the highest step it reaches (value >= from). Below the lowest step it takes base_color.",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "from": {
+                          "type": "number"
+                        },
+                        "color": {
+                          "type": "string",
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive"
+                          ]
+                        }
+                      },
+                      "required": ["from", "color"]
+                    }
+                  },
+                  "base_color": {
+                    "type": ["string", "null"],
+                    "enum": [
+                      "red",
+                      "teal",
+                      "amber",
+                      "lime",
+                      "orange",
+                      "purple",
+                      "green",
+                      "pink",
+                      "blue",
+                      "olive",
+                      null
+                    ],
+                    "description": "steps: color for values below the lowest step. null = amber."
+                  },
+                  "fill": {
+                    "type": ["string", "null"],
+                    "enum": ["solid", "gradient", null],
+                    "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell. With value and to both null the scale always spans the column's current min and max."
+                  },
+                  "high_color": {
+                    "type": ["string", "null"],
+                    "enum": [
+                      "red",
+                      "teal",
+                      "amber",
+                      "lime",
+                      "orange",
+                      "purple",
+                      "green",
+                      "pink",
+                      "blue",
+                      "olive",
+                      null
+                    ],
+                    "description": "value between with fill gradient: the color at the `to` end. null = green."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "column",
+                  "enabled",
+                  "display",
+                  "applies_to",
+                  "color",
+                  "op",
+                  "value",
+                  "to",
+                  "threshold",
+                  "unit",
+                  "text",
+                  "steps",
+                  "base_color",
+                  "fill",
+                  "high_color"
+                ]
+              }
+            }
+          },
+          "required": ["identity_columns", "rules"]
+        }
+      },
+      "required": ["buffer_id", "cell_id", "highlight_config"]
+    }
+  },
+  {
     "name": "set_cell_autorefresh",
     "category": "free",
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set auto-refresh polling for a cell, as a per-cell override of the notebook default (set_notebook_autorefresh). Applies to both chart (draw-mode) and grid (run-mode) cells. A cell containing DDL/DML never polls: the value is stored, but the engine blocks its ticks and read tools report `auto_refresh_blocked: \"contains_write\"`. Markdown cells are rejected. Nothing polls without a per-cell value or a notebook default. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"), or null to clear the override so the cell inherits the notebook default.",
+    "description": "Set auto-refresh polling for a cell, as a per-cell override of the notebook default (set_notebook_autorefresh). Applies to both chart (draw-mode) and grid (run-mode) cells. A cell containing DDL/DML never polls: the value is stored, but the engine blocks its ticks and read tools report `auto_refresh_blocked: \"contains_write\"`. Markdown cells are rejected. Nothing polls without a per-cell value or a notebook default. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, a fixed interval string (digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"), or null to clear the override so the cell inherits the notebook default.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -719,7 +929,8 @@
             },
             {
               "type": "string",
-              "enum": ["1s", "5s", "10s", "30s", "1m"]
+              "pattern": "^[1-9][0-9]*(ms|s|m)$",
+              "description": "Fixed interval: digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"."
             }
           ]
         }
@@ -733,7 +944,7 @@
     "surfaces": ["ai", "mcp"],
     "mutatesNotebook": true,
     "createsNotebook": false,
-    "description": "Set the notebook-level auto-refresh default for every cell showing a chart or a grid. Cells with no per-cell value inherit it; set_cell_autorefresh sets a per-cell override that wins over it. Cells containing DDL/DML are skipped — auto-refresh never executes a write. Until this is set, nothing polls. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (\"1s\", \"5s\", \"10s\", \"30s\", \"1m\"). `reset_cell_overrides: true` additionally deletes every per-cell override in the same atomic call, so ALL cells follow the new default — the equivalent of the console's \"Reset cell overrides\" action. Nothing re-runs; false or null leaves per-cell overrides in place and they keep winning over the default.",
+    "description": "Set the notebook-level auto-refresh default for every cell showing a chart or a grid. Cells with no per-cell value inherit it; set_cell_autorefresh sets a per-cell override that wins over it. Cells containing DDL/DML are skipped — auto-refresh never executes a write. Until this is set, nothing polls. `value`: true = adaptive poll (interval auto-tuned to response time), false = no polling, or a fixed interval string (digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"). `reset_cell_overrides: true` additionally deletes every per-cell override in the same atomic call, so ALL cells follow the new default — the equivalent of the console's \"Reset cell overrides\" action. Nothing re-runs; false or null leaves per-cell overrides in place and they keep winning over the default.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -748,7 +959,8 @@
             },
             {
               "type": "string",
-              "enum": ["1s", "5s", "10s", "30s", "1m"]
+              "pattern": "^[1-9][0-9]*(ms|s|m)$",
+              "description": "Fixed interval: digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"."
             }
           ]
         },
@@ -811,7 +1023,8 @@
             },
             {
               "type": "string",
-              "enum": ["1s", "5s", "10s", "30s", "1m"]
+              "pattern": "^[1-9][0-9]*(ms|s|m)$",
+              "description": "Fixed interval: digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"."
             }
           ],
           "description": "Notebook-level auto-refresh default after this apply. Cells with no per-cell auto_refresh inherit it. Null preserves current."
@@ -878,10 +1091,11 @@
                   },
                   {
                     "type": "string",
-                    "enum": ["1s", "5s", "10s", "30s", "1m"]
+                    "pattern": "^[1-9][0-9]*(ms|s|m)$",
+                    "description": "Fixed interval: digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"."
                   }
                 ],
-                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (\"1s\"/\"5s\"/\"10s\"/\"30s\"/\"1m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default. Ignored for markdown; keep it null."
+                "description": "Per-cell auto-refresh value: true = adaptive poll, false = off, or a fixed interval string (digits plus ms, s or m, from 50ms to 60m, e.g. \"250ms\", \"5s\", \"15m\"). Omitted or null stores NO override — the cell inherits the notebook's auto_refresh_default."
               },
               "editor_height": {
                 "anyOf": [
@@ -1007,6 +1221,195 @@
                 },
                 "required": ["x_column", "queries", "right_axis"]
               },
+              "highlight_config": {
+                "type": ["object", "null"],
+                "additionalProperties": false,
+                "description": "Highlight rules for the cell's result grids, applied to every statement's grid by column name. Omitting clears the cell's rules (full PUT) — copy the current `highlight_config` from <notebook_context> to keep them.",
+                "properties": {
+                  "identity_columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Columns whose values identify the same row across refreshes, e.g. [\"symbol\",\"side\"]. Needed only by previous rules; may be empty otherwise. A grid missing any of them gets no comparison. Never the designated timestamp for latest-row queries."
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["previous", "value", "steps", "newRow"],
+                          "description": "previous = compare with the same row in the previous result (needs identity_columns). newRow = a row whose identity was not in the previous result (needs identity_columns); it always paints the whole row and takes only color and display, so send column null. value = compare with a fixed value; op between with fill gradient shades by position in the range. steps = ascending thresholds, one color each, value >= from, highest wins; base_color below the first."
+                        },
+                        "column": {
+                          "type": ["string", "null"],
+                          "description": "Result column the rule targets. null = every numeric column (ignored by newRow)."
+                        },
+                        "enabled": {
+                          "type": ["boolean", "null"],
+                          "description": "false keeps the rule but skips it. null = enabled."
+                        },
+                        "display": {
+                          "type": ["string", "null"],
+                          "enum": ["temporary", "always", null],
+                          "description": "UI labels: Flash = temporary (briefly highlight matching cells, then fade out); Permanent = always (keep matching cells highlighted until the next result). Use these UI labels when describing the display mode to the user, but send temporary or always in this field. null = temporary for previous rules, always otherwise."
+                        },
+                        "applies_to": {
+                          "type": ["string", "null"],
+                          "enum": ["cell", "row", null],
+                          "description": "What a match colors: cell = only the matching cell, row = every cell of the row. null = cell. List order decides per cell; a row rule listed first paints the whole row, a cell rule listed first keeps its cell."
+                        },
+                        "color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "Cell color for previous and value rules; for between with fill gradient, the color at the `value` end. null = teal. Use green/red for up/down (the gain/loss pair)."
+                        },
+                        "op": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "gt",
+                            "gte",
+                            "lt",
+                            "lte",
+                            "changed",
+                            "changedBy",
+                            "eq",
+                            "between",
+                            "isNull",
+                            "contains",
+                            "matches",
+                            null
+                          ],
+                          "description": "previous: gt|lt|changed|changedBy. value: gt|gte|lt|lte|eq|between|isNull|contains|matches. null for steps and newRow. Per column type: numeric takes everything except contains/matches; timestamp takes gt/lt/changed, the ordering ops, eq, between (solid fill) and isNull; text takes changed, eq, isNull, contains and matches; boolean takes changed, eq and isNull; other types (arrays, uuid, …) take changed and isNull. A condition that does not fit the column never matches."
+                        },
+                        "value": {
+                          "type": ["number", "string", "null"],
+                          "description": "value rules: the comparison value (gt/gte/lt/lte/eq), or the lower bound for between. Plain value, no quotes; a number with more than 15 significant digits (a LONG id past 2^53, a high-scale DECIMAL) as a string, so JSON keeps every digit. Timestamps as ISO strings only (YYYY-MM-DD[THH:mm[:ss[.fraction]]], up to 9 fraction digits), read as UTC unless they carry a zone; other date forms are rejected. For between, null = auto: the column's current minimum, recomputed on every result."
+                        },
+                        "to": {
+                          "type": ["number", "string", "null"],
+                          "description": "value between: the upper bound, inclusive; a number with more than 15 significant digits as a string. null = auto: the column's current maximum, recomputed on every result."
+                        },
+                        "threshold": {
+                          "type": ["number", "null"],
+                          "description": "previous changedBy: minimum change to match, inclusive (|change| >= threshold), 0 or more; 0 = any change, unchanged cells never match."
+                        },
+                        "unit": {
+                          "type": ["string", "null"],
+                          "enum": ["absolute", "percent", null],
+                          "description": "previous changedBy: threshold unit. null = percent."
+                        },
+                        "text": {
+                          "type": ["string", "null"],
+                          "description": "value contains: case-insensitive substring (eq on text ignores case too). value matches: an RE2 regular expression (linear time; no backreferences or lookarounds), e.g. ^EUR; there are no /…/flags, put (?i) in front to ignore case, e.g. (?i)eur."
+                        },
+                        "steps": {
+                          "type": ["array", "null"],
+                          "description": "steps: thresholds; a value takes the highest step it reaches (value >= from). Below the lowest step it takes base_color.",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "from": {
+                                "type": "number"
+                              },
+                              "color": {
+                                "type": "string",
+                                "enum": [
+                                  "red",
+                                  "teal",
+                                  "amber",
+                                  "lime",
+                                  "orange",
+                                  "purple",
+                                  "green",
+                                  "pink",
+                                  "blue",
+                                  "olive"
+                                ]
+                              }
+                            },
+                            "required": ["from", "color"]
+                          }
+                        },
+                        "base_color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "steps: color for values below the lowest step. null = amber."
+                        },
+                        "fill": {
+                          "type": ["string", "null"],
+                          "enum": ["solid", "gradient", null],
+                          "description": "value between only. solid = one color inside the range (default). gradient = shade from `color` at `value` to `high_color` at `to`, mixed in between and clamped beyond the ends; matches every numeric cell. With value and to both null the scale always spans the column's current min and max."
+                        },
+                        "high_color": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "red",
+                            "teal",
+                            "amber",
+                            "lime",
+                            "orange",
+                            "purple",
+                            "green",
+                            "pink",
+                            "blue",
+                            "olive",
+                            null
+                          ],
+                          "description": "value between with fill gradient: the color at the `to` end. null = green."
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "column",
+                        "enabled",
+                        "display",
+                        "applies_to",
+                        "color",
+                        "op",
+                        "value",
+                        "to",
+                        "threshold",
+                        "unit",
+                        "text",
+                        "steps",
+                        "base_color",
+                        "fill",
+                        "high_color"
+                      ]
+                    }
+                  }
+                },
+                "required": ["identity_columns", "rules"]
+              },
               "grid": {
                 "type": ["object", "null"],
                 "additionalProperties": false,
@@ -1042,7 +1445,8 @@
               "result_height",
               "view",
               "chart_config",
-              "grid"
+              "grid",
+              "highlight_config"
             ]
           }
         }

@@ -2,6 +2,8 @@ import type { editor } from "monaco-editor"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
+import { isHighlightConfig } from "../components/ResultGrid/highlight/isHighlightConfig"
 
 // Virtualization + lazy hydration bound render and memory cost; the cap guards
 // notebook data size and the wrapper DOM / grid-layout work that still scales
@@ -20,15 +22,7 @@ export const exceedsCellNameLimit = (name: string): boolean =>
 
 export type CellMode = "run" | "draw"
 
-export const AUTO_REFRESH_INTERVALS = {
-  "1s": 1000,
-  "5s": 5000,
-  "10s": 10000,
-  "30s": 30000,
-  "1m": 60000,
-} as const
-
-export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+export type AutoRefreshInterval = `${number}${"ms" | "s" | "m"}`
 // false means "Off", true means "Auto" — presence checks must be `!== undefined`.
 export type AutoRefresh = boolean | AutoRefreshInterval
 
@@ -68,6 +62,9 @@ export type NotebookCell = {
   // Run is the absence of draw mode and must never be persisted.
   mode?: "draw"
   chartConfig?: ChartConfig
+  // One set of rules for every result grid of the cell, by column name; an
+  // edit to the SQL never touches it.
+  highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
   // Stored pane arrangement for a cell with a result. A cell without one
   // shows only the editor; that never rewrites it.
@@ -79,6 +76,7 @@ export type NotebookCell = {
 export type DqlQueryResult = {
   type: "dql"
   query: string
+  effectiveQuery?: string
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
@@ -198,6 +196,25 @@ export const dropLegacyChartConfigs = (
     const next = { ...cell }
     delete next.chartConfig
     return next
+  })
+  return { ...state, cells }
+}
+
+export const sanitizeHighlightConfig = (
+  value: unknown,
+): HighlightConfig | undefined => (isHighlightConfig(value) ? value : undefined)
+
+const hasMalformedHighlightConfig = (cell: NotebookCell): boolean =>
+  cell.highlightConfig != null && !isHighlightConfig(cell.highlightConfig)
+
+export const dropMalformedHighlightConfigs = (
+  state: NotebookViewState,
+): NotebookViewState => {
+  if (!state.cells.some(hasMalformedHighlightConfig)) return state
+  const cells = state.cells.map((cell) => {
+    if (!hasMalformedHighlightConfig(cell)) return cell
+    const { highlightConfig: _dropped, ...rest } = cell
+    return rest
   })
   return { ...state, cells }
 }

@@ -897,6 +897,7 @@ describe("sanitizeBuffer", () => {
               mode: "draw",
               autoRefresh: true,
               chartConfig: { name: "Legacy title", xColumn: "ts", queries: [] },
+              highlightConfig: { identityColumns: ["symbol"], rules: [] },
             },
           ],
         },
@@ -908,6 +909,7 @@ describe("sanitizeBuffer", () => {
       expect(cell).toMatchObject({ type: "markdown", name: "Legacy title" })
       expect(cell && "mode" in cell).toBe(false)
       expect(cell && "chartConfig" in cell).toBe(false)
+      expect(cell && "highlightConfig" in cell).toBe(false)
       expect(cell && "autoRefresh" in cell).toBe(false)
     })
 
@@ -1044,7 +1046,7 @@ describe("sanitizeBuffer", () => {
         sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
       ).toBe(false)
       // …and an unknown token is dropped.
-      input.notebookViewState.settings = { autoRefreshDefault: "2s" }
+      input.notebookViewState.settings = { autoRefreshDefault: "10ms" }
       expect(
         sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
       ).toBeUndefined()
@@ -1063,7 +1065,7 @@ describe("sanitizeBuffer", () => {
               autoRefresh: "5s",
               bottomResized: true,
             },
-            { id: "bad-token", value: "SELECT 2", autoRefresh: "2s" },
+            { id: "bad-token", value: "SELECT 2", autoRefresh: "10ms" },
             { id: "bad-type", value: "SELECT 3", autoRefresh: 5000 },
           ],
         },
@@ -1107,6 +1109,64 @@ describe("sanitizeBuffer", () => {
         xColumn: "ts",
         queries: [{ type: "line", yColumns: ["price"] }, null],
       })
+    })
+
+    it("keeps valid highlight rules through pane migration and drops malformed rules", () => {
+      // Given a legacy maximized cell with valid rules and another with an unknown rule kind
+      const valid = {
+        identityColumns: ["symbol"],
+        rules: [
+          {
+            id: "r1",
+            kind: "previous",
+            enabled: true,
+            target: { kind: "column", name: "price" },
+            display: "temporary",
+            appliesTo: "cell",
+            condition: { op: "gt" },
+            color: "dataPositive",
+          },
+        ],
+      }
+      const input = {
+        label: "Notebook",
+        value: "",
+        position: 0,
+        notebookViewState: {
+          cells: [
+            {
+              id: "c1",
+              value: "SELECT 1",
+              highlightConfig: valid,
+              isViewMaximized: true,
+              topHeight: 152,
+              bottomHeight: 350,
+            },
+            {
+              id: "c2",
+              value: "SELECT 2",
+              highlightConfig: {
+                identityColumns: [],
+                rules: [{ kind: "nope" }],
+              },
+            },
+          ],
+        },
+      }
+
+      // When the buffer is sanitized
+      const result = sanitizeBuffer(input)
+
+      // Then the rules survive alongside migrated dimensions, and malformed rules drop
+      expect(result.notebookViewState?.cells[0].highlightConfig).toEqual(valid)
+      expect(result.notebookViewState?.cells[0]).toMatchObject({
+        paneView: "result",
+        bottomHeight: 502,
+      })
+      expect(result.notebookViewState?.cells[0]).not.toHaveProperty(
+        "isViewMaximized",
+      )
+      expect(result.notebookViewState?.cells[1].highlightConfig).toBeUndefined()
     })
 
     it("migrates a legacy chartConfig.name to the cell name and preserves an explicit cell name", () => {

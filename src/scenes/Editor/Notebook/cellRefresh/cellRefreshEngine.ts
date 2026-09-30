@@ -1,5 +1,6 @@
 import type { QueryExecResult } from "../../../../hooks/useQueryExecution"
 import { runAdaptivePollLoop } from "../../../../hooks/useAdaptivePoll"
+import { runFixedIntervalPollLoop } from "../../../../utils/runFixedIntervalPollLoop"
 import { sleep } from "../../../../utils/sleep"
 import type {
   AutoRefresh,
@@ -1090,11 +1091,20 @@ export class CellRefreshEngine {
       const aborted = await sleep(untilDue, abort.signal)
       if (aborted) return
     }
+    const fetchFn = () => this.fetchOnce(entry, "poll")
+    if (fixed !== undefined) {
+      await runFixedIntervalPollLoop({
+        fetchFn,
+        signal: abort.signal,
+        intervalMs: fixed,
+      })
+      return
+    }
     await runAdaptivePollLoop({
-      fetchFn: () => this.fetchOnce(entry, "poll"),
+      fetchFn,
       signal: abort.signal,
-      minIntervalMs: fixed ?? REFRESH_MIN_MS,
-      maxIntervalMs: fixed ?? REFRESH_MAX_MS,
+      minIntervalMs: REFRESH_MIN_MS,
+      maxIntervalMs: REFRESH_MAX_MS,
       onIntervalChange: (intervalMs) => {
         entry.pollIntervalMs = intervalMs
       },

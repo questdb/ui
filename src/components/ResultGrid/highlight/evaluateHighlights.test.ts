@@ -1,0 +1,1463 @@
+import { beforeAll, describe, expect, it } from "vitest"
+import { loadRe2 } from "./pattern"
+import type { ColumnDefinition } from "../../../utils/questdb/types"
+import type { ResultGridRow } from "../types"
+import { evaluateHighlights } from "./evaluateHighlights"
+import { buildIdentityIndex } from "./identityIndex"
+import type {
+  HighlightConfig,
+  HighlightRule,
+  RuleTarget,
+  ValueCondition,
+} from "./types"
+
+beforeAll(async () => {
+  await loadRe2()
+})
+
+const columns: ColumnDefinition[] = [
+  { name: "symbol", type: "SYMBOL" },
+  { name: "price", type: "DOUBLE" },
+  { name: "amount", type: "DOUBLE" },
+  { name: "ts", type: "TIMESTAMP" },
+]
+
+const SYMBOL = 0
+const PRICE = 1
+const AMOUNT = 2
+const TS = 3
+
+const row = (
+  symbol: string,
+  price: number | null,
+  amount: number,
+  ts = "2026-09-24T10:00:00.000000Z",
+): ResultGridRow => [symbol, price, amount, ts]
+
+const previousOf = (rows: ResultGridRow[]) => buildIdentityIndex(rows, [SYMBOL])
+
+const rule = (partial: Partial<HighlightRule> & Pick<HighlightRule, "kind">) =>
+  ({
+    id: "r",
+    enabled: true,
+    target: { kind: "column", name: "price" },
+    display: "always",
+    appliesTo: "cell",
+    ...partial,
+  }) as HighlightRule
+
+const config = (
+  rules: HighlightRule[],
+  identityColumns = ["symbol"],
+): HighlightConfig => ({ identityColumns, rules })
+
+describe("evaluateHighlights: previous result rules", () => {
+  it("colors an increase and a decrease against the matched previous row", () => {
+    // Given a previous result and two rules on price
+    const previous = previousOf([row("BTC", 100, 1), row("ETH", 50, 1)])
+    const dataset = [row("BTC", 101, 1), row("ETH", 49, 1)]
+    const rules = [
+      rule({
+        id: "up",
+        kind: "previous",
+        condition: { op: "gt" },
+        color: "dataPositive",
+        display: "temporary",
+      }),
+      rule({
+        id: "down",
+        kind: "previous",
+        condition: { op: "lt" },
+        color: "dataNegative",
+        display: "temporary",
+      }),
+    ]
+
+    // When the new result is evaluated
+    const { lookup, stats } = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous,
+    })
+
+    // Then each cell gets the matching color and direction
+    expect(lookup.background(0, PRICE)).toEqual({
+      color: "dataPositive",
+      display: "temporary",
+    })
+    expect(lookup.direction(0, PRICE)).toBe("up")
+    expect(lookup.background(1, PRICE)?.color).toBe("dataNegative")
+    expect(lookup.direction(1, PRICE)).toBe("down")
+    expect(stats).toEqual({ total: 2, matched: 2, added: 0, ambiguous: 0 })
+  })
+
+  it("does not compare when there is no previous result", () => {
+    // Given no baseline
+    const rules = [
+      rule({
+        kind: "previous",
+        condition: { op: "changed" },
+        color: "dataSeries2",
+      }),
+    ]
+
+    // When evaluated
+    const { lookup, stats } = evaluateHighlights({
+      columns,
+      dataset: [row("BTC", 1, 1)],
+      config: config(rules),
+      previous: null,
+    })
+
+    // Then nothing is highlighted and there are no stats
+    expect(lookup.background(0, PRICE)).toBeUndefined()
+    expect(stats).toBeNull()
+  })
+
+  it("counts new rows and skips ambiguous keys", () => {
+    // Given a previous result with a duplicated key and a new row
+    const previous = previousOf([row("BTC", 1, 1), row("BTC", 2, 1)])
+    const dataset = [row("BTC", 3, 1), row("SOL", 1, 1), row("SOL", 2, 1)]
+    const rules = [
+      rule({
+        kind: "previous",
+        condition: { op: "changed" },
+        color: "dataSeries2",
+      }),
+    ]
+
+    // When evaluated
+    const { lookup, stats } = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous,
+    })
+
+    // Then the ambiguous key is not compared, the new key counts as added,
+    // and the duplicated current key counts as ambiguous
+    expect(lookup.background(0, PRICE)).toBeUndefined()
+    expect(stats).toEqual({ total: 3, matched: 0, added: 1, ambiguous: 1 })
+  })
+
+  it("detects a change on a text column", () => {
+    // Given the symbol column changed its side value
+    const sideColumns: ColumnDefinition[] = [
+      { name: "id", type: "LONG" },
+      { name: "status", type: "STRING" },
+    ]
+    const previous = buildIdentityIndex([[1, "open"]], [0])
+    const rules = [
+      rule({
+        kind: "previous",
+        target: { kind: "column", name: "status" },
+        condition: { op: "changed" },
+        color: "dataSeries2",
+      }),
+    ]
+
+    // When evaluated
+    const { lookup } = evaluateHighlights({
+      columns: sideColumns,
+      dataset: [[1, "filled"]],
+      config: config(rules, ["id"]),
+      previous,
+    })
+
+    // Then the text cell is highlighted
+    expect(lookup.background(0, 1)?.color).toBe("dataSeries2")
+  })
+
+  it("compares array cells by content, so an equal array is not a change", () => {
+    // Given a changed rule on an array column, and rows whose arrays arrive as new objects
+    const arrayColumns: ColumnDefinition[] = [
+      { name: "id", type: "LONG" },
+      { name: "bids", type: "ARRAY" },
+    ]
+    const previous = buildIdentityIndex(
+      [
+        [1, [1.5, 2.5]],
+        [2, [[1, 2], [3]]],
+        [3, [1.5, 2.5]],
+      ] as ResultGridRow[],
+      [0],
+    )
+    const rules = [
+      rule({
+        kind: "previous",
+        target: { kind: "column", name: "bids" },
+        condition: { op: "changed" },
+        color: "dataSeries2",
+      }),
+    ]
+
+    // When one array is equal, one is nested differently, and one has another value
+    const { lookup } = evaluateHighlights({
+      columns: arrayColumns,
+      dataset: [
+        [1, [1.5, 2.5]],
+        [2, [[1], [2, 3]]],
+        [3, [1.5, 2.6]],
+      ] as ResultGridRow[],
+      config: config(rules, ["id"]),
+      previous,
+    })
+
+    // Then only the arrays whose content differs are highlighted
+    expect(lookup.background(0, 1)).toBeUndefined()
+    expect(lookup.background(1, 1)?.color).toBe("dataSeries2")
+    expect(lookup.background(2, 1)?.color).toBe("dataSeries2")
+  })
+
+  it("applies an absolute and a percent threshold, and never matches a zero baseline in percent", () => {
+    // Given three rows with different deltas
+    const previous = previousOf([
+      row("A", 100, 1),
+      row("B", 100, 1),
+      row("C", 0, 1),
+    ])
+    const dataset = [row("A", 100.5, 1), row("B", 103, 1), row("C", 5, 1)]
+    const absolute = rule({
+      id: "abs",
+      kind: "previous",
+      condition: { op: "changedBy", threshold: 1, unit: "absolute" },
+      color: "dataSeries2",
+    })
+    const percent = rule({
+      id: "pct",
+      kind: "previous",
+      condition: { op: "changedBy", threshold: 2, unit: "percent" },
+      color: "dataSeries2",
+    })
+
+    // When evaluated with each rule
+    const byAbsolute = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([absolute]),
+      previous,
+    }).lookup
+    const byPercent = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([percent]),
+      previous,
+    }).lookup
+
+    // Then only the rows past the threshold match
+    expect(byAbsolute.background(0, PRICE)).toBeUndefined()
+    expect(byAbsolute.background(1, PRICE)).toBeDefined()
+    expect(byPercent.background(0, PRICE)).toBeUndefined()
+    expect(byPercent.background(1, PRICE)).toBeDefined()
+    expect(byPercent.background(2, PRICE)).toBeUndefined()
+
+    // And a threshold of 0 flags any change but never an unchanged cell
+    const anyChange = evaluateHighlights({
+      columns,
+      dataset: [row("A", 100, 1), row("B", 100.001, 1)],
+      config: config([
+        rule({
+          id: "any",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 0, unit: "absolute" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+    expect(anyChange.background(0, PRICE)).toBeUndefined()
+    expect(anyChange.background(1, PRICE)).toBeDefined()
+  })
+
+  it("flags a change of exactly the threshold on doubles, absolute and percent", () => {
+    // Given prices that move by exactly one tick and by exactly one percent
+    const previous = previousOf([
+      row("TICK", 1.1, 1),
+      row("PCT", 1.1, 1),
+      row("UNDER", 1.1, 1),
+    ])
+    const dataset = [
+      row("TICK", 1.1001, 1),
+      row("PCT", 1.111, 1),
+      row("UNDER", 1.1000999, 1),
+    ]
+
+    // When evaluated with a one-tick and a one-percent threshold
+    const byAbsolute = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([
+        rule({
+          id: "tick",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 0.0001, unit: "absolute" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+    const byPercent = evaluateHighlights({
+      columns,
+      dataset,
+      config: config([
+        rule({
+          id: "pct",
+          kind: "previous",
+          condition: { op: "changedBy", threshold: 1, unit: "percent" },
+          color: "dataSeries2",
+        }),
+      ]),
+      previous,
+    }).lookup
+
+    // Then the exact moves match and the move just under does not
+    expect(byAbsolute.background(0, PRICE)).toBeDefined()
+    expect(byPercent.background(1, PRICE)).toBeDefined()
+    expect(byAbsolute.background(2, PRICE)).toBeUndefined()
+  })
+
+  it("flags a change of exactly the threshold on a short DECIMAL column", () => {
+    // Given a DECIMAL(10,4) column whose value moves by one unit of scale
+    const decimalColumns: ColumnDefinition[] = [
+      { name: "id", type: "LONG" },
+      { name: "qty", type: "DECIMAL(10,4)" },
+    ]
+    const previous = buildIdentityIndex([[1, "1.1000"]], [0])
+
+    // When evaluated with a threshold of that unit
+    const { lookup } = evaluateHighlights({
+      columns: decimalColumns,
+      dataset: [[1, "1.1001"]],
+      config: config(
+        [
+          rule({
+            id: "tick",
+            kind: "previous",
+            target: { kind: "column", name: "qty" },
+            condition: { op: "changedBy", threshold: 0.0001, unit: "absolute" },
+            color: "dataSeries2",
+          }),
+        ],
+        ["id"],
+      ),
+      previous,
+    })
+
+    // Then the one-unit move matches
+    expect(lookup.background(0, 1)).toBeDefined()
+  })
+
+  it("paints a row whose identity was not in the previous result", () => {
+    // Given a new-row rule
+    const fresh: HighlightRule = {
+      id: "fresh",
+      kind: "newRow",
+      enabled: true,
+      display: "always",
+      color: "dataSeries9",
+    }
+
+    // When B is new, A was there, and C shares a key with another row
+    const { lookup, stats } = evaluateHighlights({
+      columns,
+      dataset: [row("A", 1, 1), row("B", 1, 1), row("C", 1, 1), row("C", 2, 2)],
+      config: config([fresh]),
+      previous: previousOf([row("A", 1, 1)]),
+    })
+
+    // Then only B's row is painted, and the first run paints nothing
+    expect(lookup.row(0)).toBeUndefined()
+    expect(lookup.row(1)?.color).toBe("dataSeries9")
+    expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries9")
+    expect(lookup.row(2)?.color).toBe("dataSeries9")
+    expect(lookup.row(3)).toBeUndefined()
+    expect(stats).toEqual({ total: 4, matched: 1, added: 2, ambiguous: 1 })
+    const firstRun = evaluateHighlights({
+      columns,
+      dataset: [row("B", 1, 1)],
+      config: config([fresh]),
+      previous: null,
+    })
+    expect(firstRun.lookup.row(0)).toBeUndefined()
+  })
+
+  it("compares timestamps with the previous result as instants", () => {
+    // Given up and down rules on ts
+    const later = rule({
+      id: "later",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const earlier = rule({
+      id: "earlier",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "lt" },
+      color: "dataNegative",
+    })
+
+    // When a row's timestamp moves forward and another's moves back
+    const { lookup } = evaluateHighlights({
+      columns,
+      dataset: [
+        row("A", 1, 1, "2026-09-24T10:00:05.000000Z"),
+        row("B", 1, 1, "2026-09-24T09:59:00.000000Z"),
+      ],
+      config: config([later, earlier]),
+      previous: previousOf([row("A", 1, 1), row("B", 1, 1)]),
+    })
+
+    // Then the glyph and color follow the instant, not the text
+    expect(lookup.background(0, TS)?.color).toBe("dataPositive")
+    expect(lookup.direction(0, TS)).toBe("up")
+    expect(lookup.background(1, TS)?.color).toBe("dataNegative")
+    expect(lookup.direction(1, TS)).toBe("down")
+  })
+
+  it("compares timestamps at nanosecond precision", () => {
+    // Given up and down rules on ts
+    const later = rule({
+      id: "later",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const earlier = rule({
+      id: "earlier",
+      kind: "previous",
+      target: { kind: "column", name: "ts" },
+      condition: { op: "lt" },
+      color: "dataNegative",
+    })
+
+    // When a timestamp moves by one microsecond, one by a nanosecond, and one not at all
+    const { lookup } = evaluateHighlights({
+      columns,
+      dataset: [
+        row("A", 1, 1, "2026-09-24T10:00:00.369374Z"),
+        row("B", 1, 1, "2026-09-24T10:00:00.369373999Z"),
+        row("C", 1, 1, "2026-09-24T10:00:00.369373Z"),
+      ],
+      config: config([later, earlier]),
+      previous: previousOf([
+        row("A", 1, 1, "2026-09-24T10:00:00.369373Z"),
+        row("B", 1, 1, "2026-09-24T10:00:00.369374000Z"),
+        row("C", 1, 1, "2026-09-24T10:00:00.369373000Z"),
+      ]),
+    })
+
+    // Then the smallest move is seen, and an equal instant in another layout is not a move
+    expect(lookup.direction(0, TS)).toBe("up")
+    expect(lookup.direction(1, TS)).toBe("down")
+    expect(lookup.direction(2, TS)).toBeUndefined()
+    expect(lookup.background(2, TS)).toBeUndefined()
+  })
+
+  it("keeps the direction glyph when a value rule wins the background", () => {
+    // Given a breach rule listed before the movement rule
+    const previous = previousOf([row("BTC", 200, 1)])
+    const rules = [
+      rule({
+        id: "limit",
+        kind: "value",
+        condition: { op: "gt", value: 100 },
+        color: "dataSeries3",
+      }),
+      rule({
+        id: "down",
+        kind: "previous",
+        condition: { op: "lt" },
+        color: "dataNegative",
+      }),
+    ]
+
+    // When the price drops but stays above the limit
+    const { lookup } = evaluateHighlights({
+      columns,
+      dataset: [row("BTC", 150, 1)],
+      config: config(rules),
+      previous,
+    })
+
+    // Then the limit color wins and the direction still shows
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.direction(0, PRICE)).toBe("down")
+  })
+})
+
+describe("evaluateHighlights: value rules", () => {
+  const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
+    evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules, []),
+      previous: null,
+    }).lookup
+
+  it("matches numeric comparisons and between", () => {
+    // Given a between rule on amount
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        condition: { op: "between", from: 10, to: 20, fill: { kind: "solid" } },
+        color: "dataSeries4",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [
+      row("A", 1, 5),
+      row("A", 1, 15),
+      row("A", 1, 20),
+    ])
+
+    // Then only the in-range cells match, bounds included
+    expect(lookup.background(0, AMOUNT)).toBeUndefined()
+    expect(lookup.background(1, AMOUNT)).toBeDefined()
+    expect(lookup.background(2, AMOUNT)).toBeDefined()
+  })
+
+  it("treats a DECIMAL(p,s) column as numeric", () => {
+    // Given a decimal column, as the server reports it, with string values
+    const decimalColumns: ColumnDefinition[] = [
+      { name: "qty", type: "DECIMAL(10,3)" },
+    ]
+    const dataset: ResultGridRow[] = [["1.500"], ["2.000"]]
+    const decimalRule = (
+      id: string,
+      target: RuleTarget,
+      condition: ValueCondition,
+    ) => rule({ id, kind: "value", target, condition, color: "dataSeries2" })
+    const evaluateDecimal = (rules: HighlightRule[]) =>
+      evaluateHighlights({
+        columns: decimalColumns,
+        dataset,
+        config: config(rules, []),
+        previous: null,
+      }).lookup
+
+    // When an all-numeric, an automatic-range gradient, and an equality rule
+    // are evaluated
+    const allNumeric = evaluateDecimal([
+      decimalRule("gt", { kind: "allNumeric" }, { op: "gt", value: 1.6 }),
+    ])
+    const gradient = evaluateDecimal([
+      decimalRule(
+        "scale",
+        { kind: "column", name: "qty" },
+        {
+          op: "between",
+          from: null,
+          to: null,
+          fill: { kind: "gradient", highColor: "dataPositive" },
+        },
+      ),
+    ])
+    const equal = evaluateDecimal([
+      decimalRule(
+        "eq",
+        { kind: "column", name: "qty" },
+        { op: "eq", value: 1.5 },
+      ),
+    ])
+
+    // Then the column takes part in each rule as a number
+    expect(allNumeric.background(0, 0)).toBeUndefined()
+    expect(allNumeric.background(1, 0)).toBeDefined()
+    expect(gradient.background(0, 0)?.blend?.ratio).toBe(0)
+    expect(gradient.background(1, 0)?.blend?.ratio).toBe(1)
+    expect(equal.background(0, 0)).toBeDefined()
+    expect(equal.background(1, 0)).toBeUndefined()
+  })
+
+  it("treats ≥ and ≤ as inclusive and > and < as strict", () => {
+    // Given one rule of each comparison on amount, all against 10
+    const at = (op: "gt" | "gte" | "lt" | "lte") =>
+      rule({
+        id: op,
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        condition: { op, value: 10 },
+        color: "dataSeries4",
+      })
+
+    // When a cell equals the bound
+    const matchesAtBound = (op: "gt" | "gte" | "lt" | "lte") =>
+      evaluate([at(op)], [row("A", 1, 10)]).background(0, AMOUNT) !== undefined
+
+    // Then only the inclusive ops match it
+    expect(matchesAtBound("gt")).toBe(false)
+    expect(matchesAtBound("gte")).toBe(true)
+    expect(matchesAtBound("lt")).toBe(false)
+    expect(matchesAtBound("lte")).toBe(true)
+  })
+
+  it("compares timestamps as instants", () => {
+    // Given a rule on the timestamp column
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "ts" },
+        condition: { op: "gt", value: "2026-09-24T09:00:00Z" },
+        color: "dataSeries5",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [
+      row("A", 1, 1, "2026-09-24T10:00:00.000000Z"),
+      row("A", 1, 1, "2026-09-24T08:00:00.000000Z"),
+    ])
+
+    // Then only the later row matches
+    expect(lookup.background(0, TS)).toBeDefined()
+    expect(lookup.background(1, TS)).toBeUndefined()
+  })
+
+  it("matches a timestamp literal exactly, whatever its fraction length", () => {
+    // Given an = rule with a microsecond literal
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "ts" },
+        condition: { op: "eq", value: "2026-09-24T10:00:00.369373Z" },
+        color: "dataSeries5",
+      }),
+    ]
+
+    // When rows differ from it by a microsecond or only in layout
+    const lookup = evaluate(rules, [
+      row("A", 1, 1, "2026-09-24T10:00:00.369373000Z"),
+      row("A", 1, 1, "2026-09-24T10:00:00.369374Z"),
+      row("A", 1, 1, "2026-09-24T10:00:00.369372Z"),
+    ])
+
+    // Then only the same instant matches
+    expect(lookup.background(0, TS)).toBeDefined()
+    expect(lookup.background(1, TS)).toBeUndefined()
+    expect(lookup.background(2, TS)).toBeUndefined()
+  })
+
+  it("matches null and text contains", () => {
+    // Given an is-null rule on price and a contains rule on symbol
+    const rules = [
+      rule({
+        id: "n",
+        kind: "value",
+        condition: { op: "isNull" },
+        color: "dataSeries6",
+      }),
+      rule({
+        id: "c",
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "contains", text: "usdt" },
+        color: "dataSeries8",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [
+      row("BTC-USDT", null, 1),
+      row("ETH-BTC", 1, 1),
+    ])
+
+    // Then the null price and the matching symbol are highlighted
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries6")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries8")
+    expect(lookup.background(1, SYMBOL)).toBeUndefined()
+  })
+
+  it("ignores surrounding quotes and whitespace in text comparisons", () => {
+    // Given equality and contains rules typed the SQL way, with quotes
+    const rules = [
+      rule({
+        id: "eq",
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "eq", value: " 'btc-usdt' " },
+        color: "dataSeries2",
+      }),
+      rule({
+        id: "contains",
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "contains", text: '"eth"' },
+        color: "dataSeries3",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [
+      row("BTC-USDT", 1, 1),
+      row("ETH-BTC", 1, 1),
+    ])
+
+    // Then both rows match without the quotes, ignoring case
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries2")
+    expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries3")
+  })
+
+  it("matches a regular expression, honours an inline (?i) flag, and never matches an invalid pattern", () => {
+    // Given a case-sensitive pattern, an inline-flagged one and a broken one on symbol
+    const symbolRule = (
+      id: string,
+      pattern: string,
+      color: "dataSeries2" | "dataSeries3" | "dataSeries4",
+    ) =>
+      rule({
+        id,
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "matches", pattern },
+        color,
+      })
+    const dataset = [
+      row("BTC-USDT", 1, 1),
+      row("eth-btc", 1, 1),
+      row("SOL-USDT", 1, 1),
+    ]
+
+    // When each rule is evaluated alone
+    const anchored = evaluate([symbolRule("a", "^BTC", "dataSeries2")], dataset)
+    const flagged = evaluate(
+      [symbolRule("b", "(?i)^eth", "dataSeries3")],
+      dataset,
+    )
+    const broken = evaluate([symbolRule("c", "(", "dataSeries4")], dataset)
+
+    // Then only the intended rows match and the broken pattern matches nothing
+    expect(anchored.background(0, SYMBOL)?.color).toBe("dataSeries2")
+    expect(anchored.background(2, SYMBOL)).toBeUndefined()
+    expect(flagged.background(1, SYMBOL)?.color).toBe("dataSeries3")
+    expect(broken.background(0, SYMBOL)).toBeUndefined()
+  })
+
+  it("treats slashes as literal characters instead of regex bounds", () => {
+    // Given path-like values and patterns wrapped in or containing slashes
+    const dataset = [
+      row("/api/users/1", 1, 1),
+      row("xapiY", 1, 1),
+      row("/api/s", 1, 1),
+    ]
+    const pathRule = (pattern: string) =>
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "matches", pattern },
+      })
+
+    // When a slash-wrapped pattern and a path pattern are evaluated
+    const slashWrapped = evaluate([pathRule("/api/s")], dataset)
+    const path = evaluate([pathRule("^/api/users")], dataset)
+    const matchedRows = (lookup: typeof slashWrapped) =>
+      [0, 1, 2].filter((index) => lookup.background(index, SYMBOL))
+
+    // Then /api/s matches only the literal text and the path pattern matches the path
+    expect(matchedRows(slashWrapped)).toEqual([2])
+    expect(matchedRows(path)).toEqual([0])
+  })
+
+  it("evaluates a pattern that backtracks exponentially in a backtracking engine without stalling", () => {
+    // Given a nested-quantifier pattern and values that almost match it
+    const almostMatching = "order rejected insufficient margin for account!"
+    const dataset = [
+      row(almostMatching, 1, 1),
+      row("order accepted", 1, 1),
+      row(almostMatching, 1, 1),
+    ]
+    const nested = rule({
+      kind: "value",
+      target: { kind: "column", name: "symbol" },
+      condition: { op: "matches", pattern: "^(\\w+\\s?)+$" },
+      color: "dataSeries2",
+    })
+
+    // When the column is evaluated
+    const lookup = evaluate([nested], dataset)
+
+    // Then the test completes within the suite timeout, and only the plain
+    // row matches
+    expect(lookup.background(0, SYMBOL)).toBeUndefined()
+    expect(lookup.background(1, SYMBOL)?.color).toBe("dataSeries2")
+    expect(lookup.background(2, SYMBOL)).toBeUndefined()
+  })
+
+  it("never matches a pattern that needs a backreference or a lookaround", () => {
+    // Given RE2 syntax limits: backreferences and lookarounds do not compile
+    const dataset = [row("BTC-BTC", 1, 1), row("BTC-USDT", 1, 1)]
+    const symbolRule = (pattern: string) =>
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "symbol" },
+        condition: { op: "matches", pattern },
+        color: "dataSeries2",
+      })
+
+    // When a backreference and a lookahead pattern are evaluated
+    const backreference = evaluate([symbolRule("^(\\w+)-\\1$")], dataset)
+    const lookahead = evaluate([symbolRule("^BTC(?=-USDT)")], dataset)
+
+    // Then no row is highlighted by either
+    expect(backreference.background(0, SYMBOL)).toBeUndefined()
+    expect(lookahead.background(1, SYMBOL)).toBeUndefined()
+  })
+
+  it("applies the first matching rule and ignores disabled rules", () => {
+    // Given a disabled rule first, then two overlapping rules
+    const rules = [
+      rule({
+        id: "off",
+        kind: "value",
+        enabled: false,
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries2",
+      }),
+      rule({
+        id: "a",
+        kind: "value",
+        condition: { op: "gt", value: 10 },
+        color: "dataSeries2",
+      }),
+      rule({
+        id: "b",
+        kind: "value",
+        condition: { op: "gt", value: 5 },
+        color: "dataSeries3",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [row("A", 20, 1), row("A", 7, 1)])
+
+    // Then order decides and the disabled rule never matches
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries2")
+    expect(lookup.background(1, PRICE)?.color).toBe("dataSeries3")
+  })
+
+  it("targets every numeric column with one rule", () => {
+    // Given an all-numeric rule
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "allNumeric" },
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries8",
+      }),
+    ]
+
+    // When evaluated
+    const lookup = evaluate(rules, [row("A", 1, 1)])
+
+    // Then price and amount match, symbol and ts do not
+    expect(lookup.background(0, PRICE)).toBeDefined()
+    expect(lookup.background(0, AMOUNT)).toBeDefined()
+    expect(lookup.background(0, SYMBOL)).toBeUndefined()
+    expect(lookup.background(0, TS)).toBeUndefined()
+  })
+})
+
+describe("evaluateHighlights: rules that apply to the row", () => {
+  const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
+    evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous: null,
+    }).lookup
+
+  it("colors the row of a matching cell and leaves other rows alone", () => {
+    // Given a value rule on amount that applies to the row
+    const rules = [
+      rule({
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        appliesTo: "row",
+        condition: { op: "gt", value: 100 },
+        color: "dataSeries10",
+      }),
+    ]
+
+    // When one row breaches and one does not
+    const lookup = evaluate(rules, [row("A", 1, 500), row("B", 1, 5)])
+
+    // Then every cell of the breaching row gets the color
+    expect(lookup.row(0)).toEqual({
+      color: "dataSeries10",
+      display: "always",
+    })
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries10")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries10")
+    expect(lookup.row(1)).toBeUndefined()
+    expect(lookup.background(1, AMOUNT)).toBeUndefined()
+  })
+
+  it("lets list order decide between a row rule and a cell rule", () => {
+    // Given a row rule on amount listed after a row rule on price, and a cell rule
+    const rules = [
+      rule({
+        id: "price-row",
+        kind: "value",
+        appliesTo: "row",
+        condition: { op: "gt", value: 10 },
+        color: "dataSeries3",
+      }),
+      rule({
+        id: "amount-row",
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        appliesTo: "row",
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries10",
+      }),
+      rule({
+        id: "amount-cell",
+        kind: "value",
+        target: { kind: "column", name: "amount" },
+        appliesTo: "cell",
+        condition: { op: "lt", value: 10 },
+        color: "dataNegative",
+      }),
+    ]
+
+    // When both row rules match the same row
+    const lookup = evaluate(rules, [row("A", 20, 5)])
+
+    // Then the row rule listed first paints every cell, including amount
+    expect(lookup.row(0)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries3")
+
+    // And with the cell rule moved first, amount keeps its own color and the row fills the rest
+    const reordered = evaluate(
+      [rules[2], rules[0], rules[1]],
+      [row("A", 20, 5)],
+    )
+    expect(reordered.background(0, AMOUNT)?.color).toBe("dataNegative")
+    expect(reordered.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(reordered.row(0)?.color).toBe("dataSeries3")
+  })
+
+  it("still paints the row when the row rule follows a matching cell rule on the same column", () => {
+    // Given a cell rule and then a row rule, both on price and both matching
+    const rules = [
+      rule({
+        id: "price-cell",
+        kind: "value",
+        appliesTo: "cell",
+        condition: { op: "lt", value: 10 },
+        color: "dataNegative",
+      }),
+      rule({
+        id: "price-row",
+        kind: "value",
+        appliesTo: "row",
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries3",
+      }),
+    ]
+
+    // When a row matches both
+    const lookup = evaluate(rules, [row("A", 5, 1)])
+
+    // Then price keeps the cell color and the other cells take the row color
+    expect(lookup.background(0, PRICE)?.color).toBe("dataNegative")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(lookup.row(0)?.color).toBe("dataSeries3")
+  })
+
+  it("lets a row rule listed first beat a later cell rule on the same column", () => {
+    // Given a row rule and then a cell rule, both on price and both matching
+    const rules = [
+      rule({
+        id: "price-row",
+        kind: "value",
+        appliesTo: "row",
+        condition: { op: "gt", value: 0 },
+        color: "dataSeries3",
+      }),
+      rule({
+        id: "price-cell",
+        kind: "value",
+        appliesTo: "cell",
+        condition: { op: "lt", value: 10 },
+        color: "dataNegative",
+      }),
+    ]
+
+    // When a row matches both
+    const lookup = evaluate(rules, [row("A", 5, 1)])
+
+    // Then the row color covers price as well
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(0, SYMBOL)?.color).toBe("dataSeries3")
+  })
+})
+
+describe("evaluateHighlights: LONG columns as decimal strings", () => {
+  const longColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "volume", type: "LONG" },
+  ]
+  const VOLUME = 1
+  const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
+    evaluateHighlights({
+      columns: longColumns,
+      dataset,
+      config: config(rules),
+      previous: buildIdentityIndex([["A", "50000"]], [SYMBOL]),
+    }).lookup
+
+  it("reads string-encoded longs as numbers for steps, comparisons, gradient and movement", () => {
+    // Given one rule of each numeric kind on a LONG column
+    const target = { kind: "column", name: "volume" } as const
+    const steps = rule({
+      id: "steps",
+      kind: "steps",
+      target,
+      steps: [{ id: "s", from: 60000, color: "dataPositive" }],
+      baseColor: "dataNegative",
+    })
+    const above = rule({
+      id: "above",
+      kind: "value",
+      target,
+      condition: { op: "gte", value: 60000 },
+      color: "dataSeries3",
+    })
+    const gradient = rule({
+      id: "gradient",
+      kind: "value",
+      target,
+      condition: {
+        op: "between",
+        from: 0,
+        to: 64915,
+        fill: { kind: "gradient", highColor: "dataSeries9" },
+      },
+      color: "dataNegative",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+
+    // When the values arrive as decimal strings
+    const rows: ResultGridRow[] = [
+      ["A", "50825"],
+      ["B", "64915"],
+    ]
+
+    // Then every rule kind evaluates them as numbers
+    expect(evaluate([steps], rows).background(0, VOLUME)?.color).toBe(
+      "dataNegative",
+    )
+    expect(evaluate([steps], rows).background(1, VOLUME)?.color).toBe(
+      "dataPositive",
+    )
+    expect(evaluate([above], rows).background(0, VOLUME)).toBeUndefined()
+    expect(evaluate([above], rows).background(1, VOLUME)?.color).toBe(
+      "dataSeries3",
+    )
+    expect(evaluate([gradient], rows).background(1, VOLUME)?.blend?.ratio).toBe(
+      1,
+    )
+    expect(evaluate([up], rows).background(0, VOLUME)?.color).toBe(
+      "dataPositive",
+    )
+    expect(evaluate([up], rows).direction(0, VOLUME)).toBe("up")
+  })
+})
+
+describe("evaluateHighlights: LONG columns past 2^53", () => {
+  const longColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "id", type: "LONG" },
+  ]
+  const ID = 1
+  const target = { kind: "column", name: "id" } as const
+  const evaluate = (
+    rules: HighlightRule[],
+    dataset: ResultGridRow[],
+    previous: ReturnType<typeof buildIdentityIndex> | null = null,
+  ) =>
+    evaluateHighlights({
+      columns: longColumns,
+      dataset,
+      config: config(rules),
+      previous,
+    }).lookup
+
+  it("matches = and > previous at full precision, as the grid shows the ids", () => {
+    // Given ids one unit apart, closer than a double can tell
+    const rows: ResultGridRow[] = [
+      ["A", "1727000000000000010"],
+      ["B", "1727000000000000011"],
+      ["C", "1727000000000000012"],
+    ]
+    const equals = rule({
+      id: "eq",
+      kind: "value",
+      target,
+      condition: { op: "eq", value: "1727000000000000011" },
+      color: "dataSeries3",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1727000000000000010"]],
+      [SYMBOL],
+    )
+
+    // When evaluated
+    const byValue = evaluate([equals], rows)
+    const byPrevious = evaluate([up], [["A", "1727000000000000011"]], previous)
+
+    // Then only the exact id matches, and a rise of one unit counts
+    expect(byValue.background(0, ID)).toBeUndefined()
+    expect(byValue.background(1, ID)?.color).toBe("dataSeries3")
+    expect(byValue.background(2, ID)).toBeUndefined()
+    expect(byPrevious.background(0, ID)?.color).toBe("dataPositive")
+    expect(byPrevious.direction(0, ID)).toBe("up")
+  })
+
+  it("measures a change of one unit for a changed-by rule", () => {
+    // Given a changed-by rule with a threshold of one unit
+    const byOne = rule({
+      id: "by",
+      kind: "previous",
+      target,
+      condition: { op: "changedBy", threshold: 1, unit: "absolute" },
+      color: "dataSeries3",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1727000000000000010"]],
+      [SYMBOL],
+    )
+
+    // When the id moves by one unit, and when it stays
+    const moved = evaluate([byOne], [["A", "1727000000000000011"]], previous)
+    const same = evaluate([byOne], [["A", "1727000000000000010"]], previous)
+
+    // Then only the move matches
+    expect(moved.background(0, ID)?.color).toBe("dataSeries3")
+    expect(same.background(0, ID)).toBeUndefined()
+  })
+})
+
+describe("evaluateHighlights: DECIMAL columns past double precision", () => {
+  const decimalColumns: ColumnDefinition[] = [
+    { name: "symbol", type: "SYMBOL" },
+    { name: "amount", type: "DECIMAL(38,18)" },
+  ]
+  const AMOUNT = 1
+  const target = { kind: "column", name: "amount" } as const
+  const evaluate = (
+    rules: HighlightRule[],
+    dataset: ResultGridRow[],
+    previous: ReturnType<typeof buildIdentityIndex> | null = null,
+  ) =>
+    evaluateHighlights({
+      columns: decimalColumns,
+      dataset,
+      config: config(rules),
+      previous,
+    }).lookup
+
+  it("matches =, > and > previous at full scale, as the grid shows the amounts", () => {
+    // Given amounts one unit apart at the eighteenth decimal
+    const rows: ResultGridRow[] = [
+      ["A", "1234.123456789012345678"],
+      ["B", "1234.123456789012345679"],
+    ]
+    const equals = rule({
+      id: "eq",
+      kind: "value",
+      target,
+      condition: { op: "eq", value: "1234.123456789012345678" },
+      color: "dataSeries3",
+    })
+    const above = rule({
+      id: "gt",
+      kind: "value",
+      target,
+      condition: { op: "gt", value: "1234.123456789012345678" },
+      color: "dataSeries2",
+    })
+    const up = rule({
+      id: "up",
+      kind: "previous",
+      target,
+      condition: { op: "gt" },
+      color: "dataPositive",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1234.123456789012345678"]],
+      [SYMBOL],
+    )
+
+    // When evaluated
+    const byValue = evaluate([equals, above], rows)
+    const byPrevious = evaluate(
+      [up],
+      [["A", "1234.123456789012345679"]],
+      previous,
+    )
+
+    // Then only the exact amount equals, the next unit is above, and a rise of one unit counts
+    expect(byValue.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(byValue.background(1, AMOUNT)?.color).toBe("dataSeries2")
+    expect(byPrevious.background(0, AMOUNT)?.color).toBe("dataPositive")
+    expect(byPrevious.direction(0, AMOUNT)).toBe("up")
+  })
+
+  it("measures a change of one unit for a changed-by rule", () => {
+    // Given a changed-by rule that counts any change
+    const byAny = rule({
+      id: "by",
+      kind: "previous",
+      target,
+      condition: { op: "changedBy", threshold: 0, unit: "absolute" },
+      color: "dataSeries3",
+    })
+    const previous = buildIdentityIndex(
+      [["A", "1234.123456789012345678"]],
+      [SYMBOL],
+    )
+
+    // When the amount moves by one unit, and when it stays
+    const moved = evaluate(
+      [byAny],
+      [["A", "1234.123456789012345679"]],
+      previous,
+    )
+    const same = evaluate([byAny], [["A", "1234.123456789012345678"]], previous)
+
+    // Then only the move matches
+    expect(moved.background(0, AMOUNT)?.color).toBe("dataSeries3")
+    expect(same.background(0, AMOUNT)).toBeUndefined()
+  })
+})
+
+describe("evaluateHighlights: steps and gradient fill", () => {
+  const evaluate = (rules: HighlightRule[], dataset: ResultGridRow[]) =>
+    evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules, []),
+      previous: null,
+    }).lookup
+
+  it("picks the highest step the value reaches, else the base color", () => {
+    // Given unsorted steps
+    const rules = [
+      rule({
+        kind: "steps",
+        steps: [
+          { id: "s2", from: 500, color: "dataSeries3" },
+          { id: "s1", from: 100, color: "dataSeries2" },
+        ],
+        baseColor: "dataSeries6",
+      }),
+    ]
+
+    // When evaluated below, between, at and above the bounds
+    const lookup = evaluate(rules, [
+      row("A", 50, 1),
+      row("A", 200, 1),
+      row("A", 500, 1),
+      row("A", 900, 1),
+    ])
+
+    // Then the highest reached step wins and the bound is inclusive
+    expect(lookup.background(0, PRICE)?.color).toBe("dataSeries6")
+    expect(lookup.background(1, PRICE)?.color).toBe("dataSeries2")
+    expect(lookup.background(2, PRICE)?.color).toBe("dataSeries3")
+    expect(lookup.background(3, PRICE)?.color).toBe("dataSeries3")
+  })
+
+  it("shades a gradient fill by position in the range and clamps beyond it", () => {
+    // Given a between rule on price, 0 … 200, red at the low end, green at the high end
+    const rules = [
+      rule({
+        kind: "value",
+        condition: {
+          op: "between",
+          from: 0,
+          to: 200,
+          fill: { kind: "gradient", highColor: "dataPositive" },
+        },
+        color: "dataNegative",
+      }),
+    ]
+
+    // When values sit at the low end, in the middle, above and below the range
+    const lookup = evaluate(rules, [
+      row("A", 0, 1),
+      row("A", 50, 1),
+      row("A", 500, 1),
+      row("A", -10, 1),
+    ])
+
+    // Then the blend ratio follows the position and is clamped at the ends
+    expect(lookup.background(0, PRICE)).toEqual({
+      color: "dataNegative",
+      display: "always",
+      blend: { color: "dataPositive", ratio: 0 },
+    })
+    expect(lookup.background(1, PRICE)?.blend?.ratio).toBe(0.25)
+    expect(lookup.background(2, PRICE)?.blend?.ratio).toBe(1)
+    expect(lookup.background(3, PRICE)?.blend?.ratio).toBe(0)
+  })
+
+  it("reads automatic between bounds from the column's current min and max", () => {
+    // Given a gradient with both bounds automatic and a solid rule open at the top
+    const heatmap = rule({
+      id: "heatmap",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: null,
+        to: null,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+    const fromTen = rule({
+      id: "from-ten",
+      kind: "value",
+      condition: { op: "between", from: 10, to: null, fill: { kind: "solid" } },
+      color: "dataSeries3",
+    })
+
+    // When the result spans 5 to 25, then 100 to 300
+    const first = evaluate([heatmap], [row("A", 5, 1), row("B", 25, 1)])
+    const second = evaluate([heatmap], [row("A", 100, 1), row("B", 300, 1)])
+    const solid = evaluate([fromTen], [row("A", 5, 1), row("B", 500, 1)])
+
+    // Then the scale follows each result, and the open bound reaches the max
+    expect(first.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(first.background(1, PRICE)?.blend?.ratio).toBe(1)
+    expect(second.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(second.background(1, PRICE)?.blend?.ratio).toBe(1)
+    expect(solid.background(0, PRICE)).toBeUndefined()
+    expect(solid.background(1, PRICE)?.color).toBe("dataSeries3")
+  })
+
+  it("keeps a gradient clamped at its fixed bound when the data lies beyond it", () => {
+    // Given a floor of 100 with an automatic top, and a ceiling of 100 with an automatic bottom
+    const floor = rule({
+      id: "floor",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: 100,
+        to: null,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+    const ceiling = rule({
+      id: "ceiling",
+      kind: "value",
+      condition: {
+        op: "between",
+        from: null,
+        to: 100,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+      color: "dataNegative",
+    })
+
+    // When every value sits below the floor, and every value sits above the ceiling
+    const belowFloor = evaluate([floor], [row("A", 10, 1), row("B", 50, 1)])
+    const aboveCeiling = evaluate(
+      [ceiling],
+      [row("A", 200, 1), row("B", 300, 1)],
+    )
+
+    // Then the cells take the color of the bound they are beyond
+    expect(belowFloor.background(0, PRICE)?.blend?.ratio).toBe(0)
+    expect(belowFloor.background(1, PRICE)?.blend?.ratio).toBe(0)
+    expect(aboveCeiling.background(0, PRICE)?.blend?.ratio).toBe(1)
+    expect(aboveCeiling.background(1, PRICE)?.blend?.ratio).toBe(1)
+  })
+
+  it("leaves a solid between rule as a plain range match", () => {
+    // Given the same range with a solid fill
+    const rules = [
+      rule({
+        kind: "value",
+        condition: { op: "between", from: 0, to: 200, fill: { kind: "solid" } },
+        color: "dataSeries4",
+      }),
+    ]
+
+    // When a value is outside the range
+    const lookup = evaluate(rules, [row("A", 500, 1), row("A", 50, 1)])
+
+    // Then it does not match, and an inside value carries no blend
+    expect(lookup.background(0, PRICE)).toBeUndefined()
+    expect(lookup.background(1, PRICE)?.blend).toBeUndefined()
+  })
+})
+
+describe("evaluateHighlights: direction slot", () => {
+  it("reserves a slot only for a column with an up or down rule and a baseline", () => {
+    // Given an up rule on price and a changed rule on amount
+    const previous = previousOf([row("BTC", 100, 1)])
+    const dataset = [row("BTC", 100, 1)]
+    const rules = [
+      rule({
+        id: "up",
+        kind: "previous",
+        condition: { op: "gt" },
+        color: "dataPositive",
+        display: "temporary",
+      }),
+      rule({
+        id: "moved",
+        kind: "previous",
+        target: { kind: "column", name: "amount" },
+        condition: { op: "changed" },
+        color: "dataSeries2",
+        display: "temporary",
+      }),
+    ]
+
+    // When evaluated against a baseline and without one
+    const compared = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous,
+    })
+    const first = evaluateHighlights({
+      columns,
+      dataset,
+      config: config(rules),
+      previous: null,
+    })
+
+    // Then price keeps its slot even while unchanged, amount never gets one,
+    // and no slot is reserved before there is a baseline
+    expect(compared.lookup.hasDirection(PRICE)).toBe(true)
+    expect(compared.lookup.direction(0, PRICE)).toBeUndefined()
+    expect(compared.lookup.hasDirection(AMOUNT)).toBe(false)
+    expect(first.lookup.hasDirection(PRICE)).toBe(false)
+  })
+})

@@ -6,7 +6,10 @@ import {
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
 import { NotebookToolError } from "../notebooks/notebookToolError"
-import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
+import {
+  sanitizeForPromptContext,
+  stringifyForPromptContext,
+} from "./sanitizeForPromptContext"
 import type {
   AgentCellView,
   AutoRefresh,
@@ -35,6 +38,13 @@ type ChartQueryWire = {
   enabled?: boolean
   name?: string
 }
+import {
+  toHighlightConfigWire,
+  type HighlightConfigWire,
+} from "../tools/highlightConfigWire"
+
+export type { HighlightConfigWire }
+
 export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
@@ -60,6 +70,7 @@ export type NotebookContextCell = {
   result_height: number | "auto" | null
   view: AgentCellView | null
   chart_config?: ChartConfigWire
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
   // Live-only: present for the mounted notebook alone. Absence never means
@@ -128,6 +139,11 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
+
+const highlightConfigWire = (
+  cell: NotebookCell,
+): HighlightConfigWire | undefined =>
+  cell.highlightConfig ? toHighlightConfigWire(cell.highlightConfig) : undefined
 
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
@@ -199,6 +215,8 @@ const buildCell = (
   if (chartConfig && Array.isArray(chartConfig.queries)) {
     out.chart_config = toChartConfigWire(chartConfig)
   }
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
     if (g) {
@@ -330,9 +348,12 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
     lines.push(`      view: ${c.view}`)
     if (c.chart_config) {
       lines.push(
-        `      chart_config: ${sanitizeForPromptContext(
-          JSON.stringify(c.chart_config),
-        )}`,
+        `      chart_config: ${stringifyForPromptContext(c.chart_config)}`,
+      )
+    }
+    if (c.highlight_config) {
+      lines.push(
+        `      highlight_config: ${stringifyForPromptContext(c.highlight_config)}`,
       )
     }
     if (c.last_run_status)
@@ -471,6 +492,7 @@ export type NotebookCellDetails = {
   result_height: number | "auto" | null
   view: AgentCellView | null
   chart_config?: ChartConfigWire
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
   // Live-only (mounted notebook); see NotebookContextCell.
@@ -547,6 +569,8 @@ export const serializeCell = (
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   return out
 }
 

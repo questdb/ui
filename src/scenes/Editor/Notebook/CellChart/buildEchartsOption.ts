@@ -90,9 +90,15 @@ const resolveSeriesRenderSpec = (type: ChartType) => {
   }
   if (isStep) lineExtras.step = "end"
   // Scatter/bar use `large` for big point/bar sets; lines downsample with LTTB.
-  const perfExtras: { sampling?: "lttb"; large?: boolean } = isLineFamily
-    ? { sampling: "lttb" }
-    : { large: true }
+  const perfExtras: {
+    sampling?: "lttb"
+    large?: boolean
+    animation?: boolean
+  } = isLineFamily
+    ? { sampling: "lttb", animation: false }
+    : isScatter
+      ? { large: true, animation: false }
+      : { large: true }
   return { seriesType, lineExtras, perfExtras, isStacked }
 }
 
@@ -322,6 +328,7 @@ const buildScatterChartOption = (
         name,
         type: "scatter" as const,
         large: true,
+        animation: false,
         data: q.dataset.map((row) => [
           toNumberOrNull(row[xIdx]),
           toNumberOrNull(row[yIdx]),
@@ -485,8 +492,10 @@ export const buildEchartsOption = (
           nameTextStyle: axisName,
           axisLabel,
           splitLine: { show: false },
-          ...(chart.rightAxis?.min != null ? { min: chart.rightAxis.min } : {}),
-          ...(chart.rightAxis?.max != null ? { max: chart.rightAxis.max } : {}),
+          // Keep both keys even when unset: chart updates merge into the prior
+          // option, and an omitted key would keep a cleared bound on screen.
+          min: chart.rightAxis?.min,
+          max: chart.rightAxis?.max,
         },
       ]
     : leftAxis

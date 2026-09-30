@@ -14,6 +14,7 @@ import type { ChartSettingsTelemetry } from "./chartSettingsTelemetry"
 import { availableChartTypes, findOhlc, groupColumns } from "./inferChartConfig"
 import type { QueryTab } from "../DrawCanvas/drawCanvasUtils"
 import {
+  CheckboxRow,
   Field,
   FieldGroup,
   FieldLabel,
@@ -67,15 +68,6 @@ const SqlPre = styled(HighlightedSql)`
   font-size: 1.1rem;
 `
 
-const CheckboxRow = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 1.2rem;
-  color: ${({ theme }) => theme.color.contentPrimary};
-  cursor: pointer;
-`
-
 const OhlcGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -99,6 +91,7 @@ const IncompatibleNote = styled.div`
 export type QueryControlsProps = {
   activeTab: QueryTab
   query: QueryChart
+  xColumn: string | null
   anchorLabel: string
   isAnchorTab: boolean
   ohlcError: boolean
@@ -110,6 +103,7 @@ export type QueryControlsProps = {
 export const QueryControls: React.FC<QueryControlsProps> = ({
   activeTab,
   query,
+  xColumn,
   anchorLabel,
   isAnchorTab,
   ohlcError,
@@ -127,6 +121,9 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
     label: c.name,
     value: c.name,
   }))
+  const partitionCandidates = groups.categorical.filter(
+    (c) => c.name !== xColumn,
+  )
   const idx = activeTab.index
 
   return (
@@ -269,7 +266,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
       )}
 
       {PARTITION_TYPES.includes(query.type) &&
-        groups.categorical.length > 0 && (
+        partitionCandidates.length > 0 && (
           <Field>
             <FieldLabel>Partition by</FieldLabel>
             <SelectMenuControl
@@ -283,7 +280,7 @@ export const QueryControls: React.FC<QueryControlsProps> = ({
               }
               options={[
                 { label: "None", value: "" },
-                ...groups.categorical.map((c) => ({
+                ...partitionCandidates.map((c) => ({
                   label: c.name,
                   value: c.name,
                 })),

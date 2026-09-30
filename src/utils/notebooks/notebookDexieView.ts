@@ -4,6 +4,7 @@ import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
+  dropMalformedHighlightConfigs,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
   migrateLegacyCellNames,
@@ -38,6 +39,7 @@ const MARKDOWN_FOREIGN_FIELDS = [
   "isViewMaximized",
   "mode",
   "chartConfig",
+  "highlightConfig",
   "autoRefresh",
   "bottomHeight",
   "bottomResized",
@@ -67,7 +69,9 @@ const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
 }
 
 export const migratePersistedNotebookView = (view: NotebookViewState) => {
-  const migrated = dropLegacyChartConfigs(migrateLegacyCellNames(view))
+  const migrated = dropMalformedHighlightConfigs(
+    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
+  )
   return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
 }
 

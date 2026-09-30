@@ -638,6 +638,81 @@ describe("formatSnapshot", () => {
     expect(out).toContain("grid: { x: 0, y: 0, w: 12 }")
   })
 
+  it("renders the cell's highlight_config as wire JSON", async () => {
+    // Given a cell with one previous rule
+    const value = "SELECT 1; SELECT symbol, price FROM trades"
+    const cell = sql("a", value, {
+      highlightConfig: {
+        identityColumns: ["symbol"],
+        rules: [
+          {
+            id: "r1",
+            enabled: true,
+            target: { kind: "column", name: "price" },
+            display: "temporary",
+            kind: "previous",
+            appliesTo: "cell",
+            condition: { op: "gt" },
+            color: "dataPositive",
+          },
+        ],
+      },
+    })
+    const id = await seedNotebook({ cells: [cell] })
+
+    // When the snapshot is built and formatted
+    const snap = await buildSnapshot(id)
+    const out = formatSnapshot(snap!)
+
+    // Then the wire config carries the rule in hue names
+    expect(snap?.status === "ok" && snap.cells[0].highlight_config).toEqual({
+      identity_columns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          column: "price",
+          display: "temporary",
+          color: "green",
+          op: "gt",
+        },
+      ],
+    })
+    expect(out).toContain('highlight_config: {"identity_columns":["symbol"]')
+  })
+
+  it("keeps angle brackets in highlight rule text across a copy back", async () => {
+    // Given a contains rule whose text carries angle brackets
+    const cell = sql("a", "SELECT symbol FROM trades", {
+      highlightConfig: {
+        identityColumns: [],
+        rules: [
+          {
+            id: "r1",
+            enabled: true,
+            target: { kind: "column", name: "symbol" },
+            display: "always",
+            kind: "value",
+            appliesTo: "cell",
+            condition: { op: "contains", text: "<NA>" },
+            color: "dataNegative",
+          },
+        ],
+      },
+    })
+    const id = await seedNotebook({ cells: [cell] })
+
+    // When the snapshot is formatted and the model copies the JSON back
+    const out = formatSnapshot((await buildSnapshot(id))!)
+    const line = out.split("\n").find((l) => l.includes("highlight_config:"))!
+    const copied = JSON.parse(line.slice(line.indexOf("{"))) as {
+      rules: { text: string }[]
+    }
+
+    // Then the prompt shows no raw tag characters and the text is unchanged
+    expect(line).not.toMatch(/[<>]/)
+    expect(copied.rules[0].text).toBe("<NA>")
+  })
+
   it("renders chart_config as one-line wire JSON the model can copy back", async () => {
     const cell = sql("a", "SELECT 1", {
       mode: "draw",

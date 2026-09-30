@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from "react"
 import type { ChartConfig } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
+import { withHighlightConfig } from "./result-table/highlightConfig"
 import type { NotebookCell, SingleQueryResult } from "../../../store/notebook"
 import {
   attachScriptSummary,
@@ -11,9 +13,16 @@ import type { AutoRefresh } from "../../../store/notebook"
 type Options = {
   initialCells: NotebookCell[]
   persistCells: (cells: NotebookCell[]) => void
+  // Runs synchronously on every write, hydration included, before React
+  // renders the new cells.
+  onCellsChange: (prev: NotebookCell[], next: NotebookCell[]) => void
 }
 
-export const useCellsStore = ({ initialCells, persistCells }: Options) => {
+export const useCellsStore = ({
+  initialCells,
+  persistCells,
+  onCellsChange,
+}: Options) => {
   const [cells, setCells] = useState<NotebookCell[]>(initialCells)
 
   const cellsRef = useRef(cells)
@@ -24,27 +33,32 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
   // cells and clobbering the first.
   const updateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
-      const next = updater(cellsRef.current)
+      const prev = cellsRef.current
+      const next = updater(prev)
       cellsRef.current = next
+      onCellsChange(prev, next)
       persistCells(next)
       setCells(next)
     },
-    [persistCells],
+    [persistCells, onCellsChange],
   )
 
   // Hydration-only setter: restoring persisted result snapshots must NOT
   // schedule a persist. Results are stripped from the persist payload, so the
   // write would be pure churn — and because persistCells' identity changes with
   // every EditorProvider render (via updateBuffer), a persisting hydrate effect
-  // re-triggers itself off its own buffer write, looping forever. Stable
-  // identity ([] deps) so the hydration effect runs once per mount.
+  // re-triggers itself off its own buffer write, looping forever. Its only
+  // dependency is onCellsChange, which the caller must keep referentially
+  // stable, so the hydration effect runs once per mount.
   const hydrateCells = useCallback(
     (updater: (prev: NotebookCell[]) => NotebookCell[]) => {
-      const next = updater(cellsRef.current)
+      const prev = cellsRef.current
+      const next = updater(prev)
       cellsRef.current = next
+      onCellsChange(prev, next)
       setCells(next)
     },
-    [],
+    [onCellsChange],
   )
 
   const updateCell = useCallback(
@@ -88,6 +102,14 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     [updateCell],
   )
 
+  const setCellHighlightConfig = useCallback(
+    (cellId: string, config: HighlightConfig | null) =>
+      updateCells((prev) =>
+        prev.map((c) => (c.id === cellId ? withHighlightConfig(c, config) : c)),
+      ),
+    [updateCells],
+  )
+
   const setCellRefresh = useCallback(
     (cellId: string, value: AutoRefresh | undefined) => {
       if (value === undefined) {
@@ -110,6 +132,7 @@ export const useCellsStore = ({ initialCells, persistCells }: Options) => {
     updateCellResult,
     setScriptSummary,
     setCellChartConfig,
+    setCellHighlightConfig,
     setCellRefresh,
   }
 }

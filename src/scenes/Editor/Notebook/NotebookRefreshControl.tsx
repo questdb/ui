@@ -55,6 +55,7 @@ export const NotebookRefreshControl: React.FC = () => {
     (cell) => resolveCellView(cell) !== "none",
   ).length
   const [writeBlockedCount, setWriteBlockedCount] = useState(0)
+  const [menuOpen, setMenuOpen] = useState(false)
   const intervalAriaLabel =
     overrideCount > 0
       ? `Notebook auto-refresh: ${defaultLabel}, ${overrideCount} ${
@@ -74,6 +75,7 @@ export const NotebookRefreshControl: React.FC = () => {
   }
 
   const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
     intervalTooltip.onMenuOpenChange(open)
     if (open) setWriteBlockedCount(cellRefresh?.countWriteBlockedGrids() ?? 0)
   }
@@ -110,7 +112,7 @@ export const NotebookRefreshControl: React.FC = () => {
           <ArrowClockwiseIcon />
         </EditorRefreshButton>
       </Tooltip>
-      <SelectMenu.Root onOpenChange={handleMenuOpenChange}>
+      <SelectMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
         <Tooltip
           content="Notebook auto-refresh"
           {...intervalTooltip.tooltipProps}
@@ -127,6 +129,7 @@ export const NotebookRefreshControl: React.FC = () => {
             <AutoRefreshOptions
               value={storedDefault ?? false}
               onSelect={handleSelectDefault}
+              onClose={() => handleMenuOpenChange(false)}
             />
             {overrideCount > 0 && (
               <>

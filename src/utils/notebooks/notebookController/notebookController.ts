@@ -8,6 +8,7 @@ import type {
   NotebookViewState,
 } from "../../../store/notebook"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
 import type { CellResultStatus } from "../../../scenes/Editor/Notebook/notebookUtils"
 import type {
   AgentHeightValue,
@@ -162,6 +163,7 @@ export type ApplyNotebookStateCellRequest = {
   resultHeight?: AgentHeightValue
   view?: AgentCellView | null
   chartConfig?: ChartConfig | null
+  highlightConfig?: HighlightConfig | null
   grid?: { x: number; y: number; w: number } | null
 }
 

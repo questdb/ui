@@ -1,5 +1,6 @@
+import "../../test/stubBrowserGlobals"
 import { describe, expect, it } from "vitest"
-import type { NotebookViewState } from "../../store/notebook"
+import type { NotebookCell, NotebookViewState } from "../../store/notebook"
 import { migratePersistedNotebookView } from "./notebookDexieView"
 import { MAX_PANE_HEIGHT_PX } from "../../scenes/Editor/Notebook/cellSizing"
 
@@ -227,6 +228,7 @@ describe("migratePersistedNotebookView markdown sub-state", () => {
           type: "markdown",
           mode: "draw",
           chartConfig: { xColumn: null, queries: [null] },
+          highlightConfig: { identityColumns: ["symbol"], rules: [] },
           autoRefresh: 5000,
           bottomHeight: 350,
           bottomResized: true,
@@ -259,6 +261,7 @@ describe("migratePersistedNotebookView markdown sub-state", () => {
           value: "SELECT 1",
           mode: "draw",
           chartConfig: { xColumn: null, queries: [null] },
+          highlightConfig: { identityColumns: ["symbol"], rules: [] },
           autoRefresh: 5000,
           bottomHeight: 350,
         },
@@ -267,9 +270,50 @@ describe("migratePersistedNotebookView markdown sub-state", () => {
     // When the persisted view is migrated
     const cell = migratePersistedNotebookView(view).cells[0]
     // Then its draw state is untouched
+    expect(cell.highlightConfig).toEqual({
+      identityColumns: ["symbol"],
+      rules: [],
+    })
     expect(cell.mode).toBe("draw")
     expect(cell.chartConfig).toBeDefined()
     expect(cell.autoRefresh).toBe(5000)
     expect(cell.bottomHeight).toBe(350)
+  })
+})
+
+const cell = (id: string, highlightConfig: unknown): NotebookCell =>
+  ({ id, position: 0, value: "select 1", highlightConfig }) as NotebookCell
+
+describe("migratePersistedNotebookView", () => {
+  it("drops a malformed highlight config on load and keeps a valid one", () => {
+    // Given a persisted view with one valid config and one with an unknown rule
+    const valid = {
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          id: "r1",
+          kind: "value",
+          enabled: true,
+          target: { kind: "column", name: "price" },
+          display: "always",
+          appliesTo: "cell",
+          condition: { op: "gt", value: 100 },
+          color: "dataSeries2",
+        },
+      ],
+    }
+    const persisted: NotebookViewState = {
+      cells: [
+        cell("ok", valid),
+        cell("bad", { identityColumns: [], rules: [{ kind: "nope" }] }),
+      ],
+    }
+
+    // When the view is read from storage
+    const view = migratePersistedNotebookView(persisted)
+
+    // Then the valid rules survive and the malformed config is gone
+    expect(view.cells[0].highlightConfig).toEqual(valid)
+    expect("highlightConfig" in view.cells[1]).toBe(false)
   })
 })

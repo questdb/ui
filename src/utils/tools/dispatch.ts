@@ -1,4 +1,5 @@
 import type { ModelToolsClient, StatusCallback } from "../ai/aiAssistant"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import { AIOperationStatus } from "../../providers/AIStatusProvider"
 import {
   getQuestDBTableOfContents,
@@ -8,6 +9,7 @@ import {
 } from "../questdbDocsRetrieval"
 import { getBufferActionSeq } from "../notebooks/notebookAIBridge"
 import { NotebookToolError } from "../notebooks/notebookToolError"
+import { requireCellIn } from "../notebooks/notebookDexieView"
 import type {
   AgentCellView,
   CellMode,
@@ -57,6 +59,14 @@ import {
   type ToolRightAxis,
 } from "./chartConfigWire"
 import {
+  type HighlightConfigWire,
+  parseHighlightConfigFor,
+  regexLiteralNotes,
+  shownResultsOf,
+  wireUsesPatterns,
+} from "./highlightConfigWire"
+import { loadCellSnapshot } from "../../store/notebookResults"
+import {
   invalidBufferIdResult,
   notebookErrorHint,
   notFetchedNotebookResult,
@@ -73,6 +83,7 @@ import {
   moveCellDownTransition,
   moveCellUpTransition,
   setCellChartConfigTransition,
+  setCellHighlightConfigTransition,
   setCellDimensionsTransition,
   setCellLayoutTransition,
   setCellMaximizedTransition,
@@ -1007,6 +1018,49 @@ export const dispatchTool = async (
           toolContext,
         )
       }
+      case "set_cell_highlight_config": {
+        const { buffer_id, cell_id, highlight_config } =
+          (input as {
+            buffer_id: number
+            cell_id: string
+            highlight_config?: HighlightConfigWire | null
+          }) || {}
+        setStatus(AIOperationStatus.ConfiguringHighlight, { cellId: cell_id })
+        const highlightBaseline = getBufferActionSeq(buffer_id)
+        if (highlight_config && wireUsesPatterns(highlight_config)) {
+          await loadRe2()
+        }
+        const notes = highlight_config
+          ? regexLiteralNotes(highlight_config)
+          : []
+        return routeNotebookTool(async () => {
+          const snapshot = highlight_config
+            ? await loadCellSnapshot(buffer_id, cell_id)
+            : undefined
+          await runTransition(
+            buffer_id,
+            (parts) =>
+              setCellHighlightConfigTransition(
+                parts,
+                buffer_id,
+                cell_id,
+                highlight_config
+                  ? parseHighlightConfigFor(
+                      highlight_config,
+                      shownResultsOf(
+                        requireCellIn(parts.cells, cell_id, buffer_id),
+                        snapshot,
+                      ),
+                      "highlight_config",
+                    )
+                  : null,
+              ),
+            signal,
+            highlightBaseline,
+          )
+          return notes.length > 0 ? { notes } : undefined
+        }, toolContext)
+      }
       case "set_cell_name": {
         const { buffer_id, cell_id, name } =
           (input as {
@@ -1046,7 +1100,7 @@ export const dispatchTool = async (
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: value must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+              message: `VALIDATION_ERROR: value must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
             }),
             is_error: true,
           }
@@ -1091,7 +1145,7 @@ export const dispatchTool = async (
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: value must be true, false, or one of "1s", "5s", "10s", "30s", "1m".`,
+              message: `VALIDATION_ERROR: value must be true, false, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
             }),
             is_error: true,
           }
@@ -1111,7 +1165,7 @@ export const dispatchTool = async (
         )
       }
       case "apply_notebook_state": {
-        return dispatchApplyNotebookState(
+        return await dispatchApplyNotebookState(
           input,
           setStatus,
           perms,

@@ -390,3 +390,31 @@ describe("buildEchartsOption — axis labels", () => {
     expect(firstAxis(opt.xAxis).axisLabel).toMatchObject({ hideOverlap: true })
   })
 })
+
+describe("buildEchartsOption — right-axis bounds", () => {
+  it("keeps unset bounds as explicit keys so a cleared bound resets the merged chart", () => {
+    // Given a chart with a right axis whose min/max were cleared
+    const columns = [
+      col("ts", "TIMESTAMP"),
+      col("a", "DOUBLE"),
+      col("b", "DOUBLE"),
+    ]
+    const dataset = [[1000, 1, 100]]
+    // When the option builds
+    const opt = buildEchartsOption({ xColumn: "ts", rightAxis: {} }, [
+      resolved({ columns, dataset, xColumn: "ts", yColumns: ["a"] }),
+      resolved({
+        index: 1,
+        columns,
+        dataset,
+        xColumn: "ts",
+        yColumns: ["b"],
+        axis: "right",
+      }),
+    ])
+    // Then both bound keys are present, so ECharts' merge overwrites stale bounds
+    const rightAxis = (opt.yAxis as Record<string, unknown>[])[1]
+    expect(rightAxis).toHaveProperty("min", undefined)
+    expect(rightAxis).toHaveProperty("max", undefined)
+  })
+})

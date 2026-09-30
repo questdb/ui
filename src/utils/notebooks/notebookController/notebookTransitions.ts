@@ -11,6 +11,8 @@ import type { ViewParts } from "../notebookDexieView"
 import { requireCellIn, requireCellWithinLineLimit } from "../notebookDexieView"
 import type { ApplyNotebookStateRequest } from "./notebookController"
 import type { ChartConfig } from "../../../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight/types"
+import { withHighlightConfig } from "../../../scenes/Editor/Notebook/result-table/highlightConfig"
 import {
   buildAppliedNotebookState,
   clearCellAutoRefresh,
@@ -454,6 +456,31 @@ export const setCellModeTransition = (
     ...(entersDraw
       ? { cancelRuns: { cellIds: [cellId], reason: "mode_changed" as const } }
       : {}),
+  }
+}
+
+export const setCellHighlightConfigTransition = (
+  parts: ViewParts,
+  bufferId: number,
+  cellId: string,
+  config: HighlightConfig | null,
+): NotebookTransitionResult => {
+  const cell = requireCellIn(parts.cells, cellId, bufferId)
+  if (cell.type === "markdown" && config !== null) {
+    throw new NotebookToolError(
+      "validation",
+      "Markdown cells cannot have highlight rules.",
+    )
+  }
+  return {
+    parts: {
+      ...parts,
+      cells: parts.cells.map((c) =>
+        c.id === cellId ? withHighlightConfig(c, config) : c,
+      ),
+    },
+    result: undefined,
+    touchedCellId: cellId,
   }
 }
 

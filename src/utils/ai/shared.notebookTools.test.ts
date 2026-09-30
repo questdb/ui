@@ -696,13 +696,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBe(false)
   })
 
-  it("set_cell_autorefresh rejects a token outside the allowed set", async () => {
+  it("set_cell_autorefresh rejects an interval outside 50ms to 60m", async () => {
     // Given a cell without an override
     const { state } = mountLive(1, [cell("c")])
-    // When the agent sends an unknown token
+    // When the agent sends an interval below 50ms
     const res = await dispatchTool(
       "set_cell_autorefresh",
-      { buffer_id: 1, cell_id: "c", value: "2s" },
+      { buffer_id: 1, cell_id: "c", value: "10ms" },
       makeClient(),
       noopStatus,
       ALL_GRANTED,
@@ -809,13 +809,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBe("5s")
   })
 
-  it("set_notebook_autorefresh rejects a token outside the allowed set", async () => {
+  it("set_notebook_autorefresh rejects an interval outside 50ms to 60m", async () => {
     // Given a notebook without a default
     const { state } = mountLive(1, [cell("c")])
-    // When the agent sends an unknown token
+    // When the agent sends an interval below 50ms
     const res = await dispatchTool(
       "set_notebook_autorefresh",
-      { buffer_id: 1, value: "2s" },
+      { buffer_id: 1, value: "10ms" },
       makeClient(),
       noopStatus,
       ALL_GRANTED,
@@ -1045,6 +1045,542 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(chart?.autoRefresh).toBeUndefined()
     expect(state.parts.settings.autoRefreshDefault).toBe("30s")
   })
+
+  it("set_cell_highlight_config stores one config for the cell", async () => {
+    // Given a run cell with two statements
+    const { state } = mountLive(1, [cell("c", "SELECT 1; SELECT 2")])
+
+    // When the cell gets an up/down pair
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["symbol"],
+          rules: [
+            { kind: "previous", column: "price", op: "gt", color: "green" },
+            { kind: "previous", column: "price", op: "lt", color: "red" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the cell carries the rules, typed and with ids
+    expect(result.is_error).toBeFalsy()
+    const config = cellById(state, "c")?.highlightConfig
+    expect(config).toMatchObject({
+      identityColumns: ["symbol"],
+      rules: [
+        {
+          kind: "previous",
+          condition: { op: "gt" },
+          color: "dataPositive",
+          display: "temporary",
+        },
+        { kind: "previous", condition: { op: "lt" }, color: "dataNegative" },
+      ],
+    })
+    expect(config?.rules[0].id).toBeTruthy()
+  })
+
+  it("set_cell_highlight_config saves a regex literal as plain RE2 and tells the agent", async () => {
+    // Given a run cell
+    const { state } = mountLive(1, [cell("c", "SELECT sym FROM t")])
+
+    // When a matches rule arrives written like a JavaScript regex literal
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [
+            { kind: "value", column: "sym", op: "matches", text: "/eur/i" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the rule is saved as typed, and the result notes how it reads
+    expect(result.is_error).toBeFalsy()
+    expect(cellById(state, "c")?.highlightConfig?.rules[0]).toMatchObject({
+      condition: { op: "matches", pattern: "/eur/i" },
+    })
+    const { notes } = JSON.parse(result.content) as { notes: string[] }
+    const [note] = notes
+    expect(note).toContain("plain RE2")
+    expect(note).toContain("(?i)eur")
+  })
+
+  it("set_cell_highlight_config clears with null and accepts an empty identity", async () => {
+    // Given a cell with a value rule and no identity
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+    await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [{ kind: "value", column: "v", op: "gt", value: 10 }],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(cellById(state, "c")?.highlightConfig).toBeDefined()
+
+    // When cleared with null, then the field is gone
+    await dispatchTool(
+      "set_cell_highlight_config",
+      { buffer_id: 1, cell_id: "c", highlight_config: null },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("set_cell_highlight_config rejects an invalid rule without touching the cell", async () => {
+    // Given a cell and a rule with a bad color
+    const { state } = mountLive(1, [cell("c", "SELECT 1")])
+
+    // When dispatched
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["k"],
+          rules: [
+            { kind: "previous", column: "v", op: "gt", color: "hotpink" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then it is a validation error and the cell has no rules
+    expect(result.is_error).toBe(true)
+    expect(JSON.parse(result.content)).toMatchObject({
+      error_code: "validation",
+    })
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("set_cell_highlight_config rejects a condition that does not fit a column the cell has shown", async () => {
+    // Given a cell whose result shows a SYMBOL column
+    const { state } = mountLive(1, [
+      cell("c", "SELECT sym FROM t", {
+        result: {
+          results: [
+            {
+              type: "dql",
+              query: "SELECT sym FROM t",
+              columns: [{ name: "sym", type: "SYMBOL" }],
+              dataset: [],
+              count: 0,
+            },
+          ],
+          activeResultIndex: 0,
+          timestamp: 0,
+        },
+      }),
+    ])
+
+    // When a numeric comparison is sent for that column
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: ["sym"],
+          rules: [{ kind: "value", column: "sym", op: "gt", value: "abc" }],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then it is a validation error that names the column type, and the cell has no rules
+    expect(result.is_error).toBe(true)
+    expect(JSON.parse(result.content)).toMatchObject({
+      error_code: "validation",
+    })
+    expect(result.content).toContain("Not for a text column")
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("set_cell_highlight_config checks a released cell against the columns its snapshot shows", async () => {
+    // Given a cell whose result was released, with a snapshot that shows a DOUBLE column
+    await saveCellSnapshot({
+      bufferId: 1,
+      cellId: "c",
+      results: [
+        {
+          type: "dql",
+          query: "SELECT price FROM t",
+          columns: [{ name: "price", type: "DOUBLE" }],
+          dataset: [],
+          count: 0,
+        },
+      ],
+      savedAt: 100,
+      activeResultIndex: 0,
+    })
+    const { state } = mountLive(1, [
+      cell("c", "SELECT price FROM t", { lastRunStatus: "success" }),
+    ])
+
+    // When a text condition is sent for that column
+    const result = await dispatchTool(
+      "set_cell_highlight_config",
+      {
+        buffer_id: 1,
+        cell_id: "c",
+        highlight_config: {
+          identity_columns: [],
+          rules: [
+            { kind: "value", column: "price", op: "contains", text: "1" },
+          ],
+        },
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then it is rejected as it would be for the cell in memory
+    expect(result.is_error).toBe(true)
+    expect(result.content).toContain("Not for a numeric column")
+    expect(cellById(state, "c")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state checks a released cell against its snapshot only while its SQL still matches", async () => {
+    // Given two released cells with the same snapshot of a SYMBOL column, one since edited
+    const snapshotOf = (cellId: string) =>
+      saveCellSnapshot({
+        bufferId: 1,
+        cellId,
+        results: [
+          {
+            type: "dql",
+            query: "SELECT sym AS price FROM t",
+            columns: [{ name: "price", type: "SYMBOL" }],
+            dataset: [],
+            count: 0,
+          },
+        ],
+        savedAt: 100,
+        activeResultIndex: 0,
+      })
+    await snapshotOf("kept")
+    await snapshotOf("edited")
+    const { state } = mountLive(1, [
+      cell("kept", "SELECT sym AS price FROM t"),
+      cell("edited", "SELECT 7 AS price"),
+    ])
+    const numericRule = {
+      identity_columns: [],
+      rules: [{ kind: "value", column: "price", op: "gt", value: 5 }],
+    }
+
+    // When a numeric rule is sent for each cell with its SQL kept
+    const kept = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "kept", preserve_value: true, highlight_config: numericRule },
+          { id: "edited", preserve_value: true },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    const edited = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "kept", preserve_value: true },
+          { id: "edited", preserve_value: true, highlight_config: numericRule },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the matching snapshot rejects the rule, and the stale one does not apply
+    expect(kept.is_error).toBe(true)
+    expect(kept.content).toContain("Not for a text column")
+    expect(edited.is_error).toBeFalsy()
+    expect(cellById(state, "edited")?.highlightConfig?.rules).toHaveLength(1)
+  })
+
+  it("apply_notebook_state checks rules loosely for a cell whose SQL it rewrites", async () => {
+    // Given two cells whose shown results have a SYMBOL column named price
+    const shown = {
+      results: [
+        {
+          type: "dql" as const,
+          query: "SELECT sym AS price FROM t",
+          columns: [{ name: "price", type: "SYMBOL" }],
+          dataset: [],
+          count: 0,
+        },
+      ],
+      activeResultIndex: 0,
+      timestamp: 0,
+    }
+    const { state } = mountLive(1, [
+      cell("c", "SELECT sym AS price FROM t", { result: shown }),
+      cell("d", "SELECT sym AS price FROM t", { result: shown }),
+    ])
+    const numericRule = {
+      identity_columns: ["price"],
+      rules: [{ kind: "value", column: "price", op: "gt", value: 5 }],
+    }
+
+    // When a numeric rule comes with new SQL for one cell, and with the SQL kept for the other
+    const rewritten = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "c",
+            value: "SELECT 7 AS price",
+            highlight_config: numericRule,
+          },
+          { id: "d", preserve_value: true },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    const kept = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          { id: "c", preserve_value: true },
+          { id: "d", preserve_value: true, highlight_config: numericRule },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the rewritten cell takes the rule, and the kept one is checked against its shown column
+    expect(rewritten.is_error).toBeFalsy()
+    expect(cellById(state, "c")?.highlightConfig?.rules).toHaveLength(1)
+    expect(kept.is_error).toBe(true)
+    expect(kept.content).toContain("Not for a text column")
+    expect(cellById(state, "d")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state sets highlight_config and clears when omitted", async () => {
+    // Given a notebook with one cell
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When an apply sends a gradient-filled between rule
+    await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1; SELECT 2",
+            highlight_config: {
+              identity_columns: ["k"],
+              rules: [
+                {
+                  kind: "value",
+                  column: null,
+                  op: "between",
+                  value: 0,
+                  to: 100,
+                  fill: "gradient",
+                },
+              ],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the cell holds the rule
+    expect(cellById(state, "a")?.highlightConfig?.rules[0]).toMatchObject({
+      kind: "value",
+      target: { kind: "allNumeric" },
+      condition: {
+        op: "between",
+        from: 0,
+        to: 100,
+        fill: { kind: "gradient", highColor: "dataPositive" },
+      },
+    })
+
+    // When the next apply omits highlight_config, then the rules are cleared
+    await dispatchTool(
+      "apply_notebook_state",
+      { buffer_id: 1, cells: [{ id: "a", preserve_value: true }] },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(cellById(state, "a")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply_notebook_state rejects an invalid highlight_config and leaves the cell untouched", async () => {
+    // Given a one-statement cell
+    const { state } = mountLive(1, [cell("a", "SELECT 1")])
+
+    // When a rule with an unknown op is sent
+    const result = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "a",
+            value: "SELECT 1",
+            highlight_config: {
+              identity_columns: ["k"],
+              rules: [{ kind: "value", column: "v", op: "changed" }],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+
+    // Then the apply fails and the cell is untouched
+    expect(result.is_error).toBe(true)
+    expect(result.content).toContain("highlight_config")
+    expect(cellById(state, "a")?.highlightConfig).toBeUndefined()
+  })
+
+  it("apply preserves supplied highlights while discarding results and reports regex notes", async () => {
+    const { state, runCell } = mountLive(1, [
+      cell("a", "SELECT sym FROM t", {
+        result: {
+          results: [
+            {
+              type: "dql",
+              query: "SELECT sym FROM t",
+              columns: [{ name: "sym", type: "SYMBOL" }],
+              dataset: [["eur"]],
+              count: 1,
+            },
+          ],
+          activeResultIndex: 0,
+          timestamp: 1,
+        },
+      }),
+    ])
+    const result = await dispatchTool(
+      "apply_notebook_state",
+      {
+        buffer_id: 1,
+        cells: [
+          {
+            id: "a",
+            preserve_value: true,
+            view: "editor",
+            highlight_config: {
+              identity_columns: [],
+              rules: [
+                { kind: "value", column: "sym", op: "matches", text: "/eur/i" },
+              ],
+            },
+          },
+        ],
+      },
+      makeClient(),
+      noopStatus,
+      ALL_GRANTED,
+      dqlValidator,
+    )
+    expect(result.is_error).toBeFalsy()
+    expect(JSON.parse(result.content)).toMatchObject({
+      results_cleared: ["a"],
+      notes: [expect.stringContaining("cells[0].highlight_config")],
+    })
+    expect(cellById(state, "a")?.result).toBeUndefined()
+    expect(cellById(state, "a")?.highlightConfig?.rules).toHaveLength(1)
+    expect(runCell).not.toHaveBeenCalled()
+  })
+
+  it.each(["set_cell_highlight_config", "apply_notebook_state"])(
+    "%s rejects highlight rules on markdown without mutating it",
+    async (tool) => {
+      const { state } = mountLive(1, [
+        cell("m", "# Notes", { type: "markdown" }),
+      ])
+      const before = state.parts
+      const highlight_config = { identity_columns: [], rules: [] }
+      const input =
+        tool === "set_cell_highlight_config"
+          ? { buffer_id: 1, cell_id: "m", highlight_config }
+          : {
+              buffer_id: 1,
+              cells: [{ id: "m", preserve_value: true, highlight_config }],
+            }
+      const result = await dispatchTool(
+        tool,
+        input,
+        makeClient(),
+        noopStatus,
+        ALL_GRANTED,
+        dqlValidator,
+      )
+      expect(result.is_error).toBe(true)
+      expect(JSON.parse(result.content)).toMatchObject({
+        error_code: "validation",
+      })
+      expect(state.parts).toBe(before)
+    },
+  )
 
   it("set_cell_name sets the cell name", async () => {
     // Given an unnamed cell
@@ -1528,7 +2064,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
-        auto_refresh_default: "2s",
+        auto_refresh_default: "10ms",
         cells: [{ value: "SELECT 2" }],
       },
       makeClient(),

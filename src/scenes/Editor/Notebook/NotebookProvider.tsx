@@ -22,6 +22,7 @@ import type {
   CellType,
 } from "../../../store/notebook"
 import type { ChartConfig } from "./CellChart/chartTypes"
+import type { HighlightConfig } from "../../../components/ResultGrid/highlight"
 import { useQueryExecution } from "../../../hooks/useQueryExecution"
 import { useCellsStore } from "./useCellsStore"
 import { useCellExecution } from "./useCellExecution"
@@ -96,6 +97,10 @@ import {
   clearChartZoom,
   clearChartZooms,
 } from "./cellVirtualization/chartZoomStore"
+import { clearSettingsDrawerSessions } from "./settingsDrawer/settingsDrawerSessions"
+import { createResultTrendStore } from "./result-table/resultTrendStore"
+import { captureResultTrends } from "./result-table/resultTrendCapture"
+import { ResultTrendProvider } from "./result-table/ResultTrendContext"
 import type { CellVirtualizationEngine } from "./cellVirtualization/cellVirtualizationEngine"
 import {
   CellResultHydrationEngine,
@@ -139,6 +144,10 @@ export type NotebookActions = {
   setCellMode: (cellId: string, mode: CellMode) => void
   clearCellResult: (cellId: string) => void
   setCellChartConfig: (cellId: string, config: ChartConfig) => void
+  setCellHighlightConfig: (
+    cellId: string,
+    config: HighlightConfig | null,
+  ) => void
   setCellRefresh: (cellId: string, value: AutoRefresh | undefined) => void
   resetAutoRefreshOverrides: () => void
   refreshAllCells: () => { refreshed: number; skippedWrites: number }
@@ -170,6 +179,7 @@ const NOOP_ACTIONS: NotebookActions = {
   setCellMode: () => undefined,
   clearCellResult: () => undefined,
   setCellChartConfig: () => undefined,
+  setCellHighlightConfig: () => undefined,
   setCellRefresh: () => undefined,
   resetAutoRefreshOverrides: () => undefined,
   refreshAllCells: () => ({ refreshed: 0, skippedWrites: 0 }),
@@ -286,9 +296,21 @@ export const NotebookProvider: React.FC<{
       },
     })
 
+  // Baselines for "previous result" highlight rules live with the notebook,
+  // so a cell remount (maximize, restore) keeps them.
+  const resultTrendStore = useMemo(() => createResultTrendStore(), [])
+  // Results the hydration engine read back from storage, so their flashes
+  // are timed from the save and never replay.
+  const restoredResults = useMemo(() => new WeakSet<CellResult>(), [])
+  const captureTrends = useCallback(
+    (prev: NotebookCell[], next: NotebookCell[]) =>
+      captureResultTrends(resultTrendStore, restoredResults, prev, next),
+    [resultTrendStore, restoredResults],
+  )
   const store = useCellsStore({
     initialCells: initialState.cells,
     persistCells,
+    onCellsChange: captureTrends,
   })
 
   const { hydrateCells, cellsRef } = store
@@ -313,6 +335,7 @@ export const NotebookProvider: React.FC<{
         deleteSnapshot: (cellId) => deleteCellSnapshot(bufferId, cellId),
         getCell: (cellId) => cellsRef.current.find((c) => c.id === cellId),
         applyResult: (cellId, result) => {
+          restoredResults.add(result)
           hydrateCells((prev) =>
             prev.map((c) =>
               c.id === cellId && c.result == null ? { ...c, result } : c,
@@ -447,12 +470,24 @@ export const NotebookProvider: React.FC<{
     [execution, releaseCellExecution],
   )
 
+  // A controller invalidation discards the result, unlike a virtualization
+  // release or the refresh engine temporarily hiding it during an SQL edit.
+  const noteResultMissing = useCallback(
+    (cellId: string) => {
+      resultTrendStore.clearCell(cellId)
+      clearSettingsDrawerSessions(cellId)
+      resultHydration.noteMissing(cellId)
+    },
+    [resultTrendStore, resultHydration],
+  )
+
   const commitTransition = useCallback(
     <T,>(
       run: (parts: ViewParts) => NotebookTransitionResult<T>,
     ): { result: T; persisted: Promise<void> } => {
+      const cellsBefore = store.cellsRef.current
       const out = run({
-        cells: store.cellsRef.current,
+        cells: cellsBefore,
         settings: settingsRef.current,
         maximizedCellId: maximizedCellIdRef.current,
         focusedCellId: focusedCellIdRef.current,
@@ -463,6 +498,15 @@ export const NotebookProvider: React.FC<{
       settingsRef.current = parts.settings
       maximizedCellIdRef.current = parts.maximizedCellId
       focusedCellIdRef.current = parts.focusedCellId
+      // Close the old view's drawer before publishing cells, so a mode
+      // change cannot remount a panel with an obsolete session. Maximizing
+      // or restoring the same view keeps its draft.
+      const modeBefore = new Map(cellsBefore.map((c) => [c.id, c.mode]))
+      for (const cell of parts.cells) {
+        if (modeBefore.has(cell.id) && modeBefore.get(cell.id) !== cell.mode) {
+          clearSettingsDrawerSessions(cell.id)
+        }
+      }
       unstable_batchedUpdates(() => {
         store.hydrateCells(() => parts.cells)
         setSettingsState(parts.settings)
@@ -479,6 +523,7 @@ export const NotebookProvider: React.FC<{
           abortCellRun(cellId, "cell_deleted")
           removeNotebookCellLayouts(bufferId, cellId)
           clearChartZoom(cellId)
+          clearSettingsDrawerSessions(cellId)
         }
       }
       if (out.cancelRuns) {
@@ -486,10 +531,11 @@ export const NotebookProvider: React.FC<{
           abortCellRun(cellId, out.cancelRuns.reason)
         }
       }
-      // noteMissing collapses the cell's reserved result area immediately
+      // Discard cached display state and collapse the reserved result area
+      // immediately; the snapshot itself waits for persistence below.
       if (out.deleteSnapshots) {
         for (const cellId of out.deleteSnapshots.cellIds) {
-          resultHydration.noteMissing(cellId)
+          noteResultMissing(cellId)
         }
       }
       // Snapshot rows outlive a failed document write: the stored document
@@ -501,7 +547,7 @@ export const NotebookProvider: React.FC<{
       )
       return { result: out.result, persisted }
     },
-    [store, persistImmediately, bufferId, abortCellRun, resultHydration],
+    [store, persistImmediately, bufferId, abortCellRun, noteResultMissing],
   )
 
   // A gesture sees its transition land at once; a failed document write only
@@ -578,9 +624,11 @@ export const NotebookProvider: React.FC<{
         ),
       )
       resultHydration.forget(cellId)
+      resultTrendStore.clearCell(cellId)
+      clearSettingsDrawerSessions(cellId)
       void deleteCellSnapshot(bufferId, cellId)
     },
-    [store, bufferId, resultHydration],
+    [store, bufferId, resultHydration, resultTrendStore],
   )
 
   const setCellResult = useCallback(
@@ -635,6 +683,7 @@ export const NotebookProvider: React.FC<{
     () => () => {
       resetChartEntryAnimation(bufferId)
       clearChartZooms(cellsRef.current.map((c) => c.id))
+      cellsRef.current.forEach((c) => clearSettingsDrawerSessions(c.id))
     },
     [bufferId, cellsRef],
   )
@@ -880,6 +929,7 @@ export const NotebookProvider: React.FC<{
     setCellMode,
     clearCellResult,
     setCellChartConfig: store.setCellChartConfig,
+    setCellHighlightConfig: store.setCellHighlightConfig,
     setCellRefresh: store.setCellRefresh,
     resetAutoRefreshOverrides,
     refreshAllCells: () => cellRefreshEngine.refreshAll(),
@@ -891,7 +941,7 @@ export const NotebookProvider: React.FC<{
     getMaximizedCellId: () => maximizedCellIdRef.current,
     readRefreshState: () => cellRefreshEngine.readRefreshState(),
     readResultStatus: (cellId) => resultHydration.statusOf(cellId),
-    noteResultMissing: (cellId) => resultHydration.noteMissing(cellId),
+    noteResultMissing,
     flushChartSnapshots: () => cellRefreshEngine.flushPendingSnapshots(),
     applyTransition: applyTransitionPersisted,
   }
@@ -944,7 +994,9 @@ export const NotebookProvider: React.FC<{
           <CellRefreshProvider value={cellRefreshEngine}>
             <CellVirtualizationProvider value={cellVirtualizationEngine}>
               <CellResultHydrationProvider value={resultHydration}>
-                {children}
+                <ResultTrendProvider value={resultTrendStore}>
+                  {children}
+                </ResultTrendProvider>
               </CellResultHydrationProvider>
             </CellVirtualizationProvider>
           </CellRefreshProvider>

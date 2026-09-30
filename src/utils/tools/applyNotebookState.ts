@@ -15,9 +15,11 @@ import type {
   AgentCellView,
   CellMode,
   CellType,
+  NotebookCell,
   NotebookVariable,
 } from "../../store/notebook"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { loadRe2 } from "../../components/ResultGrid/highlight"
 import {
   denyReasonUnresolvedSql,
   requireAllDQL,
@@ -39,6 +41,14 @@ import {
   type ToolQueryChart,
   type ToolRightAxis,
 } from "./chartConfigWire"
+import {
+  type HighlightConfigWire,
+  parseHighlightConfigFor,
+  regexLiteralNotes,
+  shownResultsOf,
+  wireUsesPatterns,
+} from "./highlightConfigWire"
+import { loadCellSnapshot } from "../../store/notebookResults"
 import {
   applyStaleNotebookResult,
   notebookErrorHint,
@@ -229,6 +239,7 @@ export const dispatchApplyNotebookState = async (
         editor_height?: number | "auto" | null
         result_height?: number | "auto" | null
         view?: AgentCellView | null
+        highlight_config?: HighlightConfigWire | null
         chart_config?: {
           x_column?: string | null
           queries?: (ToolQueryChart | null)[] | null
@@ -274,7 +285,7 @@ export const dispatchApplyNotebookState = async (
     return {
       content: JSON.stringify({
         error_code: "validation",
-        message: `VALIDATION_ERROR: auto_refresh_default must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+        message: `VALIDATION_ERROR: auto_refresh_default must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
       }),
       is_error: true,
     }
@@ -295,7 +306,7 @@ export const dispatchApplyNotebookState = async (
       return {
         content: JSON.stringify({
           error_code: "validation",
-          message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+          message: `VALIDATION_ERROR: cells[${idx}].auto_refresh must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
         }),
         is_error: true,
       }
@@ -390,6 +401,20 @@ export const dispatchApplyNotebookState = async (
   if (denied && !denied.granted) {
     return { content: denied.reason, is_error: true }
   }
+  if (
+    cells.some(
+      (c) => c.highlight_config && wireUsesPatterns(c.highlight_config),
+    )
+  ) {
+    await loadRe2()
+  }
+  const snapshots = await Promise.all(
+    cells.map(async (c) =>
+      c.highlight_config && c.id
+        ? loadCellSnapshot(buffer_id, c.id)
+        : undefined,
+    ),
+  )
   const request: ApplyNotebookStateRequest = {
     layoutMode: layout_mode ?? null,
     autoRefreshDefault: isAutoRefresh(auto_refresh_default)
@@ -425,6 +450,38 @@ export const dispatchApplyNotebookState = async (
       return cell
     }),
   }
+  // Rules are checked against the columns the cell's results have shown, in
+  // memory or in its snapshot, so the parse waits for the live cells. A new
+  // cell, or one whose SQL this request rewrites, has no columns to check
+  // against yet.
+  const shownCellFor = (
+    existing: NotebookCell[],
+    c: (typeof cells)[number],
+  ): NotebookCell | undefined => {
+    const live = existing.find((cell) => cell.id === c.id)
+    const sameSql = c.preserve_value === true || c.value === live?.value
+    return sameSql ? live : undefined
+  }
+  const withHighlightConfigs = (
+    existing: NotebookCell[],
+  ): ApplyNotebookStateRequest => ({
+    ...request,
+    cells: request.cells.map((cell, index) => {
+      const wire = cells[index].highlight_config
+      if (!wire) return cell
+      return {
+        ...cell,
+        highlightConfig: parseHighlightConfigFor(
+          wire,
+          shownResultsOf(
+            shownCellFor(existing, cells[index]),
+            snapshots[index],
+          ),
+          `cells[${index}].highlight_config`,
+        ),
+      }
+    }),
+  })
   if (signal?.aborted) {
     return {
       content: JSON.stringify({
@@ -446,7 +503,11 @@ export const dispatchApplyNotebookState = async (
       buffer_id,
       (ctrl) =>
         ctrl.mutateWithResultStatus((parts, resultStatusOf) =>
-          applyNotebookStateTransition(parts, request, resultStatusOf),
+          applyNotebookStateTransition(
+            parts,
+            withHighlightConfigs(parts.cells),
+            resultStatusOf,
+          ),
         ),
       signal,
     )
@@ -489,7 +550,20 @@ export const dispatchApplyNotebookState = async (
       validateSql,
       signal,
     )
-    return { content: JSON.stringify({ ...appliedPayload(out), runs }) }
+    const notes = cells.flatMap((c, index) =>
+      c.highlight_config
+        ? regexLiteralNotes(c.highlight_config).map(
+            (note) => `cells[${index}].highlight_config ${note}`,
+          )
+        : [],
+    )
+    return {
+      content: JSON.stringify({
+        ...appliedPayload(out),
+        runs,
+        ...(notes.length > 0 ? { notes } : {}),
+      }),
+    }
   } catch (e) {
     // Once withBoundNotebook resolved the mutation is durably committed, so an
     // abort during the post-apply read/auto-run must report the state as applied

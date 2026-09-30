@@ -20,6 +20,7 @@ import { ChartPlaceholder } from "../cellVirtualization/ChartPlaceholder"
 import { GridShimmer } from "../cellVirtualization/GridShimmer"
 import { useCellResultStatus } from "../resultHydration/CellResultHydrationContext"
 import { createResultGridViewportStore } from "../result-table/resultGridViewportStore"
+import { cellColumnsOf } from "../result-table/highlightConfig"
 import { getQueriesFromText } from "../../Monaco/utils"
 import {
   derivePositionalFrame,
@@ -44,6 +45,7 @@ type Props = {
   expectingResult: boolean
   isFocused: boolean
   isRunning: boolean
+  refreshIntervalMs: number | undefined
   onConfigChange: (config: ChartConfig) => void
   onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
@@ -55,6 +57,7 @@ export const CellBottomContent: React.FC<Props> = ({
   expectingResult,
   isFocused,
   isRunning,
+  refreshIntervalMs,
   onConfigChange,
   onRetryUnmountWhileFocused,
   onYieldFocus,
@@ -106,6 +109,11 @@ export const CellBottomContent: React.FC<Props> = ({
     [resultIndexOf, reRunResultAt, cell.id],
   )
 
+  const cellColumns = useMemo(
+    () => cellColumnsOf(slots.map((slot) => slot.result)),
+    [slots],
+  )
+
   useEffect(
     () => () => {
       viewportStore.clear()
@@ -118,6 +126,7 @@ export const CellBottomContent: React.FC<Props> = ({
       <DrawCanvas
         cell={cell}
         isFocused={isFocused}
+        refreshIntervalMs={refreshIntervalMs}
         onConfigChange={onConfigChange}
         onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
@@ -149,6 +158,9 @@ export const CellBottomContent: React.FC<Props> = ({
         onReRun={reRunStatement}
         onYieldFocus={onYieldFocus}
         viewportStore={viewportStore}
+        highlightConfig={cell.highlightConfig}
+        cellColumns={cellColumns}
+        refreshIntervalMs={refreshIntervalMs}
       />
     ) : (
       <GridShimmer
