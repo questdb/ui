@@ -232,7 +232,9 @@ describe("notebook highlight rules", () => {
     cy.get("[data-hook='grid-cell']").should("not.exist")
 
     // And the cell is refreshed and mounts its grid panel again
-    cy.get("[data-notebook-cell] button[aria-label='Refresh']").click()
+    cy.get("[data-notebook-cell] button[aria-label='Refresh']")
+      .should("not.have.attr", "aria-busy", "true")
+      .click()
     cy.getByDataHook("grid-viewport").should("exist")
 
     // Then the drawer stays closed

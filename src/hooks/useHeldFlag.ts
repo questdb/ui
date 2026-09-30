@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react"
 
-// On while `active`, and for `holdMs` after it turns off. Activity inside
-// the hold restarts it, so a flag that flips often stays on.
-export const useHeldFlag = (active: boolean, holdMs: number): boolean => {
-  const [held, setHeld] = useState(active)
+// On while `active`, and for at least `minMs` from when it turned on, so a
+// short activity still shows for `minMs`.
+export const useHeldFlag = (active: boolean, minMs: number): boolean => {
+  const [heldUntil, setHeldUntil] = useState<number | null>(null)
 
   useEffect(() => {
-    if (active) {
-      setHeld(true)
-      return
-    }
-    if (!held) return
-    const releaseTimerId = window.setTimeout(() => setHeld(false), holdMs)
-    return () => window.clearTimeout(releaseTimerId)
-  }, [active, holdMs, held])
+    if (active) setHeldUntil(Date.now() + minMs)
+  }, [active, minMs])
 
-  return active || held
+  useEffect(() => {
+    if (active || heldUntil === null) return
+    const releaseTimerId = window.setTimeout(
+      () => setHeldUntil(null),
+      heldUntil - Date.now(),
+    )
+    return () => window.clearTimeout(releaseTimerId)
+  }, [active, heldUntil])
+
+  return active || (heldUntil !== null && Date.now() < heldUntil)
 }
