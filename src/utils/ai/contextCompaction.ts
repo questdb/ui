@@ -1,5 +1,5 @@
 import type { ConversationMessage } from "../../providers/AIConversationProvider/types"
-import { getTestModel } from "./index"
+import { getSelectedModel } from "./index"
 import type { AIProvider, Message } from "./index"
 import { getMessageTextLength } from "./shared"
 import type { AiAssistantSettings } from "../../providers/LocalStorageProvider/types"
@@ -89,9 +89,9 @@ async function generateSummary(
   settings?: AiAssistantSettings,
   abortSignal?: AbortSignal,
 ): Promise<string> {
-  const testModelValue = getTestModel(aiProvider.id, settings)
-  if (!testModelValue) {
-    throw new Error("No test model found for provider")
+  const summaryModel = settings ? getSelectedModel(settings) : null
+  if (!summaryModel) {
+    throw new Error("No model selected for summarization")
   }
 
   const conversationText = middleMessages
@@ -123,7 +123,7 @@ async function generateSummary(
   const userMessage = `Please summarize the following conversation:\n\n${conversationText}`
 
   return aiProvider.generateSummary({
-    model: testModelValue,
+    model: summaryModel,
     systemPrompt: SUMMARIZATION_PROMPT,
     userMessage,
     abortSignal,
