@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { toNativeMessages } from "./anthropicProvider"
+import Anthropic from "@anthropic-ai/sdk"
+import { createAnthropicProvider, toNativeMessages } from "./anthropicProvider"
 import type { Message, ToolCall } from "./types"
 
 const toolCall = (over: Partial<ToolCall> = {}): ToolCall => ({
@@ -8,6 +9,30 @@ const toolCall = (over: Partial<ToolCall> = {}): ToolCall => ({
   arguments: '{"sql":"SELECT 1"}',
   timestamp: 0,
   ...over,
+})
+
+describe("anthropicProvider.classifyError", () => {
+  it("reports a 429 as a rate or usage limit", () => {
+    const provider = createAnthropicProvider("test-key")
+    const error = new Anthropic.RateLimitError(
+      429,
+      {
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          message: "Rate limit reached",
+        },
+      },
+      "Rate limit reached",
+      new Headers(),
+    )
+
+    expect(provider.classifyError(error, () => {})).toMatchObject({
+      type: "rate_limit",
+      message:
+        "The provider's rate or usage limit was reached. Check your provider account limits or try again later.",
+    })
+  })
 })
 
 describe("anthropicProvider.toNativeMessages", () => {

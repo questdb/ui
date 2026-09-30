@@ -1,6 +1,8 @@
+import React from "react"
 import * as RadixAlertDialog from "@radix-ui/react-alert-dialog"
 import styled, { css } from "styled-components"
 import { modalSurfaceStyles } from "../overlayStyles"
+import { ModalLayer } from "../ModalLayer"
 
 const dialogShow = css`
   @keyframes dialogShow {
@@ -24,8 +26,14 @@ const dialogHide = css`
   }
 `
 
+const Root = (props: React.ComponentProps<typeof RadixAlertDialog.Root>) => (
+  <ModalLayer modal>
+    <RadixAlertDialog.Root {...props} />
+  </ModalLayer>
+)
+
 export const AlertDialog = {
-  Root: RadixAlertDialog.Root,
+  Root,
   Overlay: RadixAlertDialog.Overlay,
   Trigger: RadixAlertDialog.Trigger,
   Portal: RadixAlertDialog.Portal,

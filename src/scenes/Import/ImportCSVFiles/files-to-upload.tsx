@@ -232,7 +232,6 @@ export const FilesToUpload = ({
           ariaLabel="Table owner"
           dataHook="import-table-owner-select"
           value={data.table_owner || ownedByList[0] || ""}
-          modal={false}
           onValueChange={(value) =>
             onFilePropertyChange(data.id, {
               table_owner: value,
@@ -330,7 +329,6 @@ export const FilesToUpload = ({
             ariaLabel="Write mode"
             value={writeMode}
             dataHook="import-write-mode-trigger"
-            modal={false}
             onValueChange={(value) => {
               const overwrite = value === "overwrite"
 
