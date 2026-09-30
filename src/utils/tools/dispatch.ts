@@ -1100,7 +1100,7 @@ export const dispatchTool = async (
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: value must be true, false, null, or one of "1s", "5s", "10s", "30s", "1m".`,
+              message: `VALIDATION_ERROR: value must be true, false, null, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
             }),
             is_error: true,
           }
@@ -1145,7 +1145,7 @@ export const dispatchTool = async (
           return {
             content: JSON.stringify({
               error_code: "validation",
-              message: `VALIDATION_ERROR: value must be true, false, or one of "1s", "5s", "10s", "30s", "1m".`,
+              message: `VALIDATION_ERROR: value must be true, false, or an interval of digits plus ms, s or m from 50ms to 60m, e.g. "250ms", "5s", "15m".`,
             }),
             is_error: true,
           }

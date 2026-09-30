@@ -15,7 +15,6 @@ import type {
   SingleQueryResult,
 } from "../../../store/notebook"
 import {
-  AUTO_REFRESH_INTERVALS,
   createCell,
   MAX_NOTEBOOK_CELLS,
   MAX_CELL_LINES,
@@ -57,11 +56,52 @@ import {
 // Auto-refresh (draw cells): true = adaptive poll, false = off, a token like
 // "5s" = fixed cadence. The cell stores this value verbatim (= the MCP wire
 // form), so there is no conversion layer.
+export const AUTO_REFRESH_PRESETS: AutoRefreshInterval[] = [
+  "250ms",
+  "500ms",
+  "1s",
+  "5s",
+  "10s",
+  "30s",
+  "1m",
+]
+
 export const AUTO_REFRESH_OPTIONS: AutoRefresh[] = [
   true,
   false,
-  ...(Object.keys(AUTO_REFRESH_INTERVALS) as AutoRefreshInterval[]),
+  ...AUTO_REFRESH_PRESETS,
 ]
+
+export const MIN_AUTO_REFRESH_INTERVAL_MS = 50
+export const MAX_AUTO_REFRESH_INTERVAL_MS = 60 * 60 * 1000
+
+const INTERVAL_UNIT_MS = { ms: 1, s: 1000, m: 60 * 1000 } as const
+const INTERVAL_PATTERN = /^([1-9]\d*)(ms|s|m)$/
+const INTERVAL_INPUT_PATTERN = /^(\d+)(ms|s|m)$/
+
+// Undefined for anything that is not a stored token (digits without a leading
+// zero plus ms, s or m), or that falls outside 50ms to 60m.
+const intervalMsOf = (value: string): number | undefined => {
+  const match = INTERVAL_PATTERN.exec(value)
+  if (!match) return undefined
+  const unit = match[2] as keyof typeof INTERVAL_UNIT_MS
+  const ms = Number(match[1]) * INTERVAL_UNIT_MS[unit]
+  return ms >= MIN_AUTO_REFRESH_INTERVAL_MS &&
+    ms <= MAX_AUTO_REFRESH_INTERVAL_MS
+    ? ms
+    : undefined
+}
+
+// Reads what a user types, such as " 750 MS ", as the stored token "750ms".
+export const parseAutoRefreshInterval = (
+  input: string,
+): AutoRefreshInterval | undefined => {
+  const compact = input.replace(/\s+/g, "").toLowerCase()
+  const match = INTERVAL_INPUT_PATTERN.exec(compact)
+  if (!match) return undefined
+  const token = `${Number(match[1])}${match[2]}` as AutoRefreshInterval
+  return intervalMsOf(token) === undefined ? undefined : token
+}
 
 export const autoRefreshLabel = (value: AutoRefresh): string =>
   value === true ? "Auto" : value === false ? "Off" : value
@@ -69,12 +109,11 @@ export const autoRefreshLabel = (value: AutoRefresh): string =>
 export const autoRefreshIntervalMs = (
   value: AutoRefresh,
 ): number | undefined =>
-  typeof value === "string" ? AUTO_REFRESH_INTERVALS[value] : undefined
+  typeof value === "string" ? intervalMsOf(value) : undefined
 
 export const isAutoRefresh = (value: unknown): value is AutoRefresh =>
   typeof value === "boolean" ||
-  (typeof value === "string" &&
-    Object.prototype.hasOwnProperty.call(AUTO_REFRESH_INTERVALS, value))
+  (typeof value === "string" && intervalMsOf(value) !== undefined)
 
 // Terminal fallback is Off for every view: nothing polls unless the cell or
 // the notebook says so.

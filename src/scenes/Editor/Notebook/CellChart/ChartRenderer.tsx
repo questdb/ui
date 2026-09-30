@@ -30,6 +30,7 @@ type Props = {
   onZoomChange?: (start: number, end: number) => void
   isFocused?: boolean
   animateEntry?: boolean
+  animate?: boolean
   zoomWindow: ZoomWindow
 }
 
@@ -99,6 +100,7 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
       onZoomChange,
       isFocused = true,
       animateEntry = true,
+      animate = true,
       zoomWindow,
     },
     ref,
@@ -133,11 +135,13 @@ export const ChartRenderer = React.forwardRef<ChartRendererHandle, Props>(
     const suppressEntryAnimation =
       !animateEntryRef.current && !firstInstanceDoneRef.current
     const renderOption = useMemo(
-      () =>
-        suppressEntryAnimation
+      () => ({
+        ...(suppressEntryAnimation
           ? { ...optionToDraw, animationDuration: 0 }
-          : optionToDraw,
-      [optionToDraw, suppressEntryAnimation],
+          : optionToDraw),
+        animation: animate,
+      }),
+      [optionToDraw, suppressEntryAnimation, animate],
     )
     const events = useMemo(() => {
       if (!onZoomChange) return undefined

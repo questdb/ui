@@ -39,6 +39,12 @@ import { PaneEmptyState } from "../PaneEmptyState"
 
 const NO_RESULTS: QueryExecResult[] = []
 
+const MIN_ANIMATED_REFRESH_INTERVAL_MS = 500
+
+const animatesAt = (refreshIntervalMs: number | undefined) =>
+  refreshIntervalMs === undefined ||
+  refreshIntervalMs >= MIN_ANIMATED_REFRESH_INTERVAL_MS
+
 type DrawState = Pick<
   CellFetchState,
   "queries" | "queriesKey" | "settledKey" | "classifyBlock" | "fetchCancelled"
@@ -115,6 +121,7 @@ const VisuallyHiddenStatus = styled.span`
 type Props = {
   cell: NotebookCell
   isFocused: boolean
+  refreshIntervalMs: number | undefined
   onConfigChange: (config: ChartConfig) => void
   onRetryUnmountWhileFocused: () => void
 }
@@ -122,6 +129,7 @@ type Props = {
 export const DrawCanvas: React.FC<Props> = ({
   cell,
   isFocused,
+  refreshIntervalMs,
   onConfigChange,
   onRetryUnmountWhileFocused,
 }) => {
@@ -264,6 +272,7 @@ export const DrawCanvas: React.FC<Props> = ({
             option={option}
             onZoomChange={handleZoomChange}
             isFocused={isFocused}
+            animate={animatesAt(refreshIntervalMs)}
             zoomWindow={{ start: zoomStart, end: zoomEnd }}
           />
         </Canvas>

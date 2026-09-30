@@ -24,6 +24,7 @@ type Props = {
   viewportStore: ResultGridViewportStore
   highlightConfig: HighlightConfig | undefined
   cellColumns: ColumnDefinition[]
+  refreshIntervalMs: number | undefined
 }
 
 export const InlineResultTable: React.FC<Props> = ({
@@ -41,6 +42,7 @@ export const InlineResultTable: React.FC<Props> = ({
   viewportStore,
   highlightConfig,
   cellColumns,
+  refreshIntervalMs,
 }) => {
   const activeSlot = slots[activeSlotIndex] ?? slots[0]
   const activeResult = activeSlot?.result
@@ -89,6 +91,7 @@ export const InlineResultTable: React.FC<Props> = ({
           viewportStore={viewportStore}
           highlightConfig={highlightConfig}
           cellColumns={cellColumns}
+          refreshIntervalMs={refreshIntervalMs}
         />
       )}
     </ResultWrapper>

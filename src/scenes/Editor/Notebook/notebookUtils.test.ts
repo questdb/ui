@@ -4,6 +4,7 @@ import {
   buildAppliedNotebookState,
   attachScriptSummary,
   autoRefreshIntervalMs,
+  parseAutoRefreshInterval,
   autoRefreshLabel,
   AUTO_REFRESH_OPTIONS,
   isAutoRefresh,
@@ -2316,16 +2317,31 @@ describe("sqlHash", () => {
 })
 
 describe("isAutoRefresh", () => {
-  it("accepts booleans and the fixed-interval tokens", () => {
+  it("accepts booleans and any interval from 50ms to 60m", () => {
     // Booleans are the 2.0.0-compatible auto/off values.
     expect(isAutoRefresh(true)).toBe(true)
     expect(isAutoRefresh(false)).toBe(true)
     expect(isAutoRefresh("5s")).toBe(true)
-    expect(isAutoRefresh("1m")).toBe(true)
+    expect(isAutoRefresh("2s")).toBe(true)
+    expect(isAutoRefresh("50ms")).toBe(true)
+    expect(isAutoRefresh("60m")).toBe(true)
+  })
+
+  it("rejects intervals outside 50ms to 60m", () => {
+    expect(isAutoRefresh("49ms")).toBe(false)
+    expect(isAutoRefresh("61m")).toBe(false)
+    expect(isAutoRefresh("3601s")).toBe(false)
+  })
+
+  it("rejects tokens that are not stored in their canonical form", () => {
+    expect(isAutoRefresh("0250ms")).toBe(false)
+    expect(isAutoRefresh("5 s")).toBe(false)
+    expect(isAutoRefresh("5S")).toBe(false)
+    expect(isAutoRefresh("1h")).toBe(false)
+    expect(isAutoRefresh("1.5s")).toBe(false)
   })
 
   it("rejects unknown tokens and non-values", () => {
-    expect(isAutoRefresh("2s")).toBe(false)
     expect(isAutoRefresh("")).toBe(false)
     expect(isAutoRefresh(5000)).toBe(false)
     expect(isAutoRefresh(null)).toBe(false)
@@ -2356,8 +2372,29 @@ describe("autoRefreshIntervalMs", () => {
     expect(autoRefreshIntervalMs("1s")).toBe(1000)
     expect(autoRefreshIntervalMs("5s")).toBe(5000)
     expect(autoRefreshIntervalMs("1m")).toBe(60000)
+    expect(autoRefreshIntervalMs("750ms")).toBe(750)
+    expect(autoRefreshIntervalMs("15m")).toBe(900000)
     expect(autoRefreshIntervalMs(true)).toBeUndefined()
     expect(autoRefreshIntervalMs(false)).toBeUndefined()
+  })
+})
+
+describe("parseAutoRefreshInterval", () => {
+  it("reads typed input as the stored token", () => {
+    // Given what a user may type in the custom interval box
+    // When each input is parsed
+    // Then spaces, case and leading zeros fold into the canonical token
+    expect(parseAutoRefreshInterval("750ms")).toBe("750ms")
+    expect(parseAutoRefreshInterval(" 2 S ")).toBe("2s")
+    expect(parseAutoRefreshInterval("0250ms")).toBe("250ms")
+  })
+
+  it("rejects input outside 50ms to 60m or without a unit", () => {
+    expect(parseAutoRefreshInterval("49ms")).toBeUndefined()
+    expect(parseAutoRefreshInterval("61m")).toBeUndefined()
+    expect(parseAutoRefreshInterval("0s")).toBeUndefined()
+    expect(parseAutoRefreshInterval("500")).toBeUndefined()
+    expect(parseAutoRefreshInterval("1h")).toBeUndefined()
   })
 })
 
@@ -2545,6 +2582,8 @@ describe("AUTO_REFRESH_OPTIONS", () => {
     expect(AUTO_REFRESH_OPTIONS).toEqual([
       true,
       false,
+      "250ms",
+      "500ms",
       "1s",
       "5s",
       "10s",

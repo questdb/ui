@@ -22,15 +22,7 @@ export const exceedsCellNameLimit = (name: string): boolean =>
 
 export type CellMode = "run" | "draw"
 
-export const AUTO_REFRESH_INTERVALS = {
-  "1s": 1000,
-  "5s": 5000,
-  "10s": 10000,
-  "30s": 30000,
-  "1m": 60000,
-} as const
-
-export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+export type AutoRefreshInterval = `${number}${"ms" | "s" | "m"}`
 // false means "Off", true means "Auto" — presence checks must be `!== undefined`.
 export type AutoRefresh = boolean | AutoRefreshInterval
 

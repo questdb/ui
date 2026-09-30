@@ -28,7 +28,11 @@ import {
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { toast } from "../../../../components/Toast"
-import { resolveAutoRefresh, resolveCellView } from "../notebookUtils"
+import {
+  autoRefreshIntervalMs,
+  resolveAutoRefresh,
+  resolveCellView,
+} from "../notebookUtils"
 import {
   CELL_EDITOR_LINE_HEIGHT,
   CELL_EDITOR_PADDING,
@@ -629,6 +633,7 @@ const CellInner: React.FC<Props> = ({
               expectingResult={expectingResult}
               isFocused={isFocused}
               isRunning={isRunning}
+              refreshIntervalMs={autoRefreshIntervalMs(effectiveAutoRefresh)}
               onConfigChange={handleChartConfigChange}
               onRetryUnmountWhileFocused={focusCellToolbar}
               onYieldFocus={() => editorRef.current?.focus()}

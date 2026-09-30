@@ -198,7 +198,7 @@ const pulseAnim = (ring: string, transparent: string) => keyframes`
 
 const HIGHLIGHT_STATIC_OPACITY = 30
 const HIGHLIGHT_FLASH_OPACITY = 55
-const FLASH_DURATION_MS = 1000
+export const DEFAULT_FLASH_DURATION_MS = 1000
 
 // The flash animates the registered --grid-flash color, which the cell paints
 // as its top background layer; a background-color would sit under a pinned
@@ -314,7 +314,8 @@ export const Cell = styled.div<CellProps>`
         HIGHLIGHT_FLASH_OPACITY,
         $highlightBlend,
       )};
-      animation: ${flashAnim[$flashParity]} ${FLASH_DURATION_MS}ms ease-out;
+      animation: ${flashAnim[$flashParity]} ${DEFAULT_FLASH_DURATION_MS}ms
+        ease-out;
     `}
 
   ${({ $isActive, theme }) =>

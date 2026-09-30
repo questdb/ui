@@ -17,7 +17,10 @@ import {
   pendingCellFetchState,
   type CellRefreshDeps,
 } from "./cellRefreshEngine"
-import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
+import {
+  createRequestLimiter,
+  MAX_ACTIVE_STATEMENT_REQUESTS,
+} from "../../../../utils/questdb/requestLimiter"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
 import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
 import { buildStatementSlotViews } from "../result-table/statementSlotView"
@@ -197,9 +200,11 @@ describe("CellRefreshEngine", () => {
     harness = makeDeps()
     deps = harness.deps
     cellResults = harness.cellResults
-    // Jitter off: tests assert exact fetch timing.
+    // Jitter off: tests assert exact fetch timing. A per-test limiter, so a
+    // fetch a test leaves hanging never holds a slot in the next test.
     engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
       initialFetchJitterMs: 0,
+      requestLimiter: createRequestLimiter(MAX_ACTIVE_STATEMENT_REQUESTS),
     })
     engine.attach()
   })

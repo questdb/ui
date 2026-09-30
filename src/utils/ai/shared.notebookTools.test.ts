@@ -696,13 +696,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBe(false)
   })
 
-  it("set_cell_autorefresh rejects a token outside the allowed set", async () => {
+  it("set_cell_autorefresh rejects an interval outside 50ms to 60m", async () => {
     // Given a cell without an override
     const { state } = mountLive(1, [cell("c")])
-    // When the agent sends an unknown token
+    // When the agent sends an interval below 50ms
     const res = await dispatchTool(
       "set_cell_autorefresh",
-      { buffer_id: 1, cell_id: "c", value: "2s" },
+      { buffer_id: 1, cell_id: "c", value: "10ms" },
       makeClient(),
       noopStatus,
       ALL_GRANTED,
@@ -809,13 +809,13 @@ describe("dispatchTool — notebook tools (happy path)", () => {
     expect(cellById(state, "c")?.autoRefresh).toBe("5s")
   })
 
-  it("set_notebook_autorefresh rejects a token outside the allowed set", async () => {
+  it("set_notebook_autorefresh rejects an interval outside 50ms to 60m", async () => {
     // Given a notebook without a default
     const { state } = mountLive(1, [cell("c")])
-    // When the agent sends an unknown token
+    // When the agent sends an interval below 50ms
     const res = await dispatchTool(
       "set_notebook_autorefresh",
-      { buffer_id: 1, value: "2s" },
+      { buffer_id: 1, value: "10ms" },
       makeClient(),
       noopStatus,
       ALL_GRANTED,
@@ -2064,7 +2064,7 @@ describe("dispatchTool — notebook tools (happy path)", () => {
       "apply_notebook_state",
       {
         buffer_id: 1,
-        auto_refresh_default: "2s",
+        auto_refresh_default: "10ms",
         cells: [{ value: "SELECT 2" }],
       },
       makeClient(),

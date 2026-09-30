@@ -25,6 +25,7 @@ import { EventType } from "../../../../modules/EventBus/types"
 import type { ResultGridViewportStore } from "./resultGridViewportStore"
 import { useResultTrendStore } from "./ResultTrendContext"
 import { resolveHighlightConfig } from "./highlightConfig"
+import { flashDurationFor } from "./flashDuration"
 import {
   columnRangeOf,
   duplicateRowCount,
@@ -53,6 +54,7 @@ type Props = {
   highlightConfig: HighlightConfig | undefined
   // Every column any result of the cell has, for the rule pickers.
   cellColumns: ColumnDefinition[]
+  refreshIntervalMs: number | undefined
 }
 
 const trackHighlightOpen = () =>
@@ -97,6 +99,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
   viewportStore,
   highlightConfig: savedHighlightConfig,
   cellColumns,
+  refreshIntervalMs,
 }) => {
   const { queryKey, columnLayout, viewport } = useInitialGridState({
     bufferId,
@@ -200,6 +203,7 @@ const ResultGridPanelInner: React.FC<Props> = ({
         cellHighlights={highlights.lookup}
         flashParity={revision % 2 === 0 ? 0 : 1}
         flashStartedAt={capturedAt}
+        flashDurationMs={flashDurationFor(refreshIntervalMs)}
         isFocused={isFocused}
         initialColumnSizing={columnLayout?.columnSizing}
         initialColumnOrder={columnLayout?.columnOrder}

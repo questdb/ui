@@ -43,6 +43,7 @@ import {
   CellDirectionGlyph,
   CellText,
   ColResizer,
+  DEFAULT_FLASH_DURATION_MS,
   GridContainer,
   HeaderCell,
   HeaderName,
@@ -106,6 +107,7 @@ type GridCellProps = {
   hasDirectionSlot: boolean
   flashParity: 0 | 1
   flashStartedAt: number
+  flashDurationMs: number
   onCellClick: (row: number, col: number) => void
 }
 
@@ -127,6 +129,7 @@ const GridCell = React.memo(function GridCell({
   hasDirectionSlot,
   flashParity,
   flashStartedAt,
+  flashDurationMs,
   onCellClick,
 }: GridCellProps) {
   const colType = col?.type ?? ""
@@ -165,7 +168,12 @@ const GridCell = React.memo(function GridCell({
         left,
         width,
         ...(isPulsing ? { zIndex: 4 } : frozen ? { zIndex: 2 } : {}),
-        ...(flashDelay ? { animationDelay: flashDelay } : {}),
+        ...(flashDelay
+          ? {
+              animationDelay: flashDelay,
+              animationDuration: `${flashDurationMs}ms`,
+            }
+          : {}),
       }}
       $isNull={loaded && rawValue === null}
       $isTimestamp={isDesignatedTimestamp}
@@ -201,6 +209,7 @@ type Props = {
   // When the highlighted result landed, so a flash ends one duration after
   // that whenever its cell mounts.
   flashStartedAt?: number
+  flashDurationMs?: number
   isFocused?: boolean
   initialColumnSizing?: Record<string, number>
   onColumnSizingCommit?: (sizing: Record<string, number>) => void
@@ -269,6 +278,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
       cellHighlights = EMPTY_HIGHLIGHT_LOOKUP,
       flashParity = 0,
       flashStartedAt = 0,
+      flashDurationMs = DEFAULT_FLASH_DURATION_MS,
       isFocused = true,
       initialColumnSizing,
       onColumnSizingCommit,
@@ -912,6 +922,7 @@ export const ResultGrid = forwardRef<ResultGridHandle, Props>(
                     hasDirectionSlot={cellHighlights.hasDirection(dataIndex)}
                     flashParity={flashParity}
                     flashStartedAt={flashStartedAt}
+                    flashDurationMs={flashDurationMs}
                     col={header.column.columnDef.meta?.col}
                     colWidth={header.getSize()}
                     left={pos.left}

@@ -203,6 +203,10 @@ export const CellToolbar: React.FC<Props> = ({
       mode,
     })
   }
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    moreActionsTooltip.onMenuOpenChange(open)
+  }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
     if (value === cell.autoRefresh) return
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_AUTOREFRESH_CHANGE, {
@@ -284,12 +288,7 @@ export const CellToolbar: React.FC<Props> = ({
         </CellIconButton>
       </Tooltip>
       {!isMaximized && (
-        <DropdownMenu.Root
-          onOpenChange={(o) => {
-            setMenuOpen(o)
-            moreActionsTooltip.onMenuOpenChange(o)
-          }}
-        >
+        <DropdownMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
               <CellIconButton label="More actions" variant="ghost">
@@ -369,6 +368,7 @@ export const CellToolbar: React.FC<Props> = ({
                       <AutoRefreshOptions
                         value={cell.autoRefresh}
                         onSelect={handleRefreshSelect}
+                        onClose={() => handleMenuOpenChange(false)}
                         inheritedValue={resolveAutoRefresh(
                           undefined,
                           autoRefreshDefault,

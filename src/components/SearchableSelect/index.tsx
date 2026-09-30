@@ -7,7 +7,11 @@ import { ButtonBase } from "../Button"
 import { IconButton } from "../IconButton"
 import { Input } from "../Input"
 import { SelectMenuTriggerButton } from "../SelectMenu"
-import { menuContainerStyles, menuItemStyles } from "../menuStyles"
+import {
+  menuContainerStyles,
+  menuInputStyles,
+  menuItemStyles,
+} from "../menuStyles"
 
 export type SearchableSelectOption = {
   label: string
@@ -123,11 +127,9 @@ const ResetButton = styled(ButtonBase)`
 `
 
 const SearchInput = styled(Input)`
+  ${menuInputStyles}
   width: 100%;
-  height: 3.2rem;
   padding: 0 3rem;
-  font-size: 1.3rem;
-  border-radius: 0.4rem;
 `
 
 const ClearButton = styled(IconButton).attrs({ tabIndex: -1 })`

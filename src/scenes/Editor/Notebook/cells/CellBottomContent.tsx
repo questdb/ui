@@ -45,6 +45,7 @@ type Props = {
   expectingResult: boolean
   isFocused: boolean
   isRunning: boolean
+  refreshIntervalMs: number | undefined
   onConfigChange: (config: ChartConfig) => void
   onRetryUnmountWhileFocused: () => void
   onYieldFocus: () => void
@@ -56,6 +57,7 @@ export const CellBottomContent: React.FC<Props> = ({
   expectingResult,
   isFocused,
   isRunning,
+  refreshIntervalMs,
   onConfigChange,
   onRetryUnmountWhileFocused,
   onYieldFocus,
@@ -124,6 +126,7 @@ export const CellBottomContent: React.FC<Props> = ({
       <DrawCanvas
         cell={cell}
         isFocused={isFocused}
+        refreshIntervalMs={refreshIntervalMs}
         onConfigChange={onConfigChange}
         onRetryUnmountWhileFocused={onRetryUnmountWhileFocused}
       />
@@ -157,6 +160,7 @@ export const CellBottomContent: React.FC<Props> = ({
         viewportStore={viewportStore}
         highlightConfig={cell.highlightConfig}
         cellColumns={cellColumns}
+        refreshIntervalMs={refreshIntervalMs}
       />
     ) : (
       <GridShimmer

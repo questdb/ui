@@ -1046,7 +1046,7 @@ describe("sanitizeBuffer", () => {
         sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
       ).toBe(false)
       // …and an unknown token is dropped.
-      input.notebookViewState.settings = { autoRefreshDefault: "2s" }
+      input.notebookViewState.settings = { autoRefreshDefault: "10ms" }
       expect(
         sanitizeBuffer(input).notebookViewState?.settings?.autoRefreshDefault,
       ).toBeUndefined()
@@ -1065,7 +1065,7 @@ describe("sanitizeBuffer", () => {
               autoRefresh: "5s",
               bottomResized: true,
             },
-            { id: "bad-token", value: "SELECT 2", autoRefresh: "2s" },
+            { id: "bad-token", value: "SELECT 2", autoRefresh: "10ms" },
             { id: "bad-type", value: "SELECT 3", autoRefresh: 5000 },
           ],
         },
