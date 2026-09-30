@@ -452,3 +452,37 @@ describe("toChartResult", () => {
     }
   })
 })
+
+describe("resolveDraw — partition on the x column", () => {
+  it("drops a partition that repeats the x column", () => {
+    // Given one row per symbol, charted with x = symbol and partitioned by symbol
+    const statement =
+      "SELECT symbol, price FROM fx_trades LATEST ON ts PARTITION BY symbol"
+    const result = dql(
+      [
+        { name: "symbol", type: "SYMBOL" },
+        { name: "price", type: "DOUBLE" },
+      ],
+      [
+        ["EURUSD", 1.1],
+        ["GBPUSD", 1.3],
+      ],
+      statement,
+    )
+    const saved: ChartConfig = {
+      xColumn: "symbol",
+      queries: [
+        { type: "line", yColumns: ["price"], partitionByColumn: "symbol" },
+      ],
+    }
+    // When the draw resolves
+    const { renderQueries, effectiveConfig } = resolveDraw(
+      [statement],
+      [result],
+      saved,
+    )
+    // Then neither the chart nor the settings drawer sees the partition
+    expect(renderQueries[0].partitionByColumn).toBeUndefined()
+    expect(effectiveConfig.queries[0]?.partitionByColumn).toBeUndefined()
+  })
+})

@@ -167,6 +167,17 @@ const ChartSettings: React.FC<SettingsProps> = ({
       ),
     })
 
+  const changeXColumn = (xColumn: string | null) =>
+    updateDraft({
+      ...draft,
+      xColumn,
+      queries: draft.queries.map((q, i) =>
+        i === anchorTab?.index && q?.partitionByColumn === xColumn
+          ? { ...q, partitionByColumn: undefined }
+          : q,
+      ),
+    })
+
   const setQuery = (index: number, next: QueryChart) =>
     updateDraft({
       ...draft,
@@ -212,9 +223,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
           ariaLabel="X-axis"
           value={draft.xColumn ?? ""}
           placeholder="Select column"
-          onValueChange={(value) =>
-            updateDraft({ ...draft, xColumn: value || null })
-          }
+          onValueChange={(value) => changeXColumn(value || null)}
           options={xCandidates.map((c) => ({
             label: c.name,
             value: c.name,
@@ -301,6 +310,7 @@ const ChartSettings: React.FC<SettingsProps> = ({
         <QueryControls
           activeTab={activeTab}
           query={query}
+          xColumn={isAnchorTab ? draft.xColumn : activeTab.xColumn}
           anchorLabel={anchorTab?.label ?? "Q1"}
           isAnchorTab={isAnchorTab}
           ohlcError={saveAttempted && candlestickMissingOhlc(query)}

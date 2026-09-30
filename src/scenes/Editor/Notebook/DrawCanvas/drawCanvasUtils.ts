@@ -157,6 +157,7 @@ export type QueryTab = {
   label: string
   query: string
   columns: ColumnDefinition[]
+  xColumn: string | null
   compatible: boolean
   inferredChart: QueryChart
 }
@@ -208,6 +209,17 @@ const pruneQuery = (
   return next
 }
 
+// Partitioning by the x column yields one series per x value, each holding a
+// single point: nothing to connect, and every tooltip lists all series.
+const dropPartitionOnX = (
+  qc: QueryChart,
+  xColumn: string | null,
+): QueryChart => {
+  if (qc.partitionByColumn !== xColumn) return qc
+  const { partitionByColumn: _dropped, ...rest } = qc
+  return rest
+}
+
 // Resolves the cell's queries into everything the chart + drawer need: matches
 // each successful result to its statement (stable index, tolerant of failures),
 // merges saved config with per-query inference, picks the anchor x-axis, and
@@ -246,11 +258,16 @@ export const resolveDraw = (
   const anchorRole = anchor ? xRoleOf(anchor.r.columns, anchorX) : "other"
   const canCombine = anchorRole === "temporal" || anchorRole === "categorical"
 
+  const placedItems = items.map((it, i) => {
+    const ownX = i === 0 ? anchorX : it.inferred.xColumn
+    return { ...it, ownX, qc: dropPartitionOnX(it.qc, ownX) }
+  })
+
   const tabs: QueryTab[] = []
   const renderQueries: ResolvedQuery[] = []
-  items.forEach((it, i) => {
+  placedItems.forEach((it, i) => {
     const isAnchor = i === 0
-    const ownX = isAnchor ? anchorX : it.inferred.xColumn
+    const { ownX } = it
     const role = xRoleOf(it.r.columns, ownX)
     const compatible = isAnchor || (canCombine && role === anchorRole)
     const enabled = isAnchor ? true : (it.qc.enabled ?? true)
@@ -260,6 +277,7 @@ export const resolveDraw = (
         label: `Q${it.idx + 1}`,
         query: it.r.query,
         columns: it.r.columns,
+        xColumn: ownX,
         compatible,
         inferredChart: it.inferred.chart,
       })
@@ -282,7 +300,7 @@ export const resolveDraw = (
   // Dense, statement-aligned config for the drawer: a concrete QueryChart per
   // statement that ran, else the saved override, else `null` for unresolved statements.
   const denseQueries: (QueryChart | null)[] = statements.map((_stmt, i) => {
-    const it = items.find((x) => x.idx === i)
+    const it = placedItems.find((x) => x.idx === i)
     if (it) {
       const qc: QueryChart = { ...it.qc }
       const oh = resolveOhlc(qc, it.r.columns)
