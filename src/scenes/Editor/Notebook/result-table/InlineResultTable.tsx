@@ -74,7 +74,11 @@ export const InlineResultTable: React.FC<Props> = ({
         />
       )}
 
-      <StatusNotification slot={activeSlot} onCancelQuery={onCancelQuery} />
+      <StatusNotification
+        key={`status-${activeSlot.key}`}
+        slot={activeSlot}
+        onCancelQuery={onCancelQuery}
+      />
 
       {hasGrid && (
         <ResultGridPanel
