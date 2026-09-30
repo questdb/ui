@@ -492,8 +492,10 @@ export const buildEchartsOption = (
           nameTextStyle: axisName,
           axisLabel,
           splitLine: { show: false },
-          ...(chart.rightAxis?.min != null ? { min: chart.rightAxis.min } : {}),
-          ...(chart.rightAxis?.max != null ? { max: chart.rightAxis.max } : {}),
+          // Keep both keys even when unset: chart updates merge into the prior
+          // option, and an omitted key would keep a cleared bound on screen.
+          min: chart.rightAxis?.min,
+          max: chart.rightAxis?.max,
         },
       ]
     : leftAxis
