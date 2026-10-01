@@ -51,8 +51,7 @@ const SegmentedControlRoot = styled.div`
 
   /* The liquid track clips content at its rounded edge, so the standard
      outside button outline is not visible here. Draw the keyboard ring inside
-     every direct action instead, including auxiliary actions such as
-     maximize/reset that live beside the segments. */
+     each segment instead. */
   && > button:focus-visible,
   && > button[aria-pressed="true"]:focus-visible {
     outline: none;
@@ -69,15 +68,7 @@ const FilterDefinitions = styled.svg`
   pointer-events: none;
 `
 
-const GlassSelection = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  z-index: 2;
-  opacity: 0;
-  pointer-events: none;
+export const glassLens = css`
   background: ${({ theme }) => theme.color.glassSurface};
   border: 1px solid ${({ theme }) => theme.color.glassBorder};
   border-bottom-width: 2px;
@@ -89,6 +80,18 @@ const GlassSelection = styled.div`
       : `0 3px 9px ${theme.color.shadowSoft}`};
   backdrop-filter: blur(6px) saturate(145%);
   -webkit-backdrop-filter: blur(5px) saturate(150%);
+`
+
+const GlassSelection = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  ${glassLens}
   transition: opacity 100ms ease;
   will-change: transform, width;
 `

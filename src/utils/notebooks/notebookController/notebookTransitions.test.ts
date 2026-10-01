@@ -6,17 +6,22 @@ import {
   applyNotebookStateTransition,
   deleteCellTransition,
   duplicateCellTransition,
+  setCellDimensionsTransition,
+  setCellLayoutTransition,
   setCellModeTransition,
   updateCellTransition,
 } from "./notebookTransitions"
 import type { ViewParts } from "../notebookDexieView"
 import { NotebookToolError } from "../notebookToolError"
-import { topHeightForSql } from "../../../scenes/Editor/Notebook/notebookUtils"
+import { topHeightForSql } from "../../../scenes/Editor/Notebook/cellSizing"
 import {
   MAX_CELL_LINES,
   MAX_NOTEBOOK_CELLS,
   type NotebookCell,
 } from "../../../store/notebook"
+import type { CellResultStatusReader } from "../../../scenes/Editor/Notebook/cellSizing"
+
+const unrequested: CellResultStatusReader = () => "unrequested"
 
 const BUFFER_ID = 7
 
@@ -37,14 +42,318 @@ const partsOf = (
   ...overrides,
 })
 
+describe("setCellDimensionsTransition", () => {
+  it("shows the editor by expanding the derived footprint and preserving both panes", () => {
+    // Given a result-only draw cell placed in a grid at its result-only height
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 72,
+      bottomHeight: 350,
+      paneView: "result",
+    })
+    const parts = partsOf([chart], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 12, h: 14 }],
+      },
+    })
+
+    // When an agent asks for the split view
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor_result",
+      resultStatus: "missing",
+    })
+
+    // Then both pane heights survive, the grid row grows and the view is reported
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      bottomHeight: 350,
+      paneView: "editor_result",
+    })
+    expect(out.parts.settings.layout?.[0].h).toBe(17)
+    expect(out.result).toEqual({ view: "editor_result", mode: "draw" })
+  })
+
+  it("supports null preserve, auto reset, and a fixed result height", () => {
+    // Given a draw cell with a user-resized editor and an auto result height
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      topHeight: 200,
+      topResized: true,
+      bottomHeight: 350,
+      bottomResized: false,
+      paneView: "result",
+    })
+
+    // When an agent resets the editor, pins the result and preserves the view
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      editorHeight: "auto",
+      resultHeight: 300,
+      view: null,
+    })
+
+    // Then the editor snaps to its floor, the result is pinned and the view stays
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 72,
+      topResized: false,
+      bottomHeight: 300,
+      bottomResized: true,
+      paneView: "result",
+    })
+    expect(out.result).toEqual({ view: "result", mode: "draw" })
+  })
+
+  it("ignores view and result_height on a markdown cell and reports a null view", () => {
+    // Given a markdown cell
+    const markdown = cell("a", "# title", { type: "markdown" })
+    // When an agent sends a view and a result_height with the editor height
+    const out = setCellDimensionsTransition(
+      partsOf([markdown]),
+      BUFFER_ID,
+      "a",
+      {
+        editorHeight: 86,
+        resultHeight: 300,
+        view: "result",
+        resultStatus: "missing",
+      },
+    )
+    // Then only the editor height lands, and the view reports null
+    expect(out.parts.cells[0]).toMatchObject({
+      topHeight: 86,
+      topResized: true,
+    })
+    expect(out.parts.cells[0].bottomHeight).toBeUndefined()
+    expect(out.parts.cells[0].paneView).toBeUndefined()
+    expect(out.result).toEqual({ view: null, mode: null })
+  })
+
+  it("view editor discards the run outcome and exits draw", () => {
+    // Given a draw cell with a stored result-only arrangement
+    const chart = cell("a", "SELECT 1", {
+      mode: "draw",
+      paneView: "result",
+      lastRunStatus: "success",
+    })
+    // When an agent sends view "editor" — the toggle-off gesture
+    const out = setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+      view: "editor",
+      resultStatus: "missing",
+    })
+    // Then the run outcome and persisted draw marker are wiped, the stored
+    // arrangement survives for the next run, and the snapshot is deleted
+    expect(out.parts.cells[0]).toMatchObject({
+      result: undefined,
+      lastRunStatus: undefined,
+      paneView: "result",
+    })
+    expect(out.parts.cells[0].mode).toBeUndefined()
+    expect(out.result).toEqual({
+      view: "editor",
+      mode: null,
+      result_discarded: true,
+    })
+    expect(out.cancelRuns).toEqual({
+      cellIds: ["a"],
+      reason: "result_cleared",
+    })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
+  })
+
+  it("view editor deletes any marker-less snapshot idempotently", () => {
+    // Given a run cell that never ran
+    const parts = partsOf([cell("a", "SELECT 1")])
+
+    // When an agent asks for the editor-only view
+    const out = setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+      view: "editor",
+      resultStatus: "missing",
+    })
+
+    // Then the cells are untouched while the run and snapshot cleanup are still requested
+    expect(out.parts.cells).toBe(parts.cells)
+    expect(out.result).toEqual({ view: "editor", mode: null })
+    expect(out.cancelRuns).toEqual({
+      cellIds: ["a"],
+      reason: "result_cleared",
+    })
+    expect(out.deleteSnapshots).toEqual({ cellIds: ["a"] })
+  })
+
+  it("rejects a view outside the wire enum", () => {
+    // Given a plain cell
+    const parts = partsOf([cell("a")])
+
+    // When an agent sends a forged view value
+    const apply = () =>
+      setCellDimensionsTransition(parts, BUFFER_ID, "a", {
+        view: "<forged>" as never,
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/view must be editor, result, or editor_result/)
+  })
+
+  it("rejects heights above the ceiling", () => {
+    // Given a draw cell
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+
+    // When an agent asks for a result height above the ceiling
+    const apply = () =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 2401,
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/at most 2400px/)
+  })
+
+  it("rejects chart result heights below the visual minimum", () => {
+    // Given a draw cell
+    const chart = cell("a", "SELECT 1", { mode: "draw" })
+
+    // When an agent asks for a result height below the chart minimum
+    const apply = () =>
+      setCellDimensionsTransition(partsOf([chart]), BUFFER_ID, "a", {
+        resultHeight: 100,
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(/at least 296px/)
+  })
+
+  it("uses the mounted missing-result state for the grid height", () => {
+    // Given a cell that ran before, placed at a split-view height in the grid
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+
+    // When the transition runs with the mounted status saying the result is missing
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 19 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { resultStatus: "missing" },
+    )
+
+    // Then the cell reports editor and the grid row shrinks to the editor alone
+    expect(out.result).toEqual({ view: "editor", mode: null })
+    expect(out.parts.settings.layout?.[0].h).toBe(5)
+  })
+
+  it("reserves the result area while the snapshot is still loading", () => {
+    // Given the same pending cell, but with a live status that says the
+    // snapshot has not been proven missing yet
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+
+    // When the transition runs while the snapshot is still unrequested
+    const out = setCellDimensionsTransition(
+      partsOf([pending], {
+        settings: {
+          layoutMode: "grid",
+          layout: [{ i: "a", x: 0, y: 0, w: 12, h: 5 }],
+        },
+      }),
+      BUFFER_ID,
+      "a",
+      { resultStatus: "unrequested" },
+    )
+
+    // Then the grid box keeps the reserved-result footprint
+    expect(out.parts.settings.layout?.[0].h).toBe(19)
+  })
+
+  it("persists the pane preference but reports editor while result is missing", () => {
+    // Given a cell that ran before whose result is missing
+    const pending = cell("a", "SELECT 1", {
+      lastRunStatus: "success",
+      paneView: "editor_result",
+    })
+
+    // When an agent asks for the result-only view
+    const out = setCellDimensionsTransition(
+      partsOf([pending]),
+      BUFFER_ID,
+      "a",
+      { view: "result", resultStatus: "missing" },
+    )
+
+    // Then the preference is stored while the reported view stays editor
+    expect(out.parts.cells[0].paneView).toBe("result")
+    expect(out.result).toEqual({ view: "editor", mode: null })
+  })
+})
+
+describe("setCellLayoutTransition", () => {
+  const chart = cell("a", "SELECT 1", {
+    mode: "draw",
+    paneView: "editor_result",
+  })
+
+  it("returns the stored view after a position change", () => {
+    // Given a split-view draw cell placed in the grid
+    const parts = partsOf([chart], {
+      settings: {
+        layoutMode: "grid",
+        layout: [{ i: "a", x: 0, y: 0, w: 6, h: 10 }],
+      },
+    })
+
+    // When an agent narrows the cell
+    const out = setCellLayoutTransition(parts, BUFFER_ID, "a", {
+      x: 0,
+      y: 0,
+      w: 4,
+      resultStatus: "missing",
+    })
+
+    // Then the new placement comes back with the stored view and mode
+    expect(out.result).toEqual({
+      grid: { x: 0, y: 0, w: 4 },
+      view: "editor_result",
+      mode: "draw",
+    })
+  })
+
+  it("rejects placement that extends beyond the grid", () => {
+    // Given a grid-mode notebook
+    const parts = partsOf([chart], { settings: { layoutMode: "grid" } })
+
+    // When an agent places the cell past the last column
+    const apply = () =>
+      setCellLayoutTransition(parts, BUFFER_ID, "a", {
+        x: 11,
+        y: 0,
+        w: 2,
+        resultStatus: "unrequested",
+      })
+
+    // Then the transition rejects it
+    expect(apply).toThrow(NotebookToolError)
+  })
+})
+
 describe("applyNotebookStateTransition", () => {
   it("carries every dropped cell in cleanup.cellIds for post-commit removal", () => {
     // Given a three-cell notebook
     const parts = partsOf([cell("a"), cell("b"), cell("c")])
     // When a full-state apply keeps only "a"
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then the two dropped cells travel in cleanup so the shell can drop their
     // snapshots/layouts after it commits, and the diff names them deleted
     expect(out.cleanup?.cellIds).toEqual(["b", "c"])
@@ -58,12 +367,16 @@ describe("applyNotebookStateTransition", () => {
       cell("b", "SELECT 2"),
     ])
     // When an apply rewrites "a" and keeps "b"
-    const out = applyNotebookStateTransition(parts, {
-      cells: [
-        { id: "a", value: "SELECT 99" },
-        { id: "b", preserveValue: true },
-      ],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [
+          { id: "a", value: "SELECT 99" },
+          { id: "b", preserveValue: true },
+        ],
+      },
+      unrequested,
+    )
     // Then no snapshot deletion is requested — hydration reconciles the
     // persisted results by statement content on the next load
     expect(out.deleteSnapshots).toBeUndefined()
@@ -90,12 +403,35 @@ describe("applyNotebookStateTransition", () => {
       }),
     ])
     // When an apply rewrites the SQL so no statement survives
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ id: "a", value: "SELECT 99" }],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", value: "SELECT 99" }],
+      },
+      unrequested,
+    )
     // Then the frame collapses and the snapshot deletion is requested, so
     // disk agrees with the collapsed cell on every later reload
     expect(out.parts.cells[0].result).toBeNull()
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
+    expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
+  })
+
+  it("cancels a result-less cell run when apply requests editor-only", () => {
+    // Given a run cell with no persisted result, since headless execution keeps no running placeholder
+    const parts = partsOf([cell("a", "SELECT 1")])
+
+    // When an apply requests the editor-only view
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", preserveValue: true, view: "editor" }],
+      },
+      unrequested,
+    )
+
+    // Then the run is cancelled and the snapshot is flagged for deletion
+    expect(out.cancelRuns?.cellIds).toEqual(["a"])
     expect(out.deleteSnapshots?.cellIds).toEqual(["a"])
   })
 
@@ -118,9 +454,13 @@ describe("applyNotebookStateTransition", () => {
       }),
     ])
     // When an apply edits only the second statement
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ id: "a", value: "SELECT 1; SELECT 99" }],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", value: "SELECT 1; SELECT 99" }],
+      },
+      unrequested,
+    )
     // Then the unchanged statement keeps its result and nothing is deleted
     expect(out.parts.cells[0].result?.results).toEqual([dql("SELECT 1")])
     expect(out.deleteSnapshots).toBeUndefined()
@@ -130,9 +470,13 @@ describe("applyNotebookStateTransition", () => {
     // Given a run cell whose value the apply preserves
     const parts = partsOf([cell("a", "SELECT 1", { lastRunStatus: "success" })])
     // When the apply keeps it verbatim
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ id: "a", preserveValue: true }],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", preserveValue: true }],
+      },
+      unrequested,
+    )
     // Then no snapshot deletion is requested
     expect(out.deleteSnapshots).toBeUndefined()
   })
@@ -141,26 +485,133 @@ describe("applyNotebookStateTransition", () => {
     // Given a one-cell notebook
     const parts = partsOf([cell("a", "SELECT 1")])
     // When an apply updates "a" and adds a brand-new cell
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ id: "a", value: "SELECT 2" }, { value: "SELECT 3" }],
-    })
-    // Then the result shape the dispatch layer relays back is preserved: a
-    // single `applied` key holding the three diff arrays
-    expect(Object.keys(out.result)).toEqual(["applied"])
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ id: "a", value: "SELECT 2" }, { value: "SELECT 3" }],
+      },
+      unrequested,
+    )
+    // Then the dispatch layer gets the three diff arrays and the cleared list
+    expect(Object.keys(out.result)).toEqual(["applied", "resultsCleared"])
     expect(Array.isArray(out.result.applied.added)).toBe(true)
     expect(Array.isArray(out.result.applied.updated)).toBe(true)
     expect(Array.isArray(out.result.applied.deleted)).toBe(true)
     expect(out.result.applied.added).toHaveLength(1)
     expect(out.result.applied.deleted).toHaveLength(0)
+    expect(out.result.resultsCleared).toEqual([])
+  })
+
+  describe("resultsCleared", () => {
+    const heldResult = (queries: string[]) => ({
+      results: queries.map((query) => ({
+        type: "dql" as const,
+        query,
+        columns: [{ name: "x", type: "INT" }],
+        dataset: [[1]],
+        count: 1,
+      })),
+      activeResultIndex: 0,
+      timestamp: 0,
+    })
+
+    it("lists a cell whose rewrite keeps no statement", () => {
+      // Given a cell holding the result of two statements
+      const parts = partsOf([
+        cell("a", "SELECT 1;\nSELECT 2", {
+          result: heldResult(["SELECT 1", "SELECT 2"]),
+        }),
+      ])
+
+      // When an apply rewrites both statements
+      const out = applyNotebookStateTransition(
+        parts,
+        {
+          cells: [{ id: "a", value: "SELECT 3;\nSELECT 4" }],
+        },
+        unrequested,
+      )
+
+      // Then the cell is reported as cleared
+      expect(out.result.resultsCleared).toEqual(["a"])
+    })
+
+    it("does not list a cell whose rewrite keeps one statement", () => {
+      // Given a cell holding the result of two statements
+      const parts = partsOf([
+        cell("a", "SELECT 1;\nSELECT 2", {
+          result: heldResult(["SELECT 1", "SELECT 2"]),
+        }),
+      ])
+
+      // When an apply rewrites only the second statement
+      const out = applyNotebookStateTransition(
+        parts,
+        {
+          cells: [{ id: "a", value: "SELECT 1;\nSELECT 4" }],
+        },
+        unrequested,
+      )
+
+      // Then the cell keeps a result and is not reported
+      expect(out.result.resultsCleared).toEqual([])
+    })
+
+    it("lists a cell that view:'editor' discards", () => {
+      // Given a cell with a result
+      const parts = partsOf([
+        cell("a", "SELECT 1", { result: heldResult(["SELECT 1"]) }),
+      ])
+
+      // When an apply hides its result pane
+      const out = applyNotebookStateTransition(
+        parts,
+        {
+          cells: [{ id: "a", preserveValue: true, mode: null, view: "editor" }],
+        },
+        unrequested,
+      )
+
+      // Then the cell is reported as cleared
+      expect(out.result.resultsCleared).toEqual(["a"])
+    })
+
+    it("adds the cells whose stored snapshot the shell found outdated, once each", () => {
+      // Given an apply that clears the held result of "a"
+      const parts = partsOf([
+        cell("a", "SELECT 1", { result: heldResult(["SELECT 1"]) }),
+        cell("b", "SELECT 2"),
+      ])
+      const out = applyNotebookStateTransition(
+        parts,
+        {
+          cells: [
+            { id: "a", value: "SELECT 3" },
+            { id: "b", value: "SELECT 4" },
+          ],
+        },
+        unrequested,
+      )
+
+      // When the shell reports the snapshot-only results it found outdated
+      const result = out.withSnapshotsCleared?.(["a", "b"])
+
+      // Then both cells are listed, without a duplicate
+      expect(result?.resultsCleared).toEqual(["a", "b"])
+    })
   })
 
   it("revalidates focusedCellId: drops a focus whose cell the apply removed", () => {
     // Given the focused cell is about to be replaced wholesale
     const parts = partsOf([cell("a")], { focusedCellId: "a" })
     // When a full-state apply drops it
-    const out = applyNotebookStateTransition(parts, {
-      cells: [{ value: "SELECT 2" }],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [{ value: "SELECT 2" }],
+      },
+      unrequested,
+    )
     // Then no ghost focus target survives for the next mount's scroll
     expect(out.parts.focusedCellId).toBeNull()
   })
@@ -169,31 +620,39 @@ describe("applyNotebookStateTransition", () => {
     // Given a focused cell that the apply preserves
     const parts = partsOf([cell("a"), cell("b")], { focusedCellId: "a" })
     // When the apply keeps "a"
-    const out = applyNotebookStateTransition(parts, {
-      cells: [
-        { id: "a", preserveValue: true },
-        { id: "b", preserveValue: true },
-      ],
-    })
+    const out = applyNotebookStateTransition(
+      parts,
+      {
+        cells: [
+          { id: "a", preserveValue: true },
+          { id: "b", preserveValue: true },
+        ],
+      },
+      unrequested,
+    )
     // Then the focus is left untouched
     expect(out.parts.focusedCellId).toBe("a")
   })
 
-  it("does no freshness checking: it takes only (parts, request), no read-seq", () => {
-    // Freshness is gated once at the dispatch layer, never inside a transition;
-    // a seq parameter here would let staleness leak into the pure layer.
-    expect(applyNotebookStateTransition).toHaveLength(2)
+  it("does no freshness checking: it takes (parts, request, resultStatusOf), no read-seq", () => {
+    // Given freshness is gated once at the dispatch layer, never inside a transition,
+    // so a seq parameter here would let staleness leak into the pure layer
+    // When the transition's parameter count is read
+    const parameterCount = applyNotebookStateTransition.length
+
+    // Then the third parameter is a per-cell status reader from the controller, not a freshness token
+    expect(parameterCount).toBe(3)
   })
 
   it("does no freshness checking: re-applying its own output never staleness-throws", () => {
     // Given an apply has already run
     const parts = partsOf([cell("a", "SELECT 1")])
     const request = { cells: [{ id: "a", value: "SELECT 2" }] }
-    const once = applyNotebookStateTransition(parts, request)
+    const once = applyNotebookStateTransition(parts, request, unrequested)
     // When the same request runs again against the already-applied parts
     // Then the transition applies unconditionally rather than rejecting as stale
     expect(() =>
-      applyNotebookStateTransition(once.parts, request),
+      applyNotebookStateTransition(once.parts, request, unrequested),
     ).not.toThrow()
   })
 })
@@ -229,7 +688,7 @@ describe("deleteCellTransition", () => {
 describe("setCellModeTransition", () => {
   it("asks the shell to cancel the cell's run when it enters draw mode", () => {
     // Given a run-mode cell (a run may be in flight)
-    const parts = partsOf([cell("a", "select 1", { mode: "run" })])
+    const parts = partsOf([cell("a", "select 1")])
     // When the cell switches to draw
     const out = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
     // Then the shell is told to abort its in-flight run — the chart engine
@@ -245,8 +704,24 @@ describe("setCellModeTransition", () => {
     const stillDraw = setCellModeTransition(parts, BUFFER_ID, "a", "draw")
     // Then neither carries a cancel request
     expect(toRun.cancelRuns).toBeUndefined()
+    expect(toRun.parts.cells[0].mode).toBeUndefined()
     expect(stillDraw.cancelRuns).toBeUndefined()
   })
+
+  it.each(["draw", "run"] as const)(
+    "rejects mode %s on a markdown cell with a typed error",
+    (mode) => {
+      // Given a markdown cell whose prose happens to parse as SQL
+      const parts = partsOf([cell("m", "SELECT 1", { type: "markdown" })])
+      // When a mode is requested
+      const apply = () => setCellModeTransition(parts, BUFFER_ID, "m", mode)
+      // Then the transition refuses and the cell keeps no mode
+      expect(apply).toThrowError(NotebookToolError)
+      expect(apply).toThrowError(/Markdown cells have no run or draw mode/)
+      expect(parts.cells[0].mode).toBeUndefined()
+      expect(parts.cells[0].bottomHeight).toBeUndefined()
+    },
+  )
 })
 
 describe("transition validation guards", () => {

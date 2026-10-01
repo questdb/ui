@@ -1,0 +1,71 @@
+import { eventBus } from "../../../../modules/EventBus"
+import { EventType } from "../../../../modules/EventBus/types"
+import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import { trackEvent } from "../../../../modules/ConsoleEventTracker"
+import { signalUserEdit } from "../../../../utils/notebooks/notebookAIBridge"
+import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
+import { resetChartZoom } from "../cellVirtualization/chartZoomStore"
+import type { CellView } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
+
+type CellViewActionMethod = "menu" | "toggle"
+
+type Params = {
+  cellId: string
+  view: CellView
+  paneLayout: CellPaneLayout
+  isCellBusy: boolean
+  method: CellViewActionMethod
+}
+
+export const useCellViewActions = ({
+  cellId,
+  view,
+  paneLayout,
+  isCellBusy,
+  method,
+}: Params) => {
+  const { setCellPaneView, setCellMode, clearCellResult } = useNotebookActions()
+  const bufferId = useNotebookBufferId()
+  const resultOnly = paneLayout === "result"
+
+  const viewTable = () => {
+    if (isCellBusy) return
+    if (view === "none") {
+      signalUserEdit(bufferId)
+      eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
+      return
+    }
+
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: view === "grid" ? "none" : "grid",
+      method,
+    })
+    signalUserEdit(bufferId)
+    if (view === "grid") clearCellResult(cellId)
+    else setCellMode(cellId, "run")
+  }
+
+  const viewChart = () => {
+    if (isCellBusy) return
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
+      to: view === "chart" ? "none" : "chart",
+      method,
+    })
+    signalUserEdit(bufferId)
+    eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId })
+  }
+
+  const toggleEditor = () => {
+    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_EDITOR_TOGGLE, {
+      editorShown: resultOnly,
+      view,
+    })
+    signalUserEdit(bufferId)
+    setCellPaneView(cellId, resultOnly ? "editor_result" : "result")
+  }
+
+  const resetZoom = () => resetChartZoom(cellId)
+
+  return { viewTable, viewChart, toggleEditor, resetZoom }
+}

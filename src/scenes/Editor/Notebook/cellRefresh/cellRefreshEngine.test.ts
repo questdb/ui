@@ -14,12 +14,22 @@ import type { CellResultStatus } from "../resultHydration/cellResultHydration"
 import {
   CellRefreshEngine,
   deriveChartLoading,
+  pendingCellFetchState,
   type CellRefreshDeps,
 } from "./cellRefreshEngine"
-import { createRequestLimiter } from "../../../../utils/questdb/requestLimiter"
+import {
+  createRequestLimiter,
+  MAX_ACTIVE_STATEMENT_REQUESTS,
+} from "../../../../utils/questdb/requestLimiter"
 import { clearStatementClassCache } from "../../../../utils/tools/permissions"
-import { statementKeysFor } from "../notebookUtils"
+import { deriveStatementFrame, statementKeysFor } from "../statementIdentity"
+import { buildStatementSlotViews } from "../result-table/statementSlotView"
 import { toChartResult } from "../DrawCanvas/drawCanvasUtils"
+import {
+  clearChartZoom,
+  getChartZoom,
+  setChartZoom,
+} from "../cellVirtualization/chartZoomStore"
 
 vi.mock("../persistCellSnapshot", () => ({
   persistCellSnapshot: vi.fn().mockResolvedValue(true),
@@ -42,6 +52,9 @@ const dqlResult = (query: string): QueryExecResult => ({
   count: 1,
 })
 
+const resultFetchedAt = (result: SingleQueryResult) =>
+  "fetchedAt" in result ? result.fetchedAt : undefined
+
 const dqlCellResult = (query: string, timestamp = 0): CellResult => ({
   results: [
     {
@@ -51,6 +64,7 @@ const dqlCellResult = (query: string, timestamp = 0): CellResult => ({
       dataset: [[1]],
       count: 1,
       timestamp: 0,
+      fetchedAt: timestamp,
     },
   ],
   activeResultIndex: 0,
@@ -71,6 +85,8 @@ const drawCell = (
 
 const dqlValidation = { query: "q", columns: [], timestamp: 0 }
 
+const keyOf = (sql: string) => statementKeysFor([sql])[0]
+
 // Backs getCellResult with whatever setCellResult last wrote — the engine
 // dedups against the CURRENT cell result, so a fake returning undefined would
 // silently disable dedup and over-count writes. The load fakes stand in for
@@ -82,7 +98,9 @@ const makeDeps = () => {
   const loadStatuses = new Map<string, CellResultStatus>()
   const loadListeners = new Map<string, Set<() => void>>()
   const deps = {
-    executeSingle: vi.fn((sql: string) => Promise.resolve(dqlResult(sql))),
+    executeSingle: vi.fn((sql: string, _signal?: AbortSignal) =>
+      Promise.resolve(dqlResult(sql)),
+    ),
     validateWithGlobals: vi.fn().mockResolvedValue(dqlValidation),
     setCellResult: vi.fn((cellId: string, result: CellResult | undefined) => {
       cellResults.set(cellId, result)
@@ -182,9 +200,11 @@ describe("CellRefreshEngine", () => {
     harness = makeDeps()
     deps = harness.deps
     cellResults = harness.cellResults
-    // Jitter off: tests assert exact fetch timing.
+    // Jitter off: tests assert exact fetch timing. A per-test limiter, so a
+    // fetch a test leaves hanging never holds a slot in the next test.
     engine = new CellRefreshEngine(BUFFER_ID, () => deps as CellRefreshDeps, {
       initialFetchJitterMs: 0,
+      requestLimiter: createRequestLimiter(MAX_ACTIVE_STATEMENT_REQUESTS),
     })
     engine.attach()
   })
@@ -519,7 +539,7 @@ describe("CellRefreshEngine", () => {
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
 
       // When the user switches the cell back to run mode
-      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
       await vi.advanceTimersByTimeAsync(15_000)
 
       // Then the blocked frame never persists — saving it would resurrect the
@@ -581,6 +601,250 @@ describe("CellRefreshEngine", () => {
 
       // Then the blocked frame never persists — no orphan record
       expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe("stopping the first chart fetch", () => {
+    // Like the real client, the fake rejects once its signal aborts.
+    const deferFetch = () => {
+      let resolveFetch: () => void = () => {}
+      deps.executeSingle = vi.fn(
+        (sql: string, signal?: AbortSignal) =>
+          new Promise<QueryExecResult>((resolve, reject) => {
+            resolveFetch = () => resolve(dqlResult(sql))
+            signal?.addEventListener(
+              "abort",
+              () => reject(new Error("aborted")),
+              { once: true },
+            )
+          }),
+      )
+      return () => resolveFetch()
+    }
+
+    it("aborts the round, settles the canvas as cancelled, and discards the late response", async () => {
+      // Given a draw cell whose first fetch is still in flight
+      const resolveFetch = deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(engine.getState("c1")?.fetching).toBe(true)
+
+      // When the user stops the fetch
+      engine.cancelChartFetch("c1")
+
+      // Then the round is over and the chart no longer reads as loading
+      const state = engine.getState("c1")!
+      expect(state.fetching).toBe(false)
+      expect(state.fetchCancelled).toBe(true)
+      expect(deriveChartLoading(state, { kind: "missing" }, false)).toBe(false)
+
+      // And the aborted response never lands
+      resolveFetch()
+      await flushAsync()
+      expect(deps.setCellResult).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      [
+        "the cell scrolls out and back",
+        () => {
+          engine.setVisible("c1", false)
+          engine.setVisible("c1", true)
+        },
+      ],
+      [
+        "the browser tab is hidden and shown",
+        () => {
+          setDocumentHidden(true)
+          setDocumentHidden(false)
+        },
+      ],
+    ])("keeps a stopped fetch stopped when %s", async (_trigger, reveal) => {
+      // Given a stopped first fetch on a draw cell with auto-refresh off
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the cell is revealed again
+      reveal()
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      // Then the stopped query is not sent again and the canvas stays cancelled
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+      expect(engine.getState("c1")?.fetching).toBe(false)
+    })
+
+    it("an SQL edit after a stopped first fetch fetches the new SQL", async () => {
+      // Given a stopped first fetch on a draw cell with auto-refresh off
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the user edits the SQL and the edit debounce elapses
+      engine.sync([drawCell("c1", "select 2", false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+
+      // Then the new SQL is fetched and the cancelled marker is gone
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(deps.executeSingle).toHaveBeenLastCalledWith(
+        "select 2",
+        expect.anything(),
+        expect.anything(),
+      )
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+    })
+
+    it("a retry clears the cancelled marker and fetches again", async () => {
+      // Given a stopped first fetch
+      const resolveFetch = deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the user retries
+      void engine.refresh("c1")
+      await flushAsync()
+
+      // Then a fresh round is in flight without the marker
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+      expect(engine.getState("c1")?.fetching).toBe(true)
+
+      // And its response settles the chart
+      resolveFetch()
+      await flushAsync()
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+      const state = engine.getState("c1")!
+      expect(state.settledKey).toBe(state.queriesKey)
+    })
+
+    it.each([
+      [
+        "the cell scrolls out and back",
+        () => {
+          engine.setVisible("c1", false)
+          engine.setVisible("c1", true)
+        },
+      ],
+      [
+        "the browser tab is hidden and shown",
+        () => {
+          setDocumentHidden(true)
+          setDocumentHidden(false)
+        },
+      ],
+    ])(
+      "keeps a stopped fetch stopped on a polling cell when %s, until the next tick",
+      async (_trigger, reveal) => {
+        // Given a stopped first fetch on a draw cell that polls every minute
+        deferFetch()
+        syncOnScreen([drawCell("c1", "select 1", "1m")])
+        await flushAsync()
+        engine.cancelChartFetch("c1")
+
+        // When the cell is revealed again a few seconds later
+        await vi.advanceTimersByTimeAsync(5_000)
+        reveal()
+        await vi.advanceTimersByTimeAsync(30_000)
+
+        // Then the stopped query is not sent before the interval elapses
+        expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+        expect(engine.getState("c1")?.fetching).toBe(false)
+
+        // And the next tick fetches again
+        await vi.advanceTimersByTimeAsync(30_000)
+        expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+        expect(engine.getState("c1")?.fetching).toBe(true)
+      },
+    )
+
+    it("keeps a stopped fetch stopped on an Auto cell until the adaptive interval elapses", async () => {
+      // Given an Auto draw cell whose first fetch ran 3 s before the user
+      // stopped it, so the adaptive loop settled on a 6 s interval. The loop
+      // measures rounds with performance.now, which follows the fake clock here.
+      const perfBase = Date.now()
+      const perfNow = vi
+        .spyOn(performance, "now")
+        .mockImplementation(() => Date.now() - perfBase)
+      try {
+        deferFetch()
+        syncOnScreen([drawCell("c1", "select 1", true)])
+        await flushAsync()
+        await vi.advanceTimersByTimeAsync(3_000)
+        engine.cancelChartFetch("c1")
+        await flushAsync()
+
+        // When the cell is revealed again a second later
+        await vi.advanceTimersByTimeAsync(1_000)
+        engine.setVisible("c1", false)
+        engine.setVisible("c1", true)
+        await vi.advanceTimersByTimeAsync(4_000)
+
+        // Then the stopped query waits for the adaptive interval, not the 2 s
+        // floor
+        expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(true)
+
+        // And the tick lands when it was due
+        await vi.advanceTimersByTimeAsync(2_000)
+        expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+        expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+      } finally {
+        perfNow.mockRestore()
+      }
+    })
+
+    it("the next auto-refresh tick fetches again after a stop", async () => {
+      // Given a polling draw cell whose first fetch was stopped
+      deferFetch()
+      syncOnScreen([drawCell("c1", "select 1", "1s")])
+      await flushAsync()
+      engine.cancelChartFetch("c1")
+
+      // When the poll interval elapses
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Then the marker is gone and a new round is in flight
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+      expect(engine.getState("c1")?.fetchCancelled).toBe(false)
+      expect(engine.getState("c1")?.fetching).toBe(true)
+    })
+
+    it("is a no-op once the round has settled", async () => {
+      // Given a draw cell whose first fetch already landed
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      expect(deps.setCellResult).toHaveBeenCalledTimes(1)
+
+      // When a stale stop arrives
+      engine.cancelChartFetch("c1")
+
+      // Then the settled frame is untouched
+      const state = engine.getState("c1")!
+      expect(state.fetchCancelled).toBe(false)
+      expect(state.settledKey).toBe(state.queriesKey)
+    })
+
+    it("a snapshot load still shows loading over a cancelled marker", () => {
+      // Given a cancelled state whose result snapshot is hydrating
+      const state = {
+        ...pendingCellFetchState("select 1"),
+        fetchCancelled: true,
+      }
+
+      // When the loading flag derives while the load is in flight and after it
+      const whileLoading = deriveChartLoading(state, { kind: "missing" }, true)
+      const afterLoad = deriveChartLoading(state, { kind: "missing" }, false)
+
+      // Then hydration wins until the snapshot settles
+      expect(whileLoading).toBe(true)
+      expect(afterLoad).toBe(false)
     })
   })
 
@@ -750,6 +1014,72 @@ describe("CellRefreshEngine", () => {
     })
   })
 
+  describe("chart slot errors", () => {
+    const errorResult = (query: string): QueryExecResult => ({
+      type: "error",
+      query,
+      columns: [],
+      dataset: [],
+      count: 0,
+      error: "boom",
+    })
+
+    it("keys a failed statement's fetch error to its own slot and reports it to the agent", async () => {
+      // Given a two-statement chart whose second statement fails
+      deps.executeSingle.mockImplementation((sql: string) =>
+        Promise.resolve(
+          sql === "select bad" ? errorResult(sql) : dqlResult(sql),
+        ),
+      )
+
+      // When the fetch round settles
+      syncOnScreen([drawCell("c1", "select 1; select bad", false)])
+      await flushAsync()
+
+      // Then only the failing statement's slot carries the error
+      const state = engine.getState("c1")
+      expect(state?.slotErrors.get(keyOf("select bad"))).toBe("boom")
+      expect(state?.slotErrors.size).toBe(1)
+
+      // And the agent view reports it as the last refresh error
+      expect(engine.readRefreshState().get("c1")?.lastRefreshError).toBe("boom")
+    })
+
+    it("restores a loaded frame's error onto its own statement's slot", async () => {
+      // Given a snapshot load in flight for a two-statement chart
+      harness.beginLoadOnRequest()
+      syncOnScreen([drawCell("c1", "select 1; select bad", false)])
+      await flushAsync()
+
+      // When the load settles with a frame whose second statement errored
+      harness.settleLoad("c1", {
+        results: [
+          dqlCellResult("select 1", 1).results[0],
+          {
+            type: "error",
+            query: "select bad",
+            error: "old boom",
+            fetchedAt: 1,
+          },
+        ],
+        activeResultIndex: 0,
+        timestamp: 1,
+      })
+      await flushAsync()
+
+      // Then the chart settles on the frame without fetching
+      expect(deps.executeSingle).not.toHaveBeenCalled()
+
+      // And the error lands on the failing statement's slot and the agent view
+      const state = engine.getState("c1")
+      expect(state?.slotErrors.get(keyOf("select bad"))).toBe("old boom")
+      expect(state?.slotErrors.size).toBe(1)
+      expect(engine.readRefreshState().get("c1")?.lastRefreshError).toBe(
+        "old boom",
+      )
+    })
+  })
+
   it("clears result, load status and snapshot when the SQL becomes empty", async () => {
     // Given a settled draw cell with a frame and a snapshot
     syncOnScreen([drawCell("c1", "select 1", false)])
@@ -841,7 +1171,7 @@ describe("CellRefreshEngine", () => {
 
     // When the user switches to the grid and back — the cell never leaves the
     // viewport, so the visibility observer reports nothing new
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
     engine.sync([drawCell("c1", "select 1", "1s")])
     await flushAsync()
 
@@ -874,7 +1204,7 @@ describe("CellRefreshEngine", () => {
     expect(deps.executeSingle).toHaveBeenCalledTimes(1)
 
     // When the cell is no longer in draw mode
-    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: "run" }])
+    engine.sync([{ ...drawCell("c1", "select 1", "1s"), mode: undefined }])
 
     // Then no further fetches happen and the entry's state is gone
     await vi.advanceTimersByTimeAsync(10_000)
@@ -944,6 +1274,60 @@ describe("CellRefreshEngine", () => {
     )
   })
 
+  describe("chart zoom on SQL edits", () => {
+    let resets: unknown[]
+    const recordReset = (payload?: unknown) => resets.push(payload)
+
+    const zoomedDrawCell = async () => {
+      syncOnScreen([drawCell("c1", "select 1", false)])
+      await flushAsync()
+      setChartZoom("c1", 20, 60)
+    }
+
+    const editSql = async (value: string) => {
+      engine.sync([drawCell("c1", value, false)])
+      await vi.advanceTimersByTimeAsync(301)
+      await flushAsync()
+    }
+
+    beforeEach(() => {
+      resets = []
+      eventBus.subscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
+    })
+
+    afterEach(() => {
+      eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RESET_ZOOM, recordReset)
+      clearChartZoom("c1")
+    })
+
+    it.each([
+      ["a statement is modified", "select 2"],
+      ["a statement is added", "select 1; select 2"],
+    ])("resets the zoom when %s", async (_change, value) => {
+      // Given a drawn chart zoomed to a sub-window
+      await zoomedDrawCell()
+
+      // When the edit changes the chart's statements
+      await editSql(value)
+
+      // Then the stored window clears and the mounted chart is told to reset
+      expect(getChartZoom("c1")).toBeUndefined()
+      expect(resets).toEqual([{ cellId: "c1" }])
+    })
+
+    it("keeps the zoom when an edit only adds trailing whitespace", async () => {
+      // Given a drawn chart zoomed to a sub-window
+      await zoomedDrawCell()
+
+      // When the edit only adds a trailing semicolon and newline
+      await editSql("select 1;\n")
+
+      // Then the window survives
+      expect(getChartZoom("c1")).toEqual({ start: 20, end: 60 })
+      expect(resets).toEqual([])
+    })
+  })
+
   it("keeps the frame and skips refetching on a formatting-only SQL change", async () => {
     // Given a settled draw cell showing results
     syncOnScreen([drawCell("c1", "select 1", false)])
@@ -961,6 +1345,151 @@ describe("CellRefreshEngine", () => {
     expect(cellResults.get("c1")).toBe(frame)
     const state = engine.getState("c1")
     expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("executes only the edited statement when auto-refresh is off", async () => {
+    // Given a settled two-statement draw cell with auto-refresh off
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+    // When one statement changes
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then only the changed statement executes and the other keeps its result
+    expect(
+      deps.executeSingle.mock.calls.slice(2).map((call) => call[0]),
+    ).toEqual(["select 3"])
+    expect(cellResults.get("c1")?.results.map((r) => r.query)).toEqual([
+      "select 1",
+      "select 3",
+    ])
+    const state = engine.getState("c1")
+    expect(state?.settledKey).toBe(state?.queriesKey)
+  })
+
+  it("stamps only the executed statement on an edit; the carried one keeps its fetch time", async () => {
+    // Given a settled two-statement draw cell fetched at T0
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+    const fetchedAt = resultFetchedAt(cellResults.get("c1")!.results[0])
+    expect(fetchedAt).toBeGreaterThan(0)
+    vi.mocked(persistCellSnapshot).mockClear()
+
+    // When one statement changes an hour later
+    const hour = 60 * 60 * 1000
+    await vi.advanceTimersByTimeAsync(hour)
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // Then the carried rows keep T0 while the edited statement stamps T1,
+    // and the persisted frame carries both times with its rows
+    const [carried, edited] = cellResults.get("c1")!.results
+    expect(resultFetchedAt(carried)).toBe(fetchedAt)
+    expect(resultFetchedAt(edited)).toBeGreaterThanOrEqual(fetchedAt! + hour)
+    expect(persistCellSnapshot).toHaveBeenCalledTimes(1)
+    const persisted = vi.mocked(persistCellSnapshot).mock.calls[0][0]
+    expect(persisted.results.map(resultFetchedAt)).toEqual([
+      fetchedAt,
+      resultFetchedAt(edited),
+    ])
+    expect(persisted).not.toHaveProperty("slotFetchedAt")
+  })
+
+  it("shows each tab's own fetch time after a chart edit switches to the table view", async () => {
+    // Given a settled two-statement draw cell fetched at T0
+    const fetchedAt = Date.now()
+    syncOnScreen([drawCell("c1", "select 1;\nselect 2", false)])
+    await flushAsync()
+
+    // When one statement changes an hour later
+    const hour = 60 * 60 * 1000
+    await vi.advanceTimersByTimeAsync(hour)
+    engine.sync([drawCell("c1", "select 1;\nselect 3", false)])
+    await vi.advanceTimersByTimeAsync(301)
+    await flushAsync()
+
+    // And the cell switches to the table view
+    deps.isDrawCell.mockReturnValue(false)
+    engine.sync([
+      {
+        ...drawCell("c1", "select 1;\nselect 3", false),
+        mode: undefined,
+        result: cellResults.get("c1"),
+      },
+    ])
+    await flushAsync()
+
+    // Then the carried tab shows T0 and the edited tab shows its own fetch
+    const state = engine.getState("c1")!
+    const frame = deriveStatementFrame(state.queries, cellResults.get("c1"))!
+    const [carried, edited] = buildStatementSlotViews(frame, state)
+    expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    expect(carried.fetchedAt).toBe(fetchedAt)
+    expect(edited.fetchedAt).toBeGreaterThanOrEqual(fetchedAt + hour)
+  })
+
+  it("keeps the snapshot when a carried statement fails validation and the edited one fails to run", async () => {
+    // Given a settled two-statement draw cell whose first statement reads table t
+    syncOnScreen([drawCell("c1", "select 1 from t;\nselect 2", false)])
+    await flushAsync()
+    await vi.advanceTimersByTimeAsync(60_000)
+    vi.mocked(persistCellSnapshot).mockClear()
+    const deletesBefore = vi.mocked(deleteCellSnapshot).mock.calls.length
+
+    // And, after a reload, table t is gone
+    clearStatementClassCache()
+    deps.validateWithGlobals.mockImplementation((sql: string) =>
+      Promise.resolve(
+        sql.includes("from t")
+          ? {
+              query: sql,
+              position: 14,
+              error: "table does not exist [table=t]",
+            }
+          : dqlValidation,
+      ),
+    )
+    deps.executeSingle.mockImplementation((sql: string) =>
+      Promise.resolve({ ...dqlResult(sql), type: "error", error: "boom" }),
+    )
+
+    // When the user edits the second statement to one that fails
+    engine.sync([drawCell("c1", "select 1 from t;\nselect boom", false)])
+    await vi.advanceTimersByTimeAsync(15_000)
+    await flushAsync()
+
+    // Then the screen keeps the carried rows, and the disk copy keeps them too
+    const frame = cellResults.get("c1")!
+    expect(frame.results.map((r) => r.type)).toEqual(["dql", "error"])
+    expect(vi.mocked(deleteCellSnapshot).mock.calls.length).toBe(deletesBefore)
+    const snapshot = vi.mocked(persistCellSnapshot).mock.calls.at(-1)?.[0]
+    expect(snapshot?.results.map((r) => r.type)).toEqual(["dql", "error"])
+  })
+
+  it("advances every fetch time on a poll tick even when the rows did not change", async () => {
+    // Given a polling draw cell whose rows never change
+    const key = statementKeysFor(["select 1"])[0]
+    syncOnScreen([drawCell("c1", "select 1", "1s")])
+    await flushAsync()
+    const written = cellResults.get("c1")!.results[0]
+    const firstFetchedAt = resultFetchedAt(written)
+    expect(firstFetchedAt).toBeGreaterThan(0)
+    expect(engine.getState("c1")?.slotVerifiedAt.has(key)).toBe(false)
+
+    // When the next tick re-fetches identical rows
+    await vi.advanceTimersByTimeAsync(1000)
+    await flushAsync()
+
+    // Then the frame is untouched but the overlay records the verifying poll
+    expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    expect(cellResults.get("c1")!.results[0]).toBe(written)
+    expect(engine.getState("c1")?.slotVerifiedAt.get(key)).toBeGreaterThan(
+      firstFetchedAt!,
+    )
   })
 
   it("never executes a query that fails validation, and blocks it once it resolves to a write", async () => {
@@ -1265,6 +1794,7 @@ describe("CellRefreshEngine", () => {
     // Given a settled key that matches while a fetch is in flight
     const state = {
       queries: ["select 1"],
+      slotKeys: statementKeysFor(["select 1"]),
       queriesKey: "select 1",
       fetching: true,
       settledKey: "select 1",
@@ -1273,22 +1803,23 @@ describe("CellRefreshEngine", () => {
       slotFetching: new Set<string>(),
       slotErrors: new Map<string, string>(),
       cancelledSlots: new Set<string>(),
-      slotFetchedAt: new Map<string, number>(),
+      slotVerifiedAt: new Map<string, number>(),
+      fetchCancelled: false,
     }
 
-    // Then the recovery fetch after a failed restore shows the spinner
-    expect(deriveChartLoading(state, { kind: "missing" }, false).loading).toBe(
-      true,
+    // When the loading flag derives over a missing frame and over an empty one
+    const overMissing = deriveChartLoading(state, { kind: "missing" }, false)
+    const overEmpty = deriveChartLoading(
+      state,
+      { kind: "settled", results: [], hadError: false },
+      false,
     )
 
+    // Then the recovery fetch after a failed restore shows the spinner
+    expect(overMissing).toBe(true)
+
     // And a genuinely empty settled frame keeps "No data" without flicker
-    expect(
-      deriveChartLoading(
-        state,
-        { kind: "settled", results: [], hadError: false, timestamp: 0 },
-        false,
-      ).loading,
-    ).toBe(false)
+    expect(overEmpty).toBe(false)
   })
 
   it("refetches on reveal when the settled frame was replaced by a truncated one", async () => {
@@ -1378,11 +1909,11 @@ describe("CellRefreshEngine", () => {
   it("exposes loading state for the cell toolbar via its subscription", async () => {
     // Given a subscriber deriving loading from the engine's state and the
     // cell's result, as the toolbar's useChartLoading does
-    const states: Array<{ loading: boolean; refreshing: boolean }> = []
+    const states: boolean[] = []
     const listener = () => {
       const state = engine.getState("c1")
       if (!state) {
-        states.push({ loading: false, refreshing: false })
+        states.push(false)
         return
       }
       states.push(
@@ -1401,11 +1932,8 @@ describe("CellRefreshEngine", () => {
     unsubscribe()
 
     // Then it reports loading during the fetch and idle after it settles
-    expect(states[0]).toEqual({ loading: true, refreshing: false })
-    expect(states[states.length - 1]).toEqual({
-      loading: false,
-      refreshing: false,
-    })
+    expect(states[0]).toBe(true)
+    expect(states[states.length - 1]).toBe(false)
   })
 
   it("defers fetching until the observer reports the cell visible", async () => {
@@ -1576,6 +2104,40 @@ describe("CellRefreshEngine", () => {
       await vi.advanceTimersByTimeAsync(1000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(4000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe("poll schedule", () => {
+    it("starts Auto on its own floor after a cell leaves a fixed interval", async () => {
+      // Given a draw cell that polled once on a one-minute interval
+      syncOnScreen([drawCell("c1", "select 1", "1m")])
+      await flushAsync()
+      await vi.advanceTimersByTimeAsync(60_000)
+      expect(deps.executeSingle).toHaveBeenCalledTimes(2)
+
+      // When the user switches the cell to Auto a few seconds later
+      await vi.advanceTimersByTimeAsync(5_000)
+      syncOnScreen([drawCell("c1", "select 1", true)])
+      await flushAsync()
+
+      // Then Auto fetches right away, not when the minute would have ended
+      expect(deps.executeSingle).toHaveBeenCalledTimes(3)
+    })
+
+    it("keeps polling when the clock is set back", async () => {
+      // Given a draw cell that polls every minute
+      syncOnScreen([drawCell("c1", "select 1", "1m")])
+      await flushAsync()
+      expect(deps.executeSingle).toHaveBeenCalledTimes(1)
+
+      // When the clock moves back an hour and the cell is revealed again
+      vi.setSystemTime(Date.now() - 3_600_000)
+      engine.setVisible("c1", false)
+      engine.setVisible("c1", true)
+
+      // Then the next tick still lands within one interval
+      await vi.advanceTimersByTimeAsync(60_000)
       expect(deps.executeSingle).toHaveBeenCalledTimes(2)
     })
   })
@@ -1847,7 +2409,7 @@ describe("CellRefreshEngine", () => {
       engine.refreshAll()
 
       // When the cell exits draw mode and returns while still hidden
-      engine.sync([{ ...drawCell("c1", "select 1", false), mode: "run" }])
+      engine.sync([{ ...drawCell("c1", "select 1", false), mode: undefined }])
       engine.sync([drawCell("c1", "select 1", false)])
       await flushAsync()
 
@@ -2099,7 +2661,7 @@ describe("CellRefreshEngine", () => {
     ): NotebookCell => {
       const result = gridFrame(queries)
       cellResults.set(id, result)
-      return { id, position: 0, value, mode: "run", autoRefresh, result }
+      return { id, position: 0, value, mode: undefined, autoRefresh, result }
     }
 
     const errorValidation = (sql: string, error: string) => ({
@@ -2113,8 +2675,6 @@ describe("CellRefreshEngine", () => {
         Promise.resolve(map[sql.trim()] ?? dqlValidation),
       )
     }
-
-    const keyOf = (sql: string) => statementKeysFor([sql])[0]
 
     it("ticks a refreshable grid and swaps each slot's rows in place", async () => {
       // Given a two-statement run cell with a visible grid on a 1s interval
@@ -2192,22 +2752,48 @@ describe("CellRefreshEngine", () => {
       syncOnScreen([cell])
       await flushAsync()
       expect(deps.setCellResult).toHaveBeenCalledTimes(1)
-      const fetchedAfterSwap = engine
+      const verifiedAfterSwap = engine
         .getState("g1")
-        ?.slotFetchedAt.get(keyOf("select 1"))
-      expect(fetchedAfterSwap).toBeDefined()
+        ?.slotVerifiedAt.get(keyOf("select 1"))
+      expect(verifiedAfterSwap).toBeDefined()
 
       // When later ticks return the same rows
       await vi.advanceTimersByTimeAsync(6000)
 
       // Then the frame is never re-written — a re-commit would churn renders
-      // and snapshots for identical data — while the fetch time keeps
-      // advancing for the status line
+      // and snapshots for identical data — while the overlay keeps advancing
+      // for the status line
       expect(deps.executeSingle.mock.calls.length).toBeGreaterThan(1)
       expect(deps.setCellResult).toHaveBeenCalledTimes(1)
       expect(
-        engine.getState("g1")?.slotFetchedAt.get(keyOf("select 1")) ?? 0,
-      ).toBeGreaterThan(fetchedAfterSwap ?? 0)
+        engine.getState("g1")?.slotVerifiedAt.get(keyOf("select 1")) ?? 0,
+      ).toBeGreaterThan(verifiedAfterSwap ?? 0)
+    })
+
+    it("notifies an identical tick only for the progress its subscribers show", async () => {
+      // Given a polling grid past its first tick
+      const cell = gridCell("g1", "select 1", ["select 1"], "1s")
+      syncOnScreen([cell])
+      await flushAsync()
+      const notified: Array<[boolean, number]> = []
+      const unsubscribe = engine.subscribe("g1", () => {
+        const state = engine.getState("g1")
+        notified.push([state?.fetching ?? false, state?.slotFetching.size ?? 0])
+      })
+
+      // When the next tick returns the same rows
+      await vi.advanceTimersByTimeAsync(1000)
+      unsubscribe()
+
+      // Then only the round start, the slot launch, the slot settle and the
+      // round end notify: re-stating the settled key or an empty slot set does
+      // not, since every notify re-renders the cell's subscribers
+      expect(notified).toEqual([
+        [true, 0],
+        [true, 1],
+        [true, 0],
+        [false, 0],
+      ])
     })
 
     it("commits again when a tick returns changed rows", async () => {
@@ -2272,12 +2858,12 @@ describe("CellRefreshEngine", () => {
       void engine.refresh("g1")
       await flushAsync()
 
-      // Then the badge clears and the fetch time records the verifying poll,
+      // Then the badge clears and the overlay records the verifying poll,
       // while the frame stays untouched
       const state = engine.getState("g1")
       expect(state?.slotErrors.size).toBe(0)
       expect(deps.setCellResult).not.toHaveBeenCalled()
-      expect(state?.slotFetchedAt.get(keyOf("select 1"))).toBeDefined()
+      expect(state?.slotVerifiedAt.get(keyOf("select 1"))).toBeDefined()
     })
 
     it("never registers an editor-only run cell", async () => {
@@ -2286,7 +2872,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
       }
 
@@ -2305,7 +2891,7 @@ describe("CellRefreshEngine", () => {
         id: "g1",
         position: 0,
         value: "select 1",
-        mode: "run",
+        mode: undefined,
         autoRefresh: "1s",
         lastRunStatus: "success",
       }
@@ -2768,10 +3354,12 @@ describe("CellRefreshEngine", () => {
     it("seeds persisted refresh errors for surviving statements only", async () => {
       // Given errors seeded before the entry exists — one for a statement the
       // cell no longer contains
-      engine.seedRefreshErrors("g1", [
-        { statementKey: keyOf("select 1"), message: "old failure" },
-        { statementKey: keyOf("select gone"), message: "dropped" },
-      ])
+      engine.seedRefreshState("g1", {
+        refreshErrors: [
+          { statementKey: keyOf("select 1"), message: "old failure" },
+          { statementKey: keyOf("select gone"), message: "dropped" },
+        ],
+      })
 
       // When the cell syncs into the engine
       const cell = gridCell("g1", "select 1", ["select 1"], false)
@@ -2794,10 +3382,12 @@ describe("CellRefreshEngine", () => {
       )
       syncOnScreen([cell])
       await flushAsync()
-      engine.seedRefreshErrors("g1", [
-        { statementKey: keyOf("select 1"), message: "e1" },
-        { statementKey: keyOf("select 2"), message: "e2" },
-      ])
+      engine.seedRefreshState("g1", {
+        refreshErrors: [
+          { statementKey: keyOf("select 1"), message: "e1" },
+          { statementKey: keyOf("select 2"), message: "e2" },
+        ],
+      })
 
       // When the second statement is edited and the debounce expires
       engine.sync([{ ...cell, value: "select 1; select 3" }])
@@ -2844,7 +3434,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },
@@ -2900,7 +3490,7 @@ describe("CellRefreshEngine", () => {
           id: "g1",
           position: 0,
           value: "select 1",
-          mode: "run",
+          mode: undefined,
           autoRefresh: false,
           lastRunStatus: "success",
         },
@@ -3143,8 +3733,8 @@ describe("CellRefreshEngine", () => {
       ])
     })
 
-    it("a run commit clears the refresh stamps so the run frame's own timestamp takes over", async () => {
-      // Given a grid whose manual refresh swapped fresh rows in (stamps set)
+    it("a run commit clears the overlay so the run's rows show their own fetch time", async () => {
+      // Given a grid whose manual refresh swapped fresh rows in (overlay set)
       changingResults()
       const cell = gridCell("g1", "select 1", ["select 1"], false)
       syncOnScreen([cell])
@@ -3152,14 +3742,14 @@ describe("CellRefreshEngine", () => {
       void engine.refresh("g1")
       await flushAsync()
       const key = keyOf("select 1")
-      expect(engine.getState("g1")?.slotFetchedAt.get(key)).toBeDefined()
+      expect(engine.getState("g1")?.slotVerifiedAt.get(key)).toBeDefined()
 
       // When a run commits a new frame
       engine.noteCellRan("g1")
 
-      // Then the stamps are gone — the status line must follow the run, not
+      // Then the overlay is gone — the status line must follow the run, not
       // the superseded refresh round
-      expect(engine.getState("g1")?.slotFetchedAt.size).toBe(0)
+      expect(engine.getState("g1")?.slotVerifiedAt.size).toBe(0)
     })
 
     it("a per-statement rerun clears only that statement's stamp", async () => {
@@ -3175,15 +3765,15 @@ describe("CellRefreshEngine", () => {
       await flushAsync()
       void engine.refresh("g1")
       await flushAsync()
-      expect(engine.getState("g1")?.slotFetchedAt.size).toBe(2)
+      expect(engine.getState("g1")?.slotVerifiedAt.size).toBe(2)
 
       // When one statement is rerun
       engine.noteStatementRan("g1", keyOf("select 1"))
 
-      // Then only its stamp drops; the sibling keeps its refresh time
+      // Then only its overlay entry drops; the sibling keeps its refresh time
       const state = engine.getState("g1")
-      expect(state?.slotFetchedAt.has(keyOf("select 1"))).toBe(false)
-      expect(state?.slotFetchedAt.has(keyOf("select 2"))).toBe(true)
+      expect(state?.slotVerifiedAt.has(keyOf("select 1"))).toBe(false)
+      expect(state?.slotVerifiedAt.has(keyOf("select 2"))).toBe(true)
     })
 
     it("a superseded round's late settle leaves the replacement round's slot state intact", async () => {

@@ -2,6 +2,8 @@ import type { editor } from "monaco-editor"
 import type { ColumnDefinition, Timings } from "../utils/questdb/types"
 import type { RunStatus } from "../utils/ai/runStatus"
 import type { ChartConfig } from "../scenes/Editor/Notebook/CellChart/chartTypes"
+import type { HighlightConfig } from "../components/ResultGrid/highlight/types"
+import { isHighlightConfig } from "../components/ResultGrid/highlight/isHighlightConfig"
 
 // Virtualization + lazy hydration bound render and memory cost; the cap guards
 // notebook data size and the wrapper DOM / grid-layout work that still scales
@@ -20,15 +22,7 @@ export const exceedsCellNameLimit = (name: string): boolean =>
 
 export type CellMode = "run" | "draw"
 
-export const AUTO_REFRESH_INTERVALS = {
-  "1s": 1000,
-  "5s": 5000,
-  "10s": 10000,
-  "30s": 30000,
-  "1m": 60000,
-} as const
-
-export type AutoRefreshInterval = keyof typeof AUTO_REFRESH_INTERVALS
+export type AutoRefreshInterval = `${number}${"ms" | "s" | "m"}`
 // false means "Off", true means "Auto" — presence checks must be `!== undefined`.
 export type AutoRefresh = boolean | AutoRefreshInterval
 
@@ -36,6 +30,19 @@ export type AutoRefresh = boolean | AutoRefreshInterval
 // `=== "markdown"`, so old notebooks (no `type`) behave as SQL cells with no
 // migration. Markdown cells hold their source in `value` and are never executed.
 export type CellType = "sql" | "markdown"
+
+export type AgentCellView = "editor" | "result" | "editor_result"
+
+export const isAgentCellView = (value: unknown): value is AgentCellView =>
+  value === "editor" || value === "result" || value === "editor_result"
+
+// The storable pane arrangements. "editor" exists only on the agent wire: as a
+// write it discards the result (the toggle-off gesture), as a read it is the
+// derived presentation of a cell with nothing to show.
+export type CellPaneView = "result" | "editor_result"
+
+export const isCellPaneView = (value: unknown): value is CellPaneView =>
+  value === "result" || value === "editor_result"
 
 export type NotebookCell = {
   id: string
@@ -50,10 +57,18 @@ export type NotebookCell = {
   topResized?: boolean
   bottomResized?: boolean
   spotlightEditorRatio?: number
-  mode?: CellMode
+  // Draw is persistent cell identity because it is also the marker used to
+  // hydrate and refresh a chart whose result is not currently in memory.
+  // Run is the absence of draw mode and must never be persisted.
+  mode?: "draw"
   chartConfig?: ChartConfig
+  // One set of rules for every result grid of the cell, by column name; an
+  // edit to the SQL never touches it.
+  highlightConfig?: HighlightConfig
   autoRefresh?: AutoRefresh
-  isViewMaximized?: boolean
+  // Stored pane arrangement for a cell with a result. A cell without one
+  // shows only the editor; that never rewrites it.
+  paneView?: CellPaneView
   lastRunStatus?: RunStatus
   lastRunError?: string
 }
@@ -61,6 +76,7 @@ export type NotebookCell = {
 export type DqlQueryResult = {
   type: "dql"
   query: string
+  effectiveQuery?: string
   columns: ColumnDefinition[]
   dataset: (boolean | string | number | null)[][]
   count: number
@@ -68,17 +84,22 @@ export type DqlQueryResult = {
   timestamp?: number
   timings?: Timings
   notice?: string
+  // When the rows were fetched. Every constructor stamps it; hydration folds
+  // it once into results persisted before it existed.
+  fetchedAt?: number
 }
 
 export type DdlDmlQueryResult = {
   type: "ddl" | "dml"
   query: string
+  fetchedAt?: number
 }
 
 export type ErrorQueryResult = {
   type: "error"
   query: string
   error: string
+  fetchedAt?: number
 }
 
 export type TransientQueryResult = {
@@ -92,6 +113,7 @@ export type CancelledQueryResult = {
   type: "cancelled"
   query: string
   reason?: CancelReason
+  fetchedAt?: number
 }
 
 export type SingleQueryResult =
@@ -101,11 +123,19 @@ export type SingleQueryResult =
   | TransientQueryResult
   | CancelledQueryResult
 
+export const isSettledResult = (
+  result: SingleQueryResult,
+): result is Exclude<SingleQueryResult, TransientQueryResult> =>
+  result.type !== "running" && result.type !== "queued"
+
 export type CellResult = {
   results: SingleQueryResult[]
   activeResultIndex: number
   activeStatementKey?: string
   error?: string
+  // The run token: it changes when a run replaces the frame, and the grid
+  // keys its viewport on it. It is not a time — each result carries its own
+  // fetchedAt — and after a reload it is the snapshot's save time.
   timestamp: number
   script?: {
     successCount: number
@@ -147,6 +177,7 @@ export const createCell = (position: number, value = ""): NotebookCell => ({
   id: crypto.randomUUID(),
   position,
   value,
+  paneView: "editor_result",
 })
 
 export const createDefaultNotebookViewState = (): NotebookViewState => ({
@@ -165,6 +196,25 @@ export const dropLegacyChartConfigs = (
     const next = { ...cell }
     delete next.chartConfig
     return next
+  })
+  return { ...state, cells }
+}
+
+export const sanitizeHighlightConfig = (
+  value: unknown,
+): HighlightConfig | undefined => (isHighlightConfig(value) ? value : undefined)
+
+const hasMalformedHighlightConfig = (cell: NotebookCell): boolean =>
+  cell.highlightConfig != null && !isHighlightConfig(cell.highlightConfig)
+
+export const dropMalformedHighlightConfigs = (
+  state: NotebookViewState,
+): NotebookViewState => {
+  if (!state.cells.some(hasMalformedHighlightConfig)) return state
+  const cells = state.cells.map((cell) => {
+    if (!hasMalformedHighlightConfig(cell)) return cell
+    const { highlightConfig: _dropped, ...rest } = cell
+    return rest
   })
   return { ...state, cells }
 }

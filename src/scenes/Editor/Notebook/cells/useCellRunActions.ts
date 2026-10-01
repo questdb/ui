@@ -4,20 +4,19 @@ import type { NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
 import { useCellRefresh } from "../cellRefresh/CellRefreshContext"
 import { useLocalStorage } from "../../../../providers/LocalStorageProvider"
-import { useValidateWithGlobals } from "../globals/useValidateWithGlobals"
 import {
   getQueryFromCursor,
   normalizeQueryText,
   resolveSelectionRun,
   type SelectionRunResolution,
 } from "../../Monaco/utils"
-import { resolveActiveStatementSql, resolveRunAction } from "../notebookUtils"
+import { resolveRunAction } from "../notebookUtils"
+import { resolveActiveStatementSql } from "../statementIdentity"
 import {
   emitUserAction,
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { createRunStatus, type RanStatus } from "../../../../utils/ai/runStatus"
-import { requireAllDQL } from "../../../../utils/tools/permissions"
 import { toast } from "../../../../components/Toast"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
@@ -27,8 +26,6 @@ import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
 type Options = {
   cell: NotebookCell
   isRunning: boolean
-  isCompactTier: boolean
-  showBottomSlot: boolean
   editorRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>
   applyHighlight: (ok: boolean) => void
   clearHighlight: () => void
@@ -45,34 +42,27 @@ type RunRequest = { kind: "all" } | { kind: "single"; source: SingleRunSource }
 export const useCellRunActions = ({
   cell,
   isRunning,
-  isCompactTier,
-  showBottomSlot,
   editorRef,
   applyHighlight,
   clearHighlight,
 }: Options) => {
   const {
     runCell,
+    validateForDraw,
     setCellMode,
     clearCellResult,
-    setCellViewMaximized,
     getCellsSnapshot,
   } = useNotebookActions()
   const bufferIdForEvents = useNotebookBufferId()
-  const validateWithGlobals = useValidateWithGlobals()
   const { runWithSelectionMode } = useLocalStorage()
   const isDrawMode = cell.mode === "draw"
 
   // A run from the Run toggle spins the Run segment; a run from the refresh
   // button spins the refresh button instead.
   const firstRunRef = useRef(false)
-  const validatingDrawRef = useRef(false)
 
-  // Returns true only when the cell actually entered draw mode, so a caller can
-  // apply chart-only follow-ups (e.g. maximize) without affecting a cell whose
-  // draw was refused by validation.
-  const handleDrawClick = useCallback(async (): Promise<boolean> => {
-    if (isRunning) return false
+  const handleDrawClick = useCallback(async (): Promise<void> => {
+    if (isRunning) return
     if (isDrawMode) {
       setCellMode(cell.id, "run")
       clearCellResult(cell.id)
@@ -82,39 +72,36 @@ export const useCellRunActions = ({
         cellId: cell.id,
         mode: "run",
       })
-      return false
+      return
     }
-    if (validatingDrawRef.current) return false
-    validatingDrawRef.current = true
-    try {
-      const decision = await requireAllDQL(cell.value, (s) =>
-        validateWithGlobals(s),
-      )
-      if (!decision.granted) {
+    // A draw from an empty cell is its first run: the gate's validation is
+    // the phase the Stop button can end.
+    firstRunRef.current = cell.result == null
+    signalUserEdit(bufferIdForEvents)
+    const gate = await validateForDraw(cell.id)
+    if (!gate.granted) {
+      if (gate.reason !== undefined) {
         void trackEvent(ConsoleEvent.NOTEBOOK_DRAW_REFUSED)
-        toast.error(decision.reason)
-        return false
+        toast.error(gate.reason)
       }
-      setCellMode(cell.id, "draw")
-      emitUserAction({
-        kind: "user_changed_cell_mode",
-        bufferId: bufferIdForEvents,
-        cellId: cell.id,
-        mode: "draw",
-      })
-      return true
-    } finally {
-      validatingDrawRef.current = false
+      return
     }
+    setCellMode(cell.id, "draw")
+    emitUserAction({
+      kind: "user_changed_cell_mode",
+      bufferId: bufferIdForEvents,
+      cellId: cell.id,
+      mode: "draw",
+    })
   }, [
     cell.id,
-    cell.value,
+    cell.result,
     isRunning,
     isDrawMode,
     setCellMode,
     clearCellResult,
+    validateForDraw,
     bufferIdForEvents,
-    validateWithGlobals,
   ])
 
   const tryRunSelection = useCallback((): SelectionRunResolution["kind"] => {
@@ -157,10 +144,10 @@ export const useCellRunActions = ({
 
     const priorResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    const { ok } = await runCell(cell.id)
+    const outcome = await runCell(cell.id)
     const freshResult =
       getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-    emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+    emitRanEvent(createRunStatus(priorResult, freshResult, outcome))
   }, [
     cell.id,
     runCell,
@@ -195,10 +182,10 @@ export const useCellRunActions = ({
       clearHighlight()
       const priorResult =
         getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-      void runCell(cell.id, normalizeQueryText(sql)).then(({ ok }) => {
+      void runCell(cell.id, normalizeQueryText(sql)).then((outcome) => {
         const freshResult =
           getCellsSnapshot().find((c) => c.id === cell.id)?.result ?? null
-        emitRanEvent(createRunStatus(priorResult, freshResult, ok))
+        emitRanEvent(createRunStatus(priorResult, freshResult, outcome))
       })
       return true
     },
@@ -218,10 +205,13 @@ export const useCellRunActions = ({
   const runResolved = useCallback(
     (request: RunRequest) => {
       const plan = resolveRunAction(
-        { mode: cell.mode, result: cell.result },
-        { isCompactTier, showBottomSlot, intent: request.kind },
+        { mode: cell.mode },
+        { intent: request.kind },
       )
       if (plan.kind === "noop") return
+      // A run in flight is user activity the agent has not seen: bumping the
+      // seq now makes a stale-read apply fail instead of cancelling the run.
+      signalUserEdit(bufferIdForEvents)
       if (plan.kind === "chart") {
         void trackEvent(ConsoleEvent.NOTEBOOK_CELL_DRAW)
         firstRunRef.current = false
@@ -230,33 +220,21 @@ export const useCellRunActions = ({
         })
         return
       }
-      const exitDrawMode = () => {
-        if (!plan.exitDraw) return
-        signalUserEdit(bufferIdForEvents)
-        setCellMode(cell.id, "run")
-      }
-      firstRunRef.current = cell.result == null
+      // A gesture during a run never starts a first run: the running frame
+      // already replaced the empty result, and the run in flight keeps Stop.
+      if (!isRunning) firstRunRef.current = cell.result == null
       if (request.kind === "all") {
-        exitDrawMode()
         void handleRunAll()
-        if (plan.reveal) setCellViewMaximized(cell.id, true)
         return
       }
-      // A single run that finds nothing to run leaves the cell untouched —
-      // a draw cell keeps its chart instead of dropping to the grid.
-      if (!handleRunSingle(request.source)) return
-      exitDrawMode()
-      if (plan.reveal) setCellViewMaximized(cell.id, true)
+      handleRunSingle(request.source)
     },
     [
       cell.id,
       cell.mode,
       cell.result,
+      isRunning,
       bufferIdForEvents,
-      isCompactTier,
-      showBottomSlot,
-      setCellViewMaximized,
-      setCellMode,
       handleRunAll,
       handleRunSingle,
     ],
@@ -285,6 +263,7 @@ export const useCellRunActions = ({
       state.classifiedKey === state.queriesKey &&
       state.classifyBlock === null
     if (engineRefreshable) {
+      signalUserEdit(bufferIdForEvents)
       void cellRefresh.refresh(cell.id).then(() => {
         const settled = cellRefresh.getState(cell.id)
         emitRanEvent(
@@ -296,7 +275,15 @@ export const useCellRunActions = ({
       return
     }
     runResolved({ kind: "all" })
-  }, [cell.id, cell.mode, cell.result, cellRefresh, emitRanEvent, runResolved])
+  }, [
+    cell.id,
+    cell.mode,
+    cell.result,
+    bufferIdForEvents,
+    cellRefresh,
+    emitRanEvent,
+    runResolved,
+  ])
 
   useEffect(() => {
     if (!isRunning) firstRunRef.current = false
@@ -310,11 +297,9 @@ export const useCellRunActions = ({
       if (payload?.cellId !== cell.id) return
       refreshRun()
     }
-    const drawHandler = (payload?: { cellId?: string; maximize?: boolean }) => {
+    const drawHandler = (payload?: { cellId?: string }) => {
       if (payload?.cellId !== cell.id) return
-      void handleDrawClick().then((entered) => {
-        if (entered && payload.maximize) setCellViewMaximized(cell.id, true)
-      })
+      void handleDrawClick()
     }
     eventBus.subscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
     eventBus.subscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
@@ -322,7 +307,7 @@ export const useCellRunActions = ({
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_RUN, runHandler)
       eventBus.unsubscribe(EventType.NOTEBOOK_CELL_DRAW, drawHandler)
     }
-  }, [cell.id, refreshRun, handleDrawClick, setCellViewMaximized])
+  }, [cell.id, refreshRun, handleDrawClick])
 
   const isGridLoading = isRunning && firstRunRef.current
 

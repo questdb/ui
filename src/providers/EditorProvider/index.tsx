@@ -26,8 +26,8 @@ import {
   cloneNotebookViewStateWithCellIdMap,
   generateId,
   nextCopyLabel,
-  snapshotResultsMatchQueries,
 } from "../../scenes/Editor/Notebook/notebookUtils"
+import { snapshotResultsMatchQueries } from "../../scenes/Editor/Notebook/statementIdentity"
 import { createCell } from "../../store/notebook"
 import { NotebookToolError } from "../../utils/notebooks/notebookToolError"
 import { requestCellReveal } from "../../scenes/Editor/Notebook/cellReveal"

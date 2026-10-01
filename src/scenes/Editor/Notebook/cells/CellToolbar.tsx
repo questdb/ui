@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useMemo, useState } from "react"
 import styled, { css } from "styled-components"
 import {
   ChevronUp,
@@ -12,8 +12,6 @@ import {
   CornersOutIcon,
   CornersInIcon,
   ArrowClockwiseIcon,
-  ArrowsOutLineVerticalIcon,
-  ArrowsInLineVerticalIcon,
   GearIcon,
   TableIcon,
   ChartLineIcon,
@@ -26,22 +24,28 @@ import { useTriggerTooltip } from "./useTriggerTooltip"
 import {
   autoRefreshLabel,
   cellToolbarMenuFlags,
+  hasActiveResultGrid,
   resolveAutoRefresh,
   resolveCellView,
 } from "../notebookUtils"
+import type { SettingsDrawerRequest } from "../settingsDrawer/settingsDrawerSessions"
 import type { CellToolbarTier } from "../notebookUtils"
+import type { CellPaneLayout } from "../cellSizing"
 import type { AutoRefresh, NotebookCell } from "../../../../store/notebook"
 import { useNotebookActions, useNotebookBufferId } from "../NotebookProvider"
-import { useCellFetchState } from "../cellRefresh/CellRefreshContext"
+import {
+  selectWriteBlocked,
+  useCellFetchSelector,
+} from "../cellRefresh/CellRefreshContext"
 import {
   emitUserAction,
   signalUserEdit,
 } from "../../../../utils/notebooks/notebookAIBridge"
 import { eventBus } from "../../../../modules/EventBus"
 import { EventType } from "../../../../modules/EventBus/types"
-import { clearChartZoom } from "../cellVirtualization/chartZoomStore"
 import { trackEvent } from "../../../../modules/ConsoleEventTracker"
 import { ConsoleEvent } from "../../../../modules/ConsoleEventTracker/events"
+import { useCellViewActions } from "./useCellViewActions"
 
 const ToolbarWrapper = styled.div<{
   $inline?: boolean
@@ -82,9 +86,10 @@ type Props = {
   layoutMode: "list" | "grid"
   autoRefreshDefault?: AutoRefresh
   isMaximized: boolean
-  isRunning?: boolean
+  isCellBusy?: boolean
   inline?: boolean
   toolbarTier?: CellToolbarTier
+  paneLayout?: CellPaneLayout
   chartZoomed?: boolean
 }
 
@@ -96,9 +101,10 @@ export const CellToolbar: React.FC<Props> = ({
   layoutMode,
   autoRefreshDefault,
   isMaximized,
-  isRunning = false,
+  isCellBusy = false,
   inline,
   toolbarTier,
+  paneLayout,
   chartZoomed = false,
 }) => {
   const {
@@ -109,8 +115,6 @@ export const CellToolbar: React.FC<Props> = ({
     setFocusedCell,
     setMaximizedCellId,
     setCellRefresh,
-    setCellViewMaximized,
-    setCellMode,
   } = useNotebookActions()
   const bufferId = useNotebookBufferId()
 
@@ -123,24 +127,36 @@ export const CellToolbar: React.FC<Props> = ({
   const isChartView = view === "chart"
   const isGridView = view === "grid"
   const isNoneView = view === "none"
-  const isViewMaximized = !isNoneView && !!cell.isViewMaximized
+  const hasResultGrid = useMemo(() => hasActiveResultGrid(cell), [cell])
+  const resultOnly = paneLayout === "result"
   const autoRefresh = resolveAutoRefresh(cell.autoRefresh, autoRefreshDefault)
   // A write cell never ticks, so the menu must not offer an interval the
   // engine would ignore — same gate the inline selector applies.
-  const autoRefreshBlocked =
-    useCellFetchState(cellId)?.classifyBlock?.kind === "write"
+  const autoRefreshBlocked = useCellFetchSelector(cellId, selectWriteBlocked)
   const [menuOpen, setMenuOpen] = useState(false)
   const moreActionsTooltip = useTriggerTooltip()
+  const {
+    viewTable: handleViewTable,
+    viewChart: handleViewChart,
+    toggleEditor: handleToggleEditor,
+    resetZoom: handleResetZoom,
+  } = useCellViewActions({
+    cellId,
+    view,
+    paneLayout: paneLayout ?? "split",
+    isCellBusy,
+    method: "menu",
+  })
 
   const {
-    showViewSql,
     showViewTable,
     showViewChart,
-    showSplitItem,
+    showEditorToggleItem,
     showResetZoom,
     showAutoRefreshItem,
     showRefreshItem,
     showChartSettings,
+    showHighlightSettings,
     showMoveUp,
     showMoveDown,
     showDuplicate,
@@ -151,62 +167,13 @@ export const CellToolbar: React.FC<Props> = ({
     tier: toolbarTier ?? "compact",
     view,
     isMarkdown,
-    // "View SQL" minimizes the chart/table to the editor without dropping data.
-    sqlShown: cell.isViewMaximized === false,
     chartZoomed,
+    hasResultGrid,
     isGridMode,
     cellIndex,
     totalCells,
   })
 
-  // Minimize the chart/table to the editor, keeping the data on the cell.
-  const handleViewSql = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "sql",
-      method: "menu",
-    })
-    signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, false)
-  }
-  const handleViewTable = () => {
-    if (isRunning) return
-    signalUserEdit(bufferId)
-    if (isNoneView) {
-      eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
-      return
-    }
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "grid",
-      method: "menu",
-    })
-    // A chart transfers its data to the grid (no re-query); restore the data
-    // pane in case the SQL was being shown.
-    if (isChartView) setCellMode(cellId, "run")
-    setCellViewMaximized(cellId, true)
-  }
-  const handleViewChart = () => {
-    if (isRunning) return
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_CHANGE, {
-      to: "chart",
-      method: "menu",
-    })
-    signalUserEdit(bufferId)
-    if (isNoneView || isGridView) {
-      // Entering draw can be refused (non-DQL SQL); maximize only once the
-      // draw actually takes, so a refused chart never maximizes the grid.
-      eventBus.publish(EventType.NOTEBOOK_CELL_DRAW, { cellId, maximize: true })
-      return
-    }
-    setCellViewMaximized(cellId, true)
-  }
-  const handleToggleMaximizeView = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CELL_VIEW_MAXIMIZE, {
-      isViewMaximized: !cell.isViewMaximized,
-      view,
-    })
-    signalUserEdit(bufferId)
-    setCellViewMaximized(cellId, !cell.isViewMaximized)
-  }
   const handleMaximizeCell = () => {
     void trackEvent(ConsoleEvent.NOTEBOOK_CELL_MAXIMIZE, {
       action: isMaximized ? "restore" : "maximize",
@@ -224,15 +191,21 @@ export const CellToolbar: React.FC<Props> = ({
     }
     eventBus.publish(EventType.NOTEBOOK_CELL_RUN, { cellId })
   }
-  const handleResetZoom = () => {
-    clearChartZoom(cellId)
-    eventBus.publish(EventType.NOTEBOOK_CELL_RESET_ZOOM, { cellId })
-  }
-  const handleChartSettings = () => {
-    void trackEvent(ConsoleEvent.NOTEBOOK_CHART_SETTINGS_OPEN, {
-      chartType: cell.chartConfig?.queries.find((q) => q != null)?.type,
+  const handleChartSettings = (mode: SettingsDrawerRequest["mode"]) => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, {
+      cellId,
+      mode,
     })
-    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_CHART_SETTINGS, { cellId })
+  }
+  const handleHighlightSettings = (mode: SettingsDrawerRequest["mode"]) => {
+    eventBus.publish(EventType.NOTEBOOK_CELL_OPEN_HIGHLIGHT_SETTINGS, {
+      cellId,
+      mode,
+    })
+  }
+  const handleMenuOpenChange = (open: boolean) => {
+    setMenuOpen(open)
+    moreActionsTooltip.onMenuOpenChange(open)
   }
   const handleRefreshSelect = (value: AutoRefresh | undefined) => {
     if (value === cell.autoRefresh) return
@@ -282,9 +255,25 @@ export const CellToolbar: React.FC<Props> = ({
   return (
     <ToolbarWrapper
       className="cell-toolbar"
+      data-hook="cell-toolbar"
       $inline={inline}
       $forceVisible={menuOpen}
     >
+      {isMaximized && (isChartView || hasResultGrid) && (
+        <Tooltip content={isChartView ? "Chart settings" : "Highlight rules"}>
+          <CellIconButton
+            label={isChartView ? "Chart settings" : "Highlight rules"}
+            variant="ghost"
+            onClick={() =>
+              isChartView
+                ? handleChartSettings("toggle")
+                : handleHighlightSettings("toggle")
+            }
+          >
+            <GearIcon size={20} />
+          </CellIconButton>
+        </Tooltip>
+      )}
       <Tooltip content={isMaximized ? "Restore" : "Maximize"}>
         <CellIconButton
           label={isMaximized ? "Restore" : "Maximize"}
@@ -299,12 +288,7 @@ export const CellToolbar: React.FC<Props> = ({
         </CellIconButton>
       </Tooltip>
       {!isMaximized && (
-        <DropdownMenu.Root
-          onOpenChange={(o) => {
-            setMenuOpen(o)
-            moreActionsTooltip.onMenuOpenChange(o)
-          }}
-        >
+        <DropdownMenu.Root open={menuOpen} onOpenChange={handleMenuOpenChange}>
           <Tooltip content="More actions" {...moreActionsTooltip.tooltipProps}>
             <DropdownMenu.Trigger asChild>
               <CellIconButton label="More actions" variant="ghost">
@@ -314,51 +298,52 @@ export const CellToolbar: React.FC<Props> = ({
           </Tooltip>
           <DropdownMenu.Portal>
             <DropdownMenu.Content align="end" sideOffset={4}>
-              {showViewSql && (
-                <DropdownMenu.Item
-                  onSelect={handleViewSql}
+              {showViewTable &&
+                (isNoneView ? (
+                  <DropdownMenu.Item
+                    onSelect={handleViewTable}
+                    disabled={isCellBusy}
+                    icon={<PlayIcon size={16} />}
+                  >
+                    Run
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.CheckboxItem
+                    checked={isGridView}
+                    onSelect={handleViewTable}
+                    disabled={isCellBusy}
+                    icon={<TableIcon size={16} />}
+                  >
+                    View table
+                  </DropdownMenu.CheckboxItem>
+                ))}
+              {showViewChart &&
+                (isNoneView ? (
+                  <DropdownMenu.Item
+                    onSelect={handleViewChart}
+                    disabled={isCellBusy}
+                    icon={<ChartLineIcon size={16} />}
+                  >
+                    Draw
+                  </DropdownMenu.Item>
+                ) : (
+                  <DropdownMenu.CheckboxItem
+                    checked={isChartView}
+                    onSelect={handleViewChart}
+                    disabled={isCellBusy}
+                    icon={<ChartLineIcon size={16} />}
+                  >
+                    View chart
+                  </DropdownMenu.CheckboxItem>
+                ))}
+              {showEditorToggleItem && (
+                <DropdownMenu.CheckboxItem
+                  checked={!resultOnly}
+                  onSelect={handleToggleEditor}
                   icon={<FileSqlIcon size={16} />}
                 >
-                  View SQL
-                </DropdownMenu.Item>
-              )}
-              {showViewTable && (
-                <DropdownMenu.Item
-                  onSelect={handleViewTable}
-                  disabled={isRunning}
-                  icon={
-                    isNoneView ? (
-                      <PlayIcon size={16} />
-                    ) : (
-                      <TableIcon size={16} />
-                    )
-                  }
-                >
-                  {isNoneView ? "Run" : "View table"}
-                </DropdownMenu.Item>
-              )}
-              {showViewChart && (
-                <DropdownMenu.Item
-                  onSelect={handleViewChart}
-                  disabled={isRunning}
-                  icon={<ChartLineIcon size={16} />}
-                >
-                  {isNoneView ? "Draw" : "View chart"}
-                </DropdownMenu.Item>
-              )}
-              {showSplitItem && (
-                <DropdownMenu.Item
-                  onSelect={handleToggleMaximizeView}
-                  icon={
-                    isViewMaximized ? (
-                      <ArrowsInLineVerticalIcon size={16} />
-                    ) : (
-                      <ArrowsOutLineVerticalIcon size={16} />
-                    )
-                  }
-                >
-                  {isViewMaximized ? "Split view" : "Maximized view"}
-                </DropdownMenu.Item>
+                  Show editor
+                </DropdownMenu.CheckboxItem>
               )}
 
               {groupAHasItems && <DropdownMenu.Divider />}
@@ -383,6 +368,7 @@ export const CellToolbar: React.FC<Props> = ({
                       <AutoRefreshOptions
                         value={cell.autoRefresh}
                         onSelect={handleRefreshSelect}
+                        onClose={() => handleMenuOpenChange(false)}
                         inheritedValue={resolveAutoRefresh(
                           undefined,
                           autoRefreshDefault,
@@ -402,10 +388,18 @@ export const CellToolbar: React.FC<Props> = ({
               )}
               {showChartSettings && (
                 <DropdownMenu.Item
-                  onSelect={handleChartSettings}
+                  onSelect={() => handleChartSettings("open")}
                   icon={<GearIcon size={16} />}
                 >
                   Chart settings
+                </DropdownMenu.Item>
+              )}
+              {showHighlightSettings && (
+                <DropdownMenu.Item
+                  onSelect={() => handleHighlightSettings("open")}
+                  icon={<GearIcon size={16} />}
+                >
+                  Highlight rules
                 </DropdownMenu.Item>
               )}
 

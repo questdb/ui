@@ -1,4 +1,5 @@
 import type { EChartsOption } from "echarts"
+import type { ChartZoomDensity } from "./chartDensity"
 import type { ColumnDefinition } from "../../../../utils/questdb/types"
 import type { ChartConfig, ChartType, SeriesAxis } from "./chartTypes"
 import { MAX_PARTITION_SERIES, classifyColumn } from "./inferChartConfig"
@@ -31,8 +32,6 @@ type SeriesContext = {
   xMode: XMode
   categoryUnion: string[] | null // set only when overlaying series onto a shared category axis; null for a single positional query
 }
-
-const DATAZOOM_THRESHOLD = 200
 
 const LEGEND_BOTTOM = 3
 const SLIDER_HEIGHT = 18
@@ -91,9 +90,15 @@ const resolveSeriesRenderSpec = (type: ChartType) => {
   }
   if (isStep) lineExtras.step = "end"
   // Scatter/bar use `large` for big point/bar sets; lines downsample with LTTB.
-  const perfExtras: { sampling?: "lttb"; large?: boolean } = isLineFamily
-    ? { sampling: "lttb" }
-    : { large: true }
+  const perfExtras: {
+    sampling?: "lttb"
+    large?: boolean
+    animation?: boolean
+  } = isLineFamily
+    ? { sampling: "lttb", animation: false }
+    : isScatter
+      ? { large: true, animation: false }
+      : { large: true }
   return { seriesType, lineExtras, perfExtras, isStacked }
 }
 
@@ -323,6 +328,7 @@ const buildScatterChartOption = (
         name,
         type: "scatter" as const,
         large: true,
+        animation: false,
         data: q.dataset.map((row) => [
           toNumberOrNull(row[xIdx]),
           toNumberOrNull(row[yIdx]),
@@ -357,7 +363,7 @@ export const buildEchartsOption = (
   queries: ResolvedQuery[],
 ): EChartsOption => {
   const chartText = { fontSize: CHART_FONT_SIZE }
-  const axisLabel = { fontSize: CHART_FONT_SIZE }
+  const axisLabel = { fontSize: CHART_FONT_SIZE, hideOverlap: true }
   const axisName = { fontSize: CHART_FONT_SIZE }
   const baseLegend = {
     type: "scroll" as const,
@@ -459,22 +465,13 @@ export const buildEchartsOption = (
       ? (rightQueries[0].name ?? rightQueries[0].yColumns[0] ?? "")
       : "")
 
-  const maxRows = queries.reduce((m, q) => Math.max(m, q.dataset.length), 0)
-  const hasZoom = maxRows > DATAZOOM_THRESHOLD
-  const sliderZoom = {
-    type: "slider" as const,
-    height: SLIDER_HEIGHT,
-    bottom: SLIDER_BOTTOM,
-    textStyle: chartText,
-  }
-
   const rightPadding = 36
 
   const grid: EChartsOption["grid"] = {
     left: 24,
     right: rightPadding,
     top: 40,
-    bottom: hasZoom ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+    bottom: GRID_BOTTOM_NO_ZOOM,
     containLabel: true,
   }
 
@@ -495,8 +492,10 @@ export const buildEchartsOption = (
           nameTextStyle: axisName,
           axisLabel,
           splitLine: { show: false },
-          ...(chart.rightAxis?.min != null ? { min: chart.rightAxis.min } : {}),
-          ...(chart.rightAxis?.max != null ? { max: chart.rightAxis.max } : {}),
+          // Keep both keys even when unset: chart updates merge into the prior
+          // option, and an omitted key would keep a cleared bound on screen.
+          min: chart.rightAxis?.min,
+          max: chart.rightAxis?.max,
         },
       ]
     : leftAxis
@@ -548,7 +547,36 @@ export const buildEchartsOption = (
     grid,
     xAxis,
     yAxis,
-    dataZoom: hasZoom ? [{ type: "inside" }, sliderZoom] : undefined,
     series: series as EChartsOption["series"],
+  }
+}
+
+// Every cartesian chart embeds both zoom components, and density only toggles
+// their visibility — never the option's structure, which would remount the
+// chart through its structural key. Wheel zoom arms while marks are merely
+// tight (it costs no plot space); the slider costs plot height, so it waits
+// until marks fall under the readable floor. The renderer measures the density
+// from its own width.
+export const withZoomDensity = (
+  option: EChartsOption,
+  density: ChartZoomDensity,
+): EChartsOption => {
+  if (option.xAxis == null) return option
+  return {
+    ...option,
+    grid: {
+      ...(option.grid as object),
+      bottom: density.slider ? GRID_BOTTOM_WITH_ZOOM : GRID_BOTTOM_NO_ZOOM,
+    },
+    dataZoom: [
+      { type: "inside", disabled: !density.wheel },
+      {
+        type: "slider",
+        show: density.slider,
+        height: SLIDER_HEIGHT,
+        bottom: SLIDER_BOTTOM,
+        textStyle: { fontSize: CHART_FONT_SIZE },
+      },
+    ],
   }
 }

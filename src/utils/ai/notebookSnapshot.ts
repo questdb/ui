@@ -1,12 +1,17 @@
 import {
   getController,
   type CellRefreshView,
+  type NotebookController,
 } from "../notebooks/notebookController"
 import { enqueueBufferTask } from "../notebooks/notebookBufferQueue"
 import { readNotebookBufferMeta } from "../notebooks/notebookDexieView"
 import { NotebookToolError } from "../notebooks/notebookToolError"
-import { sanitizeForPromptContext } from "./sanitizeForPromptContext"
+import {
+  sanitizeForPromptContext,
+  stringifyForPromptContext,
+} from "./sanitizeForPromptContext"
 import type {
+  AgentCellView,
   AutoRefresh,
   CellLayoutItem,
   NotebookCell,
@@ -15,9 +20,14 @@ import type {
 import type { UserActionDigest } from "../../providers/AIConversationProvider/types"
 import type { WorkspaceInfo } from "./executeAIFlow"
 import { normalizeVariables } from "../../scenes/Editor/Notebook/declareUtils"
-import { computeAgentCellGridH } from "../../scenes/Editor/Notebook/notebookUtils"
+import {
+  agentCellPaneDimensions,
+  agentCellPresentation,
+} from "../../scenes/Editor/Notebook/cellSizing"
+import type { CellResultStatus } from "../../scenes/Editor/Notebook/resultHydration/cellResultHydration"
 import { getCellRunStatus, type RunStatus } from "./runStatus"
 import type { ChartConfig } from "../../scenes/Editor/Notebook/CellChart/chartTypes"
+import { loadPassiveResultStatusReader } from "../notebooks/notebookResultStatus"
 
 type ChartQueryWire = {
   type: string
@@ -28,6 +38,13 @@ type ChartQueryWire = {
   enabled?: boolean
   name?: string
 }
+import {
+  toHighlightConfigWire,
+  type HighlightConfigWire,
+} from "../tools/highlightConfigWire"
+
+export type { HighlightConfigWire }
+
 export type ChartConfigWire = {
   x_column: string | null
   queries: (ChartQueryWire | null)[]
@@ -47,10 +64,13 @@ export type NotebookContextCell = {
   // Omitted for SQL cells (the default); "markdown" for prose cells (rendered,
   // never executed).
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
-  is_view_maximized?: boolean
+  editor_height: number | "auto"
+  result_height: number | "auto" | null
+  view: AgentCellView | null
   chart_config?: ChartConfigWire
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error_summary?: string
   // Live-only: present for the mounted notebook alone. Absence never means
@@ -58,7 +78,7 @@ export type NotebookContextCell = {
   refreshing?: true
   last_refresh_error?: string
   auto_refresh_blocked?: "contains_write"
-  grid?: { x: number; y: number; w: number; h: number }
+  grid?: { x: number; y: number; w: number }
 }
 
 export type NotebookContextSnapshot =
@@ -82,13 +102,23 @@ export type NotebookContextSnapshot =
 const PREVIEW_MAX = 120
 const ERROR_MAX = 200
 
+export const loadNotebookResultStatusReader = (
+  bufferId: number,
+  controller?: Pick<NotebookController, "readResultStatus">,
+): Promise<(cellId: string) => CellResultStatus> =>
+  controller?.readResultStatus
+    ? Promise.resolve(controller.readResultStatus)
+    : loadPassiveResultStatusReader(bufferId)
+
 const truncate = (s: string, max: number): string =>
   s.length <= max ? s : `${s.slice(0, max - 3)}...`
 
 const escapeNewlines = (s: string): string => s.replace(/\n/g, "\\n")
 
+// Keep structured read payloads faithful to the stored cell value. The
+// pseudo-XML prompt wrapper applies its delimiter guard at formatting time.
 const preview = (value: string): string =>
-  sanitizeForPromptContext(escapeNewlines(truncate(value, PREVIEW_MAX)))
+  escapeNewlines(truncate(value, PREVIEW_MAX))
 
 export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
   x_column: cfg.xColumn,
@@ -109,6 +139,11 @@ export const toChartConfigWire = (cfg: ChartConfig): ChartConfigWire => ({
   ),
   ...(cfg.rightAxis ? { right_axis: cfg.rightAxis } : {}),
 })
+
+const highlightConfigWire = (
+  cell: NotebookCell,
+): HighlightConfigWire | undefined =>
+  cell.highlightConfig ? toHighlightConfigWire(cell.highlightConfig) : undefined
 
 // Forwards ONLY status + trimmed error — no columns, rows, or counts.
 const lastRunSummary = (
@@ -156,10 +191,16 @@ const buildCell = (
   gridByCellId: Map<string, CellLayoutItem>,
   layoutMode: "list" | "grid",
   refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatus: CellResultStatus,
 ): NotebookContextCell => {
+  const dimensions = agentCellPaneDimensions(cell)
+  const presentation = agentCellPresentation(cell, resultStatus)
   const out: NotebookContextCell = {
     id: cell.id,
     preview: preview(cell.value),
+    editor_height: dimensions.editorHeight,
+    result_height: dimensions.resultHeight,
+    ...presentation,
     ...lastRunSummary(cell),
     ...refreshFields(refreshState?.get(cell.id)),
   }
@@ -169,15 +210,13 @@ const buildCell = (
   }
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
-  if (cell.mode === "draw" || cell.mode === "run") out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  if (typeof cell.isViewMaximized === "boolean") {
-    out.is_view_maximized = cell.isViewMaximized
-  }
   const chartConfig = cell.chartConfig
   if (chartConfig && Array.isArray(chartConfig.queries)) {
     out.chart_config = toChartConfigWire(chartConfig)
   }
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   if (layoutMode === "grid") {
     const g = gridByCellId.get(cell.id)
     if (g) {
@@ -185,7 +224,6 @@ const buildCell = (
         x: g.x,
         y: g.y,
         w: g.w,
-        h: computeAgentCellGridH(cell),
       }
     }
   }
@@ -208,6 +246,10 @@ export const buildSnapshot = async (
   }
   const view = controller ? await controller.readView() : meta.view
   const refreshState = controller?.readRefreshState?.()
+  const resultStatusOf = await loadNotebookResultStatusReader(
+    bufferId,
+    controller,
+  )
   const cells: NotebookCell[] = view.cells
   const settings: NotebookSettings = view.settings ?? {}
   const maximizedCellId = view.maximizedCellId ?? null
@@ -224,7 +266,13 @@ export const buildSnapshot = async (
     layout_mode: layoutMode,
     maximized_cell_id: maximizedCellId,
     cells: cells.map((c) =>
-      buildCell(c, gridByCellId, layoutMode, refreshState),
+      buildCell(
+        c,
+        gridByCellId,
+        layoutMode,
+        refreshState,
+        resultStatusOf(c.id),
+      ),
     ),
   }
   // Absence stays observable: with no configured default, nothing polls.
@@ -280,7 +328,9 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
   lines.push("  cells:")
   for (const c of snap.cells) {
     lines.push(`    - id: ${c.id}`)
-    lines.push(`      preview: ${JSON.stringify(c.preview)}`)
+    lines.push(
+      `      preview: ${JSON.stringify(sanitizeForPromptContext(c.preview))}`,
+    )
     if (c.preview_truncated) {
       lines.push(`      preview_truncated: true`)
       lines.push(`      full_length: ${c.full_length}`)
@@ -290,16 +340,20 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
         `      name: ${JSON.stringify(sanitizeForPromptContext(c.name))}`,
       )
     if (c.type) lines.push(`      type: ${c.type}`)
-    if (c.mode) lines.push(`      mode: ${c.mode}`)
+    lines.push(`      mode: ${c.mode}`)
     if (c.auto_refresh !== undefined)
       lines.push(`      auto_refresh: ${c.auto_refresh}`)
-    if (c.is_view_maximized !== undefined)
-      lines.push(`      is_view_maximized: ${c.is_view_maximized}`)
+    lines.push(`      editor_height: ${c.editor_height}`)
+    lines.push(`      result_height: ${c.result_height}`)
+    lines.push(`      view: ${c.view}`)
     if (c.chart_config) {
       lines.push(
-        `      chart_config: ${sanitizeForPromptContext(
-          JSON.stringify(c.chart_config),
-        )}`,
+        `      chart_config: ${stringifyForPromptContext(c.chart_config)}`,
+      )
+    }
+    if (c.highlight_config) {
+      lines.push(
+        `      highlight_config: ${stringifyForPromptContext(c.highlight_config)}`,
       )
     }
     if (c.last_run_status)
@@ -319,7 +373,7 @@ export const formatSnapshot = (snap: NotebookContextSnapshot): string => {
       lines.push(`      auto_refresh_blocked: ${c.auto_refresh_blocked}`)
     if (c.grid) {
       lines.push(
-        `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w}, h: ${c.grid.h} }`,
+        `      grid: { x: ${c.grid.x}, y: ${c.grid.y}, w: ${c.grid.w} }`,
       )
     }
   }
@@ -416,7 +470,7 @@ export type NotebookCellSummary = {
   preview: string
   position: number
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   last_run_status?: RunStatus
   // Live-only (mounted notebook); see NotebookContextCell.
   refreshing?: true
@@ -432,10 +486,13 @@ export type NotebookCellDetails = {
   name?: string
   position: number
   type?: "sql" | "markdown"
-  mode?: "run" | "draw"
+  mode: "run" | "draw" | null
   auto_refresh?: AutoRefresh
-  is_view_maximized?: boolean
+  editor_height: number | "auto"
+  result_height: number | "auto" | null
+  view: AgentCellView | null
   chart_config?: ChartConfigWire
+  highlight_config?: HighlightConfigWire
   last_run_status?: RunStatus
   last_run_error?: string
   // Live-only (mounted notebook); see NotebookContextCell.
@@ -446,7 +503,8 @@ export type NotebookCellDetails = {
 
 export const summarizeCells = (
   cells: NotebookCell[],
-  refreshState?: ReadonlyMap<string, CellRefreshView>,
+  refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatusOf: (cellId: string) => CellResultStatus,
 ): NotebookCellSummary[] =>
   cells.map((cell) => {
     const summary: NotebookCellSummary = {
@@ -456,12 +514,12 @@ export const summarizeCells = (
           ? cell.value
           : `${cell.value.slice(0, 117)}...`,
       position: cell.position,
+      mode: agentCellPresentation(cell, resultStatusOf(cell.id)).mode,
       last_run_status: runStatusOf(cell).status,
       ...refreshFields(refreshState?.get(cell.id)),
     }
     if (cell.name) summary.name = cell.name
     if (cell.type === "markdown") summary.type = "markdown"
-    if (cell.mode) summary.mode = cell.mode
     return summary
   })
 
@@ -470,7 +528,8 @@ export const serializeCell = (
   cellId: string,
   bufferId: number,
   getFullContent: boolean,
-  refreshState?: ReadonlyMap<string, CellRefreshView>,
+  refreshState: ReadonlyMap<string, CellRefreshView> | undefined,
+  resultStatus: CellResultStatus,
 ): NotebookCellDetails => {
   const cell = cells.find((c) => c.id === cellId)
   if (!cell) {
@@ -488,12 +547,17 @@ export const serializeCell = (
   const truncated = !getFullContent && cell.value.length > CELL_VALUE_MAX
   const value = truncated ? cell.value.slice(0, CELL_VALUE_MAX) : cell.value
   const run = runStatusOf(cell)
+  const dimensions = agentCellPaneDimensions(cell)
+  const presentation = agentCellPresentation(cell, resultStatus)
   const out: NotebookCellDetails = {
     id: cell.id,
     value,
     position: cell.position,
     last_run_status: run.status,
     last_run_error: run.error,
+    editor_height: dimensions.editorHeight,
+    result_height: dimensions.resultHeight,
+    ...presentation,
     ...refreshFields(refreshState?.get(cell.id)),
   }
   if (truncated) {
@@ -502,12 +566,11 @@ export const serializeCell = (
   }
   if (cell.name != null) out.name = cell.name
   if (cell.type === "markdown") out.type = "markdown"
-  if (cell.mode) out.mode = cell.mode
   if (cell.autoRefresh !== undefined) out.auto_refresh = cell.autoRefresh
-  if (typeof cell.isViewMaximized === "boolean")
-    out.is_view_maximized = cell.isViewMaximized
   if (cell.chartConfig && Array.isArray(cell.chartConfig.queries))
     out.chart_config = toChartConfigWire(cell.chartConfig)
+  const highlightConfig = highlightConfigWire(cell)
+  if (highlightConfig) out.highlight_config = highlightConfig
   return out
 }
 

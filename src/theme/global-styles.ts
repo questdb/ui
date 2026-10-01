@@ -10,6 +10,12 @@ export const GlobalStyle = createGlobalStyle`
     color-scheme: ${({ theme }) => theme.mode};
   }
 
+  @property --grid-flash {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: transparent;
+  }
+
   html,
   body {
     width: 100%;

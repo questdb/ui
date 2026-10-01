@@ -4,6 +4,7 @@ import { db } from "../../store/db"
 import { bufferStore } from "../../store/buffers"
 import {
   dropLegacyChartConfigs,
+  dropMalformedHighlightConfigs,
   exceedsCellLineLimit,
   MAX_CELL_LINES,
   migrateLegacyCellNames,
@@ -13,8 +14,10 @@ import type {
   NotebookSettings,
   NotebookViewState,
 } from "../../store/notebook"
+import { isCellPaneView } from "../../store/notebook"
 import { NotebookToolError } from "./notebookToolError"
 import { buildPersistPayload } from "../../scenes/Editor/Notebook/notebookUtils"
+import { foldLegacyMaximizedHeights } from "../../scenes/Editor/Notebook/cellSizing"
 
 // Persisted-view IO for notebook buffers: migrated reads, full-view commits,
 // and the cell guards shared by the Dexie controller and the headless run
@@ -26,8 +29,51 @@ type NotebookBufferMeta =
   | { kind: "deleted" }
   | { kind: "not_a_notebook" }
 
-export const migratePersistedNotebookView = (view: NotebookViewState) =>
-  dropLegacyChartConfigs(migrateLegacyCellNames(view))
+// Main persisted `isViewMaximized`. Materialize the stored pane view and drop
+// the legacy key from the runtime view. A stored "editor" predates the
+// discard-on-editor model and normalizes to the split default. Markdown
+// carries no SQL sub-state: imports predating the type gate could persist
+// draw/result fields on prose, which would reserve a phantom result pane.
+const MARKDOWN_FOREIGN_FIELDS = [
+  "paneView",
+  "isViewMaximized",
+  "mode",
+  "chartConfig",
+  "highlightConfig",
+  "autoRefresh",
+  "bottomHeight",
+  "bottomResized",
+  "result",
+  "lastRunStatus",
+  "lastRunError",
+] as const
+
+const migrateCellPaneView = (cell: NotebookCell): NotebookCell => {
+  const raw = cell as NotebookCell & Record<string, unknown>
+  if (cell.type === "markdown") {
+    const next = { ...raw }
+    for (const field of MARKDOWN_FOREIGN_FIELDS) delete next[field]
+    return next as NotebookCell
+  }
+  const storedView = isCellPaneView(raw.paneView) ? raw.paneView : undefined
+  const inferredMaximized =
+    storedView === undefined && raw.isViewMaximized === true
+  const next = {
+    ...raw,
+    paneView: storedView ?? (inferredMaximized ? "result" : "editor_result"),
+  } as NotebookCell & Record<string, unknown>
+  delete next.isViewMaximized
+  return inferredMaximized
+    ? foldLegacyMaximizedHeights(next as NotebookCell)
+    : (next as NotebookCell)
+}
+
+export const migratePersistedNotebookView = (view: NotebookViewState) => {
+  const migrated = dropMalformedHighlightConfigs(
+    dropLegacyChartConfigs(migrateLegacyCellNames(view)),
+  )
+  return { ...migrated, cells: migrated.cells.map(migrateCellPaneView) }
+}
 
 export const readNotebookBufferMeta = async (
   bufferId: number,

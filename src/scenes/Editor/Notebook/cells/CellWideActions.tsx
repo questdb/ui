@@ -2,6 +2,7 @@ import React from "react"
 import { CellViewToggle } from "./CellViewToggle"
 import { CellRefreshButton } from "./CellRefreshButton"
 import type { AutoRefresh } from "../../../../store/notebook"
+import type { CellPaneLayout } from "../cellSizing"
 
 type Props = {
   cellId: string
@@ -10,12 +11,13 @@ type Props = {
   view: "grid" | "chart"
   cellAutoRefresh: AutoRefresh | undefined
   autoRefreshDefault: AutoRefresh | undefined
-  isViewMaximized: boolean
+  paneLayout: CellPaneLayout
   isRunning: boolean
   isGridLoading: boolean
   isChartLoading: boolean
-  isChartRefreshing: boolean
+  isCellBusy: boolean
   chartZoomed: boolean
+  onResetZoomFocus: () => void
 }
 
 export const CellWideActions: React.FC<Props> = ({
@@ -23,12 +25,13 @@ export const CellWideActions: React.FC<Props> = ({
   view,
   cellAutoRefresh,
   autoRefreshDefault,
-  isViewMaximized,
+  paneLayout,
   isRunning,
   isGridLoading,
   isChartLoading,
-  isChartRefreshing,
+  isCellBusy,
   chartZoomed,
+  onResetZoomFocus,
 }) => (
   <>
     {/* Hide the refresh control until the first result lands — while loading,
@@ -39,22 +42,21 @@ export const CellWideActions: React.FC<Props> = ({
         view={view}
         cellAutoRefresh={cellAutoRefresh}
         autoRefreshDefault={autoRefreshDefault}
-        // A grid's first run spins the Run segment instead — only a true refresh
-        // (re-running an existing grid) spins the refresh button.
-        isRefreshing={
-          view === "chart" ? isChartRefreshing : isRunning && !isGridLoading
-        }
+        // A grid's first run spins the Run segment instead — only a true
+        // re-run of an existing grid spins the refresh button.
+        isRerunning={view === "grid" && isRunning && !isGridLoading}
       />
     )}
     <CellViewToggle
       cellId={cellId}
       view={view}
-      isViewMaximized={isViewMaximized}
+      paneLayout={paneLayout}
       isGridLoading={isGridLoading}
       isChartLoading={isChartLoading}
-      isRunning={isRunning}
+      isCellBusy={isCellBusy}
       chartZoomed={chartZoomed}
       showLabels
+      onResetZoomFocus={onResetZoomFocus}
     />
   </>
 )
