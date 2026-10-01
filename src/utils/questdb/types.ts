@@ -364,6 +364,8 @@ export type Options = {
   cols?: string
   src?: string
   cancellable?: boolean
+  /** Invoked immediately before the SQL fetch, after any token refresh wait. */
+  onRequestStart?: () => void
 }
 
 export type Release = {

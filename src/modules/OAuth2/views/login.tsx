@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import styled, { useTheme } from "styled-components"
 import { User, Building } from "../../../components/icons"
 import { ErrorWarning } from "../../../components/icons"
@@ -296,6 +296,13 @@ export const Login = ({
       : ""
   const version = settings["release.version"]
   const [loading, setLoading] = useState(false)
+  const redirectErrorRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (redirectErrorTitle || redirectErrorMessage) {
+      redirectErrorRef.current?.focus()
+    }
+  }, [redirectErrorTitle, redirectErrorMessage])
 
   const httpBasicAuthStrategy = isEE
     ? {
@@ -358,7 +365,11 @@ export const Login = ({
       <LoginContainer data-hook="auth-login">
         <LoginBackground />
         {(redirectErrorTitle || redirectErrorMessage) && (
-          <RedirectErrorContainer>
+          <RedirectErrorContainer
+            ref={redirectErrorRef}
+            role="alert"
+            tabIndex={-1}
+          >
             <PlugsContainer>
               {isDisconnection ? (
                 <img

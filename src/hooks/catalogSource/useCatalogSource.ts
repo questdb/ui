@@ -4,11 +4,11 @@ import * as QuestDB from "../../utils/questdb"
 import {
   createSourceMachineState,
   nextSourceState,
-  SOURCE_TIMEOUT_MS,
   type SourceMachineState,
   type SourceRetryPolicy,
 } from "./sourceState"
 import type { SourceFetchOutcome, SourceState } from "./types"
+import { createCatalogRequestDeadline } from "./requestDeadline"
 
 type Params<T> = {
   sourceKey: string
@@ -62,25 +62,23 @@ export const useCatalogSource = <T>({
   const runRequest = useCallback(async (): Promise<SourceFetchOutcome> => {
     const requestKey = sourceKey
     let queryId: QuestDB.QueryId | null = null
-    let timeoutId: number | null = null
     let timedOut = false
+    const deadline = createCatalogRequestDeadline(sourceName, () => {
+      timedOut = true
+      if (queryId !== null && activeQueryIdRef.current === queryId) {
+        quest.abort(queryId)
+      }
+    })
 
     try {
-      const request = quest.queryRaw(query, { cancellable: true })
+      const request = quest.queryRaw(query, {
+        cancellable: true,
+        onRequestStart: deadline.onRequestStart,
+      })
       queryId = request.queryId
       activeQueryIdRef.current = request.queryId
 
-      const timeout = new Promise<never>((_, reject) => {
-        timeoutId = window.setTimeout(() => {
-          timedOut = true
-          if (activeQueryIdRef.current === request.queryId) {
-            quest.abort(request.queryId)
-          }
-          reject(new Error(`${sourceName} request timed out`))
-        }, SOURCE_TIMEOUT_MS)
-      })
-
-      const response = await Promise.race([request.promise, timeout])
+      const response = await Promise.race([request.promise, deadline.promise])
       if (
         currentKeyRef.current !== requestKey ||
         activeQueryIdRef.current !== queryId
@@ -120,9 +118,7 @@ export const useCatalogSource = <T>({
       console.error(`Failed to fetch ${sourceName}:`, error)
       return "failure"
     } finally {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
-      }
+      deadline.clear()
       if (activeQueryIdRef.current === queryId) {
         activeQueryIdRef.current = null
       }

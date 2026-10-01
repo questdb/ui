@@ -11,6 +11,7 @@ import { getValue, removeValue, setValue } from "../utils/localStorage"
 import {
   getAuthorisationURL,
   getAuthToken,
+  readAuthTokenResponse,
   getSSOUserNameWithClientID,
   getTokenExpirationDate,
   removeSSOUserNameWithClientID,
@@ -27,6 +28,8 @@ import { Login } from "../modules/OAuth2/views/login"
 import { Settings } from "./SettingsProvider/types"
 import { useSettings } from "./SettingsProvider"
 import { ssoAuthState } from "../modules/OAuth2/ssoAuthState"
+import { handleSSOUnauthorized } from "../modules/OAuth2/handleUnauthorized"
+import { toast } from "../components/Toast"
 
 type ContextProps = {
   sessionData?: Partial<AuthPayload>
@@ -48,6 +51,7 @@ type ContextProps = {
   refreshAuthToken: (
     settings: Settings,
     refreshToken: string | undefined,
+    signal?: AbortSignal,
   ) => Promise<AuthPayload>
   redirectToAuthorizationUrl: (options?: { prompt?: "login" | "none" }) => void
 }
@@ -127,6 +131,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         tokenResponse.expires_in,
       ).toString() // convert from the sec offset
       ssoAuthState.setAuthPayload(tokenResponse)
+      removeValue(StoreKey.REST_TOKEN)
+      removeValue(StoreKey.BASIC_AUTH_HEADER)
       setSessionData(tokenResponse)
       setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
       // Remove the code from the URL
@@ -160,13 +166,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshAuthToken = async (
     settings: Settings,
     refreshToken: string | undefined,
+    signal?: AbortSignal,
   ) => {
-    const response = await getAuthToken(settings, {
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: settings["acl.oidc.client.id"],
-    })
-    const tokenResponse = (await response.json()) as AuthPayload
+    const response = await getAuthToken(
+      settings,
+      {
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: settings["acl.oidc.client.id"],
+      },
+      signal,
+    )
+    const tokenResponse = await readAuthTokenResponse(response, signal)
     setAuthToken(tokenResponse, settings)
     return tokenResponse
   }
@@ -179,32 +190,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Proceed with the OAuth2 flow only if it is enabled on the server
     if (settings["acl.oidc.enabled"]) {
-      // Subscribe for any subsequent REST 401 responses (incorrect token, etc)
-      eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
-        const oauthRedirectCount = getValue(StoreKey.OAUTH_REDIRECT_COUNT)
-        // If any prior 401 when oauth2 is enabled has been received
-        if (oauthRedirectCount) {
-          const count = parseInt(oauthRedirectCount)
-          // Something is wrong with the backend, it is consistently rejecting the token.
-          // Redirect to a dedicated logout page instead to break the loop.
-          if (!isNaN(count) && count >= 5) {
-            // redirect to /logout and force user authentication to avoid infinite loop
-            removeValue(StoreKey.OAUTH_REDIRECT_COUNT)
-            logout({ promptForLogin: true, clearSSOSession: true })
-          } else {
-            setValue(
-              StoreKey.OAUTH_REDIRECT_COUNT,
-              JSON.stringify(
-                oauthRedirectCount ? parseInt(oauthRedirectCount) + 1 : 1,
-              ),
-            )
-            logout()
-          }
-          // First time 401
-        } else {
-          setValue(StoreKey.OAUTH_REDIRECT_COUNT, JSON.stringify(1))
-          logout()
+      eventBus.subscribe(EventType.MSG_AUTH_REFRESH_FAILED, () => {
+        const authPayload = ssoAuthState.getAuthPayload()
+        if (
+          authPayload &&
+          new Date(authPayload.expires_at).getTime() > Date.now()
+        ) {
+          toast.error(
+            "Could not refresh your SSO session. We'll retry on a later request.",
+          )
         }
+      })
+
+      eventBus.subscribe(EventType.MSG_CONNECTION_UNAUTHORIZED, () => {
+        handleSSOUnauthorized(logout)
       })
 
       // Clear the 401 auth redirect loop in case the connection is back to normal
