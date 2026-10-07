@@ -88,7 +88,6 @@ const NewsText = styled(Text).attrs({ color: "contentPrimary" })`
 const News = () => {
   const dispatch = useDispatch()
   const { quest } = useContext(QuestContext)
-  const telemetryConfig = useSelector(selectors.telemetry.getConfig)
   const [isLoading, setIsLoading] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [enterpriseNews, setEnterpriseNews] = useState<NewsItem[] | undefined>(
@@ -105,10 +104,7 @@ const News = () => {
     setIsLoading(true)
     setHasError(false)
     try {
-      const news = await quest.getNews({
-        category: "enterprise",
-        telemetryConfig,
-      })
+      const news = await quest.getNews({ category: "enterprise" })
       setEnterpriseNews(news)
     } catch (e) {
       setHasError(true)
