@@ -17,6 +17,80 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe("Client queryRaw HTTP errors", () => {
+  const query = "SELECT 1"
+
+  it.each([
+    ["null body", "null"],
+    ["missing error", "{}"],
+    ["object error", '{"error":{"message":"bad query"}}'],
+    ["array body", "[]"],
+    ["HTML body", "<html>Bad request</html>"],
+    ["success-shaped body", '{"ddl":true}'],
+  ])("rejects a %s with a renderable error", async (_, body) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(body, { status: 400, statusText: "Bad Request" }),
+        ),
+    )
+
+    await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+      query,
+      error: "Bad Request",
+      position: -1,
+      type: Type.ERROR,
+      status: 400,
+    })
+  })
+
+  it.each([undefined, null, "3", -2, 0.5, 9])(
+    "does not expose invalid error position %s to the editor",
+    async (position) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ error: "bad query", position }), {
+            status: 400,
+          }),
+        ),
+      )
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        error: "bad query",
+        position: -1,
+      })
+    },
+  )
+
+  it.each([0, query.length])(
+    "preserves valid position %s",
+    async (position) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({ error: "bad query", query, position }),
+            {
+              status: 400,
+            },
+          ),
+        ),
+      )
+
+      await expect(new Client().queryRaw(query)).rejects.toMatchObject({
+        query,
+        error: "bad query",
+        position,
+        type: Type.ERROR,
+        status: 400,
+      })
+    },
+  )
+})
+
 const rawDqlResult = (
   columns: Array<{ name: string; type: string }>,
   dataset: Array<Array<string | number | boolean | null>>,
