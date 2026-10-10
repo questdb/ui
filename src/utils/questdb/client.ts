@@ -334,6 +334,40 @@ export class Client {
           })
         }
         const fetchTime = (new Date().getTime() - start.getTime()) * 1e6
+        if (response.status === 400) {
+          let errorData: Record<string, unknown> = {}
+          try {
+            const parsed: unknown = JSON.parse(responseText)
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              !Array.isArray(parsed)
+            ) {
+              errorData = parsed as Record<string, unknown>
+            }
+          } catch {
+            // A proxy can return a non-JSON error instead of a QuestDB response.
+          }
+
+          const position = errorData.position
+          eventBus.publish(EventType.MSG_CONNECTION_OK)
+          return Promise.reject({
+            query,
+            error:
+              typeof errorData.error === "string" && errorData.error
+                ? errorData.error
+                : response.statusText || "Query failed",
+            position:
+              typeof position === "number" &&
+              Number.isInteger(position) &&
+              position >= 0 &&
+              position <= query.length
+                ? position
+                : -1,
+            type: Type.ERROR,
+            status: response.status,
+          })
+        }
         let data
         try {
           data = JSON.parse(responseText) as RawResult
