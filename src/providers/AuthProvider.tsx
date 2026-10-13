@@ -11,10 +11,13 @@ import { getValue, removeValue, setValue } from "../utils/localStorage"
 import {
   getAuthorisationURL,
   getAuthToken,
+  exchangeAuthorizationCode,
   readAuthTokenResponse,
   getSSOUserNameWithClientID,
   getTokenExpirationDate,
+  getMissingIdTokenError,
   removeSSOUserNameWithClientID,
+  GrantType,
 } from "../modules/OAuth2/utils"
 import {
   generateCodeChallenge,
@@ -110,6 +113,27 @@ const stripOAuthCallbackParams = (search: string) => {
   return params
 }
 
+// Replaces the callback params with the ones saved before the redirect to the
+// provider, whatever the outcome of the sign-in. Otherwise a reload resubmits
+// the used code, and its invalid_grant error replaces the actual sign-in error.
+const restoreUrlAfterOAuthCallback = () => {
+  if (!history.replaceState) return
+  const restored = stripOAuthCallbackParams(window.location.search)
+  const savedParams = sessionStorage.getItem(StoreKey.OAUTH_RETURN_PARAMS)
+  sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
+  if (savedParams) {
+    new URLSearchParams(savedParams).forEach((value, key) => {
+      if (!restored.has(key)) restored.set(key, value)
+    })
+  }
+  const queryString = restored.toString()
+  history.replaceState(
+    null,
+    "",
+    location.pathname + (queryString ? `?${queryString}` : ""),
+  )
+}
+
 const getDefaultRedirectUri = () =>
   window.location.origin + window.location.pathname
 
@@ -123,36 +147,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     useState<ContextProps["sessionData"]>(undefined)
   const [state, dispatch] = useReducer(reducer, initialState)
 
-  const setAuthToken = (tokenResponse: AuthPayload, settings: Settings) => {
-    if (tokenResponse.access_token) {
-      tokenResponse.groups_encoded_in_token =
-        settings["acl.oidc.groups.encoded.in.token"]
-      tokenResponse.expires_at = getTokenExpirationDate(
-        tokenResponse.expires_in,
-      ).toString() // convert from the sec offset
-      ssoAuthState.setAuthPayload(tokenResponse)
-      removeValue(StoreKey.REST_TOKEN)
-      removeValue(StoreKey.BASIC_AUTH_HEADER)
-      setSessionData(tokenResponse)
-      setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
-      // Remove the code from the URL
-      if (history.replaceState) {
-        const restored = stripOAuthCallbackParams(window.location.search)
-        const savedParams = sessionStorage.getItem(StoreKey.OAUTH_RETURN_PARAMS)
-        sessionStorage.removeItem(StoreKey.OAUTH_RETURN_PARAMS)
-        if (savedParams) {
-          new URLSearchParams(savedParams).forEach((value, key) => {
-            if (!restored.has(key)) restored.set(key, value)
-          })
-        }
-        const queryString = restored.toString()
-        history.replaceState(
-          null,
-          "",
-          location.pathname + (queryString ? `?${queryString}` : ""),
-        )
-      }
-    } else {
+  // Returns whether the token response signed the user in
+  const setAuthToken = (
+    tokenResponse: AuthPayload,
+    settings: Settings,
+    grantType: GrantType,
+  ) => {
+    if (!tokenResponse.access_token) {
       const error = tokenResponse as unknown as OAuth2Error
       // display error message
       logout({
@@ -160,7 +161,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         errorMessage:
           error.error_description ?? "Error logging in. Please try again.",
       })
+      return false
     }
+    // Set before the check below: the client picks the bearer by this flag,
+    // and must not install an access token in place of a missing ID token.
+    tokenResponse.groups_encoded_in_token =
+      settings["acl.oidc.groups.encoded.in.token"]
+    const missingIdTokenError = getMissingIdTokenError(tokenResponse, grantType)
+    if (missingIdTokenError) {
+      logout(missingIdTokenError)
+      return false
+    }
+    tokenResponse.expires_at = getTokenExpirationDate(tokenResponse).toString()
+    ssoAuthState.setAuthPayload(tokenResponse)
+    removeValue(StoreKey.REST_TOKEN)
+    removeValue(StoreKey.BASIC_AUTH_HEADER)
+    setSessionData(tokenResponse)
+    setValue(StoreKey.SSO_SESSION_ACTIVE, "true")
+    return true
   }
 
   const refreshAuthToken = async (
@@ -178,7 +196,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       signal,
     )
     const tokenResponse = await readAuthTokenResponse(response, signal)
-    setAuthToken(tokenResponse, settings)
+    setAuthToken(tokenResponse, settings, "refresh_token")
     return tokenResponse
   }
 
@@ -226,6 +244,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const state = getValue(StoreKey.OAUTH_STATE)
         const stateParam = urlParams.get("state")
         removeValue(StoreKey.OAUTH_STATE)
+        restoreUrlAfterOAuthCallback()
 
         if (
           settings["acl.oidc.state.required"] &&
@@ -237,7 +256,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         const code_verifier = getValue(StoreKey.PKCE_CODE_VERIFIER)
-        const response = await getAuthToken(settings, {
+        const exchange = await exchangeAuthorizationCode(settings, {
           grant_type: "authorization_code",
           code,
           code_verifier,
@@ -245,9 +264,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           redirect_uri:
             settings["acl.oidc.redirect.uri"] || getDefaultRedirectUri(),
         })
-        const tokenResponse = (await response.json()) as AuthPayload
-        setAuthToken(tokenResponse, settings)
-        await startServerSession(tokenResponse)
+        if ("signInError" in exchange) {
+          logout(exchange.signInError)
+          return
+        }
+        const { tokenResponse } = exchange
+        if (setAuthToken(tokenResponse, settings, "authorization_code")) {
+          await startServerSession(tokenResponse)
+        }
       } else if (oauth2Error.error) {
         // User has just been redirected back from the OAuth2 provider and there is an error
         const previousPrompt = getValue(StoreKey.OAUTH_PROMPT)
@@ -258,6 +282,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           redirectToAuthorizationUrl({ isRetry: true })
         } else {
           // If the error is not in response for a silent authorization code request, display the error
+          restoreUrlAfterOAuthCallback()
           logout({
             errorTitle: "Something went wrong.",
             errorMessage:

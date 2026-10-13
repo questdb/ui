@@ -19,6 +19,22 @@ const startedFlow = {
   codeVerifier: "verifier-we-generated",
 }
 
+const queryResult = {
+  query: "select 2",
+  columns: [{ name: "column", type: "INT" }],
+  dataset: [[2]],
+  count: 1,
+}
+
+const stubConsoleRequests = () => {
+  cy.intercept(
+    { method: "GET", url: `${baseUrl}/exec*` },
+    { statusCode: 200, body: queryResult },
+  )
+  cy.intercept({ method: "GET", url: `${baseUrl}/warnings*` }, [])
+  cy.intercept({ method: "GET", url: `${baseUrl}/chk*` }, { status: "Exists" })
+}
+
 const visitCallback = (query, flow) =>
   cy.visit(`${baseUrl}${query}`, {
     onBeforeLoad(win) {
@@ -256,23 +272,7 @@ describe("Auth - OIDC callback validation", () => {
       },
     ).as("tokenExchange")
 
-    cy.intercept(
-      { method: "GET", url: `${baseUrl}/exec*` },
-      {
-        statusCode: 200,
-        body: {
-          query: "select 2",
-          columns: [{ name: "column", type: "INT" }],
-          dataset: [[2]],
-          count: 1,
-        },
-      },
-    )
-    cy.intercept({ method: "GET", url: `${baseUrl}/warnings*` }, [])
-    cy.intercept(
-      { method: "GET", url: `${baseUrl}/chk*` },
-      { status: "Exists" },
-    )
+    stubConsoleRequests()
   }
 
   const expectNoTokenExchange = () => {
@@ -360,5 +360,285 @@ describe("Auth - OIDC callback validation", () => {
       // Then the console follows the server configuration
       cy.wait("@tokenExchange")
     })
+  })
+})
+
+describe("Auth - OIDC sign-in errors", () => {
+  const tokenUrl = "https://oauth.example.com/token"
+  // The console's own params, e.g. a shared query, which it saves before the
+  // redirect to the provider
+  const returnParams = "query=select+1"
+
+  const visitCallbackWithReturnParams = (query) =>
+    cy.visit(`${baseUrl}${query}`, {
+      onBeforeLoad(win) {
+        win.localStorage.clear()
+        win.sessionStorage.setItem("oauth.return.params", returnParams)
+      },
+    })
+
+  beforeEach(() => {
+    interceptSettings({
+      config: {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "test-client",
+        "acl.oidc.authorization.endpoint": "https://oauth.example.com/auth",
+        "acl.oidc.token.endpoint": tokenUrl,
+        "acl.oidc.state.required": false,
+        "acl.oidc.groups.encoded.in.token": false,
+      },
+    })
+    stubConsoleRequests()
+  })
+
+  it("does not resubmit a code that failed to sign in on reload", () => {
+    // Given a provider that rejects the authorization code
+    cy.intercept(
+      { method: "POST", url: tokenUrl },
+      {
+        statusCode: 400,
+        body: { error: "invalid_grant", error_description: "Code not valid" },
+      },
+    ).as("tokenExchange")
+    visitCallbackWithReturnParams("?code=code-from-the-provider")
+    cy.wait("@settings")
+    cy.contains("Code not valid").should("be.visible")
+
+    // Then the URL gets back the console's own params instead of the code
+    cy.location("search").should("eq", `?${returnParams}`)
+
+    // When the page is reloaded
+    cy.reload()
+
+    // Then the console shows the login page without exchanging the code again
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.contains("Code not valid").should("not.exist")
+    cy.get("@tokenExchange.all").should("have.length", 1)
+  })
+
+  it("does not show a provider error again on reload", () => {
+    // Given a provider that redirects back with an error
+    visitCallbackWithReturnParams(
+      "?error=access_denied&error_description=Sign-in+cancelled",
+    )
+    cy.wait("@settings")
+    cy.contains("access_denied: Sign-in cancelled").should("be.visible")
+
+    // Then the URL gets back the console's own params instead of the error
+    cy.location("search").should("eq", `?${returnParams}`)
+
+    // When the page is reloaded
+    cy.reload()
+
+    // Then the console shows the login page without the old error
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.contains("access_denied: Sign-in cancelled").should("not.exist")
+  })
+
+  for (const { failure, reply, message } of [
+    {
+      failure: "cannot be reached",
+      reply: { forceNetworkError: true },
+      message:
+        "Could not reach the identity provider to complete the sign-in. Please try again.",
+    },
+    {
+      failure: "returns a response that is not JSON",
+      reply: { statusCode: 502, body: "<html>Bad Gateway</html>" },
+      message:
+        "The identity provider returned an unexpected response (HTTP 502). Please try again.",
+    },
+  ]) {
+    it(`shows an error, not a blank page, when the token endpoint ${failure}`, () => {
+      // Given a token endpoint that fails without an OAuth response
+      cy.intercept({ method: "POST", url: tokenUrl }, reply)
+      visitCallback("?code=code-from-the-provider")
+      cy.wait("@settings")
+
+      // Then the console shows the login page with the error
+      cy.getByDataHook("auth-login").should("be.visible")
+      cy.contains(message).closest("[role='alert']").should("be.focused")
+    })
+  }
+
+  it("shows an error, not a blank page, when the token endpoint does not respond", () => {
+    // Given a token endpoint that does not respond within the timeout
+    let requested = false
+    cy.intercept({ method: "POST", url: tokenUrl }, (req) => {
+      requested = true
+      req.reply({ delay: 30000, body: {} })
+    })
+    // Fake only the timeouts, so the test does not wait for 10 seconds
+    cy.clock(Date.now(), ["setTimeout", "clearTimeout"])
+    visitCallback("?code=code-from-the-provider")
+    cy.wait("@settings")
+    cy.wrap(null).should(() => expect(requested).to.equal(true))
+
+    // When the timeout elapses
+    cy.tick(10000)
+
+    // Then the console shows the login page with the error
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.contains(
+      "The identity provider did not respond within 10 seconds. Please try again.",
+    )
+      .closest("[role='alert']")
+      .should("be.focused")
+  })
+})
+
+describe("Auth - OIDC ID token", () => {
+  const tokenUrl = "https://oauth.example.com/token"
+
+  // Unsigned: the console only reads the claims, and the stubbed server does
+  // not validate the token.
+  const idToken = (subject, lifetimeSeconds) => {
+    const base64url = (part) =>
+      btoa(JSON.stringify(part))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "")
+    const iat = Math.floor(Date.now() / 1000)
+    return [
+      base64url({ alg: "RS256", typ: "JWT" }),
+      base64url({ sub: subject, iat, exp: iat + lifetimeSeconds }),
+      "signature",
+    ].join(".")
+  }
+
+  // Signs in with SSO to a server that expects the ID token as the bearer.
+  // The provider returns the ID token given for each grant type, while the
+  // token response's expires_in describes the access token.
+  const signIn = ({ idTokens, accessTokenLifetime = 3600 }) => {
+    const grants = []
+
+    interceptSettings({
+      config: {
+        "release.type": "EE",
+        "release.version": "1.2.3",
+        "acl.enabled": true,
+        "acl.basic.auth.realm.enabled": false,
+        "acl.oidc.enabled": true,
+        "acl.oidc.client.id": "test-client",
+        "acl.oidc.authorization.endpoint": "https://oauth.example.com/auth",
+        "acl.oidc.token.endpoint": tokenUrl,
+        "acl.oidc.state.required": false,
+        "acl.oidc.groups.encoded.in.token": true,
+      },
+    })
+    cy.intercept({ method: "POST", url: tokenUrl }, (req) => {
+      const grant = new URLSearchParams(req.body).get("grant_type")
+      grants.push(grant)
+      req.reply({
+        access_token: `${grant}-access-token`,
+        refresh_token: "refresh-token",
+        id_token: idTokens[grant],
+        token_type: "Bearer",
+        expires_in: accessTokenLifetime,
+      })
+    })
+    stubConsoleRequests()
+    // The first query after sign-in, which waits for a due refresh
+    cy.intercept(
+      {
+        method: "GET",
+        url: `${baseUrl}/exec*`,
+        query: { query: /^SELECT 1$/ },
+      },
+      { statusCode: 200, body: queryResult },
+    ).as("authCheck")
+    cy.intercept(
+      { method: "GET", url: `${baseUrl}/exec*`, query: { session: "true" } },
+      { statusCode: 200, body: queryResult },
+    ).as("sessionStart")
+
+    visitCallback("?code=code-from-the-provider")
+    cy.wait("@settings")
+    return grants
+  }
+
+  const expectMissingIdTokenError = (detail) => {
+    cy.getByDataHook("auth-login").should("be.visible")
+    cy.contains("Missing ID token")
+      .closest("[role='alert']")
+      .should("be.focused")
+    cy.contains(
+      "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token)",
+    )
+      .should("be.visible")
+      .and("contain", detail)
+    cy.getEditor().should("not.exist")
+  }
+
+  it("refreshes an ID token that expires before the access token", () => {
+    // Given an ID token within the 30s refresh window, and an access token
+    // that is valid for an hour
+    const refreshed = idToken("refreshed", 3600)
+    const grants = signIn({
+      idTokens: {
+        authorization_code: idToken("initial", 20),
+        refresh_token: refreshed,
+      },
+      accessTokenLifetime: 3600,
+    })
+
+    // Then the console refreshes before its first query, and sends the new
+    // ID token
+    cy.wait("@authCheck")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${refreshed}`)
+    cy.wrap(grants).should("deep.equal", [
+      "authorization_code",
+      "refresh_token",
+    ])
+  })
+
+  it("does not refresh an ID token that outlives the access token", () => {
+    // Given an ID token that is valid for an hour, and an access token within
+    // the 30s refresh window
+    const initial = idToken("initial", 3600)
+    const grants = signIn({
+      idTokens: {
+        authorization_code: initial,
+        refresh_token: idToken("refreshed", 3600),
+      },
+      accessTokenLifetime: 20,
+    })
+
+    // Then the console keeps sending the initial ID token
+    cy.wait("@authCheck")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${initial}`)
+    cy.wrap(grants).should("deep.equal", ["authorization_code"])
+  })
+
+  it("explains a sign-in without the ID token the server expects", () => {
+    // Given a provider that returns no ID token, as without the openid scope
+    signIn({ idTokens: {} })
+
+    // Then the console explains the problem instead of starting a session,
+    // and drops the used code from the URL
+    expectMissingIdTokenError("Check that the openid scope is requested.")
+    cy.get("@sessionStart.all").should("have.length", 0)
+    cy.location("search").should("eq", "")
+  })
+
+  it("explains a refresh without the ID token the server expects", () => {
+    // Given a provider that omits the ID token on refresh, which OIDC allows
+    const initial = idToken("initial", 20)
+    signIn({ idTokens: { authorization_code: initial } })
+
+    // Then the console ends the session with an explanation, and the query
+    // waiting for the refresh keeps the last ID token, not "Bearer undefined"
+    expectMissingIdTokenError(
+      "when refreshing your session. Please sign in again.",
+    )
+    cy.wait("@authCheck")
+      .its("request.headers.authorization")
+      .should("eq", `Bearer ${initial}`)
   })
 })

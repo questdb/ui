@@ -32,10 +32,11 @@ import {
   ValidateQueryErrorResult,
 } from "./types"
 import { ssoAuthState } from "../../modules/OAuth2/ssoAuthState"
+import { TOKEN_REQUEST_TIMEOUT_MS } from "../../modules/OAuth2/utils"
 
 export type QueryId = number
 
-export const REFRESH_TIMEOUT_MS = 10_000
+export const REFRESH_TIMEOUT_MS = TOKEN_REQUEST_TIMEOUT_MS
 const REFRESH_RETRY_DELAY_MS = 5_000
 const MAX_REFRESH_RETRY_DELAY_MS = 30_000
 
@@ -102,16 +103,17 @@ export class Client {
         this.refreshTokenMethod(controller.signal),
         deadline,
       ])
-      if (newToken.access_token) {
+      const bearer = newToken.groups_encoded_in_token
+        ? newToken.id_token
+        : newToken.access_token
+      // An OAuth error, or a response without the ID token the server expects,
+      // has no bearer: the auth provider reports it and ends the session.
+      if (bearer) {
         // Each request captured its own headers at fetch time; no drain of
         // in-flight queries is necessary before replacing this object.
         this.setCommonHeaders({
           ...this.commonHeaders,
-          Authorization: `Bearer ${
-            newToken.groups_encoded_in_token
-              ? newToken.id_token
-              : newToken.access_token
-          }`,
+          Authorization: `Bearer ${bearer}`,
         })
         Client.refreshRetryCount = 0
         Client.retryRefreshAfter = 0

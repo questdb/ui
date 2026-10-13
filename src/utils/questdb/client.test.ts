@@ -651,16 +651,21 @@ describe("Client token refresh", () => {
     )
   })
 
-  it("does not overwrite the header for an OAuth error response", async () => {
+  it.each([
+    { response: "an OAuth error response", token: { error: "invalid_grant" } },
+    {
+      // OIDC lets a refresh response omit the ID token
+      response: "a response without the ID token the server expects",
+      token: { access_token: "new", groups_encoded_in_token: true },
+    },
+  ])("does not overwrite the header for $response", async ({ token }) => {
     setExpiringToken()
     const fetchMock = vi.fn().mockResolvedValue(response({ notice: "hint" }))
     vi.stubGlobal("fetch", fetchMock)
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
     const client = new Client()
     client.setCommonHeaders({ Authorization: "Bearer stale" })
-    client.refreshTokenMethod = vi.fn().mockResolvedValue({
-      error: "invalid_grant",
-    })
+    client.refreshTokenMethod = vi.fn().mockResolvedValue(token)
     await client.queryRaw("SELECT 1")
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),

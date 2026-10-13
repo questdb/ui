@@ -1,3 +1,4 @@
+import { Base64 } from "js-base64"
 import { Settings } from "../../providers/SettingsProvider/types"
 import { AuthPayload } from "./types"
 import { StoreKey } from "../../utils/localStorage/types"
@@ -63,9 +64,62 @@ export const getAuthorisationURL = ({
   )
 }
 
-export const getTokenExpirationDate = (expires_in: number) => {
-  return new Date(new Date().getTime() + expires_in * 1000)
+// Reads the exp claim of a JWT, in milliseconds. The signature is not verified:
+// the claim only schedules the refresh, and the server validates the token.
+const getJwtExpiration = (jwt: string | undefined) => {
+  const payload = jwt?.split(".")[1]
+  if (!payload) return undefined
+  try {
+    const claims = JSON.parse(Base64.decode(payload)) as {
+      exp?: unknown
+    } | null
+    const exp = claims?.exp
+    return typeof exp === "number" && Number.isFinite(exp)
+      ? exp * 1000
+      : undefined
+  } catch {
+    return undefined
+  }
 }
+
+// expires_in is the lifetime of the access token, so an ID token bearer expires
+// at its exp claim instead. exp is not rebased onto iat, because some IdPs
+// (e.g. Entra ID) backdate iat by several minutes to allow for clock skew.
+export const getTokenExpirationDate = (
+  tokenResponse: Pick<
+    AuthPayload,
+    "id_token" | "expires_in" | "groups_encoded_in_token"
+  >,
+) => {
+  const idTokenExpiration = tokenResponse.groups_encoded_in_token
+    ? getJwtExpiration(tokenResponse.id_token)
+    : undefined
+  return new Date(
+    idTokenExpiration ?? Date.now() + tokenResponse.expires_in * 1000,
+  )
+}
+
+export type GrantType = "authorization_code" | "refresh_token"
+
+const MISSING_ID_TOKEN_MESSAGES: Record<GrantType, string> = {
+  authorization_code:
+    "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token), but the identity provider did not return one. Check that the openid scope is requested.",
+  refresh_token:
+    "The server requires an ID token for authentication (acl.oidc.groups.encoded.in.token), but the identity provider did not return one when refreshing your session. Please sign in again.",
+}
+
+// The server cannot authenticate an ID token bearer without the ID token. OIDC
+// lets a refresh response omit it, and without the openid scope there is none.
+export const getMissingIdTokenError = (
+  tokenResponse: Pick<AuthPayload, "id_token" | "groups_encoded_in_token">,
+  grantType: GrantType,
+) =>
+  tokenResponse.groups_encoded_in_token && !tokenResponse.id_token
+    ? {
+        errorTitle: "Missing ID token",
+        errorMessage: MISSING_ID_TOKEN_MESSAGES[grantType],
+      }
+    : undefined
 
 export const getAuthToken = async (
   settings: Settings,
@@ -83,6 +137,75 @@ export const getAuthToken = async (
       signal,
     },
   )
+}
+
+// How long both the sign-in and the refresh wait for the token endpoint
+export const TOKEN_REQUEST_TIMEOUT_MS = 10_000
+
+export type SignInError = { errorTitle: string; errorMessage: string }
+
+type CodeExchange =
+  | { tokenResponse: AuthPayload }
+  | { signInError: SignInError }
+
+const signInFailure = (errorMessage: string): CodeExchange => ({
+  signInError: { errorTitle: "Something went wrong.", errorMessage },
+})
+
+const SIGN_IN_TIMED_OUT = `The identity provider did not respond within ${TOKEN_REQUEST_TIMEOUT_MS / 1000} seconds. Please try again.`
+
+const requestTokens = async (
+  settings: Settings,
+  payload: TokenPayload,
+  signal: AbortSignal,
+): Promise<CodeExchange> => {
+  let response: Response
+  try {
+    response = await getAuthToken(settings, payload, signal)
+  } catch {
+    return signInFailure(
+      signal.aborted
+        ? SIGN_IN_TIMED_OUT
+        : "Could not reach the identity provider to complete the sign-in. Please try again.",
+    )
+  }
+  try {
+    return { tokenResponse: (await response.json()) as AuthPayload }
+  } catch {
+    return signInFailure(
+      signal.aborted
+        ? SIGN_IN_TIMED_OUT
+        : `The identity provider returned an unexpected response (HTTP ${response.status}). Please try again.`,
+    )
+  }
+}
+
+// Exchanges the authorization code for tokens. A request that fails or times
+// out without an OAuth response resolves with the error to show, because the
+// sign-in would otherwise stop on a blank screen. The token response itself
+// may still be an OAuth error.
+export const exchangeAuthorizationCode = async (
+  settings: Settings,
+  payload: TokenPayload,
+): Promise<CodeExchange> => {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  // Aborting fails both the request and the body read, and the race ends the
+  // sign-in even if neither settles.
+  const deadline = new Promise<CodeExchange>((resolve) => {
+    timeout = setTimeout(() => {
+      controller.abort()
+      resolve(signInFailure(SIGN_IN_TIMED_OUT))
+    }, TOKEN_REQUEST_TIMEOUT_MS)
+  })
+  try {
+    return await Promise.race([
+      requestTokens(settings, payload, controller.signal),
+      deadline,
+    ])
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 export const readAuthTokenResponse = async (
